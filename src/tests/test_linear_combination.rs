@@ -9,7 +9,6 @@ mod tests {
     use crate::nodes::Node;
     use crate::numerical::opt::optimisable_component::OptimisableComponent;
     use crate::functions::parse_function;
-    use crate::functions::ast::ExpressionNode;
     use crate::hydrology::accounts::account_manager::AccountManager;
 
     #[test]
@@ -30,12 +29,7 @@ mod tests {
 
         for (expr, should_detect, expected_coeffs) in test_cases {
             let parsed = parse_function(expr).unwrap();
-            let ast = parsed.get_ast();
-            let expr_node = (ast as &dyn std::any::Any)
-                .downcast_ref::<ExpressionNode>()
-                .unwrap();
-
-            let result = detect_linear_combination(expr_node);
+            let result = detect_linear_combination(parsed.get_ast());
 
             if should_detect {
                 assert!(result.is_some(), "Failed to detect linear combination in: {}", expr);

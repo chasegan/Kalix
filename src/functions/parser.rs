@@ -9,7 +9,7 @@
 /// according to mathematical conventions.
 
 use std::collections::HashSet;
-use crate::functions::ast::{ASTNode, ExpressionNode};
+use crate::functions::ast::ExpressionNode;
 use crate::functions::errors::ParseError;
 use crate::functions::evaluator::VariableContext;
 use crate::functions::operators::{BinaryOperator, UnaryOperator};
@@ -257,7 +257,7 @@ pub struct FunctionParser {
 /// with different variable contexts for optimal performance.
 #[derive(Debug, Clone)]
 pub struct ParsedFunction {
-    ast: Box<dyn ASTNode>,
+    ast: ExpressionNode,
     variables: HashSet<String>,
 }
 
@@ -274,7 +274,7 @@ impl ParsedFunction {
     /// # Returns
     ///
     /// A new ParsedFunction ready for evaluation.
-    pub fn new(ast: Box<dyn ASTNode>) -> Self {
+    pub fn new(ast: ExpressionNode) -> Self {
         let variables = ast.get_variables();
         Self { ast, variables }
     }
@@ -317,8 +317,8 @@ impl ParsedFunction {
     /// # Returns
     ///
     /// A reference to the AST root node.
-    pub fn get_ast(&self) -> &dyn ASTNode {
-        self.ast.as_ref()
+    pub fn get_ast(&self) -> &ExpressionNode {
+        &self.ast
     }
 
     /// Check if this function is a single variable reference (no operations).
@@ -346,22 +346,12 @@ impl ParsedFunction {
     /// assert_eq!(f2.is_single_variable(), None);
     /// ```
     pub fn is_single_variable(&self) -> Option<&str> {
-        // Check if we have exactly one variable
-        if self.variables.len() != 1 {
-            return None;
+        // A root Variable node is by construction the expression's only variable.
+        match &self.ast {
+            ExpressionNode::Variable { name } => Some(name.as_str()),
+            ExpressionNode::VariableWithOffset { name, .. } => Some(name.as_str()),
+            _ => None,
         }
-
-        // Downcast to ExpressionNode to inspect the AST structure
-        if let Some(expr_node) = (self.ast.as_ref() as &dyn std::any::Any).downcast_ref::<ExpressionNode>() {
-            // Check if the root node is a simple Variable node (with or without offset)
-            match expr_node {
-                ExpressionNode::Variable { name } => return Some(name.as_str()),
-                ExpressionNode::VariableWithOffset { name, .. } => return Some(name.as_str()),
-                _ => {}
-            }
-        }
-
-        None
     }
 
     /// Check if this function is a single variable with an offset.
@@ -375,16 +365,8 @@ impl ParsedFunction {
     /// `None` if it's not a single variable with offset.
     /// Offset: -ve = past, 0 = current, +ve = future
     pub fn is_single_variable_with_offset(&self) -> Option<(&str, isize, f64)> {
-        // Check if we have exactly one variable
-        if self.variables.len() != 1 {
-            return None;
-        }
-
-        // Downcast to ExpressionNode to inspect the AST structure
-        if let Some(expr_node) = (self.ast.as_ref() as &dyn std::any::Any).downcast_ref::<ExpressionNode>() {
-            if let ExpressionNode::VariableWithOffset { name, offset, default_value } = expr_node {
-                return Some((name.as_str(), *offset, *default_value));
-            }
+        if let ExpressionNode::VariableWithOffset { name, offset, default_value } = &self.ast {
+            return Some((name.as_str(), *offset, *default_value));
         }
 
         None
@@ -450,22 +432,22 @@ impl FunctionParser {
         Ok(())
     }
     
-    fn parse_expression(&mut self) -> Result<Box<dyn ASTNode>, ParseError> {
+    fn parse_expression(&mut self) -> Result<ExpressionNode, ParseError> {
         self.parse_or_expression()
     }
     
-    fn parse_or_expression(&mut self) -> Result<Box<dyn ASTNode>, ParseError> {
+    fn parse_or_expression(&mut self) -> Result<ExpressionNode, ParseError> {
         let mut left = self.parse_and_expression()?;
         
         while let Token::Operator(ref op) = self.current_token {
             if op == "||" {
                 self.consume_token()?;
                 let right = self.parse_and_expression()?;
-                left = Box::new(ExpressionNode::BinaryOp {
-                    left,
+                left = ExpressionNode::BinaryOp {
+                    left: Box::new(left),
                     op: BinaryOperator::Or,
-                    right,
-                });
+                    right: Box::new(right),
+                };
             } else {
                 break;
             }
@@ -474,18 +456,18 @@ impl FunctionParser {
         Ok(left)
     }
     
-    fn parse_and_expression(&mut self) -> Result<Box<dyn ASTNode>, ParseError> {
+    fn parse_and_expression(&mut self) -> Result<ExpressionNode, ParseError> {
         let mut left = self.parse_equality_expression()?;
         
         while let Token::Operator(ref op) = self.current_token {
             if op == "&&" {
                 self.consume_token()?;
                 let right = self.parse_equality_expression()?;
-                left = Box::new(ExpressionNode::BinaryOp {
-                    left,
+                left = ExpressionNode::BinaryOp {
+                    left: Box::new(left),
                     op: BinaryOperator::And,
-                    right,
-                });
+                    right: Box::new(right),
+                };
             } else {
                 break;
             }
@@ -494,7 +476,7 @@ impl FunctionParser {
         Ok(left)
     }
     
-    fn parse_equality_expression(&mut self) -> Result<Box<dyn ASTNode>, ParseError> {
+    fn parse_equality_expression(&mut self) -> Result<ExpressionNode, ParseError> {
         let mut left = self.parse_comparison_expression()?;
         
         while let Token::Operator(ref op) = self.current_token {
@@ -505,11 +487,11 @@ impl FunctionParser {
             } {
                 self.consume_token()?;
                 let right = self.parse_comparison_expression()?;
-                left = Box::new(ExpressionNode::BinaryOp {
-                    left,
+                left = ExpressionNode::BinaryOp {
+                    left: Box::new(left),
                     op: bin_op,
-                    right,
-                });
+                    right: Box::new(right),
+                };
             } else {
                 break;
             }
@@ -518,7 +500,7 @@ impl FunctionParser {
         Ok(left)
     }
     
-    fn parse_comparison_expression(&mut self) -> Result<Box<dyn ASTNode>, ParseError> {
+    fn parse_comparison_expression(&mut self) -> Result<ExpressionNode, ParseError> {
         let mut left = self.parse_additive_expression()?;
         
         while let Token::Operator(ref op) = self.current_token {
@@ -531,11 +513,11 @@ impl FunctionParser {
             } {
                 self.consume_token()?;
                 let right = self.parse_additive_expression()?;
-                left = Box::new(ExpressionNode::BinaryOp {
-                    left,
+                left = ExpressionNode::BinaryOp {
+                    left: Box::new(left),
                     op: bin_op,
-                    right,
-                });
+                    right: Box::new(right),
+                };
             } else {
                 break;
             }
@@ -544,7 +526,7 @@ impl FunctionParser {
         Ok(left)
     }
     
-    fn parse_additive_expression(&mut self) -> Result<Box<dyn ASTNode>, ParseError> {
+    fn parse_additive_expression(&mut self) -> Result<ExpressionNode, ParseError> {
         let mut left = self.parse_multiplicative_expression()?;
         
         while let Token::Operator(ref op) = self.current_token {
@@ -555,11 +537,11 @@ impl FunctionParser {
             } {
                 self.consume_token()?;
                 let right = self.parse_multiplicative_expression()?;
-                left = Box::new(ExpressionNode::BinaryOp {
-                    left,
+                left = ExpressionNode::BinaryOp {
+                    left: Box::new(left),
                     op: bin_op,
-                    right,
-                });
+                    right: Box::new(right),
+                };
             } else {
                 break;
             }
@@ -568,7 +550,7 @@ impl FunctionParser {
         Ok(left)
     }
     
-    fn parse_multiplicative_expression(&mut self) -> Result<Box<dyn ASTNode>, ParseError> {
+    fn parse_multiplicative_expression(&mut self) -> Result<ExpressionNode, ParseError> {
         let mut left = self.parse_power_expression()?;
         
         while let Token::Operator(ref op) = self.current_token {
@@ -580,11 +562,11 @@ impl FunctionParser {
             } {
                 self.consume_token()?;
                 let right = self.parse_power_expression()?;
-                left = Box::new(ExpressionNode::BinaryOp {
-                    left,
+                left = ExpressionNode::BinaryOp {
+                    left: Box::new(left),
                     op: bin_op,
-                    right,
-                });
+                    right: Box::new(right),
+                };
             } else {
                 break;
             }
@@ -593,25 +575,25 @@ impl FunctionParser {
         Ok(left)
     }
     
-    fn parse_power_expression(&mut self) -> Result<Box<dyn ASTNode>, ParseError> {
+    fn parse_power_expression(&mut self) -> Result<ExpressionNode, ParseError> {
         let left = self.parse_unary_expression()?;
         
         if let Token::Operator(ref op) = self.current_token {
             if op == "^" || op == "**" {
                 self.consume_token()?;
                 let right = self.parse_power_expression()?; // Right associative
-                return Ok(Box::new(ExpressionNode::BinaryOp {
-                    left,
+                return Ok(ExpressionNode::BinaryOp {
+                    left: Box::new(left),
                     op: BinaryOperator::Power,
-                    right,
-                }));
+                    right: Box::new(right),
+                });
             }
         }
         
         Ok(left)
     }
     
-    fn parse_unary_expression(&mut self) -> Result<Box<dyn ASTNode>, ParseError> {
+    fn parse_unary_expression(&mut self) -> Result<ExpressionNode, ParseError> {
         if let Token::Operator(ref op) = self.current_token {
             if let Some(unary_op) = match op.as_str() {
                 "+" => Some(UnaryOperator::Plus),
@@ -621,22 +603,22 @@ impl FunctionParser {
             } {
                 self.consume_token()?;
                 let operand = self.parse_unary_expression()?;
-                return Ok(Box::new(ExpressionNode::UnaryOp {
+                return Ok(ExpressionNode::UnaryOp {
                     op: unary_op,
-                    operand,
-                }));
+                    operand: Box::new(operand),
+                });
             }
         }
         
         self.parse_primary_expression()
     }
     
-    fn parse_primary_expression(&mut self) -> Result<Box<dyn ASTNode>, ParseError> {
+    fn parse_primary_expression(&mut self) -> Result<ExpressionNode, ParseError> {
         match &self.current_token {
             Token::Number(value) => {
                 let value = *value;
                 self.consume_token()?;
-                Ok(Box::new(ExpressionNode::Constant { value }))
+                Ok(ExpressionNode::Constant { value })
             }
             Token::Identifier(name) => {
                 let name = name.clone();
@@ -665,10 +647,10 @@ impl FunctionParser {
                     }
 
                     self.consume_token()?; // consume ')'
-                    Ok(Box::new(ExpressionNode::FunctionCall {
+                    Ok(ExpressionNode::FunctionCall {
                         func: crate::functions::ast::FunctionRef::from_name(&name.to_lowercase()),
                         args,
-                    }))
+                    })
                 } else if self.current_token == Token::LeftBracket {
                     // Variable with offset: node.x.ds_1[offset, default]
                     // Both offset and default are required
@@ -765,10 +747,10 @@ impl FunctionParser {
                     }
                     self.consume_token()?; // consume ']'
 
-                    Ok(Box::new(ExpressionNode::VariableWithOffset { name, offset, default_value }))
+                    Ok(ExpressionNode::VariableWithOffset { name, offset, default_value })
                 } else {
                     // Variable (no offset)
-                    Ok(Box::new(ExpressionNode::Variable { name }))
+                    Ok(ExpressionNode::Variable { name })
                 }
             }
             Token::LeftParen => {

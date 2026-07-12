@@ -416,16 +416,8 @@ impl OptimizedExpressionNode {
                 Err(format!("Variable '{}' not found in variable maps", name))
             }
             ExpressionNode::BinaryOp { left, op, right } => {
-                // Need to downcast the boxed ASTNode children to ExpressionNode
-                let left_expr = (left.as_ref() as &dyn std::any::Any)
-                    .downcast_ref::<ExpressionNode>()
-                    .ok_or("Failed to downcast left operand")?;
-                let right_expr = (right.as_ref() as &dyn std::any::Any)
-                    .downcast_ref::<ExpressionNode>()
-                    .ok_or("Failed to downcast right operand")?;
-
-                let left_opt = Self::from_expression_node(left_expr, data_variable_map, constant_variable_map, tables)?;
-                let right_opt = Self::from_expression_node(right_expr, data_variable_map, constant_variable_map, tables)?;
+                let left_opt = Self::from_expression_node(left, data_variable_map, constant_variable_map, tables)?;
+                let right_opt = Self::from_expression_node(right, data_variable_map, constant_variable_map, tables)?;
 
                 Ok(OptimizedExpressionNode::BinaryOp {
                     left: Box::new(left_opt),
@@ -434,11 +426,7 @@ impl OptimizedExpressionNode {
                 })
             }
             ExpressionNode::UnaryOp { op, operand } => {
-                let operand_expr = (operand.as_ref() as &dyn std::any::Any)
-                    .downcast_ref::<ExpressionNode>()
-                    .ok_or("Failed to downcast operand")?;
-
-                let operand_opt = Self::from_expression_node(operand_expr, data_variable_map, constant_variable_map, tables)?;
+                let operand_opt = Self::from_expression_node(operand, data_variable_map, constant_variable_map, tables)?;
 
                 Ok(OptimizedExpressionNode::UnaryOp {
                     op: *op,
@@ -448,12 +436,7 @@ impl OptimizedExpressionNode {
             ExpressionNode::FunctionCall { func, args } => {
                 let args_opt: Result<Vec<_>, String> = args
                     .iter()
-                    .map(|arg| {
-                        let arg_expr = (arg.as_ref() as &dyn std::any::Any)
-                            .downcast_ref::<ExpressionNode>()
-                            .ok_or("Failed to downcast function argument")?;
-                        Self::from_expression_node(arg_expr, data_variable_map, constant_variable_map, tables)
-                    })
+                    .map(|arg| Self::from_expression_node(arg, data_variable_map, constant_variable_map, tables))
                     .collect();
 
                 lower_function_call(func, args_opt?, tables)
@@ -591,43 +574,40 @@ impl DynamicInput {
         }
 
         // Check if it's a linear combination pattern first
-        let ast = parsed.get_ast();
-        if let Some(expr_node) = (ast as &dyn std::any::Any).downcast_ref::<ExpressionNode>() {
-            if let Some(linear_info) = detect_linear_combination(expr_node) {
-                // It's a linear combination! Create the LinearCombination variant
-                let mut data_indices = Vec::new();
+        if let Some(linear_info) = detect_linear_combination(parsed.get_ast()) {
+            // It's a linear combination! Create the LinearCombination variant
+            let mut data_indices = Vec::new();
 
-                // Resolve variable names to data cache indices
-                for var_name in &linear_info.variables {
-                    let lower_name = var_name.to_lowercase();
-                    // node.* references are not critical inputs (they're outputs from other nodes)
-                    let is_critical = flag_as_critical && !lower_name.starts_with("node.");
-                    let idx = data_cache.get_or_add_new_series(&lower_name, is_critical);
-                    data_indices.push(idx);
-                }
-
-                // Initialize with default parameter values
-                let n = data_indices.len();
-                let u_params = if n > 1 {
-                    vec![0.5; n - 1]  // n-1 parameters for distribution
-                } else {
-                    vec![]
-                };
-                let bias = linear_info.coefficients.iter().sum::<f64>();
-
-                // Use parsed coefficients directly - don't recompute with defaults
-                // (they may already be optimized values from a saved model)
-                let coefficients = linear_info.coefficients.clone();
-
-                return Ok(DynamicInput::LinearCombination {
-                    data_indices,
-                    variable_names: linear_info.variables,
-                    coefficients,
-                    u_params,
-                    bias,
-                    original: trimmed.to_string(),
-                });
+            // Resolve variable names to data cache indices
+            for var_name in &linear_info.variables {
+                let lower_name = var_name.to_lowercase();
+                // node.* references are not critical inputs (they're outputs from other nodes)
+                let is_critical = flag_as_critical && !lower_name.starts_with("node.");
+                let idx = data_cache.get_or_add_new_series(&lower_name, is_critical);
+                data_indices.push(idx);
             }
+
+            // Initialize with default parameter values
+            let n = data_indices.len();
+            let u_params = if n > 1 {
+                vec![0.5; n - 1]  // n-1 parameters for distribution
+            } else {
+                vec![]
+            };
+            let bias = linear_info.coefficients.iter().sum::<f64>();
+
+            // Use parsed coefficients directly - don't recompute with defaults
+            // (they may already be optimized values from a saved model)
+            let coefficients = linear_info.coefficients.clone();
+
+            return Ok(DynamicInput::LinearCombination {
+                data_indices,
+                variable_names: linear_info.variables,
+                coefficients,
+                u_params,
+                bias,
+                original: trimmed.to_string(),
+            });
         }
 
         // Not a linear combination, proceed with existing logic
@@ -860,14 +840,7 @@ fn transform_to_optimised_ast(
     constant_variable_map: &HashMap<String, usize>,
     tables: &TableRegistry
 ) -> Result<OptimizedExpressionNode, String> {
-    let ast = parsed.get_ast();
-
-    // Downcast to ExpressionNode
-    if let Some(expr_node) = (ast as &dyn std::any::Any).downcast_ref::<ExpressionNode>() {
-        OptimizedExpressionNode::from_expression_node(expr_node, data_variable_map, constant_variable_map, tables)
-    } else {
-        Err("Failed to downcast AST node".to_string())
-    }
+    OptimizedExpressionNode::from_expression_node(parsed.get_ast(), data_variable_map, constant_variable_map, tables)
 }
 
 /// Lower a parsed function call into its specialised hot-path form, validating

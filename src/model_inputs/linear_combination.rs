@@ -25,18 +25,9 @@ pub fn detect_linear_combination(node: &ExpressionNode) -> Option<LinearCombinat
         match node {
             ExpressionNode::BinaryOp { left, op, right } if *op == BinaryOperator::Add => {
                 // Recursively extract from left side (could be another addition)
-                let left_expr = (left.as_ref() as &dyn std::any::Any)
-                    .downcast_ref::<ExpressionNode>();
-                let right_expr = (right.as_ref() as &dyn std::any::Any)
-                    .downcast_ref::<ExpressionNode>();
-
-                if let (Some(left_node), Some(right_node)) = (left_expr, right_expr) {
-                    let left_ok = extract_addition_terms(left_node, terms);
-                    let right_ok = extract_single_term(right_node, terms);
-                    left_ok && right_ok
-                } else {
-                    false
-                }
+                let left_ok = extract_addition_terms(left, terms);
+                let right_ok = extract_single_term(right, terms);
+                left_ok && right_ok
             }
             _ => {
                 // Base case: not an addition, try to extract as a single term
@@ -50,28 +41,19 @@ pub fn detect_linear_combination(node: &ExpressionNode) -> Option<LinearCombinat
         match node {
             ExpressionNode::BinaryOp { left, op, right } if *op == BinaryOperator::Multiply => {
                 // Try both orders: constant * variable or variable * constant
-                let left_expr = (left.as_ref() as &dyn std::any::Any)
-                    .downcast_ref::<ExpressionNode>();
-                let right_expr = (right.as_ref() as &dyn std::any::Any)
-                    .downcast_ref::<ExpressionNode>();
-
-                if let (Some(left_node), Some(right_node)) = (left_expr, right_expr) {
-                    // Try constant * variable
-                    if let ExpressionNode::Constant { value } = left_node {
-                        if let ExpressionNode::Variable { name } = right_node {
-                            if name.to_lowercase().starts_with("data.") {
-                                terms.push((*value, name.clone()));
-                                return true;
-                            }
+                if let ExpressionNode::Constant { value } = left.as_ref() {
+                    if let ExpressionNode::Variable { name } = right.as_ref() {
+                        if name.to_lowercase().starts_with("data.") {
+                            terms.push((*value, name.clone()));
+                            return true;
                         }
                     }
-                    // Try variable * constant
-                    if let ExpressionNode::Variable { name } = left_node {
-                        if let ExpressionNode::Constant { value } = right_node {
-                            if name.to_lowercase().starts_with("data.") {
-                                terms.push((*value, name.clone()));
-                                return true;
-                            }
+                }
+                if let ExpressionNode::Variable { name } = left.as_ref() {
+                    if let ExpressionNode::Constant { value } = right.as_ref() {
+                        if name.to_lowercase().starts_with("data.") {
+                            terms.push((*value, name.clone()));
+                            return true;
                         }
                     }
                 }
