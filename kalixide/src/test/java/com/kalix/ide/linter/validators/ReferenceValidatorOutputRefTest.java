@@ -83,6 +83,46 @@ class ReferenceValidatorOutputRefTest {
     }
 
     @Test
+    void varOutputBlockCaseInsensitive() {
+        // Finding #6: the outputs path used an exact-case block lookup, so a
+        // reference var.Acct.headroom against [var.acct] was a false positive.
+        LinterSchema schema = LinterSchema.loadDefault();
+        INIModelParser.ParsedModel model = INIModelParser.parse("""
+                [var.acct]
+                headroom = 5.0
+
+                [outputs]
+                var.Acct.Headroom
+                """);
+
+        ValidationResult result = new ValidationResult();
+        new ReferenceValidator().validate(model, schema, result, null);
+        assertTrue(result.getIssues().isEmpty(),
+                "block and key should resolve case-insensitively, got: " + result.getIssues());
+    }
+
+    @Test
+    void varOutputPhaseNotReferenceable() {
+        // Finding #2/#6: 'phase' is configuration, not a series, on both paths.
+        LinterSchema schema = LinterSchema.loadDefault();
+        INIModelParser.ParsedModel model = INIModelParser.parse("""
+                [var.acct]
+                phase = flow
+                headroom = 5.0
+
+                [outputs]
+                var.acct.phase
+                """);
+
+        ValidationResult result = new ValidationResult();
+        new ReferenceValidator().validate(model, schema, result, null);
+        List<ValidationIssue> issues = result.getIssues().stream()
+                .filter(i -> i.getMessage().contains("unknown var"))
+                .toList();
+        assertEquals(1, issues.size(), "phase must not be referenceable, got: " + result.getIssues());
+    }
+
+    @Test
     void unknownVarOutputReferenceFlagged() {
         LinterSchema schema = LinterSchema.loadDefault();
         INIModelParser.ParsedModel model = INIModelParser.parse("""

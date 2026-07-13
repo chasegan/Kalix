@@ -1,4 +1,5 @@
-/// Built-in mathematical functions for the functions module.
+/// Built-in mathematical functions for the functions module — and the
+/// language's reserved-name registry.
 ///
 /// This module exposes the closed set of built-in functions accepted by the Kalix
 /// expression parser as a [`BuiltinFunction`] enum. Names are resolved against this
@@ -6,8 +7,68 @@
 /// resolved enum tag rather than a string. Evaluation is then a direct match — no
 /// per-call string compare or hashing, which matters because parameter and inflow
 /// expressions are evaluated millions of times per model run.
+///
+/// # The reserved-name registry (single source of truth)
+///
+/// Everything the language claims for itself lives in THIS file, in three tiers:
+/// - [`BuiltinFunction`] — the pure, context-free builtins (`abs`, `min`, ...);
+/// - [`STATEFUL_FUNCTIONS`] — the temporal builtins (`moving_*`, `*_since`),
+///   which are not enum variants because they resolve at lowering, where their
+///   arena state is allocated (`lower_stateful_call` in dynamic_input.rs);
+/// - [`RESERVED_WORDS`] — grammar keywords (`assert`, `this`).
+///
+/// [`reserved_name_kind`] answers "is this name the language's?" for every
+/// consumer: the program parser's local-assignment guard, `[fn]` name/param
+/// validation, and anything added later. Per expression-naming §1.3, the
+/// language owns the bare names — a user-definable name must never collide
+/// with any tier, including tiers added in the future.
+///
+/// # Checklist for adding a builtin (keep this current)
+///
+/// 1. Pure function: add the enum variant + `from_name` + `name` + `call`
+///    arms here, and the lowering arm in dynamic_input.rs (`Func1`/`Func2`/
+///    `Fold`/dedicated node).
+///    Stateful function: add the name to [`STATEFUL_FUNCTIONS`] here, the
+///    lowering arm in `lower_stateful_call`, and its state layout/advance.
+/// 2. Mirror the name, arity, and a one-line description in the IDE's single
+///    Java definition: `kalixide/.../language/ExpressionLanguage.java`
+///    (the linter, section validators, and autocomplete all consume it).
+/// 3. Add the name to the engine-drift pins in the IDE's
+///    `FunctionExpressionValidatorTest`, and the rejected-spelling suggestions
+///    if the new name has a common wrong spelling (expression-naming §2.4).
+/// 4. Document it in docs/functions/FUNCTIONS_DOCUMENTATION.md (function
+///    table + a section if it carries semantics worth explaining).
 
 use crate::functions::errors::EvaluationError;
+
+/// The temporal (stateful) builtins, resolved at lowering rather than through
+/// [`BuiltinFunction`]. Membership here reserves the name exactly as builtin
+/// status does. `stateful_lowering_covers_registry` in the tests ties this
+/// list to `lower_stateful_call`'s match arms so they cannot drift.
+pub const STATEFUL_FUNCTIONS: [&str; 9] = [
+    "moving_sum", "moving_mean", "moving_min", "moving_max",
+    "sum_since", "min_since", "max_since", "count_since", "steps_since",
+];
+
+/// Grammar keywords: names with statement-level meaning that are neither
+/// builtins nor stateful functions.
+pub const RESERVED_WORDS: [&str; 2] = ["assert", "this"];
+
+/// Is `lower` (a lowercased bare name) reserved by the language? Returns the
+/// tier for error messages ("builtin function", "stateful function",
+/// "reserved word"), or None when the name is free for the modeller.
+pub fn reserved_name_kind(lower: &str) -> Option<&'static str> {
+    if BuiltinFunction::from_name(lower).is_some() {
+        return Some("builtin function");
+    }
+    if STATEFUL_FUNCTIONS.contains(&lower) {
+        return Some("stateful function");
+    }
+    if RESERVED_WORDS.contains(&lower) {
+        return Some("reserved word");
+    }
+    None
+}
 
 /// Every built-in function recognised by the parser.
 ///

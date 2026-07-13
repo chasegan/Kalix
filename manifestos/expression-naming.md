@@ -46,7 +46,20 @@ naming question is settled by citation, not conversation.
    `table.rating(x)`, not `rating(x)`.
 6. **Names are lowercase; matching is case-insensitive.** `MEAN(x)` and
    `mean(x)` are the same call; write lowercase in documentation and
-   examples.
+   examples. For *definitions* this is enforced, not advisory: every
+   definition name in a model file — `[fn]` names and parameters,
+   `[var.*]` blocks and keys — must satisfy the strict bare rule
+   (lowercase letter first, then lowercase letters, digits, underscores;
+   decided 2026-07, closing a drift where `[fn]` case-folded while
+   everything else was strict). Call-site matching stays case-insensitive.
+7. **Reserved names span tiers, and nothing user-named may shadow any
+   tier.** The language's names come in three tiers — builtin functions,
+   stateful functions (resolved at lowering, not the builtin enum), and
+   grammar keywords (`assert`, `this`). Locals, `[fn]` names, and
+   parameters are checked against *all* tiers through one registry, so a
+   tier added later extends every guard automatically (decided 2026-07,
+   closing a drift where stateful names were reserved for `[fn]` but
+   shadowable as locals).
 
 ## 3. Rationale — the worked examples
 
@@ -70,16 +83,22 @@ thing they are looking at.
 
 ## 4. Enforcement
 
-- **The engine is the single source of truth.** The only place a builtin
-  name resolves is `BuiltinFunction::from_name` in
-  `src/functions/functions.rs`; there is no secondary registry to drift.
-  Structural.
-- **The IDE linter mirrors the engine, never leads it.** `KNOWN_FUNCTIONS`
-  in `FunctionExpressionValidator` carries a keep-in-sync comment, and
+- **The engine is the single source of truth.** Builtin names resolve only
+  through `BuiltinFunction::from_name` in `src/functions/functions.rs`,
+  which is also the home of the full reserved-name registry
+  (`STATEFUL_FUNCTIONS`, `RESERVED_WORDS`, `reserved_name_kind`) and the
+  add-a-builtin checklist. The strict bare-name rule lives once, in
+  `misc_functions::is_valid_bare_name`. Structural.
+- **The IDE linter mirrors the engine, never leads it.** The IDE holds ONE
+  Java copy of the language definition (`ExpressionLanguage.java` —
+  builtins, arities, sim variables, reserved tiers), consumed by the
+  validator, the section validators, and autocomplete alike, with a
+  cross-sync test asserting the consumers agree.
   `FunctionExpressionValidatorTest.testEngineDriftFunctions` pins the
-  rejected spellings (`log`, `avg`, and the never-implemented
-  `sinh`/`cosh`/`tanh`) as rejected — the test exists because the linter
-  *did* drift once, in both directions. Held by test.
+  rejected spellings (`log`, `avg`, `running_*`, `days_since`, and the
+  never-implemented `sinh`/`cosh`/`tanh`) as rejected — the tests exist
+  because the linter *did* drift, more than once, in both directions.
+  Held by test.
 - **Docs list the absences explicitly.** `FUNCTIONS_DOCUMENTATION.md` names
   the deliberately-missing spellings and why, so a future contributor finds
   the decision before re-proposing it. Advisory — held by review.

@@ -27,12 +27,26 @@ public final class ValidationContext {
     private final LinterSchema schema;
     private final INIModelParser.NodeSection currentNode;
     private final File baseDirectory;
+    private FnRegistry fnRegistry;
 
     private ValidationContext(Builder builder) {
         this.model = builder.model;
         this.schema = builder.schema;
         this.currentNode = builder.currentNode;
         this.baseDirectory = builder.baseDirectory;
+        this.fnRegistry = builder.fnRegistry;
+    }
+
+    /**
+     * The parsed {@code [fn]} section for this context. Built once per lint pass
+     * and memoized on the model, so every consumer (call-site arity checks,
+     * duplicate detection, the recursion scan) reads one source. Never null.
+     */
+    public FnRegistry getFnRegistry() {
+        if (fnRegistry == null) {
+            fnRegistry = FnRegistry.forModel(model);
+        }
+        return fnRegistry;
     }
 
     /**
@@ -151,6 +165,7 @@ public final class ValidationContext {
         private LinterSchema schema;
         private INIModelParser.NodeSection currentNode;
         private File baseDirectory;
+        private FnRegistry fnRegistry;
 
         private Builder() {}
 
@@ -183,6 +198,15 @@ public final class ValidationContext {
          */
         public Builder baseDirectory(File baseDirectory) {
             this.baseDirectory = baseDirectory;
+            return this;
+        }
+
+        /**
+         * Set the pre-built {@code [fn]} registry. Optional: when unset, the
+         * context lazily derives (and memoizes) it from the model.
+         */
+        public Builder fnRegistry(FnRegistry fnRegistry) {
+            this.fnRegistry = fnRegistry;
             return this;
         }
 

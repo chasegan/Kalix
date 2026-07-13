@@ -1,0 +1,96 @@
+package com.kalix.ide.language;
+
+import com.kalix.ide.linter.validators.FunctionExpressionValidator;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * Cross-sync guard for the single Java language definition
+ * ({@link ExpressionLanguage}). It pins the engine-mirrored function and
+ * sim-variable sets so a drift shows up as a failing test, and it checks that
+ * the real consumer ({@code FunctionExpressionValidator}) agrees with the
+ * definition — so the five formerly hand-synced tables cannot silently diverge.
+ */
+class ExpressionLanguageCrossSyncTest {
+
+    /** Engine-drift pin: the 24 pure builtins + 9 stateful builtins. */
+    private static final Set<String> EXPECTED_FUNCTION_NAMES = Set.of(
+            "if", "min", "max", "sum", "mean",
+            "abs", "sqrt", "sin", "cos", "tan", "asin", "acos", "atan",
+            "exp", "ln", "log10", "log2", "ceil", "floor", "round", "sign",
+            "pow", "atan2", "clamp",
+            "moving_sum", "moving_mean", "moving_min", "moving_max",
+            "sum_since", "min_since", "max_since", "count_since", "steps_since");
+
+    private static final Set<String> EXPECTED_STATEFUL_NAMES = Set.of(
+            "moving_sum", "moving_mean", "moving_min", "moving_max",
+            "sum_since", "min_since", "max_since", "count_since", "steps_since");
+
+    private static final Set<String> EXPECTED_SIM_VARIABLES = Set.of(
+            "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step",
+            "sim.new_day", "sim.new_month", "sim.new_year");
+
+    @Test
+    @DisplayName("The function and sim-variable sets match the engine pin exactly")
+    void testEngineDriftPins() {
+        assertEquals(EXPECTED_FUNCTION_NAMES, ExpressionLanguage.functionNames());
+        assertEquals(EXPECTED_FUNCTION_NAMES, ExpressionLanguage.functionArities().keySet());
+        assertEquals(EXPECTED_SIM_VARIABLES, ExpressionLanguage.simVariableNames());
+        assertEquals(33, ExpressionLanguage.BUILTINS.size());
+        assertEquals(8, ExpressionLanguage.SIM_VARIABLES.size());
+    }
+
+    @Test
+    @DisplayName("Every builtin carries an arity, a signature, and a description")
+    void testEveryEntryComplete() {
+        for (ExpressionLanguage.Builtin b : ExpressionLanguage.BUILTINS) {
+            assertNotEquals(0, b.arity(), "arity must be non-zero for " + b.name());
+            assertNotNull(b.signature(), "signature for " + b.name());
+            assertFalse(b.signature().isBlank(), "signature blank for " + b.name());
+            assertNotNull(b.description(), "description for " + b.name());
+            assertFalse(b.description().isBlank(), "description blank for " + b.name());
+            assertEquals(b.stateful(), EXPECTED_STATEFUL_NAMES.contains(b.name()),
+                    "stateful flag wrong for " + b.name());
+        }
+        for (ExpressionLanguage.SimVariable v : ExpressionLanguage.SIM_VARIABLES) {
+            assertFalse(v.description().isBlank(), "description blank for " + v.name());
+        }
+    }
+
+    @Test
+    @DisplayName("reservedTier names the tier for each reserved name, and null for free names")
+    void testReservedTiers() {
+        assertEquals("builtin function", ExpressionLanguage.reservedTier("min"));
+        assertEquals("builtin function", ExpressionLanguage.reservedTier("clamp"));
+        assertEquals("stateful function", ExpressionLanguage.reservedTier("moving_mean"));
+        assertEquals("stateful function", ExpressionLanguage.reservedTier("steps_since"));
+        assertEquals("reserved word", ExpressionLanguage.reservedTier("assert"));
+        assertEquals("reserved word", ExpressionLanguage.reservedTier("this"));
+        assertNull(ExpressionLanguage.reservedTier("headroom"));
+    }
+
+    @Test
+    @DisplayName("The FunctionExpressionValidator recognises every defined builtin")
+    void testValidatorConsumesEveryBuiltin() {
+        FunctionExpressionValidator validator = new FunctionExpressionValidator();
+        for (ExpressionLanguage.Builtin b : ExpressionLanguage.BUILTINS) {
+            // Call each function with its minimum arity; every argument a data ref
+            // (moving_* window/default get bare literals so the literal rule is met).
+            int minArity = b.arity() < 0 ? -b.arity() : b.arity();
+            List<String> args = new java.util.ArrayList<>();
+            for (int i = 0; i < minArity; i++) {
+                boolean movingConst = b.name().startsWith("moving_") && i >= 1;
+                args.add(movingConst ? (i == 1 ? "3" : "0") : "data.x");
+            }
+            String expr = b.name() + "(" + String.join(", ", args) + ")";
+            List<String> errors = validator.validate(expr);
+            assertTrue(errors.stream().noneMatch(e -> e.contains("Unknown function")),
+                    "validator did not recognise builtin '" + b.name() + "': " + errors);
+        }
+    }
+}

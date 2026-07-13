@@ -550,7 +550,115 @@ class FunctionExpressionValidatorTest {
         assertFnBodyValid("this.inflow[-1, 0] + x", List.of("x"));
     }
 
+    // ============ moving_* literal window/default rule (finding #3) ============
+
+    @Test
+    @DisplayName("moving_* accepts a bare positive-integer window and a bare default")
+    void testMovingLiteralArgsAccepted() {
+        assertValid("moving_mean(data.x, 30, 0)");
+        assertValid("moving_sum(data.q, 1, 0)");
+        assertValid("moving_min(data.q, 5, 0)");
+    }
+
+    @Test
+    @DisplayName("moving_* rejects a non-literal window (state is sized at model load)")
+    void testMovingNonLiteralWindowRejected() {
+        assertInvalid("moving_mean(data.q, data.window, 0)", "window (2nd argument) must be a constant");
+        assertInvalid("moving_mean(data.q, c.n, 0)", "window (2nd argument) must be a constant");
+        assertInvalid("moving_min(data.x, 2+3, 0)", "window (2nd argument) must be a constant");
+    }
+
+    @Test
+    @DisplayName("moving_* rejects a non-positive-integer literal window")
+    void testMovingNonIntegerWindowRejected() {
+        assertInvalid("moving_sum(data.q, 2.5, 0)", "positive integer");
+        assertInvalid("moving_sum(data.q, 0, 0)", "positive integer");
+    }
+
+    @Test
+    @DisplayName("moving_* rejects a non-literal default")
+    void testMovingNonLiteralDefaultRejected() {
+        assertInvalid("moving_mean(data.q, 3, data.d)", "default (3rd argument) must be a constant");
+        // The engine does not fold: a leading unary minus is not a bare literal.
+        // Signed literals fold at parse in the engine (July 2026), so a
+        // negative default is a genuine constant — and a signed non-literal
+        // expression is still rejected.
+        assertValid("moving_min(data.q, 3, -1)");
+        assertValid("moving_max(data.q, 3, +2.5)");
+        assertInvalid("moving_min(data.q, 3, -data.x)", "must be a constant");
+        assertInvalid("moving_sum(data.q, -3 * 2, 0)", "must be a constant");
+        assertInvalid("moving_sum(data.q, -3, 0)", "positive integer");
+    }
+
+    @Test
+    @DisplayName("*_since functions carry no literal constraint on their arguments")
+    void testSinceFunctionsUnconstrained() {
+        assertValid("sum_since(data.q, sim.new_month)");
+        assertValid("count_since(data.q > data.threshold, sim.new_year)");
+        assertValid("steps_since(data.flag)");
+    }
+
+    // ============ fn arity consistency (finding #4) ============
+
+    @Test
+    @DisplayName("A trailing-comma [fn] signature is unregistered, so a call is 'unknown', not a bogus arity")
+    void testFnArityConsistentWithTrailingComma() {
+        String ini = """
+            [fn]
+            foo(a,) = a
+            bar(a, b) = a + b
+            """;
+        var context = contextFor(ini);
+        // foo(a,) is an invalid signature (rejected by FnSectionValidator), so it
+        // is not in the registry - the call is 'unknown', never "expects 2".
+        List<String> fooErrors = validator.validate("fn.foo(5)", context);
+        assertTrue(fooErrors.stream().anyMatch(e -> e.contains("Unknown function")),
+                "expected unknown-function, got: " + fooErrors);
+        assertTrue(fooErrors.stream().noneMatch(e -> e.contains("expects")),
+                "must not emit a bogus arity error, got: " + fooErrors);
+        // A well-formed definition still gets a real arity error.
+        assertTrue(validator.validate("fn.bar(1)", context).stream()
+                .anyMatch(e -> e.contains("expects 2 arguments")));
+        assertTrue(validator.validate("fn.bar(1, 2)", context).isEmpty());
+    }
+
+    // ============ var refs: case-insensitive + phase excluded (findings #2, #6) ============
+
+    @Test
+    @DisplayName("A var reference resolves case-insensitively on block and key")
+    void testVarReferenceCaseInsensitive() {
+        String ini = """
+            [var.acct]
+            headroom = 5.0
+            """;
+        var context = contextFor(ini);
+        assertTrue(validator.validate("var.acct.headroom", context).isEmpty());
+        assertTrue(validator.validate("var.Acct.Headroom", context).isEmpty(),
+                "block and key should match case-insensitively");
+        assertFalse(validator.validate("var.acct.missing", context).isEmpty());
+    }
+
+    @Test
+    @DisplayName("var.<block>.phase is not a valid reference (the engine skips 'phase')")
+    void testVarPhaseNotReferenceable() {
+        String ini = """
+            [var.acct]
+            phase = flow
+            headroom = 5.0
+            """;
+        var context = contextFor(ini);
+        List<String> errors = validator.validate("var.acct.phase", context);
+        assertTrue(errors.stream().anyMatch(e -> e.contains("Unknown var")),
+                "phase must be excluded from var references, got: " + errors);
+    }
+
     // ==================== Helper Methods ====================
+
+    private com.kalix.ide.linter.model.ValidationContext contextFor(String ini) {
+        com.kalix.ide.linter.parsing.INIModelParser.ParsedModel model =
+                com.kalix.ide.linter.parsing.INIModelParser.parse(ini);
+        return com.kalix.ide.linter.model.ValidationContext.builder().model(model).build();
+    }
 
     private void assertFnBodyValid(String body, List<String> params) {
         List<String> errors = validator.validateFnBody(body, params,

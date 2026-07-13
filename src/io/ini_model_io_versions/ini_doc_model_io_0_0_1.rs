@@ -8,7 +8,7 @@ use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
-use crate::misc::misc_functions::{is_valid_variable_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
+use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, Node};
 use crate::hydrology::rainfall_runoff::gr4j::Gr4Variant;
 use crate::nodes::storage_node::OutletDefinition;
@@ -690,7 +690,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // they execute here, reading anything computed above.
             // -------------------------------------------------------------------------------------
             let block_name = &section_name[4..];
-            if !is_valid_variable_name(block_name) || block_name.contains('.') {
+            if !is_valid_bare_name(block_name) {
                 return Err(format!("Error on line {}: Invalid var block name '{}'",
                                    ini_section.line_number, block_name));
             }
@@ -722,7 +722,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 if key.as_str() == "phase" {
                     continue;
                 }
-                if !is_valid_variable_name(key) || key.contains('.') {
+                if !is_valid_bare_name(key) {
                     return Err(format!("Error on line {}: Invalid var name '{}' in [{}]",
                                        ini_property.line_number, key, section_name));
                 }

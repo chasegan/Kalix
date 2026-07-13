@@ -1,6 +1,7 @@
 package com.kalix.ide.linter.validators;
 
 import com.kalix.ide.linter.LinterSchema;
+import com.kalix.ide.linter.model.FnRegistry;
 import com.kalix.ide.linter.model.ValidationContext;
 import com.kalix.ide.linter.model.ValidationResult;
 import com.kalix.ide.linter.model.ValidationRule;
@@ -10,13 +11,10 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Validates the [fn] section: user-defined function definitions.
@@ -28,9 +26,9 @@ import java.util.regex.Pattern;
  *   <li>Keys are signatures: {@code name(a, b)} or {@code name()}. Name and
  *       parameters are bare identifiers (lowercase letter first; lowercase
  *       letters, digits, underscores after; no dots), and parameters are
- *       distinct.</li>
- *   <li>Neither the name nor a parameter may shadow a builtin function or the
- *       reserved words {@code assert} / {@code this}.</li>
+ *       distinct. Trailing/empty parameters ({@code foo(a,)}) are rejected.</li>
+ *   <li>Neither the name nor a parameter may shadow a builtin function, a
+ *       stateful function, or the reserved words {@code assert} / {@code this}.</li>
  *   <li>Duplicate function names are rejected regardless of arity — fixed
  *       signatures, no overloads (§8.1).</li>
  *   <li>Bodies are validated as expressions or {@code { ... }} blocks whose
@@ -41,28 +39,13 @@ import java.util.regex.Pattern;
  *   <li>{@code [fn.something]} is reserved for future namespaced groups; only
  *       {@code [fn]} is supported for now.</li>
  * </ul>
+ *
+ * <p>Signature parsing, arity, and the call graph all read from the shared
+ * {@link FnRegistry} (one parse per lint pass), and the recursion scan walks
+ * tokenized bodies (see {@link FunctionExpressionValidator#collectFnCallees})
+ * rather than regex-scanning raw text.</p>
  */
 public class FnSectionValidator implements ValidationStrategy {
-
-    /** A bare name per the engine's is_valid_variable_name: lowercase first. */
-    private static final Pattern VALID_NAME = Pattern.compile("^[a-z][a-z0-9_]*$");
-
-    /** {@code fn.<name>} call scan, for building the recursion call graph. */
-    private static final Pattern FN_CALL = Pattern.compile("\\bfn\\.([a-z][a-z0-9_]*)");
-
-    /**
-     * Names that cannot be used as a function name or parameter: the builtin
-     * functions (mirrors FunctionExpressionValidator's KNOWN_FUNCTIONS, which
-     * mirrors the engine's BuiltinFunction enum) plus 'assert' and 'this'.
-     */
-    private static final Set<String> RESERVED = Set.of(
-            "if", "min", "max", "sum", "mean", "abs", "sqrt", "sin", "cos", "tan",
-            "asin", "acos", "atan", "ln", "log10", "log2", "exp", "ceil", "floor",
-            "round", "sign", "pow", "atan2", "clamp",
-            "moving_sum", "moving_mean", "moving_min", "moving_max",
-            "sum_since", "min_since", "max_since", "count_since", "steps_since",
-            "assert", "this"
-    );
 
     private final FunctionExpressionValidator expressionValidator = new FunctionExpressionValidator();
 
@@ -84,44 +67,41 @@ public class FnSectionValidator implements ValidationStrategy {
             return;
         }
 
+        // One registry per lint pass: shared signature parser, arity, call graph.
+        FnRegistry registry = FnRegistry.forModel(model);
         ValidationContext context = ValidationContext.builder()
                 .model(model)
                 .schema(schema)
+                .fnRegistry(registry)
                 .build();
 
-        // Lowercased name -> line of first definition (for duplicate detection).
-        Map<String, Integer> firstDefinitionLine = new LinkedHashMap<>();
-        // Lowercased name -> body text (for the recursion scan).
-        Map<String, String> bodies = new LinkedHashMap<>();
-
         for (INIModelParser.Property prop : fnSection.getAllProperties()) {
-            String key = prop.getKey();
             int line = prop.getLineNumber();
 
-            Signature sig = parseSignature(key);
-            if (sig.error != null) {
-                result.addIssue(line, sig.error, ValidationRule.Severity.ERROR, "invalid_fn_signature");
+            FnRegistry.Signature sig = FnRegistry.parseSignature(prop.getKey());
+            if (sig.error() != null) {
+                result.addIssue(line, sig.error(), ValidationRule.Severity.ERROR, "invalid_fn_signature");
                 continue;
             }
 
-            String lowerName = sig.name.toLowerCase();
-            if (firstDefinitionLine.containsKey(lowerName)) {
+            // Duplicate detection consumes the registry: it keeps the FIRST
+            // definition per name, so any property on a different line is a dup.
+            FnRegistry.Entry first = registry.get(sig.name());
+            if (first != null && first.line() != line) {
                 result.addIssue(line,
-                        "Duplicate function '" + sig.name + "' in [fn] (one definition per name; "
+                        "Duplicate function '" + sig.name() + "' in [fn] (one definition per name; "
                                 + "there are no overloads)",
                         ValidationRule.Severity.ERROR, "duplicate_fn_name");
                 continue;
             }
-            firstDefinitionLine.put(lowerName, line);
-            bodies.put(lowerName, prop.getValue());
 
-            for (String err : expressionValidator.validateFnBody(prop.getValue(), sig.params, context)) {
-                result.addIssue(line, "In function '" + sig.name + "': " + err,
+            for (String err : expressionValidator.validateFnBody(prop.getValue(), sig.params(), context)) {
+                result.addIssue(line, "In function '" + sig.name() + "': " + err,
                         ValidationRule.Severity.ERROR, "invalid_fn_body");
             }
         }
 
-        checkNoRecursion(bodies, firstDefinitionLine, result);
+        checkNoRecursion(registry, result);
     }
 
     @Override
@@ -129,90 +109,29 @@ public class FnSectionValidator implements ValidationStrategy {
         return "Function section ([fn]) validation";
     }
 
-    /** A parsed signature: name and ordered parameters, or an error message. */
-    private static final class Signature {
-        String name;
-        final List<String> params = new ArrayList<>();
-        String error;
-    }
-
-    /**
-     * Parse a signature key {@code name(a, b)} / {@code name()}. Returns a
-     * Signature whose {@code error} is non-null when the key is malformed.
-     */
-    private static Signature parseSignature(String key) {
-        Signature sig = new Signature();
-        String k = key.trim();
-
-        int open = k.indexOf('(');
-        if (open < 0 || !k.endsWith(")")) {
-            sig.error = "Invalid [fn] signature '" + key + "': expected a signature like name(a, b) or name()";
-            return sig;
-        }
-
-        String name = k.substring(0, open).trim();
-        if (name.contains(".")) {
-            sig.error = "Invalid function name '" + name + "' (use a bare name; no dots)";
-            return sig;
-        }
-        if (!VALID_NAME.matcher(name).matches()) {
-            sig.error = "Invalid function name '" + name
-                    + "' (start with a lowercase letter; use lowercase letters, digits and underscores)";
-            return sig;
-        }
-        if (RESERVED.contains(name)) {
-            sig.error = "Function name '" + name + "' collides with a builtin function or reserved word";
-            return sig;
-        }
-        sig.name = name;
-
-        String inner = k.substring(open + 1, k.length() - 1).trim();
-        if (!inner.isEmpty()) {
-            for (String rawParam : inner.split(",")) {
-                String p = rawParam.trim();
-                if (p.contains(".")) {
-                    sig.error = "Invalid parameter '" + p + "' in signature '" + key + "' (use a bare name; no dots)";
-                    return sig;
-                }
-                if (!VALID_NAME.matcher(p).matches()) {
-                    sig.error = "Invalid parameter '" + p + "' in signature '" + key
-                            + "' (start with a lowercase letter; use lowercase letters, digits and underscores)";
-                    return sig;
-                }
-                if (RESERVED.contains(p)) {
-                    sig.error = "Parameter '" + p + "' in signature '" + key
-                            + "' collides with a builtin function or reserved word";
-                    return sig;
-                }
-                if (sig.params.contains(p)) {
-                    sig.error = "Duplicate parameter '" + p + "' in signature '" + key + "'";
-                    return sig;
-                }
-                sig.params.add(p);
-            }
-        }
-        return sig;
-    }
-
     /**
      * Verify the fn call graph is a DAG. Cycles (direct or mutual) are rejected
      * even when the cyclic definition is unused, mirroring the engine's
      * load-time check_dag. Three-colour iterative DFS; the cycle is named.
+     *
+     * <p>Edges come from walking each body with the expression Tokenizer and
+     * collecting lowercased {@code fn.} calls — case-correct (so a mutual cycle
+     * through {@code fn.B} is caught) and free of the phantom edges a raw-text
+     * regex produced (e.g. an input alias named {@code fn} in {@code data.fn.a}).</p>
      */
-    private void checkNoRecursion(Map<String, String> bodies, Map<String, Integer> lines,
-                                  ValidationResult result) {
+    private void checkNoRecursion(FnRegistry registry, ValidationResult result) {
         // Build fn->fn adjacency, following only calls to known functions.
-        Map<String, List<String>> graph = new LinkedHashMap<>();
-        for (Map.Entry<String, String> entry : bodies.entrySet()) {
+        Map<String, List<String>> graph = new HashMap<>();
+        Map<String, Integer> lines = new HashMap<>();
+        for (FnRegistry.Entry entry : registry.entries()) {
+            lines.put(entry.name(), entry.line());
             List<String> callees = new ArrayList<>();
-            Matcher m = FN_CALL.matcher(entry.getValue());
-            while (m.find()) {
-                String callee = m.group(1).toLowerCase();
-                if (bodies.containsKey(callee)) {
+            for (String callee : FunctionExpressionValidator.collectFnCallees(entry.body())) {
+                if (registry.contains(callee)) {
                     callees.add(callee);
                 }
             }
-            graph.put(entry.getKey(), callees);
+            graph.put(entry.name(), callees);
         }
 
         Map<String, Mark> marks = new HashMap<>();

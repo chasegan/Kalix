@@ -14,22 +14,8 @@
 use rustc_hash::FxHashMap;
 use std::sync::Arc;
 use crate::functions::ast::{ExpressionNode, Program, Stmt};
-use crate::functions::functions::BuiltinFunction;
-
-/// Names that parse as calls but are not user-definable: the stateful
-/// builtins are resolved by the lowering, not the builtin enum, so they
-/// need their own reservation here.
-const RESERVED_STATEFUL: [&str; 9] = [
-    "moving_sum", "moving_mean", "moving_min", "moving_max",
-    "sum_since", "min_since", "max_since", "count_since", "steps_since",
-];
-
-fn is_reserved_name(lower: &str) -> bool {
-    BuiltinFunction::from_name(lower).is_some()
-        || RESERVED_STATEFUL.contains(&lower)
-        || lower == "assert"
-        || lower == "this"
-}
+use crate::functions::functions::reserved_name_kind;
+use crate::misc::misc_functions::is_valid_bare_name;
 
 /// One user-defined function: parsed body plus the original text for
 /// round-trip serialization.
@@ -218,7 +204,12 @@ pub fn collect_fn_call_names(expr: &ExpressionNode, out: &mut Vec<String>) {
     }
 }
 
-/// Parse a signature key: `name(a, b)` or `name()`. Names fold to lowercase.
+/// Parse a signature key: `name(a, b)` or `name()`.
+///
+/// Names are validated RAW against the strict bare-name rule — lowercase
+/// definitions, no case folding (owner decision, July 2026: one strict rule
+/// for every definition name in the file; call-site matching stays
+/// case-insensitive, so `fn.NET_DEMAND(...)` still resolves).
 fn parse_signature(key: &str) -> Result<(String, Vec<String>), String> {
     let key = key.trim();
     let open = key.find('(').ok_or_else(|| format!(
@@ -229,15 +220,15 @@ fn parse_signature(key: &str) -> Result<(String, Vec<String>), String> {
         return Err(format!("invalid [fn] key '{}': signature must end with ')'", key));
     }
 
-    let name = key[..open].trim().to_lowercase();
-    validate_bare_name(&name, "function name")?;
+    let name = key[..open].trim().to_string();
+    validate_definition_name(&name, "function name")?;
 
     let inner = key[open + 1..key.len() - 1].trim();
     let mut params: Vec<String> = Vec::new();
     if !inner.is_empty() {
         for p in inner.split(',') {
-            let p = p.trim().to_lowercase();
-            validate_bare_name(&p, "parameter")?;
+            let p = p.trim().to_string();
+            validate_definition_name(&p, "parameter")?;
             if params.contains(&p) {
                 return Err(format!("duplicate parameter '{}' in signature '{}'", p, key));
             }
@@ -247,25 +238,24 @@ fn parse_signature(key: &str) -> Result<(String, Vec<String>), String> {
     Ok((name, params))
 }
 
-fn validate_bare_name(name: &str, what: &str) -> Result<(), String> {
+/// A definition name must satisfy the strict bare rule and be free of every
+/// reserved tier. Both halves live in single-source homes
+/// (misc_functions::is_valid_bare_name; functions::reserved_name_kind) so a
+/// growing language extends them in exactly one place each.
+fn validate_definition_name(name: &str, what: &str) -> Result<(), String> {
     if name.is_empty() {
         return Err(format!("{} is empty", what));
     }
-    if name.contains('.') {
-        return Err(format!("{} '{}' must be a bare name (no '.')", what, name));
-    }
-    let mut chars = name.chars();
-    let first_ok = chars.next().map(|c| c.is_ascii_alphabetic() || c == '_').unwrap_or(false);
-    if !first_ok || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
+    if !is_valid_bare_name(name) {
         return Err(format!(
-            "{} '{}' must start with a letter and contain only letters, digits, and underscores",
+            "{} '{}' must be a bare lowercase name: a lowercase letter, then              lowercase letters, digits, or underscores",
             what, name
         ));
     }
-    if is_reserved_name(name) {
+    if let Some(kind) = reserved_name_kind(name) {
         return Err(format!(
-            "{} '{}' collides with a builtin or reserved word",
-            what, name
+            "{} '{}' collides with a {}",
+            what, name, kind
         ));
     }
     Ok(())
@@ -286,5 +276,43 @@ fn parse_body(text: &str) -> Result<Program, String> {
         let parsed = crate::functions::parse_function(trimmed)
             .map_err(|e| format!("failed to parse body: {}", e))?;
         Ok(Program { stmts: vec![], result: parsed.get_ast().clone() })
+    }
+}
+
+#[cfg(test)]
+mod reserved_registry_tests {
+    use crate::functions::functions::{reserved_name_kind, STATEFUL_FUNCTIONS};
+
+    /// Ties STATEFUL_FUNCTIONS (the reservation registry) to
+    /// lower_stateful_call (the resolution site): every registered name must
+    /// actually lower, so the two cannot drift apart when the language grows.
+    #[test]
+    fn stateful_lowering_covers_registry() {
+        let mut cache = crate::data_management::data_cache::DataCache::new();
+        for name in STATEFUL_FUNCTIONS {
+            let expr = match name {
+                n if n.starts_with("moving_") => format!("{}(data.x, 3, 0)", n),
+                "steps_since" => "steps_since(data.x > 0)".to_string(),
+                n => format!("{}(data.x, sim.new_month)", n),
+            };
+            let result = crate::model_inputs::DynamicInput::from_string(
+                &expr, &mut cache, false, None);
+            assert!(result.is_ok(),
+                "STATEFUL_FUNCTIONS entry '{}' does not lower ('{}'): {:?} — \
+                 either remove it from the registry or add its lower_stateful_call arm",
+                name, expr, result.err());
+        }
+    }
+
+    /// The three tiers answer for the names the guards depend on.
+    #[test]
+    fn reserved_tiers_answer() {
+        assert_eq!(reserved_name_kind("min"), Some("builtin function"));
+        assert_eq!(reserved_name_kind("clamp"), Some("builtin function"));
+        assert_eq!(reserved_name_kind("steps_since"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_mean"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("assert"), Some("reserved word"));
+        assert_eq!(reserved_name_kind("this"), Some("reserved word"));
+        assert_eq!(reserved_name_kind("headroom"), None);
     }
 }

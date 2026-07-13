@@ -180,8 +180,15 @@ fn test_positional_params() {
 /// call is `fn.MIXED(5)`. All fold to the same names; result is 10.
 #[test]
 fn test_case_insensitive() {
+    // Definitions are strictly lowercase (owner decision, July 2026:
+    // one rule for every definition name in the file)...
     let mut dc = cache_with_x(&[0.0]);
-    dc.fns.parse_and_insert("Mixed(X)", "x * 2").unwrap();
+    let err = dc.fns.parse_and_insert("Mixed(X)", "x * 2").unwrap_err();
+    assert!(err.contains("lowercase"),
+        "mixed-case definition should be rejected with a lowercase message, got: {}", err);
+
+    // ...while call-site MATCHING stays case-insensitive.
+    dc.fns.parse_and_insert("mixed(x)", "x * 2").unwrap();
     let input = DynamicInput::from_string("fn.MIXED(5)", &mut dc, true, None)
         .expect("mixed-case call should lower");
     dc.set_current_step(0);

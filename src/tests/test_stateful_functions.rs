@@ -505,3 +505,21 @@ fn test_model_run_twice_identical() {
     assert_eq!(first, second, "two runs must produce identical stateful outputs");
     assert_eq!(first, vec![20.0, 30.0, 20.0, 30.0], "hand-computed sanity check");
 }
+
+/// A signed literal is a literal: unary +/- over a numeric constant folds at
+/// parse, so a negative moving_* element default is accepted (caught by the
+/// July 2026 IDE-lockstep review verification — previously `-1` lowered as a
+/// UnaryOp and was rejected by the literal-only rule).
+#[test]
+fn test_moving_default_accepts_signed_literal() {
+    let mut dc = DataCache::new();
+    dc.get_or_add_new_series("data.x", true);
+    for expr in ["moving_min(data.x, 3, -1)", "moving_max(data.x, 3, +2.5)", "moving_sum(data.x, 3, -0.5)"] {
+        assert!(DynamicInput::from_string(expr, &mut dc, false, None).is_ok(),
+            "'{}' should lower (signed literal default)", expr);
+    }
+    // The window length must still be a positive integer: a negative literal
+    // is a literal, but not a valid window.
+    assert!(DynamicInput::from_string("moving_sum(data.x, -3, 0)", &mut dc, false, None).is_err(),
+        "negative window must still be rejected");
+}

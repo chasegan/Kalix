@@ -596,19 +596,18 @@ impl FunctionParser {
                     }
                 };
                 let lower = name.to_lowercase();
-                if BuiltinFunction::from_name(&lower).is_some() {
+                // The language owns the bare names (expression-naming §1.3):
+                // a local may not shadow ANY reserved tier — builtin,
+                // stateful builtin, or keyword — including tiers the
+                // language grows later. One registry answers for all of
+                // them (owner decision, July 2026).
+                if let Some(kind) = crate::functions::functions::reserved_name_kind(&lower) {
                     return Err(ParseError::SyntaxError {
                         position: stmt_start,
                         message: format!(
-                            "cannot use builtin function name '{}' as a local variable",
-                            lower
+                            "cannot use {} name '{}' as a local variable",
+                            kind, lower
                         ),
-                    });
-                }
-                if lower == "this" {
-                    return Err(ParseError::SyntaxError {
-                        position: stmt_start,
-                        message: "'this' is reserved and cannot be used as a local variable".to_string(),
                     });
                 }
                 parser.consume_token()?; // consume '='
@@ -856,6 +855,19 @@ impl FunctionParser {
             } {
                 self.consume_token()?;
                 let operand = self.parse_unary_expression()?;
+                // Fold unary +/- over a numeric literal at parse, so signed
+                // literals ARE literals: `-1` is a Constant, not a UnaryOp
+                // over one. Semantics are identical everywhere; it matters
+                // where the language requires a load-time literal — a
+                // moving_* element default of -1 must be accepted
+                // (lower_stateful_call::constant_arg matches Constant only).
+                if let ExpressionNode::Constant { value } = operand {
+                    match unary_op {
+                        UnaryOperator::Minus => return Ok(ExpressionNode::Constant { value: -value }),
+                        UnaryOperator::Plus => return Ok(ExpressionNode::Constant { value }),
+                        UnaryOperator::Not => {}
+                    }
+                }
                 return Ok(ExpressionNode::UnaryOp {
                     op: unary_op,
                     operand: Box::new(operand),

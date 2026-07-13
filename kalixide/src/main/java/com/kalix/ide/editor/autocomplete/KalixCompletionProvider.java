@@ -2,6 +2,7 @@ package com.kalix.ide.editor.autocomplete;
 
 import com.kalix.ide.editor.EditorPosition;
 import com.kalix.ide.io.DataSourceHeaderReader;
+import com.kalix.ide.language.ExpressionLanguage;
 import com.kalix.ide.linter.LinterSchema;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
@@ -34,6 +35,12 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
     private final InputDataRegistry inputDataRegistry;
     private final InputFileScanner inputFileScanner;
 
+    // The model-independent value completions — builtin functions and sim.*
+    // variables (41 entries) — built once. Per manifestos/performance.md, this
+    // avoids the library re-sorting the whole list after each per-request add:
+    // a single addCompletions(List) sorts once.
+    private final List<Completion> staticValueCompletions;
+
     private CompletionContext currentContext;
 
     // Anchor offset for value contexts: computed by scanning left from the caret
@@ -65,6 +72,25 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
         this.modelSupplier = modelSupplier;
         this.inputDataRegistry = inputDataRegistry;
         this.inputFileScanner = inputFileScanner;
+        this.staticValueCompletions = buildStaticValueCompletions();
+    }
+
+    /**
+     * Build the model-independent value completions once: the builtin functions
+     * (name plus '(' so the call is ready for its arguments) and the sim.*
+     * variables, all derived from {@link ExpressionLanguage}.
+     */
+    private List<Completion> buildStaticValueCompletions() {
+        List<Completion> list = new ArrayList<>();
+        for (ExpressionLanguage.Builtin fn : ExpressionLanguage.BUILTINS) {
+            String text = fn.completionText();
+            list.add(new BasicCompletion(this, fn.name() + "(", text, "<html><b>" + text + "</b></html>"));
+        }
+        for (ExpressionLanguage.SimVariable simVar : ExpressionLanguage.SIM_VARIABLES) {
+            list.add(new BasicCompletion(this, simVar.name(), simVar.description(),
+                    "<html><b>" + simVar.description() + "</b></html>"));
+        }
+        return list;
     }
 
     @Override
@@ -282,6 +308,24 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
                         + "Add <code>values = </code> rows of x, y breakpoints (1D), or "
                         + "<code>n_cols</code> and a keyed grid (2D).</html>");
         addCompletion(tableCompletion);
+
+        // Function section
+        BasicCompletion fnCompletion = new BasicCompletion(this, "[fn]\n",
+                null,
+                "<html><b>[fn]</b><br><br>"
+                        + "Define reusable functions, called from expressions as "
+                        + "<code>fn.name(args)</code>.<br>"
+                        + "Each key is a signature: <code>name(a, b) = a + b</code>.</html>");
+        addCompletion(fnCompletion);
+
+        // Variable block prefix
+        BasicCompletion varCompletion = new BasicCompletion(this, "[var.",
+                null,
+                "<html><b>[var.&lt;block&gt;]</b><br><br>"
+                        + "Define published, scheduled calculations. Each key is a series, "
+                        + "referable as <code>var.block.key</code> and recordable in "
+                        + "<code>[outputs]</code>.</html>");
+        addCompletion(varCompletion);
     }
 
     private void addPropertyCompletions(String sectionName, String nodeType) {
@@ -367,6 +411,9 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
                 addCompletion(completion);
             }
         }
+
+        // var.<block>.<key> series are recordable in [outputs] too.
+        addVarSeriesCompletions(model);
     }
 
     private void addInputFileCompletions() {
@@ -404,81 +451,12 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
         }
     }
 
-    // Builtin functions: {name, signature-description}. Mirrors the engine's
-    // BuiltinFunction enum (src/functions/functions.rs) and the validator's
-    // KNOWN_FUNCTIONS set - keep the three in sync.
-    private static final String[][] BUILTIN_FUNCTIONS = {
-        {"if", "if(cond, a, b) - a when cond is true, otherwise b"},
-        {"min", "min(a, b, ...) - smallest of its arguments"},
-        {"max", "max(a, b, ...) - largest of its arguments"},
-        {"sum", "sum(a, ...) - sum of its arguments"},
-        {"mean", "mean(a, ...) - arithmetic mean of its arguments"},
-        {"abs", "abs(x) - absolute value"},
-        {"sqrt", "sqrt(x) - square root"},
-        {"sin", "sin(x) - sine (radians)"},
-        {"cos", "cos(x) - cosine (radians)"},
-        {"tan", "tan(x) - tangent (radians)"},
-        {"asin", "asin(x) - arcsine (radians)"},
-        {"acos", "acos(x) - arccosine (radians)"},
-        {"atan", "atan(x) - arctangent (radians)"},
-        {"ln", "ln(x) - natural logarithm"},
-        {"log10", "log10(x) - base-10 logarithm"},
-        {"log2", "log2(x) - base-2 logarithm"},
-        {"exp", "exp(x) - e raised to the power x"},
-        {"ceil", "ceil(x) - round up to an integer"},
-        {"floor", "floor(x) - round down to an integer"},
-        {"round", "round(x) - round to the nearest integer"},
-        {"sign", "sign(x) - -1, 0, or 1 by the sign of x"},
-        {"pow", "pow(x, y) - x raised to the power y"},
-        {"atan2", "atan2(y, x) - angle of the vector (x, y)"},
-        {"clamp", "clamp(x, lo, hi) - constrain to a range"},
-        {"moving_sum", "moving_sum(x, n, default) - sum over the last n steps"},
-        {"moving_mean", "moving_mean(x, n, default) - mean over the last n steps"},
-        {"moving_min", "moving_min(x, n, default) - minimum over the last n steps"},
-        {"moving_max", "moving_max(x, n, default) - maximum over the last n steps"},
-        {"sum_since", "sum_since(x, reset) - sum of x since reset last fired"},
-        {"min_since", "min_since(x, reset) - minimum of x since reset last fired"},
-        {"max_since", "max_since(x, reset) - maximum of x since reset last fired"},
-        {"count_since", "count_since(x, reset) - steps counted since reset last fired"},
-        {"steps_since", "steps_since(reset) - steps since reset last fired"}
-    };
-
-    // Simulation variables: {reference, description}. Mirrors the validator's
-    // KNOWN_SIM_VARIABLES set - keep the two in sync.
-    private static final String[][] SIM_VARIABLES = {
-        {"sim.year", "sim.year - calendar year of the current step"},
-        {"sim.month", "sim.month - month of the year (1-12)"},
-        {"sim.day", "sim.day - day of the month"},
-        {"sim.day_of_year", "sim.day_of_year - day of the year (1-366)"},
-        {"sim.step", "sim.step - zero-based step index"},
-        {"sim.new_day", "sim.new_day - 1 on the first step of a new day, else 0"},
-        {"sim.new_month", "sim.new_month - 1 on the first step of a new month, else 0"},
-        {"sim.new_year", "sim.new_year - 1 on the first step of a new year, else 0"}
-    };
-
-    private void addBuiltinFunctionCompletions() {
-        for (String[] fn : BUILTIN_FUNCTIONS) {
-            // Insert the name plus '(' so the call is ready for its arguments.
-            BasicCompletion completion = new BasicCompletion(this, fn[0] + "(",
-                    fn[1], "<html><b>" + fn[1] + "</b></html>");
-            addCompletion(completion);
-        }
-    }
-
-    private void addSimVariableCompletions() {
-        for (String[] simVar : SIM_VARIABLES) {
-            BasicCompletion completion = new BasicCompletion(this, simVar[0],
-                    simVar[1], "<html><b>" + simVar[1] + "</b></html>");
-            addCompletion(completion);
-        }
-    }
-
     private void addGeneralValueCompletions() {
         // Builtin functions and sim.* variables do not depend on the parsed
         // model, so they are offered first - they surface even when no model
-        // has parsed yet (the model-dependent completions below need one).
-        addBuiltinFunctionCompletions();
-        addSimVariableCompletions();
+        // has parsed yet (the model-dependent completions below need one). Built
+        // once (see the constructor); addCompletions sorts the batch once.
+        addCompletions(staticValueCompletions);
 
         INIModelParser.ParsedModel model = modelSupplier.get();
         if (model == null) {
@@ -512,6 +490,55 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
 
         // Lookup table calls from [table.*] sections
         addTableCompletions(model);
+
+        // User-defined function calls from the [fn] section
+        addFnCompletions(model);
+
+        // var.<block>.<key> series from [var.*] blocks
+        addVarSeriesCompletions(model);
+    }
+
+    private void addFnCompletions(INIModelParser.ParsedModel model) {
+        INIModelParser.Section fnSection = model.getSections().get("fn");
+        if (fnSection == null) {
+            return;
+        }
+        for (INIModelParser.Property prop : fnSection.getAllProperties()) {
+            com.kalix.ide.linter.model.FnRegistry.Signature sig =
+                    com.kalix.ide.linter.model.FnRegistry.parseSignature(prop.getKey());
+            if (sig.error() != null) {
+                continue; // malformed keys are reported by the linter
+            }
+            String signature = "fn." + sig.name() + "(" + String.join(", ", sig.params()) + ")";
+            // Insert the name plus '(' so the call is ready for its arguments.
+            BasicCompletion completion = new BasicCompletion(this, "fn." + sig.name() + "(",
+                    null,
+                    "<html><b>" + signature + "</b>"
+                            + "<br><br>User-defined function from the [fn] section.</html>");
+            addCompletion(completion);
+        }
+    }
+
+    private void addVarSeriesCompletions(INIModelParser.ParsedModel model) {
+        for (Map.Entry<String, INIModelParser.Section> entry : model.getSections().entrySet()) {
+            String sectionName = entry.getKey();
+            if (!sectionName.equals("var") && !sectionName.startsWith("var.")) {
+                continue;
+            }
+            String blockName = sectionName.equals("var") ? "" : sectionName.substring("var.".length());
+            for (INIModelParser.Property prop : entry.getValue().getAllProperties()) {
+                String key = prop.getKey();
+                if (key.equalsIgnoreCase("phase")) {
+                    continue; // 'phase' is configuration, not a series
+                }
+                String completionText = "var." + blockName + "." + key;
+                BasicCompletion completion = new BasicCompletion(this, completionText,
+                        null,
+                        "<html><b>" + completionText + "</b>"
+                                + "<br><br>Variable series from [" + sectionName + "].</html>");
+                addCompletion(completion);
+            }
+        }
     }
 
     private void addTableCompletions(INIModelParser.ParsedModel model) {

@@ -478,3 +478,22 @@ node.a.ds_1
     // And the values are the hand-computed base + step, as a sanity check.
     assert_eq!(first, vec![10.0, 11.0, 12.0, 13.0, 14.0]);
 }
+
+/// Locals may not shadow ANY reserved tier — builtins, stateful functions,
+/// or keywords (owner decision, July 2026; one registry answers for all,
+/// so new tiers extend the guard automatically).
+#[test]
+fn test_local_cannot_shadow_stateful_or_reserved() {
+    for (value, needle) in [
+        ("{ steps_since = 1; steps_since }", "stateful function"),
+        ("{ moving_mean = 1; moving_mean }", "stateful function"),
+        ("{ min = 1; min }", "builtin function"),
+        ("{ this = 1; 1 }", "reserved word"),
+    ] {
+        let mut dc = DataCache::new();
+        let err = DynamicInput::from_string(value, &mut dc, true, None)
+            .expect_err(&format!("'{}' should be rejected", value));
+        assert!(err.contains(needle),
+            "'{}' error should mention '{}', got: {}", value, needle, err);
+    }
+}

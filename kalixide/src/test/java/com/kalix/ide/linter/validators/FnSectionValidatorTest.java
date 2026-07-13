@@ -139,6 +139,36 @@ class FnSectionValidatorTest {
         assertHasIssue("[fn]\nfoo(x) = notafunc(x)\n", "Unknown function");
     }
 
+    @Test
+    @DisplayName("A trailing-comma signature is rejected (empty parameter), mirroring the engine")
+    void testTrailingCommaSignature() {
+        assertHasIssue("[fn]\nfoo(a,) = a\n", "Empty parameter");
+        assertHasIssue("[fn]\nfoo(,a) = a\n", "Empty parameter");
+        assertHasIssue("[fn]\nfoo(,) = 1\n", "Empty parameter");
+    }
+
+    @Test
+    @DisplayName("A case-crossing mutual cycle is caught (call names resolve case-insensitively)")
+    void testCaseCrossingRecursion() {
+        // fn.B calls into b; the old regex only matched lowercase and missed this.
+        assertHasIssue("""
+            [fn]
+            a(x) = fn.B(x)
+            b(x) = fn.a(x)
+            """, "recursive");
+    }
+
+    @Test
+    @DisplayName("A data alias named 'fn' does not create a phantom recursion edge")
+    void testPhantomFnEdgeNotFlagged() {
+        // data.fn.a lexes as one DATA_REF token, never an fn. call; the old
+        // regex's \\b matched inside it and produced a false 'fn.a -> fn.a'.
+        ValidationResult result = run("[fn]\na() = data.fn.a * 2\n");
+        boolean recursive = result.getIssues().stream()
+                .anyMatch(i -> i.getMessage().toLowerCase().contains("recursive"));
+        assertTrue(!recursive, "must not flag a phantom recursion, got: " + result.getIssues());
+    }
+
     // ==================== Helper methods ====================
 
     private ValidationResult run(String ini) {

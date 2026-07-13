@@ -101,6 +101,26 @@ pub fn starts_with_numeric_char(s: &str) -> bool {
 }
 
 
+/// The strict rule for BARE definition names — [fn] function names and
+/// parameters, [var.*] block and key names: lowercase-alphabetic first
+/// character, then lowercase letters, digits, and underscores. No dots (dots
+/// are namespace separators), no uppercase (definitions are written
+/// lowercase, per expression-naming §2.6; call-site MATCHING stays
+/// case-insensitive), no leading underscore (owner decision, July 2026:
+/// one strict rule for every definition name in the file).
+///
+/// Contrast [`is_valid_variable_name`], which is the rule for dotted data
+/// paths and permits '.' separators.
+pub fn is_valid_bare_name(s: &str) -> bool {
+    let mut bytes = s.bytes();
+    match bytes.next() {
+        Some(b) if b.is_ascii_lowercase() => {}
+        _ => return false,
+    }
+    bytes.all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+}
+
+
 pub fn is_valid_variable_name(s: &str) -> bool {
     if let Some(b) = s.bytes().next() {
         // First char must be lowercase alphabetic

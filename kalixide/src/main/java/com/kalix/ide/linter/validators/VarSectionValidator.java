@@ -1,5 +1,6 @@
 package com.kalix.ide.linter.validators;
 
+import com.kalix.ide.language.ExpressionLanguage;
 import com.kalix.ide.linter.LinterSchema;
 import com.kalix.ide.linter.model.ValidationContext;
 import com.kalix.ide.linter.model.ValidationResult;
@@ -30,16 +31,24 @@ import java.util.regex.Pattern;
 public class VarSectionValidator implements ValidationStrategy {
 
     /** A bare name per the engine's is_valid_variable_name: lowercase first. */
-    private static final Pattern VALID_NAME = Pattern.compile("^[a-z][a-z0-9_]*$");
+    private static final Pattern VALID_NAME = ExpressionLanguage.BARE_NAME;
 
     private final FunctionExpressionValidator expressionValidator = new FunctionExpressionValidator();
 
     @Override
     public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, File baseDirectory) {
+        // A var block belongs to no node: 'this.' cannot be resolved here, so the
+        // context carries the model (for node/var/fn/table refs) but no current
+        // node. It is identical for every [var.*] block, so build it once.
+        ValidationContext context = ValidationContext.builder()
+                .model(model)
+                .schema(schema)
+                .build();
+
         for (Map.Entry<String, INIModelParser.Section> entry : model.getSections().entrySet()) {
             String sectionName = entry.getKey();
             if (sectionName.equals("var") || sectionName.startsWith("var.")) {
-                validateVarSection(sectionName, entry.getValue(), model, schema, result);
+                validateVarSection(sectionName, entry.getValue(), context, result);
             }
         }
     }
@@ -50,8 +59,7 @@ public class VarSectionValidator implements ValidationStrategy {
     }
 
     private void validateVarSection(String sectionName, INIModelParser.Section section,
-                                    INIModelParser.ParsedModel model, LinterSchema schema,
-                                    ValidationResult result) {
+                                    ValidationContext context, ValidationResult result) {
         // The namespace is everything after "var."; a bare [var] has none.
         String blockName = sectionName.equals("var") ? "" : sectionName.substring("var.".length());
         if (!VALID_NAME.matcher(blockName).matches()) {
@@ -61,14 +69,6 @@ public class VarSectionValidator implements ValidationStrategy {
                             + "underscores; no dots)",
                     ValidationRule.Severity.ERROR, "invalid_var_block_name");
         }
-
-        // A var block belongs to no node: 'this.' cannot be resolved here, so
-        // the context carries the model (for node/var/fn/table refs) but no
-        // current node.
-        ValidationContext context = ValidationContext.builder()
-                .model(model)
-                .schema(schema)
-                .build();
 
         for (INIModelParser.Property prop : section.getAllProperties()) {
             String key = prop.getKey();

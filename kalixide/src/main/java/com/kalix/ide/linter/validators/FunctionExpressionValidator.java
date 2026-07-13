@@ -1,7 +1,9 @@
 package com.kalix.ide.linter.validators;
 
+import com.kalix.ide.language.ExpressionLanguage;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.LinterSchema;
+import com.kalix.ide.linter.model.FnRegistry;
 import com.kalix.ide.linter.model.ValidationContext;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.utils.ValidationUtils;
@@ -25,16 +27,17 @@ import java.util.*;
  * - Program blocks: "{ x = data.a * 2; assert(x >= 0); x + 1 }" - ';'-terminated
  *   statements (local assignments and asserts) followed by a bare result expression
  *
- * The known-function set mirrors the engine's BuiltinFunction enum
- * (src/functions/functions.rs) — keep the two in sync.
+ * The known-function set and sim-variable set derive from the single Java
+ * language definition ({@link ExpressionLanguage}), which mirrors the engine's
+ * BuiltinFunction enum (src/functions/functions.rs).
  *
  * Performance target: < 10ms per expression validation
  */
 public class FunctionExpressionValidator {
 
-    // Known functions with their argument counts.
-    // Negative value = variadic with minimum argument count of -value.
-    private static final Map<String, Integer> KNOWN_FUNCTIONS = createFunctionMap();
+    // Known functions with their argument counts (negative = variadic with
+    // minimum argument count of -value). Derived from ExpressionLanguage.
+    private static final Map<String, Integer> KNOWN_FUNCTIONS = ExpressionLanguage.functionArities();
 
     // Fast-path recognisers, compiled once: these run per expression per validation
     // pass, and String.matches would recompile each pattern every call.
@@ -49,64 +52,8 @@ public class FunctionExpressionValidator {
     private static final java.util.regex.Pattern THIS_REF_FAST_PATTERN =
         java.util.regex.Pattern.compile("^this\\.[a-zA-Z_][a-zA-Z0-9_]*(\\[.*?\\])?$");
 
-    // Known simulation variables
-    private static final Set<String> KNOWN_SIM_VARIABLES = Set.of(
-        "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step",
-        "sim.new_day", "sim.new_month", "sim.new_year"
-    );
-
-    private static Map<String, Integer> createFunctionMap() {
-        Map<String, Integer> map = new HashMap<>();
-
-        // Conditional
-        map.put("if", 3);
-
-        // Aggregation (variadic; negative = minimum argument count)
-        map.put("max", -2);
-        map.put("min", -2);
-        map.put("sum", -1);
-        map.put("mean", -1);
-
-        // Single argument math
-        map.put("abs", 1);
-        map.put("sqrt", 1);
-        map.put("sin", 1);
-        map.put("cos", 1);
-        map.put("tan", 1);
-        map.put("asin", 1);
-        map.put("acos", 1);
-        map.put("atan", 1);
-        map.put("ln", 1);
-        map.put("log10", 1);
-        map.put("log2", 1);
-        map.put("exp", 1);
-        map.put("ceil", 1);
-        map.put("floor", 1);
-        map.put("round", 1);
-        map.put("sign", 1);
-
-        // Two argument math
-        map.put("pow", 2);
-        map.put("atan2", 2);
-
-        // Three argument
-        map.put("clamp", 3);
-
-        // Temporal (stateful) functions: moving_*(x, n, default)
-        map.put("moving_sum", 3);
-        map.put("moving_mean", 3);
-        map.put("moving_min", 3);
-        map.put("moving_max", 3);
-
-        // Event-window functions: the last argument is always the reset condition
-        map.put("sum_since", 2);
-        map.put("min_since", 2);
-        map.put("max_since", 2);
-        map.put("count_since", 2);
-        map.put("steps_since", 1);
-
-        return Collections.unmodifiableMap(map);
-    }
+    // Known simulation variables. Derived from ExpressionLanguage.
+    private static final Set<String> KNOWN_SIM_VARIABLES = ExpressionLanguage.simVariableNames();
 
     /**
      * Validate a function expression without model context. Convenience for callers
@@ -158,7 +105,7 @@ public class FunctionExpressionValidator {
                 Tokenizer tokenizer = new Tokenizer(expression);
                 Parser parser = new Parser(tokenizer, context);
                 parser.parseProgram(errors);
-                if (parser.current.type != TokenType.EOF) {
+                if (errors.isEmpty() && parser.current.type != TokenType.EOF) {
                     errors.add("Unexpected tokens after closing '}': '" + parser.current.value + "'");
                 }
             } catch (ParseException e) {
@@ -261,7 +208,10 @@ public class FunctionExpressionValidator {
             } else {
                 parser.parseExpression(errors);
             }
-            if (parser.current.type != TokenType.EOF) {
+            // Guard with errors.isEmpty() so a parse that stopped early (e.g. a
+            // program statement with no effect) doesn't stack a trailing-token
+            // error on top of the real diagnostic.
+            if (errors.isEmpty() && parser.current.type != TokenType.EOF) {
                 errors.add("Unexpected tokens after expression: '" + parser.current.value + "'");
             }
         } catch (ParseException e) {
@@ -270,6 +220,40 @@ public class FunctionExpressionValidator {
             errors.add("Failed to parse function body: " + e.getMessage());
         }
         return errors;
+    }
+
+    /**
+     * Collect the lowercased bare names of every {@code fn.*} call in a body, by
+     * walking it with the expression Tokenizer and picking out {@code FN_REF}
+     * tokens. Used by the {@code [fn]} recursion check.
+     *
+     * <p>Tokenizing rather than regex-scanning raw text makes the scan
+     * case-correct ({@code fn.B} yields {@code "b"}) and immune to phantom
+     * matches inside other references: {@code data.fn.a} lexes as a single
+     * {@code DATA_REF} token, never an {@code FN_REF}, so it produces no edge.</p>
+     */
+    static List<String> collectFnCallees(String body) {
+        List<String> out = new ArrayList<>();
+        if (body == null) {
+            return out;
+        }
+        try {
+            Tokenizer tokenizer = new Tokenizer(body);
+            for (Token tok = tokenizer.nextToken(); tok.type != TokenType.EOF; tok = tokenizer.nextToken()) {
+                if (tok.type == TokenType.FN_REF) {
+                    String bare = tok.value.substring(3).toLowerCase(); // strip "fn."
+                    // Skip malformed dotted names (e.g. fn.a.b) and empty tails:
+                    // they match no definition, so they cannot be a real edge.
+                    if (!bare.isEmpty() && bare.indexOf('.') < 0) {
+                        out.add(bare);
+                    }
+                }
+            }
+        } catch (ParseException e) {
+            // A malformed body throws mid-scan; its own body validation reports
+            // that error. Return the edges collected before the throw.
+        }
+        return out;
     }
 
     // Fast path checks using simple regex
@@ -649,7 +633,7 @@ public class FunctionExpressionValidator {
         private final Tokenizer tokenizer;
         private final ValidationContext context;
         Token current;
-        private Token lookahead;
+        private final List<Token> lookaheadBuffer = new ArrayList<>();
 
         /** Non-null while validating a program block or fn body: the bare
          *  local/parameter names (lowercased) assigned so far. Bare
@@ -667,9 +651,8 @@ public class FunctionExpressionValidator {
         }
 
         private void advance() throws ParseException {
-            if (lookahead != null) {
-                current = lookahead;
-                lookahead = null;
+            if (!lookaheadBuffer.isEmpty()) {
+                current = lookaheadBuffer.remove(0);
             } else {
                 current = tokenizer.nextToken();
             }
@@ -677,10 +660,16 @@ public class FunctionExpressionValidator {
 
         /** One-token lookahead (statement-shape decisions: 'name =', 'assert('). */
         private Token peek() throws ParseException {
-            if (lookahead == null) {
-                lookahead = tokenizer.nextToken();
+            return peekAt(0);
+        }
+
+        /** N-token lookahead; peekAt(0) is the token after `current`. Only
+         *  the signed-literal check needs depth 1. */
+        private Token peekAt(int i) throws ParseException {
+            while (lookaheadBuffer.size() <= i) {
+                lookaheadBuffer.add(tokenizer.nextToken());
             }
-            return lookahead;
+            return lookaheadBuffer.get(i);
         }
 
         private void expect(TokenType type, List<String> errors) throws ParseException {
@@ -740,10 +729,13 @@ public class FunctionExpressionValidator {
                         && peek().value.equals("=")) {
                     String name = current.value;
                     String lower = name.toLowerCase();
-                    if (KNOWN_FUNCTIONS.containsKey(lower)) {
-                        errors.add("Cannot use builtin function name '" + lower + "' as a local variable");
-                    } else if (lower.equals("assert") || lower.equals("this")) {
-                        errors.add("'" + lower + "' is reserved and cannot be used as a local variable");
+                    // The language owns the bare names: a local may not shadow ANY
+                    // reserved tier — builtin, stateful builtin, or keyword. Name
+                    // the tier exactly as the engine's local-assignment guard does
+                    // (src/functions/parser.rs, reserved_name_kind).
+                    String tier = ExpressionLanguage.reservedTier(lower);
+                    if (tier != null) {
+                        errors.add("Cannot use " + tier + " name '" + lower + "' as a local variable");
                     }
                     advance(); // name
                     advance(); // =
@@ -783,11 +775,8 @@ public class FunctionExpressionValidator {
                         return;
                     }
                     errors.add("Statement has no effect: expected 'name = expression;', 'assert(...);', or the final result expression (no ';')");
-                    // Consume the rest so the caller's trailing-token check
-                    // doesn't stack a second error on top of this one.
-                    while (current.type != TokenType.EOF) {
-                        advance();
-                    }
+                    // Callers guard their trailing-token check with errors.isEmpty(),
+                    // so leaving tokens unconsumed here cannot stack a second error.
                     return;
                 }
                 if (current.type == TokenType.EOF) {
@@ -1020,7 +1009,7 @@ public class FunctionExpressionValidator {
 
             int argCount = 0;
             if (current.type != TokenType.RPAREN) {
-                argCount = parseArgumentList(errors);
+                argCount = parseArgumentList(null, errors);
             }
             expect(TokenType.RPAREN, errors);
 
@@ -1066,9 +1055,7 @@ public class FunctionExpressionValidator {
             String fnRef = current.value; // e.g. "fn.net_demand"
 
             String fnName = null;
-            if (fnRef.contains("..")) {
-                errors.add("Malformed function reference: '" + fnRef + "' (consecutive dots)");
-            } else if (fnRef.endsWith(".")) {
+            if (fnRef.endsWith(".")) {
                 errors.add("Incomplete function reference: '" + fnRef + "'");
             } else {
                 fnName = fnRef.substring(3); // "fn.".length() == 3
@@ -1088,14 +1075,13 @@ public class FunctionExpressionValidator {
 
             int argCount = 0;
             if (current.type != TokenType.RPAREN) {
-                argCount = parseArgumentList(errors);
+                argCount = parseArgumentList(null, errors);
             }
             expect(TokenType.RPAREN, errors);
 
-            // Validate existence and arity against the [fn] section when available
+            // Validate existence and arity against the shared [fn] registry.
             if (fnName != null && context.getModel() != null) {
-                INIModelParser.Section fnSection = context.getModel().getSections().get("fn");
-                Integer expectedArgs = fnSection == null ? null : fnArity(fnSection, fnName);
+                Integer expectedArgs = context.getFnRegistry().arity(fnName.toLowerCase());
                 if (expectedArgs == null) {
                     errors.add("Unknown function '" + fnRef + "' (no matching definition in the [fn] section)");
                 } else if (argCount != expectedArgs) {
@@ -1105,41 +1091,12 @@ public class FunctionExpressionValidator {
             }
         }
 
-        /**
-         * Find a definition in the [fn] section by (lowercased) name and
-         * return its parameter count, or null when no key matches. Keys are
-         * signatures like "net_demand(pop, doy)".
-         */
-        private Integer fnArity(INIModelParser.Section fnSection, String fnName) {
-            String want = fnName.toLowerCase();
-            for (String key : fnSection.getProperties().keySet()) {
-                int open = key.indexOf('(');
-                if (open <= 0 || !key.trim().endsWith(")")) {
-                    continue; // malformed keys are reported by the section validator
-                }
-                String name = key.substring(0, open).trim().toLowerCase();
-                if (!name.equals(want)) {
-                    continue;
-                }
-                String inner = key.substring(open + 1, key.trim().length() - 1).trim();
-                if (inner.isEmpty()) {
-                    return 0;
-                }
-                return (int) (inner.chars().filter(c -> c == ',').count() + 1);
-            }
-            return null;
-        }
-
         // A var reference is a plain series reference: var.<block>.<key>,
         // optionally with the offset bracket syntax. Forward offsets are
         // rejected (var values are computed during the run).
         private void validateVarReference(String varRef, List<String> errors) {
             String refWithoutBrackets = varRef.replaceFirst("\\[.*?\\]$", "");
 
-            if (refWithoutBrackets.contains("..")) {
-                errors.add("Malformed var reference: '" + varRef + "' (consecutive dots)");
-                return;
-            }
             if (refWithoutBrackets.endsWith(".")) {
                 errors.add("Malformed var reference: '" + varRef + "' (trailing dot)");
                 return;
@@ -1167,18 +1124,16 @@ public class FunctionExpressionValidator {
             }
 
             // Validate against the model when available: the block section and key.
+            // Shared with the [outputs] path (ValidationUtils.checkVarReference):
+            // case-insensitive on block and key, and the 'phase' key is excluded.
             if (context.getModel() != null) {
                 String sectionName = "var." + segments[1].toLowerCase();
-                INIModelParser.Section varSection = context.getModel().getSections().get(sectionName);
-                if (varSection == null) {
-                    errors.add("Unknown var block: '" + varRef + "' (no [" + sectionName + "] section is defined)");
-                } else {
-                    boolean found = varSection.getProperties().keySet().stream()
-                            .anyMatch(k -> k.trim().toLowerCase().equals(segments[2].toLowerCase()));
-                    if (!found) {
-                        errors.add("Unknown var: '" + varRef + "' (no '" + segments[2]
-                                + "' in [" + sectionName + "])");
-                    }
+                switch (ValidationUtils.checkVarReference(segments[1], segments[2], context.getModel())) {
+                    case UNKNOWN_BLOCK -> errors.add("Unknown var block: '" + varRef
+                            + "' (no [" + sectionName + "] section is defined)");
+                    case UNKNOWN_KEY -> errors.add("Unknown var: '" + varRef
+                            + "' (no '" + segments[2] + "' in [" + sectionName + "])");
+                    case OK -> { /* resolved */ }
                 }
             }
         }
@@ -1198,9 +1153,10 @@ public class FunctionExpressionValidator {
             advance();
             expect(TokenType.LPAREN, errors);
 
+            List<Double> argLiterals = new ArrayList<>();
             int argCount = 0;
             if (current.type != TokenType.RPAREN) {
-                argCount = parseArgumentList(errors);
+                argCount = parseArgumentList(argLiterals, errors);
             }
 
             expect(TokenType.RPAREN, errors);
@@ -1217,20 +1173,102 @@ public class FunctionExpressionValidator {
                                " argument" + (minimum == 1 ? "" : "s") + ", but got " + argCount);
                 }
             }
+
+            // moving_*(x, n, default): the window (arg 2) and default (arg 3) must
+            // be load-time literals — the engine sizes and pre-fills the window
+            // state at model load, and does no constant folding (constant_arg
+            // matches only a lone Constant node). The window must be a positive
+            // integer. *_since functions carry no such constraint.
+            if (ExpressionLanguage.isMovingWindowFunction(funcName) && argCount == 3) {
+                Double window = argLiterals.get(1);
+                if (window == null) {
+                    errors.add(funcName + "'s window (2nd argument) must be a constant"
+                            + " — state is sized at model load");
+                } else if (window != Math.floor(window) || window < 1) {
+                    errors.add(funcName + "'s window (2nd argument) must be a positive integer, but got "
+                            + trimNumber(window));
+                }
+                if (argLiterals.get(2) == null) {
+                    errors.add(funcName + "'s default (3rd argument) must be a constant"
+                            + " — state is sized at model load");
+                }
+            }
+        }
+
+        /** Render a literal argument value without a needless trailing ".0". */
+        private static String trimNumber(double v) {
+            if (v == Math.floor(v) && !Double.isInfinite(v)) {
+                return Long.toString((long) v);
+            }
+            return Double.toString(v);
         }
 
         // ArgumentList := Expression ( ',' Expression )*
-        private int parseArgumentList(List<String> errors) throws ParseException {
+        //
+        // When outLiterals is non-null it is filled with one entry per argument:
+        // the numeric value if that argument was a bare numeric literal, else
+        // null. A fresh list is captured per call site, so nested calls don't
+        // clobber it. "Bare literal" is judged BEFORE descending into the
+        // argument (an optionally signed NUMBER token immediately followed by
+        // ',' or ')'), mirroring the engine's constant_arg: the engine folds
+        // unary +/- over a numeric literal at parse, so signed literals are
+        // Constants; anything else lowers to a non-Constant it rejects.
+        private int parseArgumentList(List<Double> outLiterals, List<String> errors) throws ParseException {
             int count = 1;
+            if (outLiterals != null) {
+                outLiterals.add(bareLiteralValue());
+            }
             parseExpression(errors);
 
             while (current.type == TokenType.COMMA) {
                 advance();
+                if (outLiterals != null) {
+                    outLiterals.add(bareLiteralValue());
+                }
                 parseExpression(errors);
                 count++;
             }
 
             return count;
+        }
+
+        /**
+         * If the current token starts a (possibly signed) numeric literal
+         * argument — an optional leading '+'/'-' then a single NUMBER token
+         * immediately at the argument boundary (',' or ')') — return its
+         * value; otherwise null. The engine folds unary +/- over a numeric
+         * literal at parse (parser.rs, July 2026), so a signed literal IS a
+         * load-time Constant and a moving_* default of -1 is legal.
+         */
+        private Double bareLiteralValue() throws ParseException {
+            double sign = 1.0;
+            int offset = 0;
+            if (current.type == TokenType.OPERATOR
+                    && (current.value.equals("-") || current.value.equals("+"))) {
+                // Peek only reaches one token ahead, so a signed literal is
+                // judged when the sign token is current and the NUMBER next.
+                if (peek().type != TokenType.NUMBER) {
+                    return null;
+                }
+                sign = current.value.equals("-") ? -1.0 : 1.0;
+                offset = 1;
+            }
+            Token numberToken = offset == 0 ? current : peek();
+            if (numberToken.type != TokenType.NUMBER) {
+                return null;
+            }
+            // The literal must be the WHOLE argument: the token after the
+            // number is the argument boundary (',' or ')'). For a signed
+            // literal that's two tokens ahead of `current`.
+            TokenType next = peekAt(offset).type;
+            if (next == TokenType.COMMA || next == TokenType.RPAREN) {
+                try {
+                    return sign * Double.parseDouble(numberToken.value);
+                } catch (NumberFormatException ignored) {
+                    return null;
+                }
+            }
+            return null;
         }
 
         private void validateDataReference(String dataRef, List<String> errors) {
