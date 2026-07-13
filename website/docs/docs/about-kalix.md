@@ -42,7 +42,7 @@ The model operates on a constant timestep (typically a daily timestep, but this 
 | --- | --- |
 | **For modellers** |  |
 | Executables: | Refer to [Downloads](../downloads.md) |
-| Online documentation: | https://chasegan.notion.site/Kalix-User-Guide-762687200b564e8e8c82b4f98879974f |
+| Homepage: | <https://kalixproject.org> |
 | Software licence details: | <https://www.mozilla.org/en-US/MPL/2.0/> |
 | **For developers** |  |
 | Getting started | <https://github.com/chasegan/Kalix/wiki/Getting-started> |

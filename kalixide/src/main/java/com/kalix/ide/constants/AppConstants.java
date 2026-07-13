@@ -30,7 +30,7 @@ public final class AppConstants {
         }
         return "0.1.0"; // Fallback
     }
-    public static final String APP_WEBSITE_URL = "https://chasegan.notion.site/Kalix-User-Guide-762687200b564e8e8c82b4f98879974f";
+    public static final String APP_WEBSITE_URL = "https://kalixproject.org";
     
     // Window properties
     public static final int DEFAULT_WINDOW_WIDTH = 1200;

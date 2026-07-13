@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://chasegan.notion.site/Kalix-User-Guide-762687200b564e8e8c82b4f98879974f"
+Homepage = "https://kalixproject.org"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]

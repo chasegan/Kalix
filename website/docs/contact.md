@@ -24,9 +24,6 @@ hide:
         <a href="#" class="kx-email"><span class="__cf_email__" data-cfemail="1063717e7e75507f74786974627f7c7f77693e737f7d">[email&#160;protected]</span></a>
       </div>
       <div>
-        <div class="kx-person-tags"><span class="kx-person-name">Matt Gooda</span><span class="kx-tag kx-tag-sme">SME</span><span class="kx-tag kx-tag-hydro">Senior hydrologist</span></div>
-      </div>
-      <div>
         <div class="kx-person-tags"><span class="kx-person-name">Ciaran Komarakul-Greene</span><span class="kx-tag kx-tag-dev">Developer</span></div>
         <a href="#" class="kx-email"><span class="__cf_email__" data-cfemail="6f0c060e1d0e012f000b07160b1d0003000816410c0002">[email&#160;protected]</span></a>
       </div>
