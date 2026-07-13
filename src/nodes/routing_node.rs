@@ -4,6 +4,7 @@ use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
 use crate::numerical::mathfn::quadratic_plus;
 use crate::numerical::interpolation::lerp;
+use crate::numerical::opt::optimisable_component::OptimisableComponent;
 
 const MAX_DS_LINKS: usize = 1;
 const PWL_TT_PREFIX: &str = "pwl_tt_";
@@ -235,6 +236,19 @@ impl Node for RoutingNode {
                 return Err(format!(
                     "Error in node '{}'. Routing table index flows must be strictly increasing (violation at row {}).",
                     self.name, i + 2
+                ));
+            }
+        }
+
+        // Validate PWL travel times are non-negative. Segment storage is
+        // V(q) = integral of tt(q), so a negative travel time makes V
+        // non-monotonic and the reference-flow solver loses root uniqueness.
+        // (`!(x >= 0)` also catches NaN.)
+        for i in 0..=self.pwl_segs {
+            if !(self.pwl_tt[i] >= 0.0) {
+                return Err(format!(
+                    "Error in node '{}'. Routing table travel times must be non-negative, got {} at row {}.",
+                    self.name, self.pwl_tt[i], i + 1
                 ));
             }
         }
@@ -527,4 +541,112 @@ impl Node for RoutingNode {
 
 
 
+}
+
+// ============================================================================
+// OptimisableComponent Implementation
+// ============================================================================
+
+impl RoutingNode {
+    /// Whether this node's optimisable parameters are the PWL travel times
+    /// (as opposed to the NLM pair). Keys off `pwl_segs` rather than
+    /// `uses_nlm()`: the routing table is structural (the optimiser never
+    /// touches it), whereas a candidate `nlm_k` of 0 would flip `uses_nlm()`
+    /// mid-optimisation and make later `set_param` calls spuriously fail.
+    /// A lag-only node (no table) lands in the NLM bucket: calibrating k onto
+    /// it is how a modeller would give it NLM routing.
+    fn optimises_pwl(&self) -> bool {
+        self.pwl_segs > 0
+    }
+
+    /// Parse and bounds-check the index of a `pwl_tt_<i>` parameter name.
+    /// Valid indices are 0 to `pwl_segs` inclusive (the table has
+    /// `pwl_segs + 1` points).
+    fn parse_pwl_tt_index(&self, name: &str) -> Result<usize, String> {
+        let idx_str = &name[PWL_TT_PREFIX.len()..];
+        let idx = idx_str.parse::<usize>().map_err(|_| {
+            format!("Node '{}': invalid index in parameter '{}'", self.name, name)
+        })?;
+        if idx > self.pwl_segs {
+            return Err(format!(
+                "Node '{}': parameter '{}' out of range - routing table has {} points ({}0 to {}{})",
+                self.name, name, self.pwl_segs + 1, PWL_TT_PREFIX, PWL_TT_PREFIX, self.pwl_segs
+            ));
+        }
+        Ok(idx)
+    }
+}
+
+impl OptimisableComponent for RoutingNode {
+    fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
+        // Only the active mode's parameters are accepted, mirroring
+        // list_params. Value validation (tt >= 0, k >= 0, m in (0, 5]) stays
+        // in initialise(), which reruns before every evaluation.
+        if self.optimises_pwl() {
+            if name.starts_with(PWL_TT_PREFIX) {
+                let idx = self.parse_pwl_tt_index(name)?;
+                self.pwl_tt[idx] = value;
+                Ok(())
+            } else if name == "nlm_k" || name == "nlm_m" {
+                Err(format!(
+                    "Node '{}' uses PWL routing; '{}' is not optimisable here (available: {}0 to {}{})",
+                    self.name, name, PWL_TT_PREFIX, PWL_TT_PREFIX, self.pwl_segs
+                ))
+            } else {
+                Err(format!("Unknown routing parameter: {}", name))
+            }
+        } else {
+            match name {
+                "nlm_k" => {
+                    self.nlm_k = value;
+                    Ok(())
+                }
+                "nlm_m" => {
+                    self.nlm_m = value;
+                    Ok(())
+                }
+                _ if name.starts_with(PWL_TT_PREFIX) => Err(format!(
+                    "Node '{}' has no PWL routing table; '{}' is not optimisable here (available: nlm_k, nlm_m)",
+                    self.name, name
+                )),
+                _ => Err(format!("Unknown routing parameter: {}", name)),
+            }
+        }
+    }
+
+    fn get_param(&self, name: &str) -> Result<f64, String> {
+        if self.optimises_pwl() {
+            if name.starts_with(PWL_TT_PREFIX) {
+                let idx = self.parse_pwl_tt_index(name)?;
+                Ok(self.pwl_tt[idx])
+            } else if name == "nlm_k" || name == "nlm_m" {
+                Err(format!(
+                    "Node '{}' uses PWL routing; '{}' is not optimisable here (available: {}0 to {}{})",
+                    self.name, name, PWL_TT_PREFIX, PWL_TT_PREFIX, self.pwl_segs
+                ))
+            } else {
+                Err(format!("Unknown routing parameter: {}", name))
+            }
+        } else {
+            match name {
+                "nlm_k" => Ok(self.nlm_k),
+                "nlm_m" => Ok(self.nlm_m),
+                _ if name.starts_with(PWL_TT_PREFIX) => Err(format!(
+                    "Node '{}' has no PWL routing table; '{}' is not optimisable here (available: nlm_k, nlm_m)",
+                    self.name, name
+                )),
+                _ => Err(format!("Unknown routing parameter: {}", name)),
+            }
+        }
+    }
+
+    fn list_params(&self) -> Vec<String> {
+        if self.optimises_pwl() {
+            (0..=self.pwl_segs)
+                .map(|i| format!("{}{}", PWL_TT_PREFIX, i))
+                .collect()
+        } else {
+            vec!["nlm_k".to_string(), "nlm_m".to_string()]
+        }
+    }
 }
