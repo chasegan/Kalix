@@ -34,6 +34,8 @@ ds_1 = my_other_node
 | x (optional) | Inflow bias. This sets the bias of the upstream flow (as opposed to the downstream flow) in the index flow term used in the pwl storage routing solver. Default value is 0. Example: `x = 0` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
+The routing parameters — the `nlm` pair, or the travel times of the `pwl` table — can be calibrated with the built-in optimiser: see [Optimisable parameters](optimisable-parameters.md).
+
 ## Results associated with this node
 
 | Result | Description |

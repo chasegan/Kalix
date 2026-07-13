@@ -33,6 +33,8 @@ ds_1 = my_other_node
 | variant (optional) | Selects the model formulation: `gr4j` (classic daily model, used by default if omitted) or `gr4h` (suitable for sub-daily timesteps). Example: `variant = gr4h` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Gr4j nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
+The four model parameters — and the rainfall-weighting terms, when `rain` is a linear combination of stations — can be calibrated with the built-in optimiser: see [Optimisable parameters](optimisable-parameters.md).
+
 ## Results associated with this node
 
 | Result | Description |

@@ -132,7 +132,7 @@ Each line maps a **model property** to a search range driven by a **gene** `g(n)
 
 - `lin_range(g(n), min, max)` searches **linearly** — right for parameters with a natural additive scale, like `laguh` (lag, 0–3 days) and `rf_bias` (0.7–1.3).
 
-For the full optimisation-config reference (every key, every statistic and algorithm), see the optimisation reference — *[mention-page placeholder]*.
+For the full optimisation-config reference see the [optimisation reference](../docs/optimisation.md).
 
 ## Step 1 — Verify the command
 
@@ -264,6 +264,6 @@ Change one thing at a time and re-run.
 
 ## Where to go from here
 
-- **Optimisation from Python** — the same calibration driven from a notebook via the `kalix` package, so you can script multi-site calibrations and post-process the results in pandas. CLI for batch and automation; Python for analysis — the same split you saw between [Tutorial 4 — Running Kalix from the commandline](04-commandline.md) and [Tutorial 5 — Running Kalix from Python](05-python.md). *[mention-page placeholder once the Python optimisation tutorial is published]*
+- [**Tutorial 13 — Optimisation from Python**](13-optimisation-python.md) — the same calibration driven from a notebook via the `kalix` package, so you can script multi-site calibrations and post-process the results in pandas. CLI for batch and automation; Python for analysis — the same split you saw between [Tutorial 4 — Running Kalix from the commandline](04-commandline.md) and [Tutorial 5 — Running Kalix from Python](05-python.md).
 
 For the full CLI reference (every command, every flag), see Commandline.

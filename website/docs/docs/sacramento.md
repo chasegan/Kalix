@@ -32,6 +32,8 @@ ds_1 = my_other_node
 | params (compulsory) | The Sacramento model parameters:   adimp, lzfpm, lzfsm, lzpk,  lzsk, lztwm, pctim, pfree,  rexp, sarva, side, ssout,   uzfwm, uzk, uztwm, zperc,   laguh Example: `params = 0, 45, 60, 0.01, 0.01, 150, 0, 0.11, 1.5, 0, 0.2, 0.01, 25, 0.2, 47, 15, 0.1` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Gr4j nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
+All seventeen model parameters — and the rainfall-weighting terms, when `rain` is a linear combination of stations — can be calibrated with the built-in optimiser: see [Optimisable parameters](optimisable-parameters.md).
+
 ## Results associated with this node
 
 | Result | Description |

@@ -172,6 +172,7 @@ nav:
           - Kalix binary path in KalixIDE: docs/kalix-binary-path.md
           - Optimisation:
               - docs/optimisation.md
+              - Optimisable parameters: docs/optimisable-parameters.md
               - Objective functions: docs/objective-functions.md
               - Algorithms:
                   - Shuffled Complex Evolution (SCE): docs/sce.md

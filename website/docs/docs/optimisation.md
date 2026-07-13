@@ -17,6 +17,10 @@ A range of optimisation algorithms are available. Each makes different trade-off
 | SC-SAHEL | Shuffled Complex Self Adaptive Hybrid Evolution (SC-SAHEL) |
 | DREAM | [Dream](dream.md) |
 
+## Optimisable parameters
+
+Optimisations are defined against parameter addresses — model constants (`c.*`) and node parameters (`node.<name>.<param>`). The full reference of what can be tuned, with typical search ranges, is at [Optimisable parameters](optimisable-parameters.md).
+
 ## Objective functions
 
 Check them out at [Objective functions](objective-functions.md)
