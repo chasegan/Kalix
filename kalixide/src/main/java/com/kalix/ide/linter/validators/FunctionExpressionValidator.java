@@ -15,10 +15,15 @@ import java.util.*;
  * - Constant references: "c.pi", "c.node_1_demand_levels.high"
  * - Node output references: "node.node13_inflow.ds_1"
  * - This references: "this.dsflow", "this.volume" (shorthand for current node outputs)
- * - Sim references: "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step"
+ * - Sim references: "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step",
+ *   and the calendar-boundary flags "sim.new_day", "sim.new_month", "sim.new_year"
  * - Table lookups: "table.rating(x)" (1D), "table.pump(col_key, row_key)" (2D)
+ * - User-defined function calls: "fn.net_demand(x, y)" (validated against the [fn] section)
+ * - Var references: "var.accounting.headroom" (a series written by a [var.*] block)
  * - Constant expressions: "5.0", "2 + 3"
  * - Complex functions: "if(data.temp > 20, 10.0, 5.0) * 1.2"
+ * - Program blocks: "{ x = data.a * 2; assert(x >= 0); x + 1 }" - ';'-terminated
+ *   statements (local assignments and asserts) followed by a bare result expression
  *
  * The known-function set mirrors the engine's BuiltinFunction enum
  * (src/functions/functions.rs) — keep the two in sync.
@@ -46,7 +51,8 @@ public class FunctionExpressionValidator {
 
     // Known simulation variables
     private static final Set<String> KNOWN_SIM_VARIABLES = Set.of(
-        "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step"
+        "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step",
+        "sim.new_day", "sim.new_month", "sim.new_year"
     );
 
     private static Map<String, Integer> createFunctionMap() {
@@ -82,6 +88,22 @@ public class FunctionExpressionValidator {
         // Two argument math
         map.put("pow", 2);
         map.put("atan2", 2);
+
+        // Three argument
+        map.put("clamp", 3);
+
+        // Temporal (stateful) functions: moving_*(x, n, default)
+        map.put("moving_sum", 3);
+        map.put("moving_mean", 3);
+        map.put("moving_min", 3);
+        map.put("moving_max", 3);
+
+        // Event-window functions: the last argument is always the reset condition
+        map.put("sum_since", 2);
+        map.put("min_since", 2);
+        map.put("max_since", 2);
+        map.put("count_since", 2);
+        map.put("steps_since", 1);
 
         return Collections.unmodifiableMap(map);
     }
@@ -126,6 +148,24 @@ public class FunctionExpressionValidator {
         // Fast path: empty expression
         if (expression.isEmpty()) {
             errors.add("Expression is empty");
+            return errors;
+        }
+
+        // Program block: '{ statements; result }' - the block form of a value.
+        // Only legal as the entire value, so the first character decides.
+        if (expression.startsWith("{")) {
+            try {
+                Tokenizer tokenizer = new Tokenizer(expression);
+                Parser parser = new Parser(tokenizer, context);
+                parser.parseProgram(errors);
+                if (parser.current.type != TokenType.EOF) {
+                    errors.add("Unexpected tokens after closing '}': '" + parser.current.value + "'");
+                }
+            } catch (ParseException e) {
+                errors.add(e.getMessage());
+            } catch (Exception e) {
+                errors.add("Failed to parse program: " + e.getMessage());
+            }
             return errors;
         }
 
@@ -186,6 +226,49 @@ public class FunctionExpressionValidator {
             errors.add("Failed to parse expression: " + e.getMessage());
         }
 
+        return errors;
+    }
+
+    /**
+     * Validate a [fn] definition body: an expression or a { } block whose
+     * bare names resolve against the function's parameters (plus any locals
+     * it assigns). 'this.' is late-bound to the calling node, so it cannot
+     * be checked here and is allowed through.
+     *
+     * @param body   the body text as written (expression or block)
+     * @param params the signature's parameter names, in order
+     */
+    public List<String> validateFnBody(String body, List<String> params, ValidationContext context) {
+        List<String> errors = new ArrayList<>();
+        if (body == null || body.trim().isEmpty()) {
+            errors.add("Function body is empty");
+            return errors;
+        }
+        if (context == null) {
+            context = ValidationContext.empty();
+        }
+        String trimmed = body.trim();
+        try {
+            Tokenizer tokenizer = new Tokenizer(trimmed);
+            Parser parser = new Parser(tokenizer, context);
+            parser.allowLateThis = true;
+            parser.programLocals = new HashSet<>();
+            for (String p : params) {
+                parser.programLocals.add(p.toLowerCase());
+            }
+            if (trimmed.startsWith("{")) {
+                parser.parseProgram(errors);
+            } else {
+                parser.parseExpression(errors);
+            }
+            if (parser.current.type != TokenType.EOF) {
+                errors.add("Unexpected tokens after expression: '" + parser.current.value + "'");
+            }
+        } catch (ParseException e) {
+            errors.add(e.getMessage());
+        } catch (Exception e) {
+            errors.add("Failed to parse function body: " + e.getMessage());
+        }
         return errors;
     }
 
@@ -254,7 +337,8 @@ public class FunctionExpressionValidator {
     // ==================== Tokenizer ====================
 
     enum TokenType {
-        NUMBER, IDENT, DATA_REF, CONST_REF, NODE_REF, THIS_REF, SIM_REF, TABLE_REF, OPERATOR, LPAREN, RPAREN, COMMA, EOF
+        NUMBER, IDENT, DATA_REF, CONST_REF, NODE_REF, THIS_REF, SIM_REF, TABLE_REF, FN_REF, VAR_REF,
+        OPERATOR, LPAREN, RPAREN, LBRACE, RBRACE, SEMICOLON, COMMA, EOF
     }
 
     static class Token {
@@ -318,6 +402,18 @@ public class FunctionExpressionValidator {
             if (ch == ',') {
                 pos++;
                 return new Token(TokenType.COMMA, ",", pos - 1);
+            }
+            if (ch == '{') {
+                pos++;
+                return new Token(TokenType.LBRACE, "{", pos - 1);
+            }
+            if (ch == '}') {
+                pos++;
+                return new Token(TokenType.RBRACE, "}", pos - 1);
+            }
+            if (ch == ';') {
+                pos++;
+                return new Token(TokenType.SEMICOLON, ";", pos - 1);
             }
 
             throw new ParseException("Unexpected character at position " + pos + ": '" + ch + "'");
@@ -398,6 +494,17 @@ public class FunctionExpressionValidator {
                 return readDottedReference(start, firstSegment, TokenType.TABLE_REF);
             }
 
+            // Check if this is a user-defined function reference (starts with "fn.")
+            if (firstSegment.equals("fn") && pos < input.length() && input.charAt(pos) == '.') {
+                return readDottedReference(start, firstSegment, TokenType.FN_REF);
+            }
+
+            // Check if this is a var reference (starts with "var.") - a series
+            // written by a [var.*] block; supports the offset bracket syntax.
+            if (firstSegment.equals("var") && pos < input.length() && input.charAt(pos) == '.') {
+                return readDottedReference(start, firstSegment, TokenType.VAR_REF);
+            }
+
             // Check if this is a sim reference (starts with "sim.")
             if (firstSegment.equals("sim") && pos < input.length() && input.charAt(pos) == '.') {
                 return readSimReference(start);
@@ -432,8 +539,8 @@ public class FunctionExpressionValidator {
                 sb.append(input, segStart, pos);
             }
 
-            // Check for optional square brackets (only for data and node references)
-            if ((tokenType == TokenType.DATA_REF || tokenType == TokenType.NODE_REF) &&
+            // Check for optional square brackets (data, node, and var references)
+            if ((tokenType == TokenType.DATA_REF || tokenType == TokenType.NODE_REF || tokenType == TokenType.VAR_REF) &&
                 pos < input.length() && input.charAt(pos) == '[') {
                 int bracketStart = pos;
                 pos++; // consume '['
@@ -542,6 +649,16 @@ public class FunctionExpressionValidator {
         private final Tokenizer tokenizer;
         private final ValidationContext context;
         Token current;
+        private Token lookahead;
+
+        /** Non-null while validating a program block or fn body: the bare
+         *  local/parameter names (lowercased) assigned so far. Bare
+         *  identifiers resolve against this set instead of erroring. */
+        Set<String> programLocals;
+
+        /** True when validating a [fn] body: 'this.' is late-bound to the
+         *  calling node, so context checks are suppressed. */
+        boolean allowLateThis;
 
         Parser(Tokenizer tokenizer, ValidationContext context) throws ParseException {
             this.tokenizer = tokenizer;
@@ -550,7 +667,20 @@ public class FunctionExpressionValidator {
         }
 
         private void advance() throws ParseException {
-            current = tokenizer.nextToken();
+            if (lookahead != null) {
+                current = lookahead;
+                lookahead = null;
+            } else {
+                current = tokenizer.nextToken();
+            }
+        }
+
+        /** One-token lookahead (statement-shape decisions: 'name =', 'assert('). */
+        private Token peek() throws ParseException {
+            if (lookahead == null) {
+                lookahead = tokenizer.nextToken();
+            }
+            return lookahead;
         }
 
         private void expect(TokenType type, List<String> errors) throws ParseException {
@@ -558,6 +688,139 @@ public class FunctionExpressionValidator {
                 throw new ParseException("Expected " + type + " but got " + current.type + " ('" + current.value + "')");
             }
             advance();
+        }
+
+        private static final String NO_RESULT_MSG =
+            "Program has no result value: the final line must be a bare expression without ';' (its value is the block's value)";
+
+        // Program := '{' Statement* ResultExpression '}'
+        // Statement := IDENT '=' Expression ';' | 'assert' '(' Expression ')' ';'
+        void parseProgram(List<String> errors) throws ParseException {
+            if (current.type != TokenType.LBRACE) {
+                errors.add("A program block must start with '{'");
+                return;
+            }
+            advance();
+            if (programLocals == null) {
+                programLocals = new HashSet<>();
+            }
+
+            while (true) {
+                if (current.type == TokenType.EOF) {
+                    errors.add("Unclosed program block: missing '}'");
+                    return;
+                }
+                if (current.type == TokenType.RBRACE) {
+                    // '}' with no bare final expression (empty block, or the
+                    // last statement was terminated/an assignment/an assert).
+                    errors.add(NO_RESULT_MSG);
+                    advance();
+                    return;
+                }
+
+                // assert(cond); - statement form only
+                if (current.type == TokenType.IDENT && current.value.equalsIgnoreCase("assert")
+                        && peek().type == TokenType.LPAREN) {
+                    advance(); // assert
+                    advance(); // (
+                    parseExpression(errors);
+                    if (current.type != TokenType.RPAREN) {
+                        errors.add("Expected ')' after assert condition");
+                        return;
+                    }
+                    advance();
+                    if (!consumeStatementTerminator(errors, "assert(...)")) {
+                        return;
+                    }
+                    continue;
+                }
+
+                // name = expression; - local assignment (bare names only)
+                if (current.type == TokenType.IDENT && peek().type == TokenType.OPERATOR
+                        && peek().value.equals("=")) {
+                    String name = current.value;
+                    String lower = name.toLowerCase();
+                    if (KNOWN_FUNCTIONS.containsKey(lower)) {
+                        errors.add("Cannot use builtin function name '" + lower + "' as a local variable");
+                    } else if (lower.equals("assert") || lower.equals("this")) {
+                        errors.add("'" + lower + "' is reserved and cannot be used as a local variable");
+                    }
+                    advance(); // name
+                    advance(); // =
+                    parseExpression(errors);
+                    programLocals.add(lower);
+                    if (!consumeStatementTerminator(errors, "assignment to '" + name + "'")) {
+                        return;
+                    }
+                    continue;
+                }
+
+                // dotted = ... - assigning to a model reference
+                if (isReferenceToken(current.type) && peek().type == TokenType.OPERATOR
+                        && peek().value.equals("=")) {
+                    errors.add("Cannot assign to '" + current.value
+                            + "': dotted names are model references; local variables are bare names");
+                    advance();
+                    advance();
+                    parseExpression(errors);
+                    if (!consumeStatementTerminator(errors, "assignment")) {
+                        return;
+                    }
+                    continue;
+                }
+
+                // Otherwise: the final (result) expression, which must be bare.
+                parseExpression(errors);
+                if (current.type == TokenType.RBRACE) {
+                    advance();
+                    return; // the block's value
+                }
+                if (current.type == TokenType.SEMICOLON) {
+                    advance();
+                    if (current.type == TokenType.RBRACE) {
+                        errors.add(NO_RESULT_MSG);
+                        advance();
+                        return;
+                    }
+                    errors.add("Statement has no effect: expected 'name = expression;', 'assert(...);', or the final result expression (no ';')");
+                    // Consume the rest so the caller's trailing-token check
+                    // doesn't stack a second error on top of this one.
+                    while (current.type != TokenType.EOF) {
+                        advance();
+                    }
+                    return;
+                }
+                if (current.type == TokenType.EOF) {
+                    // Block ended mid-result-expression: the common typo is a
+                    // missing closing brace, so say that, not "unexpected ''".
+                    errors.add("Unclosed program block: missing '}'");
+                    return;
+                }
+                errors.add("Unexpected token in program: '" + current.value + "'");
+                return;
+            }
+        }
+
+        /** After a statement: ';' continues; '}' means the modeller terminated
+         *  the final line (the no-result error); anything else is malformed. */
+        private boolean consumeStatementTerminator(List<String> errors, String what) throws ParseException {
+            if (current.type == TokenType.SEMICOLON) {
+                advance();
+                return true;
+            }
+            if (current.type == TokenType.RBRACE) {
+                errors.add(NO_RESULT_MSG);
+                advance();
+                return false;
+            }
+            errors.add("Expected ';' after " + what);
+            return false;
+        }
+
+        private static boolean isReferenceToken(TokenType t) {
+            return t == TokenType.DATA_REF || t == TokenType.CONST_REF || t == TokenType.NODE_REF
+                    || t == TokenType.THIS_REF || t == TokenType.SIM_REF || t == TokenType.VAR_REF
+                    || t == TokenType.TABLE_REF || t == TokenType.FN_REF;
         }
 
         // Expression := OrExpression
@@ -693,9 +956,28 @@ public class FunctionExpressionValidator {
             } else if (current.type == TokenType.TABLE_REF) {
                 // Table lookup call: table.<name>(args)
                 parseTableCall(errors);
+            } else if (current.type == TokenType.FN_REF) {
+                // User-defined function call: fn.<name>(args)
+                parseFnCall(errors);
+            } else if (current.type == TokenType.VAR_REF) {
+                validateVarReference(current.value, errors);
+                advance();
             } else if (current.type == TokenType.IDENT) {
-                // Function call
-                parseFunctionCall(errors);
+                // Function call - or, inside a program/fn body, a bare local
+                if (peek().type == TokenType.LPAREN) {
+                    parseFunctionCall(errors);
+                } else if (programLocals != null) {
+                    String lower = current.value.toLowerCase();
+                    if (!programLocals.contains(lower)) {
+                        errors.add("Local variable '" + current.value
+                                + "' is used before it is assigned (locals must be assigned above their first use; model references need a namespace prefix like data. or node.)");
+                    }
+                    advance();
+                } else {
+                    // Plain-expression context: a bare identifier can only be a
+                    // (mis)spelled function call.
+                    parseFunctionCall(errors);
+                }
             } else if (current.type == TokenType.LPAREN) {
                 advance();
                 parseExpression(errors);
@@ -779,12 +1061,137 @@ public class FunctionExpressionValidator {
             return 1;
         }
 
+        // FnCall := FN_REF '(' ArgumentList? ')'
+        private void parseFnCall(List<String> errors) throws ParseException {
+            String fnRef = current.value; // e.g. "fn.net_demand"
+
+            String fnName = null;
+            if (fnRef.contains("..")) {
+                errors.add("Malformed function reference: '" + fnRef + "' (consecutive dots)");
+            } else if (fnRef.endsWith(".")) {
+                errors.add("Incomplete function reference: '" + fnRef + "'");
+            } else {
+                fnName = fnRef.substring(3); // "fn.".length() == 3
+                if (fnName.contains(".")) {
+                    errors.add("Invalid function reference: '" + fnRef + "' (function names cannot contain dots)");
+                    fnName = null;
+                }
+            }
+            advance();
+
+            if (current.type != TokenType.LPAREN) {
+                errors.add("Function reference '" + fnRef + "' must be called with parentheses, e.g. "
+                        + fnRef + "(...)");
+                return;
+            }
+            advance(); // consume '('
+
+            int argCount = 0;
+            if (current.type != TokenType.RPAREN) {
+                argCount = parseArgumentList(errors);
+            }
+            expect(TokenType.RPAREN, errors);
+
+            // Validate existence and arity against the [fn] section when available
+            if (fnName != null && context.getModel() != null) {
+                INIModelParser.Section fnSection = context.getModel().getSections().get("fn");
+                Integer expectedArgs = fnSection == null ? null : fnArity(fnSection, fnName);
+                if (expectedArgs == null) {
+                    errors.add("Unknown function '" + fnRef + "' (no matching definition in the [fn] section)");
+                } else if (argCount != expectedArgs) {
+                    errors.add("Function '" + fnRef + "' expects " + expectedArgs
+                            + " argument" + (expectedArgs == 1 ? "" : "s") + ", but got " + argCount);
+                }
+            }
+        }
+
+        /**
+         * Find a definition in the [fn] section by (lowercased) name and
+         * return its parameter count, or null when no key matches. Keys are
+         * signatures like "net_demand(pop, doy)".
+         */
+        private Integer fnArity(INIModelParser.Section fnSection, String fnName) {
+            String want = fnName.toLowerCase();
+            for (String key : fnSection.getProperties().keySet()) {
+                int open = key.indexOf('(');
+                if (open <= 0 || !key.trim().endsWith(")")) {
+                    continue; // malformed keys are reported by the section validator
+                }
+                String name = key.substring(0, open).trim().toLowerCase();
+                if (!name.equals(want)) {
+                    continue;
+                }
+                String inner = key.substring(open + 1, key.trim().length() - 1).trim();
+                if (inner.isEmpty()) {
+                    return 0;
+                }
+                return (int) (inner.chars().filter(c -> c == ',').count() + 1);
+            }
+            return null;
+        }
+
+        // A var reference is a plain series reference: var.<block>.<key>,
+        // optionally with the offset bracket syntax. Forward offsets are
+        // rejected (var values are computed during the run).
+        private void validateVarReference(String varRef, List<String> errors) {
+            String refWithoutBrackets = varRef.replaceFirst("\\[.*?\\]$", "");
+
+            if (refWithoutBrackets.contains("..")) {
+                errors.add("Malformed var reference: '" + varRef + "' (consecutive dots)");
+                return;
+            }
+            if (refWithoutBrackets.endsWith(".")) {
+                errors.add("Malformed var reference: '" + varRef + "' (trailing dot)");
+                return;
+            }
+            String[] segments = refWithoutBrackets.split("\\.");
+            if (segments.length != 3) {
+                errors.add("Invalid var reference: '" + varRef
+                        + "' (expected var.<block>.<name>, e.g. var.accounting.headroom)");
+                return;
+            }
+
+            // Forward offsets: computed series have no future values.
+            int bracket = varRef.indexOf('[');
+            if (bracket >= 0) {
+                String inside = varRef.substring(bracket + 1, varRef.length() - 1).trim();
+                int comma = inside.indexOf(',');
+                String offsetPart = (comma >= 0 ? inside.substring(0, comma) : inside).trim();
+                try {
+                    if (Integer.parseInt(offsetPart) > 0) {
+                        errors.add("Forward lookup not supported for computed series: '" + varRef + "'");
+                    }
+                } catch (NumberFormatException ignored) {
+                    // Non-integer offsets are caught by the engine's offset grammar.
+                }
+            }
+
+            // Validate against the model when available: the block section and key.
+            if (context.getModel() != null) {
+                String sectionName = "var." + segments[1].toLowerCase();
+                INIModelParser.Section varSection = context.getModel().getSections().get(sectionName);
+                if (varSection == null) {
+                    errors.add("Unknown var block: '" + varRef + "' (no [" + sectionName + "] section is defined)");
+                } else {
+                    boolean found = varSection.getProperties().keySet().stream()
+                            .anyMatch(k -> k.trim().toLowerCase().equals(segments[2].toLowerCase()));
+                    if (!found) {
+                        errors.add("Unknown var: '" + varRef + "' (no '" + segments[2]
+                                + "' in [" + sectionName + "])");
+                    }
+                }
+            }
+        }
+
         // FunctionCall := IDENT '(' ArgumentList? ')'
         private void parseFunctionCall(List<String> errors) throws ParseException {
             String funcName = current.value.toLowerCase();
 
-            // Check if function is known
-            if (!KNOWN_FUNCTIONS.containsKey(funcName)) {
+            // assert is a statement, not a function - it only appears at
+            // statement position inside a { } block.
+            if (funcName.equals("assert")) {
+                errors.add("'assert' is a statement, not a function: write it as its own line inside a { } block, e.g. assert(x > 0);");
+            } else if (!KNOWN_FUNCTIONS.containsKey(funcName)) {
                 errors.add("Unknown function: '" + funcName + "'" + suggestFunction(funcName));
             }
 
@@ -885,7 +1292,7 @@ public class FunctionExpressionValidator {
         private void validateSimReference(String simRef, List<String> errors) {
             // Check if the sim reference is one of the known variables
             if (!KNOWN_SIM_VARIABLES.contains(simRef)) {
-                errors.add("Unknown sim variable: '" + simRef + "'. Valid options are: sim.year, sim.month, sim.day, sim.day_of_year, sim.step");
+                errors.add("Unknown sim variable: '" + simRef + "'. Valid options are: sim.year, sim.month, sim.day, sim.day_of_year, sim.step, sim.new_day, sim.new_month, sim.new_year");
             }
         }
 
@@ -896,6 +1303,12 @@ public class FunctionExpressionValidator {
             // Check for malformed this references
             if (refWithoutBrackets.equals("this") || refWithoutBrackets.equals("this.")) {
                 errors.add("Incomplete this reference: '" + thisRef + "'");
+                return;
+            }
+
+            // Inside a [fn] body, 'this.' is late-bound to the calling node:
+            // nothing can be checked until a call site exists.
+            if (allowLateThis) {
                 return;
             }
 
@@ -928,15 +1341,23 @@ public class FunctionExpressionValidator {
             // Common typos and suggestions. 'avg' and 'log' are deliberately
             // not functions - the engine's spellings are 'mean' (the specific
             // statistic, not the family) and the explicit 'ln'/'log10'.
-            Map<String, String> suggestions = Map.of(
-                "maximum", "max",
-                "minimum", "min",
-                "average", "mean",
-                "avg", "mean",
-                "square_root", "sqrt",
-                "logarithm", "ln",
-                "log", "ln",
-                "power", "pow"
+            Map<String, String> suggestions = Map.ofEntries(
+                Map.entry("maximum", "max"),
+                Map.entry("minimum", "min"),
+                Map.entry("average", "mean"),
+                Map.entry("avg", "mean"),
+                Map.entry("square_root", "sqrt"),
+                Map.entry("logarithm", "ln"),
+                Map.entry("log", "ln"),
+                Map.entry("power", "pow"),
+                // Temporal functions: 'moving' (fixed window), never 'running'
+                // (cumulative-since-start, which is sum_since's job); windows
+                // are step-based, not day-based.
+                Map.entry("running_mean", "moving_mean"),
+                Map.entry("running_sum", "moving_sum"),
+                Map.entry("rolling_mean", "moving_mean"),
+                Map.entry("rolling_sum", "moving_sum"),
+                Map.entry("days_since", "steps_since")
             );
 
             if (suggestions.containsKey(funcName)) {

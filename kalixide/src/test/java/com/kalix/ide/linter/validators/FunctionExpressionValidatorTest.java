@@ -418,7 +418,155 @@ class FunctionExpressionValidatorTest {
                 "Expected 2D arity error, got: " + errors);
     }
 
+    // ==================== Temporal & Clamp Functions ====================
+
+    @Test
+    @DisplayName("Temporal and clamp functions validate their arity")
+    void testTemporalAndClampFunctions() {
+        assertValid("moving_mean(data.x, 30, 0)");
+        assertInvalid("moving_mean(data.x, 30)", "expects 3 argument");
+        assertValid("steps_since(sim.new_month)");
+        assertValid("clamp(data.x, 0, 10)");
+        assertInvalid("clamp(1, 2)", "expects 3 argument");
+    }
+
+    // ==================== Calendar-boundary Sim Flags ====================
+
+    @Test
+    @DisplayName("Calendar-boundary sim flags are valid; unknown ones are rejected")
+    void testCalendarBoundarySimFlags() {
+        assertValid("sim.new_day");
+        assertValid("sim.new_month");
+        assertValid("sim.new_year");
+        assertInvalid("sim.new_week", "Unknown sim variable");
+    }
+
+    // ==================== Engine-drift Function Names ====================
+
+    @Test
+    @DisplayName("Drift-prone function names are rejected with a did-you-mean suggestion")
+    void testDriftFunctionSuggestions() {
+        assertInvalid("running_mean(data.x, 5, 0)", "Unknown function");
+        assertInvalid("running_mean(data.x, 5, 0)", "did you mean 'moving_mean'");
+        assertInvalid("running_sum(data.x, 5, 0)", "did you mean 'moving_sum'");
+        assertInvalid("rolling_mean(data.x, 5, 0)", "did you mean 'moving_mean'");
+        assertInvalid("days_since(sim.new_day)", "did you mean 'steps_since'");
+        assertInvalid("avg(data.x, data.y)", "did you mean 'mean'");
+        assertInvalid("log(data.x)", "did you mean 'ln'");
+    }
+
+    // ==================== Program Blocks ====================
+
+    @Test
+    @DisplayName("A well-formed program block is valid")
+    void testValidProgramBlock() {
+        assertValid("{ x = data.a * 2; assert(x >= 0); x + 1 }");
+    }
+
+    @Test
+    @DisplayName("Program blocks that never yield a bare result are rejected")
+    void testProgramBlockNoResult() {
+        assertInvalid("{ x = 1; x; }", "no result value");
+        assertInvalid("{ x = 1; }", "no result value");
+        assertInvalid("{}", "no result value");
+    }
+
+    @Test
+    @DisplayName("A non-final bare expression in a block has no effect")
+    void testProgramBlockStatementHasNoEffect() {
+        assertInvalid("{ 1 + 2; 3 }", "Statement has no effect");
+    }
+
+    @Test
+    @DisplayName("Assigning to a dotted model reference in a block is rejected")
+    void testProgramBlockCannotAssignDotted() {
+        assertInvalid("{ data.x = 1; 1 }", "Cannot assign to");
+    }
+
+    @Test
+    @DisplayName("A builtin function name cannot be a local variable")
+    void testProgramBlockBuiltinLocalName() {
+        assertInvalid("{ min = 1; min }", "builtin function name");
+    }
+
+    @Test
+    @DisplayName("A local used before assignment is rejected")
+    void testProgramBlockUsedBeforeAssigned() {
+        assertInvalid("{ y = x + 1; y }", "used before it is assigned");
+    }
+
+    @Test
+    @DisplayName("A block missing its closing brace reports as unclosed")
+    void testProgramBlockUnclosed() {
+        assertInvalid("{ x = 1; x", "Unclosed program block");
+    }
+
+    @Test
+    @DisplayName("A plain assert (outside a block) is rejected as a statement")
+    void testAssertAsPlainExpression() {
+        assertInvalid("assert(data.x > 0)", "statement");
+    }
+
+    // ==================== User-defined Function References ====================
+
+    @Test
+    @DisplayName("User-defined fn calls need no unknown-function error without a model")
+    void testFnCallWithoutModel() {
+        assertValid("fn.double(5)");
+    }
+
+    @Test
+    @DisplayName("A bare fn reference must be called with parentheses")
+    void testBareFnReference() {
+        assertInvalid("fn.double", "must be called");
+    }
+
+    @Test
+    @DisplayName("Dotted fn names are rejected")
+    void testDottedFnReference() {
+        assertInvalid("fn.a.b(1)", "cannot contain dots");
+    }
+
+    // ==================== Var References ====================
+
+    @Test
+    @DisplayName("Var references validate their shape and reject forward lookups")
+    void testVarReferences() {
+        assertValid("var.acct.headroom");
+        assertInvalid("var.acct", "Invalid var reference");
+        assertInvalid("var.acct.headroom[1, 0]", "Forward lookup");
+        assertValid("var.acct.headroom[-1, 0]");
+    }
+
+    // ==================== Fn Body Validation ====================
+
+    @Test
+    @DisplayName("Fn bodies resolve bare names against their parameters")
+    void testValidateFnBody() {
+        assertFnBodyValid("x * 2", List.of("x"));
+        assertFnBodyInvalid("y * 2", List.of("x"), "used before it is assigned");
+        assertFnBodyValid("{ m = x + 1; m * 2 }", List.of("x"));
+        // 'this.' is late-bound to the calling node, so it passes here.
+        assertFnBodyValid("this.inflow[-1, 0] + x", List.of("x"));
+    }
+
     // ==================== Helper Methods ====================
+
+    private void assertFnBodyValid(String body, List<String> params) {
+        List<String> errors = validator.validateFnBody(body, params,
+                com.kalix.ide.linter.model.ValidationContext.empty());
+        assertTrue(errors.isEmpty(),
+            "Fn body '" + body + "' should be valid, but got errors: " + errors);
+    }
+
+    private void assertFnBodyInvalid(String body, List<String> params, String expectedError) {
+        List<String> errors = validator.validateFnBody(body, params,
+                com.kalix.ide.linter.model.ValidationContext.empty());
+        assertFalse(errors.isEmpty(),
+            "Fn body '" + body + "' should be invalid");
+        assertTrue(errors.stream().anyMatch(e -> e.contains(expectedError)),
+            "Expected error containing '" + expectedError + "', but got: " + errors);
+    }
 
     private void assertValid(String expression) {
         List<String> errors = validator.validate(expression);

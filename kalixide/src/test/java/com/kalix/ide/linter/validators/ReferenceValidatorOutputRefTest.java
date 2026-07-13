@@ -61,4 +61,43 @@ class ReferenceValidatorOutputRefTest {
         new ReferenceValidator().validate(model, schema, result, null);
         assertTrue(result.getIssues().isEmpty(), "unexpected: " + result.getIssues());
     }
+
+    @Test
+    void varOutputReferenceIsAccepted() {
+        LinterSchema schema = LinterSchema.loadDefault();
+        INIModelParser.ParsedModel model = INIModelParser.parse("""
+                [node.real]
+                type = confluence
+                loc = 1, 2
+
+                [var.accounting]
+                headroom = 5.0
+
+                [outputs]
+                var.accounting.headroom
+                """);
+
+        ValidationResult result = new ValidationResult();
+        new ReferenceValidator().validate(model, schema, result, null);
+        assertTrue(result.getIssues().isEmpty(), "unexpected: " + result.getIssues());
+    }
+
+    @Test
+    void unknownVarOutputReferenceFlagged() {
+        LinterSchema schema = LinterSchema.loadDefault();
+        INIModelParser.ParsedModel model = INIModelParser.parse("""
+                [var.accounting]
+                headroom = 5.0
+
+                [outputs]
+                var.accounting.missing
+                """);
+
+        ValidationResult result = new ValidationResult();
+        new ReferenceValidator().validate(model, schema, result, null);
+        List<ValidationIssue> issues = result.getIssues().stream()
+                .filter(i -> i.getMessage().contains("unknown var"))
+                .toList();
+        assertEquals(1, issues.size(), "expected one unknown-var diagnostic, got: " + result.getIssues());
+    }
 }

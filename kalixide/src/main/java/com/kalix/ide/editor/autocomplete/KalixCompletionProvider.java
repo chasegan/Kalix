@@ -404,7 +404,82 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
         }
     }
 
+    // Builtin functions: {name, signature-description}. Mirrors the engine's
+    // BuiltinFunction enum (src/functions/functions.rs) and the validator's
+    // KNOWN_FUNCTIONS set - keep the three in sync.
+    private static final String[][] BUILTIN_FUNCTIONS = {
+        {"if", "if(cond, a, b) - a when cond is true, otherwise b"},
+        {"min", "min(a, b, ...) - smallest of its arguments"},
+        {"max", "max(a, b, ...) - largest of its arguments"},
+        {"sum", "sum(a, ...) - sum of its arguments"},
+        {"mean", "mean(a, ...) - arithmetic mean of its arguments"},
+        {"abs", "abs(x) - absolute value"},
+        {"sqrt", "sqrt(x) - square root"},
+        {"sin", "sin(x) - sine (radians)"},
+        {"cos", "cos(x) - cosine (radians)"},
+        {"tan", "tan(x) - tangent (radians)"},
+        {"asin", "asin(x) - arcsine (radians)"},
+        {"acos", "acos(x) - arccosine (radians)"},
+        {"atan", "atan(x) - arctangent (radians)"},
+        {"ln", "ln(x) - natural logarithm"},
+        {"log10", "log10(x) - base-10 logarithm"},
+        {"log2", "log2(x) - base-2 logarithm"},
+        {"exp", "exp(x) - e raised to the power x"},
+        {"ceil", "ceil(x) - round up to an integer"},
+        {"floor", "floor(x) - round down to an integer"},
+        {"round", "round(x) - round to the nearest integer"},
+        {"sign", "sign(x) - -1, 0, or 1 by the sign of x"},
+        {"pow", "pow(x, y) - x raised to the power y"},
+        {"atan2", "atan2(y, x) - angle of the vector (x, y)"},
+        {"clamp", "clamp(x, lo, hi) - constrain to a range"},
+        {"moving_sum", "moving_sum(x, n, default) - sum over the last n steps"},
+        {"moving_mean", "moving_mean(x, n, default) - mean over the last n steps"},
+        {"moving_min", "moving_min(x, n, default) - minimum over the last n steps"},
+        {"moving_max", "moving_max(x, n, default) - maximum over the last n steps"},
+        {"sum_since", "sum_since(x, reset) - sum of x since reset last fired"},
+        {"min_since", "min_since(x, reset) - minimum of x since reset last fired"},
+        {"max_since", "max_since(x, reset) - maximum of x since reset last fired"},
+        {"count_since", "count_since(x, reset) - steps counted since reset last fired"},
+        {"steps_since", "steps_since(reset) - steps since reset last fired"}
+    };
+
+    // Simulation variables: {reference, description}. Mirrors the validator's
+    // KNOWN_SIM_VARIABLES set - keep the two in sync.
+    private static final String[][] SIM_VARIABLES = {
+        {"sim.year", "sim.year - calendar year of the current step"},
+        {"sim.month", "sim.month - month of the year (1-12)"},
+        {"sim.day", "sim.day - day of the month"},
+        {"sim.day_of_year", "sim.day_of_year - day of the year (1-366)"},
+        {"sim.step", "sim.step - zero-based step index"},
+        {"sim.new_day", "sim.new_day - 1 on the first step of a new day, else 0"},
+        {"sim.new_month", "sim.new_month - 1 on the first step of a new month, else 0"},
+        {"sim.new_year", "sim.new_year - 1 on the first step of a new year, else 0"}
+    };
+
+    private void addBuiltinFunctionCompletions() {
+        for (String[] fn : BUILTIN_FUNCTIONS) {
+            // Insert the name plus '(' so the call is ready for its arguments.
+            BasicCompletion completion = new BasicCompletion(this, fn[0] + "(",
+                    fn[1], "<html><b>" + fn[1] + "</b></html>");
+            addCompletion(completion);
+        }
+    }
+
+    private void addSimVariableCompletions() {
+        for (String[] simVar : SIM_VARIABLES) {
+            BasicCompletion completion = new BasicCompletion(this, simVar[0],
+                    simVar[1], "<html><b>" + simVar[1] + "</b></html>");
+            addCompletion(completion);
+        }
+    }
+
     private void addGeneralValueCompletions() {
+        // Builtin functions and sim.* variables do not depend on the parsed
+        // model, so they are offered first - they surface even when no model
+        // has parsed yet (the model-dependent completions below need one).
+        addBuiltinFunctionCompletions();
+        addSimVariableCompletions();
+
         INIModelParser.ParsedModel model = modelSupplier.get();
         if (model == null) {
             return;

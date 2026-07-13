@@ -10,7 +10,7 @@ core (`;`, blocks, locals, `assert`, `clamp`), stateful builtins
 (inline expansion, hygienic, `this.` rebinding, DAG-checked, conditional
 execution in branches), and `[var.*]` blocks (flow phase at file position;
 `phase = order` rejected pending its ordering-system interleave). Phase 5
-(IDE lockstep) pending.** This document records the decisions and their
+(IDE lockstep — linter grammar/functions/sections, autocomplete) July 2026.** This document records the decisions and their
 reasons. A manifesto will be harvested after implementation proves the
 calls out (per `on-manifestos §4`).
 

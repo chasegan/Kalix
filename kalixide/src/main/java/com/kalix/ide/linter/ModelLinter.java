@@ -25,6 +25,8 @@ public class ModelLinter {
         this.validators = Arrays.asList(
             new SectionValidator(),
             new TableSectionValidator(),
+            new FnSectionValidator(),
+            new VarSectionValidator(),
             new FileValidator(),
             new ReferenceValidator(),
             new NodeOrderingValidator(),

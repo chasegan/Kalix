@@ -19,6 +19,8 @@ public class ValidationUtils {
     private static final Pattern INI_VERSION_PATTERN = Pattern.compile("^\\d+\\.\\d+\\.\\d+$");
     // node.<name>.<property> - used to pick apart output/node references
     private static final Pattern NODE_PROPERTY_REFERENCE_PATTERN = Pattern.compile("^node\\.([\\w_]+)\\.([\\w_]+)$");
+    // var.<block>.<key> - a series written by a [var.*] block, recordable in [outputs]
+    private static final Pattern VAR_OUTPUT_REFERENCE_PATTERN = Pattern.compile("^var\\.([\\w_]+)\\.([\\w_]+)$");
     // Downstream link parameters: ds_1, ds_2, ... - deliberately NOT ds_1_outlet,
     // ds_1_order etc., whose values are not node names. Shared so every consumer
     // (reference validation, ordering validation, parsing) agrees on the rule.
@@ -81,6 +83,13 @@ public class ValidationUtils {
     private static void validateNodeSpecificOutputs(List<String> outputRefs, INIModelParser.ParsedModel model,
                                                    LinterSchema schema, ValidationResult result, ValidationRule rule) {
         for (String outputRef : outputRefs) {
+            // A var series (var.<block>.<key>, a series written by a [var.*]
+            // block) is recordable in [outputs] just like a node output.
+            if (outputRef.startsWith("var.")) {
+                validateVarOutputReference(outputRef, model, result, rule);
+                continue;
+            }
+
             java.util.regex.Matcher matcher = NODE_PROPERTY_REFERENCE_PATTERN.matcher(outputRef);
             if (!matcher.matches()) {
                 Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
@@ -143,6 +152,48 @@ public class ValidationUtils {
                               "Output property '" + outputProperty + "' is not allowed for node type '" + nodeType + "'. Allowed outputs: " + nodeTypeDef.allowedOutputs,
                               rule.getSeverity(), "invalid_output_property");
             }
+        }
+    }
+
+    /**
+     * Validate a {@code var.<block>.<key>} output reference: the format, and
+     * (when the block is present in the model) that the block and key exist.
+     */
+    private static void validateVarOutputReference(String outputRef, INIModelParser.ParsedModel model,
+                                                   ValidationResult result, ValidationRule rule) {
+        java.util.regex.Matcher matcher = VAR_OUTPUT_REFERENCE_PATTERN.matcher(outputRef);
+        if (!matcher.matches()) {
+            Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
+            int reportLine = lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
+            result.addIssue(reportLine,
+                          "Invalid output reference format: " + outputRef + " (should be var.block.name)",
+                          rule.getSeverity(), "invalid_output_reference");
+            return;
+        }
+
+        String blockName = matcher.group(1);
+        String varName = matcher.group(2);
+        String sectionName = "var." + blockName;
+        INIModelParser.Section varSection = model.getSections().get(sectionName);
+        if (varSection == null) {
+            Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
+            int reportLine = lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
+            result.addIssue(reportLine,
+                          "Output reference points to unknown var block: " + blockName
+                                  + " (no [" + sectionName + "] section is defined)",
+                          rule.getSeverity(), "invalid_var_reference");
+            return;
+        }
+
+        boolean found = varSection.getProperties().keySet().stream()
+                .anyMatch(k -> !k.equals("phase") && k.equals(varName));
+        if (!found) {
+            Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
+            int reportLine = lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
+            result.addIssue(reportLine,
+                          "Output reference points to unknown var: " + varName
+                                  + " (no '" + varName + "' in [" + sectionName + "])",
+                          rule.getSeverity(), "invalid_var_reference");
         }
     }
 
