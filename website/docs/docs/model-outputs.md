@@ -8,6 +8,15 @@ Model outputs listed in the [outputs] section are recorded during the simulation
 
 Refer to the node documentation ([Nodes](nodes.md)) to see the available outputs.
 
+Values published by [`[var.*]` blocks](vars.md) are recordable the same way —
+one bare line per series:
+
+```ini
+[outputs]
+node.dam.volume
+var.accounting.headroom
+```
+
 ### Output file format
 
 The CSV format has a single header row, and a single timestamp column.

@@ -119,6 +119,16 @@ Available functions:
 | `ceil` | 1 | Round up |
 | `round` | 1 | Round to nearest |
 | `sign` | 1 | Sign (-1, 0, or 1) |
+| `clamp` | 3 | Constrain to a range: clamp(x, lo, hi) |
+| `moving_sum` | 3 | Sum over the last n steps: moving\_sum(x, n, default) |
+| `moving_mean` | 3 | Mean over the last n steps |
+| `moving_min` | 3 | Minimum over the last n steps |
+| `moving_max` | 3 | Maximum over the last n steps |
+| `sum_since` | 2 | Sum of x since a reset condition last fired |
+| `min_since` | 2 | Minimum of x since reset |
+| `max_since` | 2 | Maximum of x since reset |
+| `count_since` | 2 | Steps on which a condition held since reset |
+| `steps_since` | 1 | Steps elapsed since reset (0 on a reset step) |
 
 Two names are deliberately absent. There is no `log`: write the explicit `ln`
 or `log10`. And there is no `avg` or `average`: the function is `mean`, named
@@ -137,6 +147,82 @@ release = table.pump_rating(sim.month, node.dam.volume)
 
 Click [here](tables.md) to find out more about lookup tables.
 
+### Program Blocks
+
+A value can be a `{ ... }` program block: statements terminated by `;`, then a
+bare final expression whose value is the block's value. Statements are local
+assignments and assertions.
+
+```ini
+pond_demand = {
+    target = table.monthly_demand(sim.month);
+    recent = moving_mean(node.headwater.ds_1, 30, 0.0);
+    assert(target >= 0);
+    min(target, recent * c.demand_fraction)
+    }
+```
+
+- The final line must be a bare expression with **no** `;` — a terminated
+  final line is a load error, never a silent default.
+- Locals are bare lowercase names, private to their block, and must be
+  assigned above their first use. They cannot take the name of any inbuilt
+  function or reserved word.
+- `assert(cond)` stops the run — naming the statement, node, and timestep —
+  when `cond` is 0 **or NaN**. NaN is exactly the case you most want caught.
+- A block is only legal as the entire value.
+
+### Temporal Functions
+
+These functions remember earlier timesteps. Their state advances exactly once
+per timestep, unconditionally — a `moving_mean` inside an untaken `if` branch
+still updates, so its value depends only on the series it watches, never on
+which branches past evaluations took.
+
+**Moving windows** — `moving_sum(x, n, default)` and friends compute over the
+last `n` steps. `n` and `default` must be plain numbers (state is sized when
+the model loads): `default` pre-fills the window, so the statistic is
+well-defined from the very first step.
+
+```ini
+recent_flow = moving_mean(node.gauge_1.dsflow, 30, 0.0)
+```
+
+**Event windows** — the `*_since` family accumulates since a reset condition
+last fired, and the **last argument is always the reset condition**. On the
+step the reset fires, the accumulator clears first and that step's
+contribution is then included — on 1 July, "usage this water year" equals that
+day's usage, not zero. The start of the run counts as a reset.
+
+```ini
+used_wy = sum_since(node.town.diversion, sim.new_month && sim.month == 7)
+dry_spell = steps_since(node.gauge.dsflow > c.low_flow_threshold)
+spill_days = count_since(node.dam.ds_1_spill > 0, sim.new_year)
+```
+
+There is deliberately no water-year setting in Kalix — the boundary is an
+expression written where it's used (or named once per model in a
+[user-defined function](fn.md)), because the water year varies from valley
+to valley.
+
+### User-Defined Functions
+
+Functions defined in the [`[fn]` section](fn.md) are called with the `fn.`
+prefix:
+
+```ini
+order = fn.net_demand(data.town.by_name.population, sim.day_of_year)
+```
+
+### Model Variables
+
+Values published by [`[var.*]` blocks](vars.md) are read like any series,
+including with the offset syntax:
+
+```ini
+release = min(this.order, var.accounting.headroom)
+prev = var.accounting.headroom[-1, 0.0]
+```
+
 ### Notes
 
 - Expressions are evaluated once per timestep
@@ -145,6 +231,10 @@ Click [here](tables.md) to find out more about lookup tables.
 
 - Whitespace is ignored: `a+b` and `a + b` are equivalent
 
-- Function names are not case sensitive
+- Function names are not case sensitive when *called*; names you *define*
+  (functions, parameters, var blocks and keys) are strictly lowercase
+
+- Nothing you name may collide with an inbuilt function, a temporal function,
+  or a reserved word (`assert`, `this`) — the load error names the clash
 
 [Referencing Input Data](referencing-input-data.md)[Referencing Model Results](referencing-model-results.md)[Simulation Context Vars](simulation-context-vars.md)[Constants](constants.md)[Tables](tables.md)
