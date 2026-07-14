@@ -19,12 +19,19 @@ import numpy as np
 # backend only, so the CLI backend works without the wheel installed.
 
 
+# Suffix used for the debug artifact that verify_resave leaves on disk when it
+# fails (see its docstring). Excluded from find_model_files so a leftover
+# artifact from a previous failing run is never picked up as a model to
+# verify in its own right.
+_RESAVE_CHECK_SUFFIX = '.resave_check.ini'
+
+
 def find_model_files(root_dir):
-    """Find all .ini files in the directory tree."""
+    """Find all .ini files in the directory tree, excluding debug artifacts."""
     ini_files = []
     for root, dirs, files in os.walk(root_dir):
         for file in files:
-            if file.endswith('.ini'):
+            if file.endswith('.ini') and not file.endswith(_RESAVE_CHECK_SUFFIX):
                 ini_files.append(os.path.join(root, file))
     return sorted(ini_files)
 
@@ -152,6 +159,118 @@ def _simulate(backend, cli_bin, model_path, mass_balance_path):
         kalix.simulate(model_path, mass_balance=mass_balance_path)
 
 
+def _resave(cli_bin, model_path, resaved_path):
+    """Run `kalix resave model_path resaved_path`, raising RuntimeError on failure."""
+    result = subprocess.run(
+        [str(cli_bin), 'resave', model_path, resaved_path],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or '').strip()
+        raise RuntimeError(f"resave failed: {detail or f'kalix exited with code {result.returncode}'}")
+
+
+def _write_diff(lines_a, lines_b, diff_path, fromfile, tofile):
+    """Write a unified diff between two line lists to diff_path."""
+    diff = difflib.unified_diff(lines_a, lines_b, fromfile=fromfile, tofile=tofile)
+    with open(diff_path, 'w') as diff_f:
+        diff_f.writelines(diff)
+    return Path(diff_path).relative_to(Path.cwd()).as_posix()
+
+
+def verify_resave(model_path, backend, cli_bin, mbal_filename='mbal.txt'):
+    """
+    Verify that a model still simulates identically after a save round-trip.
+
+    Loads the model, saves it back out (per its own [kalix] save_method — see
+    SaveMethod in src/misc/configuration.rs), and re-simulates the resaved copy.
+    Catches load/save bugs that a plain load-and-simulate check can't: a
+    round-trip that silently drops or corrupts a property still simulates fine
+    on the *original* file, but would show up here as a mass balance mismatch
+    on the *resaved* one. Only supported on the CLI backend (`kalix resave`);
+    the Python package backend has no equivalent entry point.
+
+    Args:
+        model_path: Path to the .ini model file
+        backend: 'cli' or 'package' (see resolve_backend)
+        cli_bin: Path to the CLI binary when backend == 'cli', else None
+        mbal_filename: Name of the reference mass balance file to verify against
+
+    On failure, the resaved model, an ini diff against the source, and (if the
+    mismatch was in the mass balance) the generated mass balance are left on
+    disk next to the source model — as `<stem>.resave_check.ini` /
+    `<stem>.resave_check.diff` / `<stem>.resave_check.mbal.txt` — for manual
+    debugging. They are cleaned up automatically on success. All are
+    gitignored (see .gitignore).
+
+    Returns:
+        tuple: (success: bool, message: str) — success is True with a "SKIPPED"
+        message on the package backend.
+    """
+    if backend != 'cli':
+        return True, "SKIPPED (resave round-trip needs the CLI backend)"
+
+    model_dir = os.path.dirname(model_path)
+    mbal_path = os.path.join(model_dir, mbal_filename)
+    if not os.path.exists(mbal_path):
+        return False, f"Mass balance file not found: {mbal_path}"
+
+    # Resave alongside the original (not a system temp dir) so the model's
+    # relative input-file paths still resolve when we re-simulate it.
+    stem = Path(model_path).stem
+    resaved_path = os.path.join(model_dir, stem + _RESAVE_CHECK_SUFFIX)
+    ini_diff_path = os.path.join(model_dir, f"{stem}.resave_check.diff")
+    tmp_mbal_path = None
+    success = False
+    try:
+        _resave(cli_bin, model_path, resaved_path)
+
+        # Diff the resave against the source up front, so it's available for
+        # a mass balance mismatch below *and* for a simulate-time exception
+        # (e.g. the resave silently dropped an input alias).
+        with open(model_path, 'r') as f:
+            source_lines = f.readlines()
+        with open(resaved_path, 'r') as f:
+            resaved_lines = f.readlines()
+        rel_ini_diff = _write_diff(
+            source_lines, resaved_lines, ini_diff_path, fromfile='source', tofile='resaved',
+        )
+        rel_ini = Path(resaved_path).relative_to(Path.cwd()).as_posix()
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as tmp_mbal:
+            tmp_mbal_path = tmp_mbal.name
+
+        _simulate(backend, cli_bin, resaved_path, tmp_mbal_path)
+
+        matched, detail = compare_mass_balance_files(tmp_mbal_path, mbal_path)
+        if matched:
+            success = True
+            return True, "VERIFIED! (resave round-trip)"
+
+        kept_mbal_path = os.path.join(model_dir, f"{stem}.resave_check.mbal.txt")
+        shutil.copy(tmp_mbal_path, kept_mbal_path)
+        rel_mbal = Path(kept_mbal_path).relative_to(Path.cwd()).as_posix()
+        return False, (f"Resaved model's mass balance mismatch ({detail}): "
+                        f"resaved model kept at {rel_ini}, mass balance at {rel_mbal}, "
+                        f"ini diff at {rel_ini_diff}")
+    except Exception as e:
+        detail = f"Error: {str(e)}"
+        if os.path.exists(ini_diff_path):
+            rel_ini_diff = Path(ini_diff_path).relative_to(Path.cwd()).as_posix()
+            detail += f" (ini diff at {rel_ini_diff})"
+        return False, detail
+    finally:
+        # Only clean up the resaved model and its diff on success — a failure
+        # leaves them (and the mass balance above) on disk for manual debugging.
+        if success:
+            if os.path.exists(resaved_path):
+                os.unlink(resaved_path)
+            if os.path.exists(ini_diff_path):
+                os.unlink(ini_diff_path)
+        if tmp_mbal_path and os.path.exists(tmp_mbal_path):
+            os.unlink(tmp_mbal_path)
+
+
 def verify_model(model_path, backend, cli_bin, mbal_filename='mbal.txt'):
     """
     Verify a model against its mass balance report via the selected backend.
@@ -188,15 +307,11 @@ def verify_model(model_path, backend, cli_bin, mbal_filename='mbal.txt'):
             else:
                 # Copy the generated file and write a diff for inspection
                 shutil.copy(tmp_mbal_path, mbal_path + '.log')
-                diff_path = mbal_path + '.diff'
                 with open(mbal_path, 'r') as ref_f, open(tmp_mbal_path, 'r') as gen_f:
-                    diff = difflib.unified_diff(
+                    rel_diff = _write_diff(
                         ref_f.readlines(), gen_f.readlines(),
-                        fromfile='reference', tofile='generated',
+                        mbal_path + '.diff', fromfile='reference', tofile='generated',
                     )
-                    with open(diff_path, 'w') as diff_f:
-                        diff_f.writelines(diff)
-                rel_diff = Path(diff_path).relative_to(Path.cwd()).as_posix()
                 return False, f"Mass balance mismatch ({detail}): diff saved to {rel_diff}"
         finally:
             # Clean up temporary file
@@ -304,19 +419,24 @@ def main():
 
     log(f"Found {len(model_files)} model file(s)\n")
 
-    # Verify each model
+    # Verify each model. Each entry is (result label suffix, check function);
+    # checks beyond the first are additional angles on the same model (currently
+    # just a save/reload round-trip via verify_resave).
+    checks = [
+        (None, lambda p: verify_model(p, backend, cli_bin)),
+        ('resave', lambda p: verify_resave(p, backend, cli_bin)),
+    ]
+
     results = []
     for model_path in model_files:
         rel_path = os.path.relpath(model_path, root_dir)
         log(f"Verifying: {rel_path}")
 
-        success, message = verify_model(model_path, backend, cli_bin)
-        results.append((rel_path, success, message))
-
-        if success:
-            log(f"  [PASS] {message}")
-        else:
-            log(f"  [FAIL] {message}")
+        for label, run in checks:
+            success, message = run(model_path)
+            result_key = rel_path if label is None else f"{rel_path} ({label})"
+            results.append((result_key, success, message))
+            log(f"  [{'PASS' if success else 'FAIL'}] {message}")
         log()
 
     # Summary

@@ -73,6 +73,18 @@ enum Commands {
         #[arg(short = 'p', long)]
         profile: bool,
     },
+    /// Load a model and save it back out (per its save_method), without simulating.
+    ///
+    /// Used to exercise the save/round-trip path in isolation, e.g. to verify
+    /// that a canonical save reproduces a model that reloads and simulates
+    /// identically to the source.
+    #[command(visible_alias = "resave")]
+    Resave {
+        /// Path to the model file to load
+        model_file: String,
+        /// Path to write the resaved model file
+        output_file: Option<String>,
+    },
 }
 
 fn main() {
@@ -220,6 +232,22 @@ fn main() {
                 println!("  ─────────────────────────────");
                 println!("  Total time:      {:>10.3} ms", total_time.as_secs_f64() * 1000.0);
             }
+        }
+        Commands::Resave { model_file, output_file } => {
+            let model = match IniModelIO::new().read_model_file(model_file.as_str()) {
+                Ok(model) => model,
+                Err(s) => {
+                    eprintln!("Error: {}", s);
+                    std::process::exit(1);
+                }
+            };
+            let model_string = IniModelIO::new().model_to_string(&model);
+            let target_file = output_file.unwrap_or(model_file.clone());
+            if let Err(s) = fs::write(&target_file, model_string) {
+                eprintln!("Error: {}", s);
+                std::process::exit(1);
+            }
+            println!("Resaved model to: {}", target_file);
         }
         Commands::Optimise { config_file, model_file, save_model, quiet, report_frequency, profile } => {
             use kalix::numerical::opt::{

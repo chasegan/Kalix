@@ -1,1 +1,4 @@
 **/*.diff
+**/*.resave_check.ini
+**/*.resave_check.mbal.txt
+**/*.canonical_check.ini
