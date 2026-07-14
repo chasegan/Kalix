@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::hydrology::accounts::account::Account;
 use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
 use crate::io::custom_ini_parser::{IniDocument, IniSection};
@@ -1014,6 +1012,10 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.pond_demand_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "target_level", &n.target_level.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "exists", &n.exists.to_string());
+                for (i, ds_force_release) in n.ds_force_release_input.iter().enumerate() {
+                    let property_name = format!("ds_{}_force_release", i + 1);
+                    set_property_if_not_empty(&mut ini_doc, section_name.as_str(), &property_name, &ds_force_release.to_string());
+                }
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "initial_volume", &n.vol_initial.to_string(), "0");
                 // order_through defaults to false; emit only when enabled.
                 if n.order_through {
