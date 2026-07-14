@@ -8,6 +8,12 @@
           "required": false,
           "type": "version",
           "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "save_method": {
+          "required": false,
+          "type": "string",
+          "pattern": "^(standard|canonical)$",
+          "description": "Save method: 'standard' or 'canonical'"
         }
       }
     },

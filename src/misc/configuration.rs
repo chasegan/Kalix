@@ -1,7 +1,6 @@
 
 #[derive(Debug)]
 #[derive(Clone)]
-#[derive(Default)]
 pub struct Configuration {
     pub specified_sim_start_timestamp: Option<u64>, //If specified in model - the time at the start of the FIRST simulated timestep.
     pub specified_sim_end_timestamp: Option<u64>,   //If specified in model - the time at the start of the LAST simulated timestep.
@@ -10,6 +9,16 @@ pub struct Configuration {
     pub sim_start_timestamp: u64,                   //The time (u64 representation) at the start of the FIRST simulated timestep.
     pub sim_end_timestamp: u64,                     //The time (u64 representation) at the start of the LAST simulated timestep.
     pub sim_nsteps: u64,                            //The number of simulated timesteps including the FIRST and LAST.
+
+    pub save_method: SaveMethod,                    // Method of saving to disk, see SaveMethod enum.
+}
+
+#[derive(Debug, Clone, Default)]
+pub enum SaveMethod {
+    #[default]
+    StandardUnset, // Standard method will only overwrite sections that are invalidated. (Not set by user)
+    Standard,  // Standard method will only overwrite sections that are invalidated.
+    Canonical  // Force a canonical save of the model i.e. all sections of the ini will be rewritten
 }
 
 impl Configuration {
@@ -17,10 +26,20 @@ impl Configuration {
         Configuration {
             specified_sim_end_timestamp: None,
             specified_sim_start_timestamp: None,
+
             sim_stepsize: 1,
             sim_start_timestamp: 0,
             sim_end_timestamp: 0,
             sim_nsteps: 1, //1 + ((sim_end_timestamp - sim_start_timestamp) / sim_stepsize)
+
+            save_method: SaveMethod::StandardUnset,
         }
+    }
+}
+
+// Pin Default implementation to new()
+impl Default for Configuration {
+    fn default() -> Self {
+        Configuration::new()
     }
 }

@@ -1,6 +1,7 @@
 use crate::hydrology::accounts::account::Account;
 use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
 use crate::io::custom_ini_parser::{IniDocument, IniSection};
+use crate::misc::configuration::SaveMethod;
 use crate::misc::location::Location;
 use crate::model_inputs::DynamicInput;
 use crate::numerical::lookup_table::LookupTable;
@@ -126,6 +127,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 } else if name_lower == "end" {
                     let timestamp = date_string_to_u64_flexible(ini_property.value.as_str())?.0;
                     model.configuration.specified_sim_end_timestamp = Some(timestamp);
+                } else if name_lower == "save_method" {
+                    match ini_property.value.to_lowercase().as_str() {
+                        "standard" => model.configuration.save_method = SaveMethod::Standard,
+                        "canonical" => model.configuration.save_method = SaveMethod::Canonical,
+                        other => return Err(format!("Error on line {}: Invalid save_method '{}'. Expected 'standard' or 'canonical'.", ini_property.line_number, other)),
+                    }
                 }
             }
         } else if section_name == "inputs" {
@@ -829,6 +836,19 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
     if let Some(end_timestamp) = model.configuration.specified_sim_end_timestamp {
         ini_doc.set_property("kalix", "end", &u64_to_date_string_for_step_size(end_timestamp, sim_stepsize));
     }
+    
+    // Save method
+    match model.configuration.save_method {
+        SaveMethod::Standard => {
+            ini_doc.set_property("kalix", "save_method", "standard");
+        }
+        SaveMethod::Canonical => {
+            ini_doc.set_property("kalix", "save_method", "canonical");
+        }
+        SaveMethod::StandardUnset => {
+            // no-op
+        }
+    }
 
     // List all input files
     for file_path in &model.input_file_paths {
@@ -1087,41 +1107,52 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
 /// document to preserve (e.g. a model built programmatically).
 pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
     let current = render_canonical_0_0_1(model);
+    // Exhaustive match is a compiler-enforced guarantee that all save methods are handled.
+    match model.configuration.save_method {
+        SaveMethod::Standard | SaveMethod::StandardUnset => {
+            // Standard save method
+            let (baseline, original) = match (&model.baseline_canonical, &model.ini_document) {
+            (Some(baseline), Some(original)) => (baseline, original),
+            _ => return current, // nothing to preserve
+            };
 
-    let (baseline, original) = match (&model.baseline_canonical, &model.ini_document) {
-        (Some(baseline), Some(original)) => (baseline, original),
-        _ => return current, // nothing to preserve
-    };
+            // Rebuild the original (formatting-preserving) document by mark-and-sweep:
+            // validate the sections we keep verbatim, set the ones that changed, and let
+            // the sweep drop everything left invalid (deleted sections/properties).
+            let mut out = original.clone();
+            out.invalidate_all();
 
-    // Rebuild the original (formatting-preserving) document by mark-and-sweep:
-    // validate the sections we keep verbatim, set the ones that changed, and let
-    // the sweep drop everything left invalid (deleted sections/properties).
-    let mut out = original.clone();
-    out.invalidate_all();
+            for (section_name, current_section) in &current.sections {
+                let unchanged = baseline.sections.get(section_name)
+                    .map_or(false, |base| sections_canonically_equal(base, current_section));
 
-    for (section_name, current_section) in &current.sections {
-        let unchanged = baseline.sections.get(section_name)
-            .map_or(false, |base| sections_canonically_equal(base, current_section));
-
-        if unchanged && out.sections.contains_key(section_name) {
-            // Keep the original section verbatim (preserves raw_lines and comments).
-            out.validate_section(section_name);
-            let keys: Vec<String> = out.sections[section_name].properties.keys().cloned().collect();
-            for key in keys {
-                out.validate_property(section_name, &key);
+                if unchanged && out.sections.contains_key(section_name) {
+                    // Keep the original section verbatim (preserves raw_lines and comments).
+                    out.validate_section(section_name);
+                    let keys: Vec<String> = out.sections[section_name].properties.keys().cloned().collect();
+                    for key in keys {
+                        out.validate_property(section_name, &key);
+                    }
+                } else {
+                    // Changed, new, or not present in the original: emit canonically.
+                    {
+                        let out: &mut IniDocument = &mut out;
+                        for (key, prop) in &current_section.properties {
+                            out.set_property(section_name, key, &prop.value);
+                        }
+                    };
+                }
             }
-        } else {
-            // Changed, new, or not present in the original: emit canonically.
-            for (key, prop) in &current_section.properties {
-                out.set_property(section_name, key, &prop.value);
-            }
+            out.remove_invalid_sections_and_properties();
+            out
         }
+        SaveMethod::Canonical => {
+            // Canonical save method
+            current
+        }
+        // Note: never use a wildcard match here, to ensure compiler enforces exhaustive handling.
     }
-
-    out.remove_invalid_sections_and_properties();
-    out
 }
-
 
 /// Two sections are canonically equal when they hold the same property keys with
 /// the same (canonical) values. Comments, ordering and raw formatting are
