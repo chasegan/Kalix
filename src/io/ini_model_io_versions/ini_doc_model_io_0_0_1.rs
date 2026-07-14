@@ -1145,7 +1145,6 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 } else {
                     // Changed, new, or not present in the original: emit canonically.
                     {
-                        let out: &mut IniDocument = &mut out;
                         for (key, prop) in &current_section.properties {
                             out.set_property(section_name, key, &prop.value);
                         }
