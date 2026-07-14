@@ -1,5 +1,6 @@
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use kalix::io::ini_model_io::IniModelIO;
+use kalix::misc::configuration::SaveMethod;
 use kalix::perf::benchmarks;
 use kalix::misc::cli_helpers::describe_cli_api;
 use kalix::misc::simulation_context::install_simulation_panic_hook;
@@ -73,18 +74,45 @@ enum Commands {
         #[arg(short = 'p', long)]
         profile: bool,
     },
-    /// Load a model and save it back out (per its save_method), without simulating.
+    /// Load a model and save it back out, without simulating.
     ///
     /// Used to exercise the save/round-trip path in isolation, e.g. to verify
     /// that a canonical save reproduces a model that reloads and simulates
     /// identically to the source.
+    ///
+    /// How to save is the caller's choice, not the model's: --save-method selects
+    /// it, and a model file has no say (and no record) either way.
     #[command(visible_alias = "resave")]
     Resave {
         /// Path to the model file to load
         model_file: String,
         /// Path to write the resaved model file
         output_file: Option<String>,
+        /// How to write the output
+        #[arg(long = "save-method", value_enum, default_value = "standard")]
+        save_method: SaveMethodArg,
     },
+}
+
+/// The save methods a caller may select on the command line.
+///
+/// Mirrors `SaveMethod`, kept CLI-side so the engine's `Configuration` never has
+/// to know that clap exists.
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum SaveMethodArg {
+    /// Rewrite only the sections that changed; preserve original formatting elsewhere
+    Standard,
+    /// Rewrite every section in canonical form
+    Canonical,
+}
+
+impl From<SaveMethodArg> for SaveMethod {
+    fn from(arg: SaveMethodArg) -> Self {
+        match arg {
+            SaveMethodArg::Standard => SaveMethod::Standard,
+            SaveMethodArg::Canonical => SaveMethod::Canonical,
+        }
+    }
 }
 
 fn main() {
@@ -233,14 +261,15 @@ fn main() {
                 println!("  Total time:      {:>10.3} ms", total_time.as_secs_f64() * 1000.0);
             }
         }
-        Commands::Resave { model_file, output_file } => {
-            let model = match IniModelIO::new().read_model_file(model_file.as_str()) {
+        Commands::Resave { model_file, output_file, save_method } => {
+            let mut model = match IniModelIO::new().read_model_file(model_file.as_str()) {
                 Ok(model) => model,
                 Err(s) => {
                     eprintln!("Error: {}", s);
                     std::process::exit(1);
                 }
             };
+            model.configuration.save_method = save_method.into();
             let model_string = IniModelIO::new().model_to_string(&model);
             let target_file = output_file.unwrap_or(model_file.clone());
             if let Err(s) = fs::write(&target_file, model_string) {

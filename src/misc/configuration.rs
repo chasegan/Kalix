@@ -13,10 +13,15 @@ pub struct Configuration {
     pub save_method: SaveMethod,                    // Method of saving to disk, see SaveMethod enum.
 }
 
+/// How a model is written back to disk.
+///
+/// Deliberately NOT a model-file property: how a file is written is the caller's
+/// business, not the model's. Callers choose it (`kalix resave --save-method`);
+/// nothing about it is persisted, so a round-trip can never smuggle a save
+/// preference into the saved model.
 #[derive(Debug, Clone, Default)]
 pub enum SaveMethod {
     #[default]
-    StandardUnset, // Standard method will only overwrite sections that are invalidated. (Not set by user)
     Standard,  // Standard method will only overwrite sections that are invalidated.
     Canonical  // Force a canonical save of the model i.e. all sections of the ini will be rewritten
 }
@@ -32,7 +37,7 @@ impl Configuration {
             sim_end_timestamp: 0,
             sim_nsteps: 1, //1 + ((sim_end_timestamp - sim_start_timestamp) / sim_stepsize)
 
-            save_method: SaveMethod::StandardUnset,
+            save_method: SaveMethod::Standard,
         }
     }
 }

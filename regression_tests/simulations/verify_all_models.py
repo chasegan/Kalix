@@ -159,15 +159,29 @@ def _simulate(backend, cli_bin, model_path, mass_balance_path):
         kalix.simulate(model_path, mass_balance=mass_balance_path)
 
 
-def _resave(cli_bin, model_path, resaved_path):
-    """Run `kalix resave model_path resaved_path`, raising RuntimeError on failure."""
-    result = subprocess.run(
-        [str(cli_bin), 'resave', model_path, resaved_path],
-        capture_output=True, text=True,
-    )
+def _resave(cli_bin, model_path, resaved_path, save_method=None):
+    """Run `kalix resave model_path resaved_path`, raising RuntimeError on failure.
+
+    save_method picks the save path (the CLI defaults to standard when omitted);
+    a model file has no say in it — see SaveMethod in src/misc/configuration.rs.
+    """
+    cmd = [str(cli_bin), 'resave', model_path, resaved_path]
+    if save_method is not None:
+        cmd += ['--save-method', save_method]
+    result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or '').strip()
         raise RuntimeError(f"resave failed: {detail or f'kalix exited with code {result.returncode}'}")
+
+
+def _with_final_newline(text):
+    """Text with exactly the final newline the serializer always emits.
+
+    The serializer ends every file with a newline; a source file that happens to
+    lack one is not a round-trip failure, so forgive that one byte — and only
+    that one. Extra blank lines at EOF still show up as a difference.
+    """
+    return text if text.endswith('\n') else text + '\n'
 
 
 def _write_diff(lines_a, lines_b, diff_path, fromfile, tofile):
@@ -178,17 +192,81 @@ def _write_diff(lines_a, lines_b, diff_path, fromfile, tofile):
     return Path(diff_path).relative_to(Path.cwd()).as_posix()
 
 
-def verify_resave(model_path, backend, cli_bin, mbal_filename='mbal.txt'):
+def verify_resave_noop(model_path, backend, cli_bin):
     """
-    Verify that a model still simulates identically after a save round-trip.
+    Verify that saving a model with no changes reproduces it byte-for-byte.
 
-    Loads the model, saves it back out (per its own [kalix] save_method — see
-    SaveMethod in src/misc/configuration.rs), and re-simulates the resaved copy.
-    Catches load/save bugs that a plain load-and-simulate check can't: a
-    round-trip that silently drops or corrupts a property still simulates fine
-    on the *original* file, but would show up here as a mass balance mismatch
-    on the *resaved* one. Only supported on the CLI backend (`kalix resave`);
-    the Python package backend has no equivalent entry point.
+    This is the promise of the standard save method (see SaveMethod in
+    src/misc/configuration.rs): sections that did not change are kept verbatim,
+    comments and formatting included. Nothing changed here, so nothing may move.
+    A byte comparison catches what a simulate-and-compare never could — a lost
+    comment, a reflowed table, a dropped empty section — since none of those
+    alter the numbers.
+
+    Args:
+        model_path: Path to the .ini model file
+        backend: 'cli' or 'package' (see resolve_backend)
+        cli_bin: Path to the CLI binary when backend == 'cli', else None
+
+    On failure the resaved model and a diff against the source are left on disk
+    beside it, as `<stem>.noop.resave_check.ini` / `.diff` (gitignored).
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    if backend != 'cli':
+        return True, "SKIPPED (resave needs the CLI backend)"
+
+    model_dir = os.path.dirname(model_path)
+    stem = Path(model_path).stem
+    resaved_path = os.path.join(model_dir, f"{stem}.noop" + _RESAVE_CHECK_SUFFIX)
+    ini_diff_path = os.path.join(model_dir, f"{stem}.noop.resave_check.diff")
+    success = False
+    try:
+        _resave(cli_bin, model_path, resaved_path, save_method='standard')
+
+        with open(model_path, 'r') as f:
+            source = f.read()
+        with open(resaved_path, 'r') as f:
+            resaved = f.read()
+
+        if _with_final_newline(source) == _with_final_newline(resaved):
+            success = True
+            return True, "VERIFIED! (no-op save is byte-identical)"
+
+        rel_ini_diff = _write_diff(
+            source.splitlines(keepends=True), resaved.splitlines(keepends=True),
+            ini_diff_path, fromfile='source', tofile='resaved',
+        )
+        rel_ini = Path(resaved_path).relative_to(Path.cwd()).as_posix()
+        return False, (f"No-op save is not byte-identical: resaved model kept at "
+                       f"{rel_ini}, ini diff at {rel_ini_diff}")
+    except Exception as e:
+        return False, f"Error: {str(e)}"
+    finally:
+        # Only clean up on success — a failure leaves the artifacts for debugging.
+        if success:
+            if os.path.exists(resaved_path):
+                os.unlink(resaved_path)
+            if os.path.exists(ini_diff_path):
+                os.unlink(ini_diff_path)
+
+
+def verify_resave_canonical(model_path, backend, cli_bin, mbal_filename='mbal.txt'):
+    """
+    Verify that a model still simulates identically after a canonical save.
+
+    Forces a canonical save (`--save-method canonical`), which re-renders every
+    section from the model in memory rather than preserving the source text, and
+    re-simulates the result. Catches load/save bugs a plain load-and-simulate
+    check can't: a round-trip that silently drops or corrupts a property still
+    simulates fine on the *original* file, but shows up here as a mass balance
+    mismatch on the *resaved* one. Only supported on the CLI backend (`kalix
+    resave`); the Python package backend has no equivalent entry point.
+
+    Choosing the method from the command line keeps a save concern out of the
+    model files and means every model is checked both ways (see also
+    verify_resave_noop).
 
     Args:
         model_path: Path to the .ini model file
@@ -198,10 +276,9 @@ def verify_resave(model_path, backend, cli_bin, mbal_filename='mbal.txt'):
 
     On failure, the resaved model, an ini diff against the source, and (if the
     mismatch was in the mass balance) the generated mass balance are left on
-    disk next to the source model — as `<stem>.resave_check.ini` /
-    `<stem>.resave_check.diff` / `<stem>.resave_check.mbal.txt` — for manual
-    debugging. They are cleaned up automatically on success. All are
-    gitignored (see .gitignore).
+    disk next to the source model — as `<stem>.canonical.resave_check.ini` /
+    `.diff` / `.mbal.txt` — for manual debugging. They are cleaned up
+    automatically on success. All are gitignored (see .gitignore).
 
     Returns:
         tuple: (success: bool, message: str) — success is True with a "SKIPPED"
@@ -218,12 +295,12 @@ def verify_resave(model_path, backend, cli_bin, mbal_filename='mbal.txt'):
     # Resave alongside the original (not a system temp dir) so the model's
     # relative input-file paths still resolve when we re-simulate it.
     stem = Path(model_path).stem
-    resaved_path = os.path.join(model_dir, stem + _RESAVE_CHECK_SUFFIX)
-    ini_diff_path = os.path.join(model_dir, f"{stem}.resave_check.diff")
+    resaved_path = os.path.join(model_dir, f"{stem}.canonical" + _RESAVE_CHECK_SUFFIX)
+    ini_diff_path = os.path.join(model_dir, f"{stem}.canonical.resave_check.diff")
     tmp_mbal_path = None
     success = False
     try:
-        _resave(cli_bin, model_path, resaved_path)
+        _resave(cli_bin, model_path, resaved_path, save_method='canonical')
 
         # Diff the resave against the source up front, so it's available for
         # a mass balance mismatch below *and* for a simulate-time exception
@@ -245,9 +322,9 @@ def verify_resave(model_path, backend, cli_bin, mbal_filename='mbal.txt'):
         matched, detail = compare_mass_balance_files(tmp_mbal_path, mbal_path)
         if matched:
             success = True
-            return True, "VERIFIED! (resave round-trip)"
+            return True, "VERIFIED! (canonical resave round-trip)"
 
-        kept_mbal_path = os.path.join(model_dir, f"{stem}.resave_check.mbal.txt")
+        kept_mbal_path = os.path.join(model_dir, f"{stem}.canonical.resave_check.mbal.txt")
         shutil.copy(tmp_mbal_path, kept_mbal_path)
         rel_mbal = Path(kept_mbal_path).relative_to(Path.cwd()).as_posix()
         return False, (f"Resaved model's mass balance mismatch ({detail}): "
@@ -420,11 +497,13 @@ def main():
     log(f"Found {len(model_files)} model file(s)\n")
 
     # Verify each model. Each entry is (result label suffix, check function);
-    # checks beyond the first are additional angles on the same model (currently
-    # just a save/reload round-trip via verify_resave).
+    # checks beyond the first are additional angles on the same model — the two
+    # save paths, driven from the CLI so no model file has to declare a save
+    # method for the sake of the harness.
     checks = [
         (None, lambda p: verify_model(p, backend, cli_bin)),
-        ('resave', lambda p: verify_resave(p, backend, cli_bin)),
+        ('no-op save', lambda p: verify_resave_noop(p, backend, cli_bin)),
+        ('canonical resave', lambda p: verify_resave_canonical(p, backend, cli_bin)),
     ]
 
     results = []

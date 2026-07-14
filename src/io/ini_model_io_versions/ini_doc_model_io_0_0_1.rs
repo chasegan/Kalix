@@ -127,12 +127,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 } else if name_lower == "end" {
                     let timestamp = date_string_to_u64_flexible(ini_property.value.as_str())?.0;
                     model.configuration.specified_sim_end_timestamp = Some(timestamp);
-                } else if name_lower == "save_method" {
-                    match ini_property.value.to_lowercase().as_str() {
-                        "standard" => model.configuration.save_method = SaveMethod::Standard,
-                        "canonical" => model.configuration.save_method = SaveMethod::Canonical,
-                        other => return Err(format!("Error on line {}: Invalid save_method '{}'. Expected 'standard' or 'canonical'.", ini_property.line_number, other)),
-                    }
                 }
             }
         } else if section_name == "inputs" {
@@ -836,19 +830,6 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
     if let Some(end_timestamp) = model.configuration.specified_sim_end_timestamp {
         ini_doc.set_property("kalix", "end", &u64_to_date_string_for_step_size(end_timestamp, sim_stepsize));
     }
-    
-    // Save method
-    match model.configuration.save_method {
-        SaveMethod::Standard => {
-            ini_doc.set_property("kalix", "save_method", "standard");
-        }
-        SaveMethod::Canonical => {
-            ini_doc.set_property("kalix", "save_method", "canonical");
-        }
-        SaveMethod::StandardUnset => {
-            // no-op
-        }
-    }
 
     // List all input files
     for file_path in &model.input_file_paths {
@@ -1118,7 +1099,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
     let current = render_canonical_0_0_1(model);
     // Exhaustive match is a compiler-enforced guarantee that all save methods are handled.
     match model.configuration.save_method {
-        SaveMethod::Standard | SaveMethod::StandardUnset => {
+        SaveMethod::Standard => {
             // Standard save method
             let (baseline, original) = match (&model.baseline_canonical, &model.ini_document) {
             (Some(baseline), Some(original)) => (baseline, original),
@@ -1151,6 +1132,19 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                     };
                 }
             }
+            // A section the source declared but that carries no properties (an empty
+            // `[inputs]`, say) has no counterpart in the canonical render, so the loop
+            // above never validated it and the sweep would drop it — taking any comments
+            // attached to it with it. It holds no model-meaningful content, so there is
+            // nothing in it that *could* have changed: keep it verbatim.
+            let empty_sections: Vec<String> = out.sections.iter()
+                .filter(|(_, section)| section.properties.is_empty())
+                .map(|(name, _)| name.clone())
+                .collect();
+            for section_name in empty_sections {
+                out.validate_section(&section_name);
+            }
+
             out.remove_invalid_sections_and_properties();
             out
         }
