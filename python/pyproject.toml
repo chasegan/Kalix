@@ -39,3 +39,9 @@ dev = [
     "pytest>=8.4.2",
     "tox>=4.30.3",
 ]
+
+[tool.pylint.master]
+# kalix._native is a compiled PyO3 extension; astroid can't statically parse
+# it, so pylint must actually import it to see its members (else every name
+# in it is flagged as no-name-in-module).
+extension-pkg-allow-list = ["kalix._native"]
