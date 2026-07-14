@@ -275,6 +275,10 @@ fn test_save_noop_is_byte_identical() {
     // Phase 2: loading then saving with NO change must reproduce the source
     // byte-for-byte, including original number formatting, spacing, comments,
     // continuations and the awkward node types.
+    // This is the reason the fixture's [kalix] section must NOT set
+    // save_method = canonical: canonical mode intentionally reformats values
+    // (e.g. drops trailing zeros), which would break the byte-identical
+    // assertion below.
     // `include_str!` captures the file with the checkout's line endings (CRLF on
     // Windows via core.autocrlf, LF elsewhere). The serializer emits LF by design
     // (the parser strips `\r` via `str::lines()`), so normalise the expected side
