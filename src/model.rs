@@ -58,6 +58,8 @@ pub struct Model {
     pub configuration: Configuration,
     pub inputs: Vec<TimeseriesInput>,
     pub input_file_paths: Vec<String>,
+    /// Maps file_path to the alias provided for quick lookup
+    pub alias_map: HashMap<String, String>, 
     pub outputs: Vec<String>,
     pub account_manager: AccountManager,
     pub data_cache: DataCache,
@@ -116,6 +118,7 @@ impl Model {
             input_file_paths: vec![],
             outputs: vec![],
             working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+            alias_map: HashMap::new(),
             ..Default::default()
         }
     }
@@ -146,6 +149,7 @@ impl Model {
             node_lookup: self.node_lookup.clone(),
             ini_document: None,
             baseline_canonical: None,
+            alias_map: self.alias_map.clone(),
         }
     }
 
@@ -649,9 +653,16 @@ impl Model {
         Ok(kp.resolved)
     }
 
+    /// Load input data from a file and store it in the model's inputs vector.
+    /// Responsible for remembering how the input was loaded (original path, alias) and for resolving the path.
+    /// Construction of the TimeseriesInput is delegated to the TimeseriesInput::load function.
     pub fn load_input_data(&mut self, file_path: &str, alias: Option<&str>) -> Result<usize, String> {
         // Remember the ORIGINAL input file path (for serialization/display)
         self.input_file_paths.push(file_path.to_string());
+        // Remember also the alias if provided
+        if let Some(alias_str) = alias {
+            self.alias_map.insert(file_path.to_string(), alias_str.to_string());
+        }
 
         // Resolve the path (supports absolute, relative, and trailhead paths)
         let resolved_path = self.resolve_path(file_path)?;

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::hydrology::accounts::account::Account;
 use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
 use crate::io::custom_ini_parser::{IniDocument, IniSection};
@@ -852,7 +854,12 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
 
     // List all input files
     for file_path in &model.input_file_paths {
-        ini_doc.set_property("inputs", file_path.as_str(), "");
+        let alias = model.alias_map.get(file_path);
+        let (k, v) = match alias {
+            Some(alias_string) => (alias_string.as_str(), file_path.as_str()),
+            None => (file_path.as_str(), ""),
+        };
+        ini_doc.set_property("inputs", k, v);
     }
 
     // List all constants
