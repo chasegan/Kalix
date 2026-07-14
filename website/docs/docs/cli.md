@@ -21,6 +21,9 @@ title: Commandline
 `optimise` · alias `opt`
 :   Run an optimisation — see [`kalix optimise`](#kalix-optimise).
 
+`resave`
+:   Load a model and write it back out, without simulating — see [`kalix resave`](#kalix-resave).
+
 `new-session`
 :   Open an interactive session; the engine communicates two-way over STDIO using a bespoke protocol (used internally by KalixIDE).
 
@@ -103,4 +106,36 @@ Run an optimisation. Alias: `opt`.
 
 ```console
 $ kalix optimise config.ini model.ini -s calibrated_model.ini
+```
+
+## kalix resave
+
+Load a model and write it back out, without simulating. Use it to reformat a model file, or to check that a model survives a save-and-reload unchanged.
+
+**Usage** — `kalix resave <MODEL_FILE> [OUTPUT_FILE] [OPTIONS]`
+
+**Arguments**
+
+`<MODEL_FILE>`
+:   Path to the model file to load.
+
+`[OUTPUT_FILE]`
+:   File to write the resaved model to. Required, unless you pass `--in-place`.
+
+**Options**
+
+`--in-place`
+:   Overwrite the model file with the resaved model, instead of writing to an `[OUTPUT_FILE]`. The original is not kept, so reach for this on a model you can recover — one under version control, say.
+
+`--save-method <SAVE_METHOD>`
+:   How to write the output. `standard` (the default) rewrites only the sections that changed, leaving the rest of the file exactly as it was — comments, spacing and number formatting included. `canonical` re-renders every section from the model, normalising dates, numbers and table layout, so expect the file to change even when the model has not.
+
+`-h`, `--help`
+:   Print help.
+
+**Examples**
+
+```console
+$ kalix resave my_model.ini tidy_model.ini --save-method canonical
+$ kalix resave my_model.ini --in-place --save-method canonical
 ```

@@ -87,7 +87,11 @@ enum Commands {
         /// Path to the model file to load
         model_file: String,
         /// Path to write the resaved model file
+        #[arg(required_unless_present = "in_place")]
         output_file: Option<String>,
+        /// Overwrite the model file with the resaved model
+        #[arg(long = "in-place", conflicts_with = "output_file")]
+        in_place: bool,
         /// How to write the output
         #[arg(long = "save-method", value_enum, default_value = "standard")]
         save_method: SaveMethodArg,
@@ -261,7 +265,11 @@ fn main() {
                 println!("  Total time:      {:>10.3} ms", total_time.as_secs_f64() * 1000.0);
             }
         }
-        Commands::Resave { model_file, output_file, save_method } => {
+        // `in_place` is not read here: clap enforces exactly one of OUTPUT_FILE /
+        // --in-place, so an absent output file already means "overwrite the source".
+        // Its job is to make that destructive case something the caller asks for by
+        // name rather than something they get by forgetting an argument.
+        Commands::Resave { model_file, output_file, in_place: _, save_method } => {
             let mut model = match IniModelIO::new().read_model_file(model_file.as_str()) {
                 Ok(model) => model,
                 Err(s) => {
