@@ -464,7 +464,7 @@ type = blackhole
 node.up.dsflow
 node.calc.dsflow
 ";
-    IniModelIO::new().read_model_string(ini)
+    IniModelIO::read_model_string(ini)
         .expect("month-boundary model should parse")
 }
 

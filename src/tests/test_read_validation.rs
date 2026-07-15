@@ -37,8 +37,7 @@ fn model_ini(a_inflow_expression: &str) -> String {
 }
 
 fn run_model(a_inflow_expression: &str) -> Result<crate::model::Model, String> {
-    let mut model = IniModelIO::new()
-        .read_model_string(&model_ini(a_inflow_expression))
+    let mut model = IniModelIO::read_model_string(&model_ini(a_inflow_expression))
         .expect("model should parse");
     model.configure()?;
     model.run()?;

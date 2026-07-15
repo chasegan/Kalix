@@ -72,9 +72,8 @@ fn test_evaluate_sdeb_with_sacramento_parameters() {
     // using 17 normalized parameter values as would be used in SCE-UA
 
     // Load the Sacramento model
-    let ini_reader = IniModelIO::new();
     let model_filename = "./src/tests/example_models/8/picnic_sacr.ini";
-    let model = ini_reader.read_model_file(model_filename).unwrap();
+    let model = IniModelIO::read_model_file(model_filename).unwrap();
 
     // Load observed data
     let all_data = read_ts("./src/tests/example_models/8/formatted_11000A.csv").unwrap();

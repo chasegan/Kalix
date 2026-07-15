@@ -279,8 +279,7 @@ impl Command for LoadModelFileCommand {
             .ok_or_else(|| CommandError::InvalidParameters("model_path is required".to_string()))?;
 
         // Load the model
-        let ini_reader = IniModelIO::new();
-        let model = ini_reader.read_model_file(model_path)
+        let model = IniModelIO::read_model_file(model_path)
             .map_err(|e| CommandError::ExecutionError(format!("Failed to load model: {}", e)))?;
 
         // Store the model in the session
@@ -340,8 +339,7 @@ impl Command for LoadModelStringCommand {
             .ok_or_else(|| CommandError::InvalidParameters("model_ini is required".to_string()))?;
 
         // Load the model from string
-        let ini_reader = IniModelIO::new();
-        let model = ini_reader.read_model_string(model_ini)
+        let model = IniModelIO::read_model_string(model_ini)
             .map_err(|e| CommandError::ExecutionError(format!("Failed to parse model: {}", e)))?;
 
         // Store the model in the session
@@ -742,11 +740,11 @@ impl Command for RunOptimisationCommand {
         // Load model with priority: inline model_ini > config model_file > session model
         let model = if let Some(model_ini) = params.get("model_ini").and_then(|v| v.as_str()) {
             // Priority 1: Use inline model parameter
-            IniModelIO::new().read_model_string(model_ini)
+            IniModelIO::read_model_string(model_ini)
                 .map_err(|e| CommandError::ExecutionError(format!("Failed to parse inline model: {}", e)))?
         } else if let Some(model_file) = &config.model_file {
             // Priority 2: Use model_file from config
-            IniModelIO::new().read_model_file(model_file)
+            IniModelIO::read_model_file(model_file)
                 .map_err(|e| CommandError::ExecutionError(format!("Failed to load model from '{}': {}", model_file, e)))?
         } else if let Some(session_model) = session.get_model() {
             // Priority 3: Use session's loaded model
@@ -863,7 +861,7 @@ impl Command for RunOptimisationCommand {
             .map_err(|e| CommandError::ExecutionError(format!("Failed to apply best parameters: {}", e)))?;
 
         // Serialize the optimized model to INI string
-        let optimised_model_ini = IniModelIO::new().model_to_string(&problem.model);
+        let optimised_model_ini = IniModelIO::model_to_string(&problem.model);
 
         // Build result JSON
         let mut result_json = serde_json::json!({

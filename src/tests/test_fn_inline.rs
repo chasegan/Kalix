@@ -262,7 +262,7 @@ node.a.dsflow
 [fn]
 prev_own() = this.inflow[-1, 99]
 ";
-    let mut model = IniModelIO::new().read_model_string(ini)
+    let mut model = IniModelIO::read_model_string(ini)
         .expect("model with a this.-using fn should load");
     model.configure().expect("configuration should succeed");
     model.run().expect("run should succeed");
@@ -390,7 +390,7 @@ must_be_positive(x) = {
     x
     }
 ";
-    let mut model = IniModelIO::new().read_model_string(ini)
+    let mut model = IniModelIO::read_model_string(ini)
         .expect("model with an asserting fn should load");
     model.configure().expect("configuration should succeed");
 

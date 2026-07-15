@@ -260,8 +260,7 @@ impl PyModel {
         mut slf: PyRefMut<'py, Self>,
         model_path: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
-        let mut model = IniModelIO::new()
-            .read_model_file(model_path)
+        let mut model = IniModelIO::read_model_file(model_path)
             .map_err(|e| PyIOError::new_err(format!("Failed to load model: {}", e)))?;
         // Verification step
         model.configure().map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
@@ -277,8 +276,7 @@ impl PyModel {
         mut slf: PyRefMut<'py, Self>,
         model_string: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
-        let mut model = IniModelIO::new()
-            .read_model_string(model_string)
+        let mut model = IniModelIO::read_model_string(model_string)
             .map_err(|e| PyIOError::new_err(format!("Failed to load model: {}", e)))?;
         // Verification step
         model.configure().map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;

@@ -2,19 +2,11 @@ use crate::model::Model;
 use crate::io::custom_ini_parser::IniDocument;
 use crate::io::ini_model_io_versions::ini_doc_model_io_0_0_1::{ini_doc_to_model_0_0_1, model_to_ini_doc_0_0_1};
 
-#[derive(Default)]
-pub struct IniModelIO {
-    pub name: String,
-}
-
+/// Namespace for INI model I/O. Carries no state -- every method is a pure
+/// function grouped here for discoverability (`IniModelIO::read_model_file(...)`).
+pub struct IniModelIO;
 
 impl IniModelIO {
-    pub fn new() -> IniModelIO {
-        IniModelIO {
-            ..Default::default()
-        }
-    }
-
     /// Parses a hydrological model from a file.
     ///
     /// This function takes an INI-formatted file containing a complete model definition
@@ -30,7 +22,7 @@ impl IniModelIO {
     /// * `Ok(Model)` - Successfully parsed and validated model ready for simulation
     /// * `Err(String)` - Error message describing parsing failure, validation error, or
     ///   unsupported format version.
-    pub fn read_model_file(&self, path: &str) -> Result<Model, String> {
+    pub fn read_model_file(path: &str) -> Result<Model, String> {
         // Read file content
         let content = std::fs::read_to_string(path)
             .map_err(|e| format!("Failed to read file '{}': {}", path, e))?;
@@ -55,7 +47,7 @@ impl IniModelIO {
 
         // Parse the model with the working directory set BEFORE loading any data
         // This allows relative paths in the INI to be resolved correctly
-        let model = self.read_model_string_with_working_directory(content.as_str(), Some(model_dir))?;
+        let model = Self::read_model_string_with_working_directory(content.as_str(), Some(model_dir))?;
 
         Ok(model)
     }
@@ -75,8 +67,8 @@ impl IniModelIO {
     /// * `Ok(Model)` - Successfully parsed and validated model ready for simulation
     /// * `Err(String)` - Error message describing parsing failure, validation error, or
     ///   unsupported format version.
-    pub fn read_model_string(&self, ini_string: &str) -> Result<Model, String> {
-        self.read_model_string_with_working_directory(ini_string, None)
+    pub fn read_model_string(ini_string: &str) -> Result<Model, String> {
+        Self::read_model_string_with_working_directory(ini_string, None)
     }
 
     /// Parses a hydrological model from a string with a specified working directory.
@@ -91,7 +83,7 @@ impl IniModelIO {
     /// * `Ok(Model)` - Successfully parsed and validated model ready for simulation
     /// * `Err(String)` - Error message describing parsing failure, validation error, or
     ///   unsupported format version.
-    pub fn read_model_string_with_working_directory(&self, ini_string: &str, working_directory: Option<std::path::PathBuf>) -> Result<Model, String> {
+    pub fn read_model_string_with_working_directory(ini_string: &str, working_directory: Option<std::path::PathBuf>) -> Result<Model, String> {
         let ini_doc = IniDocument::parse(ini_string)?;
         let model = Self::ini_doc_to_model_with_working_directory(ini_doc, working_directory)?;
         Ok(model)
@@ -155,9 +147,8 @@ impl IniModelIO {
         // }
     }
 
-
     /// Convert a Model to an INI string
-    pub fn model_to_string(&self, model: &Model) -> String {
+    pub fn model_to_string(model: &Model) -> String {
         // Get the ini doc
         let ini_doc = model_to_ini_doc_0_0_1(model);
 

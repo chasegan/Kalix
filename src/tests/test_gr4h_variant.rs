@@ -28,31 +28,31 @@ fn model_ini(variant_line: &str) -> String {
 
 #[test]
 fn variant_absent_defaults_to_gr4j() {
-    let m = IniModelIO::new().read_model_string(&model_ini("")).unwrap();
+    let m = IniModelIO::read_model_string(&model_ini("")).unwrap();
     assert_eq!(variant_of(&m, "test_gr4"), Gr4Variant::Gr4j);
 }
 
 #[test]
 fn variant_gr4j_parses_as_daily() {
-    let m = IniModelIO::new().read_model_string(&model_ini("variant = gr4j\n")).unwrap();
+    let m = IniModelIO::read_model_string(&model_ini("variant = gr4j\n")).unwrap();
     assert_eq!(variant_of(&m, "test_gr4"), Gr4Variant::Gr4j);
 }
 
 #[test]
 fn variant_gr4h_parses_as_subdaily() {
-    let m = IniModelIO::new().read_model_string(&model_ini("variant = gr4h\n")).unwrap();
+    let m = IniModelIO::read_model_string(&model_ini("variant = gr4h\n")).unwrap();
     assert_eq!(variant_of(&m, "test_gr4"), Gr4Variant::Gr4h);
 }
 
 #[test]
 fn variant_is_case_insensitive() {
-    let m = IniModelIO::new().read_model_string(&model_ini("variant = GR4H\n")).unwrap();
+    let m = IniModelIO::read_model_string(&model_ini("variant = GR4H\n")).unwrap();
     assert_eq!(variant_of(&m, "test_gr4"), Gr4Variant::Gr4h);
 }
 
 #[test]
 fn unknown_variant_is_an_error() {
-    let result = IniModelIO::new().read_model_string(&model_ini("variant = gr4x\n"));
+    let result = IniModelIO::read_model_string(&model_ini("variant = gr4x\n"));
     match result {
         Ok(_) => panic!("expected an error for an unknown variant"),
         Err(err) => assert!(err.contains("variant"), "error should mention the variant: {err}"),
@@ -61,28 +61,24 @@ fn unknown_variant_is_an_error() {
 
 #[test]
 fn writer_emits_variant_only_for_gr4h() {
-    let io = IniModelIO::new();
-
     // Default (gr4j): no variant line should be written.
-    let m_default = io.read_model_string(&model_ini("")).unwrap();
-    let out_default = io.model_to_string(&m_default);
+    let m_default = IniModelIO::read_model_string(&model_ini("")).unwrap();
+    let out_default = IniModelIO::model_to_string(&m_default);
     assert!(!out_default.contains("variant"),
             "classic GR4J model should not emit a variant line:\n{out_default}");
 
     // gr4h: variant line must be present.
-    let m_h = io.read_model_string(&model_ini("variant = gr4h\n")).unwrap();
-    let out_h = io.model_to_string(&m_h);
+    let m_h = IniModelIO::read_model_string(&model_ini("variant = gr4h\n")).unwrap();
+    let out_h = IniModelIO::model_to_string(&m_h);
     assert!(out_h.contains("variant = gr4h"),
             "GR4H model should emit `variant = gr4h`:\n{out_h}");
 }
 
 #[test]
 fn variant_survives_a_full_round_trip() {
-    let io = IniModelIO::new();
-
-    let m1 = io.read_model_string(&model_ini("variant = gr4h\n")).unwrap();
-    let serialised = io.model_to_string(&m1);
-    let m2 = io.read_model_string(&serialised).unwrap();
+    let m1 = IniModelIO::read_model_string(&model_ini("variant = gr4h\n")).unwrap();
+    let serialised = IniModelIO::model_to_string(&m1);
+    let m2 = IniModelIO::read_model_string(&serialised).unwrap();
 
     assert_eq!(variant_of(&m2, "test_gr4"), Gr4Variant::Gr4h,
                "variant should be preserved through write -> read");

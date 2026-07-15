@@ -212,7 +212,7 @@ n_cols = 13
 values = x, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
        0, 9, 8, 7, 5, 3, 2, 2, 3, 5, 7,  8,  9,
 ";
-    let model = IniModelIO::new().read_model_string(ini).expect("model should load");
+    let model = IniModelIO::read_model_string(ini).expect("model should load");
 
     let rating = model.data_cache.tables.get("rating").expect("rating registered");
     assert_eq!(rating.arity(), 1);
@@ -223,7 +223,7 @@ values = x, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
 
 #[test]
 fn test_model_table_error_cases() {
-    let read = |ini: &str| IniModelIO::new().read_model_string(ini);
+    let read = |ini: &str| IniModelIO::read_model_string(ini);
 
     // Invalid table name (uppercase)
     assert!(read("[kalix]\n[table.Bad]\nvalues = 0, 0, 1, 1\n").is_err());
@@ -387,8 +387,7 @@ inflow = table.rating(sim.day)
 [outputs]
 node.in1.dsflow
 ";
-    let io = IniModelIO::new();
-    let mut model = io.read_model_string(ini).expect("model should load");
+    let mut model = IniModelIO::read_model_string(ini).expect("model should load");
     model.configure().expect("model should configure");
     model.run().expect("model should run");
 
@@ -415,15 +414,14 @@ values = 0, 0,
 loc = 0, 0
 type = gauge
 ";
-    let io = IniModelIO::new();
-    let model = io.read_model_string(ini).expect("model should load");
-    let saved = io.model_to_string(&model);
+    let model = IniModelIO::read_model_string(ini).expect("model should load");
+    let saved = IniModelIO::model_to_string(&model);
 
     // The saved model must still contain the table definition...
     assert!(saved.contains("[table.rating]"), "saved model should keep the table section:\n{}", saved);
 
     // ...and re-reading it must yield a working, identical table.
-    let model2 = io.read_model_string(&saved).expect("saved model should re-load");
+    let model2 = IniModelIO::read_model_string(&saved).expect("saved model should re-load");
     let rating = model2.data_cache.tables.get("rating").expect("rating survives round-trip");
     match rating {
         LookupTable::OneD(t) => assert_eq!(t.lookup(0.25), 60.0),

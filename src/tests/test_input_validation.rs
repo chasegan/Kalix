@@ -13,10 +13,8 @@ use crate::io::ini_model_io::IniModelIO;
 /// - picnic_sacr_broken.ini: uses incorrect path `data.formatted_11000A.csv.by_index.1`
 #[test]
 fn test_broken_model_file_invalid_data_reference() {
-    let io = IniModelIO::new();
-
     // The broken model should fail at configure time with a helpful error
-    let mut broken_model = io.read_model_file("./src/tests/example_models/8/picnic_sacr_broken.ini")
+    let mut broken_model = IniModelIO::read_model_file("./src/tests/example_models/8/picnic_sacr_broken.ini")
         .expect("Should be able to parse the model file");
 
     let result = broken_model.configure();
@@ -40,9 +38,7 @@ fn test_broken_model_file_invalid_data_reference() {
 /// Test that the working model file configures and runs successfully
 #[test]
 fn test_working_model_file_runs_successfully() {
-    let io = IniModelIO::new();
-
-    let mut working_model = io.read_model_file("./src/tests/example_models/8/picnic_sacr_working.ini")
+    let mut working_model = IniModelIO::read_model_file("./src/tests/example_models/8/picnic_sacr_working.ini")
         .expect("Should be able to parse the model file");
 
     working_model.configure().expect("Working model should configure successfully");

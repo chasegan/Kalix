@@ -176,7 +176,7 @@ fn main() {
             // Load + configure
             let load_start = Instant::now();
             println!("Loading model file: {}", model_file);
-            let mut m = match IniModelIO::new().read_model_file(model_file.as_str()) {
+            let mut m = match IniModelIO::read_model_file(model_file.as_str()) {
                 Ok(model) => model,
                 Err(s) => {
                     eprintln!("Error: {}", s);
@@ -270,7 +270,7 @@ fn main() {
         // Its job is to make that destructive case something the caller asks for by
         // name rather than something they get by forgetting an argument.
         Commands::Resave { model_file, output_file, in_place: _, save_method } => {
-            let mut model = match IniModelIO::new().read_model_file(model_file.as_str()) {
+            let mut model = match IniModelIO::read_model_file(model_file.as_str()) {
                 Ok(model) => model,
                 Err(s) => {
                     eprintln!("Error: {}", s);
@@ -278,7 +278,7 @@ fn main() {
                 }
             };
             model.configuration.save_method = save_method.into();
-            let model_string = IniModelIO::new().model_to_string(&model);
+            let model_string = IniModelIO::model_to_string(&model);
             let target_file = output_file.unwrap_or(model_file.clone());
             if let Err(s) = fs::write(&target_file, model_string) {
                 eprintln!("Error: {}", s);
@@ -337,7 +337,7 @@ fn main() {
             };
 
             println!("Loading model: {}", model_file_path);
-            let model = match IniModelIO::new().read_model_file(model_file_path) {
+            let model = match IniModelIO::read_model_file(model_file_path) {
                 Ok(m) => m,
                 Err(e) => {
                     eprintln!("Error loading model: {}", e);
@@ -467,8 +467,7 @@ fn main() {
             // Save optimised model to file if specified
             let output_start = Instant::now();
             if let Some(model_path) = save_model {
-                let ini_io = IniModelIO::new();
-                let model_string = ini_io.model_to_string(&problem_mut.model);
+                let model_string = IniModelIO::model_to_string(&problem_mut.model);
                 match fs::write(&model_path, model_string) {
                     Ok(_) => println!("\nOptimized model written to: {}", model_path),
                     Err(e) => eprintln!("Error writing model: {}", e),

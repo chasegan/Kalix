@@ -38,7 +38,7 @@ pub fn simulate_from_file(
     output_path: Option<&str>,
     mass_balance_path: Option<&str>,
 ) -> Result<(), String> {
-    let mut m = IniModelIO::new().read_model_file(model_path)?;
+    let mut m = IniModelIO::read_model_file(model_path)?;
     m.configure()?;
     m.run()?;
     if let Some(p) = output_path {
@@ -95,7 +95,7 @@ pub fn optimise_from_file(
         })?,
     };
 
-    let model = IniModelIO::new().read_model_file(model_file_path)?;
+    let model = IniModelIO::read_model_file(model_file_path)?;
 
     // Build comparison pairs from terms (load each observed series).
     let mut comparisons: Vec<ComparisonPair> = Vec::with_capacity(config.terms.len());
@@ -134,7 +134,7 @@ pub fn optimise_from_file(
     problem.set_params(&result.best_params)
         .map_err(|e| format!("Failed to apply best parameters: {}", e))?;
 
-    let optimised_model_ini = IniModelIO::new().model_to_string(&problem.model);
+    let optimised_model_ini = IniModelIO::model_to_string(&problem.model);
 
     // Optionally write the optimised model to disk.
     if let Some(path) = save_model_path {

@@ -297,8 +297,7 @@ fn test_hourly_model_end_to_end_preserves_step_size() {
     use crate::io::ini_model_io::IniModelIO;
 
     let model_filename = "./src/tests/example_models/hourly_test/hourly.ini";
-    let mut m = IniModelIO::new()
-        .read_model_file(model_filename)
+    let mut m = IniModelIO::read_model_file(model_filename)
         .expect("Should load model");
 
     m.configure().expect("Configuration should succeed");

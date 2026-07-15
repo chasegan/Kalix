@@ -26,7 +26,7 @@ accounts = name, size, initial,
            smith, 42, 10,
            jones, 105, 0,
 "#);
-    let model = IniModelIO::new().read_model_string(&ini).expect("model should load");
+    let model = IniModelIO::read_model_string(&ini).expect("model should load");
 
     let smith = model.account_manager.get_account_idx("smith").expect("smith exists");
     let jones = model.account_manager.get_account_idx("jones").expect("jones exists");
@@ -48,7 +48,7 @@ fn test_acc_columns_order_free_and_initial_defaults() {
 accounts = name, initial, size,
            a1, 5, 50,
 "#);
-    let model = IniModelIO::new().read_model_string(&ini).expect("model should load");
+    let model = IniModelIO::read_model_string(&ini).expect("model should load");
     let a1 = model.account_manager.get_account_idx("a1").unwrap();
     assert_eq!(model.account_manager.get_account(a1).unwrap().size, 50.0);
     assert_eq!(model.account_manager.get_account(a1).unwrap().initial_balance, 5.0);
@@ -59,7 +59,7 @@ accounts = name, initial, size,
 accounts = name, size,
            a2, 7,
 "#);
-    let model = IniModelIO::new().read_model_string(&ini).expect("model should load");
+    let model = IniModelIO::read_model_string(&ini).expect("model should load");
     let a2 = model.account_manager.get_account_idx("a2").unwrap();
     assert_eq!(model.account_manager.get_account(a2).unwrap().initial_balance, 0.0);
 }
@@ -74,7 +74,7 @@ fn test_acc_header_contract_errors() {
 accounts = name, size, initail,
            a1, 42, 0,
 "#);
-    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
     assert!(err.contains("not a whole number") || err.contains("Invalid size"),
         "unexpected error: {}", err);
 
@@ -84,7 +84,7 @@ accounts = name, size, initail,
 accounts = name, initial,
            a1, 0,
 "#);
-    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
     assert!(err.contains("requires a 'size' column"), "unexpected error: {}", err);
 
     // name not first
@@ -93,7 +93,7 @@ accounts = name, initial,
 accounts = size, name,
            42, a1,
 "#);
-    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
     assert!(err.contains("must be 'name'") || err.contains("must start with a header"),
         "unexpected error: {}", err);
 
@@ -102,7 +102,7 @@ accounts = size, name,
         r#"[acc.g1]
 accounts = name, size,
 "#);
-    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
     assert!(err.contains("no account rows"), "unexpected error: {}", err);
 
     // Account named after a column keyword, first row: the name extends the
@@ -112,7 +112,7 @@ accounts = name, size,
 accounts = name, size,
            initial, 42,
 "#);
-    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
     assert!(err.contains("not a whole number"), "unexpected error: {}", err);
 
     // Account named after a column keyword, later row: caught by the explicit check
@@ -122,7 +122,7 @@ accounts = name, size,
            a1, 42,
            initial, 10,
 "#);
-    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
     assert!(err.contains("clashes with an accounts-table column name"), "unexpected error: {}", err);
 
     // Initial exceeding size
@@ -131,7 +131,7 @@ accounts = name, size,
 accounts = name, size, initial,
            a1, 42, 43,
 "#);
-    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
     assert!(err.contains("outside [0, size"), "unexpected error: {}", err);
 }
 
@@ -143,7 +143,7 @@ water_year = 7
 accounts = name, size,
            a1, 42,
 "#);
-    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
     assert!(err.contains("policy belongs in [ras.*]"), "unexpected error: {}", err);
 }
 
@@ -159,7 +159,7 @@ accounts = name, size,
 accounts = name, size,
            a1, 10,
 "#);
-    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
     assert!(err.contains("more than once"), "unexpected error: {}", err);
 
     // Account name colliding with a group name (flat acc. namespace)
@@ -172,7 +172,7 @@ accounts = name, size,
 accounts = name, size,
            a2, 10,
 "#);
-    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
     assert!(err.contains("clashes"), "unexpected error: {}", err);
 }
 
@@ -184,11 +184,11 @@ accounts = name, size, initial,
            smith, 42, 10,
            jones, 105, 0,
 "#);
-    let model = IniModelIO::new().read_model_string(&ini).expect("model should load");
-    let rendered = IniModelIO::new().model_to_string(&model);
+    let model = IniModelIO::read_model_string(&ini).expect("model should load");
+    let rendered = IniModelIO::model_to_string(&model);
 
     // Re-load the canonical render and compare account state
-    let model2 = IniModelIO::new().read_model_string(&rendered)
+    let model2 = IniModelIO::read_model_string(&rendered)
         .unwrap_or_else(|e| panic!("canonical render should re-load, got: {}\n---\n{}", e, rendered));
     for name in ["smith", "jones"] {
         let i1 = model.account_manager.get_account_idx(name).unwrap();
@@ -220,7 +220,7 @@ account = n0031, avl, 42, 7
 [outputs]
 node.u1.dsflow
 "#;
-    let err = IniModelIO::new().read_model_string(ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(ini).err().expect("expected a load error");
     assert!(err.contains("Unexpected parameter 'account'"), "unexpected error: {}", err);
 }
 
@@ -239,7 +239,7 @@ demand = 5
 accounts = nonexistent
 ds_1 = n1
 "#);
-    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
     assert!(err.contains("Unknown account 'nonexistent'"), "unexpected error: {}", err);
 
     // Group name where an account name is required
@@ -255,7 +255,7 @@ demand = 5
 accounts = g1
 ds_1 = n1
 "#);
-    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
     assert!(err.contains("is an account group"), "unexpected error: {}", err);
 }
 
@@ -289,7 +289,7 @@ accounts = a_first, b_second
 [outputs]
 node.u1.diversion
 "#;
-    let mut model = IniModelIO::new().read_model_string(ini).expect("model should load");
+    let mut model = IniModelIO::read_model_string(ini).expect("model should load");
     model.configure().expect("model should configure");
     model.run().expect("simulation should run");
 
@@ -315,7 +315,7 @@ fn test_acc_no_implicit_behaviour() {
 accounts = name, size, initial,
            a1, 42, 10,
 "#);
-    let mut model = IniModelIO::new().read_model_string(&ini).expect("model should load");
+    let mut model = IniModelIO::read_model_string(&ini).expect("model should load");
     model.configure().expect("model should configure");
     let a1 = model.account_manager.get_account_idx("a1").unwrap();
     let account = model.account_manager.get_account(a1).unwrap();

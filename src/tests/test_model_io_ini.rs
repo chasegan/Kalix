@@ -5,12 +5,11 @@ use crate::tests::test_helpers::print_text_diff;
 
 #[test]
 fn test_model_1_io_ini_read() {
-    let ini_reader = IniModelIO::new();
 
     //Read the model
     let model_filename = "./src/tests/example_models/1/first_model.ini";
     println!("model_file = {}", model_filename);
-    let mut m= match  ini_reader.read_model_file(model_filename) {
+    let mut m= match  IniModelIO::read_model_file(model_filename) {
         Ok(v) => {
             println!("Model read okay from file.");
             println!("number of inputs = {}", v.inputs.len());
@@ -56,8 +55,7 @@ fn test_model_1_io_ini_read() {
 
 #[test]
 fn test_model_2_io_ini_read() {
-    let ini_reader = IniModelIO::new();
-    let mut m = ini_reader.read_model_file("./src/tests/example_models/2/model.ini").unwrap();
+    let mut m = IniModelIO::read_model_file("./src/tests/example_models/2/model.ini").unwrap();
     m.configure().expect("Configuration error");
     m.run().expect("Simulation error");
 
@@ -77,12 +75,11 @@ fn test_model_2_io_ini_read() {
 
 #[test]
 fn test_model_3_io_ini_read() {
-    let ini_reader = IniModelIO::new();
 
     //Read the model
     let model_filename = "./src/tests/example_models/3/model_3.ini";
     println!("model_file = {}", model_filename);
-    let mut m= match  ini_reader.read_model_file(model_filename) {
+    let mut m= match  IniModelIO::read_model_file(model_filename) {
         Ok(v) => {
             println!("Model read okay from file.");
             println!("number of inputs = {}", v.inputs.len());
@@ -123,8 +120,7 @@ fn test_model_3_io_ini_read() {
 fn test_model_3_minimal_version() {
 
     fn run_model(model_filename: &str, output_filename: &str) -> Result<(), String> {
-        let ini_reader = IniModelIO::new();
-        let mut m = ini_reader.read_model_file(model_filename)?;
+        let mut m = IniModelIO::read_model_file(model_filename)?;
         m.configure()?;
         m.run()?;
         m.write_outputs(output_filename)?;
@@ -142,8 +138,7 @@ fn test_model_3_minimal_version() {
 fn test_model_4() {
 
     fn run_model(model_filename: &str, output_filename: &str) -> Result<Model, String> {
-        let ini_reader = IniModelIO::new();
-        let mut m = ini_reader.read_model_file(model_filename)?;
+        let mut m = IniModelIO::read_model_file(model_filename)?;
         m.configure()?;
         m.run()?;
         m.write_outputs(output_filename)?;
@@ -179,12 +174,11 @@ fn test_model_4() {
 
 #[test]
 fn test_model_with_every_node_type_save() {
-    let ini_io = IniModelIO::new();
 
     // Load the model
     let model_filename = "./src/tests/example_models/6/model_with_every_node_type.ini";
     println!("Loading model from: {}", model_filename);
-    let mut m = ini_io.read_model_file(model_filename)
+    let mut m = IniModelIO::read_model_file(model_filename)
         .expect("Failed to load model");
 
     println!("Model loaded successfully");
@@ -200,7 +194,7 @@ fn test_model_with_every_node_type_save() {
 
     // Save the model to a new file
     let output_filename = "./src/tests/example_models/6/model_with_every_node_type_saved.ini";
-    let ini_string = ini_io.model_to_string(&m);
+    let ini_string = IniModelIO::model_to_string(&m);
 
     std::fs::write(output_filename, ini_string)
         .expect("Failed to write model file");
@@ -227,8 +221,7 @@ fn test_routing_nlm_does_not_emit_pwl() {
                type = blackhole\n\
                loc = 1, 2\n";
 
-    let ini_io = IniModelIO::new();
-    let mut model = ini_io.read_model_string(ini).expect("model should parse");
+    let mut model = IniModelIO::read_model_string(ini).expect("model should parse");
 
     // Force the routing section to re-render canonically.
     for node in &mut model.nodes {
@@ -237,7 +230,7 @@ fn test_routing_nlm_does_not_emit_pwl() {
         }
     }
 
-    let out = ini_io.model_to_string(&model);
+    let out = IniModelIO::model_to_string(&model);
     assert!(out.contains("nlm = 2, 0.8"), "expected canonical nlm line, got:\n{}", out);
     assert!(!out.contains("pwl"), "must not emit a pwl line for an NLM node, got:\n{}", out);
 }
@@ -260,8 +253,7 @@ fn test_baseline_canonical_captured_at_load() {
                type = blackhole\n\
                loc = 1, 2\n";
 
-    let ini_io = IniModelIO::new();
-    let model = ini_io.read_model_string(ini).expect("model should parse");
+    let model = IniModelIO::read_model_string(ini).expect("model should parse");
 
     let baseline = model.baseline_canonical.as_ref()
         .expect("baseline canonical should be captured at load");
@@ -286,10 +278,9 @@ fn test_save_noop_is_byte_identical() {
     // the relative input CSVs resolve (they sit alongside the model).
     let path = concat!(env!("CARGO_MANIFEST_DIR"),
         "/regression_tests/simulations/5_model_with_every_node/model_with_every_node_type.ini");
-    let ini_io = IniModelIO::new();
-    let model = ini_io.read_model_file(path).expect("model should parse");
+    let model = IniModelIO::read_model_file(path).expect("model should parse");
 
-    let saved = ini_io.model_to_string(&model);
+    let saved = IniModelIO::model_to_string(&model);
 
     print_text_diff(&original, &saved);
 
@@ -313,8 +304,7 @@ fn test_save_localises_single_param_change() {
                     type = blackhole\n\
                     loc = 1.00, 2.00\n";
 
-    let ini_io = IniModelIO::new();
-    let mut model = ini_io.read_model_string(original).expect("model should parse");
+    let mut model = IniModelIO::read_model_string(original).expect("model should parse");
 
     // Mutate one GR4J parameter directly on the node (as the optimiser would).
     for node in &mut model.nodes {
@@ -323,7 +313,7 @@ fn test_save_localises_single_param_change() {
         }
     }
 
-    let saved = ini_io.model_to_string(&model);
+    let saved = IniModelIO::model_to_string(&model);
 
     // The changed node re-renders canonically (new value, canonical formatting)...
     assert!(saved.contains("params = 400, 0, 90, 1.7"), "changed params, got:\n{}", saved);
@@ -353,8 +343,7 @@ fn test_changed_storage_keeps_target_level_and_order_through() {
                type = blackhole\n\
                loc = 1, 2\n";
 
-    let ini_io = IniModelIO::new();
-    let mut model = ini_io.read_model_string(ini).expect("model should parse");
+    let mut model = IniModelIO::read_model_string(ini).expect("model should parse");
 
     // Force the storage section to re-render canonically.
     for node in &mut model.nodes {
@@ -363,7 +352,7 @@ fn test_changed_storage_keeps_target_level_and_order_through() {
         }
     }
 
-    let saved = ini_io.model_to_string(&model);
+    let saved = IniModelIO::model_to_string(&model);
 
     assert!(saved.contains("initial_volume = 200"), "expected changed initial_volume, got:\n{}", saved);
     assert!(saved.contains("target_level"), "changed storage must keep target_level, got:\n{}", saved);
@@ -394,8 +383,7 @@ fn test_changed_unregulated_user_keeps_account() {
                type = blackhole\n\
                loc = 1, 2\n";
 
-    let ini_io = IniModelIO::new();
-    let mut model = ini_io.read_model_string(ini).expect("model should parse");
+    let mut model = IniModelIO::read_model_string(ini).expect("model should parse");
 
     // Force the user section to re-render canonically.
     for node in &mut model.nodes {
@@ -405,7 +393,7 @@ fn test_changed_unregulated_user_keeps_account() {
         }
     }
 
-    let saved = ini_io.model_to_string(&model);
+    let saved = IniModelIO::model_to_string(&model);
 
     assert!(saved.contains("annual_cap"), "expected changed section, got:\n{}", saved);
     assert!(saved.contains("accounts = myacc, otheracc"),
