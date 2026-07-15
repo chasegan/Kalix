@@ -136,6 +136,7 @@ nav:
           - "[kalix]": docs/model-file-structure.md
           - "[inputs]": docs/input-data.md
           - "[constants]": docs/constants.md
+          - "[var.*]": docs/vars.md
           - "[node.*]":
               - docs/nodes.md
               - Blackhole: docs/blackhole.md
@@ -155,7 +156,6 @@ nav:
               - Unregulated user: docs/unregulated-user.md
           - "[table.*]": docs/tables.md
           - "[fn]": docs/fn.md
-          - "[var.*]": docs/vars.md
           - "[outputs]": docs/model-outputs.md
       - KalixIDE: docs/ide.md
       - Kalix CLI: docs/cli.md
