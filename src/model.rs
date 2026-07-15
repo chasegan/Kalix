@@ -198,10 +198,8 @@ impl Model {
         self.node_lookup.get(&name.to_lowercase()).copied()
     }
 
-
-    /*
-    Model configuration needs to be done once, after loading the model, but not for every run.
-     */
+    /// Model configuration needs to be done once, after loading the model, but not for every run.
+    /// May be used to validate a model.
     pub fn configure(&mut self) -> Result<(), String> {
 
         //TASKS
@@ -342,12 +340,14 @@ impl Model {
         Ok(())
     }
 
-
     pub fn run(&mut self) -> Result<(), String> {
         self.run_with_interrupt(|| false, None).map(|_| ())
     }
 
-    pub fn run_with_interrupt<F>(&mut self, interrupt_check: F, mut progress_callback: Option<Box<dyn FnMut(u64, u64)>>) -> Result<bool, String>
+    pub fn run_with_interrupt<F>(
+        &mut self, interrupt_check: F, 
+        mut progress_callback: Option<Box<dyn FnMut(u64, u64)>>
+    ) -> Result<bool, String>
     where
         F: Fn() -> bool,
     {
@@ -556,7 +556,6 @@ impl Model {
         Ok(())
     }
 
-
     pub fn run_timestep(&mut self, _t: u64) {
 
         // Accounting policy: [ras.*] systems run in file order at the top of
@@ -659,7 +658,6 @@ impl Model {
     pub fn empty_input_data(&mut self) {
         self.inputs.clear();
     }
-    
 
     /// Resolve a file path relative to the model's working directory.
     /// Supports absolute, relative, and trailhead (`^/`) paths.
@@ -672,7 +670,11 @@ impl Model {
     /// Load input data from a file and store it in the model's inputs vector.
     /// Responsible for remembering how the input was loaded (original path, alias) and for resolving the path.
     /// Construction of the TimeseriesInput is delegated to the TimeseriesInput::load function.
-    pub fn load_input_data(&mut self, file_path: &str, alias: Option<&str>) -> Result<usize, String> {
+    pub fn load_input_data(
+        &mut self, 
+        file_path: &str, 
+        alias: Option<&str>
+    ) -> Result<usize, String> {
         // Remember the ORIGINAL input file path (for serialization/display)
         self.input_file_paths.push(file_path.to_string());
         // Remember also the alias if provided
@@ -691,7 +693,6 @@ impl Model {
         self.inputs.append(&mut x);
         Ok(len)
     }
-
 
     /// Check execution order.
     ///
@@ -743,8 +744,6 @@ impl Model {
         None
     }
 
-
-    ///
     pub fn generate_mass_balance_report(&self) -> String {
 
         let mut report = "".to_string();
@@ -826,8 +825,6 @@ impl Model {
         report
     }
 
-
-
     /// Prints all the inputs to the console, one on each line.
     pub fn print_inputs(&self) {
         let mut i = 0;
@@ -842,7 +839,6 @@ impl Model {
             i += 1;
         }
     }
-
 
     /// Collects the output series that are valid to export — those whose length matches the
     /// simulation horizon (`sim_nsteps`). An output declared in `[outputs]` but never
