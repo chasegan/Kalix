@@ -1,6 +1,8 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.KalixIDE;
+import com.kalix.ide.utils.Platform;
+import com.kalix.ide.utils.PlatformUtils;
 
 import javax.swing.JFrame;
 import javax.swing.ImageIcon;
@@ -32,19 +34,36 @@ public class IconManager {
      * Sets the OS-level app icon (macOS Dock / Linux app menu) so non-bundled
      * launches show the real icon. No-op on platforms that don't support it
      * (Windows drives its taskbar icon from the frame image instead).
+     * <p>
+     * macOS reserves a transparent margin around Dock content, so there we use
+     * the padded {@code kalix-dock.png} — the full-bleed frame images would
+     * render oversized next to native apps. Linux follows the full-bleed
+     * convention, so it (like the fallback) uses the largest frame image.
      */
     private static void setTaskbarIcon(List<Image> icons) {
-        if (icons.isEmpty() || !Taskbar.isTaskbarSupported()) {
+        if (!Taskbar.isTaskbarSupported() || icons.isEmpty()) {
             return;
+        }
+        Image dockIcon = null;
+        if (PlatformUtils.getCurrentPlatform() == Platform.MACOS) {
+            dockIcon = loadImage("/icons/kalix-dock.png"); // Apple-standard padding
+        }
+        if (dockIcon == null) {
+            dockIcon = icons.get(icons.size() - 1); // largest frame image (full-bleed)
         }
         try {
             Taskbar taskbar = Taskbar.getTaskbar();
             if (taskbar.isSupported(Taskbar.Feature.ICON_IMAGE)) {
-                taskbar.setIconImage(icons.get(icons.size() - 1)); // largest available
+                taskbar.setIconImage(dockIcon);
             }
         } catch (UnsupportedOperationException | SecurityException ignored) {
             // Best-effort only: the frame icon above is the guaranteed path.
         }
+    }
+
+    private static Image loadImage(String resource) {
+        URL url = KalixIDE.class.getResource(resource);
+        return url != null ? new ImageIcon(url).getImage() : null;
     }
 
     private static List<Image> loadIcons(String prefix) {

@@ -44,6 +44,11 @@ ICO_SIZES=(16 24 32 48 256)
 APPLE_TOUCH_BG="#ffffff"
 # Rasterised size of the PNG favicon fallback (for browsers without SVG favicons).
 FAVICON_PNG_SIZE=96
+# macOS reserves a transparent margin around app-icon content — Apple's grid puts
+# the artwork at ~80.5% of the canvas (824 of 1024). A full-bleed tile therefore
+# renders ~24% larger than native Dock neighbours, so the .icns AND the runtime
+# Dock image are padded to match. Windows/Linux keep full-bleed (correct there).
+MAC_CONTENT_PX=824
 
 # --------------------------------------------------------------------------
 
@@ -67,6 +72,14 @@ trap 'rm -rf "$TMP"' EXIT
 
 # render <svg> <size> <out.png>   — rasterise at native size (no upscaling).
 render() { rsvg-convert -w "$2" -h "$2" -o "$3" "$1"; }
+
+# render_mac <size> <out.png>  — the glyph at Apple's content size, centered on a
+# transparent full-size canvas, so macOS' expected margin is baked in.
+render_mac() {
+    local inner=$(( $1 * MAC_CONTENT_PX / 1024 ))
+    rsvg-convert -w "$inner" -h "$inner" "$GLYPH_SVG" \
+        | magick - -background none -gravity center -extent "$1x$1" "$2"
+}
 
 # Every unique glyph size we need across all outputs, rendered once from the
 # vector so each artifact gets a crisp native raster (never a downscaled one).
@@ -102,24 +115,31 @@ ok "kalix.ico (frames: $(IFS=,; echo "${ICO_SIZES[*]}"))"
 # 3. macOS launcher .icns  (proper multi-res, incl. @2x retina tiers)
 # --------------------------------------------------------------------------
 if [[ $HAVE_ICONUTIL -eq 1 ]]; then
-    log "Assembling macOS .icns via iconutil"
+    log "Assembling macOS .icns via iconutil (Apple-standard padding)"
     ISET="$TMP/kalix.iconset"; mkdir -p "$ISET"
-    #        iconset name              source px
-    cp "$TMP/glyph-16.png"   "$ISET/icon_16x16.png"
-    cp "$TMP/glyph-32.png"   "$ISET/icon_16x16@2x.png"
-    cp "$TMP/glyph-32.png"   "$ISET/icon_32x32.png"
-    cp "$TMP/glyph-64.png"   "$ISET/icon_32x32@2x.png"
-    cp "$TMP/glyph-128.png"  "$ISET/icon_128x128.png"
-    cp "$TMP/glyph-256.png"  "$ISET/icon_128x128@2x.png"
-    cp "$TMP/glyph-256.png"  "$ISET/icon_256x256.png"
-    cp "$TMP/glyph-512.png"  "$ISET/icon_256x256@2x.png"
-    cp "$TMP/glyph-512.png"  "$ISET/icon_512x512.png"
-    cp "$TMP/glyph-1024.png" "$ISET/icon_512x512@2x.png"
+    #           px    iconset name
+    render_mac  16   "$ISET/icon_16x16.png"
+    render_mac  32   "$ISET/icon_16x16@2x.png"
+    render_mac  32   "$ISET/icon_32x32.png"
+    render_mac  64   "$ISET/icon_32x32@2x.png"
+    render_mac  128  "$ISET/icon_128x128.png"
+    render_mac  256  "$ISET/icon_128x128@2x.png"
+    render_mac  256  "$ISET/icon_256x256.png"
+    render_mac  512  "$ISET/icon_256x256@2x.png"
+    render_mac  512  "$ISET/icon_512x512.png"
+    render_mac  1024 "$ISET/icon_512x512@2x.png"
     iconutil -c icns "$ISET" -o "$IDE_ICONS/kalix.icns"
-    ok "kalix.icns (16→1024 incl. retina)"
+    ok "kalix.icns (16→1024 incl. retina, padded)"
 else
     warn "iconutil not found (macOS only) — skipped kalix.icns"
 fi
+
+# Runtime Dock/app icon (IconManager → Taskbar.setIconImage) — padded to match
+# the .icns so the dev-run Dock icon (IntelliJ/gradlew run) isn't oversized
+# either. rsvg+magick only, so it's produced on every platform.
+log "Writing padded runtime Dock icon"
+render_mac 1024 "$IDE_ICONS/kalix-dock.png"
+ok "kalix-dock.png (1024, Apple-standard padding)"
 
 # --------------------------------------------------------------------------
 # 4. Website icons  → website/docs/assets/
@@ -162,13 +182,13 @@ echo
 log "Done. Review with:  git diff --stat"
 cat <<'NOTE'
 
-  Follow-ups (one-time wiring, not handled by this script):
-    • macOS build still points jpackage at kalix-256.png. To use the richer
-      .icns, change the non-Windows branch in kalixide/build.gradle.kts to
-      file("src/main/resources/icons/kalix.icns").
-    • The web extras (apple-touch-icon / icon-192 / icon-512) are generated but
-      not yet referenced. Add the <link> tags + a manifest.webmanifest in
-      website/overrides/main.html to activate them.
-    • graphics/icons/exported-{transparent,white}/ are now redundant reference
-      exports — retire them or regenerate from the same master to avoid drift.
+  Wiring (already in place — listed so it's not forgotten if paths move):
+    • build.gradle.kts selects .ico / .icns / kalix-256.png per platform.
+    • IconManager feeds kalix-dock.png to Taskbar on macOS (padded Dock icon).
+    • Web tags + manifest live in overrides/main.html AND the bespoke
+      docs/index.html landing page (which bypasses the Material theme).
+
+  Still optional:
+    • graphics/icons/exported-{transparent,white}/ are redundant reference
+      exports — retire them or regenerate from the master to avoid drift.
 NOTE
