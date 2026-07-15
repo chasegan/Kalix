@@ -15,5 +15,8 @@ echo "==> Generating version-dependent data"
 "$PY" scripts/gen_speed_plot.py
 
 echo "==> Building site"
-"$MKDOCS" build --clean
+"$MKDOCS" build --clean --strict
+
+echo "==> Checking internal links"
+"$PY" scripts/check_links.py
 echo "==> Done: website/site/"

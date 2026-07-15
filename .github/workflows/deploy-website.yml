@@ -49,7 +49,11 @@ jobs:
 
       - name: Build site
         working-directory: website
-        run: mkdocs build
+        run: mkdocs build --strict
+
+      - name: Check internal links
+        working-directory: website
+        run: python scripts/check_links.py
 
       - uses: actions/upload-pages-artifact@v3
         with:
