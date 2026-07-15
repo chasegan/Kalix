@@ -56,7 +56,12 @@
 {% block tabs %}{% endblock %}
 
 {#- PNG favicon fallback for browsers without SVG-favicon support (the theme
-    already emits the adaptive SVG from theme.favicon). -#}
+    already emits the adaptive SVG from theme.favicon), plus home-screen /
+    installable-app icons. All PNGs + the manifest are regenerated from the
+    master SVG by make-icons.sh. -#}
 {% block extrahead %}
   <link rel="icon" type="image/png" href="{{ 'assets/favicon.png' | url }}">
+  <link rel="apple-touch-icon" href="{{ 'assets/apple-touch-icon.png' | url }}">
+  <link rel="manifest" href="{{ 'assets/manifest.webmanifest' | url }}">
+  <meta name="theme-color" content="#0f1720">
 {% endblock %}

@@ -91,11 +91,14 @@ runtime {
         jpackageHome = System.getProperty("java.home")
         imageName = "KalixIDE"
 
-        // Use .ico on Windows, .png on other platforms
-        val iconFile = if (System.getProperty("os.name").lowercase().contains("win")) {
-            file("src/main/resources/icons/kalix.ico")
-        } else {
-            file("src/main/resources/icons/kalix-256.png")
+        // Per-platform launcher icon: .ico (Windows), .icns (macOS, multi-res
+        // incl. retina), .png (Linux — jpackage won't accept an .icns there).
+        // All three are regenerated from the master SVG by ../make-icons.sh.
+        val osName = System.getProperty("os.name").lowercase()
+        val iconFile = when {
+            osName.contains("win") -> file("src/main/resources/icons/kalix.ico")
+            osName.contains("mac") -> file("src/main/resources/icons/kalix.icns")
+            else -> file("src/main/resources/icons/kalix-256.png")
         }
 
         imageOptions = listOf(
