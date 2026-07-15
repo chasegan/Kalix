@@ -846,24 +846,6 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
         ini_doc.set_property("constants", name.as_str(), value.to_string().as_str());
     }
 
-    // List all lookup tables (sorted by name so the canonical render is deterministic)
-    for (name, table) in model.data_cache.tables.iter_sorted() {
-        let section_name = format!("table.{}", name);
-        if table.ncols() > 2 {
-            ini_doc.set_property(section_name.as_str(), "n_cols", table.ncols().to_string().as_str());
-        }
-        ini_doc.set_property(section_name.as_str(), "values", table.format_data(4).as_str());
-    }
-
-    // List all user-defined functions (the [fn] section). Passive, like tables —
-    // re-emit each definition from its original signature key and body text, in
-    // file order (iter_in_order), so a round-trip preserves the definitions.
-    if !model.data_cache.fns.is_empty() {
-        for def in model.data_cache.fns.iter_in_order() {
-            ini_doc.set_property("fn", def.original_key.as_str(), def.original_body.as_str());
-        }
-    }
-
     // List all nodes and var blocks, interleaved in execution (file) order —
     // a var block's position is part of its meaning, so a round-trip must
     // keep it where the modeller put it.
@@ -1065,6 +1047,26 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
             _ => { format!("ds_{}", link.from_outlet + 1) }, //plus one
         };
         ini_doc.set_property(section_name.as_str(), property_name.as_str(), ds_node_name);
+    }
+
+    // List all lookup tables and user-defined functions. Both are passive and
+    // position-free (load-time pre-passes resolve them wherever they sit), so
+    // canonically they live at the bottom of the file, just above [outputs].
+    // Tables are sorted by name so the canonical render is deterministic.
+    for (name, table) in model.data_cache.tables.iter_sorted() {
+        let section_name = format!("table.{}", name);
+        if table.ncols() > 2 {
+            ini_doc.set_property(section_name.as_str(), "n_cols", table.ncols().to_string().as_str());
+        }
+        ini_doc.set_property(section_name.as_str(), "values", table.format_data(4).as_str());
+    }
+
+    // [fn] definitions re-emit from their original signature key and body text,
+    // in file order (iter_in_order), so a round-trip preserves the definitions.
+    if !model.data_cache.fns.is_empty() {
+        for def in model.data_cache.fns.iter_in_order() {
+            ini_doc.set_property("fn", def.original_key.as_str(), def.original_body.as_str());
+        }
     }
 
     // List all the recorders
