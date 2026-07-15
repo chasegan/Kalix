@@ -429,6 +429,12 @@ impl IniDocument {
     }
 }
 
+impl Default for IniDocument {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
