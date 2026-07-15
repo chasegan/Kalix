@@ -18,6 +18,15 @@ __all__ = ["Model", "new_model", "load_file", "load_string"]
 
 PathLike = Union[str, Path]
 
+# `IniModelIO::read_model_file` (python/src/lib.rs) folds a genuine
+# file-read failure and an INI parse failure into the same native OSError,
+# always prefixing the former with this exact text. There's no Rust-side
+# distinction to hook into without changing the shared `IniModelIO` API
+# (also used by the CLI/IDE), so the split below is done here by sniffing
+# for this marker. If that Rust message format ever changes, update this
+# to match -- see `IniModelIO::read_model_file`.
+_FILE_READ_FAILURE_MARKER = "Failed to read file '"
+
 
 class Model:
     """A Kalix hydrological model.
@@ -56,14 +65,18 @@ class Model:
         Raises
         ------
         OSError
-            If the file could not be read, or the INI failed to parse.
+            If the file could not be read (not found, permission denied, etc.).
+        ValueError
+            If the file was read but its contents are not a valid model INI.
         RuntimeError
             If the model parsed but failed validation.
         """
         try:
             self._inner._load_file(str(model_path))
         except OSError as e:
-            raise OSError(f"Failed to load model from '{model_path}': {e}") from e
+            if _FILE_READ_FAILURE_MARKER in str(e):
+                raise OSError(f"Failed to load model from '{model_path}': {e}") from e
+            raise ValueError(f"Model '{model_path}' is not a valid model INI: {e}") from e
         except RuntimeError as e:
             raise RuntimeError(f"Model '{model_path}' failed validation: {e}") from e
         return self
@@ -84,8 +97,8 @@ class Model:
 
         Raises
         ------
-        OSError
-            If the string failed to parse as a valid model INI.
+        ValueError
+            If the string is not a valid model INI.
         RuntimeError
             If the model parsed but failed validation.
 
@@ -98,7 +111,7 @@ class Model:
         try:
             self._inner._load_model_string(model_string)
         except OSError as e:
-            raise OSError(f"Failed to parse model string: {e}") from e
+            raise ValueError(f"Failed to parse model string: {e}") from e
         except RuntimeError as e:
             raise RuntimeError(f"Model string failed validation: {e}") from e
         return self
@@ -215,7 +228,9 @@ def load_file(model_path: PathLike) -> Model:
     Raises
     ------
     OSError
-        If the file could not be read, or the INI failed to parse.
+        If the file could not be read (not found, permission denied, etc.).
+    ValueError
+        If the file was read but its contents are not a valid model INI.
     RuntimeError
         If the model parsed but failed validation.
     """
@@ -239,8 +254,8 @@ def load_string(model_string: str) -> Model:
 
     Raises
     ------
-    OSError
-        If the string failed to parse as a valid model INI.
+    ValueError
+        If the string is not a valid model INI.
     RuntimeError
         If the model parsed but failed validation.
 

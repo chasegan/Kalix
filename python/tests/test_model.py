@@ -39,7 +39,7 @@ def test_load_file_missing_file_raises():
 def test_load_file_invalid_ini_raises(tmp_path):
     bad = tmp_path / "bad.ini"
     bad.write_text("this is not valid kalix ini syntax {{{")
-    with pytest.raises(OSError):
+    with pytest.raises(ValueError):
         kalix.load_file(str(bad))
 
 
@@ -52,7 +52,8 @@ def test_model_load_file_fluent_method(tmp_path):
 def test_model_load_file_rejects_dangling_downstream_link(tmp_path):
     """A downstream link to a nonexistent node is caught during INI parsing
     itself (node/link wiring), not the later `configure()` validation step --
-    so it surfaces as an OSError, same as any other parse failure."""
+    so it surfaces as a ValueError (content is invalid), not an OSError
+    (which is reserved for genuine file-read failures)."""
     broken = tmp_path / "broken.ini"
     broken.write_text(
         "[kalix]\n"
@@ -63,7 +64,7 @@ def test_model_load_file_rejects_dangling_downstream_link(tmp_path):
         "inflow = 1.0\n"
         "ds_1 = node_that_does_not_exist\n"
     )
-    with pytest.raises(OSError, match="node_that_does_not_exist"):
+    with pytest.raises(ValueError, match="node_that_does_not_exist"):
         kalix.load_file(str(broken))
 
 
@@ -91,7 +92,7 @@ def test_load_string_returns_configured_model():
 
 
 def test_load_string_invalid_ini_raises():
-    with pytest.raises(OSError):
+    with pytest.raises(ValueError):
         kalix.new_model().load_string("this is not valid kalix ini syntax {{{")
 
 
@@ -141,13 +142,30 @@ def test_load_file_missing_file_message_is_informative():
 def test_load_file_invalid_ini_message_is_informative(tmp_path):
     bad = tmp_path / "bad.ini"
     bad.write_text("this is not valid kalix ini syntax {{{")
-    with pytest.raises(OSError, match=r"bad\.ini"):
+    with pytest.raises(ValueError, match=r"bad\.ini"):
         kalix.load_file(str(bad))
 
 
 def test_load_string_invalid_message_is_informative():
-    with pytest.raises(OSError, match="model string"):
+    with pytest.raises(ValueError, match="model string"):
         kalix.load_string("this is not valid kalix ini syntax {{{")
+
+
+def test_load_file_distinguishes_missing_file_from_invalid_content(tmp_path):
+    """The split is based on sniffing the native error message, not just on
+    OSError being "any failure" -- lock in that a missing file and a bad
+    file get different, non-overlapping exception types."""
+    missing = tmp_path / "does_not_exist.ini"
+    bad = tmp_path / "bad.ini"
+    bad.write_text("this is not valid kalix ini syntax {{{")
+
+    with pytest.raises(OSError) as missing_exc:
+        kalix.load_file(str(missing))
+    with pytest.raises(ValueError) as bad_exc:
+        kalix.load_file(str(bad))
+
+    assert not isinstance(missing_exc.value, ValueError)
+    assert not isinstance(bad_exc.value, OSError)
 
 
 def test_load_file_accepts_pathlib_path():
