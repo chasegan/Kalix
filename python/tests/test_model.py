@@ -86,13 +86,13 @@ _INLINE_MODEL_INI = (
 
 def test_load_string_returns_configured_model():
     model = kalix.new_model()
-    result = model._load_model_string(_INLINE_MODEL_INI)
+    result = model.load_string(_INLINE_MODEL_INI)
     assert result is model
 
 
 def test_load_string_invalid_ini_raises():
     with pytest.raises(OSError):
-        kalix.new_model()._load_model_string("this is not valid kalix ini syntax {{{")
+        kalix.new_model().load_string("this is not valid kalix ini syntax {{{")
 
 
 def test_module_level_load_string_returns_configured_model():
@@ -109,3 +109,54 @@ def test_run_completes_without_error():
 def test_run_returns_same_instance_for_chaining():
     model = kalix.load_file(str(_MODEL_INI))
     assert model.run() is model
+
+
+# --- not-yet-implemented methods: must raise a clean NotImplementedError,
+# never a raw pyo3_runtime.PanicException from the underlying Rust todo!(). ---
+
+def test_load_snippet_raises_not_implemented():
+    with pytest.raises(NotImplementedError, match="load_snippet"):
+        kalix.new_model().load_snippet(_INLINE_MODEL_INI)
+
+
+def test_patch_raises_not_implemented():
+    with pytest.raises(NotImplementedError, match="patch"):
+        kalix.load_file(str(_MODEL_INI)).patch("c.x = 1.0")
+
+
+def test_get_outputs_raises_not_implemented():
+    """Raises cleanly even after a real run (not conditional on run state)."""
+    with pytest.raises(NotImplementedError, match="get_outputs"):
+        kalix.load_file(str(_MODEL_INI)).run().get_outputs()
+
+
+# --- informative error messages -----------------------------------------
+
+def test_load_file_missing_file_message_is_informative():
+    path = _REPO_ROOT / "does_not_exist.ini"
+    with pytest.raises(OSError, match=r"does_not_exist\.ini"):
+        kalix.load_file(str(path))
+
+
+def test_load_file_invalid_ini_message_is_informative(tmp_path):
+    bad = tmp_path / "bad.ini"
+    bad.write_text("this is not valid kalix ini syntax {{{")
+    with pytest.raises(OSError, match=r"bad\.ini"):
+        kalix.load_file(str(bad))
+
+
+def test_load_string_invalid_message_is_informative():
+    with pytest.raises(OSError, match="model string"):
+        kalix.load_string("this is not valid kalix ini syntax {{{")
+
+
+def test_load_file_accepts_pathlib_path():
+    model = kalix.load_file(_MODEL_INI)  # a Path, not str(_MODEL_INI)
+    assert isinstance(model, kalix.Model)
+
+
+def test_model_direct_construction():
+    model = kalix.Model()
+    assert isinstance(model, kalix.Model)
+    model.load_file(str(_MODEL_INI))
+    assert isinstance(model, kalix.Model)
