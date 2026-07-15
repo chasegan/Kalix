@@ -12,8 +12,19 @@ from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from kalix.io import read_pixie, write_pixie
 from kalix.opt import optimise
 from kalix.sim import simulate
+from kalix.model import Model, load_file, load_string, new_model
 
-__all__ = ["optimise", "read_pixie", "simulate", "write_pixie", "__version__"]
+__all__ = [
+    "simulate",
+    "optimise",
+    "read_pixie",
+    "write_pixie",
+    "Model",
+    "load_file",
+    "load_string",
+    "new_model",
+    "__version__"
+]
 
 try:
     __version__ = _pkg_version("kalix")

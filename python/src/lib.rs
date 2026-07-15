@@ -3,7 +3,9 @@
 //! v0.1: just Pixie (.pxt/.pxb) I/O. Functions are prefixed with `_` and re-exported
 //! through the Python `kalix` package, which adds pandas/numpy ergonomics.
 
+use kalix::io::ini_model_io::IniModelIO;
 use kalix::io::pixie_io;
+use kalix::model::Model;
 use kalix::run;
 use kalix::tid::utils::{wrap_to_i64, wrap_to_u64};
 use kalix::timeseries::Timeseries;
@@ -230,11 +232,121 @@ fn _optimise_from_file<'py>(
     Ok(result)
 }
 
+// --------------
+// Model bindings
+// --------------
+
+#[pyclass]
+#[pyo3(name = "Model")]
+struct PyModel {
+    pub inner: Model,
+}
+
+#[pymethods]
+impl PyModel {
+    /// Construct an empty, unconfigured model.
+    #[new]
+    fn new() -> PyResult<Self> {
+        Ok(PyModel {
+            inner: Model::new(),
+        })
+    }
+
+    /// Load a model from an INI file, replacing any model already held.
+    /// Validates via `Model::configure` before accepting; leaves `self`
+    /// untouched on failure.
+    #[pyo3(name = "load_file")]
+    fn _load_file<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        model_path: &str,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        let mut model = IniModelIO::new()
+            .read_model_file(model_path)
+            .map_err(|e| PyIOError::new_err(format!("Failed to load model: {}", e)))?;
+        // Verification step
+        model.configure().map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
+        // Model OK, swap into inner
+        slf.inner = model;
+        Ok(slf)
+    }
+
+    /// Load a model from an in-memory INI string. Like `_load_file`, but
+    /// relative paths inside the INI resolve against the current working
+    /// directory (there's no containing file directory).
+    fn _load_model_string<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        model_string: &str,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        let mut model = IniModelIO::new()
+            .read_model_string(model_string)
+            .map_err(|e| PyIOError::new_err(format!("Failed to load model: {}", e)))?;
+        // Verification step
+        model.configure().map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
+        // Model OK, swap into inner
+        slf.inner = model;
+        Ok(slf)
+    }
+
+    /// Configure and run the model's simulation.
+    fn run(mut slf: PyRefMut<'_, Self>) -> PyResult<PyRefMut<'_, Self>> {
+        slf.inner.configure().map_err(PyRuntimeError::new_err)?;
+        slf.inner.run().map_err(PyRuntimeError::new_err)?; // self-resetting
+        Ok(slf)
+    }
+}
+
+// Plain (non-#[pymethods]) wrappers used by the free `kalix.load_file`/`kalix.load_string`
+// functions. 
+impl PyModel {
+    /// Construct a new model and load `model_path` into it. Backs the
+    /// free-standing `kalix.load_file(f)` function; delegates to `_load_file`.
+    fn load_file(py: Python<'_>, model_path: &str) -> PyResult<Py<PyModel>> {
+        let obj = Py::new(py, PyModel::new()?)?;
+        Self::_load_file(obj.borrow_mut(py), model_path)?;
+        Ok(obj)
+    }
+
+    /// Construct a new model and load `model_string` into it. Backs the
+    /// free-standing `kalix.load_string(s)` function; delegates to
+    /// `_load_model_string`.
+    fn load_string(py: Python<'_>, model_string: &str) -> PyResult<Py<PyModel>> {
+        let obj = Py::new(py, PyModel::new()?)?;
+        Self::_load_model_string(obj.borrow_mut(py), model_string)?;
+        Ok(obj)
+    }
+}
+
+// ----- Convenience wrappings -----
+
+/// `kalix._native.new_model()` — create a new, empty `Model`.
+#[pyfunction]
+fn new_model() -> PyResult<PyModel> {
+    PyModel::new()
+}
+
+/// `kalix._native.load_file(f)` — create a new `Model` and load it from an
+/// INI file in one call.
+#[pyfunction]
+fn load_file(py: Python<'_>, file: &str) -> PyResult<Py<PyModel>> {
+    PyModel::load_file(py, file)
+}
+
+/// `kalix._native.load_string(s)` — create a new `Model` and load it from
+/// an INI string in one call.
+#[pyfunction]
+fn load_string(py: Python<'_>, s: &str) -> PyResult<Py<PyModel>> {
+    PyModel::load_string(py, s)
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_read_pixie_raw, m)?)?;
     m.add_function(wrap_pyfunction!(_write_pixie_raw, m)?)?;
     m.add_function(wrap_pyfunction!(_simulate_from_file, m)?)?;
     m.add_function(wrap_pyfunction!(_optimise_from_file, m)?)?;
+    m.add_function(wrap_pyfunction!(new_model, m)?)?;
+    m.add_function(wrap_pyfunction!(load_file, m)?)?;
+    m.add_function(wrap_pyfunction!(load_string, m)?)?;
+    m.add_class::<PyModel>()?;
     Ok(())
 }
