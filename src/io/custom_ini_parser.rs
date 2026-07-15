@@ -3,26 +3,37 @@ use indexmap::IndexMap;
 
 #[derive(Debug, Clone)]
 pub struct IniProperty {
-    pub value: String,                // Clean, joined value
-    pub line_number: usize,           // Line where property starts
-    pub raw_lines: Vec<String>,       // Original lines for round-tripping
-    pub leading_lines: Vec<String>,    // Comments and blank lines before this property
-    pub comments: Vec<Option<String>>, // Inline comments indexed by continuation line (0=first line, 1=second line, etc.)
-    pub valid: bool,                  // Used for mark-and-sweep updates
+    /// Clean, joined value
+    pub value: String,
+    /// Line where property starts
+    pub line_number: usize,
+    /// Original lines for round-tripping
+    pub raw_lines: Vec<String>,
+    /// Comments and blank lines before this property
+    pub leading_lines: Vec<String>,
+    /// Inline comments indexed by continuation line (0=first line, 1=second line, etc.)
+    pub comments: Vec<Option<String>>,
+    /// Used for mark-and-sweep updates
+    pub valid: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct IniSection {
     pub properties: IndexMap<String, IniProperty>,
-    pub leading_lines: Vec<String>,    // Comments and blank lines before [section]
-    pub line_number: usize,            // Line where [section] appears
-    pub valid: bool,                   // Used for mark-and-sweep updates
+    /// Comments and blank lines before [section]
+    pub leading_lines: Vec<String>,
+    /// Line where [section] appears
+    pub line_number: usize,
+    /// Used for mark-and-sweep updates
+    pub valid: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct IniDocument {
+    /// Maps section name to `IniSection`
     pub sections: IndexMap<String, IniSection>,
-    pub trailing_comments: Vec<String>, // Comments at end of file
+    /// Comments at end of file
+    pub trailing_comments: Vec<String>, 
 }
 
 #[derive(Debug)]
