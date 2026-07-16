@@ -318,8 +318,7 @@ impl PyModel {
         mut slf: PyRefMut<'py, Self>,
         patch_string: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
-        let new_model =
-            patch_update(slf.inner.clone(), patch_string).map_err(PyValueError::new_err)?;
+        let new_model = patch_update(&slf.inner, patch_string).map_err(PyValueError::new_err)?;
         slf.inner = new_model;
         slf.has_run = false;
         Ok(slf)
@@ -329,8 +328,7 @@ impl PyModel {
         mut slf: PyRefMut<'py, Self>,
         patch_string: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
-        let new_model =
-            patch_override(slf.inner.clone(), patch_string).map_err(PyValueError::new_err)?;
+        let new_model = patch_override(&slf.inner, patch_string).map_err(PyValueError::new_err)?;
         slf.inner = new_model;
         slf.has_run = false;
         Ok(slf)
@@ -340,8 +338,7 @@ impl PyModel {
         mut slf: PyRefMut<'py, Self>,
         patch_string: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
-        let new_model =
-            patch_delete(slf.inner.clone(), patch_string).map_err(PyValueError::new_err)?;
+        let new_model = patch_delete(&slf.inner, patch_string).map_err(PyValueError::new_err)?;
         slf.inner = new_model;
         slf.has_run = false;
         Ok(slf)
