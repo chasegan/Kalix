@@ -94,6 +94,8 @@ mod tests {
 
     fn model_ini() -> &'static str {
         "[kalix]\n\
+         start = 2000-01-01T00:00:00\n\
+         end = 2000-01-10T00:00:00\n\
          \n\
          [node.g]\n\
          type = gr4j\n\
