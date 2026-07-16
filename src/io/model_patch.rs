@@ -43,7 +43,9 @@ pub fn patch_override(model: &Model, patch_string: &str) -> Result<Model, String
     let mut model_ini_doc = model.ini_document.clone().unwrap_or_default();
     let patch_ini = IniDocument::parse(patch_string)?;
     for (patch_section_name, patch_ini_section) in patch_ini.sections {
-        model_ini_doc.sections.insert(patch_section_name, patch_ini_section);
+        model_ini_doc
+            .sections
+            .insert(patch_section_name, patch_ini_section);
     }
     let mut patched_model = IniModelIO::read_model_string_with_working_directory(
         &model_ini_doc.to_string(),
@@ -64,15 +66,22 @@ pub fn patch_delete(model: &Model, patch_string: &str) -> Result<Model, String> 
     // in case the modification is invalid
     let mut model_ini_doc = model.ini_document.clone().unwrap_or_default();
     let patch_ini = IniDocument::parse(patch_string)?;
-    // Delete properties if listed 
+    // Delete properties if listed
     // If no properties, delete entire section
     for (patch_section_name, patch_ini_section) in patch_ini.sections {
         if patch_ini_section.properties.is_empty() {
-            model_ini_doc.sections.shift_remove(&patch_section_name.to_string());
+            model_ini_doc
+                .sections
+                .shift_remove(&patch_section_name.to_string());
         } else {
-            if let Some(model_ini_section) = model_ini_doc.sections.get_mut(&patch_section_name.to_string()) {
+            if let Some(model_ini_section) = model_ini_doc
+                .sections
+                .get_mut(&patch_section_name.to_string())
+            {
                 for (property_name, _) in patch_ini_section.properties {
-                    model_ini_section.properties.shift_remove(&property_name.to_string());
+                    model_ini_section
+                        .properties
+                        .shift_remove(&property_name.to_string());
                 }
             }
         }
@@ -85,8 +94,6 @@ pub fn patch_delete(model: &Model, patch_string: &str) -> Result<Model, String> 
     patched_model.configure()?;
     Ok(patched_model)
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -139,7 +146,10 @@ mod tests {
 
         let patched = patch_update(&model, "[node.g]\narea = 99\n").expect("patch should apply");
 
-        let ini_doc = patched.ini_document.as_ref().expect("patched model should have an ini_document");
+        let ini_doc = patched
+            .ini_document
+            .as_ref()
+            .expect("patched model should have an ini_document");
         assert_eq!(ini_doc.get_property("node.g", "area"), Some("99"));
     }
 
@@ -150,7 +160,10 @@ mod tests {
         let patched = patch_update(&model, "[node.bh2]\ntype = blackhole\nloc = 5, 5\n")
             .expect("patch should apply");
 
-        let ini_doc = patched.ini_document.as_ref().expect("patched model should have an ini_document");
+        let ini_doc = patched
+            .ini_document
+            .as_ref()
+            .expect("patched model should have an ini_document");
         assert_eq!(ini_doc.get_property("node.bh2", "type"), Some("blackhole"));
         assert_eq!(patched.nodes.len(), 3);
     }
@@ -162,7 +175,10 @@ mod tests {
 
         let _patched = patch_update(&model, "[node.g]\narea = 99\n").expect("patch should apply");
 
-        let original_ini_doc = original.ini_document.as_ref().expect("original model should have an ini_document");
+        let original_ini_doc = original
+            .ini_document
+            .as_ref()
+            .expect("original model should have an ini_document");
         assert_eq!(original_ini_doc.get_property("node.g", "area"), Some("30"));
     }
 
@@ -172,8 +188,7 @@ mod tests {
         model.working_directory = std::path::PathBuf::from("some/working/dir");
         let working_directory = model.working_directory.clone();
 
-        let patched = patch_update(model, "[node.g]\narea = 99\n")
-            .expect("patch should apply");
+        let patched = patch_update(&model, "[node.g]\narea = 99\n").expect("patch should apply");
 
         assert_eq!(patched.working_directory, working_directory);
     }
@@ -182,7 +197,7 @@ mod tests {
     fn patch_update_rejects_invalid_patch_string() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let result = patch_update(model, "not valid ini [[[");
+        let result = patch_update(&model, "not valid ini [[[");
         assert!(result.is_err());
     }
 
@@ -194,7 +209,10 @@ mod tests {
         let patched =
             patch_override(&model, "[node.bh]\ntype = blackhole\n").expect("patch should apply");
 
-        let ini_doc = patched.ini_document.as_ref().expect("patched model should have an ini_document");
+        let ini_doc = patched
+            .ini_document
+            .as_ref()
+            .expect("patched model should have an ini_document");
         assert_eq!(ini_doc.get_property("node.bh", "type"), Some("blackhole"));
         assert_eq!(ini_doc.get_property("node.bh", "loc"), None);
     }
@@ -206,7 +224,10 @@ mod tests {
         let patched = patch_override(&model, "[node.bh2]\ntype = blackhole\nloc = 5, 5\n")
             .expect("patch should apply");
 
-        let ini_doc = patched.ini_document.as_ref().expect("patched model should have an ini_document");
+        let ini_doc = patched
+            .ini_document
+            .as_ref()
+            .expect("patched model should have an ini_document");
         assert_eq!(ini_doc.get_property("node.bh2", "type"), Some("blackhole"));
         assert_eq!(patched.nodes.len(), 3);
     }
@@ -221,10 +242,19 @@ mod tests {
         let patched = patch_override(&model, "[node.bh]\ntype = blackhole\nloc = 9, 9\n")
             .expect("patch should apply");
 
-        let ini_doc = patched.ini_document.as_ref().expect("patched model should have an ini_document");
+        let ini_doc = patched
+            .ini_document
+            .as_ref()
+            .expect("patched model should have an ini_document");
         let section_names: Vec<&String> = ini_doc.sections.keys().collect();
-        let g_pos = section_names.iter().position(|s| s.as_str() == "node.g").unwrap();
-        let bh_pos = section_names.iter().position(|s| s.as_str() == "node.bh").unwrap();
+        let g_pos = section_names
+            .iter()
+            .position(|s| s.as_str() == "node.g")
+            .unwrap();
+        let bh_pos = section_names
+            .iter()
+            .position(|s| s.as_str() == "node.bh")
+            .unwrap();
         assert!(g_pos < bh_pos);
     }
 
@@ -272,18 +302,25 @@ mod tests {
 
         let patched = patch_delete(&model, "[node.g]\nparams =\n").expect("patch should apply");
 
-        let ini_doc = patched.ini_document.as_ref().expect("patched model should have an ini_document");
+        let ini_doc = patched
+            .ini_document
+            .as_ref()
+            .expect("patched model should have an ini_document");
         assert_eq!(ini_doc.get_property("node.g", "params"), None);
         assert_eq!(ini_doc.get_property("node.g", "type"), Some("gr4j"));
     }
 
     #[test]
     fn patch_delete_removes_entire_section_when_no_properties_listed() {
-        let model = IniModelIO::read_model_string(model_ini_with_extra_node()).expect("model should parse");
+        let model =
+            IniModelIO::read_model_string(model_ini_with_extra_node()).expect("model should parse");
 
         let patched = patch_delete(&model, "[node.bh2]\n").expect("patch should apply");
 
-        let ini_doc = patched.ini_document.as_ref().expect("patched model should have an ini_document");
+        let ini_doc = patched
+            .ini_document
+            .as_ref()
+            .expect("patched model should have an ini_document");
         assert!(ini_doc.get_property("node.bh2", "type").is_none());
         assert!(!ini_doc.sections.contains_key("node.bh2"));
         assert_eq!(patched.nodes.len(), 2);
@@ -302,22 +339,32 @@ mod tests {
     fn patch_delete_ignores_missing_property() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let patched = patch_delete(model, "[node.g]\nnot_a_real_property =\n")
-            .expect("patch should apply");
+        let patched =
+            patch_delete(&model, "[node.g]\nnot_a_real_property =\n").expect("patch should apply");
 
-        let ini_doc = patched.ini_document.as_ref().expect("patched model should have an ini_document");
+        let ini_doc = patched
+            .ini_document
+            .as_ref()
+            .expect("patched model should have an ini_document");
         assert_eq!(ini_doc.get_property("node.g", "type"), Some("gr4j"));
     }
 
     #[test]
     fn patch_delete_does_not_mutate_original_model() {
-        let model = IniModelIO::read_model_string(model_ini_with_extra_node()).expect("model should parse");
+        let model =
+            IniModelIO::read_model_string(model_ini_with_extra_node()).expect("model should parse");
         let original = model.clone();
 
         let _patched = patch_delete(&model, "[node.bh2]\n").expect("patch should apply");
 
-        let original_ini_doc = original.ini_document.as_ref().expect("original model should have an ini_document");
-        assert_eq!(original_ini_doc.get_property("node.bh2", "type"), Some("blackhole"));
+        let original_ini_doc = original
+            .ini_document
+            .as_ref()
+            .expect("original model should have an ini_document");
+        assert_eq!(
+            original_ini_doc.get_property("node.bh2", "type"),
+            Some("blackhole")
+        );
     }
 
     #[test]
