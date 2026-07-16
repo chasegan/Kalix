@@ -5,6 +5,7 @@ pub mod compression;
 pub mod pixie_io;
 pub mod kalix_path;
 pub mod optimisation_config_io;
+pub mod model_patch;
 
 #[cfg(test)]
 pub mod pixie_io_example;

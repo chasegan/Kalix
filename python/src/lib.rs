@@ -4,6 +4,7 @@
 //! through the Python `kalix` package, which adds pandas/numpy ergonomics.
 
 use kalix::io::ini_model_io::IniModelIO;
+use kalix::io::model_patch::patch_update;
 use kalix::io::pixie_io;
 use kalix::model::Model;
 use kalix::run;
@@ -289,6 +290,21 @@ impl PyModel {
     fn _run(mut slf: PyRefMut<'_, Self>) -> PyResult<PyRefMut<'_, Self>> {
         slf.inner.configure().map_err(PyRuntimeError::new_err)?;
         slf.inner.run().map_err(PyRuntimeError::new_err)?; // self-resetting
+        Ok(slf)
+    }
+
+    // ----- Patch functions ----
+    // Separated by functionality - python layer to orchestrate
+
+    /// Apply parameter overrides to the currently loaded model. Leaves
+    /// `self` untouched on failure (mirrors `_load_file`).
+    fn _patch_update<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        patch_string: &str
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        let new_model = patch_update(slf.inner.clone(), patch_string)
+            .map_err(PyValueError::new_err)?;
+        slf.inner = new_model;
         Ok(slf)
     }
 

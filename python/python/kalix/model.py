@@ -159,7 +159,7 @@ class Model:
             raise RuntimeError(f"Model run failed: {e}") from e
         return self
 
-    def patch(self, overrides: str) -> "Model":
+    def patch(self, patch_string: str, *, mode: Literal["update", "override", "delete"] = "update") -> "Model":
         """Apply parameter overrides to the currently loaded model.
 
         Not yet implemented.
@@ -169,12 +169,12 @@ class Model:
         NotImplementedError
             Always -- the parameter-override format is still undecided.
         """
-        raise NotImplementedError(
-            "Model.patch() is not implemented yet (the parameter-override "
-            "format is still undecided). Reload the model via "
-            "Model.load_file()/Model.load_string() with updated parameters "
-            "instead."
-        )
+        if mode == "update":
+            self._inner._patch_update(patch_string)
+        elif mode == "override":
+            raise NotImplementedError("Model.patch() override mode not implemented")
+        elif mode == "delete":
+            raise NotImplementedError("Model.patch() delete mode not implemented")
 
     def get_outputs(self) -> pd.DataFrame:
         """Retrieve the model's output time series after a run.
