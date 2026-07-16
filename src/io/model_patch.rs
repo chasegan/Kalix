@@ -12,7 +12,9 @@ use crate::model::Model;
 pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, String> {
     // Clone ensures that we do not modify the original model's ini_document -
     // in case the modification is invalid
-    let mut model_ini_doc = model.ini_document.clone().unwrap_or_default();
+    let mut model_ini_doc = model.ini_document.clone().map(Ok).unwrap_or(Err(
+        "Patch cannot be called on an empty model - use load instead.",
+    ))?;
     let patch_ini = IniDocument::parse(patch_string)?;
     for (patch_section_name, patch_ini_section) in patch_ini.sections {
         for (property_name, property_content) in patch_ini_section.properties {
@@ -40,7 +42,9 @@ pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, String> 
 pub fn patch_override(model: &Model, patch_string: &str) -> Result<Model, String> {
     // Clone ensures that we do not modify the original model's ini_document -
     // in case the modification is invalid
-    let mut model_ini_doc = model.ini_document.clone().unwrap_or_default();
+    let mut model_ini_doc = model.ini_document.clone().map(Ok).unwrap_or(Err(
+        "Patch cannot be called on an empty model - use load instead.",
+    ))?;
     let patch_ini = IniDocument::parse(patch_string)?;
     for (patch_section_name, patch_ini_section) in patch_ini.sections {
         model_ini_doc
@@ -64,7 +68,9 @@ pub fn patch_override(model: &Model, patch_string: &str) -> Result<Model, String
 pub fn patch_delete(model: &Model, patch_string: &str) -> Result<Model, String> {
     // Clone ensures that we do not modify the original model's ini_document -
     // in case the modification is invalid
-    let mut model_ini_doc = model.ini_document.clone().unwrap_or_default();
+    let mut model_ini_doc = model.ini_document.clone().map(Ok).unwrap_or(Err(
+        "Patch cannot be called on an empty model - use load instead.",
+    ))?;
     let patch_ini = IniDocument::parse(patch_string)?;
     // Delete properties if listed
     // If no properties, delete entire section
