@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
 import pytest
 
 import kalix
@@ -376,3 +378,91 @@ def test_model_direct_construction():
     assert isinstance(model, kalix.Model)
     model.load_file(str(_MODEL_INI))
     assert isinstance(model, kalix.Model)
+
+
+# --- get_outputs() --------------------------------------------------------
+
+_DECLARED_OUTPUTS = [
+    "node.my_gr4j_node.dsflow",
+    "node.my_gr4j_node.runoff_volume",
+    "node.node1.dsflow",
+    "node.node2.dsflow",
+    "node.node3.dsflow",
+    "node.reach2.volume",
+    "node.reach2.dsflow",
+    "node.reach3.volume",
+    "node.reach3.dsflow",
+    "node.reach4.volume",
+    "node.reach4.dsflow",
+    "node.reach5.volume",
+    "node.reach5.dsflow",
+    "node.my_sacr_node.dsflow",
+]
+
+
+def test_get_outputs_returns_dataframe_after_run():
+    model = kalix.load_file(str(_MODEL_INI)).run()
+    df = model.get_outputs()
+    assert isinstance(df, pd.DataFrame)
+    assert set(df.columns) == set(_DECLARED_OUTPUTS)
+
+
+def test_get_outputs_index_is_named_time_and_utc():
+    model = kalix.load_file(str(_MODEL_INI)).run()
+    df = model.get_outputs()
+    assert df.index.name == "time"
+    assert isinstance(df.index, pd.DatetimeIndex)
+    assert df.index.tz is not None
+
+
+def test_get_outputs_columns_are_float64():
+    model = kalix.load_file(str(_MODEL_INI)).run()
+    df = model.get_outputs()
+    for col in df.columns:
+        assert df[col].dtype == np.float64
+
+
+def test_get_outputs_with_explicit_names_selects_subset():
+    model = kalix.load_file(str(_MODEL_INI)).run()
+    df = model.get_outputs(["node.node1.dsflow", "node.node3.dsflow"])
+    assert list(df.columns) == ["node.node1.dsflow", "node.node3.dsflow"]
+
+
+def test_get_outputs_row_count_matches_simulation_length():
+    model = kalix.load_file(str(_MODEL_INI)).run()
+    df = model.get_outputs()
+    assert len(df) > 0
+    # Every declared output must share the same simulation length.
+    assert len(df) == len(model.get_outputs(["node.node1.dsflow"]))
+
+
+def test_get_outputs_undeclared_name_raises_value_error():
+    model = kalix.load_file(str(_MODEL_INI)).run()
+    with pytest.raises(ValueError, match="undeclared"):
+        model.get_outputs(["node.not_a_real_output.dsflow"])
+
+
+def test_get_outputs_before_run_with_explicit_name_raises_value_error():
+    """An explicitly requested output that hasn't been populated yet (model
+    not run) is an error, not silently empty/absent data."""
+    model = kalix.load_file(str(_MODEL_INI))
+    with pytest.raises(ValueError):
+        model.get_outputs(["node.node1.dsflow"])
+
+
+def test_get_outputs_before_run_with_no_names_returns_empty_columns():
+    """Unlike explicit names, `names=None` silently omits unpopulated
+    outputs rather than raising -- before run() nothing is populated yet."""
+    model = kalix.load_file(str(_MODEL_INI))
+    df = model.get_outputs()
+    assert isinstance(df, pd.DataFrame)
+    assert len(df.columns) == 0
+
+
+def test_get_outputs_on_inline_model():
+    model = kalix.load_string(_INLINE_MODEL_INI).run()
+    df = model.get_outputs()
+    assert list(df.columns) == ["node.my_node.ds_1"]
+    assert (df["node.my_node.ds_1"] == 1.0).all()
+    assert len(df) == 10  # 2000-01-01 to 2000-01-10 inclusive, daily default step
+    assert df.index[0] == pd.Timestamp("2000-01-01", tz="UTC")
