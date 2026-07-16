@@ -4,7 +4,7 @@
 //! through the Python `kalix` package, which adds pandas/numpy ergonomics.
 
 use kalix::io::ini_model_io::IniModelIO;
-use kalix::io::model_patch::patch_update;
+use kalix::io::model_patch::{patch_delete, patch_override, patch_update};
 use kalix::io::pixie_io;
 use kalix::model::Model;
 use kalix::run;
@@ -116,7 +116,9 @@ fn _write_pixie_raw(
         if (ts[i] - ts[i - 1]) as u64 != step_size {
             return Err(PyValueError::new_err(format!(
                 "Irregular timestep at index {}: expected step {}, got {}",
-                i, step_size, ts[i] - ts[i - 1]
+                i,
+                step_size,
+                ts[i] - ts[i - 1]
             )));
         }
     }
@@ -243,7 +245,6 @@ struct PyModel {
     pub inner: Model,
 }
 
-
 #[pymethods]
 impl PyModel {
     /// Construct an empty, unconfigured model.
@@ -264,7 +265,9 @@ impl PyModel {
         let mut model = IniModelIO::read_model_file(model_path)
             .map_err(|e| PyIOError::new_err(format!("Failed to load model: {}", e)))?;
         // Verification step
-        model.configure().map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
+        model
+            .configure()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
         // Model OK, swap into inner
         slf.inner = model;
         Ok(slf)
@@ -280,7 +283,9 @@ impl PyModel {
         let mut model = IniModelIO::read_model_string(model_string)
             .map_err(|e| PyIOError::new_err(format!("Failed to load model: {}", e)))?;
         // Verification step
-        model.configure().map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
+        model
+            .configure()
+            .map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
         // Model OK, swap into inner
         slf.inner = model;
         Ok(slf)
@@ -300,14 +305,32 @@ impl PyModel {
     /// `self` untouched on failure (mirrors `_load_file`).
     fn _patch_update<'py>(
         mut slf: PyRefMut<'py, Self>,
-        patch_string: &str
+        patch_string: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
-        let new_model = patch_update(slf.inner.clone(), patch_string)
-            .map_err(PyValueError::new_err)?;
+        let new_model =
+            patch_update(slf.inner.clone(), patch_string).map_err(PyValueError::new_err)?;
         slf.inner = new_model;
         Ok(slf)
     }
 
+    fn _patch_override<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        patch_string: &str,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        let new_model =
+            patch_override(slf.inner.clone(), patch_string).map_err(PyValueError::new_err)?;
+        slf.inner = new_model;
+        Ok(slf)
+    }
+
+    fn _patch_delete<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        patch_string: &str,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        let new_model =
+            patch_delete(slf.inner.clone(), patch_string).map_err(PyValueError::new_err)?;
+        slf.inner = new_model;
+        Ok(slf)
     }
 }
 

@@ -159,7 +159,12 @@ class Model:
             raise RuntimeError(f"Model run failed: {e}") from e
         return self
 
-    def patch(self, patch_string: str, *, mode: Literal["update", "override", "delete"] = "update") -> "Model":
+    def patch(
+            self,
+            patch_string: str,
+            *,
+            mode: Literal["update", "override", "delete"] = "update"
+    ) -> "Model":
         """Apply parameter overrides to the currently loaded model.
 
         Parameters
@@ -169,8 +174,14 @@ class Model:
             change, e.g. ``"[node.g]\\narea = 99\\n"``.
         mode
             ``"update"`` -- set the given properties, leaving everything
-            else untouched. The only mode implemented so far;
-            ``"override"`` and ``"delete"`` raise `NotImplementedError`.
+            else untouched (including properties on an existing section
+            that the patch doesn't mention).
+            ``"override"`` -- replace each named section wholesale with its
+            patch definition; properties on an existing section that the
+            patch omits are dropped. A section not yet present is appended.
+            ``"delete"`` -- remove properties (or, if a section lists none,
+            the whole section) from the model. Sections/properties not
+            present are silently ignored.
 
         Returns
         -------
@@ -182,15 +193,13 @@ class Model:
         ValueError
             If `patch_string` is not valid INI, or if applying it produces
             an invalid model. This `Model` is left untouched in that case.
-        NotImplementedError
-            If `mode` is ``"override"`` or ``"delete"``.
         """
         if mode == "update":
             self._inner._patch_update(patch_string)
         elif mode == "override":
-            raise NotImplementedError("Model.patch() override mode not implemented")
+            self._inner._patch_override(patch_string)
         elif mode == "delete":
-            raise NotImplementedError("Model.patch() delete mode not implemented")
+            self._inner._patch_delete(patch_string)
         else:
             raise ValueError(f"Unknown patch mode: {mode!r}")
         return self
