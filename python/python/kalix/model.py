@@ -205,7 +205,7 @@ class Model:
             raise ValueError(f"Unknown patch mode: {mode!r}")
         return self
 
-    def get_outputs(self, names: Optional[List[str]] = None) -> pd.DataFrame:
+    def get_outputs(self, names: Optional[str | List[str]] = None) -> pd.DataFrame:
         """Retrieve the model's output time series after a run.
 
         Parameters
@@ -231,6 +231,9 @@ class Model:
             start, step, size, series_dict = self._inner._get_outputs(names)
         except ValueError as e:
             raise ValueError(f"Failed to retrieve model outputs: {e}") from e
+
+        if isinstance(names, str): 
+            names = [names]
 
         timestamps_sec = start + step * np.arange(size, dtype=np.int64)
         index = pd.to_datetime(timestamps_sec, unit="s", utc=True).as_unit("s")
