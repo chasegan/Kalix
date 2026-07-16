@@ -223,8 +223,9 @@ class Model:
         Raises
         ------
         ValueError
-            If a requested name is not a declared output, or was declared
-            but not found/wrong length (e.g. the model hasn't been run yet).
+            If the model has not been run yet (loading or patching a model
+            resets its run state), or if a requested name is not a declared
+            output, or was declared but not found/wrong length.
         """
         try:
             start, step, size, series_dict = self._inner._get_outputs(names)

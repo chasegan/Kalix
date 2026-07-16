@@ -243,6 +243,11 @@ fn _optimise_from_file<'py>(
 #[pyo3(name = "_Model")]
 struct PyModel {
     pub inner: Model,
+    /// True only while `inner` holds a complete set of results from a
+    /// finished `_run()`. Any operation that replaces or modifies the model
+    /// (loading, patching) resets it, so `_get_outputs` can fail fast with a
+    /// clear message instead of serving absent or stale results.
+    has_run: bool,
 }
 
 #[pymethods]
@@ -252,6 +257,7 @@ impl PyModel {
     fn new() -> PyResult<Self> {
         Ok(PyModel {
             inner: Model::new(),
+            has_run: false,
         })
     }
 
@@ -270,6 +276,7 @@ impl PyModel {
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
         // Model OK, swap into inner
         slf.inner = model;
+        slf.has_run = false;
         Ok(slf)
     }
 
@@ -288,13 +295,17 @@ impl PyModel {
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
         // Model OK, swap into inner
         slf.inner = model;
+        slf.has_run = false;
         Ok(slf)
     }
 
     /// Configure and run the model's simulation.
     fn _run(mut slf: PyRefMut<'_, Self>) -> PyResult<PyRefMut<'_, Self>> {
+        // A failed configure/run leaves no trustworthy results behind.
+        slf.has_run = false;
         slf.inner.configure().map_err(PyRuntimeError::new_err)?;
         slf.inner.run().map_err(PyRuntimeError::new_err)?; // self-resetting
+        slf.has_run = true;
         Ok(slf)
     }
 
@@ -310,6 +321,7 @@ impl PyModel {
         let new_model =
             patch_update(slf.inner.clone(), patch_string).map_err(PyValueError::new_err)?;
         slf.inner = new_model;
+        slf.has_run = false;
         Ok(slf)
     }
 
@@ -320,6 +332,7 @@ impl PyModel {
         let new_model =
             patch_override(slf.inner.clone(), patch_string).map_err(PyValueError::new_err)?;
         slf.inner = new_model;
+        slf.has_run = false;
         Ok(slf)
     }
 
@@ -330,6 +343,7 @@ impl PyModel {
         let new_model =
             patch_delete(slf.inner.clone(), patch_string).map_err(PyValueError::new_err)?;
         slf.inner = new_model;
+        slf.has_run = false;
         Ok(slf)
     }
 
@@ -345,6 +359,12 @@ impl PyModel {
         py: Python<'py>,
         names: Option<Vec<String>>,
     ) -> PyResult<(i64, u64, usize, Bound<'py, PyDict>)> {
+        if !self.has_run {
+            return Err(PyValueError::new_err(
+                "The model has not been run yet (loading/patching invalidates the results). \
+                 Call run() before get_outputs()",
+            ));
+        }
         let outputs = self
             .inner
             .get_output_series(names)

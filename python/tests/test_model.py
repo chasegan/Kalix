@@ -443,20 +443,51 @@ def test_get_outputs_undeclared_name_raises_value_error():
 
 
 def test_get_outputs_before_run_with_explicit_name_raises_value_error():
-    """An explicitly requested output that hasn't been populated yet (model
-    not run) is an error, not silently empty/absent data."""
+    """An unrun model fails fast with a message naming the actual problem,
+    not silently empty/absent data."""
     model = kalix.load_file(str(_MODEL_INI))
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="has not been run"):
         model.get_outputs(["node.node1.dsflow"])
 
 
-def test_get_outputs_before_run_with_no_names_returns_empty_columns():
-    """Unlike explicit names, `names=None` silently omits unpopulated
-    outputs rather than raising -- before run() nothing is populated yet."""
+def test_get_outputs_before_run_with_no_names_raises_value_error():
+    """`names=None` fails fast on an unrun model too -- an empty DataFrame
+    would silently hide a forgotten run()."""
     model = kalix.load_file(str(_MODEL_INI))
-    df = model.get_outputs()
+    with pytest.raises(ValueError, match="has not been run"):
+        model.get_outputs()
+
+
+def test_get_outputs_after_patch_raises_until_rerun():
+    """Patching invalidates previous results: the pre-patch outputs no
+    longer describe the model now held, so get_outputs() must refuse until
+    the patched model has been run again."""
+    model = kalix.load_file(str(_MODEL_INI)).run()
+    model.patch("[node.reach2]\nlag = 5\n")
+    with pytest.raises(ValueError, match="has not been run"):
+        model.get_outputs()
+    df = model.run().get_outputs()
     assert isinstance(df, pd.DataFrame)
-    assert len(df.columns) == 0
+    assert len(df) > 0
+
+
+def test_get_outputs_after_failed_patch_still_works():
+    """A rejected patch leaves the model -- and its run results -- intact,
+    so get_outputs() keeps working."""
+    model = kalix.load_file(str(_MODEL_INI)).run()
+    with pytest.raises(ValueError):
+        model.patch("not valid ini [[[")
+    df = model.get_outputs()
+    assert len(df) > 0
+
+
+def test_get_outputs_after_reload_raises_until_rerun():
+    """Loading a new model into an existing instance discards the previous
+    run's results."""
+    model = kalix.load_file(str(_MODEL_INI)).run()
+    model.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError, match="has not been run"):
+        model.get_outputs()
 
 
 def test_get_outputs_on_inline_model():
