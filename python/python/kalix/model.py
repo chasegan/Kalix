@@ -9,7 +9,8 @@ instead.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal, Optional, Union
+from typing import List, Literal, Optional, Union
+import numpy as np
 import pandas as pd
 
 from kalix._native import _Model
@@ -204,23 +205,36 @@ class Model:
             raise ValueError(f"Unknown patch mode: {mode!r}")
         return self
 
-    def get_outputs(self) -> pd.DataFrame:
+    def get_outputs(self, names: Optional[List[str]] = None) -> pd.DataFrame:
         """Retrieve the model's output time series after a run.
 
-        Not yet implemented. 
+        Parameters
+        ----------
+        names
+            Names of recorders to retrieve. ``None`` (default) retrieves
+            every recorder declared in the model's ``[outputs]`` section.
+
+        Returns
+        -------
+        DataFrame
+            Index is a UTC ``DatetimeIndex`` named ``"time"``; columns are
+            output names with float64 values.
 
         Raises
         ------
-        NotImplementedError
-            Always -- outputs cannot be retrieved from Python yet.
+        ValueError
+            If a requested name is not a declared output, or was declared
+            but not found/wrong length (e.g. the model hasn't been run yet).
         """
-        raise NotImplementedError(
-            "Model.get_outputs() is not implemented yet (output time series "
-            "are not yet exposed back to Python). For now, use "
-            "kalix.simulate(model_file, output_file=...) to run the model and "
-            "write outputs to disk, then read them back with "
-            "kalix.read_pixie()."
-        )
+        try:
+            start, step, size, series_dict = self._inner._get_outputs(names)
+        except ValueError as e:
+            raise ValueError(f"Failed to retrieve model outputs: {e}") from e
+
+        timestamps_sec = start + step * np.arange(size, dtype=np.int64)
+        index = pd.to_datetime(timestamps_sec, unit="s", utc=True).as_unit("s")
+        index.name = "time"
+        return pd.DataFrame(series_dict, index=index)
 
     def __repr__(self) -> str:
         return "<kalix.Model>"
