@@ -28,3 +28,78 @@ pub fn patch_update(model: Model, patch_string: &str) -> Result<Model, String> {
         Some(model.working_directory),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn model_ini() -> &'static str {
+        "[kalix]\n\
+         \n\
+         [node.g]\n\
+         type = gr4j\n\
+         loc = 10, 20\n\
+         area = 30\n\
+         params = 350, 0, 90, 1.7\n\
+         ds_1 = bh\n\
+         \n\
+         [node.bh]\n\
+         type = blackhole\n\
+         loc = 1, 2\n"
+    }
+
+    #[test]
+    fn patch_update_overrides_existing_property() {
+        let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
+
+        let patched = patch_update(model, "[node.g]\narea = 99\n")
+            .expect("patch should apply");
+
+        let ini_doc = patched.ini_document.as_ref().expect("patched model should have an ini_document");
+        assert_eq!(ini_doc.get_property("node.g", "area"), Some("99"));
+    }
+
+    #[test]
+    fn patch_update_adds_new_section() {
+        let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
+
+        let patched = patch_update(model, "[node.bh2]\ntype = blackhole\nloc = 5, 5\n")
+            .expect("patch should apply");
+
+        let ini_doc = patched.ini_document.as_ref().expect("patched model should have an ini_document");
+        assert_eq!(ini_doc.get_property("node.bh2", "type"), Some("blackhole"));
+        assert_eq!(patched.nodes.len(), 3);
+    }
+
+    #[test]
+    fn patch_update_does_not_mutate_original_model() {
+        let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
+        let original = model.clone();
+
+        let _patched = patch_update(model, "[node.g]\narea = 99\n")
+            .expect("patch should apply");
+
+        let original_ini_doc = original.ini_document.as_ref().expect("original model should have an ini_document");
+        assert_eq!(original_ini_doc.get_property("node.g", "area"), Some("30"));
+    }
+
+    #[test]
+    fn patch_update_preserves_working_directory() {
+        let mut model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
+        model.working_directory = std::path::PathBuf::from("some/working/dir");
+        let working_directory = model.working_directory.clone();
+
+        let patched = patch_update(model, "[node.g]\narea = 99\n")
+            .expect("patch should apply");
+
+        assert_eq!(patched.working_directory, working_directory);
+    }
+
+    #[test]
+    fn patch_update_rejects_invalid_patch_string() {
+        let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
+
+        let result = patch_update(model, "not valid ini [[[");
+        assert!(result.is_err());
+    }
+}

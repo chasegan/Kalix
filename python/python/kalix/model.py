@@ -9,7 +9,7 @@ instead.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 import pandas as pd
 
 from kalix._native import _Model
@@ -37,6 +37,7 @@ class Model:
 
         model = kalix.load_file("catchment.ini").run()
     """
+    # pylint: disable=protected-access
 
     def __init__(self, model_path: Optional[PathLike] = None) -> None:
         self._inner = _Model()
@@ -151,7 +152,6 @@ class Model:
             If configuration or the simulation itself fails.
         """
         try:
-            # pylint: disable=protected-access
             # This is the intended use - the underscore indicates that this is a
             # function from Rust-land
             self._inner._run()
@@ -162,12 +162,28 @@ class Model:
     def patch(self, patch_string: str, *, mode: Literal["update", "override", "delete"] = "update") -> "Model":
         """Apply parameter overrides to the currently loaded model.
 
-        Not yet implemented.
+        Parameters
+        ----------
+        patch_string
+            A partial model INI snippet naming the sections/properties to
+            change, e.g. ``"[node.g]\\narea = 99\\n"``.
+        mode
+            ``"update"`` -- set the given properties, leaving everything
+            else untouched. The only mode implemented so far;
+            ``"override"`` and ``"delete"`` raise `NotImplementedError`.
+
+        Returns
+        -------
+        Model
+            `self`, for chaining.
 
         Raises
         ------
+        ValueError
+            If `patch_string` is not valid INI, or if applying it produces
+            an invalid model. This `Model` is left untouched in that case.
         NotImplementedError
-            Always -- the parameter-override format is still undecided.
+            If `mode` is ``"override"`` or ``"delete"``.
         """
         if mode == "update":
             self._inner._patch_update(patch_string)
@@ -175,6 +191,9 @@ class Model:
             raise NotImplementedError("Model.patch() override mode not implemented")
         elif mode == "delete":
             raise NotImplementedError("Model.patch() delete mode not implemented")
+        else:
+            raise ValueError(f"Unknown patch mode: {mode!r}")
+        return self
 
     def get_outputs(self) -> pd.DataFrame:
         """Retrieve the model's output time series after a run.

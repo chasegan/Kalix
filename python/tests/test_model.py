@@ -120,16 +120,51 @@ def test_load_snippet_raises_not_implemented():
         kalix.new_model().load_snippet(_INLINE_MODEL_INI)
 
 
-def test_patch_raises_not_implemented():
-    with pytest.raises(NotImplementedError, match="patch"):
-        kalix.load_file(str(_MODEL_INI)).patch("c.x = 1.0")
+def test_patch_update_returns_same_instance_for_chaining():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    assert model.patch("[node.my_node]\ninflow = 2.0\n") is model
 
 
-def test_get_outputs_raises_not_implemented():
-    """Raises cleanly even after a real run (not conditional on run state)."""
-    with pytest.raises(NotImplementedError, match="get_outputs"):
-        kalix.load_file(str(_MODEL_INI)).run().get_outputs()
+def test_patch_update_can_run_after_patching():
+    """A patched property is actually picked up by the model that runs --
+    not just accepted and ignored. `lag` must be a positive-enough value
+    that `configure()` still accepts the routing node."""
+    model = kalix.load_file(str(_MODEL_INI)).patch("[node.reach2]\nlag = 5\n")
+    result = model.run()
+    assert isinstance(result, kalix.Model)
 
+
+def test_patch_update_adds_new_section():
+    """Sections absent from the original model can be added by a patch, not
+    just existing ones overridden."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    result = model.patch("[node.new_sink]\ntype = blackhole\nloc = 1, 1\n")
+    assert isinstance(result, kalix.Model)
+
+
+def test_patch_update_invalid_syntax_raises_value_error():
+    with pytest.raises(ValueError):
+        kalix.load_string(_INLINE_MODEL_INI).patch("not valid ini [[[")
+
+
+def test_patch_update_invalid_result_raises_value_error():
+    """A syntactically valid patch that produces an invalid model (here, a
+    downstream link to a nonexistent node) is still a ValueError, not a
+    silent success or a panic."""
+    with pytest.raises(ValueError, match="node_that_does_not_exist"):
+        kalix.load_string(_INLINE_MODEL_INI).patch(
+            "[node.my_node]\nds_1 = node_that_does_not_exist\n"
+        )
+
+
+def test_patch_update_leaves_model_untouched_on_failure():
+    """A rejected patch must not damage the already-loaded model -- it
+    should still run exactly as before the failed patch attempt."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch("not valid ini [[[")
+    result = model.run()
+    assert isinstance(result, kalix.Model)
 
 # --- informative error messages -----------------------------------------
 
