@@ -166,6 +166,169 @@ def test_patch_update_leaves_model_untouched_on_failure():
     result = model.run()
     assert isinstance(result, kalix.Model)
 
+
+# --- patch(mode="override") ----------------------------------------------
+# A second, self-contained node so whole-section addition can be exercised
+# without disturbing `node.my_node` (mirrors model_patch.rs's use of an
+# extra leaf node nothing links to downstream).
+_INLINE_MODEL_WITH_EXTRA_NODE_INI = (
+    "[kalix]\n"
+    "start = 2000-01-01T00:00:00\n"
+    "end = 2000-01-10T00:00:00\n"
+    "\n"
+    "[node.my_node]\n"
+    "loc = 0,0\n"
+    "type = inflow\n"
+    "inflow = 1.0\n"
+    "\n"
+    "[node.extra_node]\n"
+    "loc = 1,1\n"
+    "type = inflow\n"
+    "inflow = 2.0\n"
+    "\n"
+    "[outputs]\n"
+    "node.my_node.ds_1\n"
+)
+
+
+def test_patch_override_returns_same_instance_for_chaining():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    result = model.patch("[node.my_node]\ntype = inflow\ninflow = 2.0\nloc = 0,0\n", mode="override")
+    assert result is model
+
+
+def test_patch_override_can_run_after_patching():
+    """A full, valid replacement section is accepted and the model still
+    runs -- unlike patch_update, override requires every property the
+    section needs since it isn't merged with the original."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    model.patch("[node.my_node]\ntype = inflow\ninflow = 2.0\nloc = 0,0\n", mode="override")
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
+def test_patch_override_drops_properties_omitted_from_patch():
+    """Unlike patch_update, override replaces the whole section -- a
+    property that exists on the original but is omitted from the patch
+    does not survive. Dropping the required `type` property here makes the
+    section unparseable, surfacing as a ValueError."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch("[node.my_node]\ninflow = 2.0\n", mode="override")
+
+
+def test_patch_override_adds_new_section():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    result = model.patch("[node.new_sink]\ntype = blackhole\nloc = 1, 1\n", mode="override")
+    assert isinstance(result, kalix.Model)
+
+
+def test_patch_override_invalid_syntax_raises_value_error():
+    with pytest.raises(ValueError):
+        kalix.load_string(_INLINE_MODEL_INI).patch("not valid ini [[[", mode="override")
+
+
+def test_patch_override_invalid_result_raises_value_error():
+    with pytest.raises(ValueError, match="node_that_does_not_exist"):
+        kalix.load_string(_INLINE_MODEL_INI).patch(
+            "[node.my_node]\ntype = inflow\ninflow = 2.0\nloc = 0,0\nds_1 = node_that_does_not_exist\n",
+            mode="override",
+        )
+
+
+def test_patch_override_leaves_model_untouched_on_failure():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch("not valid ini [[[", mode="override")
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
+# --- patch(mode="delete") -------------------------------------------------
+
+def test_patch_delete_returns_same_instance_for_chaining():
+    model = kalix.load_string(_INLINE_MODEL_WITH_EXTRA_NODE_INI)
+    result = model.patch("[node.extra_node]\n", mode="delete")
+    assert result is model
+
+
+def test_patch_delete_removes_entire_section_when_no_properties_listed():
+    """Deleting a leaf section that nothing else references leaves behind
+    a model that still runs -- confirming the section is actually gone,
+    not just left inert."""
+    model = kalix.load_string(_INLINE_MODEL_WITH_EXTRA_NODE_INI)
+    model.patch("[node.extra_node]\n", mode="delete")
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
+# A storage node so deleting its `dimensions` table can be exercised. Unlike
+# gr4j's `params` (which silently falls back to `Gr4j::new()` defaults when
+# absent), a storage node's `dimensions` table has no safe fallback -- with
+# fewer than 2 rows, `configure()` rejects it outright.
+_INLINE_MODEL_WITH_STORAGE_NODE_INI = (
+    "[kalix]\n"
+    "start = 2000-01-01T00:00:00\n"
+    "end = 2000-01-10T00:00:00\n"
+    "\n"
+    "[node.my_storage]\n"
+    "loc = 0,0\n"
+    "type = storage\n"
+    "dimensions = 90, 0, 0, 0,\n"
+    "             91, 100, 1, 0,\n"
+    "ds_1 = bh\n"
+    "\n"
+    "[node.bh]\n"
+    "loc = 1,1\n"
+    "type = blackhole\n"
+)
+
+
+def test_patch_delete_of_required_property_fails_validation_on_patch():
+    """Deleting a required property is validated against `configure()` at
+    patch time itself -- the section is syntactically fine without
+    `dimensions`, but the resulting model can't run, so the patch is
+    rejected up front (mirroring `load_file`/`load_string`) rather than
+    deferring the failure to `run()`."""
+    model = kalix.load_string(_INLINE_MODEL_WITH_STORAGE_NODE_INI)
+    with pytest.raises(ValueError):
+        model.patch("[node.my_storage]\ndimensions =\n", mode="delete")
+
+
+def test_patch_delete_ignores_missing_section():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    result = model.patch("[node.missing]\n", mode="delete")
+    assert isinstance(result, kalix.Model)
+    assert isinstance(result.run(), kalix.Model)
+
+
+def test_patch_delete_ignores_missing_property():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    result = model.patch("[node.my_node]\nnot_a_real_property =\n", mode="delete")
+    assert isinstance(result.run(), kalix.Model)
+
+
+def test_patch_delete_invalid_syntax_raises_value_error():
+    with pytest.raises(ValueError):
+        kalix.load_string(_INLINE_MODEL_INI).patch("not valid ini [[[", mode="delete")
+
+
+def test_patch_delete_invalid_result_raises_value_error():
+    """Deleting a mid-chain node used as another node's downstream leaves
+    a dangling link, caught at parse time (like the analogous update/override
+    tests above)."""
+    with pytest.raises(ValueError):
+        kalix.load_file(str(_MODEL_INI)).patch("[node.reach4]\n", mode="delete")
+
+
+def test_patch_delete_leaves_model_untouched_on_failure():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch("not valid ini [[[", mode="delete")
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
 # --- informative error messages -----------------------------------------
 
 def test_load_file_missing_file_message_is_informative():
