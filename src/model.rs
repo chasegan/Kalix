@@ -859,8 +859,53 @@ impl Model {
         vec_ts
     }
 
-    pub fn write_outputs(&self, filename: &str) -> Result<(), String> {
+    /// Output series to export, in declaration order.
+    ///
+    /// `names = None` selects all declared outputs, silently omitting any that
+    /// are unpopulated (see `collect_output_series`).
+    /// Named series that are undeclared or unpopulated are an error.
+    ///
+    /// Used for Python bindings.
+    pub fn get_output_series(
+        &self,
+        output_names: Option<Vec<String>>,
+    ) -> Result<Vec<&Timeseries>, String> {
+        match output_names {
+            None => Ok(self.collect_output_series()),
+            Some(vec_names) => {
+                let expected_len = self.configuration.sim_nsteps as usize;
+                let mut vec_ts: Vec<&Timeseries> = Vec::new();
+                let names_hash: HashSet<String> =
+                    HashSet::from_iter(self.outputs.iter().map(|x| x.to_lowercase()));
+                for output_name in vec_names {
+                    if names_hash.contains(&output_name.to_lowercase()) {
+                        Ok(())
+                    } else {
+                        Err(format!(
+                            "Output {} undeclared in model [outputs]",
+                            output_name
+                        ))
+                    }?;
+                    match self.data_cache.get_existing_series_idx(&output_name) {
+                        Some(idx) => {
+                            let ts = &self.data_cache.series[idx];
+                            let ts_len = ts.values.len();
+                            if ts_len == expected_len {
+                                vec_ts.push(ts);
+                                Ok(())
+                            } else {
+                                Err(format!("Output series {} found but wrong length, length {} but expected {}", output_name, ts_len, expected_len))
+                            }
+                        }
+                        None => Err(format!("Output {} not found", output_name)),
+                    }?;
+                }
+                Ok(vec_ts)
+            }
+        }
+    }
 
+    pub fn write_outputs(&self, filename: &str) -> Result<(), String> {
         let vec_ts = self.collect_output_series();
 
         // Dispatch by extension: .pxb or .pxt → paired Pixie format,
