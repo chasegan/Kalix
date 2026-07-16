@@ -5,26 +5,20 @@ use crate::io::custom_ini_parser::IniDocument;
 use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
 
-/// Apply `patch_string` to `model`'s `IniDocument`. For each property in the
-/// patch, updates it if present or creates it otherwise; sections not yet
-/// present are created and appended to the bottom of the file. Properties
-/// and sections omitted from the patch are left untouched.
-pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, String> {
+fn apply_patch(
+    model: &Model,
+    patch_string: &str,
+    mutate: impl FnOnce(&mut IniDocument, IniDocument),
+) -> Result<Model, String> {
     // Clone ensures that we do not modify the original model's ini_document -
     // in case the modification is invalid
     let mut model_ini_doc = model.ini_document.clone().map(Ok).unwrap_or(Err(
         "Patch cannot be called on an empty model - use load instead.",
     ))?;
     let patch_ini = IniDocument::parse(patch_string)?;
-    for (patch_section_name, patch_ini_section) in patch_ini.sections {
-        for (property_name, property_content) in patch_ini_section.properties {
-            model_ini_doc.set_property(
-                &patch_section_name,
-                &property_name.to_string(),
-                &property_content.value.to_string(),
-            );
-        }
-    }
+
+    mutate(&mut model_ini_doc, patch_ini);
+
     let mut patched_model = IniModelIO::read_model_string_with_working_directory(
         &model_ini_doc.to_string(),
         Some(model.working_directory.clone()),
@@ -32,6 +26,25 @@ pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, String> 
     // Reject poorly configured models
     patched_model.configure()?;
     Ok(patched_model)
+}
+
+/// Apply `patch_string` to `model`'s `IniDocument`. For each property in the
+/// patch, updates it if present or creates it otherwise; sections not yet
+/// present are created and appended to the bottom of the file. Properties
+/// and sections omitted from the patch are left untouched.
+pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, String> {
+    let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
+        for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
+            for (property_name, property_content) in patch_ini_section.properties {
+                model_ini_doc.set_property(
+                    &patch_section_name,
+                    &property_name.to_string(),
+                    &property_content.value.to_string(),
+                );
+            }
+        }
+    };
+    apply_patch(model, patch_string, mutate)
 }
 
 /// Apply `patch_string` to `model`'s `IniDocument`, replacing each named
@@ -40,24 +53,14 @@ pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, String> 
 /// original position; a section not yet present is appended to the bottom of
 /// the file.
 pub fn patch_override(model: &Model, patch_string: &str) -> Result<Model, String> {
-    // Clone ensures that we do not modify the original model's ini_document -
-    // in case the modification is invalid
-    let mut model_ini_doc = model.ini_document.clone().map(Ok).unwrap_or(Err(
-        "Patch cannot be called on an empty model - use load instead.",
-    ))?;
-    let patch_ini = IniDocument::parse(patch_string)?;
-    for (patch_section_name, patch_ini_section) in patch_ini.sections {
-        model_ini_doc
-            .sections
-            .insert(patch_section_name, patch_ini_section);
-    }
-    let mut patched_model = IniModelIO::read_model_string_with_working_directory(
-        &model_ini_doc.to_string(),
-        Some(model.working_directory.clone()),
-    )?;
-    // Reject poorly configured models
-    patched_model.configure()?;
-    Ok(patched_model)
+    let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
+        for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
+            model_ini_doc
+                .sections
+                .insert(patch_section_name, patch_ini_section);
+        }
+    };
+    apply_patch(model, patch_string, mutate)
 }
 
 /// Apply `patch_string` to `model`'s `IniDocument`. For each section in the
@@ -66,39 +69,27 @@ pub fn patch_override(model: &Model, patch_string: &str) -> Result<Model, String
 /// the entire section is removed. Sections/properties not present in the
 /// model are silently ignored.
 pub fn patch_delete(model: &Model, patch_string: &str) -> Result<Model, String> {
-    // Clone ensures that we do not modify the original model's ini_document -
-    // in case the modification is invalid
-    let mut model_ini_doc = model.ini_document.clone().map(Ok).unwrap_or(Err(
-        "Patch cannot be called on an empty model - use load instead.",
-    ))?;
-    let patch_ini = IniDocument::parse(patch_string)?;
-    // Delete properties if listed
-    // If no properties, delete entire section
-    for (patch_section_name, patch_ini_section) in patch_ini.sections {
-        if patch_ini_section.properties.is_empty() {
-            model_ini_doc
-                .sections
-                .shift_remove(&patch_section_name.to_string());
-        } else {
-            if let Some(model_ini_section) = model_ini_doc
-                .sections
-                .get_mut(&patch_section_name.to_string())
-            {
-                for (property_name, _) in patch_ini_section.properties {
-                    model_ini_section
-                        .properties
-                        .shift_remove(&property_name.to_string());
+    let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
+            for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
+            if patch_ini_section.properties.is_empty() {
+                model_ini_doc
+                    .sections
+                    .shift_remove(&patch_section_name.to_string());
+            } else {
+                if let Some(model_ini_section) = model_ini_doc
+                    .sections
+                    .get_mut(&patch_section_name.to_string())
+                {
+                    for (property_name, _) in patch_ini_section.properties {
+                        model_ini_section
+                            .properties
+                            .shift_remove(&property_name.to_string());
+                    }
                 }
             }
         }
-    }
-    let mut patched_model = IniModelIO::read_model_string_with_working_directory(
-        &model_ini_doc.to_string(),
-        Some(model.working_directory.clone()), // TODO To check: clone or move?
-    )?;
-    // Reject poorly configured models
-    patched_model.configure()?;
-    Ok(patched_model)
+    };
+    apply_patch(model, patch_string, mutate)
 }
 
 #[cfg(test)]
