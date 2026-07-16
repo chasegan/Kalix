@@ -336,7 +336,7 @@ impl PyModel {
     /// Retrieve the model's output time series after a run.
     ///
     /// Returns
-    ///     - start: u64
+    ///     - start: i64 (real, unwrapped epoch seconds)
     ///     - step: u64
     ///     - size: usize
     ///     - {name: array} PyDict
@@ -344,14 +344,18 @@ impl PyModel {
         &mut self,
         py: Python<'py>,
         names: Option<Vec<String>>,
-    ) -> PyResult<(u64, u64, usize, Bound<'py, PyDict>)> {
+    ) -> PyResult<(i64, u64, usize, Bound<'py, PyDict>)> {
         let outputs = self
             .inner
             .get_output_series(names)
             .map_err(PyValueError::new_err)?;
         let (start, step, size) = match outputs.first() {
-            Some(first) => (first.start_timestamp, first.step_size, first.values.len()),
-            None => (0u64, 0u64, 0usize),
+            Some(first) => (
+                wrap_to_i64(first.start_timestamp),
+                first.step_size,
+                first.values.len(),
+            ),
+            None => (0i64, 0u64, 0usize),
         };
         let dict = PyDict::new_bound(py);
         for ts in outputs {
