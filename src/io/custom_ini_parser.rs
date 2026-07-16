@@ -30,7 +30,9 @@ pub struct IniSection {
 
 #[derive(Debug, Clone)]
 pub struct IniDocument {
-    /// Maps section name to `IniSection`
+    /// Maps section name to `IniSection`, preserving file order. For node
+    /// sections this order is execution order and must not be resorted -
+    /// per manifestos/node-definition-order.md
     pub sections: IndexMap<String, IniSection>,
     /// Comments at end of file
     pub trailing_comments: Vec<String>, 
