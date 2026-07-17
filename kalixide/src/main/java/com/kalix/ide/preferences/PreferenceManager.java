@@ -17,7 +17,10 @@ import java.util.prefs.Preferences;
  * Access goes through the typed {@link Pref} constants in {@link PreferenceKeys};
  * the stringly accessors here are package-private plumbing for {@link Pref}.
  *
- * <p><b>Preference file location precedence:</b>
+ * <p><b>Preference file location.</b> On <b>macOS</b> the per-user config
+ * directory ({@code ~/.kalix}) is always used: writing inside the {@code .app}
+ * bundle would invalidate its code signature and fail on read-only installs.
+ * On <b>Windows/Linux</b> the location is portable, with this precedence:
  * <ol>
  *   <li>The directory containing the application JAR (portable installs),
  *       resolved via the code-source URI so install paths with spaces or
@@ -52,14 +55,29 @@ public class PreferenceManager {
      * directory precedence.
      */
     private static void initializePreferenceFile() {
-        File dir = resolveApplicationDirectory();
-        if (!isWritableDirectory(dir)) {
-            File fallback = new File(System.getProperty("user.home"), ".kalix");
-            System.err.println("Kalix: preference directory " + dir.getAbsolutePath()
-                + " is not writable; using " + fallback.getAbsolutePath());
-            dir = fallback;
+        File dir;
+        if (isMac()) {
+            // macOS: never write inside the .app bundle — it breaks the code
+            // signature and fails on read-only installs. Always use the per-user
+            // config dir, shared across versions.
+            dir = new File(System.getProperty("user.home"), ".kalix");
+        } else {
+            // Windows/Linux: portable — prefs live alongside the install, with a
+            // per-user fallback when that directory is not writable.
+            dir = resolveApplicationDirectory();
+            if (!isWritableDirectory(dir)) {
+                File fallback = new File(System.getProperty("user.home"), ".kalix");
+                System.err.println("Kalix: preference directory " + dir.getAbsolutePath()
+                    + " is not writable; using " + fallback.getAbsolutePath());
+                dir = fallback;
+            }
         }
         preferenceFile = new File(dir, "kalix_prefs.json");
+    }
+
+    /** True when running on macOS (drives the per-user prefs location above). */
+    private static boolean isMac() {
+        return System.getProperty("os.name", "").toLowerCase().contains("mac");
     }
 
     /**
