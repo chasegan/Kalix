@@ -6,8 +6,22 @@ plugins {
 
 // Read version from root VERSION file
 val kalixVersion = file("../VERSION").readText().trim()
-// jpackage --app-version requires N[.N[.N]] (macOS CFBundleShortVersionString), no pre-release suffix
-val jpackageVersion = kalixVersion.substringBefore("-")
+// jpackage --app-version requires N[.N[.N]] with no pre-release suffix, and on macOS the
+// major must be >= 1 (CFBundleShortVersionString rejects a 0 major). While we're pre-1.0 we
+// substitute a *sentinel* major of 9999 on macOS only — hydrology's conventional missing-value
+// flag, and obviously not a real release, so it can't be mistaken for one in Get Info or bug
+// reports and won't ever collide with a real version we ship. The real version lives in
+// version.txt (titlebar/About) and is untouched, so this only affects the launcher metadata
+// macOS records in Get Info. Once the real major reaches >= 1 the substitution stops.
+val jpackageVersion = run {
+    val base = kalixVersion.substringBefore("-")
+    val isMac = System.getProperty("os.name").lowercase().contains("mac")
+    val parts = base.split(".").toMutableList()
+    if (isMac && (parts.firstOrNull()?.toIntOrNull() ?: 0) < 1) {
+        parts[0] = "9999" // sentinel; macOS bundle metadata only — version.txt keeps the real version
+    }
+    parts.joinToString(".")
+}
 
 group = "com.kalix"
 version = kalixVersion
