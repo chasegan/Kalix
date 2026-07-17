@@ -68,7 +68,24 @@ ZIP_NAME="KalixIDE-${PLATFORM}-${VERSION}-Portable.zip"
 echo "Preparing KalixIDE distribution..."
 rm -rf "${DIST_FOLDER}"
 mkdir -p "${DIST_FOLDER}"
-cp -r "${JPACKAGE_DIR}"/* "${DIST_FOLDER}/" 2>/dev/null || cp -r "${JPACKAGE_DIR}" "${DIST_FOLDER}/"
+# Copy the *contents* of the jpackage output into DIST_FOLDER so the dist folder
+# itself is the app image / .app. No `2>/dev/null || cp <dir>` fallback: that would
+# silently nest the whole bundle one level down (a broken layout) whenever the glob
+# fails. Under `set -e` a failed copy must stop the build loudly instead.
+cp -R "${JPACKAGE_DIR}/." "${DIST_FOLDER}/"
+
+# Fail loudly if the jpackage launcher is missing (mirrors the Windows .bat's .exe
+# check) so a broken/empty jpackage output never ships as if it succeeded.
+case "$PLATFORM" in
+    macOS)   LAUNCHER="${DIST_FOLDER}/Contents/MacOS/KalixIDE" ;;
+    Linux)   LAUNCHER="${DIST_FOLDER}/bin/KalixIDE" ;;
+    Windows) LAUNCHER="${DIST_FOLDER}/KalixIDE.exe" ;;
+    *)       LAUNCHER="" ;;
+esac
+if [ -n "$LAUNCHER" ] && [ ! -e "$LAUNCHER" ]; then
+    echo "ERROR: expected launcher missing at ${LAUNCHER}; jpackage output looks broken"
+    exit 1
+fi
 
 echo "Copying Kalix CLI into distribution..."
 CLI_DEST="${DIST_FOLDER}${CLI_DEST_SUBDIR:+/${CLI_DEST_SUBDIR}}"
@@ -85,10 +102,17 @@ fi
 
 echo "Creating KalixIDE zip..."
 cd dist
-if command -v zip &> /dev/null; then
-    zip -r "${ZIP_NAME}" "$(basename "${DIST_FOLDER}")"
+DIST_BASENAME="$(basename "${DIST_FOLDER}")"
+if [ "$PLATFORM" = "macOS" ]; then
+    # ditto is Apple's archiver for a .app: it preserves symlinks (the jlink
+    # runtime ships ~24 under runtime/.../legal), extended attributes, and the
+    # ad-hoc code signature -- all of which `zip -r` corrupts by dereferencing
+    # symlinks and dropping xattrs. --keepParent keeps the .app as the top entry.
+    ditto -c -k --keepParent "${DIST_BASENAME}" "${ZIP_NAME}"
+elif command -v zip &> /dev/null; then
+    zip -r "${ZIP_NAME}" "${DIST_BASENAME}"
 elif command -v powershell &> /dev/null; then
-    powershell -Command "Compress-Archive -Path '$(basename "${DIST_FOLDER}")' -DestinationPath '${ZIP_NAME}' -Force"
+    powershell -Command "Compress-Archive -Path '${DIST_BASENAME}' -DestinationPath '${ZIP_NAME}' -Force"
 else
     echo "Warning: No zip utility found, skipping zip creation"
 fi
