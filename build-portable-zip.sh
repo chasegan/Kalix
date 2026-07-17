@@ -95,6 +95,12 @@ cp "target/release/${CLI_BINARY}" "${CLI_DEST}/"
 # Re-sign the macOS bundle: jpackage signs ad-hoc, but copying kalix into
 # Contents/MacOS/ invalidates that seal. Re-sign ad-hoc (-) over the whole
 # tree so spctl/Gatekeeper sees a consistent signature.
+#
+# NOTE (before notarization): --deep is deprecated by Apple and is only OK for
+# ad-hoc signing. When we move to Developer ID + notarization, drop --deep and
+# sign inside-out instead: sign the nested code first (Contents/MacOS/kalix and
+# anything under Contents/runtime), then the bundle, each with --options runtime
+# and a Developer ID identity -- then notarize + staple.
 if [ "$PLATFORM" = "macOS" ]; then
     echo "Re-signing macOS bundle (ad-hoc)..."
     codesign --force --deep --sign - "${DIST_FOLDER}"
