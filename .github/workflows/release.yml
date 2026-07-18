@@ -82,21 +82,24 @@ jobs:
         include:
           - os: ubuntu-latest
             platform: Linux
-          # macOS: additive / non-gating (see continue-on-error below). The IDE
-          # locates the bundled kalix via jpackage.app-path (Contents/MacOS/), so
-          # the old Finder-launch "can't find kalix" problem no longer applies.
-          # jpackage rejects a 0 major on macOS, so build.gradle.kts substitutes a
-          # sentinel major (9999) for the bundle's CFBundleShortVersionString only
-          # -- the in-app version (version.txt) is untouched.
+          # macOS: equal footing with Linux/Windows -- all three bundles must
+          # succeed before the release (and the PyPI push) proceeds. No partial
+          # releases: a broken platform blocks everything until it's fixed.
+          # The IDE locates the bundled kalix via jpackage.app-path
+          # (Contents/MacOS/), so the old Finder-launch "can't find kalix" problem
+          # no longer applies. jpackage rejects a 0 major on macOS, so
+          # build.gradle.kts substitutes a sentinel major (9999) for the bundle's
+          # CFBundleShortVersionString only -- the in-app version (version.txt) is
+          # untouched.
           - os: macos-latest
             platform: macOS
           - os: windows-latest
             platform: Windows
     runs-on: ${{ matrix.os }}
-    # macOS is additive: a bundle failure there must not sink the Linux/Windows
-    # release (mirrors the Windows MSI's additive stance). Its artifact simply
-    # won't be attached if the build fails.
-    continue-on-error: ${{ matrix.platform == 'macOS' }}
+    # fail-fast stays false so a failure on one platform still lets the others
+    # finish -- you see every platform's status in one run, not just the first
+    # to break. All three must be green for build-bundle (and thus the release)
+    # to proceed; there is deliberately no continue-on-error exemption.
     steps:
       - uses: actions/checkout@v6
         with:
