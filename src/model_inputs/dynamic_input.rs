@@ -33,7 +33,7 @@ use crate::functions::{parse_function, EvaluationConfig, VariableContext};
 use crate::functions::ast::{ExpressionNode, FunctionRef, Program, evaluate_binary_op, evaluate_unary_op};
 use crate::functions::functions::BuiltinFunction;
 use crate::functions::operators::{BinaryOperator, UnaryOperator};
-use crate::model_inputs::linear_combination::detect_linear_combination;
+use crate::model_inputs::linear_combination::{detect_linear_combination, equal_weight_u_params, invert_stick_breaking_weights};
 use crate::misc::misc_functions::format_f64;
 use crate::numerical::lookup_table::{LookupTable, LookupTable1D, LookupTable2D, TableRegistry};
 
@@ -996,8 +996,10 @@ pub enum DynamicInput {
     },
 
     /// Linear combination of data references with optimizable weights
-    /// Form: a1 * data1 + a2 * data2 + ... where ai = bias * softmax(logit(ui))
-    /// Following the symmetric parameterization from the wiki
+    /// Form: a1 * data1 + a2 * data2 + ... where the ai come from the
+    /// Beta-corrected stick-breaking map over (bias, u_params) — see
+    /// `linear_combination::compute_stick_breaking_weights`. A uniform search
+    /// of the u-box is a uniform, exchangeable search of the weight simplex.
     LinearCombination {
         /// Indices into data cache for each data source
         data_indices: Vec<usize>,
@@ -1005,9 +1007,9 @@ pub enum DynamicInput {
         variable_names: Vec<String>,
         /// Current weights (updated when optimization parameters change)
         coefficients: Vec<f64>,
-        /// Normalized parameters u_i in [0,1] (optimizable)
-        /// u_i = 0.5 means equal weight to reference (first) station
-        /// Length is n-1 for n stations (first station is reference)
+        /// Distribution parameters u_i in [0,1] (optimizable), length n-1 for
+        /// n stations. Initialised at load by inverting the parsed
+        /// coefficients, so (bias, u_params) and `coefficients` always agree.
         u_params: Vec<f64>,
         /// Bias parameter - sum of all weights (optimizable)
         bias: f64,
@@ -1139,18 +1141,19 @@ impl DynamicInput {
                 data_indices.push(idx);
             }
 
-            // Initialize with default parameter values
+            // Initialise (bias, u_params) as the exact stick-breaking
+            // inversion of the parsed coefficients, so the internal state
+            // agrees with what the modeller wrote: warm-starts reproduce the
+            // file's weights, and setting a subset of rf_* parameters leaves
+            // the rest of the distribution intact. Negative or all-zero
+            // weight vectors are not representable — fall back to
+            // equal-weight u defaults (bias still the coefficient sum).
             let n = data_indices.len();
-            let u_params = if n > 1 {
-                vec![0.5; n - 1]  // n-1 parameters for distribution
-            } else {
-                vec![]
-            };
-            let bias = linear_info.coefficients.iter().sum::<f64>();
-
-            // Use parsed coefficients directly - don't recompute with defaults
-            // (they may already be optimized values from a saved model)
             let coefficients = linear_info.coefficients.clone();
+            let (u_params, bias) = match invert_stick_breaking_weights(&coefficients) {
+                Some((u, b)) => (u, b),
+                None => (equal_weight_u_params(n), coefficients.iter().sum()),
+            };
 
             return Ok(DynamicInput::LinearCombination {
                 data_indices,

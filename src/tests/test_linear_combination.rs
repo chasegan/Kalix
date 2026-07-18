@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use crate::model_inputs::DynamicInput;
-    use crate::model_inputs::linear_combination::{detect_linear_combination, compute_symmetric_weights, logit};
+    use crate::model_inputs::linear_combination::{detect_linear_combination, compute_stick_breaking_weights, invert_stick_breaking_weights, equal_weight_u_params};
     use crate::data_management::data_cache::DataCache;
     use crate::nodes::gr4j_node::Gr4jNode;
     use crate::nodes::sacramento_node::SacramentoNode;
@@ -47,47 +47,85 @@ mod tests {
     }
 
     #[test]
-    fn test_symmetric_weight_computation() {
-        // Test that when all u_params = 0.5, weights are equal (softmax of zeros is uniform)
-        // For 3 stations, we need 2 u_params
-        let u_params = vec![0.5, 0.5];  // n-1 parameters for n stations
-        let coefficients = vec![0.2, 0.5, 0.3];  // Only used to determine n, not for weighting
+    fn test_stick_breaking_equal_weights() {
+        // equal_weight_u_params must land exactly on the equal-weights point
+        let u_params = equal_weight_u_params(3);
         let bias = 2.0;
 
-        let weights = compute_symmetric_weights(&u_params, &coefficients, bias);
+        let weights = compute_stick_breaking_weights(&u_params, 3, bias);
 
-        // When all u_params = 0.5 (logit(0.5) = 0), all w_i = 0
-        // Softmax of all zeros gives equal distribution: each weight = bias / n
-        let expected_weight = bias / 3.0;  // 2.0 / 3 ≈ 0.6667
-        assert!((weights[0] - expected_weight).abs() < 1e-6);
-        assert!((weights[1] - expected_weight).abs() < 1e-6);
-        assert!((weights[2] - expected_weight).abs() < 1e-6);
-
-        // All weights should be equal when u_params = 0.5
-        assert!((weights[0] - weights[1]).abs() < 1e-6);
-        assert!((weights[1] - weights[2]).abs() < 1e-6);
+        let expected_weight = bias / 3.0;
+        for weight in &weights {
+            assert!((weight - expected_weight).abs() < 1e-10);
+        }
 
         // Sum should equal bias
         let weight_sum: f64 = weights.iter().sum();
-        assert!((weight_sum - bias).abs() < 1e-6);
+        assert!((weight_sum - bias).abs() < 1e-10);
+
+        // For n = 3 the equal-weight point is u = (5/9, 1/2) — NOT the box centre
+        assert!((u_params[0] - 5.0 / 9.0).abs() < 1e-10);
+        assert!((u_params[1] - 0.5).abs() < 1e-10);
     }
 
     #[test]
-    fn test_symmetric_weight_extremes() {
-        // Test extreme u_params values
-        // For 2 stations, we need 1 u_param (station 0 is reference, u_param controls station 1)
-        let coefficients = vec![1.0, 1.0];
+    fn test_stick_breaking_extremes() {
+        // For 2 stations, u_0 is exactly station 0's fractional share
         let bias = 1.0;
 
-        // When u_param is very low (0.01), station 1 gets much less weight than reference
-        let u_params_low = vec![0.01];  // Single param for 2 stations
-        let weights_low = compute_symmetric_weights(&u_params_low, &coefficients, bias);
-        assert!(weights_low[1] < weights_low[0] * 0.1);  // Station 1 < 10% of station 0
+        // u near 0: station 0 takes almost nothing of the stick
+        let weights_low = compute_stick_breaking_weights(&[0.01], 2, bias);
+        assert!((weights_low[0] - 0.01).abs() < 1e-10);
+        assert!((weights_low[1] - 0.99).abs() < 1e-10);
 
-        // When u_param is very high (0.99), station 1 gets much more weight than reference
-        let u_params_high = vec![0.99];  // Single param for 2 stations
-        let weights_high = compute_symmetric_weights(&u_params_high, &coefficients, bias);
-        assert!(weights_high[1] > weights_high[0] * 10.0);  // Station 1 > 10x station 0
+        // u at the endpoints: exact zero weights are representable
+        let weights_zero = compute_stick_breaking_weights(&[0.0], 2, bias);
+        assert_eq!(weights_zero[0], 0.0);
+        assert!((weights_zero[1] - 1.0).abs() < 1e-10);
+
+        let weights_one = compute_stick_breaking_weights(&[1.0], 2, bias);
+        assert!((weights_one[0] - 1.0).abs() < 1e-10);
+        assert_eq!(weights_one[1], 0.0);
+    }
+
+    #[test]
+    fn test_stick_breaking_round_trip() {
+        // invert -> forward must reproduce any non-negative weight vector exactly,
+        // including exact zeros and a zero first (would-be reference) station
+        let cases: Vec<Vec<f64>> = vec![
+            vec![0.2, 0.8],
+            vec![0.3, 0.4, 0.3],
+            vec![1.0, 2.0, 3.0, 1.0],
+            vec![0.0, 1.0],
+            vec![1.0, 0.0],
+            vec![0.5, 0.0, 0.5],
+            vec![0.1371563839, 0.5095107995, 0.5975703828],
+            vec![2.5],
+        ];
+
+        for coefficients in cases {
+            let (u_params, bias) = invert_stick_breaking_weights(&coefficients)
+                .unwrap_or_else(|| panic!("Should invert {:?}", coefficients));
+            let reproduced = compute_stick_breaking_weights(&u_params, coefficients.len(), bias);
+            for (orig, repro) in coefficients.iter().zip(reproduced.iter()) {
+                assert!((orig - repro).abs() < 1e-12,
+                        "Round trip failed for {:?}: got {:?}", coefficients, reproduced);
+            }
+            // All u must be valid optimiser inputs
+            for &u in &u_params {
+                assert!((0.0..=1.0).contains(&u));
+            }
+        }
+    }
+
+    #[test]
+    fn test_invert_rejects_unrepresentable() {
+        // Negative weights cannot be represented by stick-breaking
+        assert!(invert_stick_breaking_weights(&[-0.1, 1.1]).is_none());
+        // All-zero multi-station weights have no defined distribution
+        assert!(invert_stick_breaking_weights(&[0.0, 0.0]).is_none());
+        // ...but a single station always inverts (bias carries everything)
+        assert!(invert_stick_breaking_weights(&[0.0]).is_some());
     }
 
     #[test]
@@ -104,8 +142,11 @@ mod tests {
                 assert_eq!(coefficients.len(), 2);
                 assert!((coefficients[0] - 0.3).abs() < 1e-10);
                 assert!((coefficients[1] - 0.7).abs() < 1e-10);
-                assert_eq!(u_params, vec![0.5]); // n-1 params for n stations (2 stations -> 1 param)
-                assert_eq!(bias, 1.0); // Default bias
+                // u_params are the stick-breaking inversion of the parsed
+                // coefficients; for n = 2, u_0 is station 0's share
+                assert_eq!(u_params.len(), 1);
+                assert!((u_params[0] - 0.3).abs() < 1e-10);
+                assert!((bias - 1.0).abs() < 1e-10); // Sum of coefficients
             },
             _ => panic!("Expected LinearCombination variant, got {:?}", input),
         }
@@ -307,11 +348,9 @@ mod tests {
         // Check that original_string returns the original expression
         assert_eq!(input.original_string(), expr);
 
-        // Check that to_string initially returns approximately the original
-        // (weights should be close to original after initialization)
+        // Check that to_string initially returns the original weights
+        // (load-time inversion keeps coefficients exactly as parsed)
         let output = input.to_string();
-        // Since default parameters give equal softmax weights, the actual weights
-        // will be bias * 0.5 * 0.3 = 0.15 and bias * 0.5 * 0.7 = 0.35
         assert!(output.contains("data.rain1"));
         assert!(output.contains("data.rain2"));
         println!("Initial expression: {}", output);
@@ -411,70 +450,63 @@ mod tests {
     }
 
     #[test]
-    fn test_logit() {
-        // Test boundary behavior
-        assert!(logit(0.0001).is_finite());
-        assert!(logit(0.9999).is_finite());
-
-        // Test midpoint
-        assert!((logit(0.5) - 0.0).abs() < 1e-10);
-
-        // Test symmetry
-        assert!((logit(0.25) + logit(0.75)).abs() < 1e-10);
-    }
-
-    #[test]
-    fn test_symmetric_weights() {
-        // Test equal weights when all u_i = 0.5
+    fn test_equal_weights_four_stations() {
         // For 4 stations, we need 3 u_params
-        let u_params = vec![0.5, 0.5, 0.5];
-        let original_coefficients = vec![1.0, 2.0, 3.0, 1.0]; // Just used for size
+        let u_params = equal_weight_u_params(4);
         let bias = 2.0;
 
-        let weights = compute_symmetric_weights(&u_params, &original_coefficients, bias);
+        let weights = compute_stick_breaking_weights(&u_params, 4, bias);
 
-        // When all u_params = 0.5, all w_i = 0, softmax gives equal distribution (1/4 each)
         assert_eq!(weights.len(), 4);
         for weight in &weights {
-            assert!((weight - 0.5).abs() < 1e-6); // 2.0 / 4 = 0.5 each
+            assert!((weight - 0.5).abs() < 1e-10); // 2.0 / 4 = 0.5 each
         }
 
         // Sum should equal bias
         let weight_sum: f64 = weights.iter().sum();
-        assert!((weight_sum - bias).abs() < 1e-6);
+        assert!((weight_sum - bias).abs() < 1e-10);
     }
 
     #[test]
     fn test_bias_scaling() {
-        // For 3 stations, we need 2 u_params
-        let u_params = vec![0.5, 0.5];
-        let original_coefficients = vec![0.3, 0.4, 0.3]; // Just used for size
+        // Weights always sum to bias, whatever the distribution parameters
         let bias = 2.5;
-
-        let weights = compute_symmetric_weights(&u_params, &original_coefficients, bias);
-        let weight_sum: f64 = weights.iter().sum();
-
-        // When all u_params = 0.5, softmax gives equal distribution (1/3 each)
-        // Sum should equal bias
-        assert!((weight_sum - bias).abs() < 1e-6);
-
-        // Each weight should be bias/3
-        for weight in &weights {
-            assert!((weight - bias/3.0).abs() < 1e-6);
+        for u_params in [vec![0.1, 0.9], vec![0.7, 0.2], equal_weight_u_params(3)] {
+            let weights = compute_stick_breaking_weights(&u_params, 3, bias);
+            let weight_sum: f64 = weights.iter().sum();
+            assert!((weight_sum - bias).abs() < 1e-10);
+            assert!(weights.iter().all(|w| *w >= 0.0));
         }
     }
 
     #[test]
     fn test_single_station() {
         // Single station should only use bias, no u_params
-        let u_params = vec![];
-        let original_coefficients = vec![2.0]; // Just used for size
-        let bias = 3.0;
-
-        let weights = compute_symmetric_weights(&u_params, &original_coefficients, bias);
+        let weights = compute_stick_breaking_weights(&[], 1, 3.0);
 
         assert_eq!(weights.len(), 1);
-        assert!((weights[0] - bias).abs() < 1e-6); // Should just be the bias value
+        assert!((weights[0] - 3.0).abs() < 1e-10); // Should just be the bias value
+    }
+
+    #[test]
+    fn test_partial_param_set_preserves_distribution() {
+        // Setting only rf_bias must scale the weights, not reset their
+        // distribution — this relies on load-time inversion of the parsed
+        // coefficients into u_params.
+        let mut data_cache = DataCache::new();
+        let expr = "0.2 * data.rain1 + 0.8 * data.rain2";
+        let mut input = DynamicInput::from_string(expr, &mut data_cache, true, None).unwrap();
+
+        RainfallWeightHandler::try_set_param(&mut input, "rf_bias", 2.0, "test").unwrap();
+
+        if let DynamicInput::LinearCombination { coefficients, .. } = &input {
+            assert!((coefficients[0] - 0.4).abs() < 1e-10,
+                    "Distribution lost: {:?}", coefficients);
+            assert!((coefficients[1] - 1.6).abs() < 1e-10,
+                    "Distribution lost: {:?}", coefficients);
+        } else {
+            panic!("Expected LinearCombination");
+        }
     }
 
 }

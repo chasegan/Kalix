@@ -1,11 +1,13 @@
 /// Rainfall weight parameter handling for nodes with linear combination inputs
 ///
 /// This module provides a reusable handler for managing rainfall weight parameters
-/// in nodes that support linear combinations of rainfall inputs. It implements
-/// the symmetric parameterization scheme with bias and distribution parameters.
+/// in nodes that support linear combinations of rainfall inputs. It exposes a
+/// bias parameter (`rf_bias`, the sum of the weights) and n-1 distribution
+/// parameters (`rf_d*` in [0,1]) mapped to weights via the Beta-corrected
+/// stick-breaking scheme in `model_inputs::linear_combination`.
 
 use crate::model_inputs::DynamicInput;
-use crate::model_inputs::linear_combination::compute_symmetric_weights;
+use crate::model_inputs::linear_combination::compute_stick_breaking_weights;
 
 // Constants for parameter names
 const RAINFALL_BIAS_PARAM: &str = "rf_bias";
@@ -24,9 +26,7 @@ impl RainfallWeightHandler {
             bias,
             ..
         } = rain_input {
-            // Recompute weights using the symmetric parameterization
-            // We pass coefficients as the size hint but the actual values come from bias and u_params
-            let new_weights = compute_symmetric_weights(u_params, coefficients, *bias);
+            let new_weights = compute_stick_breaking_weights(u_params, coefficients.len(), *bias);
             *coefficients = new_weights;
         }
     }
