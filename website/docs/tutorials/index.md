@@ -24,11 +24,16 @@ Each tutorial is self-contained, with sample data, model files and expected outp
 <div class="kx-tl-item"><span class="kx-tl-dot"></span><span><span class="kx-tl-title kx-muted">Single-catchment &amp; multi-objective calibration</span><br><span class="kx-tl-desc kx-muted">Coming soon · incl. split-sample validation</span></span></div>
 </div>
 
+<div class="kx-track-label">River operation &amp; resource management</div>
+<div class="kx-track">
+<a class="kx-tl-item" href="18-weir-pulsing/"><span class="kx-tl-num">18</span><span><span class="kx-tl-title">Weir pulsing</span><br><span class="kx-tl-desc">Ordering rules, travel time &amp; oscillation</span></span></a>
+</div>
+
 <div class="kx-track-label kx-muted">Coming soon</div>
 <div class="kx-track kx-dashed">
 <div class="kx-tl-item"><span class="kx-tl-dot"></span><span><span class="kx-tl-title kx-muted">Multi-node systems</span><br><span class="kx-tl-desc kx-muted">Routing · storages · confluences &amp; ordering</span></span></div>
 <div class="kx-tl-item"><span class="kx-tl-dot"></span><span><span class="kx-tl-title kx-muted">Workflow integration</span><br><span class="kx-tl-desc kx-muted">Batch runs &amp; run management</span></span></div>
-<div class="kx-tl-item"><span class="kx-tl-dot"></span><span><span class="kx-tl-title kx-muted">River operation &amp; resource management</span><br><span class="kx-tl-desc kx-muted">Ordering · entitlements &amp; accounts · assessment scenarios</span></span></div>
+<div class="kx-tl-item"><span class="kx-tl-dot"></span><span><span class="kx-tl-title kx-muted">River operation &amp; resource management</span><br><span class="kx-tl-desc kx-muted">Entitlements &amp; accounts · assessment scenarios</span></span></div>
 </div>
 
 </div>

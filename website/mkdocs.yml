@@ -128,6 +128,8 @@ nav:
       - Calibration & analysis:
           - 12 · Optimisation from the commandline: tutorials/12-optimisation-cli.md
           - 13 · Optimisation from Python: tutorials/13-optimisation-python.md
+      - River operation & resource management:
+          - 18 · Weir pulsing: tutorials/18-weir-pulsing.md
   - Docs:
       - docs/index.md
       - About Kalix: docs/about-kalix.md
