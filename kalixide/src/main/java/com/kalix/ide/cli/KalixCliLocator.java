@@ -146,7 +146,11 @@ public class KalixCliLocator {
 
         // Determine the executable name based on OS
         String executableName = isWindows() ? CLI_NAME_WINDOWS : CLI_NAME_BASE;
-        Path kalixPath = dir.resolve(executableName);
+        // Absolutise so the path stays valid when a session is later spawned with a
+        // different working directory (e.g. the model's folder) — a relative
+        // configured path like "../target/release" would otherwise be re-resolved
+        // against that directory by ProcessBuilder and fail to launch.
+        Path kalixPath = dir.resolve(executableName).toAbsolutePath().normalize();
 
         // Validate the executable
         if (validateKalixCli(kalixPath)) {
