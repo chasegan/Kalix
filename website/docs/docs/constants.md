@@ -1,9 +1,9 @@
 ---
-title: "[constants]"
+title: "[const]"
 ---
 
-# [constants]
+# [const]
 
 To complete.
 
-Constants are optimisable by the address `c.<name>` — see [Optimisable parameters](optimisable-parameters.md).
+Constants are optimisable by the address `const.<name>` — see [Optimisable parameters](optimisable-parameters.md).

@@ -43,10 +43,10 @@ class FunctionExpressionValidatorTest {
     @Test
     @DisplayName("Simple constant reference should be valid")
     void testSimpleConstantReference() {
-        assertValid("c.pi");
-        assertValid("c.node_1_demand_levels.high");
-        assertValid("c.some_value");
-        assertValid("c.nested.constant.path");
+        assertValid("const.pi");
+        assertValid("const.node_1_demand_levels.high");
+        assertValid("const.some_value");
+        assertValid("const.nested.constant.path");
     }
 
     @Test
@@ -168,10 +168,10 @@ class FunctionExpressionValidatorTest {
     @Test
     @DisplayName("Mixed data and constant references should be valid")
     void testMixedDataAndConstantReferences() {
-        assertValid("data.temp * c.pi");
-        assertValid("if(data.x > c.threshold, c.high, c.low)");
-        assertValid("max(data.value, c.minimum) * c.adjustment_factor");
-        assertValid("data.flow + c.base_offset - c.calibration.factor");
+        assertValid("data.temp * const.pi");
+        assertValid("if(data.x > const.threshold, const.high, const.low)");
+        assertValid("max(data.value, const.minimum) * const.adjustment_factor");
+        assertValid("data.flow + const.base_offset - const.calibration.factor");
     }
 
     // ==================== Invalid Expressions ====================
@@ -225,9 +225,9 @@ class FunctionExpressionValidatorTest {
     @Test
     @DisplayName("Malformed constant references should be invalid")
     void testMalformedConstantReferences() {
-        assertInvalid("c..pi", "Malformed constant reference");
-        assertInvalid("c.", "Incomplete constant reference");
-        assertInvalid("c.value.", "Malformed constant reference");
+        assertInvalid("const..pi", "Malformed constant reference");
+        assertInvalid("const.", "Incomplete constant reference");
+        assertInvalid("const.value.", "Malformed constant reference");
     }
 
     @Test
@@ -366,7 +366,7 @@ class FunctionExpressionValidatorTest {
         assertValid("table.rating(data.stage)");
         assertValid("table.pump(sim.month, node.dam.volume)");
         assertValid("2 * table.rating(data.stage) + 1");
-        assertValid("max(table.rating(data.stage), c.floor_value)");
+        assertValid("max(table.rating(data.stage), const.floor_value)");
         assertValid("table.rating(table.other(data.x))");
     }
 
@@ -564,7 +564,7 @@ class FunctionExpressionValidatorTest {
     @DisplayName("moving_* rejects a non-literal window (state is sized at model load)")
     void testMovingNonLiteralWindowRejected() {
         assertInvalid("moving_mean(data.q, data.window, 0)", "window (2nd argument) must be a constant");
-        assertInvalid("moving_mean(data.q, c.n, 0)", "window (2nd argument) must be a constant");
+        assertInvalid("moving_mean(data.q, const.n, 0)", "window (2nd argument) must be a constant");
         assertInvalid("moving_min(data.x, 2+3, 0)", "window (2nd argument) must be a constant");
     }
 

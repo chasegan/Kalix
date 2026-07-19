@@ -10,7 +10,7 @@ This page is the reference for what the optimiser can tune: every parameter addr
 [parameters]
 node.my_gr4j.x1 = lin_range(g(1), 10, 2000)
 node.my_gr4j.x4 = lin_range(g(2), 0.0001, 4)
-c.divert_frac   = lin_range(g(3), 0, 1)
+const.divert_frac   = lin_range(g(3), 0, 1)
 ```
 
 Each line maps a **parameter address** to a Kalix expression driven by one or more **genes** `g(n)` — normalised values in `[0, 1]` that the algorithm searches. `lin_range(g(n), min, max)` searches linearly between the bounds; `log_range(g(n), min, max)` searches logarithmically, which suits parameters spanning orders of magnitude. The same gene may drive several targets (tying parameters together), and expressions can be composed freely. For a worked walkthrough see [Tutorial 12 — Optimisation from the commandline](../tutorials/12-optimisation-cli.md).
@@ -21,7 +21,7 @@ There are two families of address:
 
 | Address | Meaning |
 | --- | --- |
-| `c.<name>` | A model constant from the `[constants]` section |
+| `const.<name>` | A model constant from the `[const]` section |
 | `node.<name>.<param>` | A parameter of a named node. Supported by `gr4j`, `sacramento` and `routing` nodes |
 
 KalixIDE lists every valid address for the loaded model (via the engine's `get_optimisable_params` command), which is the quickest way to discover what a given model exposes.
@@ -30,22 +30,22 @@ KalixIDE lists every valid address for the loaded model (via the engine's `get_o
 
 Candidate values are applied to the model as-is; the engine re-validates all parameters at the start of every run. A candidate that fails validation — or that produces non-finite flows inside the assessment window — is treated as **infeasible** and scores an objective of infinity, so it cannot win but also teaches the optimiser nothing. Keep your `lin_range`/`log_range` bounds inside each parameter's valid range so evaluations aren't wasted on infeasible candidates.
 
-## Constants (`c.*`)
+## Constants (`const.*`)
 
-Every constant is optimisable by the address `c.<name>`. This is the general-purpose route for optimisation beyond the built-in node parameters: any node property or expression that references a constant becomes calibratable through it.
+Every constant is optimisable by the address `const.<name>`. This is the general-purpose route for optimisation beyond the built-in node parameters: any node property or expression that references a constant becomes calibratable through it.
 
 ```ini
 # model file
-[constants]
-c.scale = 1.0
+[const]
+const.scale = 1.0
 
 [node.gauged_inflow]
 type = inflow
-inflow = c.scale * data.flows_csv.by_name.upstream
+inflow = const.scale * data.flows_csv.by_name.upstream
 
 # optimisation file
 [parameters]
-c.scale = lin_range(g(1), 0.5, 2.0)
+const.scale = lin_range(g(1), 0.5, 2.0)
 ```
 
 ## GR4J nodes (`type = gr4j`)

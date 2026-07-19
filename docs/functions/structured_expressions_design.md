@@ -73,7 +73,7 @@ pond_demand = {
     target = table.monthly_demand(sim.month);
     recent = moving_mean(node.headwater.ds_1, 30, 0.0);
     assert(target >= 0);
-    min(target, recent * c.demand_fraction)
+    min(target, recent * const.demand_fraction)
     }
 ```
 
@@ -94,7 +94,7 @@ Rules:
   not Rust). Re-assignment is allowed (needed for staged calculations).
 - Locals are **bare identifiers**. This is available because bare names have
   no other meaning as values: everything real is namespaced (`data.*`,
-  `node.*`, `c.*`, `sim.*`, `table.*`, `var.*`, `fn.*`, `this.`), per
+  `node.*`, `const.*`, `sim.*`, `table.*`, `var.*`, `fn.*`, `this.`), per
   `expression-naming §1.3`.
 - A local may **not shadow a builtin function name** — load error, with the
   usual did-you-mean diagnostic (`expression-naming §2.4`).
@@ -190,7 +190,7 @@ used_wy = sum_since(node.town.diversion, sim.new_month && sim.month == 7)
 ```
 
 and a model wanting a single point of truth defines it itself — as a
-constant (`c.wy_month = 7`) or, most readably, a zero-argument function:
+constant (`const.wy_month = 7`) or, most readably, a zero-argument function:
 
 ```ini
 [fn]
@@ -212,7 +212,7 @@ signature, each value the body:
 [fn]
 storage_frac(v, cap) = v / cap
 net_demand(pop, doy) = {
-    base = pop * c.per_capita;
+    base = pop * const.per_capita;
     peak = 1 + 0.3 * sin(2 * 3.14159 * doy / 365);
     base * peak
     }
@@ -232,7 +232,7 @@ new_wy() = sim.new_month && sim.month == 7
 - **Definitions may live anywhere in the file**, including after use.
   Functions are *passive* — they have no execution time of their own — and
   follow the table precedent. (Contrast vars, §9.)
-- Bodies may reference `data.*`, `node.*`, `c.*`, `sim.*`, `table.*`,
+- Bodies may reference `data.*`, `node.*`, `const.*`, `sim.*`, `table.*`,
   `var.*`, other `fn.*`, and `this.`.
 
 ### 8.2 Semantics: function semantics, macro implementation
@@ -266,7 +266,7 @@ new_wy() = sim.new_month && sim.month == 7
 phase = flow                 # 'order' | 'flow' (default)
 used_wy = sum_since(node.township.diversion, fn.new_wy())
 headroom = {
-    cap = c.annual_cap;
+    cap = const.annual_cap;
     assert(cap > 0);
     cap - var.accounting.used_wy
     }
@@ -362,11 +362,11 @@ first step, every run, deterministically. No additional phase rules needed.
 start = 1990-01-01
 end = 2020-12-31
 
-[constants]
-c.demand_fraction = 0.85
-c.low_flow_threshold = 10.0
-c.annual_cap = 15000.0
-c.per_capita = 0.00042
+[const]
+const.demand_fraction = 0.85
+const.low_flow_threshold = 10.0
+const.annual_cap = 15000.0
+const.per_capita = 0.00042
 
 [inputs]
 ./data.csv
@@ -400,7 +400,7 @@ pond_demand = {
     target = table.monthly_demand(sim.month);
     recent = moving_mean(node.headwater.ds_1, 30, 0.0);
     assert(target >= 0);
-    min(target, recent * c.demand_fraction)
+    min(target, recent * const.demand_fraction)
     }
 ds_1 = township
 
@@ -414,9 +414,9 @@ ds_1 = outlet
 phase = flow
 used_wy = sum_since(node.township.diversion, fn.new_wy())
 spill_days = count_since(node.dam.ds_1_spill > 0, fn.new_wy())
-dry_spell = steps_since(node.headwater.ds_1 > c.low_flow_threshold)
+dry_spell = steps_since(node.headwater.ds_1 > const.low_flow_threshold)
 headroom = {
-    cap = c.annual_cap;
+    cap = const.annual_cap;
     assert(cap > 0);
     cap - var.accounting.used_wy
     }
@@ -429,7 +429,7 @@ loc = 0, 300
 storage_frac(v, cap) = v / cap
 new_wy() = sim.new_month && sim.month == 7
 net_demand(pop, doy) = {
-    base = pop * c.per_capita;
+    base = pop * const.per_capita;
     peak = 1 + 0.3 * sin(2 * 3.14159 * doy / 365);
     base * peak
     }

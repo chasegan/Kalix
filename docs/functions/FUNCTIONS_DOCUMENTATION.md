@@ -79,7 +79,7 @@ pond_demand = {
     target = table.monthly_demand(sim.month);
     recent = moving_mean(node.headwater.ds_1, 30, 0.0);
     assert(target >= 0);
-    min(target, recent * c.demand_fraction)
+    min(target, recent * const.demand_fraction)
     }
 ```
 
@@ -106,7 +106,7 @@ the name is written exactly once — and call them namespaced as `fn.name(...)`:
 storage_frac(v, cap) = v / cap
 new_wy() = sim.new_month && sim.month == 7
 net_demand(pop, doy) = {
-    base = pop * c.per_capita;
+    base = pop * const.per_capita;
     peak = 1 + 0.3 * sin(2 * 3.14159 * doy / 365);
     base * peak
     }
@@ -118,7 +118,7 @@ net_demand(pop, doy) = {
 - **Definitions live anywhere** in the model file, including after their
   callers — functions are passive, like tables.
 - Bodies may be plain expressions or `{ ... }` blocks, and may reference
-  `data.*`, `node.*`, `c.*`, `sim.*`, `table.*`, other `fn.*` — and `this.`,
+  `data.*`, `node.*`, `const.*`, `sim.*`, `table.*`, other `fn.*` — and `this.`,
   which rebinds to the **calling** node, turning a function into a rule
   template applied at many nodes.
 - **No recursion**, direct or mutual — the call graph is checked at load.
@@ -145,7 +145,7 @@ computed above them. The file reads downstream, calculations included.
 [var.accounting]
 inflow_wy = sum_since(node.headwater.ds_1, fn.new_wy())
 headroom = {
-    cap = c.annual_cap;
+    cap = const.annual_cap;
     assert(cap > 0);
     cap - var.accounting.inflow_wy
     }
@@ -203,12 +203,12 @@ contribution is then included — on 1 July, "usage this water year" equals
 that day's usage, not zero. Run start acts as an implicit reset.
 
 ```ini
-[constants]
-c.wy_month = 7
+[const]
+const.wy_month = 7
 ```
 ```ini
-used_wy = sum_since(node.town.diversion, sim.new_month && sim.month == c.wy_month)
-dry_spell = steps_since(node.gauge.dsflow > c.low_flow_threshold)
+used_wy = sum_since(node.town.diversion, sim.new_month && sim.month == const.wy_month)
+dry_spell = steps_since(node.gauge.dsflow > const.low_flow_threshold)
 spill_days = count_since(node.dam.ds_1_spill > 0, sim.new_year)
 ```
 

@@ -28,7 +28,7 @@ termination_evaluations = 10000
 n_threads = 12
 
 [parameters]
-c.rfsum = lin_range(g(1),0,2)
+const.rfsum = lin_range(g(1),0,2)
 node.my_sac.adimp = log_range(g(2),1E-05,0.15)
 node.my_sac.lzfpm = log_range(g(3),1,300)
 node.my_sac.lzfsm = log_range(g(4),1,350)
@@ -54,8 +54,8 @@ node.my_sac.laguh = lin_range(g(18),0,3)
 [attributes]
 ini_version = 0.0.1
 
-[constants]
-c.rfsum = 1.0257577698005718
+[const]
+const.rfsum = 1.0257577698005718
 
 [inputs]
 formatted_mpot.csv
@@ -67,7 +67,7 @@ loc = 0,0
 type = sacramento
 area = 228
 evap = data.formatted_mpot_csv.by_index.1
-rain = c.rfsum * data.formatted_rain_csv.by_index.1
+rain = const.rfsum * data.formatted_rain_csv.by_index.1
 params = 0.0007996789619949308, 223.37765753669382, 240.54866695788806, 0.004710616045546181,   #adimp, lzfpm, lzfsm, lzpk
     0.019821823411697397, 36.84029513679785, 0.0017608941460532468, 0.1373435707926456,   #lzsk, lztwm, pctim, pfree
     2.0377129307581403, 0.00036730549832793947, 0.002062272249489054, 0.001105647395016545,   #rexp, sarva, side, ssout

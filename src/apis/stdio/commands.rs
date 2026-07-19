@@ -923,7 +923,7 @@ impl Command for GetOptimisableParamsCommand {
         // Collect optimisable parameters from all components
         let mut params = Vec::new();
 
-        // Add constants (already prefixed with "c.")
+        // Add constants (already prefixed with "const.")
         for constant_name in model.data_cache.list_params() {
             params.push(constant_name);
         }

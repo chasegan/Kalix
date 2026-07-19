@@ -158,7 +158,7 @@ pond_demand = {
     target = table.monthly_demand(sim.month);
     recent = moving_mean(node.headwater.ds_1, 30, 0.0);
     assert(target >= 0);
-    min(target, recent * c.demand_fraction)
+    min(target, recent * const.demand_fraction)
     }
 ```
 
@@ -195,7 +195,7 @@ day's usage, not zero. The start of the run counts as a reset.
 
 ```ini
 used_wy = sum_since(node.town.diversion, sim.new_month && sim.month == 7)
-dry_spell = steps_since(node.gauge.dsflow > c.low_flow_threshold)
+dry_spell = steps_since(node.gauge.dsflow > const.low_flow_threshold)
 spill_days = count_since(node.dam.ds_1_spill > 0, sim.new_year)
 ```
 

@@ -147,7 +147,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                 }
             }
-        } else if section_name == "constants" {
+        } else if section_name == "const" {
             // -------------------------------------------------------------------------------------
             // Parsing constants
             // -------------------------------------------------------------------------------------
@@ -843,7 +843,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
 
     // List all constants
     for (name, value) in model.data_cache.constants.get_name_value_pairs() {
-        ini_doc.set_property("constants", name.as_str(), value.to_string().as_str());
+        ini_doc.set_property("const", name.as_str(), value.to_string().as_str());
     }
 
     // List all nodes and var blocks, interleaved in execution (file) order —

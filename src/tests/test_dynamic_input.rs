@@ -315,10 +315,10 @@ fn test_dynamic_input_direct_constant_reference() {
     let mut data_cache = DataCache::new();
 
     // Set a constant value
-    data_cache.constants.set_value("c.gravity", 9.81);
+    data_cache.constants.set_value("const.gravity", 9.81);
 
     // Test direct constant reference
-    let input = DynamicInput::from_string("c.gravity", &mut data_cache, true, None)
+    let input = DynamicInput::from_string("const.gravity", &mut data_cache, true, None)
         .expect("Failed to parse constant reference");
 
     // Should be optimised to DirectConstantReference variant
@@ -340,7 +340,7 @@ fn test_dynamic_input_constant_in_expression() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
     // Set a constant
-    data_cache.constants.set_value("c.factor", 1.2);
+    data_cache.constants.set_value("const.factor", 1.2);
 
     // Add rainfall data
     let idx = data_cache.get_or_add_new_series("data.rain", true);
@@ -352,7 +352,7 @@ fn test_dynamic_input_constant_in_expression() {
     data_cache.series[idx] = ts;
 
     // Test expression mixing constant and data
-    let input = DynamicInput::from_string("c.factor * data.rain", &mut data_cache, true, None)
+    let input = DynamicInput::from_string("const.factor * data.rain", &mut data_cache, true, None)
         .expect("Failed to parse constant expression");
 
     // Should be Function variant (has both constant and data variable)
@@ -378,11 +378,11 @@ fn test_dynamic_input_multiple_constants() {
     let mut data_cache = DataCache::new();
 
     // Set multiple constants
-    data_cache.constants.set_value("c.a", 5.0);
-    data_cache.constants.set_value("c.b", 3.0);
+    data_cache.constants.set_value("const.a", 5.0);
+    data_cache.constants.set_value("const.b", 3.0);
 
     // Test expression with multiple constants
-    let input = DynamicInput::from_string("c.a + c.b", &mut data_cache, true, None)
+    let input = DynamicInput::from_string("const.a + const.b", &mut data_cache, true, None)
         .expect("Failed to parse multi-constant expression");
 
     // Should be Function variant (multiple variables)
@@ -404,7 +404,7 @@ fn test_dynamic_input_constant_conditional() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
     // Set constant threshold
-    data_cache.constants.set_value("c.threshold", 20.0);
+    data_cache.constants.set_value("const.threshold", 20.0);
 
     // Add temperature data
     let idx = data_cache.get_or_add_new_series("data.temperature", true);
@@ -417,7 +417,7 @@ fn test_dynamic_input_constant_conditional() {
 
     // Test conditional with constant threshold
     let input = DynamicInput::from_string(
-        "if(data.temperature > c.threshold, 1.0, 0.0)",
+        "if(data.temperature > const.threshold, 1.0, 0.0)",
         &mut data_cache,
         true, None
     ).expect("Failed to parse conditional with constant");
@@ -437,10 +437,10 @@ fn test_dynamic_input_constant_case_insensitive() {
     let mut data_cache = DataCache::new();
 
     // Set constant with lowercase
-    data_cache.constants.set_value("c.my_constant", 42.0);
+    data_cache.constants.set_value("const.my_constant", 42.0);
 
     // Reference with mixed case
-    let input = DynamicInput::from_string("C.MY_CONSTANT * 2", &mut data_cache, true, None)
+    let input = DynamicInput::from_string("CONST.MY_CONSTANT * 2", &mut data_cache, true, None)
         .expect("Failed to parse mixed case constant");
 
     assert_eq!(input.get_value(&mut data_cache), 84.0); // 42.0 * 2
@@ -451,7 +451,7 @@ fn test_dynamic_input_unassigned_constant_registers() {
     let mut data_cache = DataCache::new();
 
     // Parse expression with constant that hasn't been assigned yet
-    let input = DynamicInput::from_string("c.unassigned * 10", &mut data_cache, true, None)
+    let input = DynamicInput::from_string("const.unassigned * 10", &mut data_cache, true, None)
         .expect("Failed to parse unassigned constant");
 
     // The constant should be registered (but not assigned)
@@ -460,10 +460,10 @@ fn test_dynamic_input_unassigned_constant_registers() {
     // Validation should fail
     let validation = data_cache.constants.assert_all_constants_have_assigned_values();
     assert!(validation.is_err());
-    assert!(validation.unwrap_err().contains("c.unassigned"));
+    assert!(validation.unwrap_err().contains("const.unassigned"));
 
     // Now assign it
-    data_cache.constants.set_value("c.unassigned", 5.0);
+    data_cache.constants.set_value("const.unassigned", 5.0);
 
     // Validation should now pass
     assert!(data_cache.constants.assert_all_constants_have_assigned_values().is_ok());
@@ -477,11 +477,11 @@ fn test_dynamic_input_mixed_case_same_constant() {
     let mut data_cache = DataCache::new();
 
     // Set a constant
-    data_cache.constants.set_value("c.factor", 2.0);
+    data_cache.constants.set_value("const.factor", 2.0);
 
     // Expression uses the same constant with different cases
     // This tests that we don't create duplicate map entries
-    let input = DynamicInput::from_string("c.FACTOR + C.Factor + C.factor", &mut data_cache, true, None)
+    let input = DynamicInput::from_string("const.FACTOR + CONST.Factor + CONST.factor", &mut data_cache, true, None)
         .expect("Failed to parse mixed-case constant expression");
 
     // Should evaluate to 2.0 + 2.0 + 2.0 = 6.0
@@ -497,7 +497,7 @@ fn test_dynamic_input_mixed_case_constant_and_data() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
     // Set constant
-    data_cache.constants.set_value("c.multiplier", 3.0);
+    data_cache.constants.set_value("const.multiplier", 3.0);
 
     // Add data
     let idx = data_cache.get_or_add_new_series("data.value", true);
@@ -507,7 +507,7 @@ fn test_dynamic_input_mixed_case_constant_and_data() {
     data_cache.series[idx] = ts;
 
     // Use mixed cases for both constant and data variable
-    let input = DynamicInput::from_string("C.MULTIPLIER * DATA.VALUE", &mut data_cache, true, None)
+    let input = DynamicInput::from_string("CONST.MULTIPLIER * DATA.VALUE", &mut data_cache, true, None)
         .expect("Failed to parse mixed-case expression");
 
     data_cache.set_current_step(0);
@@ -652,7 +652,7 @@ fn test_dynamic_input_node_with_constant() {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
     // Set a constant
-    data_cache.constants.set_value("c.loss_factor", 0.1);
+    data_cache.constants.set_value("const.loss_factor", 0.1);
 
     // Simulate node output
     let idx = data_cache.get_or_add_new_series("node.catchment.dsflow", false);
@@ -663,7 +663,7 @@ fn test_dynamic_input_node_with_constant() {
 
     // Test expression with constant and node reference
     let input = DynamicInput::from_string(
-        "node.catchment.dsflow * (1 - c.loss_factor)",
+        "node.catchment.dsflow * (1 - const.loss_factor)",
         &mut data_cache,
         true, None
     ).expect("Failed to parse node + constant expression");
@@ -961,10 +961,10 @@ fn test_dynamic_input_offset_constant_not_supported() {
     let mut data_cache = DataCache::new();
 
     // Set a constant
-    data_cache.constants.set_value("c.threshold", 100.0);
+    data_cache.constants.set_value("const.threshold", 100.0);
 
     // Offset on constants should fail
-    let result = DynamicInput::from_string("c.threshold[-1, 0.0]", &mut data_cache, true, None);
+    let result = DynamicInput::from_string("const.threshold[-1, 0.0]", &mut data_cache, true, None);
     assert!(result.is_err(), "Offset syntax should not be supported for constants");
     assert!(result.unwrap_err().contains("not supported for constants"));
 }

@@ -19,25 +19,25 @@ import kalix.opt as opt
 
 
 def _constant(ini: str, name: str) -> float:
-    """Pull the numeric value of a `[constants]` entry from a model INI string."""
+    """Pull the numeric value of a `[const]` entry from a model INI string."""
     m = re.search(rf"^{re.escape(name)}\s*=\s*([-\d.eE+]+)", ini, re.MULTILINE)
     assert m is not None, f"{name} not found in optimised model INI"
     return float(m.group(1))
 
-# The Beale function as a kalix inflow expression over constants c.x, c.y.
+# The Beale function as a kalix inflow expression over constants const.x, const.y.
 _BEALE_MODEL = textwrap.dedent("""\
     [kalix]
     start = 2000-01-01T00:00:00
     end = 2000-01-10T00:00:00
 
-    [constants]
-    c.x = 0.46
-    c.y = 0.34
+    [const]
+    const.x = 0.46
+    const.y = 0.34
 
     [node.my_node]
     loc = 0,0
     type = inflow
-    inflow = (1.5 - c.x + c.x*c.y)^2 + (2.25 - c.x + c.x * c.y^2)^2 + (2.625 - c.x + c.x * c.y^3)^2
+    inflow = (1.5 - const.x + const.x*const.y)^2 + (2.25 - const.x + const.x * const.y^2)^2 + (2.625 - const.x + const.x * const.y^3)^2
 
     [outputs]
     node.my_node.ds_1
@@ -74,8 +74,8 @@ def _write_fixtures(tmp_path, *, model_file_in_config=True):
         statistic = MAE
 
         [parameters]
-        c.x = lin_range(g(1),-4.5,4.5)
-        c.y = lin_range(g(2),-4.5,4.5)
+        const.x = lin_range(g(1),-4.5,4.5)
+        const.y = lin_range(g(2),-4.5,4.5)
     """))
     return cfg, model
 
@@ -95,8 +95,8 @@ def test_optimise_finds_beale_minimum(tmp_path):
 
     # Beale minimum is at (3, 0.5) with objective 0.
     assert res["best_objective"] == pytest.approx(0.0, abs=1e-3)
-    assert res["parameters"]["c.x"] == pytest.approx(3.0, abs=1e-2)
-    assert res["parameters"]["c.y"] == pytest.approx(0.5, abs=1e-2)
+    assert res["parameters"]["const.x"] == pytest.approx(3.0, abs=1e-2)
+    assert res["parameters"]["const.y"] == pytest.approx(0.5, abs=1e-2)
 
 
 def test_optimise_returns_optimised_model_ini(tmp_path):
@@ -104,11 +104,11 @@ def test_optimise_returns_optimised_model_ini(tmp_path):
     res = kalix.optimise(cfg)
 
     ini = res["optimised_model_ini"]
-    assert isinstance(ini, str) and "[constants]" in ini
+    assert isinstance(ini, str) and "[const]" in ini
     # The tuned constants are serialised back into the model string and match
     # the returned physical parameters (value-formatting-agnostic).
-    assert _constant(ini, "c.x") == pytest.approx(res["parameters"]["c.x"])
-    assert _constant(ini, "c.y") == pytest.approx(res["parameters"]["c.y"])
+    assert _constant(ini, "const.x") == pytest.approx(res["parameters"]["const.x"])
+    assert _constant(ini, "const.y") == pytest.approx(res["parameters"]["const.y"])
 
 
 def test_optimise_save_model_writes_file(tmp_path):

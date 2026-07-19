@@ -14,7 +14,7 @@ exactly once — and calls use the `fn.*` namespace:
 storage_frac(v, cap) = v / cap
 new_wy() = sim.new_month && sim.month == 7
 net_demand(pop, doy) = {
-    base = pop * c.per_capita;
+    base = pop * const.per_capita;
     peak = 1 + 0.3 * sin(2 * 3.14159 * doy / 365);
     base * peak
     }
@@ -46,7 +46,7 @@ the model file, including after the nodes that call its functions.
 
 A body is a plain expression or a `{ ... }`
 [program block](dynamic-expressions.md#program-blocks), and may reference
-`data.*`, `node.*`, `c.*`, `sim.*`, `table.*`, other `fn.*` functions — and
+`data.*`, `node.*`, `const.*`, `sim.*`, `table.*`, other `fn.*` functions — and
 `this.`.
 
 **`this.` rebinds to the calling node.** That turns a function into a rule

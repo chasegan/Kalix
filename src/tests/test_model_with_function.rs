@@ -82,8 +82,8 @@ fn test_model_with_changing_constant() {
     let _ = model.load_input_data("./src/tests/example_models/1/constants.csv", None);
 
     //Add data_cache constants
-    model.data_cache.constants.set_value("c.pi", 3.14);
-    model.data_cache.constants.set_value("c.run_counter", 1.0);
+    model.data_cache.constants.set_value("const.pi", 3.14);
+    model.data_cache.constants.set_value("const.run_counter", 1.0);
 
     //Add node1
     let node1_idx: usize;
@@ -105,14 +105,14 @@ fn test_model_with_changing_constant() {
     {
         let mut n = InflowNode::new();
         n.name = "node2_inflow".to_string();
-        n.inflow_input = DynamicInput::from_string("c.run_counter * c.run_counter", &mut model.data_cache, true, None)
+        n.inflow_input = DynamicInput::from_string("const.run_counter * const.run_counter", &mut model.data_cache, true, None)
             .expect("Failed to parse expression");
         node2_idx = model.add_node(NodeEnum::InflowNode(n));
 
         //Node results
         let result_name = "node.node2_inflow.ds_1".to_string();
         model.outputs.push(result_name.clone());
-        regression_results.insert(result_name, (48824, 1.0, 0.0)); //c.run_counter * c.run_counter = 1.0
+        regression_results.insert(result_name, (48824, 1.0, 0.0)); //const.run_counter * const.run_counter = 1.0
     }
     model.add_link(node1_idx, node2_idx, 0, 0);
 
@@ -138,7 +138,7 @@ fn test_model_with_changing_constant() {
     /////////////////////////////////////////////////////////// Run again
     /////////////////////////////////////////////////////////// Check results
 
-    model.data_cache.constants.set_value("c.run_counter", 2.0);
+    model.data_cache.constants.set_value("const.run_counter", 2.0);
     model.run().expect("Simulation error");
 
     {
@@ -149,7 +149,7 @@ fn test_model_with_changing_constant() {
 
         crate::tests::test_helpers::assert_stats_close(
             (len, mean, std_dev),
-            (48824, 4.0, 0.0), //c.run_counter * c.run_counter = 4.0
+            (48824, 4.0, 0.0), //const.run_counter * const.run_counter = 4.0
             "With changed constant value",
         );
     }

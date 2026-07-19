@@ -10,7 +10,7 @@ public class ParameterExpressionLibrary {
 
     // Map of parameter type to expression template (# is placeholder for counter)
     private static final Map<String, String> TYPE_EXPRESSIONS = Map.ofEntries(
-        // Constants (from [constants] section)
+        // Constants (from [const] section)
         Map.entry("constant", "lin_range(g(#),0,2)"),
 
         // GR4J parameters
@@ -50,7 +50,7 @@ public class ParameterExpressionLibrary {
      * Detects the parameter type from the parameter name.
      *
      * Rules:
-     * - If name starts with "c." → type is "constant"
+     * - If name starts with "const." → type is "constant"
      * - If type matches "rf_d" followed by digits → normalize to "rf_d"
      * - Otherwise, type is the substring after the last "."
      *
@@ -58,7 +58,7 @@ public class ParameterExpressionLibrary {
      * @return The detected parameter type (e.g., "x1") or null if unrecognized
      */
     public static String detectParameterType(String paramName) {
-        if (paramName.startsWith("c.")) {
+        if (paramName.startsWith("const.")) {
             return "constant";
         }
 

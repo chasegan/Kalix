@@ -268,7 +268,7 @@ reconcile = start_month                # true accounts up to the volume expressi
   its order by its balance (§3.6) — not inside the storage, which meets the
   summed order as it does today. Conditional access (e.g. a class that loses
   access below a lake level) is an expression on the user side
-  (`... && node.dam.level > c.cutoff`), not stratified ownership in the pond:
+  (`... && node.dam.level > const.cutoff`), not stratified ownership in the pond:
   water in storage is fungible, and every real scheme treats it that way.
 - The honest caveat: internal-spill redistribution and reconciliation are
   iterative multi-account algorithms, so they are built-in policies of the

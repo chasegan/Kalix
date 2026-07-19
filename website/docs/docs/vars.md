@@ -14,9 +14,9 @@ replace the old workaround of parking calculations on a dummy gauge's
 ```ini
 [var.accounting]
 inflow_wy = sum_since(node.headwater.ds_1, fn.new_wy())
-dry_spell = steps_since(node.headwater.ds_1 > c.low_flow_threshold)
+dry_spell = steps_since(node.headwater.ds_1 > const.low_flow_threshold)
 headroom = {
-    cap = c.annual_cap;
+    cap = const.annual_cap;
     assert(cap > 0);
     cap - var.accounting.inflow_wy
     }

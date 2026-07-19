@@ -14,7 +14,7 @@ import java.util.*;
  * Validates function expressions used in model parameters.
  * Supports these types of inputs:
  * - Data references: "data.evap", "data.field.subfield"
- * - Constant references: "c.pi", "c.node_1_demand_levels.high"
+ * - Constant references: "const.pi", "const.node_1_demand_levels.high"
  * - Node output references: "node.node13_inflow.ds_1"
  * - This references: "this.dsflow", "this.volume" (shorthand for current node outputs)
  * - Sim references: "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step",
@@ -46,7 +46,7 @@ public class FunctionExpressionValidator {
     private static final java.util.regex.Pattern DATA_REF_FAST_PATTERN =
         java.util.regex.Pattern.compile("^data\\.[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*(\\[.*?\\])?$");
     private static final java.util.regex.Pattern CONST_REF_FAST_PATTERN =
-        java.util.regex.Pattern.compile("^c\\.[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$");
+        java.util.regex.Pattern.compile("^const\\.[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)*$");
     private static final java.util.regex.Pattern NODE_REF_FAST_PATTERN =
         java.util.regex.Pattern.compile("^node\\.[a-zA-Z_][a-zA-Z0-9_]*\\.[a-zA-Z_][a-zA-Z0-9_]*(\\[.*?\\])?$");
     private static final java.util.regex.Pattern THIS_REF_FAST_PATTERN =
@@ -268,7 +268,7 @@ public class FunctionExpressionValidator {
     }
 
     private static boolean isSimpleConstantReference(String s) {
-        // Matches: c.xxx or c.xxx.yyy.zzz (dots and underscores allowed)
+        // Matches: const.xxx or const.xxx.yyy.zzz (dots and underscores allowed)
         return CONST_REF_FAST_PATTERN.matcher(s).matches();
     }
 
@@ -463,8 +463,8 @@ public class FunctionExpressionValidator {
                 return readDottedReference(start, firstSegment, TokenType.DATA_REF);
             }
 
-            // Check if this is a constant reference (starts with "c.")
-            if (firstSegment.equals("c") && pos < input.length() && input.charAt(pos) == '.') {
+            // Check if this is a constant reference (starts with "const.")
+            if (firstSegment.equals("const") && pos < input.length() && input.charAt(pos) == '.') {
                 return readDottedReference(start, firstSegment, TokenType.CONST_REF);
             }
 
@@ -1295,7 +1295,7 @@ public class FunctionExpressionValidator {
             if (constRef.endsWith(".")) {
                 errors.add("Malformed constant reference: '" + constRef + "' (trailing dot)");
             }
-            if (constRef.equals("c") || constRef.equals("c.")) {
+            if (constRef.equals("const") || constRef.equals("const.")) {
                 errors.add("Incomplete constant reference: '" + constRef + "'");
             }
         }

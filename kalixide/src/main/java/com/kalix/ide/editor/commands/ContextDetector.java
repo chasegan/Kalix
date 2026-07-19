@@ -133,7 +133,7 @@ public class ContextDetector {
         switch (sectionName) {
             case "outputs":
                 return builder.type(EditorContext.ContextType.OUTPUT_REFERENCE).build();
-            case "constants":
+            case "const":
                 return builder.type(EditorContext.ContextType.CONSTANTS).build();
             case "inputs":
                 String line = position.getCurrentLine().trim();

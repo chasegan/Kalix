@@ -141,7 +141,7 @@ a table call is just a value in the surrounding expression:
 ```ini
 [node.dam]
 type = storage
-demand = max(table.monthly_demand(sim.month, node.dam.volume), c.min_demand)
+demand = max(table.monthly_demand(sim.month, node.dam.volume), const.min_demand)
 ```
 
 ## Editing tables in KalixIDE

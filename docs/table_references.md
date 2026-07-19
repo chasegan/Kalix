@@ -143,7 +143,7 @@ argument — including other table lookups:
 ```ini
 [node.dam]
 type = storage
-demand = max(table.monthly_demand(sim.month, node.dam.volume), c.min_demand)
+demand = max(table.monthly_demand(sim.month, node.dam.volume), const.min_demand)
 ```
 
 Tables are global: define once, reference from as many expressions as you

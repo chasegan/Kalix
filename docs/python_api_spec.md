@@ -37,7 +37,7 @@ and issues #30 and #249.
    on the user to retrieve outputs before further modification.
 6. **Values are raw strings.** The API does not coerce INI values to types.
    Property values go in and come out as strings (`"2"`, `"40000, 0.75"`,
-   `"(c.a - 5.5)^2"`). Typing is the engine mapper's business.
+   `"(const.a - 5.5)^2"`). Typing is the engine mapper's business.
 7. **Pandas out, minimal dependencies.** Results return as `pd.Series` /
    `pd.DataFrame` with a UTC `DatetimeIndex` at `"s"` precision (Kalix
    supports timesteps down to 1 second, no smaller). Runtime dependencies

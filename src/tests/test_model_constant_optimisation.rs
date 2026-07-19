@@ -20,8 +20,8 @@ fn test_model_constant_optimisation() {
 
     // Configure the optimisation
     let par_map = ParameterMappingConfig::from_strings(vec![
-        "c.a = lin_range(g(1), 0.0, 10.0)",
-        "c.b = lin_range(g(2), 0.0, 10.0)",
+        "const.a = lin_range(g(1), 0.0, 10.0)",
+        "const.b = lin_range(g(2), 0.0, 10.0)",
     ]).unwrap();
 
     // Set optimisation target

@@ -19,7 +19,7 @@ public class EditorContext {
         INPUT_FILE,            // In [inputs] section on a file path line with no alias
         INPUT_FILE_WITH_ALIAS, // In [inputs] section on a file path line with an alias
         SECTION_HEADER,        // On a section header line
-        CONSTANTS,             // In [constants] section
+        CONSTANTS,             // In [const] section
         UNKNOWN
     }
 

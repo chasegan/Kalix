@@ -125,7 +125,7 @@ impl OptimisationProblem {
     }
 
     /// Resolve every mapping's target address ("node.name.param" or
-    /// "c.constant") to a direct index. Runs once per problem; the per-
+    /// "const.constant") to a direct index. Runs once per problem; the per-
     /// evaluation path then applies values by index with no string work.
     fn resolve_targets(&mut self) -> Result<Vec<ResolvedTarget>, String> {
         let mut resolved = Vec::with_capacity(self.config.mappings.len());
@@ -133,7 +133,7 @@ impl OptimisationProblem {
             let target = &mapping.target;
             let parts: Vec<&str> = target.split('.').collect();
 
-            if parts.len() >= 2 && parts[0] == "c" {
+            if parts.len() >= 2 && parts[0] == "const" {
                 // Same registration path set_param used, so behaviour
                 // (including creating a not-yet-seen constant) is unchanged.
                 let idx = self.model.data_cache.constants.add_if_needed_and_get_idx(target);
@@ -157,7 +157,7 @@ impl OptimisationProblem {
                     param_name: param_name.to_string(),
                 });
             } else {
-                return Err(format!("Invalid target address: '{}'. Expected 'node.name.param' or 'c.constant_name'", target));
+                return Err(format!("Invalid target address: '{}'. Expected 'node.name.param' or 'const.constant_name'", target));
             }
         }
         Ok(resolved)

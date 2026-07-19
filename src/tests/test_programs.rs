@@ -345,13 +345,13 @@ fn test_model_program_inflow_end_to_end() {
 start = 2020-01-01
 end = 2020-01-05
 
-[constants]
-c.base = 10
+[const]
+const.base = 10
 
 [node.a]
 loc = 0, 0
 type = inflow
-inflow = { lvl = c.base; assert(lvl > 0); lvl + sim.step }
+inflow = { lvl = const.base; assert(lvl > 0); lvl + sim.step }
 ds_1 = b
 
 [node.b]
@@ -438,13 +438,13 @@ fn test_model_program_run_twice_identical() {
 start = 2020-01-01
 end = 2020-01-05
 
-[constants]
-c.base = 10
+[const]
+const.base = 10
 
 [node.a]
 loc = 0, 0
 type = inflow
-inflow = { lvl = c.base; acc = lvl + sim.step; acc }
+inflow = { lvl = const.base; acc = lvl + sim.step; acc }
 ds_1 = b
 
 [node.b]

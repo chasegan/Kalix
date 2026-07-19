@@ -605,7 +605,7 @@ impl OptimizedExpressionNode {
                     return Ok(OptimizedExpressionNode::SimContext { field });
                 }
 
-                // Try constant (c.* variables)
+                // Try constant (const.* variables)
                 if let Some(&idx) = constant_variable_map.get(&lower_name) {
                     return Ok(OptimizedExpressionNode::ConstantReference { cache_index: idx });
                 }
@@ -620,7 +620,7 @@ impl OptimizedExpressionNode {
                 let lower_name = name.to_lowercase();
 
                 // Constants don't support offset (they don't vary over time)
-                if lower_name.starts_with("c.") {
+                if lower_name.starts_with("const.") {
                     return Err(format!("Offset syntax not supported for constants: {}", name));
                 }
 
@@ -1182,7 +1182,7 @@ impl DynamicInput {
                 // Simulation context variables - no cache lookup needed
                 // They are resolved directly in from_expression_node via parse_sim_field
                 continue;
-            } else if lower_name.starts_with("c.") {
+            } else if lower_name.starts_with("const.") {
                 // Resolve to constants cache
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name.clone(), idx);
@@ -1221,7 +1221,7 @@ impl DynamicInput {
             let lower_var = var_name.to_lowercase();
 
             // Constants don't support offset
-            if lower_var.starts_with("c.") {
+            if lower_var.starts_with("const.") {
                 return Err(format!("Offset syntax not supported for constants: {}", var_name));
             }
 
@@ -1391,7 +1391,7 @@ impl DynamicInput {
 
             if lower_name.starts_with("sim.") {
                 continue;
-            } else if lower_name.starts_with("c.") {
+            } else if lower_name.starts_with("const.") {
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name, idx);
             } else if lower_name.starts_with("node.") || lower_name.starts_with("var.") {

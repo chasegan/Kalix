@@ -12,12 +12,12 @@ fn test_constants_cache_basic_operations() {
     let mut cache = ConstantsCache::new();
 
     // Add a constant and set its value
-    let idx1 = cache.set_value("c.gravity", 9.81);
-    println!("Added 'c.gravity' at idx: {}", idx1);
+    let idx1 = cache.set_value("const.gravity", 9.81);
+    println!("Added 'const.gravity' at idx: {}", idx1);
 
     // Add another constant
-    let idx2 = cache.set_value("c.pi", 3.14159);
-    println!("Added 'c.pi' at idx: {}", idx2);
+    let idx2 = cache.set_value("const.pi", 3.14159);
+    println!("Added 'const.pi' at idx: {}", idx2);
 
     // Retrieve the values
     assert_eq!(cache.get_value(idx1), 9.81);
@@ -37,21 +37,21 @@ fn test_constants_cache_duplicate_names() {
     let mut cache = ConstantsCache::new();
 
     // Add a constant without assigning a value
-    let idx1 = cache.add_if_needed_and_get_idx("c.temperature");
-    println!("First add of 'c.temperature' at idx: {}", idx1);
+    let idx1 = cache.add_if_needed_and_get_idx("const.temperature");
+    println!("First add of 'const.temperature' at idx: {}", idx1);
 
     // Try to add the same constant again - should return same idx
-    let idx2 = cache.add_if_needed_and_get_idx("c.temperature");
-    println!("Second add of 'c.temperature' at idx: {}", idx2);
+    let idx2 = cache.add_if_needed_and_get_idx("const.temperature");
+    println!("Second add of 'const.temperature' at idx: {}", idx2);
     assert_eq!(idx1, idx2);
 
     // Now set the value
-    let idx3 = cache.set_value("c.temperature", 25.0);
+    let idx3 = cache.set_value("const.temperature", 25.0);
     assert_eq!(idx3, idx1);
     assert_eq!(cache.get_value(idx3), 25.0);
 
     // Update the value
-    cache.set_value("c.temperature", 30.0);
+    cache.set_value("const.temperature", 30.0);
     assert_eq!(cache.get_value(idx1), 30.0);
 
     // Should still only have 1 constant
@@ -68,19 +68,19 @@ fn test_constants_cache_assert_all_assigned() {
     let mut cache = ConstantsCache::new();
 
     // Add a constant with a value
-    cache.set_value("c.assigned_constant", 42.0);
+    cache.set_value("const.assigned_constant", 42.0);
 
     // Add a constant without assigning a value
-    cache.add_if_needed_and_get_idx("c.unassigned_constant");
+    cache.add_if_needed_and_get_idx("const.unassigned_constant");
 
     // Should fail because one constant is unassigned
     let result = cache.assert_all_constants_have_assigned_values();
     println!("Assertion result: {:?}", result);
     assert!(result.is_err());
-    assert!(result.unwrap_err().contains("c.unassigned_constant"));
+    assert!(result.unwrap_err().contains("const.unassigned_constant"));
 
     // Now assign the missing constant
-    cache.set_value("c.unassigned_constant", 100.0);
+    cache.set_value("const.unassigned_constant", 100.0);
 
     // Should succeed now
     let result = cache.assert_all_constants_have_assigned_values();
@@ -92,9 +92,9 @@ fn test_constants_cache_assert_all_assigned() {
 
 #[test]
 fn test_variable_name_checker() {
-    assert!(is_valid_variable_name("c.temperature"));
-    assert!(is_valid_variable_name("c.unassigned_temperature"));
-    assert!(is_valid_variable_name("c.big_dam.volume"));
+    assert!(is_valid_variable_name("const.temperature"));
+    assert!(is_valid_variable_name("const.unassigned_temperature"));
+    assert!(is_valid_variable_name("const.big_dam.volume"));
     assert!(is_valid_variable_name("node.big_dam.ds_1"));
     assert!(!is_valid_variable_name("c.Temperature")); //has uppercase char
     assert!(!is_valid_variable_name("123_abc")); //starts with digit
