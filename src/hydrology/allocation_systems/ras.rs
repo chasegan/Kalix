@@ -67,12 +67,30 @@ pub struct RasSystem {
     pub targets_original: String,
     pub trigger_original: String,
     pub action_original: String,
+
+    /// Recorder for the `ras.<name>.fired` series (0/1 per step), opt-in via
+    /// [outputs] like every recorder.
+    pub recorder_idx_fired: Option<usize>,
 }
 
 impl RasSystem {
+    /// Resolve the opt-in recorder series (registered by [outputs]).
+    pub fn initialize_recorders(&mut self, data_cache: &mut DataCache) {
+        self.recorder_idx_fired = data_cache.get_series_idx(
+            format!("ras.{}.fired", self.name).as_str(), false);
+    }
+
     /// Evaluate the trigger and, if it fires, apply the action to every target
-    /// account. Returns whether the system fired (recorded in step 4).
+    /// account. Records the `fired` series if requested; returns whether it fired.
     pub fn run(&self, data_cache: &mut DataCache, account_manager: &mut AccountManager) -> bool {
+        let fired = self.run_inner(data_cache, account_manager);
+        if let Some(idx) = self.recorder_idx_fired {
+            data_cache.add_value_at_index(idx, if fired { 1.0 } else { 0.0 });
+        }
+        fired
+    }
+
+    fn run_inner(&self, data_cache: &mut DataCache, account_manager: &mut AccountManager) -> bool {
         if !self.trigger.is_triggered(data_cache) {
             return false;
         }

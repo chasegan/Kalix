@@ -34,6 +34,7 @@ pub struct AccountManager {
     has_recorders: bool,
     recorder_acc_balance: Vec<(usize, usize)>,
     recorder_acc_size: Vec<(usize, usize)>,
+    recorder_acc_space: Vec<(usize, usize)>,
 }
 
 impl AccountManager {
@@ -49,6 +50,7 @@ impl AccountManager {
             has_recorders: false,
             recorder_acc_balance: Vec::new(),
             recorder_acc_size: Vec::new(),
+            recorder_acc_space: Vec::new(),
         }
     }
 
@@ -126,6 +128,7 @@ impl AccountManager {
         self.has_recorders = false;
         self.recorder_acc_balance.clear();
         self.recorder_acc_size.clear();
+        self.recorder_acc_space.clear();
         for (account_idx, account) in self.accounts.iter().enumerate() {
 
             // Account balance recorders
@@ -141,6 +144,14 @@ impl AccountManager {
                 make_acc_result_name(&account.name, "size").as_str(), false
             ) {
                 self.recorder_acc_size.push((account_idx, series_idx));
+                self.has_recorders = true;
+            }
+
+            // Account space recorders (size − balance)
+            if let Some(series_idx) = data_cache.get_series_idx(
+                make_acc_result_name(&account.name, "space").as_str(), false
+            ) {
+                self.recorder_acc_space.push((account_idx, series_idx));
                 self.has_recorders = true;
             }
         }
@@ -159,6 +170,12 @@ impl AccountManager {
         // Record account sizes
         for &(account_idx, series_idx) in &self.recorder_acc_size {
             data_cache.add_value_at_index(series_idx, self.accounts[account_idx].size);
+        }
+
+        // Record account space (size − balance)
+        for &(account_idx, series_idx) in &self.recorder_acc_space {
+            let account = &self.accounts[account_idx];
+            data_cache.add_value_at_index(series_idx, account.size - account.balance);
         }
     }
 

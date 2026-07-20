@@ -356,6 +356,9 @@ impl Model {
 
         //Initialise the water management systems
         self.account_manager.initialize(&mut self.data_cache);
+        for ras in &mut self.ras_systems {
+            ras.initialize_recorders(&mut self.data_cache);
+        }
 
         // Clear any stale simulation context
         clear_context();

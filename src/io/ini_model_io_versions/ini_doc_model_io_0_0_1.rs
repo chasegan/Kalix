@@ -911,6 +911,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             targets_original: targets_str,
             trigger_original: trigger_str,
             action_original: action_str,
+            recorder_idx_fired: None,
         });
     }
 

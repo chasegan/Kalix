@@ -282,3 +282,69 @@ action  = set_full
     assert_eq!(model2.ras_systems.len(), 1, "RAS survives round-trip");
     assert!(rendered.contains("trigger = start_water_year(7)"), "trigger re-emitted as written:\n{}", rendered);
 }
+
+#[test]
+fn test_ras_fixture_annual_rollover_with_recorders() {
+    // Hand-computed fixture in the SWA shape (simplified): one account, a
+    // carryover cap and an allocation credit at the water-year boundary (file
+    // order: carryover applies BEFORE the credit), and a daily user take.
+    //
+    //   a1: size 100, initial 30; user takes 5/day (ample flow)
+    //   Jun 28: 30-5=25   Jun 29: 20   Jun 30: 15
+    //   Jul  1: reduce_to(20) -> 15 (under cap), credit 50 -> 65, take 5 -> 60
+    //   Jul  2: 55   Jul 3: 50
+    let ini = r#"
+[kalix]
+start = 2020-06-28
+end = 2020-07-03
+
+[acc.gs]
+accounts = name, size, initial,
+           a1, 100, 30,
+
+[ras.carryover]
+targets = acc.gs
+trigger = start_water_year(7)
+action  = reduce_to(20)
+
+[ras.allocation]
+targets = acc.gs
+trigger = start_water_year(7)
+action  = credit(50)
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = u1
+
+[node.u1]
+type = unregulated_user
+loc = 0, 10
+demand = 5
+accounts = a1
+
+[outputs]
+node.u1.diversion
+acc.a1.balance
+acc.a1.space
+ras.carryover.fired
+"#;
+    let mut model = run(ini);
+
+    let bal_idx = model.data_cache.get_series_idx("acc.a1.balance", false).expect("balance series");
+    let bal = model.data_cache.series[bal_idx].clone();
+    assert_eq!(bal.values, vec![25.0, 20.0, 15.0, 60.0, 55.0, 50.0], "date-by-date balances");
+
+    let space_idx = model.data_cache.get_series_idx("acc.a1.space", false).expect("space series");
+    let space = model.data_cache.series[space_idx].clone();
+    assert_eq!(space.values, vec![75.0, 80.0, 85.0, 40.0, 45.0, 50.0], "space = size - balance");
+
+    let fired_idx = model.data_cache.get_series_idx("ras.carryover.fired", false).expect("fired series");
+    let fired = model.data_cache.series[fired_idx].clone();
+    assert_eq!(fired.values, vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0], "fired only at the boundary");
+
+    let div_idx = model.data_cache.get_series_idx("node.u1.diversion", false).expect("diversion series");
+    let div = model.data_cache.series[div_idx].clone();
+    assert_eq!(div.values, vec![5.0; 6], "demand fully met throughout");
+}
