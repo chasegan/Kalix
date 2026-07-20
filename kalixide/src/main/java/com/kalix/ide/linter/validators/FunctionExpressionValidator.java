@@ -322,8 +322,20 @@ public class FunctionExpressionValidator {
 
     enum TokenType {
         NUMBER, IDENT, DATA_REF, CONST_REF, NODE_REF, THIS_REF, SIM_REF, TABLE_REF, FN_REF, VAR_REF,
+        ACC_REF, RAS_REF,
         OPERATOR, LPAREN, RPAREN, LBRACE, RBRACE, SEMICOLON, COMMA, EOF
     }
+
+    /** Fields published per account (`acc.<account>.<field>`). */
+    private static final java.util.Set<String> ACCOUNT_FIELDS =
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "size");
+
+    /** Fields published per account group — the same, less the static ones. */
+    private static final java.util.Set<String> ACCOUNT_GROUP_FIELDS =
+        java.util.Set.of("opening_balance", "closing_balance", "debits");
+
+    /** Fields published per resource allocation system (`ras.<name>.<field>`). */
+    private static final java.util.Set<String> RAS_FIELDS = java.util.Set.of("fired");
 
     static class Token {
         TokenType type;
@@ -473,6 +485,16 @@ public class FunctionExpressionValidator {
                 return readDottedReference(start, firstSegment, TokenType.NODE_REF);
             }
 
+            // Check if this is an account reference (starts with "acc.")
+            if (firstSegment.equals("acc") && pos < input.length() && input.charAt(pos) == '.') {
+                return readDottedReference(start, firstSegment, TokenType.ACC_REF);
+            }
+
+            // Check if this is a RAS reference (starts with "ras.")
+            if (firstSegment.equals("ras") && pos < input.length() && input.charAt(pos) == '.') {
+                return readDottedReference(start, firstSegment, TokenType.RAS_REF);
+            }
+
             // Check if this is a table reference (starts with "table.")
             if (firstSegment.equals("table") && pos < input.length() && input.charAt(pos) == '.') {
                 return readDottedReference(start, firstSegment, TokenType.TABLE_REF);
@@ -523,8 +545,9 @@ public class FunctionExpressionValidator {
                 sb.append(input, segStart, pos);
             }
 
-            // Check for optional square brackets (data, node, and var references)
-            if ((tokenType == TokenType.DATA_REF || tokenType == TokenType.NODE_REF || tokenType == TokenType.VAR_REF) &&
+            // Check for optional square brackets (data, node, var, account and RAS references)
+            if ((tokenType == TokenType.DATA_REF || tokenType == TokenType.NODE_REF || tokenType == TokenType.VAR_REF
+                    || tokenType == TokenType.ACC_REF || tokenType == TokenType.RAS_REF) &&
                 pos < input.length() && input.charAt(pos) == '[') {
                 int bracketStart = pos;
                 pos++; // consume '['
@@ -809,6 +832,7 @@ public class FunctionExpressionValidator {
         private static boolean isReferenceToken(TokenType t) {
             return t == TokenType.DATA_REF || t == TokenType.CONST_REF || t == TokenType.NODE_REF
                     || t == TokenType.THIS_REF || t == TokenType.SIM_REF || t == TokenType.VAR_REF
+                    || t == TokenType.ACC_REF || t == TokenType.RAS_REF
                     || t == TokenType.TABLE_REF || t == TokenType.FN_REF;
         }
 
@@ -951,6 +975,12 @@ public class FunctionExpressionValidator {
             } else if (current.type == TokenType.VAR_REF) {
                 validateVarReference(current.value, errors);
                 advance();
+            } else if (current.type == TokenType.ACC_REF) {
+                validateAccReference(current.value, errors);
+                advance();
+            } else if (current.type == TokenType.RAS_REF) {
+                validateRasReference(current.value, errors);
+                advance();
             } else if (current.type == TokenType.IDENT) {
                 // Function call - or, inside a program/fn body, a bare local
                 if (peek().type == TokenType.LPAREN) {
@@ -1088,6 +1118,83 @@ public class FunctionExpressionValidator {
                     errors.add("Function '" + fnRef + "' expects " + expectedArgs
                             + " argument" + (expectedArgs == 1 ? "" : "s") + ", but got " + argCount);
                 }
+            }
+        }
+
+        // An account reference is a plain series reference:
+        // acc.<account or group>.<field>, optionally with the offset bracket
+        // syntax. The name may be an account or an account group (the acc.
+        // namespace is flat), so the field set accepted is the union; the
+        // engine resolves which it is at load. Forward offsets are rejected
+        // (account state is computed during the run).
+        private void validateAccReference(String accRef, List<String> errors) {
+            String refWithoutBrackets = accRef.replaceFirst("\\[.*?\\]$", "");
+
+            if (refWithoutBrackets.endsWith(".")) {
+                errors.add("Malformed account reference: '" + accRef + "' (trailing dot)");
+                return;
+            }
+            String[] segments = refWithoutBrackets.split("\\.");
+            if (segments.length != 3) {
+                errors.add("Invalid account reference: '" + accRef
+                        + "' (expected acc.<account or group>.<field>, e.g. acc.smith.opening_balance)");
+                return;
+            }
+            // A name that matches an [acc.<name>] section header is a group, so
+            // the aggregate field set applies; anything else is an account name.
+            boolean isGroup = context.getModel() != null
+                    && context.getModel().getSections().containsKey("acc." + segments[1].toLowerCase());
+            java.util.Set<String> allowed = isGroup ? ACCOUNT_GROUP_FIELDS : ACCOUNT_FIELDS;
+
+            if (!allowed.contains(segments[2].toLowerCase())) {
+                java.util.List<String> known = new java.util.ArrayList<>(allowed);
+                java.util.Collections.sort(known);
+                errors.add("Unknown field for " + (isGroup ? "account group" : "account") + ": '"
+                        + accRef + "' (expected one of: " + String.join(", ", known) + ")");
+                return;
+            }
+            rejectForwardOffset(accRef, errors);
+        }
+
+        // A RAS reference is a plain series reference: ras.<name>.<field>.
+        private void validateRasReference(String rasRef, List<String> errors) {
+            String refWithoutBrackets = rasRef.replaceFirst("\\[.*?\\]$", "");
+
+            if (refWithoutBrackets.endsWith(".")) {
+                errors.add("Malformed RAS reference: '" + rasRef + "' (trailing dot)");
+                return;
+            }
+            String[] segments = refWithoutBrackets.split("\\.");
+            if (segments.length != 3) {
+                errors.add("Invalid RAS reference: '" + rasRef
+                        + "' (expected ras.<name>.<field>, e.g. ras.gs_rollover.fired)");
+                return;
+            }
+            if (!RAS_FIELDS.contains(segments[2].toLowerCase())) {
+                java.util.List<String> known = new java.util.ArrayList<>(RAS_FIELDS);
+                java.util.Collections.sort(known);
+                errors.add("Unknown RAS field: '" + rasRef + "' (expected one of: "
+                        + String.join(", ", known) + ")");
+                return;
+            }
+            rejectForwardOffset(rasRef, errors);
+        }
+
+        // Computed series have no future values, so a positive offset is an error.
+        private void rejectForwardOffset(String ref, List<String> errors) {
+            int bracket = ref.indexOf('[');
+            if (bracket < 0) {
+                return;
+            }
+            String inside = ref.substring(bracket + 1, ref.length() - 1).trim();
+            int comma = inside.indexOf(',');
+            String offsetPart = (comma >= 0 ? inside.substring(0, comma) : inside).trim();
+            try {
+                if (Integer.parseInt(offsetPart) > 0) {
+                    errors.add("Forward lookup not supported for computed series: '" + ref + "'");
+                }
+            } catch (NumberFormatException ignored) {
+                // Non-integer offsets are caught by the engine's offset grammar.
             }
         }
 

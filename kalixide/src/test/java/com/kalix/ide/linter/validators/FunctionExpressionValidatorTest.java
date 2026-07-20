@@ -652,6 +652,59 @@ class FunctionExpressionValidatorTest {
                 "phase must be excluded from var references, got: " + errors);
     }
 
+    // ==================== Account / RAS references ====================
+
+    @Test
+    @DisplayName("Account references should be valid")
+    void testAccountReferences() {
+        assertValid("acc.smith.opening_balance");
+        assertValid("acc.smith.closing_balance");
+        assertValid("acc.smith.debits");
+        assertValid("acc.smith.size");
+        assertValid("0.1 * acc.smith.opening_balance");
+        assertValid("if(acc.smith.opening_balance > 10, 5, 0)");
+        assertValid("acc.smith.closing_balance[-1, 0]");
+        assertValid("ras.gs_rollover.fired");
+        assertValid("ras.gs_rollover.fired[-1, 0]");
+    }
+
+    @Test
+    @DisplayName("Malformed account references should be invalid")
+    void testMalformedAccountReferences() {
+        assertInvalid("acc.smith", "Invalid account reference");
+        assertInvalid("acc.smith.balance", "Unknown field for account");
+        assertInvalid("acc.smith.space", "Unknown field for account");
+        assertInvalid("acc.smith.opening_balance[1, 0]", "Forward lookup not supported");
+        assertInvalid("ras.r1.went_off", "Unknown RAS field");
+        assertInvalid("ras.r1", "Invalid RAS reference");
+    }
+
+    @Test
+    @DisplayName("Group aggregates accept only the summable fields")
+    void testAccountGroupFields() {
+        String ini = """
+                [acc.gs_annual]
+                accounts = name, size,
+                           smith, 42,
+
+                [node.n1]
+                type = inflow
+                loc = 0, 0
+                """;
+        com.kalix.ide.linter.model.ValidationContext context = contextFor(ini);
+
+        // gs_annual names a group: aggregates are fine, 'size' is not
+        assertTrue(validator.validate("acc.gs_annual.opening_balance", context).isEmpty(),
+                "group opening_balance should be valid");
+        assertTrue(validator.validate("acc.gs_annual.size", context).stream()
+                        .anyMatch(e -> e.contains("Unknown field for account group")),
+                "group has no size aggregate");
+
+        // smith is not a section, so it reads as an account: 'size' is fine
+        assertTrue(validator.validate("acc.smith.size", context).isEmpty(),
+                "account size should be valid");
+    }
+
     // ==================== Helper Methods ====================
 
     private com.kalix.ide.linter.model.ValidationContext contextFor(String ini) {

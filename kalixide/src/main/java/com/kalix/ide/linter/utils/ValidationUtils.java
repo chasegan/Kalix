@@ -120,6 +120,13 @@ public class ValidationUtils {
                 continue;
             }
 
+            // Account and RAS series (acc.<account or group>.<field>,
+            // ras.<name>.fired) are recordable in [outputs] like node outputs.
+            if (outputRef.startsWith("acc.") || outputRef.startsWith("ras.")) {
+                validateAccountingOutputReference(outputRef, model, result, rule);
+                continue;
+            }
+
             java.util.regex.Matcher matcher = NODE_PROPERTY_REFERENCE_PATTERN.matcher(outputRef);
             if (!matcher.matches()) {
                 result.addIssue(outputRefReportLine(model, outputRef),
@@ -201,6 +208,55 @@ public class ValidationUtils {
                                   + " (no '" + varName + "' in [var." + blockName + "])",
                           rule.getSeverity(), "invalid_var_reference");
             case OK -> { /* resolved */ }
+        }
+    }
+
+    /** Fields published per account, per account group, and per RAS. */
+    private static final java.util.Set<String> ACCOUNT_OUTPUT_FIELDS =
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "size");
+    private static final java.util.Set<String> ACCOUNT_GROUP_OUTPUT_FIELDS =
+        java.util.Set.of("opening_balance", "closing_balance", "debits");
+    private static final java.util.Set<String> RAS_OUTPUT_FIELDS = java.util.Set.of("fired");
+
+    /**
+     * Validate an accounting series reference in {@code [outputs]}:
+     * {@code acc.<account or group>.<field>} or {@code ras.<name>.fired}.
+     * Account names are not resolvable here (they live in the [acc.*] tables,
+     * which the linter does not parse), so this checks shape and field name;
+     * the engine catches unknown names at load.
+     */
+    private static void validateAccountingOutputReference(String outputRef, INIModelParser.ParsedModel model,
+                                                          ValidationResult result, ValidationRule rule) {
+        String[] segments = outputRef.split("\\.");
+        boolean isRas = outputRef.startsWith("ras.");
+        if (segments.length != 3) {
+            result.addIssue(outputRefReportLine(model, outputRef),
+                          "Invalid output reference format: " + outputRef + " (should be "
+                                  + (isRas ? "ras.name.fired" : "acc.name.field") + ")",
+                          rule.getSeverity(), "invalid_output_reference");
+            return;
+        }
+
+        java.util.Set<String> allowed;
+        String what;
+        if (isRas) {
+            allowed = RAS_OUTPUT_FIELDS;
+            what = "RAS";
+        } else if (model.getSections().containsKey("acc." + segments[1].toLowerCase())) {
+            allowed = ACCOUNT_GROUP_OUTPUT_FIELDS;
+            what = "account group";
+        } else {
+            allowed = ACCOUNT_OUTPUT_FIELDS;
+            what = "account";
+        }
+
+        if (!allowed.contains(segments[2].toLowerCase())) {
+            java.util.List<String> known = new java.util.ArrayList<>(allowed);
+            java.util.Collections.sort(known);
+            result.addIssue(outputRefReportLine(model, outputRef),
+                          "Unknown field for " + what + ": " + outputRef
+                                  + " (expected one of: " + String.join(", ", known) + ")",
+                          rule.getSeverity(), "invalid_output_reference");
         }
     }
 

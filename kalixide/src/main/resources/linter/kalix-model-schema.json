@@ -20,14 +20,30 @@
       "validation": "output_references"
     }
   },
-
   "node_types": {
     "inflow": {
       "description": "Inflow node with external data source",
-      "allowed_outputs": ["dsflow", "inflow", "usflow", "ds_1", "ds_1_order", "expected_inflow"],
-      "required_params": ["type", "loc"],
-      "optional_params": ["inflow", "expected_inflow"],
-      "dsnode_params": ["ds_1", "ds_2", "ds_3"],
+      "allowed_outputs": [
+        "dsflow",
+        "inflow",
+        "usflow",
+        "ds_1",
+        "ds_1_order",
+        "expected_inflow"
+      ],
+      "required_params": [
+        "type",
+        "loc"
+      ],
+      "optional_params": [
+        "inflow",
+        "expected_inflow"
+      ],
+      "dsnode_params": [
+        "ds_1",
+        "ds_2",
+        "ds_3"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -48,13 +64,32 @@
         }
       }
     },
-
     "gr4j": {
       "description": "GR4J rainfall-runoff model",
-      "allowed_outputs": ["usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1", "ds_1_order"],
-      "required_params": ["type", "loc", "area", "rain", "evap", "params"],
-      "optional_params": ["variant"],
-      "dsnode_params": ["ds_1", "ds_2", "ds_3"],
+      "allowed_outputs": [
+        "usflow",
+        "runoff_volume",
+        "runoff_depth",
+        "dsflow",
+        "ds_1",
+        "ds_1_order"
+      ],
+      "required_params": [
+        "type",
+        "loc",
+        "area",
+        "rain",
+        "evap",
+        "params"
+      ],
+      "optional_params": [
+        "variant"
+      ],
+      "dsnode_params": [
+        "ds_1",
+        "ds_2",
+        "ds_3"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -88,13 +123,27 @@
         }
       }
     },
-
     "routing_node": {
       "description": "Routing node with optional lag parameter for flow delay",
-      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_1_order"],
-      "required_params": ["type", "loc"],
-      "optional_params": ["lag"],
-      "dsnode_params": ["ds_1", "ds_2", "ds_3"],
+      "allowed_outputs": [
+        "dsflow",
+        "usflow",
+        "volume",
+        "ds_1",
+        "ds_1_order"
+      ],
+      "required_params": [
+        "type",
+        "loc"
+      ],
+      "optional_params": [
+        "lag"
+      ],
+      "dsnode_params": [
+        "ds_1",
+        "ds_2",
+        "ds_3"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -112,13 +161,34 @@
         }
       }
     },
-
     "sacramento": {
       "description": "Sacramento rainfall-runoff model",
-      "allowed_outputs": ["usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1", "ds_1_order", "rain", "evap", "roimp", "flosf", "flobf", "floin"],
-      "required_params": ["type", "loc", "area", "rain", "evap", "params"],
+      "allowed_outputs": [
+        "usflow",
+        "runoff_volume",
+        "runoff_depth",
+        "dsflow",
+        "ds_1",
+        "ds_1_order",
+        "rain",
+        "evap",
+        "roimp",
+        "flosf",
+        "flobf",
+        "floin"
+      ],
+      "required_params": [
+        "type",
+        "loc",
+        "area",
+        "rain",
+        "evap",
+        "params"
+      ],
       "optional_params": [],
-      "dsnode_params": ["ds_1"],
+      "dsnode_params": [
+        "ds_1"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -148,13 +218,36 @@
         }
       }
     },
-
     "unregulated_user": {
       "description": "Unregulated user node representing water demand",
-      "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "order", "order_due", "demand", "diversion", "flow_threshold", "pump", "demand_carryover"],
-      "required_params": ["type", "loc"],
-      "optional_params": ["demand", "pump", "flow_threshold", "annual_cap", "demand_carryover"],
-      "dsnode_params": ["ds_1"],
+      "allowed_outputs": [
+        "dsflow",
+        "usflow",
+        "ds_1",
+        "ds_1_order",
+        "order",
+        "order_due",
+        "demand",
+        "diversion",
+        "flow_threshold",
+        "pump",
+        "demand_carryover"
+      ],
+      "required_params": [
+        "type",
+        "loc"
+      ],
+      "optional_params": [
+        "demand",
+        "pump",
+        "flow_threshold",
+        "annual_cap",
+        "demand_carryover",
+        "accounts"
+      ],
+      "dsnode_params": [
+        "ds_1"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -186,16 +279,39 @@
           "type": "string",
           "pattern": "^(?i)(true|false)(\\s*,\\s*([1-9]|1[0-2]))?$",
           "description": "Demand carryover: 'true'/'false', or 'true/false, N' where N is month 1-12 (case-insensitive)"
+        },
+        "accounts": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\s*,\\s*[a-z][a-z0-9_]*)*$",
+          "description": "Ordered list of account names declared in [acc.*] sections; order is order-of-use"
         }
       }
     },
-
     "regulated_user": {
       "description": "Regulated user node representing water demand",
-      "allowed_outputs": ["dsflow", "usflow", "ds_1", "ds_1_order", "order", "order_due", "demand", "diversion", "pump"],
-      "required_params": ["type", "loc"],
-      "optional_params": ["order", "pump"],
-      "dsnode_params": ["ds_1"],
+      "allowed_outputs": [
+        "dsflow",
+        "usflow",
+        "ds_1",
+        "ds_1_order",
+        "order",
+        "order_due",
+        "demand",
+        "diversion",
+        "pump"
+      ],
+      "required_params": [
+        "type",
+        "loc"
+      ],
+      "optional_params": [
+        "order",
+        "pump",
+        "accounts"
+      ],
+      "dsnode_params": [
+        "ds_1"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -213,16 +329,74 @@
         "pump": {
           "type": "function_expression",
           "description": "Pump capacity (data reference, constant, or expression)"
+        },
+        "accounts": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\s*,\\s*[a-z][a-z0-9_]*)*$",
+          "description": "Ordered list of account names declared in [acc.*] sections; order is order-of-use"
         }
       }
     },
-
     "storage": {
       "description": "Storage node for water storage modeling",
-      "allowed_outputs": ["dsflow", "usflow", "volume", "ds_1", "ds_2", "ds_3", "ds_4", "ds_1_order", "ds_2_order", "ds_3_order", "ds_4_order", "ds_1_outlet", "ds_2_outlet", "ds_3_outlet", "ds_4_outlet", "ds_1_spill", "ds_2_spill", "ds_3_spill", "ds_4_spill", "evap", "rain", "seep", "level", "area", "pond_diversion", "target_level", "rain_vol", "seep_vol", "evap_vol", "pond_demand", "exists"],
-      "required_params": ["type", "loc"],
-      "optional_params": ["dimensions", "rain", "evap", "seep", "pond_demand", "initial_volume", "ds_1_outlet", "ds_2_outlet", "ds_3_outlet", "ds_4_outlet", "target_level", "order_through", "exists"],
-      "dsnode_params": ["ds_1", "ds_2", "ds_3", "ds_4"],
+      "allowed_outputs": [
+        "dsflow",
+        "usflow",
+        "volume",
+        "ds_1",
+        "ds_2",
+        "ds_3",
+        "ds_4",
+        "ds_1_order",
+        "ds_2_order",
+        "ds_3_order",
+        "ds_4_order",
+        "ds_1_outlet",
+        "ds_2_outlet",
+        "ds_3_outlet",
+        "ds_4_outlet",
+        "ds_1_spill",
+        "ds_2_spill",
+        "ds_3_spill",
+        "ds_4_spill",
+        "evap",
+        "rain",
+        "seep",
+        "level",
+        "area",
+        "pond_diversion",
+        "target_level",
+        "rain_vol",
+        "seep_vol",
+        "evap_vol",
+        "pond_demand",
+        "exists"
+      ],
+      "required_params": [
+        "type",
+        "loc"
+      ],
+      "optional_params": [
+        "dimensions",
+        "rain",
+        "evap",
+        "seep",
+        "pond_demand",
+        "initial_volume",
+        "ds_1_outlet",
+        "ds_2_outlet",
+        "ds_3_outlet",
+        "ds_4_outlet",
+        "target_level",
+        "order_through",
+        "exists"
+      ],
+      "dsnode_params": [
+        "ds_1",
+        "ds_2",
+        "ds_3",
+        "ds_4"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -288,13 +462,22 @@
         }
       }
     },
-
     "blackhole": {
       "description": "Blackhole node that consumes flow without further routing",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order"],
-      "required_params": ["type", "loc"],
+      "allowed_outputs": [
+        "usflow",
+        "dsflow",
+        "ds_1",
+        "ds_1_order"
+      ],
+      "required_params": [
+        "type",
+        "loc"
+      ],
       "optional_params": [],
-      "dsnode_params": ["ds_1"],
+      "dsnode_params": [
+        "ds_1"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -307,13 +490,30 @@
         }
       }
     },
-
     "routing": {
       "description": "Routing node with advanced flow distribution capabilities",
-      "allowed_outputs": ["usflow", "dsflow", "volume", "ds_1", "ds_1_order"],
-      "required_params": ["type", "loc"],
-      "optional_params": ["lag", "pwl", "n_divs", "x", "typical_regulated_flow", "nlm"],
-      "dsnode_params": ["ds_1"],
+      "allowed_outputs": [
+        "usflow",
+        "dsflow",
+        "volume",
+        "ds_1",
+        "ds_1_order"
+      ],
+      "required_params": [
+        "type",
+        "loc"
+      ],
+      "optional_params": [
+        "lag",
+        "pwl",
+        "n_divs",
+        "x",
+        "typical_regulated_flow",
+        "nlm"
+      ],
+      "dsnode_params": [
+        "ds_1"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -355,13 +555,25 @@
         }
       }
     },
-
     "confluence": {
       "description": "Confluence node that merges multiple flow streams",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order", "harmony_fraction"],
-      "required_params": ["type", "loc"],
-      "optional_params": ["harmony_fraction"],
-      "dsnode_params": ["ds_1"],
+      "allowed_outputs": [
+        "usflow",
+        "dsflow",
+        "ds_1",
+        "ds_1_order",
+        "harmony_fraction"
+      ],
+      "required_params": [
+        "type",
+        "loc"
+      ],
+      "optional_params": [
+        "harmony_fraction"
+      ],
+      "dsnode_params": [
+        "ds_1"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -378,13 +590,25 @@
         }
       }
     },
-
     "loss": {
       "description": "Loss node for flow reduction modeling",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order", "loss"],
-      "required_params": ["type", "loc"],
-      "optional_params": ["table"],
-      "dsnode_params": ["ds_1"],
+      "allowed_outputs": [
+        "usflow",
+        "dsflow",
+        "ds_1",
+        "ds_1_order",
+        "loss"
+      ],
+      "required_params": [
+        "type",
+        "loc"
+      ],
+      "optional_params": [
+        "table"
+      ],
+      "dsnode_params": [
+        "ds_1"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -401,13 +625,26 @@
         }
       }
     },
-
     "splitter": {
       "description": "Splitter node for dividing flow between two downstream paths",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_2", "ds_1_order", "ds_2_order"],
-      "required_params": ["type", "loc", "table"],
+      "allowed_outputs": [
+        "usflow",
+        "dsflow",
+        "ds_1",
+        "ds_2",
+        "ds_1_order",
+        "ds_2_order"
+      ],
+      "required_params": [
+        "type",
+        "loc",
+        "table"
+      ],
       "optional_params": [],
-      "dsnode_params": ["ds_1", "ds_2"],
+      "dsnode_params": [
+        "ds_1",
+        "ds_2"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -424,13 +661,28 @@
         }
       }
     },
-
     "gauge": {
       "description": "Gauge node for monitoring and measuring flow",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order", "delta", "force_flow", "reference_flow"],
-      "required_params": ["type", "loc"],
-      "optional_params": ["force_flow", "reference_flow"],
-      "dsnode_params": ["ds_1"],
+      "allowed_outputs": [
+        "usflow",
+        "dsflow",
+        "ds_1",
+        "ds_1_order",
+        "delta",
+        "force_flow",
+        "reference_flow"
+      ],
+      "required_params": [
+        "type",
+        "loc"
+      ],
+      "optional_params": [
+        "force_flow",
+        "reference_flow"
+      ],
+      "dsnode_params": [
+        "ds_1"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -451,13 +703,32 @@
         }
       }
     },
-
     "order_control": {
       "description": "Order constraint node for limiting or setting orders",
-      "allowed_outputs": ["usflow", "dsflow", "ds_1", "ds_1_order", "min_order", "max_order", "set_order", "order", "order_due"],
-      "required_params": ["type", "loc"],
-      "optional_params": ["min_order", "max_order", "set_order", "delay_order_steps"],
-      "dsnode_params": ["ds_1"],
+      "allowed_outputs": [
+        "usflow",
+        "dsflow",
+        "ds_1",
+        "ds_1_order",
+        "min_order",
+        "max_order",
+        "set_order",
+        "order",
+        "order_due"
+      ],
+      "required_params": [
+        "type",
+        "loc"
+      ],
+      "optional_params": [
+        "min_order",
+        "max_order",
+        "set_order",
+        "delay_order_steps"
+      ],
+      "dsnode_params": [
+        "ds_1"
+      ],
       "parameters": {
         "type": {
           "type": "literal",
@@ -488,84 +759,73 @@
       }
     }
   },
-
   "validation_rules": {
     "file_paths": {
       "severity": "error",
       "description": "All input file paths must exist",
       "check": "file_exists"
     },
-
     "output_references": {
       "severity": "error",
       "description": "Output references must point to valid node.property combinations",
       "check": "node_output_validation"
     },
-
     "dsnode_references": {
       "severity": "error",
       "description": "Links must point to existing nodes",
       "check": "node_exists"
     },
-
     "node_ordering": {
       "severity": "error",
       "description": "Links must point to nodes defined below in the model file"
     },
-
     "unique_node_names": {
       "severity": "error",
       "description": "Node names must be unique"
     },
-
     "unique_properties": {
       "severity": "warning",
       "description": "This property is defined on another line."
     },
-
     "coordinate_format": {
       "severity": "error",
       "description": "Coordinates must be two comma-separated numbers"
     }
   },
-
   "data_types": {
     "number": {
       "pattern": "^-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
       "parse": "parse_float"
     },
-
     "integer": {
       "pattern": "^-?\\d+$",
       "parse": "parse_int"
     },
-
     "boolean": {
       "pattern": "^(?i)(true|false)$",
       "description": "Boolean value (true or false, case-insensitive)"
     },
-
     "coordinates": {
       "pattern": "^-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\s*,\\s*-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
       "parse": "split_floats"
     },
-
     "number_sequence": {
       "pattern": "^-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?(?:\\s*,\\s*-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?)*(?:\\s*,)?$",
       "parse": "split_floats"
     },
-
     "data_reference": {
-      "components": ["dataset", "accessor", "field"],
+      "components": [
+        "dataset",
+        "accessor",
+        "field"
+      ],
       "format": "data.{dataset}.by_{accessor}.{field}"
     },
-
     "downstream_reference": {
       "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
       "description": "Reference to a downstream node (node name)",
       "validation": "dsnode_references"
     },
-
     "function_expression": {
       "description": "Mathematical expression with optional data references and functions",
       "validation": "custom_function_validator"
