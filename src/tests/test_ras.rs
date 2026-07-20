@@ -285,9 +285,9 @@ action  = set_full
 
 #[test]
 fn test_ras_fixture_annual_rollover_with_recorders() {
-    // Hand-computed fixture in the SWA shape (simplified): one account, a
-    // carryover cap and an allocation credit at the water-year boundary (file
-    // order: carryover applies BEFORE the credit), and a daily user take.
+    // Hand-computed annual-accounting fixture: one account, a carryover cap
+    // and an allocation credit at the water-year boundary (file order:
+    // carryover applies BEFORE the credit), and a daily user take.
     //
     //   a1: size 100, initial 30; user takes 5/day (ample flow)
     //   Jun 28: 30-5=25   Jun 29: 20   Jun 30: 15
