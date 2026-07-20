@@ -204,6 +204,8 @@ accounts = name, size, initial,
 
 #[test]
 fn test_inline_account_declaration_is_a_hard_error() {
+    // The old inline declaration form is simply not a recognised parameter any
+    // more — it fails with the standard unexpected-parameter error.
     let ini = r#"
 [kalix]
 start = 2020-01-01
@@ -219,8 +221,7 @@ account = n0031, avl, 42, 7
 node.u1.dsflow
 "#;
     let err = IniModelIO::new().read_model_string(ini).err().expect("expected a load error");
-    assert!(err.contains("no longer supported") && err.contains("[acc.*]"),
-        "error should carry the migration message, got: {}", err);
+    assert!(err.contains("Unexpected parameter 'account'"), "unexpected error: {}", err);
 }
 
 #[test]

@@ -691,13 +691,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "demand" {
                             n.demand_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
-                        } else if name_lower == "account" {
-                            // Hard break (kalix-allocation-components.md §3.1): nodes
-                            // reference accounts, they never declare them.
-                            return Err(format!("Error on line {}: 'account = name, type, size, wy_month' is no longer \
-                                supported. Declare the account in an [acc.*] section and reference it here with \
-                                'accounts = <name>' — see docs/water_management/kalix-allocation-components.md §3.1.",
-                                ini_property.line_number));
                         } else if name_lower == "accounts" {
                             let account_idxs = resolve_account_references(v, &model.account_manager)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;

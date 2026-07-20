@@ -93,11 +93,12 @@ ledger touched only by node takes.
   reference several in priority order (§3.6).
 - **Nodes reference; they never declare.** The inline
   `account = name, type, size, wy_month` declaration on `unregulated_user` is
-  **removed** — a hard load error with a migration message pointing at this
-  grammar (the `;`-comment and `[const]` precedent: pre-1.0, loud, documented).
-  It embedded policy (`wy_month`) and a policy hook (`type`) that now have
-  proper homes, and inline declaration is structurally unable to express shared
-  accounts without risking inconsistent duplicate specification.
+  **removed** — the property no longer exists, so old files fail with the
+  standard unexpected-parameter error (the `;`-comment and `[const]`
+  precedent: pre-1.0, loud, documented). It embedded policy (`wy_month`) and a
+  policy hook (`type`) that now have proper homes, and inline declaration is
+  structurally unable to express shared accounts without risking inconsistent
+  duplicate specification.
 - Round-trip: add an `[acc.*]` arm to both sides of `render_canonical_0_0_1`
   (the lesson of `ec0e803`), including column alignment as the loss-table
   renderer already does.
