@@ -1,5 +1,6 @@
 use crate::hydrology::accounts::account::Account;
 use crate::hydrology::accounts::account_manager::AccountGroup;
+use crate::hydrology::allocation_systems::ras::RasSystem;
 use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
 use crate::io::custom_ini_parser::{IniDocument, IniSection};
 use crate::misc::configuration::SaveMethod;
@@ -150,7 +151,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     name.clone(),
                     group_name.to_string(), // account_type carries the group name
                     table.sizes[row],
-                    0,                      // no wy_month: behaviour comes only from [ras.*]
                     table.initials[row],
                 );
                 let account_idx = model.account_manager.add_account(account)
@@ -162,6 +162,48 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 member_ids,
                 columns: Vec::new(), // engine-known columns only for now; data columns arrive with the actions that read them
             }).map_err(|e| format!("Error on line {}: {}", ini_section.line_number, e))?;
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Collecting [ras.*] sections (parsed in a post-pass)
+    // -------------------------------------------------------------------------------------
+    // A RAS is one trigger + one action applied to the accounts of one or more
+    // target groups (kalix-allocation-components.md §3.3). The sections are
+    // collected here (preserving file order — execution order) but *built* after
+    // the main loop, because triggers and action arguments may reference
+    // constants, which parse below.
+    let mut ras_defs: Vec<(String, usize, String, String, String)> = Vec::new();
+    for (section_name, ini_section) in &ini_doc.sections {
+        if let Some(ras_name) = section_name.strip_prefix("ras.") {
+            if !is_valid_bare_name(ras_name) {
+                return Err(format!("Error on line {}: Invalid RAS name '{}'", ini_section.line_number, ras_name));
+            }
+            let mut targets = None;
+            let mut trigger = None;
+            let mut action = None;
+            for (key, ini_property) in &ini_section.properties {
+                let v = require_non_empty(&ini_property.value, key, ini_property.line_number)?;
+                match key.to_lowercase().as_str() {
+                    "targets" => targets = Some(v.to_string()),
+                    "trigger" => trigger = Some(v.to_string()),
+                    "action" => action = Some(v.to_string()),
+                    other => {
+                        return Err(format!("Error on line {}: Unexpected property '{}' in section '[{}]'. \
+                            A RAS has exactly three properties: targets, trigger, action.",
+                            ini_property.line_number, other, section_name));
+                    }
+                }
+            }
+            let line = ini_section.line_number;
+            let missing = |what: &str| format!("Error on line {}: Section '[{}]' is missing '{}'", line, section_name, what);
+            ras_defs.push((
+                ras_name.to_string(),
+                line,
+                targets.ok_or_else(|| missing("targets"))?,
+                trigger.ok_or_else(|| missing("trigger"))?,
+                action.ok_or_else(|| missing("action"))?,
+            ));
         }
     }
 
@@ -814,6 +856,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             // Account groups — already parsed in the pre-pass above
             // -------------------------------------------------------------------------------------
+        } else if section_name.starts_with("ras.") {
+            // -------------------------------------------------------------------------------------
+            // Resource allocation systems — collected above, built in the post-pass below
+            // -------------------------------------------------------------------------------------
         } else if section_name == "fn" {
             // -------------------------------------------------------------------------------------
             // User-defined functions — already parsed in the pre-pass above
@@ -835,6 +881,37 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         let to_node_idx = model.get_node_idx(&link_helper.to_node_name)
             .ok_or(format!("Node '{}' not found", link_helper.to_node_name))?;
         model.add_link(from_node_idx, to_node_idx, link_helper.from_outlet, link_helper.to_inlet);
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Building [ras.*] systems (post-pass: constants and groups are now loaded)
+    // -------------------------------------------------------------------------------------
+    for (ras_name, line, targets_str, trigger_str, action_str) in ras_defs {
+        if model.ras_systems.iter().any(|r| r.name == ras_name) {
+            return Err(format!("Error on line {}: RAS '{}' declared more than once", line, ras_name));
+        }
+        // Resolve targets: one or more acc.<group> references, flattened to
+        // member accounts in group-then-row order
+        let mut target_account_ids = Vec::new();
+        for t in csv_to_string_vec(&targets_str) {
+            let lower = t.to_lowercase();
+            let group_name = lower.strip_prefix("acc.").ok_or_else(|| format!(
+                "Error on line {}: RAS target '{}' must be an account group reference like 'acc.<group>'", line, t))?;
+            let group_idx = model.account_manager.get_group_idx(group_name).ok_or_else(|| format!(
+                "Error on line {}: Unknown account group '{}' in RAS targets", line, t))?;
+            target_account_ids.extend(model.account_manager.get_group(group_idx).unwrap().member_ids.iter().copied());
+        }
+        let trigger = parse_ras_trigger(&trigger_str, &mut model, line)?;
+        let action = parse_ras_action(&action_str, &mut model, line)?;
+        model.ras_systems.push(RasSystem {
+            name: ras_name,
+            target_account_ids,
+            trigger,
+            action,
+            targets_original: targets_str,
+            trigger_original: trigger_str,
+            action_original: action_str,
+        });
     }
 
     // -------------------------------------------------------------------------------------
@@ -906,6 +983,15 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
         let section_name = format!("acc.{}", group.name);
         let table_str = format_account_group_table(&model.account_manager, group);
         ini_doc.set_property(section_name.as_str(), "accounts", table_str.as_str());
+    }
+
+    // List all RAS systems ([ras.*] sections) in execution (file) order,
+    // re-emitting targets/trigger/action as written
+    for ras in &model.ras_systems {
+        let section_name = format!("ras.{}", ras.name);
+        ini_doc.set_property(section_name.as_str(), "targets", ras.targets_original.as_str());
+        ini_doc.set_property(section_name.as_str(), "trigger", ras.trigger_original.as_str());
+        ini_doc.set_property(section_name.as_str(), "action", ras.action_original.as_str());
     }
 
     // List all nodes and var blocks, interleaved in execution (file) order —
@@ -1330,6 +1416,79 @@ fn parse_account_table(flat: &str) -> Result<AccountTableData, String> {
         table.initials.push(initial);
     }
     Ok(table)
+}
+
+/// Parse a RAS trigger: a calendar keyword or a DynamicExpression evaluated as
+/// a pseudo-bool (level-semantic). The closed keyword set is tried first —
+/// bare identifiers are never valid Kalix expressions, so there is no
+/// ambiguity. `start_water_year(m)` takes its month explicitly: a literal or a
+/// const.* reference (shared months live in [const]).
+fn parse_ras_trigger(s: &str, model: &mut Model, line: usize) -> Result<crate::hydrology::allocation_systems::ras::RasTrigger, String> {
+    use crate::hydrology::allocation_systems::ras::RasTrigger;
+    let trimmed = s.trim();
+    match trimmed {
+        "every_step" => return Ok(RasTrigger::EveryStep),
+        "start_month" => return Ok(RasTrigger::StartMonth),
+        "start_year" => return Ok(RasTrigger::StartYear),
+        "start_water_year" => {
+            return Err(format!("Error on line {}: 'start_water_year' needs its month: \
+                start_water_year(<1-12>) or start_water_year(const.<name>)", line));
+        }
+        _ => {}
+    }
+    if let Some(inner) = trimmed.strip_prefix("start_water_year(").and_then(|r| r.strip_suffix(')')) {
+        let arg = inner.trim();
+        let month_value = if let Ok(m) = arg.parse::<f64>() {
+            m
+        } else if arg.starts_with("const.") {
+            model.data_cache.constants.get_value_by_name(&arg.to_lowercase())
+                .map_err(|e| format!("Error on line {}: {}", line, e))?
+        } else {
+            return Err(format!("Error on line {}: Invalid start_water_year month '{}': \
+                must be a number 1-12 or a const.* reference", line, arg));
+        };
+        let month = month_value as u8;
+        if month_value.fract() != 0.0 || !(1..=12).contains(&month) {
+            return Err(format!("Error on line {}: start_water_year month must be a whole number 1-12, got {}", line, month_value));
+        }
+        return Ok(RasTrigger::StartWaterYear(month));
+    }
+    // Anything else lowers as an expression
+    let input = DynamicInput::from_string(trimmed, &mut model.data_cache, true, None)
+        .map_err(|e| format!("Error on line {}: Invalid RAS trigger: {}", line, e))?;
+    Ok(RasTrigger::Expression(input))
+}
+
+/// Parse a RAS action: a stencilled action name with an optional
+/// expression-valued argument. Distributive actions arrive in phase 2/3.
+fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hydrology::allocation_systems::ras::RasAction, String> {
+    use crate::hydrology::allocation_systems::ras::RasAction;
+    let trimmed = s.trim();
+    match trimmed {
+        "set_full" => return Ok(RasAction::SetFull),
+        "set_empty" => return Ok(RasAction::SetEmpty),
+        _ => {}
+    }
+    let open = trimmed.find('(');
+    let (name, arg) = match (open, trimmed.ends_with(')')) {
+        (Some(p), true) => (trimmed[..p].trim(), trimmed[p + 1..trimmed.len() - 1].trim()),
+        _ => {
+            return Err(format!("Error on line {}: Invalid RAS action '{}'. Expected one of: set_full, \
+                set_empty, set(x), set_fraction(x), credit(x), debit(x), scale(x), reduce_to(x)", line, trimmed));
+        }
+    };
+    let input = DynamicInput::from_string(arg, &mut model.data_cache, true, None)
+        .map_err(|e| format!("Error on line {}: Invalid argument for RAS action '{}': {}", line, name, e))?;
+    match name {
+        "set" => Ok(RasAction::Set(input)),
+        "set_fraction" => Ok(RasAction::SetFraction(input)),
+        "credit" => Ok(RasAction::Credit(input)),
+        "debit" => Ok(RasAction::Debit(input)),
+        "scale" => Ok(RasAction::Scale(input)),
+        "reduce_to" => Ok(RasAction::ReduceTo(input)),
+        other => Err(format!("Error on line {}: Unknown RAS action '{}'. Expected one of: set_full, \
+            set_empty, set(x), set_fraction(x), credit(x), debit(x), scale(x), reduce_to(x)", line, other)),
+    }
 }
 
 /// Resolve a node's `accounts` property — a comma-separated, *ordered* list of

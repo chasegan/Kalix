@@ -1,8 +1,6 @@
 use rustc_hash::FxHashMap;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account::Account;
-use crate::hydrology::accounts::maintenance::{MaintenanceGroup, MaintenanceType};
-use crate::hydrology::accounts::trigger::Trigger;
 
 /// An account group ([acc.<name>] section): the unit RAS clauses target.
 /// Pure nouns — membership and per-account data columns; no behaviour
@@ -29,9 +27,6 @@ pub struct AccountManager {
     groups: Vec<AccountGroup>,
     group_lookup: FxHashMap<String, usize>,
 
-    // Account maintenance tasks
-    account_maintenance_groups: Vec<MaintenanceGroup>,
-
     // Recorder vectors are built in the 'initialize' method so we know what account values to
     // record during the run.
     // Recorder pairs are (account_idx, series_idx) where account_idx is the index of the account
@@ -51,7 +46,6 @@ impl AccountManager {
             has_accounts: false,
             groups: Vec::new(),
             group_lookup: FxHashMap::default(),
-            account_maintenance_groups: Vec::new(),
             has_recorders: false,
             recorder_acc_balance: Vec::new(),
             recorder_acc_size: Vec::new(),
@@ -79,17 +73,6 @@ impl AccountManager {
         Ok(idx)
     }
 
-
-    /// Create a new account within this account management system
-    pub fn create_account(&mut self, name: String, account_type: String, size: f64, wy_month: u8, initial_balance: f64) -> Result<usize, String> {
-        self.add_account(Account::new_with_size(
-            name.clone(),
-            account_type,
-            size,
-            wy_month,
-            initial_balance)
-        )
-    }
 
     /// Add an account group ([acc.<name>] section). Group names share the flat
     /// `acc.` namespace with account names: a collision either way is an error.
@@ -135,22 +118,9 @@ impl AccountManager {
         }
         self.has_accounts = self.accounts.len() >= 1;
 
-        // Checks
-        // None
-
-        // Initialize maintenance tasks
-        // (Go through all the accounts and see what maintenance they need)
-        // Group accounts by (trigger, task) using a map, then convert to MaintenanceGroups
-        let mut group_map: FxHashMap<(Trigger, MaintenanceType), Vec<usize>> = FxHashMap::default();
-        for (account_idx, account) in self.accounts.iter().enumerate() {
-            if account.is_unreg && (account.wy_month > 0) && (account.size > 0.0) {
-                let key = (Trigger::StartWaterYear(account.wy_month), MaintenanceType::SetFull);
-                group_map.entry(key).or_default().push(account_idx);
-            }
-        }
-        for ((trigger, maintenance_task), account_ids) in group_map {
-            self.account_maintenance_groups.push(MaintenanceGroup { trigger, maintenance_task, account_ids });
-        }
+        // No implicit behaviour: the old hard-coded water-year refill is gone.
+        // Everything that changes a balance is a [ras.*] action (executed by
+        // the model loop) or a node take.
 
         // Initialize result recorders
         self.has_recorders = false;
@@ -172,29 +142,6 @@ impl AccountManager {
             ) {
                 self.recorder_acc_size.push((account_idx, series_idx));
                 self.has_recorders = true;
-            }
-        }
-    }
-
-    /// Run maintenance:
-    /// - each group involves a particular trigger, and a particular type of maintenance;
-    /// - check each group to see if it "is_triggered";
-    /// - if triggered, do the maintenance for all accounts in the group.
-    pub fn run_maintenance(&mut self, data_cache: &DataCache) {
-        for group in &self.account_maintenance_groups {
-            if group.trigger.is_triggered(data_cache) {
-                match group.maintenance_task {
-                    MaintenanceType::SetFull => {
-                        for &idx in &group.account_ids {
-                            self.accounts[idx].set_balance_fraction(1.0);
-                        }
-                    },
-                    MaintenanceType::SetEmpty => {
-                        for &idx in &group.account_ids {
-                            self.accounts[idx].set_balance_fraction(0.0);
-                        }
-                    }
-                }
             }
         }
     }
@@ -228,6 +175,20 @@ impl AccountManager {
     /// Debit account
     pub fn debit_account(&mut self, account_id: usize, amount: f64) {
         self.accounts[account_id].debit_account_fast(amount);
+    }
+
+    // Balance mutators used by [ras.*] actions (clamped to [0, size] where safe)
+
+    pub fn set_account_balance_safely(&mut self, account_id: usize, balance: f64) {
+        self.accounts[account_id].set_balance_safely(balance);
+    }
+
+    pub fn set_account_balance_fraction(&mut self, account_id: usize, fraction: f64) {
+        self.accounts[account_id].set_balance_fraction(fraction);
+    }
+
+    pub fn add_account_value_safely(&mut self, account_id: usize, amount: f64) {
+        self.accounts[account_id].add_value_safely(amount);
     }
 }
 

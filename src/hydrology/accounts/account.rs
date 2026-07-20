@@ -1,12 +1,14 @@
 
+/// A single account: pure state — name, cap, balance. Accounts carry no
+/// behaviour and no calendar; everything that changes a balance is a [ras.*]
+/// action or a node take (kalix-allocation-components.md §3.1).
 #[derive(Default, Clone)]
 pub struct Account {
     // Properties
     pub name: String,
+    /// The declaring group's name (the acc. addressing/targeting unit).
     pub account_type: String,
     pub size: f64,
-    pub wy_month: u8, //TODO: maybe change to u8, or option<u8>?
-    pub is_unreg: bool,
     pub initial_balance: f64,
 
     // State
@@ -16,13 +18,11 @@ pub struct Account {
 impl Account {
 
     // Constructor
-    pub fn new_with_size(name: String, account_type: String, size: f64, wy_month: u8, initial_balance: f64, ) -> Self {
+    pub fn new_with_size(name: String, account_type: String, size: f64, initial_balance: f64) -> Self {
         Account {
             name,
             account_type,
             size,
-            wy_month,
-            is_unreg: true,
             initial_balance,
             balance: initial_balance,
         }
@@ -64,19 +64,8 @@ impl Account {
         self.balance = self.balance - amount;
     }
 
-    // Sets the account balance to zero
+    // Sets the account balance to the given fraction of the account size
     pub fn set_balance_fraction(&mut self, balance_as_proportion_of_account_size: f64) {
         self.set_balance_fast(balance_as_proportion_of_account_size * self.size);
     }
-
-
-    // // Carryover - maybe should work something like below
-    // pub fn carryover(&mut self) {
-    //     // done during initialization
-    //     self.carryover_size = self.size * self.carryover_proportion;
-    //
-    //     // and then done here
-    //     self.carryover_balance = self.balance.min(self.carryover_size);
-    //     self.balance = 0.0;
-    // }
 }

@@ -306,9 +306,9 @@ node.u1.diversion
 
 #[test]
 fn test_acc_no_implicit_behaviour() {
-    // Accounts created via [acc.*] must have no auto-generated water-year refill:
-    // behaviour comes only from [ras.*] (§3.1). wy_month is 0, so initialize()
-    // must generate no maintenance groups.
+    // Accounts carry no behaviour and no calendar: without a [ras.*] section
+    // targeting the group, a balance never moves except by node takes (§3.1) —
+    // in particular there is no implicit water-year refill.
     let ini = model_with_acc(
         r#"[acc.g1]
 accounts = name, size, initial,
@@ -318,6 +318,6 @@ accounts = name, size, initial,
     model.configure().expect("model should configure");
     let a1 = model.account_manager.get_account_idx("a1").unwrap();
     let account = model.account_manager.get_account(a1).unwrap();
-    assert_eq!(account.wy_month, 0, "no water-year month on table-declared accounts");
     assert_eq!(account.balance, 10.0, "balance initialised to initial");
+    assert!(model.ras_systems.is_empty(), "no implicit RAS generated");
 }

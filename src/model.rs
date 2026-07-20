@@ -5,6 +5,7 @@ use rustc_hash::FxHashMap;
 use crate::nodes::{Node, NodeEnum, Link};
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
+use crate::hydrology::allocation_systems::ras::RasSystem;
 use crate::io::csv_io::write_ts;
 use crate::io::pixie_io;
 use crate::io::custom_ini_parser::IniDocument;
@@ -62,6 +63,9 @@ pub struct Model {
     pub alias_map: HashMap<String, String>, 
     pub outputs: Vec<String>,
     pub account_manager: AccountManager,
+    // Resource allocation systems ([ras.*] sections), in file order —
+    // execution order is declaration order, as for nodes and var blocks
+    pub ras_systems: Vec<RasSystem>,
     pub data_cache: DataCache,
 
     /// Working directory for resolving relative file paths
@@ -136,6 +140,7 @@ impl Model {
             input_file_paths: vec![],
             outputs: self.outputs.clone(),
             account_manager: self.account_manager.clone(),
+            ras_systems: self.ras_systems.clone(),
             data_cache: self.data_cache.clone(),
             working_directory: self.working_directory.clone(),
             nodes: self.nodes.clone(),
@@ -551,8 +556,12 @@ impl Model {
 
     pub fn run_timestep(&mut self, _t: u64) {
 
-        // Accounting tasks
-        self.account_manager.run_maintenance(&self.data_cache);
+        // Accounting policy: [ras.*] systems run in file order at the top of
+        // the step, before ordering and flow — today's orders and takes see
+        // today's announcements (kalix-allocation-components.md §3.3).
+        for ras in &self.ras_systems {
+            ras.run(&mut self.data_cache, &mut self.account_manager);
+        }
 
         // Execute order phase
         set_context_phase(SimPhase::Ordering);

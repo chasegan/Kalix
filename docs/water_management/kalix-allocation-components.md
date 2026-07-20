@@ -145,7 +145,7 @@ action  = reduce_to(carryover_limit)     # column name → per-account argument
 
 [ras.gs_spill_forfeit]
 targets = acc.gs_annual
-trigger = node.dam1.spill > 0            # expression trigger: spill forfeiture
+trigger = node.dam1.spill[-1, 0] > 0     # expression trigger: spill forfeiture
 action  = scale(0.95)
 ```
 
@@ -177,6 +177,11 @@ action  = scale(0.95)
   for each day of the spill period, not a once-per-event action. Level,
   spill, and storage-full triggers (Burdekin's 148.1 mAHD; Lachlan's
   zero-and-refill) all come free.
+- **Node-output reads take the explicit previous-step offset.** A RAS runs
+  before the flow phase, and the engine's no-lookahead rule is enforced, not
+  papered over: `node.dam1.spill[-1, 0] > 0`, never a silent shift. Same
+  doctrine as everywhere else in the expression language; a bare read of a
+  yet-uncomputed series is a loud runtime error pointing at the fix.
 - **Edge behaviour is not engine machinery.** When a modeller genuinely wants
   fire-once-per-crossing, the existing temporal-offset syntax expresses it:
   `node.dam1.spill > 0 && node.dam1.spill[-1, 0] == 0`. No hidden

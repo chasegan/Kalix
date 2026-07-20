@@ -128,3 +128,6 @@ mod test_var_blocks;
 #[cfg(test)]
 mod test_account_groups;
 
+
+#[cfg(test)]
+mod test_ras;
