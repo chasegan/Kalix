@@ -19,7 +19,10 @@ pub struct UnregulatedUserNode {
     pub pump_capacity: DynamicInput,
     pub flow_threshold: DynamicInput,
     pub annual_cap: Option<f64>,
-    pub account_idx: Option<usize>,
+    /// Ordered account references (deemed order-of-use): the take draws the
+    /// first account down before touching the second, so available volume is
+    /// the sum and the debit cascades (kalix-allocation-components.md §3.6).
+    pub account_idxs: Vec<usize>,
     pub annual_cap_reset_month: u8,
     pub demand_carryover_allowed: bool,
     pub demand_carryover_reset_month: Option<u8>,
@@ -66,9 +69,9 @@ impl UnregulatedUserNode {
         }
     }
 
-    /// Use this to register an account with the unregulated user node
-    pub fn register_account(&mut self, account_idx: usize) {
-        self.account_idx = Some(account_idx);
+    /// Register the ordered list of accounts this node draws on.
+    pub fn register_accounts(&mut self, account_idxs: Vec<usize>) {
+        self.account_idxs = account_idxs;
     }
 }
 
@@ -122,7 +125,7 @@ impl Node for UnregulatedUserNode {
 
     fn get_name(&self) -> &str { &self.name }
 
-    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
+    fn run_order_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
@@ -174,13 +177,13 @@ impl Node for UnregulatedUserNode {
             }
         }
 
-        // Restrict take based on account if applicable
-        match self.account_idx {
-            None => {}
-            Some(account_idx) => {
-                let account_balance = _account_manager.get_account_balance(account_idx);
-                available = available.min(account_balance);
-            }
+        // Restrict take based on accounts if applicable: available volume is
+        // the sum across the ordered account list
+        if !self.account_idxs.is_empty() {
+            let total_balance: f64 = self.account_idxs.iter()
+                .map(|&idx| _account_manager.get_account_balance(idx).max(0.0))
+                .sum();
+            available = available.min(total_balance);
         }
 
         // Carryover
@@ -213,10 +216,17 @@ impl Node for UnregulatedUserNode {
             self.diversion = new_demand.min(available);
         }
 
-        // Update account to reflect this diversion
-        if let Some(account_idx) = self.account_idx {
-            _account_manager.debit_account(account_idx, self.diversion)
-        };
+        // Debit the diversion across accounts in order of use: drain the first
+        // account before touching the second
+        let mut remaining = self.diversion;
+        for &account_idx in &self.account_idxs {
+            if remaining <= 0.0 { break; }
+            let take = remaining.min(_account_manager.get_account_balance(account_idx).max(0.0));
+            if take > 0.0 {
+                _account_manager.debit_account(account_idx, take);
+                remaining -= take;
+            }
+        }
 
         // Update the annual diversion
         if let Some(_) = self.annual_cap { self.annual_diversion += self.diversion; }

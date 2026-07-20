@@ -203,6 +203,108 @@ accounts = name, size, initial,
 }
 
 #[test]
+fn test_inline_account_declaration_is_a_hard_error() {
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-10
+
+[node.u1]
+type = unregulated_user
+loc = 0, 0
+demand = 5
+account = n0031, avl, 42, 7
+
+[outputs]
+node.u1.dsflow
+"#;
+    let err = IniModelIO::new().read_model_string(ini).err().expect("expected a load error");
+    assert!(err.contains("no longer supported") && err.contains("[acc.*]"),
+        "error should carry the migration message, got: {}", err);
+}
+
+#[test]
+fn test_accounts_reference_errors() {
+    // Unknown account
+    let ini = model_with_acc(
+        r#"[acc.g1]
+accounts = name, size,
+           a1, 42,
+
+[node.u1]
+type = unregulated_user
+loc = 0, 10
+demand = 5
+accounts = nonexistent
+ds_1 = n1
+"#);
+    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    assert!(err.contains("Unknown account 'nonexistent'"), "unexpected error: {}", err);
+
+    // Group name where an account name is required
+    let ini = model_with_acc(
+        r#"[acc.g1]
+accounts = name, size,
+           a1, 42,
+
+[node.u1]
+type = unregulated_user
+loc = 0, 10
+demand = 5
+accounts = g1
+ds_1 = n1
+"#);
+    let err = IniModelIO::new().read_model_string(&ini).err().expect("expected a load error");
+    assert!(err.contains("is an account group"), "unexpected error: {}", err);
+}
+
+#[test]
+fn test_accounts_ordered_cascade_draw() {
+    // Two accounts in order of use: a_first (5 ML) then b_second (10 ML).
+    // Ample inflow, demand 8/day: day 1 takes 5 from a_first + 3 from b_second,
+    // day 2 takes remaining 7 from b_second, day 3 takes nothing.
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-05
+
+[acc.g1]
+accounts = name, size, initial,
+           a_first, 100, 5,
+           b_second, 100, 10,
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = u1
+
+[node.u1]
+type = unregulated_user
+loc = 0, 10
+demand = 8
+accounts = a_first, b_second
+
+[outputs]
+node.u1.diversion
+"#;
+    let mut model = IniModelIO::new().read_model_string(ini).expect("model should load");
+    model.configure().expect("model should configure");
+    model.run().expect("simulation should run");
+
+    let idx = model.data_cache.get_series_idx("node.u1.diversion", false).expect("diversion series");
+    let series = model.data_cache.series[idx].clone();
+    assert_eq!(series.values[0], 8.0, "day 1: full demand met (5 + 3 across accounts)");
+    assert_eq!(series.values[1], 7.0, "day 2: only b_second's remaining 7");
+    assert_eq!(series.values[2], 0.0, "day 3: both accounts empty");
+
+    let a = model.account_manager.get_account_idx("a_first").unwrap();
+    let b = model.account_manager.get_account_idx("b_second").unwrap();
+    assert_eq!(model.account_manager.get_account_balance(a), 0.0, "a_first drained first");
+    assert_eq!(model.account_manager.get_account_balance(b), 0.0, "b_second drained second");
+}
+
+#[test]
 fn test_acc_no_implicit_behaviour() {
     // Accounts created via [acc.*] must have no auto-generated water-year refill:
     // behaviour comes only from [ras.*] (§3.1). wy_month is 0, so initialize()

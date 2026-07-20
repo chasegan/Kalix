@@ -372,16 +372,22 @@ fn test_changed_storage_keeps_target_level_and_order_through() {
 
 #[test]
 fn test_changed_unregulated_user_keeps_account() {
-    // The account definition must be re-emitted (reconstructed from the account
-    // manager via the node's registered index). A changed user node previously
-    // dropped it. We add annual_cap to force the section to re-render.
+    // The account references must be re-emitted (reconstructed from the account
+    // manager via the node's registered indices — the lesson of ec0e803, carried
+    // to the [acc.*]/accounts= grammar). A changed user node previously dropped
+    // the linkage. We add annual_cap to force the section to re-render.
     let ini = "[kalix]\n\
+               \n\
+               [acc.general]\n\
+               accounts = name, size,\n\
+               \x20          myacc, 1000,\n\
+               \x20          otheracc, 50,\n\
                \n\
                [node.u]\n\
                type = unregulated_user\n\
                loc = 5, 6\n\
                demand = 10\n\
-               account = myacc, general, 1000, 7\n\
+               accounts = myacc, otheracc\n\
                ds_1 = bh\n\
                \n\
                [node.bh]\n\
@@ -402,6 +408,6 @@ fn test_changed_unregulated_user_keeps_account() {
     let saved = ini_io.model_to_string(&model);
 
     assert!(saved.contains("annual_cap"), "expected changed section, got:\n{}", saved);
-    assert!(saved.contains("account = myacc, general, 1000, 7"),
-            "changed unregulated_user must keep its account, got:\n{}", saved);
+    assert!(saved.contains("accounts = myacc, otheracc"),
+            "changed unregulated_user must keep its ordered account references, got:\n{}", saved);
 }

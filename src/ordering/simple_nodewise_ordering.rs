@@ -269,7 +269,7 @@ impl SimpleNodewiseOrderingSystem {
     /// Unlike simple_ordering.rs which iterates links in reverse, this method iterates only
     /// regulated nodes in reverse definition order, with incoming links stored in a flat
     /// contiguous vec for cache locality.
-    pub fn run_ordering_phase(&mut self, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache) {
+    pub fn run_ordering_phase(&mut self, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache, account_manager: &mut crate::hydrology::accounts::account_manager::AccountManager) {
 
         // Guard to save computation time if there is no ordering!
         if !self.model_has_ordering {
@@ -293,7 +293,7 @@ impl SimpleNodewiseOrderingSystem {
             match &mut nodes[node_idx] {
                 NodeEnum::StorageNode(node) => {
                     // Pre-order phase
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.us_orders);
@@ -302,7 +302,7 @@ impl SimpleNodewiseOrderingSystem {
                 },
                 NodeEnum::LossNode(node) => {
                     // Pre-order phase
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.usorders);
@@ -310,7 +310,7 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 },
                 NodeEnum::InflowNode(node) => {
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.usorders);
@@ -318,7 +318,7 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 },
                 NodeEnum::ConfluenceNode(node) => {
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
 
                     // Evaluate harmony fraction once and compute both upstream orders simultaneously
                     let link_1_harmony = node.harmony_fraction.get_value(data_cache)
@@ -340,7 +340,7 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 },
                 NodeEnum::OrderControlNode(node) => {
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.usorders);
@@ -348,7 +348,7 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 }
                 NodeEnum::SplitterNode(node) => {
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders.iter().sum());
@@ -356,7 +356,7 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 }
                 NodeEnum::RegulatedUserNode(node) => {
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0] + node.order_value);
@@ -364,7 +364,7 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 }
                 NodeEnum::BlackholeNode(node) => {
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream. zero.
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, 0.0);
@@ -372,7 +372,7 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 }
                 NodeEnum::GaugeNode(node) => {
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream.
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
@@ -380,7 +380,7 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 }
                 NodeEnum::UnregulatedUserNode(node) => {
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream.
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
@@ -388,7 +388,7 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 }
                 NodeEnum::Gr4jNode(node) => {
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream.
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
@@ -396,7 +396,7 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 }
                 NodeEnum::RoutingNode(node) => {
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream.
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
@@ -404,7 +404,7 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 }
                 NodeEnum::SacramentoNode(node) => {
-                    node.run_order_phase(data_cache);
+                    node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream.
                     for il in incoming {
                         upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);

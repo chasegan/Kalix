@@ -650,25 +650,16 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.demand_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "account" {
-                            let params =  csv_to_string_vec(v);
-                            if params.len() != 4 {
-                                return Err(format!("Error on line {}: Account def must have 4 values: {}",
-                                                   ini_property.line_number, params.len()));
-                            }
-                            let acc_name = params[0].clone();
-                            let acc_type = params[1].clone();
-                            let acc_size = params[2].parse::<f64>()
-                                .map_err(|_| format!("Error on line {}: Invalid account size for node '{}': not a valid number",
-                                                     ini_property.line_number, node_name))?;
-                            let acc_wy_month = params[3].parse::<u8>()
-                                .map_err(|_| format!("Error on line {}: Invalid account wy_month for node '{}': not a valid month",
-                                                     ini_property.line_number, node_name))?;
-                            // Defining an account involves (i) creating the account, (ii) adding it to
-                            // the account_manager, and also (iii) telling the node the idx for the account.
-                            let account = Account::new_with_size(acc_name, acc_type, acc_size, acc_wy_month, 0f64);
-                            let account_idx = model.account_manager.add_account(account)
+                            // Hard break (kalix-allocation-components.md §3.1): nodes
+                            // reference accounts, they never declare them.
+                            return Err(format!("Error on line {}: 'account = name, type, size, wy_month' is no longer \
+                                supported. Declare the account in an [acc.*] section and reference it here with \
+                                'accounts = <name>' — see docs/water_management/kalix-allocation-components.md §3.1.",
+                                ini_property.line_number));
+                        } else if name_lower == "accounts" {
+                            let account_idxs = resolve_account_references(v, &model.account_manager)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
-                            n.register_account(account_idx);
+                            n.register_accounts(account_idxs);
                         } else if name_lower == "annual_cap" {
                             let params = csv_string_to_f64_vec(v)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
@@ -713,6 +704,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "pump" {
                             n.pump_capacity = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else if name_lower == "accounts" {
+                            let account_idxs = resolve_account_references(v, &model.account_manager)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                            n.register_accounts(account_idxs);
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                                ini_property.line_number, name, node_name));
@@ -1071,13 +1066,13 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "demand", &n.demand_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pump", &n.pump_capacity.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "flow_threshold", &n.flow_threshold.to_string());
-                // Re-emit the account definition (name, type, size, wy_month) by
-                // looking it up in the account manager via the node's registered index.
-                if let Some(account_idx) = n.account_idx {
-                    if let Some(acc) = model.account_manager.get_account(account_idx) {
-                        let value = format!("{}, {}, {}, {}", acc.name, acc.account_type, acc.size, acc.wy_month);
-                        ini_doc.set_property(section_name.as_str(), "account", value.as_str());
-                    }
+                // Re-emit the ordered account references by name (order is
+                // meaning: deemed order-of-use)
+                if !n.account_idxs.is_empty() {
+                    let names: Vec<&str> = n.account_idxs.iter()
+                        .filter_map(|&idx| model.account_manager.get_account(idx).map(|a| a.name.as_str()))
+                        .collect();
+                    ini_doc.set_property(section_name.as_str(), "accounts", names.join(", ").as_str());
                 }
                 match n.annual_cap {
                     Some(cap) => {
@@ -1099,6 +1094,12 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 ini_doc.set_property(section_name.as_str(), "type", "regulated_user");
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "order", &n.order_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pump", &n.pump_capacity.to_string());
+                if !n.account_idxs.is_empty() {
+                    let names: Vec<&str> = n.account_idxs.iter()
+                        .filter_map(|&idx| model.account_manager.get_account(idx).map(|a| a.name.as_str()))
+                        .collect();
+                    ini_doc.set_property(section_name.as_str(), "accounts", names.join(", ").as_str());
+                }
             }
         }
     }
@@ -1329,6 +1330,33 @@ fn parse_account_table(flat: &str) -> Result<AccountTableData, String> {
         table.initials.push(initial);
     }
     Ok(table)
+}
+
+/// Resolve a node's `accounts` property — a comma-separated, *ordered* list of
+/// account names (order-of-use) — to account indices. Reference-only: names
+/// must already be declared in [acc.*] sections.
+fn resolve_account_references(v: &str, manager: &crate::hydrology::accounts::account_manager::AccountManager) -> Result<Vec<usize>, String> {
+    let names = csv_to_string_vec(v);
+    if names.is_empty() {
+        return Err("'accounts' list is empty".to_string());
+    }
+    let mut idxs = Vec::with_capacity(names.len());
+    for name in &names {
+        let lower = name.to_lowercase();
+        let idx = manager.get_account_idx(&lower).ok_or_else(|| {
+            if manager.get_group_idx(&lower).is_some() {
+                format!("'{}' is an account group; a node's 'accounts' list takes account names \
+                    (group targeting belongs in [ras.*] sections)", name)
+            } else {
+                format!("Unknown account '{}'. Accounts are declared in [acc.*] sections.", name)
+            }
+        })?;
+        if idxs.contains(&idx) {
+            return Err(format!("Account '{}' is listed more than once", name));
+        }
+        idxs.push(idx);
+    }
+    Ok(idxs)
 }
 
 /// Render an account group's headed table for saving, in the same multi-line

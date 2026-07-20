@@ -146,7 +146,7 @@ impl Node for LossNode {
         &self.name
     }
 
-    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
+    fn run_order_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {

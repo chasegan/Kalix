@@ -21,6 +21,10 @@ pub struct RegulatedUserNode {
     pub order_value: f64, //Captured during the ordering phase if in regulated zones
     pub order_buffer: FifoBuffer,
     pub pump_capacity: DynamicInput,
+    /// Ordered account references (deemed order-of-use). Orders are capped by
+    /// the summed balance at order time, deliveries are capped and debited at
+    /// flow time — debit-on-use semantics (kalix-allocation-components.md §3.6).
+    pub account_idxs: Vec<usize>,
 
     // Internal state only
     pub dsorders: [f64; MAX_DS_LINKS],
@@ -54,6 +58,17 @@ impl RegulatedUserNode {
             order_buffer: FifoBuffer::default(),
             ..Default::default()
         }
+    }
+
+    /// Register the ordered list of accounts this node draws on.
+    pub fn register_accounts(&mut self, account_idxs: Vec<usize>) {
+        self.account_idxs = account_idxs;
+    }
+
+    fn total_account_balance(&self, account_manager: &AccountManager) -> f64 {
+        self.account_idxs.iter()
+            .map(|&idx| account_manager.get_account_balance(idx).max(0.0))
+            .sum()
     }
 }
 
@@ -91,7 +106,7 @@ impl Node for RegulatedUserNode {
     fn get_name(&self) -> &str { &self.name }
 
 
-    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
+    fn run_order_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
@@ -99,6 +114,12 @@ impl Node for RegulatedUserNode {
         }
 
         self.order_value = self.order_input.get_value(data_cache);
+
+        // Cap the order by what the user owns: don't order water you can't take
+        // (§3.6 — enforced where orders originate, not inside the storage)
+        if !self.account_idxs.is_empty() {
+            self.order_value = self.order_value.min(self.total_account_balance(_account_manager));
+        }
 
         // TODO: is this where things are supposed to happen?
 
@@ -139,6 +160,22 @@ impl Node for RegulatedUserNode {
         // Determine the diversion value
         // assume demand = order_due
         self.diversion = self.order_due.min(available);
+
+        // Cap delivery by current holdings and debit the metered take across
+        // accounts in order of use (debit-on-use; balances may have moved since
+        // the order was placed)
+        if !self.account_idxs.is_empty() {
+            self.diversion = self.diversion.min(self.total_account_balance(_account_manager));
+            let mut remaining = self.diversion;
+            for &account_idx in &self.account_idxs {
+                if remaining <= 0.0 { break; }
+                let take = remaining.min(_account_manager.get_account_balance(account_idx).max(0.0));
+                if take > 0.0 {
+                    _account_manager.debit_account(account_idx, take);
+                    remaining -= take;
+                }
+            }
+        }
 
         // Extract the water and update mbal
         self.dsflow_primary = self.usflow - self.diversion;

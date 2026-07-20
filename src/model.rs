@@ -556,7 +556,7 @@ impl Model {
 
         // Execute order phase
         set_context_phase(SimPhase::Ordering);
-        self.simple_ordering_system.run_ordering_phase(&mut self.nodes, &mut self.data_cache);
+        self.simple_ordering_system.run_ordering_phase(&mut self.nodes, &mut self.data_cache, &mut self.account_manager);
 
         // Execute nodes and var blocks with flow phase, interleaved in
         // definition order (file position IS execution position for var

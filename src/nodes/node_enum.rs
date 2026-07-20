@@ -73,8 +73,8 @@ impl Node for NodeEnum {
         dispatch!(self, node => node.get_name())
     }
 
-    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
-        dispatch!(self, node => node.run_order_phase(data_cache))
+    fn run_order_phase(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
+        dispatch!(self, node => node.run_order_phase(data_cache, account_manager))
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) {

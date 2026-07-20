@@ -593,7 +593,7 @@ impl Node for StorageNode {
 
     fn get_name(&self) -> &str { &self.name }
 
-    fn run_order_phase(&mut self, data_cache: &mut DataCache) {
+    fn run_order_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
         // Record downstream orders, roll each outlet's order buffer, record
         // what is due today.
