@@ -124,3 +124,7 @@ mod test_fn_inline;
 
 #[cfg(test)]
 mod test_var_blocks;
+
+#[cfg(test)]
+mod test_account_groups;
+

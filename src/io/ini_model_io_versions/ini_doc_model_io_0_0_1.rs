@@ -1,4 +1,5 @@
 use crate::hydrology::accounts::account::Account;
+use crate::hydrology::accounts::account_manager::AccountGroup;
 use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
 use crate::io::custom_ini_parser::{IniDocument, IniSection};
 use crate::misc::configuration::SaveMethod;
@@ -109,6 +110,59 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         // load — so even an UNUSED cyclic definition is rejected.
         model.data_cache.fns.check_dag()
             .map_err(|e| format!("Error on line {}: {}", ini_section.line_number, e))?;
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Parsing account groups (pre-pass)
+    // -------------------------------------------------------------------------------------
+    // [acc.<group>] sections declare accounts as a headed table — pure nouns, no
+    // behaviour (kalix-allocation-components.md §3.1). Parsed pre-pass so nodes
+    // (accounts = references) and [ras.*] sections can target accounts and groups
+    // regardless of file order. IndexMap iteration preserves file order, so account
+    // indices follow declaration order (fill_in_order relies on row order per group).
+    for (section_name, ini_section) in &ini_doc.sections {
+        if let Some(group_name) = section_name.strip_prefix("acc.") {
+            if !is_valid_bare_name(group_name) {
+                return Err(format!("Error on line {}: Invalid account group name '{}'", ini_section.line_number, group_name));
+            }
+            let mut accounts_prop = None;
+            for (key, ini_property) in &ini_section.properties {
+                match key.as_str() {
+                    // `accounts` is the only key an [acc.*] section may contain (§3.1):
+                    // columns are data; anything behavioural belongs in [ras.*].
+                    "accounts" => accounts_prop = Some(ini_property),
+                    other => {
+                        return Err(format!("Error on line {}: Unexpected property '{}' in section '[{}]'. \
+                            [acc.*] sections hold only the 'accounts' table; policy belongs in [ras.*] sections.",
+                            ini_property.line_number, other, section_name));
+                    }
+                }
+            }
+            let accounts_prop = accounts_prop.ok_or_else(|| format!(
+                "Error on line {}: Section '[{}]' is missing its 'accounts' table", ini_section.line_number, section_name))?;
+
+            let table = parse_account_table(&accounts_prop.value)
+                .map_err(|e| format!("Error on line {}: {}", accounts_prop.line_number, e))?;
+
+            let mut member_ids = Vec::with_capacity(table.names.len());
+            for (row, name) in table.names.iter().enumerate() {
+                let account = Account::new_with_size(
+                    name.clone(),
+                    group_name.to_string(), // account_type carries the group name
+                    table.sizes[row],
+                    0,                      // no wy_month: behaviour comes only from [ras.*]
+                    table.initials[row],
+                );
+                let account_idx = model.account_manager.add_account(account)
+                    .map_err(|e| format!("Error on line {}: {}", accounts_prop.line_number, e))?;
+                member_ids.push(account_idx);
+            }
+            model.account_manager.add_group(AccountGroup {
+                name: group_name.to_string(),
+                member_ids,
+                columns: Vec::new(), // engine-known columns only for now; data columns arrive with the actions that read them
+            }).map_err(|e| format!("Error on line {}: {}", ini_section.line_number, e))?;
+        }
     }
 
     // Iterate over the sections of the ini_doc and construct the model as we go
@@ -761,6 +815,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             // Lookup tables — already parsed in the pre-pass above
             // -------------------------------------------------------------------------------------
+        } else if section_name.starts_with("acc.") {
+            // -------------------------------------------------------------------------------------
+            // Account groups — already parsed in the pre-pass above
+            // -------------------------------------------------------------------------------------
         } else if section_name == "fn" {
             // -------------------------------------------------------------------------------------
             // User-defined functions — already parsed in the pre-pass above
@@ -844,6 +902,15 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
     // List all constants
     for (name, value) in model.data_cache.constants.get_name_value_pairs() {
         ini_doc.set_property("const", name.as_str(), value.to_string().as_str());
+    }
+
+    // List all account groups ([acc.*] sections), each as its headed accounts
+    // table. Emitted before nodes so saved files read declaration-first, though
+    // load order is a pre-pass and does not depend on it.
+    for group in model.account_manager.groups() {
+        let section_name = format!("acc.{}", group.name);
+        let table_str = format_account_group_table(&model.account_manager, group);
+        ini_doc.set_property(section_name.as_str(), "accounts", table_str.as_str());
     }
 
     // List all nodes and var blocks, interleaved in execution (file) order —
@@ -1156,6 +1223,128 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
         }
         // Note: never use a wildcard match here, to ensure compiler enforces exhaustive handling.
     }
+}
+
+/// Allowed column vocabulary for the [acc.*] accounts table. A closed set by
+/// design (kalix-allocation-components.md §3.1): the header is detected as the
+/// leading run of allowed column names in the flattened cell stream — the core
+/// ini parser stays row-agnostic — and strictness on unrecognised columns is
+/// what catches typos ('initail') at load. The set grows only when an engine
+/// feature consumes a new column.
+const ACCOUNT_TABLE_COLUMNS: [&str; 3] = ["name", "size", "initial"];
+
+struct AccountTableData {
+    names: Vec<String>,
+    sizes: Vec<f64>,
+    initials: Vec<f64>,
+}
+
+/// Parse the `accounts` property of an [acc.*] section: a headed table that
+/// reaches us as one comma-flattened cell stream (multi-line values are joined
+/// by the ini parser). Header length = leading run of allowed column names;
+/// everything after wraps into rows of that width.
+fn parse_account_table(flat: &str) -> Result<AccountTableData, String> {
+    let trimmed = flat.trim_end_matches(|c: char| c == ',' || c.is_whitespace());
+    if trimmed.is_empty() {
+        return Err("Empty 'accounts' table".to_string());
+    }
+    let cells: Vec<&str> = trimmed.split(',').map(|x| x.trim()).collect();
+
+    // Header = leading run of allowed column names
+    let mut header: Vec<String> = Vec::new();
+    for cell in &cells {
+        let lower = cell.to_lowercase();
+        if ACCOUNT_TABLE_COLUMNS.contains(&lower.as_str()) {
+            if header.contains(&lower) {
+                return Err(format!("Duplicate column '{}' in accounts table header", lower));
+            }
+            header.push(lower);
+        } else {
+            break;
+        }
+    }
+    if header.is_empty() {
+        return Err(format!("Accounts table must start with a header row of column names (allowed: {})",
+            ACCOUNT_TABLE_COLUMNS.join(", ")));
+    }
+    if header[0] != "name" {
+        return Err("First column of the accounts table must be 'name'".to_string());
+    }
+    if !header.iter().any(|h| h == "size") {
+        return Err("Accounts table requires a 'size' column".to_string());
+    }
+
+    let n_cols = header.len();
+    let data = &cells[n_cols..];
+    if data.is_empty() {
+        return Err("Accounts table has a header but no account rows".to_string());
+    }
+    if data.len() % n_cols != 0 {
+        return Err(format!(
+            "Accounts table is malformed: {} data cells is not a whole number of {}-column rows \
+            (an unrecognised column name in the header reads as data — allowed columns: {})",
+            data.len(), n_cols, ACCOUNT_TABLE_COLUMNS.join(", ")));
+    }
+
+    let mut table = AccountTableData { names: Vec::new(), sizes: Vec::new(), initials: Vec::new() };
+    for row in data.chunks(n_cols) {
+        let mut size = f64::NAN;
+        let mut initial = 0.0;
+        for (col_name, cell) in header.iter().zip(row.iter()) {
+            match col_name.as_str() {
+                "name" => {
+                    let name = cell.to_lowercase();
+                    if !is_valid_bare_name(&name) {
+                        return Err(format!("Invalid account name '{}'", cell));
+                    }
+                    // A keyword-named account would be swallowed by header
+                    // detection when the saved file is re-read.
+                    if ACCOUNT_TABLE_COLUMNS.contains(&name.as_str()) {
+                        return Err(format!("Account name '{}' clashes with an accounts-table column name", cell));
+                    }
+                    table.names.push(name);
+                }
+                "size" => {
+                    size = cell.parse::<f64>()
+                        .map_err(|_| format!("Invalid size '{}' for account '{}': must be a number",
+                            cell, table.names.last().map(String::as_str).unwrap_or("?")))?;
+                    if !(size >= 0.0) {
+                        return Err(format!("Account '{}' has negative size {}",
+                            table.names.last().map(String::as_str).unwrap_or("?"), size));
+                    }
+                }
+                "initial" => {
+                    initial = cell.parse::<f64>()
+                        .map_err(|_| format!("Invalid initial balance '{}' for account '{}': must be a number",
+                            cell, table.names.last().map(String::as_str).unwrap_or("?")))?;
+                }
+                _ => unreachable!("header is drawn from ACCOUNT_TABLE_COLUMNS"),
+            }
+        }
+        if initial < 0.0 || initial > size {
+            return Err(format!("Account '{}' has initial balance {} outside [0, size={}]",
+                table.names.last().map(String::as_str).unwrap_or("?"), initial, size));
+        }
+        table.sizes.push(size);
+        table.initials.push(initial);
+    }
+    Ok(table)
+}
+
+/// Render an account group's headed table for saving, in the same multi-line
+/// continuation style as the loss node's table (one row per line, trailing
+/// commas, 4-space continuation indent).
+fn format_account_group_table(manager: &crate::hydrology::accounts::account_manager::AccountManager, group: &AccountGroup) -> String {
+    let indent = " ".repeat(4);
+    let mut out = String::from("name, size, initial, ");
+    for &account_idx in &group.member_ids {
+        if let Some(account) = manager.get_account(account_idx) {
+            out.push('\n');
+            out.push_str(&indent);
+            out.push_str(&format!("{}, {}, {}, ", account.name, format_f64(account.size), format_f64(account.initial_balance)));
+        }
+    }
+    out
 }
 
 /// Two sections are canonically equal when they hold the same property keys with

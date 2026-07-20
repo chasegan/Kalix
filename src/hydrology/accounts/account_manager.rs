@@ -4,11 +4,30 @@ use crate::hydrology::accounts::account::Account;
 use crate::hydrology::accounts::maintenance::{MaintenanceGroup, MaintenanceType};
 use crate::hydrology::accounts::trigger::Trigger;
 
+/// An account group ([acc.<name>] section): the unit RAS clauses target.
+/// Pure nouns — membership and per-account data columns; no behaviour
+/// (kalix-allocation-components.md §3.1).
+#[derive(Default, Clone)]
+pub struct AccountGroup {
+    pub name: String,
+    /// Indices into AccountManager::accounts, in table row order
+    /// (row order is meaningful: fill_in_order distributes by it).
+    pub member_ids: Vec<usize>,
+    /// Data columns beyond name/size/initial, aligned with member_ids.
+    pub columns: Vec<(String, Vec<f64>)>,
+}
+
 #[derive(Default, Clone)]
 pub struct AccountManager {
     accounts: Vec<Account>,
     account_lookup: FxHashMap<String, usize>,
     has_accounts: bool,
+
+    // Account groups ([acc.*] sections). Group names share the flat `acc.`
+    // namespace with account names, so both lookups reject either kind of
+    // collision.
+    groups: Vec<AccountGroup>,
+    group_lookup: FxHashMap<String, usize>,
 
     // Account maintenance tasks
     account_maintenance_groups: Vec<MaintenanceGroup>,
@@ -30,6 +49,8 @@ impl AccountManager {
             accounts: Vec::new(),
             account_lookup: FxHashMap::default(),
             has_accounts: false,
+            groups: Vec::new(),
+            group_lookup: FxHashMap::default(),
             account_maintenance_groups: Vec::new(),
             has_recorders: false,
             recorder_acc_balance: Vec::new(),
@@ -41,9 +62,12 @@ impl AccountManager {
     /// Add an account
     pub fn add_account(&mut self, account: Account) -> Result<usize, String> {
 
-        // Check the name doesn't clash
+        // Check the name doesn't clash (accounts and groups share the acc. namespace)
         if self.account_lookup.contains_key(&account.name) {
             return Err(format!("Tried to create account '{}' more than once.", &account.name));
+        }
+        if self.group_lookup.contains_key(&account.name) {
+            return Err(format!("Account '{}' clashes with an account group of the same name.", &account.name));
         }
 
         // Add the account to the vec & hashmap
@@ -65,6 +89,41 @@ impl AccountManager {
             wy_month,
             initial_balance)
         )
+    }
+
+    /// Add an account group ([acc.<name>] section). Group names share the flat
+    /// `acc.` namespace with account names: a collision either way is an error.
+    pub fn add_group(&mut self, group: AccountGroup) -> Result<usize, String> {
+        if self.group_lookup.contains_key(&group.name) {
+            return Err(format!("Tried to create account group '{}' more than once.", &group.name));
+        }
+        if self.account_lookup.contains_key(&group.name) {
+            return Err(format!("Account group '{}' clashes with an account of the same name.", &group.name));
+        }
+        let idx = self.groups.len();
+        self.group_lookup.insert(group.name.clone(), idx);
+        self.groups.push(group);
+        Ok(idx)
+    }
+
+    /// Look up an account group index by name.
+    pub fn get_group_idx(&self, name: &str) -> Option<usize> {
+        self.group_lookup.get(name).copied()
+    }
+
+    /// Get a reference to an account group by index, if it exists.
+    pub fn get_group(&self, group_idx: usize) -> Option<&AccountGroup> {
+        self.groups.get(group_idx)
+    }
+
+    /// All account groups, in declaration order.
+    pub fn groups(&self) -> &[AccountGroup] {
+        &self.groups
+    }
+
+    /// Look up an account index by name.
+    pub fn get_account_idx(&self, name: &str) -> Option<usize> {
+        self.account_lookup.get(name).copied()
     }
 
     /// Initialize account manager, including all accounts and recorders
