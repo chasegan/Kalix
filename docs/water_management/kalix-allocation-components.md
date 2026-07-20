@@ -81,10 +81,29 @@ ledger touched only by node takes.
 - **`accounts` is the only key an `[acc.*]` section may contain.** A future
   set-level property request is a signal the thing is policy and belongs on a
   RAS. This also keeps the grammar collision-free forever.
-- **Namespace.** Account names are globally unique across all groups (the
-  existing `AccountManager` duplicate check polices this — any second
-  declaration is a loud load error, never a merge). Group names share the flat
-  `acc.` namespace; `acc.<group>.<field>` publishes the group aggregate.
+- **Namespace: flat, settled July 2026.** Account names are globally unique
+  across all groups (the existing `AccountManager` duplicate check polices
+  this — any second declaration is a loud load error, never a merge). Group
+  names share the flat `acc.` namespace; `acc.<group>.<field>` publishes the
+  group aggregate.
+
+  Nesting (`acc.<group>.<account>.<field>`, mirroring `var.<block>.<key>`) was
+  considered and rejected. An account is an independent entity — a licence
+  holder's bucket that nodes reference — and its group is a *policy
+  classification*, not part of its identity; nesting would encode the
+  classification into every reference, the way `node.gauges.my_gauge.dsflow`
+  would. The decisive cost is refactoring: this design deliberately pushes
+  modellers to **split groups** whenever a subset needs different policy, and
+  under nesting every split rewrites every reference to the moved accounts,
+  node `accounts =` lists included. Flat keeps a split confined to the
+  `[acc.*]` tables. Verbosity told the same way — a single-group model would
+  carry a prefix that distinguishes nothing on every node reference.
+
+  Accepted costs: a reference alone does not reveal whether it names an
+  account or a group (an IDE/lint affordance, not a grammar problem), and an
+  entity holding accounts in two classes disambiguates by name
+  (`smith_swa`, `smith_aba`) rather than by path. Revisit only if models
+  routinely want *parallel* account names across many groups.
 - **The group is the policy-targeting unit** (the "account type" a RAS clause
   addresses). Wanting different policy for a subset means splitting the group —
   deliberate pressure: policy boundaries should surface as group boundaries.
