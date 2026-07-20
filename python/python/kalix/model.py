@@ -43,9 +43,9 @@ class Model:
     def __init__(self, model_path: Optional[PathLike] = None) -> None:
         self._inner = _Model()
         if model_path is not None:
-            self.load_file(model_path)
+            self.from_file(model_path)
 
-    def load_file(self, model_path: PathLike) -> "Model":
+    def from_file(self, model_path: PathLike) -> "Model":
         """Load a full model from an INI file, replacing any model already held.
 
         The model is validated (node/link wiring, required inputs, etc.)
@@ -74,7 +74,7 @@ class Model:
             If the model parsed but failed validation.
         """
         try:
-            self._inner._load_file(str(model_path))
+            self._inner._from_file(str(model_path))
         except OSError as e:
             if _FILE_READ_FAILURE_MARKER in str(e):
                 raise OSError(f"Failed to load model from '{model_path}': {e}") from e
@@ -83,7 +83,7 @@ class Model:
             raise RuntimeError(f"Model '{model_path}' failed validation: {e}") from e
         return self
 
-    def load_string(self, model_string: str) -> "Model":
+    def from_string(self, model_string: str) -> "Model":
         """Load a full model from an in-memory INI string, replacing any model already held.
 
         Parameters
@@ -111,7 +111,7 @@ class Model:
         against the current working directory.
         """
         try:
-            self._inner._load_model_string(model_string)
+            self._inner._from_model_string(model_string)
         except OSError as e:
             raise ValueError(f"Failed to parse model string: {e}") from e
         except RuntimeError as e:
@@ -131,8 +131,8 @@ class Model:
         """
         raise NotImplementedError(
             "Model.load_snippet() is not implemented yet (merging a partial "
-            "model into an existing one). Use Model.load_file()/"
-            "Model.load_string() to replace the whole model instead."
+            "model into an existing one). Use Model.from_file()/"
+            "Model.from_string() to replace the whole model instead."
         )
 
     def run(self) -> "Model":
@@ -280,7 +280,7 @@ def load_file(model_path: PathLike) -> Model:
     RuntimeError
         If the model parsed but failed validation.
     """
-    return Model().load_file(model_path)
+    return Model().from_file(model_path)
 
 
 def load_string(model_string: str) -> Model:
@@ -311,4 +311,4 @@ def load_string(model_string: str) -> Model:
     relative paths referenced inside the INI (e.g. data file inputs) are
     resolved against the current working directory.
     """
-    return Model().load_string(model_string)
+    return Model().from_string(model_string)

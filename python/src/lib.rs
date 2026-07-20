@@ -264,7 +264,7 @@ impl PyModel {
     /// Load a model from an INI file, replacing any model already held.
     /// Validates via `Model::configure` before accepting; leaves `self`
     /// untouched on failure.
-    fn _load_file<'py>(
+    fn _from_file<'py>(
         mut slf: PyRefMut<'py, Self>,
         model_path: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
@@ -283,7 +283,7 @@ impl PyModel {
     /// Load a model from an in-memory INI string. Like `_load_file`, but
     /// relative paths inside the INI resolve against the current working
     /// directory (there's no containing file directory).
-    fn _load_model_string<'py>(
+    fn _from_model_string<'py>(
         mut slf: PyRefMut<'py, Self>,
         model_string: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
