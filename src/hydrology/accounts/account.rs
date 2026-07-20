@@ -13,6 +13,11 @@ pub struct Account {
 
     // State
     pub balance: f64,
+    /// Debits from node takes so far this step. Reset at the top of every
+    /// step; only `debit_account` adds to it, so policy changes made by
+    /// [ras.*] actions (write-offs, resets, credits) are excluded by
+    /// construction — this is "water used", not "balance moved".
+    pub debits_today: f64,
 }
 
 impl Account {
@@ -25,12 +30,14 @@ impl Account {
             size,
             initial_balance,
             balance: initial_balance,
+            debits_today: 0.0,
         }
     }
 
     // Initialize account using saved initial balance
     pub fn initialize(&mut self) {
         self.balance = self.initial_balance;
+        self.debits_today = 0.0;
     }
 
     // Set balance but not allowing it to be less than 0 or greater

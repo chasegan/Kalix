@@ -1186,9 +1186,10 @@ impl DynamicInput {
                 // Resolve to constants cache
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name.clone(), idx);
-            } else if lower_name.starts_with("node.") || lower_name.starts_with("var.") {
-                // Resolve to data cache but NOT as critical input (node outputs
-                // and var values are computed during the run, not loaded)
+            } else if lower_name.starts_with("node.") || lower_name.starts_with("var.")
+                || lower_name.starts_with("acc.") {
+                // Resolve to data cache but NOT as critical input (node outputs,
+                // var values and account state are computed during the run, not loaded)
                 let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
                 data_variable_map.insert(lower_name.clone(), idx);
             } else {

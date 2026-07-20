@@ -1,5 +1,5 @@
 use crate::hydrology::accounts::account::Account;
-use crate::hydrology::accounts::account_manager::AccountGroup;
+use crate::hydrology::accounts::account_manager::{AccountGroup, ACCOUNT_SERIES_FIELDS, GROUP_SERIES_FIELDS};
 use crate::hydrology::allocation_systems::ras::RasSystem;
 use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
 use crate::io::custom_ini_parser::{IniDocument, IniSection};
@@ -906,6 +906,32 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             action_original: action_str,
             recorder_idx_fired: None,
         });
+    }
+
+    // -------------------------------------------------------------------------------------
+    // Validate acc.* series references
+    // -------------------------------------------------------------------------------------
+    // Every acc.* series in the data cache came from an [outputs] entry or an
+    // expression reference. Each must name a real account (or group) and a real
+    // field — otherwise a typo would sit there as a series nothing ever writes,
+    // reading as a silent NaN instead of an error.
+    for name in model.data_cache.series_name.clone() {
+        let Some(rest) = name.strip_prefix("acc.") else { continue };
+        let (target, field) = rest.rsplit_once('.').ok_or_else(|| format!(
+            "Invalid account reference 'acc.{}': expected 'acc.<account or group>.<field>'", rest))?;
+        let is_account = model.account_manager.get_account_idx(target).is_some();
+        let is_group = model.account_manager.get_group_idx(target).is_some();
+        if !is_account && !is_group {
+            return Err(format!("Unknown account or account group '{}' in reference '{}'. \
+                Accounts are declared in [acc.*] sections.", target, name));
+        }
+        let allowed: &[&str] = if is_account { &ACCOUNT_SERIES_FIELDS } else { &GROUP_SERIES_FIELDS };
+        if !allowed.contains(&field) {
+            return Err(format!("Unknown field '{}' in reference '{}'. Available for {}: {}",
+                field, name,
+                if is_account { "an account" } else { "an account group" },
+                allowed.join(", ")));
+        }
     }
 
     // -------------------------------------------------------------------------------------

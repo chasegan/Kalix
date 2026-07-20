@@ -26,23 +26,24 @@ Three commitments, applied to management:
 
 ## 2. Where Kalix stands today
 
-The existing seams are better than expected; the account framework just built is
-a correct, minimal foundation.
+*Phase 1 (§5) is built: account groups, the RAS kernel with its stencilled
+action set, node references, and the `acc.*` expression namespace.*
 
 | Exists now | Role in this design |
 |---|---|
-| `Account` {name, type, size, wy_month, balance} (`src/hydrology/accounts/account.rs`) | The core state object. `account_type` string is carried but uninterpreted — the natural policy hook. A `carryover()` stub is already sketched. |
-| `AccountManager` + `Trigger` (EveryTimestep / StartMonth / StartCalendarYear / StartWaterYear) + `MaintenanceGroup` (SetFull / SetEmpty) | The event system in embryo. Today's hard-coded rule — unreg accounts refill to full each water year — is *already a degenerate annual allocation system* (announce 100%, forfeit at year end). |
-| `unregulated_user` node: `flow_threshold`, `pump`, `annual_cap`, `account`, `demand_carryover` | Opportunity-rights access ("dry water") is substantially built: commence-to-pump, rate limit, annual volumetric limit, account debit. |
-| DynamicExpressions + `[table.*]` + `sim.*` context + temporal offsets | The policy language. Missing only the ability to *read* account state. |
+| `Account` {name, group, size, initial, balance, debits_today} (`src/hydrology/accounts/account.rs`) | Pure state — no behaviour, no calendar. Every balance change is a RAS action or a node take. |
+| `AccountGroup` + `AccountManager` (`[acc.*]` sections, §3.1) | Declaration and membership; the group is the addressing unit RAS clauses target. |
+| `RasSystem` {targets, trigger, action} (`src/hydrology/allocation_systems/ras.rs`, §3.3) | The policy kernel. Calendar and expression triggers; stencilled actions (`set_full`, `set`, `credit`, `debit`, `scale`, `reduce_to`, …). Distributive actions are Phase 2–3. |
+| `unregulated_user` / `regulated_user`: ordered `accounts` reference lists (§3.6) | Availability capped by summed balances, debits cascade in order of use; regulated orders capped by holdings at order time. |
+| DynamicExpressions + `[table.*]` + `sim.*` context + temporal offsets + `acc.*` (§3.2) | The policy language, now including account state. |
 | Ordering system (backward order pass, zones, lags, loss gross-up) + `storage` node (4 outlets, MOL, target level, backward-Euler) | The physical regulated-river machinery orders and delivers water — account-blind, which is correct: ownership is a ledger over the storage's fluxes, not part of its physics (§3.5). |
-| `acc.<name>.balance` / `.size` recorder series | The transparency channel, already wired. |
+| `acc.<name>.opening_balance` / `.closing_balance` / `.debits` / `.size` and `ras.<name>.fired` series | The transparency channel, and the expression-readable view of account state (§3.2). |
 
-Gaps, in increasing order of depth: accounts are 1:1 with unreg users and only
-credited by refill-to-full; expressions cannot read balances; there is no
-resource assessment / announcement machinery; storage fluxes (evaporation,
-seepage, total inflow) are not all exposed as readable outputs; orders and
-deliveries are not attributed to accounts.
+Gaps, in increasing order of depth: per-account data columns are parsed but not
+yet resolvable as action arguments (`reduce_to(carryover_limit)`); there is no
+resource assessment / announcement machinery (the distributive actions); storage
+fluxes (evaporation, seepage, total inflow) are not all exposed as readable
+outputs; orders and deliveries are not attributed to accounts.
 
 ## 3. The component set
 
@@ -83,7 +84,7 @@ ledger touched only by node takes.
 - **Namespace.** Account names are globally unique across all groups (the
   existing `AccountManager` duplicate check polices this — any second
   declaration is a loud load error, never a merge). Group names share the flat
-  `acc.` namespace, reserving `acc.<group>.*` for set aggregates later.
+  `acc.` namespace; `acc.<group>.<field>` publishes the group aggregate.
 - **The group is the policy-targeting unit** (the "account type" a RAS clause
   addresses). Wanting different policy for a subset means splitting the group —
   deliberate pressure: policy boundaries should surface as group boundaries.
@@ -105,22 +106,40 @@ ledger touched only by node takes.
 
 ### 3.2 Accounts readable in expressions — the `acc.*` namespace
 
-Extend `DynamicInput` variable resolution so `acc.<name>.balance`,
-`acc.<name>.size`, `acc.<name>.space` (size − balance), and any data column of
-the group table (`acc.<name>.carryover_limit`, …) resolve to account state,
-exactly as `node.<name>.<output>` resolves to node outputs.
+Account state is published as ordinary data-cache series, so it resolves in
+expressions by exactly the mechanism that serves `node.<name>.<output>`: a
+reference creates the series, the account manager registers the writer, and
+`[outputs]` records it. Three fields per account, plus the same three summed
+over each group (`acc.<group>.<field>`):
 
-This single feature is the biggest unlock in the design. It makes account state
-available to *every existing expression-valued parameter*: a storage's
-`target_level` can depend on a reserve account's balance; a user's `demand` can
-taper as its account empties; an `order_control` can clamp orders to a class's
-remaining allocation; a gauge `force_flow` can implement an environmental
-release rule conditioned on the contingency-allowance account. Many "allocation
-system" behaviours then need no new machinery at all — they are just expressions.
+| Field | Written | Readable within the step |
+|---|---|---|
+| `opening_balance` | once, immediately after the `[ras.*]` loop — before ordering and flow | **yes** |
+| `closing_balance` | end of step, with every other recorder | no — mid-step reads hit the standard unwritten-value error; use `[-1, 0]` for yesterday |
+| `debits` | end of step | as above |
 
-(Evaluation-order note: account reads during the flow phase see start-of-step
-balances, matching the existing `node.*` no-lookahead rule. Deterministic, and
-documented.)
+`debits` is *water used*: only node takes feed it, and it resets each step, so
+`[ras.*]` credits, resets and write-offs are excluded by construction.
+`acc.<name>.size` remains available as a recorder (it is static, so exposing
+constant properties to expressions properly is a separate piece of work).
+
+**Two views, deliberately.** `opening_balance` is the post-policy, pre-take
+snapshot: every expression reader sees the same value however the nodes happen
+to be ordered, which is what makes authored policy reproducible. Nodes deciding
+how much water they may actually extract do *not* use it — they read the live
+balance directly through the account manager during the flow phase, so a take
+can never exceed what is really there. Two jobs, two mechanisms.
+
+This is the biggest unlock in the design. It makes account state available to
+*every existing expression-valued parameter*: a storage's `target_level` can
+depend on a reserve account's balance; a user's `demand` can taper as its
+account empties; an `order_control` can clamp orders to a class's remaining
+allocation; a gauge `force_flow` can implement an environmental release rule
+conditioned on the contingency-allowance account. Many "allocation system"
+behaviours then need no new machinery at all — they are just expressions.
+
+Unknown account, group, or field names are load errors, not silently unwritten
+series.
 
 ### 3.3 The resource allocation system — `[ras.*]`
 
@@ -223,7 +242,7 @@ today's announcements — then the flow phase (node debits), then recorders.
 The exception is flux-consuming actions (`share_inflow`, loss apportionment of
 solved losses, `reconcile`), which necessarily run *after* the flow phase,
 since they consume the step's solved fluxes; their credits become visible next
-step (§3.5). Expression reads keep start-of-step semantics throughout (§3.2).
+step (§3.5). Expression reads use the published series and their timing (§3.2).
 
 With §3.1–3.3 alone, Kalix can express: annual accounting, every
 annual-plus-carryover variant (including evaporation haircuts and spill
@@ -247,7 +266,7 @@ targeting it are its rules.
 targets = acc.border_gs
 trigger = start_month
 action  = allocate(node.dam1.volume + table.min_inflow(sim.month)
-                   - acc.hp_reserve.balance - acc.loss_reserve.balance,
+                   - acc.hp_reserve.opening_balance - acc.loss_reserve.opening_balance,
                    prorata_by_size)
 ```
 
@@ -334,8 +353,8 @@ action  = reconcile(node.beardmore.volume + node.jack_taylor.volume)
   min(share × inflow, remaining space) with iterative **internal spill**
   redistribution; debit evaporation per the chosen attribution; debit
   withdrawals via the user-node linkage (§3.6). Accounts read during the flow
-  phase therefore show start-of-step balances — the same no-lookahead rule as
-  `node.*` reads, and faithful to real schemes, where orders precede the day's
+  phase therefore read `opening_balance` — the post-RAS, pre-take snapshot
+  (§3.2) — which is faithful to real schemes, where orders precede the day's
   accounting.
 - **Reconciliation** applies the St George asymmetry: surplus (physical >
   account sum) credited pro-rata by *capacity share*; deficit debited pro-rata

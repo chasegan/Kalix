@@ -28,14 +28,33 @@ pub struct AccountManager {
     group_lookup: FxHashMap<String, usize>,
 
     // Recorder vectors are built in the 'initialize' method so we know what account values to
-    // record during the run.
-    // Recorder pairs are (account_idx, series_idx) where account_idx is the index of the account
-    // in the 'accounts' vector and the series_idx is the index of the series in the data cache.
+    // record during the run. Pairs are (account_idx | group_idx, series_idx).
+    //
+    // Two balance series with distinct timing, so expressions get a stable view
+    // and outputs get the true end state (kalix-allocation-components.md §3.2):
+    //   opening_balance — written once after the [ras.*] loop, before ordering
+    //                     and flow, so every reader sees the same value however
+    //                     the nodes are ordered;
+    //   closing_balance — written at the end of the step, like every other
+    //                     recorder (mid-step reads hit the standard
+    //                     unwritten-value error and want a [-1, 0] offset).
     has_recorders: bool,
-    recorder_acc_balance: Vec<(usize, usize)>,
+    has_opening_recorders: bool,
+    recorder_acc_opening: Vec<(usize, usize)>,
+    recorder_acc_closing: Vec<(usize, usize)>,
+    recorder_acc_debits: Vec<(usize, usize)>,
     recorder_acc_size: Vec<(usize, usize)>,
-    recorder_acc_space: Vec<(usize, usize)>,
+    recorder_grp_opening: Vec<(usize, usize)>,
+    recorder_grp_closing: Vec<(usize, usize)>,
+    recorder_grp_debits: Vec<(usize, usize)>,
 }
+
+/// Series suffixes an `acc.<name>.<field>` reference may use. Closed set:
+/// anything else is a load error rather than a silently unwritten series.
+pub const ACCOUNT_SERIES_FIELDS: [&str; 4] = ["opening_balance", "closing_balance", "debits", "size"];
+
+/// Of those, the fields a *group* aggregate publishes (summed over members).
+pub const GROUP_SERIES_FIELDS: [&str; 3] = ["opening_balance", "closing_balance", "debits"];
 
 impl AccountManager {
 
@@ -48,9 +67,14 @@ impl AccountManager {
             groups: Vec::new(),
             group_lookup: FxHashMap::default(),
             has_recorders: false,
-            recorder_acc_balance: Vec::new(),
+            has_opening_recorders: false,
+            recorder_acc_opening: Vec::new(),
+            recorder_acc_closing: Vec::new(),
+            recorder_acc_debits: Vec::new(),
             recorder_acc_size: Vec::new(),
-            recorder_acc_space: Vec::new(),
+            recorder_grp_opening: Vec::new(),
+            recorder_grp_closing: Vec::new(),
+            recorder_grp_debits: Vec::new(),
         }
     }
 
@@ -124,58 +148,104 @@ impl AccountManager {
         // Everything that changes a balance is a [ras.*] action (executed by
         // the model loop) or a node take.
 
-        // Initialize result recorders
+        // Initialize result recorders. A series exists here if [outputs] asked
+        // for it or an expression referenced it — same opt-in path as node
+        // outputs, so referencing acc.x.opening_balance registers the writer.
         self.has_recorders = false;
-        self.recorder_acc_balance.clear();
+        self.recorder_acc_opening.clear();
+        self.recorder_acc_closing.clear();
+        self.recorder_acc_debits.clear();
         self.recorder_acc_size.clear();
-        self.recorder_acc_space.clear();
-        for (account_idx, account) in self.accounts.iter().enumerate() {
+        self.recorder_grp_opening.clear();
+        self.recorder_grp_closing.clear();
+        self.recorder_grp_debits.clear();
 
-            // Account balance recorders
-            if let Some(series_idx) = data_cache.get_series_idx(
-                make_acc_result_name(&account.name, "balance").as_str(), false
-            ) {
-                self.recorder_acc_balance.push((account_idx, series_idx));
-                self.has_recorders = true;
-            }
+        for account_idx in 0..self.accounts.len() {
+            let name = self.accounts[account_idx].name.clone();
+            let mut register = |field: &str, target: &mut Vec<(usize, usize)>, flag: &mut bool| {
+                if let Some(series_idx) = data_cache.get_series_idx(
+                    make_acc_result_name(&name, field).as_str(), false
+                ) {
+                    target.push((account_idx, series_idx));
+                    *flag = true;
+                }
+            };
+            let mut any = false;
+            register("opening_balance", &mut self.recorder_acc_opening, &mut any);
+            register("closing_balance", &mut self.recorder_acc_closing, &mut any);
+            register("debits", &mut self.recorder_acc_debits, &mut any);
+            register("size", &mut self.recorder_acc_size, &mut any);
+            self.has_recorders |= any;
+        }
 
-            // Account size recorders
-            if let Some(series_idx) = data_cache.get_series_idx(
-                make_acc_result_name(&account.name, "size").as_str(), false
-            ) {
-                self.recorder_acc_size.push((account_idx, series_idx));
-                self.has_recorders = true;
-            }
+        // Group aggregates: the same fields summed over member accounts
+        for group_idx in 0..self.groups.len() {
+            let name = self.groups[group_idx].name.clone();
+            let mut register = |field: &str, target: &mut Vec<(usize, usize)>, flag: &mut bool| {
+                if let Some(series_idx) = data_cache.get_series_idx(
+                    make_acc_result_name(&name, field).as_str(), false
+                ) {
+                    target.push((group_idx, series_idx));
+                    *flag = true;
+                }
+            };
+            let mut any = false;
+            register("opening_balance", &mut self.recorder_grp_opening, &mut any);
+            register("closing_balance", &mut self.recorder_grp_closing, &mut any);
+            register("debits", &mut self.recorder_grp_debits, &mut any);
+            self.has_recorders |= any;
+        }
 
-            // Account space recorders (size − balance)
-            if let Some(series_idx) = data_cache.get_series_idx(
-                make_acc_result_name(&account.name, "space").as_str(), false
-            ) {
-                self.recorder_acc_space.push((account_idx, series_idx));
-                self.has_recorders = true;
-            }
+        self.has_opening_recorders =
+            !self.recorder_acc_opening.is_empty() || !self.recorder_grp_opening.is_empty();
+    }
+
+    /// Start-of-step accounting, called after the [ras.*] loop and before the
+    /// ordering and flow phases. Resets the per-step debit tally and publishes
+    /// `opening_balance` — the post-policy, pre-take snapshot every expression
+    /// reader sees, whatever order the nodes run in.
+    pub fn start_of_step(&mut self, data_cache: &mut DataCache) {
+        for account in &mut self.accounts {
+            account.debits_today = 0.0;
+        }
+        if !self.has_opening_recorders { return; }
+        for &(account_idx, series_idx) in &self.recorder_acc_opening {
+            data_cache.add_value_at_index(series_idx, self.accounts[account_idx].balance);
+        }
+        for &(group_idx, series_idx) in &self.recorder_grp_opening {
+            let total = self.group_sum(group_idx, |a| a.balance);
+            data_cache.add_value_at_index(series_idx, total);
         }
     }
 
-    /// Record results
+    fn group_sum(&self, group_idx: usize, f: impl Fn(&Account) -> f64) -> f64 {
+        self.groups[group_idx].member_ids.iter()
+            .map(|&idx| f(&self.accounts[idx]))
+            .sum()
+    }
+
+    /// Record end-of-step results
     pub fn record_results(&self, data_cache: &mut DataCache) {
         // Early exit if there are no recorders
         if !self.has_recorders { return; }
 
-        // Record account balances
-        for &(account_idx, series_idx) in &self.recorder_acc_balance {
+        for &(account_idx, series_idx) in &self.recorder_acc_closing {
             data_cache.add_value_at_index(series_idx, self.accounts[account_idx].balance);
         }
-
-        // Record account sizes
+        for &(account_idx, series_idx) in &self.recorder_acc_debits {
+            data_cache.add_value_at_index(series_idx, self.accounts[account_idx].debits_today);
+        }
         for &(account_idx, series_idx) in &self.recorder_acc_size {
             data_cache.add_value_at_index(series_idx, self.accounts[account_idx].size);
         }
 
-        // Record account space (size − balance)
-        for &(account_idx, series_idx) in &self.recorder_acc_space {
-            let account = &self.accounts[account_idx];
-            data_cache.add_value_at_index(series_idx, account.size - account.balance);
+        for &(group_idx, series_idx) in &self.recorder_grp_closing {
+            let total = self.group_sum(group_idx, |a| a.balance);
+            data_cache.add_value_at_index(series_idx, total);
+        }
+        for &(group_idx, series_idx) in &self.recorder_grp_debits {
+            let total = self.group_sum(group_idx, |a| a.debits_today);
+            data_cache.add_value_at_index(series_idx, total);
         }
     }
 
@@ -189,9 +259,11 @@ impl AccountManager {
         self.accounts.get(account_id)
     }
 
-    /// Debit account
+    /// Debit an account for water taken by a node. This is the only path that
+    /// feeds the `debits` series, so policy changes stay out of "water used".
     pub fn debit_account(&mut self, account_id: usize, amount: f64) {
         self.accounts[account_id].debit_account_fast(amount);
+        self.accounts[account_id].debits_today += amount;
     }
 
     // Balance mutators used by [ras.*] actions (clamped to [0, size] where safe)

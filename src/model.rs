@@ -566,6 +566,10 @@ impl Model {
             ras.run(&mut self.data_cache, &mut self.account_manager);
         }
 
+        // Post-policy, pre-take snapshot: publishes acc.*.opening_balance and
+        // resets the per-step debit tally
+        self.account_manager.start_of_step(&mut self.data_cache);
+
         // Execute order phase
         set_context_phase(SimPhase::Ordering);
         self.simple_ordering_system.run_ordering_phase(&mut self.nodes, &mut self.data_cache, &mut self.account_manager);
