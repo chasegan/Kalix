@@ -239,6 +239,18 @@ fn _optimise_from_file<'py>(
 // Model bindings
 // --------------
 
+/// Mirrors `Model.patch()`'s `mode` argument (and, for deletes, `missing_ok`)
+/// on the Python side.
+#[pyclass]
+#[pyo3(name = "_PatchMode")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PatchMode {
+    Update,
+    Override,
+    Delete,
+    DeleteMissingOk,
+}
+
 #[pyclass]
 #[pyo3(name = "_Model")]
 struct PyModel {
@@ -309,26 +321,20 @@ impl PyModel {
         Ok(slf)
     }
 
-    /// TODO docstring
-    /// 
-    /// Parameters
-    ///     mode
-    ///         aaaaa # TODO
-    ///     patch_string
-    ///         aaaaa # TODO
+    /// Apply parameter overrides to the currently loaded model. Leaves
+    /// `self` untouched on failure (mirrors `_load_file`).
     fn _patch<'py>(
         mut slf: PyRefMut<'py, Self>,
-        mode: i32,  // TODO how to check mode - int? enum?
+        mode: PatchMode,
         patch_string: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
-        // TODO: see 6 of code review
         let new_model = match mode {
-            0 => patch_update(&slf.inner, patch_string),
-            1 => patch_override(&slf.inner, patch_string),
-            2 => patch_delete(&slf.inner, patch_string, false),
-            3 => patch_delete(&slf.inner, patch_string, true),
-            _ => Err(format!("Mode parameter poorly specified: {}", mode))
-        }.map_err(PyValueError::new_err)?;
+            PatchMode::Update => patch_update(&slf.inner, patch_string),
+            PatchMode::Override => patch_override(&slf.inner, patch_string),
+            PatchMode::Delete => patch_delete(&slf.inner, patch_string, false),
+            PatchMode::DeleteMissingOk => patch_delete(&slf.inner, patch_string, true),
+        }
+        .map_err(PyValueError::new_err)?;
         slf.inner = new_model;
         slf.has_run = false;
         Ok(slf)
@@ -380,5 +386,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_simulate_from_file, m)?)?;
     m.add_function(wrap_pyfunction!(_optimise_from_file, m)?)?;
     m.add_class::<PyModel>()?;
+    m.add_class::<PatchMode>()?;
     Ok(())
 }

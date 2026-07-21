@@ -13,7 +13,7 @@ from typing import List, Literal, Optional, Union
 import numpy as np
 import pandas as pd
 
-from kalix._native import _Model
+from kalix._native import _Model, _PatchMode
 
 __all__ = ["Model", "new_model", "load_file", "load_string"]
 
@@ -200,14 +200,12 @@ class Model:
             invalid model. This `Model` is left untouched in that case.
         """
         if mode == "update":
-            self._inner._patch(patch_string, mode=0)
+            self._inner._patch(patch_string, mode=_PatchMode.Update)
         elif mode == "override":
-            self._inner._patch(patch_string, mode=1)
+            self._inner._patch(patch_string, mode=_PatchMode.Override)
         elif mode == "delete":
-            if not missing_ok:
-                self._inner._patch(patch_string, mode=2)
-            else:
-                self._inner._patch(patch_string, mode=3)
+            native_mode = _PatchMode.DeleteMissingOk if missing_ok else _PatchMode.Delete
+            self._inner._patch(patch_string, mode=native_mode)
         else:
             raise ValueError(f"Unknown patch mode: {mode!r}")
         return self
