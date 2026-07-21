@@ -18,6 +18,12 @@ pub struct Account {
     /// [ras.*] actions (write-offs, resets, credits) are excluded by
     /// construction — this is "water used", not "balance moved".
     pub debits_today: f64,
+
+    /// Debits from node takes since the last allocation reset. Together with
+    /// the balance this *is* the account's allocation to date: water used does
+    /// not reduce an allocation, it moves between the two terms. Reset only by
+    /// the `reset_allocation` action (kalix-allocation-components.md §3.4).
+    pub debits_since_reset: f64,
 }
 
 impl Account {
@@ -31,6 +37,7 @@ impl Account {
             initial_balance,
             balance: initial_balance,
             debits_today: 0.0,
+            debits_since_reset: 0.0,
         }
     }
 
@@ -38,6 +45,15 @@ impl Account {
     pub fn initialize(&mut self) {
         self.balance = self.initial_balance;
         self.debits_today = 0.0;
+        self.debits_since_reset = 0.0;
+    }
+
+    /// Allocation to date: everything credited since the last reset, whether
+    /// it is still held or has been used. This is the quantity an announced
+    /// allocation percentage sets, and the reason a user drawing their balance
+    /// down does not reduce their allocation.
+    pub fn allocation(&self) -> f64 {
+        self.balance + self.debits_since_reset
     }
 
     // Set balance but not allowing it to be less than 0 or greater

@@ -905,6 +905,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             trigger_original: trigger_str,
             action_original: action_str,
             recorder_idx_fired: None,
+            recorder_idx_pct: None,
+            last_pct: 0.0,
         });
     }
 
@@ -1487,6 +1489,7 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hy
     match trimmed {
         "set_full" => return Ok(RasAction::SetFull),
         "set_empty" => return Ok(RasAction::SetEmpty),
+        "reset_allocation" => return Ok(RasAction::ResetAllocation),
         _ => {}
     }
     let open = trimmed.find('(');
@@ -1494,7 +1497,8 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hy
         (Some(p), true) => (trimmed[..p].trim(), trimmed[p + 1..trimmed.len() - 1].trim()),
         _ => {
             return Err(format!("Error on line {}: Invalid RAS action '{}'. Expected one of: set_full, \
-                set_empty, set(x), set_fraction(x), credit(x), debit(x), scale(x), reduce_to(x)", line, trimmed));
+                set_empty, reset_allocation, set(x), set_fraction(x), credit(x), debit(x), scale(x), \
+                reduce_to(x), allocate(pct)", line, trimmed));
         }
     };
     let input = DynamicInput::from_string(arg, &mut model.data_cache, true, None)
@@ -1506,8 +1510,10 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hy
         "debit" => Ok(RasAction::Debit(input)),
         "scale" => Ok(RasAction::Scale(input)),
         "reduce_to" => Ok(RasAction::ReduceTo(input)),
+        "allocate" => Ok(RasAction::Allocate(input)),
         other => Err(format!("Error on line {}: Unknown RAS action '{}'. Expected one of: set_full, \
-            set_empty, set(x), set_fraction(x), credit(x), debit(x), scale(x), reduce_to(x)", line, other)),
+            set_empty, reset_allocation, set(x), set_fraction(x), credit(x), debit(x), scale(x), \
+            reduce_to(x), allocate(pct)", line, other)),
     }
 }
 

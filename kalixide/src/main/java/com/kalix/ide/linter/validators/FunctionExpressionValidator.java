@@ -328,14 +328,14 @@ public class FunctionExpressionValidator {
 
     /** Fields published per account (`acc.<account>.<field>`). */
     private static final java.util.Set<String> ACCOUNT_FIELDS =
-        java.util.Set.of("opening_balance", "closing_balance", "debits", "size");
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "size");
 
     /** Fields published per account group — the same, less the static ones. */
     private static final java.util.Set<String> ACCOUNT_GROUP_FIELDS =
-        java.util.Set.of("opening_balance", "closing_balance", "debits");
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation");
 
     /** Fields published per resource allocation system (`ras.<name>.<field>`). */
-    private static final java.util.Set<String> RAS_FIELDS = java.util.Set.of("fired");
+    private static final java.util.Set<String> RAS_FIELDS = java.util.Set.of("fired", "pct");
 
     static class Token {
         TokenType type;
