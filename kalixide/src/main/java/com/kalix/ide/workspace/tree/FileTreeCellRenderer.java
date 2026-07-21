@@ -64,6 +64,9 @@ public class FileTreeCellRenderer extends DefaultTreeCellRenderer {
         if (lower.endsWith(".md") || lower.endsWith(".txt") || lower.endsWith(".log")) {
             return FontAwesomeSolid.FILE_ALT;
         }
+        if (lower.endsWith(".zip")) {
+            return FontAwesomeSolid.FILE_ARCHIVE;
+        }
         return FontAwesomeSolid.FILE;
     }
 
