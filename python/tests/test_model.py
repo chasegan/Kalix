@@ -346,6 +346,136 @@ def test_patch_delete_leaves_model_untouched_on_failure():
     assert isinstance(result, kalix.Model)
 
 
+# --- patch() dict form -----------------------------------------------------
+# `patch()` also accepts `{section_name: {key: value}}` as pure sugar over
+# the string form (spec sec 4.5) -- same validation, same atomicity, same
+# underlying write path, just skipping manual INI-string assembly.
+
+def test_patch_dict_merge_returns_same_instance_for_chaining():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    assert model.patch({"node.my_node": {"inflow": 2.0}}) is model
+
+
+def test_patch_dict_merge_can_run_after_patching():
+    model = kalix.load_file(str(_MODEL_INI)).patch({"node.reach2": {"lag": 5}})
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
+def test_patch_dict_merge_adds_new_section():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    result = model.patch({"node.new_sink": {"type": "blackhole", "loc": "1, 1"}})
+    assert isinstance(result, kalix.Model)
+
+
+def test_patch_dict_values_are_stringified():
+    """Values are passed through `str()` (sec 4.5) -- an `int` here is just
+    as valid as the string form's `"3"` would be."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    model.patch({"node.my_node": {"inflow": 3}})
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
+def test_patch_dict_empty_string_value_emits_bare_line():
+    """A key mapped to the empty string emits a bare line, matching the
+    list-style convention used by sections like [outputs] (sec 4.5, 5.2)."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    model.patch({"outputs": {"node.my_node.ds_1": ""}})
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
+def test_patch_dict_merge_invalid_result_raises_value_error():
+    with pytest.raises(ValueError, match="node_that_does_not_exist"):
+        kalix.load_string(_INLINE_MODEL_INI).patch(
+            {"node.my_node": {"ds_1": "node_that_does_not_exist"}}
+        )
+
+
+def test_patch_dict_merge_leaves_model_untouched_on_failure():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch({"node.my_node": {"ds_1": "node_that_does_not_exist"}})
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
+def test_patch_dict_merge_type_change_rejects_stale_properties():
+    """A merge that only changes `type` leaves the old type's properties
+    behind, which the new type doesn't recognise -- sec 4.4's rule holds
+    for the dict form exactly as it does for the string form (sec 4.5)."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch({"node.my_node": {"type": "blackhole"}})
+
+
+def test_patch_dict_replace_drops_properties_omitted_from_patch():
+    """Like the string form, replace via dict does not merge with the
+    original section -- omitting the required `type` here makes the
+    section unparseable."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch({"node.my_node": {"inflow": 2.0}}, mode="replace")
+
+
+def test_patch_dict_replace_can_run_after_patching():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    model.patch(
+        {"node.my_node": {"type": "inflow", "inflow": 2.0, "loc": "0,0"}},
+        mode="replace",
+    )
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
+def test_patch_dict_delete_removes_entire_section_when_empty_dict():
+    """An empty dict is the dict-form equivalent of a delete header with no
+    property lines under it (sec 4.3)."""
+    model = kalix.load_string(_INLINE_MODEL_WITH_EXTRA_NODE_INI)
+    model.patch({"node.extra_node": {}}, mode="delete")
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
+def test_patch_dict_delete_rejects_properties():
+    """Property-level deletion is unsupported for the dict form too -- a
+    non-empty dict under a delete section is rejected outright."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch({"node.my_node": {"not_a_real_property": ""}}, mode="delete")
+
+
+def test_patch_dict_delete_ignores_missing_section_when_missing_ok():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    result = model.patch({"node.missing": {}}, mode="delete", missing_ok=True)
+    assert isinstance(result.run(), kalix.Model)
+
+
+def test_patch_dict_delete_rejects_missing_section_when_not_missing_ok():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch({"node.missing": {}}, mode="delete")
+
+
+def test_patch_dict_multi_section_is_atomic_on_failure():
+    """A multi-section dict patch where one section is invalid must not
+    partially apply the sections that were individually fine -- no partial
+    application, ever, including multi-section snippets (sec 4.6)."""
+    model = kalix.load_string(_INLINE_MODEL_WITH_EXTRA_NODE_INI)
+    model.run()
+    baseline = model.get_outputs()
+
+    with pytest.raises(ValueError):
+        model.patch({
+            "node.my_node": {"inflow": 999.0},
+            "node.extra_node": {"bogus_property": "1"},
+        })
+
+    result = model.run()
+    pd.testing.assert_frame_equal(result.get_outputs(), baseline)
+
+
 # --- informative error messages -----------------------------------------
 
 def test_load_file_missing_file_message_is_informative():
