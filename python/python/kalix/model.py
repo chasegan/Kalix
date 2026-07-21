@@ -178,9 +178,9 @@ class Model:
             patch doesn't mention). ``"override"`` -- replace each named section
             wholesale with its patch definition; properties on an existing
             section that the patch omits are dropped. A section not yet present
-            is appended. ``"delete"`` -- remove properties (or, if a section
-            lists none, the whole section) from the model. Sections/properties
-            not present are silently ignored.
+            is appended. ``"delete"`` -- remove each named section wholesale.
+            Property-level deletion is not supported -- a patch section must
+            list no properties, or the call raises.
         missing_ok
             Only meaningful when mode=="delete". If True, silently ignores
             patch sections that don't exist in the model; if False (the

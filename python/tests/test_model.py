@@ -287,27 +287,34 @@ _INLINE_MODEL_WITH_STORAGE_NODE_INI = (
 
 
 def test_patch_delete_of_required_property_fails_validation_on_patch():
-    """Deleting a required property is validated against `configure()` at
-    patch time itself -- the section is syntactically fine without
-    `dimensions`, but the resulting model can't run, so the patch is
-    rejected up front (mirroring `load_file`/`load_string`) rather than
-    deferring the failure to `run()`."""
+    """Property-level deletion is unsupported, so naming a property here --
+    even a required one like `dimensions` -- is rejected outright (same rule
+    as `test_patch_delete_rejects_properties`), not deferred to `run()`."""
     model = kalix.load_string(_INLINE_MODEL_WITH_STORAGE_NODE_INI)
     with pytest.raises(ValueError):
         model.patch("[node.my_storage]\ndimensions =\n", mode="delete")
 
 
-def test_patch_delete_ignores_missing_section():
+def test_patch_delete_ignores_missing_section_when_missing_ok():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    result = model.patch("[node.missing]\n", mode="delete")
+    result = model.patch("[node.missing]\n", mode="delete", missing_ok=True)
     assert isinstance(result, kalix.Model)
     assert isinstance(result.run(), kalix.Model)
 
 
-def test_patch_delete_ignores_missing_property():
+def test_patch_delete_rejects_missing_section_when_not_missing_ok():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    result = model.patch("[node.my_node]\nnot_a_real_property =\n", mode="delete")
-    assert isinstance(result.run(), kalix.Model)
+    with pytest.raises(ValueError):
+        model.patch("[node.missing]\n", mode="delete")
+
+
+def test_patch_delete_rejects_properties():
+    """Property-level deletion is not supported -- a patch section listing
+    any properties is rejected outright, even if that property doesn't
+    exist on the model."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch("[node.my_node]\nnot_a_real_property =\n", mode="delete")
 
 
 def test_patch_delete_invalid_syntax_raises_value_error():
