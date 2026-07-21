@@ -249,14 +249,10 @@ impl IniDocument {
     /// Returns a mutable reference to the section for further modifications
     pub fn set_property(&mut self, section_name: &str, key: &str, new_value: &str) -> &mut IniSection {
         // Get or create the section
-        let section = self.sections.entry(section_name.to_string()).or_insert_with(|| {
-            IniSection {
-                properties: IndexMap::new(),
-                leading_lines: Vec::new(),
-                line_number: 0, // New sections don't have a line number from original file
-                valid: true,
-            }
-        });
+        let section = self
+            .sections
+            .entry(section_name.to_string())
+            .or_insert_with(|| IniSection::default());
 
         // Mark section as valid
         section.valid = true;
@@ -270,14 +266,13 @@ impl IniDocument {
             property.valid = true; // Mark as valid
         } else {
             // Create new property
-            section.properties.insert(key.to_string(), IniProperty {
-                value: new_value.to_string(),
-                line_number: 0, // New properties don't have a line number from original file
-                raw_lines: Vec::new(), // Empty indicates newly created
-                leading_lines: Vec::new(),
-                comments: Vec::new(),
-                valid: true,
-            });
+            section.properties.insert(
+                key.to_string(),
+                IniProperty {
+                    value: new_value.to_string(),
+                    ..Default::default()
+                },
+            );
         }
 
         section
@@ -439,6 +434,30 @@ impl IniDocument {
         }
 
         result
+    }
+}
+
+impl Default for IniProperty {
+    fn default() -> Self {
+        IniProperty {
+            value: String::new(),
+            line_number: 0, // New properties don't have a line number from original file
+            raw_lines: Vec::new(), // Empty indicates newly created
+            leading_lines: Vec::new(),
+            comments: Vec::new(),
+            valid: true,
+        }
+    }
+}
+
+impl Default for IniSection {
+    fn default() -> Self {
+        IniSection {
+            properties: IndexMap::new(),
+            leading_lines: Vec::new(),
+            line_number: 0, // New sections don't have a line number from original file
+            valid: true,
+        }
     }
 }
 
