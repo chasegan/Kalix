@@ -164,7 +164,8 @@ class Model:
             self,
             patch_string: str,
             *,
-            mode: Literal["update", "override", "delete"] = "update"
+            mode: Literal["update", "override", "delete"] = "update",
+            missing_ok: bool = False
     ) -> "Model":
         """Apply parameter overrides to the currently loaded model.
 
@@ -174,15 +175,18 @@ class Model:
             A partial model INI snippet naming the sections/properties to
             change, e.g. ``"[node.g]\\narea = 99\\n"``.
         mode
-            ``"update"`` -- set the given properties, leaving everything
-            else untouched (including properties on an existing section
-            that the patch doesn't mention).
-            ``"override"`` -- replace each named section wholesale with its
-            patch definition; properties on an existing section that the
-            patch omits are dropped. A section not yet present is appended.
-            ``"delete"`` -- remove properties (or, if a section lists none,
-            the whole section) from the model. Sections/properties not
-            present are silently ignored.
+            ``"update"`` -- set the given properties, leaving everything else
+            untouched (including properties on an existing section that the
+            patch doesn't mention). ``"override"`` -- replace each named section
+            wholesale with its patch definition; properties on an existing
+            section that the patch omits are dropped. A section not yet present
+            is appended. ``"delete"`` -- remove properties (or, if a section
+            lists none, the whole section) from the model. Sections/properties
+            not present are silently ignored.
+        missing_ok
+            Only meaningful when mode=="delete". If True, silently ignores
+            patch sections that don't exist in the model; if False (the
+            default), raises instead.
 
         Returns
         -------
@@ -192,15 +196,18 @@ class Model:
         Raises
         ------
         ValueError
-            If `patch_string` is not valid INI, or if applying it produces
-            an invalid model. This `Model` is left untouched in that case.
+            If `patch_string` is not valid INI, or if applying it produces an
+            invalid model. This `Model` is left untouched in that case.
         """
         if mode == "update":
-            self._inner._patch_update(patch_string)
+            self._inner._patch(patch_string, mode=0)
         elif mode == "override":
-            self._inner._patch_override(patch_string)
+            self._inner._patch(patch_string, mode=1)
         elif mode == "delete":
-            self._inner._patch_delete(patch_string)
+            if not missing_ok:
+                self._inner._patch(patch_string, mode=2)
+            else:
+                self._inner._patch(patch_string, mode=3)
         else:
             raise ValueError(f"Unknown patch mode: {mode!r}")
         return self
@@ -232,7 +239,7 @@ class Model:
         except ValueError as e:
             raise ValueError(f"Failed to retrieve model outputs: {e}") from e
 
-        if isinstance(names, str): 
+        if isinstance(names, str):
             names = [names]
 
         timestamps_sec = start + step * np.arange(size, dtype=np.int64)

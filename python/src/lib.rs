@@ -309,36 +309,26 @@ impl PyModel {
         Ok(slf)
     }
 
-    // ----- Patch functions ----
-    // Separated by functionality - python layer to orchestrate
-
-    /// Apply parameter overrides to the currently loaded model. Leaves
-    /// `self` untouched on failure (mirrors `_load_file`).
-    fn _patch_update<'py>(
+    /// TODO docstring
+    /// 
+    /// Parameters
+    ///     mode
+    ///         aaaaa # TODO
+    ///     patch_string
+    ///         aaaaa # TODO
+    fn _patch<'py>(
         mut slf: PyRefMut<'py, Self>,
+        mode: i32,  // TODO how to check mode - int? enum?
         patch_string: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
-        let new_model = patch_update(&slf.inner, patch_string).map_err(PyValueError::new_err)?;
-        slf.inner = new_model;
-        slf.has_run = false;
-        Ok(slf)
-    }
-
-    fn _patch_override<'py>(
-        mut slf: PyRefMut<'py, Self>,
-        patch_string: &str,
-    ) -> PyResult<PyRefMut<'py, Self>> {
-        let new_model = patch_override(&slf.inner, patch_string).map_err(PyValueError::new_err)?;
-        slf.inner = new_model;
-        slf.has_run = false;
-        Ok(slf)
-    }
-
-    fn _patch_delete<'py>(
-        mut slf: PyRefMut<'py, Self>,
-        patch_string: &str,
-    ) -> PyResult<PyRefMut<'py, Self>> {
-        let new_model = patch_delete(&slf.inner, patch_string).map_err(PyValueError::new_err)?;
+        // TODO: see 6 of code review
+        let new_model = match mode {
+            0 => patch_update(&slf.inner, patch_string),
+            1 => patch_override(&slf.inner, patch_string),
+            2 => patch_delete(&slf.inner, patch_string, false),
+            3 => patch_delete(&slf.inner, patch_string, true),
+            _ => Err(format!("Mode parameter poorly specified: {}", mode))
+        }.map_err(PyValueError::new_err)?;
         slf.inner = new_model;
         slf.has_run = false;
         Ok(slf)
