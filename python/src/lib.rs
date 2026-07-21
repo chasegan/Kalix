@@ -346,12 +346,15 @@ impl PyModel {
     ///     - start: i64 (real, unwrapped epoch seconds)
     ///     - step: u64
     ///     - size: usize
-    ///     - {name: array} PyDict
+    ///     - [(name, array), ...] - one entry per requested output, in request
+    ///       order. A `dict` would silently collapse repeated names into one
+    ///       entry, so this returns a list instead: requesting the same
+    ///       output twice must come back as two (identical) entries, not one.
     fn _get_outputs<'py>(
         &mut self,
         py: Python<'py>,
         names: Option<Vec<String>>,
-    ) -> PyResult<(i64, u64, usize, Bound<'py, PyDict>)> {
+    ) -> PyResult<(i64, u64, usize, Vec<(String, Bound<'py, PyArray1<f64>>)>)> {
         if !self.has_run {
             return Err(PyValueError::new_err(
                 "The model has not been run yet (loading/patching invalidates the results). \
@@ -370,12 +373,11 @@ impl PyModel {
             ),
             None => (0i64, 0u64, 0usize),
         };
-        let dict = PyDict::new_bound(py);
-        for ts in outputs {
-            let arr = ts.values.clone().into_pyarray_bound(py);
-            dict.set_item(&ts.name, arr)?;
-        }
-        Ok((start, step, size, dict))
+        let series_list = outputs
+            .into_iter()
+            .map(|ts| (ts.name.clone(), ts.values.clone().into_pyarray_bound(py)))
+            .collect();
+        Ok((start, step, size, series_list))
     }
 }
 

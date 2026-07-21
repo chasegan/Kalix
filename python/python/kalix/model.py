@@ -216,12 +216,19 @@ class Model:
         names
             Names of recorders to retrieve. ``None`` (default) retrieves
             every recorder declared in the model's ``[outputs]`` section.
+            Matching is case-insensitive. Requesting the same name more than
+            once is not an error -- it produces that many duplicate columns,
+            matching `names` position-for-position.
 
         Returns
         -------
         DataFrame
             Index is a UTC ``DatetimeIndex`` named ``"time"``; columns are
-            output names with float64 values.
+            output names with float64 values, in request order (or
+            declaration order for ``names=None``). Column names are the
+            outputs' *canonical stored* names -- the casing they were
+            declared under -- which may differ from the casing passed in
+            `names`.
 
         Raises
         ------
@@ -231,15 +238,12 @@ class Model:
             output, or was declared but not found/wrong length.
         """
         try:
-            start, step, size, series_dict = self._inner._get_outputs(names)
+            start, step, size, series_list = self._inner._get_outputs(names)
         except ValueError as e:
             raise ValueError(f"Failed to retrieve model outputs: {e}") from e
 
-        if isinstance(names, str):
-            names = [names]
-
         timestamps_sec = start + step * np.arange(size, dtype=np.int64)
-        return build_time_indexed_df(timestamps_sec, series_dict)
+        return build_time_indexed_df(timestamps_sec, series_list)
 
     def __repr__(self) -> str:
         return "<kalix.Model>"

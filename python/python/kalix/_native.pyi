@@ -40,4 +40,7 @@ class _Model:
     def _patch(self, patch_string: str, mode: _PatchMode) -> "_Model": ...
     def _get_outputs(
         self, names: Optional[List[str]] = None
-    ) -> Tuple[int, int, int, Dict[str, NDArray[np.float64]]]: ...  # start is signed (real epoch seconds)
+    ) -> Tuple[int, int, int, List[Tuple[str, NDArray[np.float64]]]]: ...  # start is signed (real epoch seconds)
+    # A list (not dict) of (name, array) pairs, one per requested output in
+    # request order -- requesting the same output twice yields two entries,
+    # not a collapsed one.
