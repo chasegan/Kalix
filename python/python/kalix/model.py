@@ -7,6 +7,7 @@ go through `Model` (or the module-level convenience functions below)
 instead.
 """
 from __future__ import annotations
+import typing
 
 from typing import List, Literal, Optional
 import numpy as np
@@ -197,7 +198,7 @@ class Model:
 
     def patch(
             self,
-            patch_string: str,
+            patch_content: str | dict[str, dict[str, str]],
             *,
             mode: Literal["merge", "replace", "delete"] = "merge",
             missing_ok: bool = False
@@ -238,13 +239,28 @@ class Model:
             ``[inputs]`` entry) that could not be read. This `Model` is left
             untouched in that case.
         """
+        if isinstance(patch_content, dict):
+            lines = []
+            for section_name, section_content in patch_content.items():
+                lines.append('[' + section_name + ']')
+                for property_name, property_value in section_content.items():
+                    if property_value == "":
+                        lines.append(property_name)
+                    else:
+                        lines.append(
+                            property_name +
+                            " = " +
+                            str(property_value)
+                        )
+            patch_content = '\n'.join(lines)
+
         if mode == "merge":
-            self._inner._patch(patch_string, mode=_PatchMode.Merge)
+            self._inner._patch(patch_content, mode=_PatchMode.Merge)
         elif mode == "replace":
-            self._inner._patch(patch_string, mode=_PatchMode.Replace)
+            self._inner._patch(patch_content, mode=_PatchMode.Replace)
         elif mode == "delete":
             native_mode = _PatchMode.DeleteMissingOk if missing_ok else _PatchMode.Delete
-            self._inner._patch(patch_string, mode=native_mode)
+            self._inner._patch(patch_content, mode=native_mode)
         else:
             raise ValueError(f"Unknown patch mode: {mode!r}")
         return self
