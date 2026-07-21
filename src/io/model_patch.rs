@@ -38,8 +38,8 @@ pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, String> 
             for (property_name, property_content) in patch_ini_section.properties {
                 model_ini_doc.set_property(
                     &patch_section_name,
-                    &property_name.to_string(),
-                    &property_content.value.to_string(),
+                    &property_name,
+                    &property_content.value,
                 );
             }
         }
