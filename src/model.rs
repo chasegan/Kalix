@@ -113,6 +113,13 @@ pub struct Model {
     pub baseline_canonical: Option<IniDocument>,
 }
 
+/// Outcome of looking a named output up in the data cache, see
+/// `Model::lookup_output_series`.
+enum OutputLookup<'a> {
+    Populated(&'a Timeseries),
+    WrongLength(usize),
+    NotFound,
+}
 
 impl Model {
     pub fn new() -> Model {
@@ -840,6 +847,24 @@ impl Model {
         }
     }
 
+    /// Result of looking up a named output series in the data cache, checked
+    /// against the simulation horizon (`sim_nsteps`). The single place that
+    /// defines "populated" for an output — both `collect_output_series` and
+    /// `get_output_series` go through this so the rule can't drift between them.
+    fn lookup_output_series(&self, name: &str, expected_len: usize) -> OutputLookup<'_> {
+        match self.data_cache.get_existing_series_idx(name) {
+            None => OutputLookup::NotFound,
+            Some(idx) => {
+                let ts = &self.data_cache.series[idx];
+                if ts.values.len() == expected_len {
+                    OutputLookup::Populated(ts)
+                } else {
+                    OutputLookup::WrongLength(ts.values.len())
+                }
+            }
+        }
+    }
+
     /// Collects the output series that are valid to export — those whose length matches the
     /// simulation horizon (`sim_nsteps`). An output declared in `[outputs]` but never
     /// populated by any component (e.g. an invalid recorder) is left empty in the data cache;
@@ -847,16 +872,15 @@ impl Model {
     /// export. Returned in the order the outputs are declared.
     pub(crate) fn collect_output_series(&self) -> Vec<&Timeseries> {
         let expected_len = self.configuration.sim_nsteps as usize;
-        let mut vec_ts: Vec<&Timeseries> = Vec::new();
-        for output_name in &self.outputs {
-            if let Some(idx) = self.data_cache.get_existing_series_idx(output_name) {
-                let ts = &self.data_cache.series[idx];
-                if ts.values.len() == expected_len {
-                    vec_ts.push(ts);
-                }
-            }
-        }
-        vec_ts
+        self.outputs
+            .iter()
+            .filter_map(
+                |output_name| match self.lookup_output_series(output_name, expected_len) {
+                    OutputLookup::Populated(ts) => Some(ts),
+                    OutputLookup::NotFound | OutputLookup::WrongLength(_) => None,
+                },
+            )
+            .collect()
     }
 
     /// Output series to export, in declaration order.
@@ -870,39 +894,35 @@ impl Model {
         &self,
         output_names: Option<Vec<String>>,
     ) -> Result<Vec<&Timeseries>, String> {
-        match output_names {
-            None => Ok(self.collect_output_series()),
-            Some(vec_names) => {
-                let expected_len = self.configuration.sim_nsteps as usize;
-                let mut vec_ts: Vec<&Timeseries> = Vec::new();
-                let names_hash: HashSet<String> =
-                    HashSet::from_iter(self.outputs.iter().map(|x| x.to_lowercase()));
-                for output_name in vec_names {
-                    if names_hash.contains(&output_name.to_lowercase()) {
-                        Ok(())
-                    } else {
-                        Err(format!(
-                            "Output {} undeclared in model [outputs]",
-                            output_name
-                        ))
-                    }?;
-                    match self.data_cache.get_existing_series_idx(&output_name) {
-                        Some(idx) => {
-                            let ts = &self.data_cache.series[idx];
-                            let ts_len = ts.values.len();
-                            if ts_len == expected_len {
-                                vec_ts.push(ts);
-                                Ok(())
-                            } else {
-                                Err(format!("Output series {} found but wrong length, length {} but expected {}", output_name, ts_len, expected_len))
-                            }
-                        }
-                        None => Err(format!("Output {} not found", output_name)),
-                    }?;
+        let Some(vec_names) = output_names else {
+            return Ok(self.collect_output_series());
+        };
+
+        let expected_len = self.configuration.sim_nsteps as usize;
+        let names_hash: HashSet<String> =
+            HashSet::from_iter(self.outputs.iter().map(|x| x.to_lowercase()));
+        let mut vec_ts: Vec<&Timeseries> = Vec::with_capacity(vec_names.len());
+        for output_name in vec_names {
+            if !names_hash.contains(&output_name.to_lowercase()) {
+                return Err(format!(
+                    "Output {} undeclared in model [outputs]",
+                    output_name
+                ));
+            }
+            match self.lookup_output_series(&output_name, expected_len) {
+                OutputLookup::Populated(ts) => vec_ts.push(ts),
+                OutputLookup::WrongLength(len) => {
+                    return Err(format!(
+                        "Output series {} found but wrong length, length {} but expected {}",
+                        output_name, len, expected_len
+                    ));
                 }
-                Ok(vec_ts)
+                OutputLookup::NotFound => {
+                    return Err(format!("Output {} not found", output_name));
+                }
             }
         }
+        Ok(vec_ts)
     }
 
     pub fn write_outputs(&self, filename: &str) -> Result<(), String> {
