@@ -33,7 +33,7 @@ fn apply_patch(
 /// patch, updates it if present or creates it otherwise; sections not yet
 /// present are created and appended to the bottom of the file. Properties
 /// and sections omitted from the patch are left untouched.
-pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, KalixIoError> {
+pub fn patch_merge(model: &Model, patch_string: &str) -> Result<Model, KalixIoError> {
     let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
         for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
             for (property_name, property_content) in patch_ini_section.properties {
@@ -51,10 +51,10 @@ pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, KalixIoE
 
 /// Apply `patch_string` to `model`'s `IniDocument`, replacing each named
 /// section wholesale with its patch definition (properties omitted from the
-/// patch are dropped, unlike `patch_update`). An overridden section keeps its
+/// patch are dropped, unlike `patch_merge`). An overridden section keeps its
 /// original position; a section not yet present is appended to the bottom of
 /// the file.
-pub fn patch_override(model: &Model, patch_string: &str) -> Result<Model, KalixIoError> {
+pub fn patch_replace(model: &Model, patch_string: &str) -> Result<Model, KalixIoError> {
     let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
         for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
             model_ini_doc.set_section(patch_section_name, patch_ini_section);
@@ -141,10 +141,10 @@ mod tests {
     }
 
     #[test]
-    fn patch_update_overrides_existing_property() {
+    fn patch_merge_overrides_existing_property() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let patched = patch_update(&model, "[node.g]\narea = 99\n").expect("patch should apply");
+        let patched = patch_merge(&model, "[node.g]\narea = 99\n").expect("patch should apply");
 
         let ini_doc = patched
             .ini_document
@@ -154,10 +154,10 @@ mod tests {
     }
 
     #[test]
-    fn patch_update_adds_new_section() {
+    fn patch_merge_adds_new_section() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let patched = patch_update(&model, "[node.bh2]\ntype = blackhole\nloc = 5, 5\n")
+        let patched = patch_merge(&model, "[node.bh2]\ntype = blackhole\nloc = 5, 5\n")
             .expect("patch should apply");
 
         let ini_doc = patched
@@ -169,11 +169,11 @@ mod tests {
     }
 
     #[test]
-    fn patch_update_does_not_mutate_original_model() {
+    fn patch_merge_does_not_mutate_original_model() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
         let original = model.clone();
 
-        let _patched = patch_update(&model, "[node.g]\narea = 99\n").expect("patch should apply");
+        let _patched = patch_merge(&model, "[node.g]\narea = 99\n").expect("patch should apply");
 
         let original_ini_doc = original
             .ini_document
@@ -183,31 +183,31 @@ mod tests {
     }
 
     #[test]
-    fn patch_update_preserves_working_directory() {
+    fn patch_merge_preserves_working_directory() {
         let mut model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
         model.working_directory = std::path::PathBuf::from("some/working/dir");
         let working_directory = model.working_directory.clone();
 
-        let patched = patch_update(&model, "[node.g]\narea = 99\n").expect("patch should apply");
+        let patched = patch_merge(&model, "[node.g]\narea = 99\n").expect("patch should apply");
 
         assert_eq!(patched.working_directory, working_directory);
     }
 
     #[test]
-    fn patch_update_rejects_invalid_patch_string() {
+    fn patch_merge_rejects_invalid_patch_string() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let result = patch_update(&model, "not valid ini [[[");
+        let result = patch_merge(&model, "not valid ini [[[");
         assert!(result.is_err());
     }
 
     #[test]
-    fn patch_override_replaces_whole_section() {
+    fn patch_replace_replaces_whole_section() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        // Omits `loc`, unlike patch_update this must not survive the override
+        // Omits `loc`, unlike patch_merge this must not survive the override
         let patched =
-            patch_override(&model, "[node.bh]\ntype = blackhole\n").expect("patch should apply");
+            patch_replace(&model, "[node.bh]\ntype = blackhole\n").expect("patch should apply");
 
         let ini_doc = patched
             .ini_document
@@ -218,10 +218,10 @@ mod tests {
     }
 
     #[test]
-    fn patch_override_adds_new_section() {
+    fn patch_replace_adds_new_section() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let patched = patch_override(&model, "[node.bh2]\ntype = blackhole\nloc = 5, 5\n")
+        let patched = patch_replace(&model, "[node.bh2]\ntype = blackhole\nloc = 5, 5\n")
             .expect("patch should apply");
 
         let ini_doc = patched
@@ -233,13 +233,13 @@ mod tests {
     }
 
     #[test]
-    fn patch_override_preserves_section_position() {
+    fn patch_replace_preserves_section_position() {
         // node.bh is upstream-linked from node.g; overriding it must not move
         // it below node.g in the file, or execution order would break -
         // per manifestos/node-definition-order.md
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let patched = patch_override(&model, "[node.bh]\ntype = blackhole\nloc = 9, 9\n")
+        let patched = patch_replace(&model, "[node.bh]\ntype = blackhole\nloc = 9, 9\n")
             .expect("patch should apply");
 
         let ini_doc = patched
@@ -259,12 +259,12 @@ mod tests {
     }
 
     #[test]
-    fn patch_override_does_not_mutate_original_model() {
+    fn patch_replace_does_not_mutate_original_model() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
         let original = model.clone();
 
         let _patched =
-            patch_override(&model, "[node.bh]\ntype = blackhole\n").expect("patch should apply");
+            patch_replace(&model, "[node.bh]\ntype = blackhole\n").expect("patch should apply");
 
         let original_ini_doc = original
             .ini_document
@@ -277,22 +277,22 @@ mod tests {
     }
 
     #[test]
-    fn patch_override_preserves_working_directory() {
+    fn patch_replace_preserves_working_directory() {
         let mut model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
         model.working_directory = std::path::PathBuf::from("some/working/dir");
         let working_directory = model.working_directory.clone();
 
-        let patched = patch_override(&model, "[node.bh]\ntype = blackhole\nloc = 1, 2\n")
+        let patched = patch_replace(&model, "[node.bh]\ntype = blackhole\nloc = 1, 2\n")
             .expect("patch should apply");
 
         assert_eq!(patched.working_directory, working_directory);
     }
 
     #[test]
-    fn patch_override_rejects_invalid_patch_string() {
+    fn patch_replace_rejects_invalid_patch_string() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let result = patch_override(&model, "not valid ini [[[");
+        let result = patch_replace(&model, "not valid ini [[[");
         assert!(result.is_err());
     }
 
@@ -376,21 +376,21 @@ mod tests {
     }
 
     #[test]
-    fn patch_update_rejects_patch_that_fails_configure() {
+    fn patch_merge_rejects_patch_that_fails_configure() {
         // Syntactically fine (`area` parses as a number), but `configure()`
         // rejects a negative catchment area - a patch that parses cleanly
         // must still be rejected if it produces a model that can't run.
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let result = patch_update(&model, "[node.g]\narea = -5\n");
+        let result = patch_merge(&model, "[node.g]\narea = -5\n");
         assert!(result.is_err());
     }
 
     #[test]
-    fn patch_override_rejects_patch_that_fails_configure() {
+    fn patch_replace_rejects_patch_that_fails_configure() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let result = patch_override(
+        let result = patch_replace(
             &model,
             "[node.g]\ntype = gr4j\nloc = 10, 20\narea = -5\nparams = 350, 0, 90, 1.7\nds_1 = bh\n",
         );
@@ -415,7 +415,7 @@ mod tests {
         // distinction as the top-level load path (see ini_model_io.rs tests).
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let result = patch_update(
+        let result = patch_merge(
             &model,
             "[inputs]\n./does_not_exist_patch_test.csv\n",
         );

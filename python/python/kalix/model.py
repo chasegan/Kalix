@@ -199,7 +199,7 @@ class Model:
             self,
             patch_string: str,
             *,
-            mode: Literal["update", "override", "delete"] = "update",
+            mode: Literal["merge", "replace", "delete"] = "merge",
             missing_ok: bool = False
     ) -> "Model":
         """Apply parameter overrides to the currently loaded model.
@@ -210,9 +210,9 @@ class Model:
             A partial model INI snippet naming the sections/properties to
             change, e.g. ``"[node.g]\\narea = 99\\n"``.
         mode
-            ``"update"`` -- set the given properties, leaving everything else
+            ``"merge"`` -- set the given properties, leaving everything else
             untouched (including properties on an existing section that the
-            patch doesn't mention). ``"override"`` -- replace each named section
+            patch doesn't mention). ``"replace"`` -- replace each named section
             wholesale with its patch definition; properties on an existing
             section that the patch omits are dropped. A section not yet present
             is appended. ``"delete"`` -- remove each named section wholesale.
@@ -238,10 +238,10 @@ class Model:
             ``[inputs]`` entry) that could not be read. This `Model` is left
             untouched in that case.
         """
-        if mode == "update":
-            self._inner._patch(patch_string, mode=_PatchMode.Update)
-        elif mode == "override":
-            self._inner._patch(patch_string, mode=_PatchMode.Override)
+        if mode == "merge":
+            self._inner._patch(patch_string, mode=_PatchMode.Merge)
+        elif mode == "replace":
+            self._inner._patch(patch_string, mode=_PatchMode.Replace)
         elif mode == "delete":
             native_mode = _PatchMode.DeleteMissingOk if missing_ok else _PatchMode.Delete
             self._inner._patch(patch_string, mode=native_mode)

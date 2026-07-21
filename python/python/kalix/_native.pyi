@@ -27,8 +27,8 @@ def _optimise_from_file(
 ) -> Dict[str, Any]: ...
 
 class _PatchMode:
-    Update: "_PatchMode"
-    Override: "_PatchMode"
+    Merge: "_PatchMode"
+    Replace: "_PatchMode"
     Delete: "_PatchMode"
     DeleteMissingOk: "_PatchMode"
 

@@ -121,12 +121,12 @@ def test_run_returns_same_instance_for_chaining():
     assert model.run() is model
 
 
-def test_patch_update_returns_same_instance_for_chaining():
+def test_patch_merge_returns_same_instance_for_chaining():
     model = kalix.load_string(_INLINE_MODEL_INI)
     assert model.patch("[node.my_node]\ninflow = 2.0\n") is model
 
 
-def test_patch_update_can_run_after_patching():
+def test_patch_merge_can_run_after_patching():
     """A patched property is actually picked up by the model that runs --
     not just accepted and ignored. `lag` must be a positive-enough value
     that `configure()` still accepts the routing node."""
@@ -135,7 +135,7 @@ def test_patch_update_can_run_after_patching():
     assert isinstance(result, kalix.Model)
 
 
-def test_patch_update_adds_new_section():
+def test_patch_merge_adds_new_section():
     """Sections absent from the original model can be added by a patch, not
     just existing ones overridden."""
     model = kalix.load_string(_INLINE_MODEL_INI)
@@ -143,12 +143,12 @@ def test_patch_update_adds_new_section():
     assert isinstance(result, kalix.Model)
 
 
-def test_patch_update_invalid_syntax_raises_value_error():
+def test_patch_merge_invalid_syntax_raises_value_error():
     with pytest.raises(ValueError):
         kalix.load_string(_INLINE_MODEL_INI).patch("not valid ini [[[")
 
 
-def test_patch_update_invalid_result_raises_value_error():
+def test_patch_merge_invalid_result_raises_value_error():
     """A syntactically valid patch that produces an invalid model (here, a
     downstream link to a nonexistent node) is still a ValueError, not a
     silent success or a panic."""
@@ -167,7 +167,7 @@ def test_patch_referencing_missing_input_file_raises_oserror():
         model.patch("[inputs]\n./does_not_exist_test_model_py.csv\n")
 
 
-def test_patch_update_leaves_model_untouched_on_failure():
+def test_patch_merge_leaves_model_untouched_on_failure():
     """A rejected patch must not damage the already-loaded model -- it
     should still run exactly as before the failed patch attempt."""
     model = kalix.load_string(_INLINE_MODEL_INI)
@@ -177,7 +177,7 @@ def test_patch_update_leaves_model_untouched_on_failure():
     assert isinstance(result, kalix.Model)
 
 
-# --- patch(mode="override") ----------------------------------------------
+# --- patch(mode="replace") ----------------------------------------------
 # A second, self-contained node so whole-section addition can be exercised
 # without disturbing `node.my_node` (mirrors model_patch.rs's use of an
 # extra leaf node nothing links to downstream).
@@ -201,55 +201,55 @@ _INLINE_MODEL_WITH_EXTRA_NODE_INI = (
 )
 
 
-def test_patch_override_returns_same_instance_for_chaining():
+def test_patch_replace_returns_same_instance_for_chaining():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    result = model.patch("[node.my_node]\ntype = inflow\ninflow = 2.0\nloc = 0,0\n", mode="override")
+    result = model.patch("[node.my_node]\ntype = inflow\ninflow = 2.0\nloc = 0,0\n", mode="replace")
     assert result is model
 
 
-def test_patch_override_can_run_after_patching():
+def test_patch_replace_can_run_after_patching():
     """A full, valid replacement section is accepted and the model still
-    runs -- unlike patch_update, override requires every property the
+    runs -- unlike patch_merge, replace requires every property the
     section needs since it isn't merged with the original."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    model.patch("[node.my_node]\ntype = inflow\ninflow = 2.0\nloc = 0,0\n", mode="override")
+    model.patch("[node.my_node]\ntype = inflow\ninflow = 2.0\nloc = 0,0\n", mode="replace")
     result = model.run()
     assert isinstance(result, kalix.Model)
 
 
-def test_patch_override_drops_properties_omitted_from_patch():
-    """Unlike patch_update, override replaces the whole section -- a
+def test_patch_replace_drops_properties_omitted_from_patch():
+    """Unlike patch_merge, replace replaces the whole section -- a
     property that exists on the original but is omitted from the patch
     does not survive. Dropping the required `type` property here makes the
     section unparseable, surfacing as a ValueError."""
     model = kalix.load_string(_INLINE_MODEL_INI)
     with pytest.raises(ValueError):
-        model.patch("[node.my_node]\ninflow = 2.0\n", mode="override")
+        model.patch("[node.my_node]\ninflow = 2.0\n", mode="replace")
 
 
-def test_patch_override_adds_new_section():
+def test_patch_replace_adds_new_section():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    result = model.patch("[node.new_sink]\ntype = blackhole\nloc = 1, 1\n", mode="override")
+    result = model.patch("[node.new_sink]\ntype = blackhole\nloc = 1, 1\n", mode="replace")
     assert isinstance(result, kalix.Model)
 
 
-def test_patch_override_invalid_syntax_raises_value_error():
+def test_patch_replace_invalid_syntax_raises_value_error():
     with pytest.raises(ValueError):
-        kalix.load_string(_INLINE_MODEL_INI).patch("not valid ini [[[", mode="override")
+        kalix.load_string(_INLINE_MODEL_INI).patch("not valid ini [[[", mode="replace")
 
 
-def test_patch_override_invalid_result_raises_value_error():
+def test_patch_replace_invalid_result_raises_value_error():
     with pytest.raises(ValueError, match="node_that_does_not_exist"):
         kalix.load_string(_INLINE_MODEL_INI).patch(
             "[node.my_node]\ntype = inflow\ninflow = 2.0\nloc = 0,0\nds_1 = node_that_does_not_exist\n",
-            mode="override",
+            mode="replace",
         )
 
 
-def test_patch_override_leaves_model_untouched_on_failure():
+def test_patch_replace_leaves_model_untouched_on_failure():
     model = kalix.load_string(_INLINE_MODEL_INI)
     with pytest.raises(ValueError):
-        model.patch("not valid ini [[[", mode="override")
+        model.patch("not valid ini [[[", mode="replace")
     result = model.run()
     assert isinstance(result, kalix.Model)
 

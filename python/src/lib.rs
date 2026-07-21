@@ -5,7 +5,7 @@
 
 use kalix::io::error::KalixIoError;
 use kalix::io::ini_model_io::IniModelIO;
-use kalix::io::model_patch::{patch_delete, patch_override, patch_update};
+use kalix::io::model_patch::{patch_delete, patch_merge, patch_replace};
 use kalix::io::pixie_io;
 use kalix::model::Model;
 use kalix::run;
@@ -256,8 +256,8 @@ fn _optimise_from_file<'py>(
 #[pyo3(name = "_PatchMode")]
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum PatchMode {
-    Update,
-    Override,
+    Merge,
+    Replace,
     Delete,
     DeleteMissingOk,
 }
@@ -340,8 +340,8 @@ impl PyModel {
         mode: PatchMode,
     ) -> PyResult<PyRefMut<'py, Self>> {
         let new_model = match mode {
-            PatchMode::Update => patch_update(&slf.inner, patch_string),
-            PatchMode::Override => patch_override(&slf.inner, patch_string),
+            PatchMode::Merge => patch_merge(&slf.inner, patch_string),
+            PatchMode::Replace => patch_replace(&slf.inner, patch_string),
             PatchMode::Delete => patch_delete(&slf.inner, patch_string, false),
             PatchMode::DeleteMissingOk => patch_delete(&slf.inner, patch_string, true),
         }
