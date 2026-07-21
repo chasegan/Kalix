@@ -1,4 +1,4 @@
-"""Tests for kalix.Model / kalix.new_model / kalix.load_file / kalix.load_string.
+"""Tests for kalix.Model / kalix.load_file / kalix.load_string.
 
 Uses the repo's `linked_model` example (a small multi-node network with
 GR4J, Sacramento, inflow, and routing nodes) rather than a synthetic fixture,
@@ -23,11 +23,6 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def test_new_model_returns_model():
-    model = kalix.new_model()
-    assert isinstance(model, kalix.Model)
-
-
 def test_load_file_returns_configured_model():
     model = kalix.load_file(str(_MODEL_INI))
     assert isinstance(model, kalix.Model)
@@ -47,7 +42,14 @@ def test_load_file_invalid_ini_raises(tmp_path):
 
 def test_model_load_file_fluent_method(tmp_path):
     """The instance method mirrors the module-level function and is chainable."""
-    model = kalix.new_model().from_file(str(_MODEL_INI))
+    model = kalix.Model().load_file(str(_MODEL_INI))
+    assert isinstance(model, kalix.Model)
+
+
+def test_model_from_file_classmethod_constructs_new_model():
+    """`Model.from_file` is a classmethod constructor, distinct from the
+    instance-level `load_file` used to reload an existing `Model`."""
+    model = kalix.Model.from_file(str(_MODEL_INI))
     assert isinstance(model, kalix.Model)
 
 
@@ -88,18 +90,23 @@ _INLINE_MODEL_INI = (
 
 
 def test_load_string_returns_configured_model():
-    model = kalix.new_model()
-    result = model.from_string(_INLINE_MODEL_INI)
+    model = kalix.Model()
+    result = model.load_string(_INLINE_MODEL_INI)
     assert result is model
 
 
 def test_load_string_invalid_ini_raises():
     with pytest.raises(ValueError):
-        kalix.new_model().from_string("this is not valid kalix ini syntax {{{")
+        kalix.Model().load_string("this is not valid kalix ini syntax {{{")
 
 
 def test_module_level_load_string_returns_configured_model():
     model = kalix.load_string(_INLINE_MODEL_INI)
+    assert isinstance(model, kalix.Model)
+
+
+def test_model_from_string_classmethod_constructs_new_model():
+    model = kalix.Model.from_string(_INLINE_MODEL_INI)
     assert isinstance(model, kalix.Model)
 
 
@@ -112,14 +119,6 @@ def test_run_completes_without_error():
 def test_run_returns_same_instance_for_chaining():
     model = kalix.load_file(str(_MODEL_INI))
     assert model.run() is model
-
-
-# --- not-yet-implemented methods: must raise a clean NotImplementedError,
-# never a raw pyo3_runtime.PanicException from the underlying Rust todo!(). ---
-
-def test_load_snippet_raises_not_implemented():
-    with pytest.raises(NotImplementedError, match="load_snippet"):
-        kalix.new_model().load_snippet(_INLINE_MODEL_INI)
 
 
 def test_patch_update_returns_same_instance_for_chaining():
@@ -435,7 +434,7 @@ def test_load_file_accepts_pathlib_path():
 def test_model_direct_construction():
     model = kalix.Model()
     assert isinstance(model, kalix.Model)
-    model.from_file(str(_MODEL_INI))
+    model.load_file(str(_MODEL_INI))
     assert isinstance(model, kalix.Model)
 
 
@@ -544,7 +543,7 @@ def test_get_outputs_after_reload_raises_until_rerun():
     """Loading a new model into an existing instance discards the previous
     run's results."""
     model = kalix.load_file(str(_MODEL_INI)).run()
-    model.from_string(_INLINE_MODEL_INI)
+    model.load_string(_INLINE_MODEL_INI)
     with pytest.raises(ValueError, match="has not been run"):
         model.get_outputs()
 

@@ -12,7 +12,7 @@ from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from kalix.io import read_pixie, write_pixie
 from kalix.opt import optimise
 from kalix.sim import simulate
-from kalix.model import Model, load_file, load_string, new_model
+from kalix.model import Model, load_file, load_string
 
 __all__ = [
     "simulate",
@@ -22,7 +22,6 @@ __all__ = [
     "Model",
     "load_file",
     "load_string",
-    "new_model",
     "__version__"
 ]
 

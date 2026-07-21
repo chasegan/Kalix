@@ -15,15 +15,17 @@ import pandas as pd
 from kalix._native import _Model, _PatchMode
 from kalix._util import PathLike, build_time_indexed_df
 
-__all__ = ["Model", "new_model", "load_file", "load_string"]
+__all__ = ["Model", "load_file", "load_string"]
 
 
 class Model:
     """A Kalix hydrological model.
 
-    Construct with `Model()`, `new_model()`, or the `load_file`/`load_string`
-    convenience functions, then call `run()`. Most methods are fluent
-    (they return `self`) so calls can be chained, e.g.::
+    Construct with `Model()` (empty), `Model.from_file()`/`Model.from_string()`
+    (loaded), or the module-level `load_file`/`load_string` convenience
+    functions (equivalent to the `from_*` classmethods), then call `run()`.
+    Most methods are fluent (they return `self`) so calls can be chained,
+    e.g.::
 
         model = kalix.load_file("catchment.ini").run()
     """
@@ -32,8 +34,66 @@ class Model:
     def __init__(self) -> None:
         self._inner = _Model()
 
-    def from_file(self, model_path: PathLike) -> "Model":
-        """Load a full model from an INI file, replacing any model already held.
+    @classmethod
+    def from_file(cls, model_path: PathLike) -> "Model":
+        """Construct a new `Model` loaded from an INI file.
+
+        Convenience for ``Model().load_file(model_path)``.
+
+        Parameters
+        ----------
+        model_path
+            Path to the model ``.ini`` file.
+
+        Returns
+        -------
+        Model
+            A new model, loaded and validated.
+
+        Raises
+        ------
+        OSError
+            If the file could not be read (not found, permission denied, etc.).
+        ValueError
+            If the file was read but its contents are not a valid model INI.
+        RuntimeError
+            If the model parsed but failed validation.
+        """
+        return cls().load_file(model_path)
+
+    @classmethod
+    def from_string(cls, model_string: str) -> "Model":
+        """Construct a new `Model` loaded from an in-memory INI string.
+
+        Convenience for ``Model().load_string(model_string)``.
+
+        Parameters
+        ----------
+        model_string
+            The complete model definition, in INI format.
+
+        Returns
+        -------
+        Model
+            A new model, loaded and validated.
+
+        Raises
+        ------
+        ValueError
+            If the string is not a valid model INI.
+        RuntimeError
+            If the model parsed but failed validation.
+
+        Notes
+        -----
+        Unlike `from_file`, there is no containing file directory, so any
+        relative paths referenced inside the INI (e.g. data file inputs) are
+        resolved against the current working directory.
+        """
+        return cls().load_string(model_string)
+
+    def load_file(self, model_path: PathLike) -> "Model":
+        """Replace the model this instance holds with the contents of an INI file.
 
         The model is validated (node/link wiring, required inputs, etc.)
         before being accepted -- if loading fails, this `Model` is left
@@ -70,8 +130,8 @@ class Model:
             raise RuntimeError(f"Model '{model_path}' failed validation: {e}") from e
         return self
 
-    def from_string(self, model_string: str) -> "Model":
-        """Load a full model from an in-memory INI string, replacing any model already held.
+    def load_string(self, model_string: str) -> "Model":
+        """Replace the model this instance holds with an in-memory INI string.
 
         Parameters
         ----------
@@ -230,22 +290,10 @@ class Model:
         return "<kalix.Model>"
 
 
-def new_model() -> Model:
-    """Create a new, empty, unconfigured `Model`.
-
-    Returns
-    -------
-    Model
-        An empty model with nothing loaded. Call `load_file`/`load_string`
-        (then `run`) before it does anything useful.
-    """
-    return Model()
-
-
 def load_file(model_path: PathLike) -> Model:
     """Create a `Model` and load it from an INI file.
 
-    Convenience for ``Model().load_file(model_path)``.
+    Module-level alias for `Model.from_file`.
 
     Parameters
     ----------
@@ -266,13 +314,13 @@ def load_file(model_path: PathLike) -> Model:
     RuntimeError
         If the model parsed but failed validation.
     """
-    return Model().from_file(model_path)
+    return Model.from_file(model_path)
 
 
 def load_string(model_string: str) -> Model:
     """Create a `Model` and load it from an in-memory INI string.
 
-    Convenience for ``Model().load_string(model_string)``.
+    Module-level alias for `Model.from_string`.
 
     Parameters
     ----------
@@ -297,4 +345,4 @@ def load_string(model_string: str) -> Model:
     relative paths referenced inside the INI (e.g. data file inputs) are
     resolved against the current working directory.
     """
-    return Model().from_string(model_string)
+    return Model.from_string(model_string)
