@@ -520,8 +520,6 @@ class TreeFileOperations {
         return file.toString().toLowerCase().endsWith(".zip");
     }
 
-    // TODO double click zip folder to unzip
-
     /**
      * Unzip the selected zip folder into the same directory. Zip4j extracts by overwriting any
      * existing file of the same name without warning, so entries that would collide with
