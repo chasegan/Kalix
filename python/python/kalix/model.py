@@ -8,16 +8,14 @@ instead.
 """
 from __future__ import annotations
 
-from pathlib import Path
-from typing import List, Literal, Optional, Union
+from typing import List, Literal, Optional
 import numpy as np
 import pandas as pd
 
 from kalix._native import _Model, _PatchMode
+from kalix._util import PathLike, build_time_indexed_df
 
 __all__ = ["Model", "new_model", "load_file", "load_string"]
-
-PathLike = Union[str, Path]
 
 # `IniModelIO::read_model_file` (python/src/lib.rs) folds a genuine
 # file-read failure and an INI parse failure into the same native OSError,
@@ -241,9 +239,7 @@ class Model:
             names = [names]
 
         timestamps_sec = start + step * np.arange(size, dtype=np.int64)
-        index = pd.to_datetime(timestamps_sec, unit="s", utc=True).as_unit("s")
-        index.name = "time"
-        return pd.DataFrame(series_dict, index=index)
+        return build_time_indexed_df(timestamps_sec, series_dict)
 
     def __repr__(self) -> str:
         return "<kalix.Model>"

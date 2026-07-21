@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import sys
 import time
-from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Union
 
 from kalix._native import _optimise_from_file
+from kalix._util import PathLike
 
 __all__ = ["optimise"]
 
-PathLike = Union[str, Path]
 Progress = Dict[str, Any]
 ProgressCallback = Callable[[Progress], Any]
 
