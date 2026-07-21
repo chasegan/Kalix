@@ -476,6 +476,91 @@ def test_patch_dict_multi_section_is_atomic_on_failure():
     pd.testing.assert_frame_equal(result.get_outputs(), baseline)
 
 
+# --- patch(mode="delete") with list-of-names form (sec 4.3) ---------------
+# A second independent leaf node alongside `node.extra_node`, so both can be
+# named in a single list-form delete without either depending on the other.
+_INLINE_MODEL_WITH_TWO_EXTRA_NODES_INI = (
+    "[kalix]\n"
+    "start = 2000-01-01T00:00:00\n"
+    "end = 2000-01-10T00:00:00\n"
+    "\n"
+    "[node.my_node]\n"
+    "loc = 0,0\n"
+    "type = inflow\n"
+    "inflow = 1.0\n"
+    "\n"
+    "[node.extra_node]\n"
+    "loc = 1,1\n"
+    "type = inflow\n"
+    "inflow = 2.0\n"
+    "\n"
+    "[node.extra_node2]\n"
+    "loc = 2,2\n"
+    "type = inflow\n"
+    "inflow = 3.0\n"
+    "\n"
+    "[outputs]\n"
+    "node.my_node.ds_1\n"
+)
+
+
+def test_patch_list_delete_returns_same_instance_for_chaining():
+    model = kalix.load_string(_INLINE_MODEL_WITH_EXTRA_NODE_INI)
+    result = model.patch(["node.extra_node"], mode="delete")
+    assert result is model
+
+
+def test_patch_list_delete_removes_single_named_section():
+    model = kalix.load_string(_INLINE_MODEL_WITH_EXTRA_NODE_INI)
+    model.patch(["node.extra_node"], mode="delete")
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
+def test_patch_list_delete_removes_multiple_named_sections():
+    """The list form's whole point is naming several sections in one call
+    (sec 4.3's `["node.old_gauge", "var.tmp"]` example)."""
+    model = kalix.load_string(_INLINE_MODEL_WITH_TWO_EXTRA_NODES_INI)
+    model.patch(["node.extra_node", "node.extra_node2"], mode="delete")
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
+def test_patch_list_delete_ignores_missing_section_when_missing_ok():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    result = model.patch(["node.missing"], mode="delete", missing_ok=True)
+    assert isinstance(result.run(), kalix.Model)
+
+
+def test_patch_list_delete_rejects_missing_section_when_not_missing_ok():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch(["node.missing"], mode="delete")
+
+
+def test_patch_list_merge_rejects_list_form():
+    """The list-of-names shorthand only has a sensible meaning for delete --
+    passing it under merge/replace must raise rather than silently create
+    empty sections."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch(["node.my_node"])
+
+
+def test_patch_list_replace_rejects_list_form():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch(["node.my_node"], mode="replace")
+
+
+def test_patch_list_delete_leaves_model_untouched_on_failure():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError):
+        model.patch(["node.missing"], mode="delete")
+    result = model.run()
+    assert isinstance(result, kalix.Model)
+
+
 # --- informative error messages -----------------------------------------
 
 def test_load_file_missing_file_message_is_informative():

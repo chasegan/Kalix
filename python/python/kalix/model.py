@@ -9,7 +9,7 @@ instead.
 from __future__ import annotations
 import typing
 
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional, overload
 import numpy as np
 import pandas as pd
 
@@ -196,9 +196,27 @@ class Model:
             raise RuntimeError(f"Model run failed: {e}") from e
         return self
 
+    @overload
     def patch(
             self,
             patch_content: str | dict[str, dict[str, str]],
+            *,
+            mode: Literal["merge", "replace", "delete"] = "merge",
+            missing_ok: bool = False
+    ) -> "Model": ...
+
+    @overload
+    def patch(
+            self,
+            patch_content: list[str],
+            *,
+            mode: Literal["delete"],
+            missing_ok: bool = False
+    ) -> "Model": ...
+
+    def patch(
+            self,
+            patch_content: str | dict[str, dict[str, str]] | list[str],
             *,
             mode: Literal["merge", "replace", "delete"] = "merge",
             missing_ok: bool = False
@@ -207,9 +225,14 @@ class Model:
 
         Parameters
         ----------
-        patch_string
+        patch_content
             A partial model INI snippet naming the sections/properties to
-            change, e.g. ``"[node.g]\\narea = 99\\n"``.
+            change, e.g. ``"[node.g]\\narea = 99\\n"``; the dict-form
+            equivalent, e.g. ``{"node.g": {"area": 99}}``; or, only when
+            ``mode="delete"``, a plain list of section names to remove, e.g.
+            ``["node.old_gauge", "var.tmp"]``. Passing a list with any other
+            `mode` raises -- listing bare names has no sensible meaning for
+            merge/replace.
         mode
             ``"merge"`` -- set the given properties, leaving everything else
             untouched (including properties on an existing section that the
@@ -232,14 +255,23 @@ class Model:
         Raises
         ------
         ValueError
-            If `patch_string` is not valid INI, or if applying it produces an
-            invalid model. This `Model` is left untouched in that case.
+            If `patch_content` is a list and `mode` is not `"delete"`; if
+            `patch_content` is not valid INI (after any dict/list
+            conversion); or if applying it produces an invalid model. This
+            `Model` is left untouched in that case.
         OSError
             If applying the patch references a data file (e.g. a new
             ``[inputs]`` entry) that could not be read. This `Model` is left
             untouched in that case.
         """
-        if isinstance(patch_content, dict):
+        if isinstance(patch_content, list):
+            if mode != "delete":
+                raise ValueError(
+                    "The list-of-names form of `patch_content` is only valid "
+                    f"with mode='delete' (got mode={mode!r})"
+                )
+            patch_content = '\n'.join('[' + name.strip() + ']' for name in patch_content)
+        elif isinstance(patch_content, dict):
             lines = []
             for section_name, section_content in patch_content.items():
                 lines.append('[' + section_name + ']')
