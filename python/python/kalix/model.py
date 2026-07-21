@@ -29,10 +29,8 @@ class Model:
     """
     # pylint: disable=protected-access
 
-    def __init__(self, model_path: Optional[PathLike] = None) -> None:
+    def __init__(self) -> None:
         self._inner = _Model()
-        if model_path is not None:
-            self.from_file(model_path)
 
     def from_file(self, model_path: PathLike) -> "Model":
         """Load a full model from an INI file, replacing any model already held.
