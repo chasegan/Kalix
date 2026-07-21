@@ -285,6 +285,26 @@ impl IniDocument {
             .map(|property| property.value.as_str())
     }
 
+    /// Inserts `section` under `section_name`, replacing it wholesale if
+    /// already present (in place) or appending it otherwise. Returns a
+    /// mutable reference to the inserted section for further modifications.
+    pub fn set_section(&mut self, section_name: String, section: IniSection) -> &mut IniSection {
+        match self.sections.entry(section_name) {
+            indexmap::map::Entry::Occupied(mut e) => {
+                *e.get_mut() = section;
+                e.into_mut()
+            }
+            indexmap::map::Entry::Vacant(e) => e.insert(section),
+        }
+    }
+
+    /// Removes `section_name` wholesale. Errors if the section does not exist.
+    pub fn remove_section(&mut self, section_name: &str) -> Result<IniSection, String> {
+        self.sections
+            .shift_remove(section_name)
+            .ok_or_else(|| format!("Section '{}' does not exist", section_name))
+    }
+
     /// Mark all sections and properties as invalid
     /// Used for mark-and-sweep updates: invalidate all, update what you need, then remove invalids
     pub fn invalidate_all(&mut self) {

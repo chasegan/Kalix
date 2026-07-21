@@ -56,9 +56,7 @@ pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, String> 
 pub fn patch_override(model: &Model, patch_string: &str) -> Result<Model, String> {
     let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
         for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
-            model_ini_doc
-                .sections
-                .insert(patch_section_name, patch_ini_section);
+            model_ini_doc.set_section(patch_section_name, patch_ini_section);
         }
         Ok(())
     };
@@ -80,13 +78,16 @@ pub fn patch_delete(model: &Model, patch_string: &str, missing_ok: bool) -> Resu
                     patch_section_name
                 ));
             }
-            if !missing_ok && !model_ini_doc.sections.contains_key(&patch_section_name) {
-                return Err(format!(
-                    "Patch string specifies section {} which does not exist in original model - specify `missing_ok` if this is intended",
-                    patch_section_name
-                ));
+            match model_ini_doc.remove_section(&patch_section_name) {
+                Ok(_) => {}
+                Err(_) if missing_ok => {}
+                Err(_) => {
+                    return Err(format!(
+                        "Patch string specifies section {} which does not exist in original model - specify `missing_ok` if this is intended",
+                        patch_section_name
+                    ));
+                }
             }
-            model_ini_doc.sections.shift_remove(&patch_section_name);
         }
         Ok(())
     };
