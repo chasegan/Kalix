@@ -74,7 +74,7 @@ fn test_acc_header_contract_errors() {
 accounts = name, size, initail,
            a1, 42, 0,
 "#);
-    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("not a whole number") || err.contains("Invalid size"),
         "unexpected error: {}", err);
 
@@ -84,7 +84,7 @@ accounts = name, size, initail,
 accounts = name, initial,
            a1, 0,
 "#);
-    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("requires a 'size' column"), "unexpected error: {}", err);
 
     // name not first
@@ -93,7 +93,7 @@ accounts = name, initial,
 accounts = size, name,
            42, a1,
 "#);
-    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("must be 'name'") || err.contains("must start with a header"),
         "unexpected error: {}", err);
 
@@ -102,7 +102,7 @@ accounts = size, name,
         r#"[acc.g1]
 accounts = name, size,
 "#);
-    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("no account rows"), "unexpected error: {}", err);
 
     // Account named after a column keyword, first row: the name extends the
@@ -112,7 +112,7 @@ accounts = name, size,
 accounts = name, size,
            initial, 42,
 "#);
-    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("not a whole number"), "unexpected error: {}", err);
 
     // Account named after a column keyword, later row: caught by the explicit check
@@ -122,7 +122,7 @@ accounts = name, size,
            a1, 42,
            initial, 10,
 "#);
-    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("clashes with an accounts-table column name"), "unexpected error: {}", err);
 
     // Initial exceeding size
@@ -131,7 +131,7 @@ accounts = name, size,
 accounts = name, size, initial,
            a1, 42, 43,
 "#);
-    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("outside [0, size"), "unexpected error: {}", err);
 }
 
@@ -143,7 +143,7 @@ water_year = 7
 accounts = name, size,
            a1, 42,
 "#);
-    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("policy belongs in [ras.*]"), "unexpected error: {}", err);
 }
 
@@ -159,7 +159,7 @@ accounts = name, size,
 accounts = name, size,
            a1, 10,
 "#);
-    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("more than once"), "unexpected error: {}", err);
 
     // Account name colliding with a group name (flat acc. namespace)
@@ -172,7 +172,7 @@ accounts = name, size,
 accounts = name, size,
            a2, 10,
 "#);
-    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("clashes"), "unexpected error: {}", err);
 }
 
@@ -220,7 +220,7 @@ account = n0031, avl, 42, 7
 [outputs]
 node.u1.dsflow
 "#;
-    let err = IniModelIO::read_model_string(ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(ini).err().expect("expected a load error").to_string();
     assert!(err.contains("Unexpected parameter 'account'"), "unexpected error: {}", err);
 }
 
@@ -239,7 +239,7 @@ demand = 5
 accounts = nonexistent
 ds_1 = n1
 "#);
-    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("Unknown account 'nonexistent'"), "unexpected error: {}", err);
 
     // Group name where an account name is required
@@ -255,7 +255,7 @@ demand = 5
 accounts = g1
 ds_1 = n1
 "#);
-    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error");
+    let err = IniModelIO::read_model_string(&ini).err().expect("expected a load error").to_string();
     assert!(err.contains("is an account group"), "unexpected error: {}", err);
 }
 

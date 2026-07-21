@@ -2,6 +2,7 @@ use crate::hydrology::accounts::account::Account;
 use crate::hydrology::accounts::account_manager::{AccountGroup, ACCOUNT_SERIES_FIELDS, GROUP_SERIES_FIELDS};
 use crate::hydrology::allocation_systems::ras::RasSystem;
 use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
+use crate::io::error::KalixIoError;
 use crate::io::custom_ini_parser::{IniDocument, IniSection};
 use crate::misc::configuration::SaveMethod;
 use crate::misc::location::Location;
@@ -32,7 +33,7 @@ const DS_4_OUTLET: u8 = 3; //ds_4 is outlet 3
 /// * `ini_doc` - The parsed INI document
 /// * `working_directory` - Optional working directory for resolving relative paths.
 ///   If None, uses the current working directory.
-pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, String> {
+pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, KalixIoError> {
 
     // Create a new model
     let mut model = Model::new();
@@ -60,7 +61,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // Table names follow the same rules as constants, and additionally must not
             // contain '.' so that table.<name>(...) call syntax stays unambiguous.
             if !is_valid_variable_name(table_name) || table_name.contains('.') {
-                return Err(format!("Error on line {}: Invalid table name '{}'", ini_section.line_number, table_name));
+                return Err(format!("Error on line {}: Invalid table name '{}'", ini_section.line_number, table_name).into());
             }
 
             let mut ncols: usize = 2;
@@ -75,7 +76,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     "values" => values = Some(ini_property.value.as_str()),
                     other => {
                         return Err(format!("Error on line {}: Unexpected property '{}' in section '[{}]'",
-                                           ini_property.line_number, other, section_name));
+                                           ini_property.line_number, other, section_name).into());
                     }
                 }
             }
@@ -124,7 +125,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     for (section_name, ini_section) in &ini_doc.sections {
         if let Some(group_name) = section_name.strip_prefix("acc.") {
             if !is_valid_bare_name(group_name) {
-                return Err(format!("Error on line {}: Invalid account group name '{}'", ini_section.line_number, group_name));
+                return Err(format!("Error on line {}: Invalid account group name '{}'", ini_section.line_number, group_name).into());
             }
             let mut accounts_prop = None;
             for (key, ini_property) in &ini_section.properties {
@@ -135,7 +136,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     other => {
                         return Err(format!("Error on line {}: Unexpected property '{}' in section '[{}]'. \
                             [acc.*] sections hold only the 'accounts' table; policy belongs in [ras.*] sections.",
-                            ini_property.line_number, other, section_name));
+                            ini_property.line_number, other, section_name).into());
                     }
                 }
             }
@@ -177,7 +178,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     for (section_name, ini_section) in &ini_doc.sections {
         if let Some(ras_name) = section_name.strip_prefix("ras.") {
             if !is_valid_bare_name(ras_name) {
-                return Err(format!("Error on line {}: Invalid RAS name '{}'", ini_section.line_number, ras_name));
+                return Err(format!("Error on line {}: Invalid RAS name '{}'", ini_section.line_number, ras_name).into());
             }
             let mut targets = None;
             let mut trigger = None;
@@ -191,7 +192,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     other => {
                         return Err(format!("Error on line {}: Unexpected property '{}' in section '[{}]'. \
                             A RAS has exactly three properties: targets, trigger, action.",
-                            ini_property.line_number, other, section_name));
+                            ini_property.line_number, other, section_name).into());
                     }
                 }
             }
@@ -236,11 +237,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 if ini_property.value.is_empty() {
                     // Direct file path (no alias)
                     model.load_input_data(name.as_str(), None)
-                        .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        .map_err(|e| e.with_context(&format!("Error on line {}: ", ini_property.line_number)))?;
                 } else {
                     // Aliased file path: name is the alias, value is the file path
                     model.load_input_data(ini_property.value.as_str(), Some(name.as_str()))
-                        .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        .map_err(|e| e.with_context(&format!("Error on line {}: ", ini_property.line_number)))?;
                 }
             }
         } else if section_name == "const" {
@@ -284,7 +285,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                                              ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::BlackholeNode(n)
@@ -306,7 +307,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.harmony_fraction = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'", ini_property.line_number, name, node_name));
+                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'", ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::ConfluenceNode(n)
@@ -332,7 +333,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                                              ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::GaugeNode(n)
@@ -365,7 +366,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                               ini_property.line_number, name, node_name));
+                                               ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::OrderControlNode(n)
@@ -401,14 +402,14 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 "gr4j" => Gr4Variant::Gr4j,
                                 "gr4h" => Gr4Variant::Gr4h,
                                 _ => return Err(format!("Error on line {}: Unknown gr4j variant '{}' for node '{}' (expected 'gr4j' or 'gr4h')",
-                                                        ini_property.line_number, v, node_name)),
+                                                        ini_property.line_number, v, node_name).into()),
                             };
                         } else if name_lower == "params" {
                             let params = csv_string_to_f64_vec(v)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                             if params.len() != 4 {
                                 return Err(format!("Error on line {}: GR4J params must have 4 values, got {}",
-                                                   ini_property.line_number, params.len()));
+                                                   ini_property.line_number, params.len()).into());
                             }
                             n.gr4j_model.x1 = params[0];
                             n.gr4j_model.x2 = params[1];
@@ -416,7 +417,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.gr4j_model.x4 = params[3];
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                                              ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::Gr4jNode(n)
@@ -442,7 +443,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                                              ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::InflowNode(n)
@@ -466,7 +467,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                                      ini_property.line_number, node_name, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                                              ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::LossNode(n)
@@ -500,7 +501,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             let all_values = csv_string_to_f64_vec(v)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                             if all_values.len() < 2 {
-                                return Err(format!("Error on line {}: Expected k and m values.", ini_property.line_number));
+                                return Err(format!("Error on line {}: Expected k and m values.", ini_property.line_number).into());
                             }
                             n.set_k(all_values[0]);
                             n.set_m(all_values[1]);
@@ -511,13 +512,13 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             let nrows = nvals / 2;
                             if all_values.len() % 2 > 0 {
                                 return Err(format!("Error on line {}: Pwl table must contain an even number of elements, but found {}",
-                                                   ini_property.line_number, nvals));
+                                                   ini_property.line_number, nvals).into());
                             } else if nrows > 32 {
                                 return Err(format!("Error on line {}: Pwl table must contain no more than 32 rows but found {}",
-                                                   ini_property.line_number, nrows));
+                                                   ini_property.line_number, nrows).into());
                             } else if nrows < 1 {
                                 return Err(format!("Error on line {}: Pwl table must contain at least one row",
-                                                   ini_property.line_number));
+                                                   ini_property.line_number).into());
                             }
                             let (index_flows, index_times) = split_interleaved(&all_values);
                             n.set_routing_table(index_flows, index_times);
@@ -527,7 +528,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                                      ini_property.line_number, name, node_name))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                                              ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::RoutingNode(n)
@@ -560,12 +561,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                             if params.len() < 17 {
                                 return Err(format!("Error on line {}: Sacramento params must have 17 values, got {}",
-                                                   ini_property.line_number, params.len()));
+                                                   ini_property.line_number, params.len()).into());
                             }
                             n.sacramento_model.set_params_by_vec(params);
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                                              ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::SacramentoNode(n)
@@ -591,7 +592,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                                      ini_property.line_number, node_name, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                                              ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::SplitterNode(n)
@@ -624,7 +625,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 0 => n.outlet_definition[i_outlet] = OutletDefinition::None,
                                 1 => n.outlet_definition[i_outlet] = OutletWithMOL(params[0]),
                                 2 => n.outlet_definition[i_outlet] = OutletWithMOLAndCapacity(params[0], params[1]),
-                                _ => return Err(format!("Error on line {}: Tabulated outlet not supported yet.", ini_property.line_number)),
+                                _ => return Err(format!("Error on line {}: Tabulated outlet not supported yet.", ini_property.line_number).into()),
                             }
                         } else if let Some(ds_num) = name_lower.strip_prefix("ds_")
                             .and_then(|s| s.strip_suffix("_force_release"))
@@ -633,7 +634,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 return Err(format!(
                                     "Error on line {}: outlet index in '{}' must be between 1 and {}",
                                     ini_property.line_number, name, n.ds_force_release_input.len()
-                                ));
+                                ).into());
                             }
                             let i_outlet = ds_num - 1;
                             n.ds_force_release_input[i_outlet] = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
@@ -670,7 +671,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         }
                         else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                                              ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::StorageNode(n)
@@ -700,7 +701,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                             if params.len() != 2 {
                                 return Err(format!("Error on line {}: User 'annual_cap' must have 2 values, got {}",
-                                                   ini_property.line_number, params.len()));
+                                                   ini_property.line_number, params.len()).into());
                             }
                             n.annual_cap = Some(params[0]);
                             n.annual_cap_reset_month = params[1] as u8;
@@ -715,7 +716,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                                              ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::UnregulatedUserNode(n)
@@ -745,7 +746,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.register_accounts(account_idxs);
                         } else {
                             return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                               ini_property.line_number, name, node_name));
+                                               ini_property.line_number, name, node_name).into());
                         }
                     }
                     NodeEnum::RegulatedUserNode(n)
@@ -755,7 +756,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         Some(ini_property) => ini_property.line_number,
                         None => ini_section.line_number,
                     };
-                    return Err(format!("Error on line {}: Unknown node type '{}'",  line_number, node_type))
+                    return Err(format!("Error on line {}: Unknown node type '{}'",  line_number, node_type).into())
                 }
             };
             model.add_node(node_enum);
@@ -777,7 +778,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             let block_name = &section_name[4..];
             if !is_valid_bare_name(block_name) {
                 return Err(format!("Error on line {}: Invalid var block name '{}'",
-                                   ini_section.line_number, block_name));
+                                   ini_section.line_number, block_name).into());
             }
 
             // Phase: 'flow' (default) runs at file position in the flow pass.
@@ -792,12 +793,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         return Err(format!(
                             "Error on line {}: phase = order is not yet implemented for \
                              [var.*] blocks (only phase = flow is supported)",
-                            p.line_number));
+                            p.line_number).into());
                     }
                     other => {
                         return Err(format!(
                             "Error on line {}: invalid phase '{}' for [{}] (expected 'flow' or 'order')",
-                            p.line_number, other, section_name));
+                            p.line_number, other, section_name).into());
                     }
                 }
             }
@@ -809,14 +810,14 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 }
                 if !is_valid_bare_name(key) {
                     return Err(format!("Error on line {}: Invalid var name '{}' in [{}]",
-                                       ini_property.line_number, key, section_name));
+                                       ini_property.line_number, key, section_name).into());
                 }
 
                 let series_name = format!("var.{}.{}", block_name, key).to_lowercase();
                 if model.data_cache.get_existing_series_idx(&series_name).is_some() {
                     return Err(format!(
                         "Error on line {}: series '{}' already exists (duplicate var definition?)",
-                        ini_property.line_number, series_name));
+                        ini_property.line_number, series_name).into());
                 }
                 // The block's own output series: registered before lowering
                 // the expression, so a self-reference with a [-1, default]
@@ -861,7 +862,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             // Unexpected section
             // -------------------------------------------------------------------------------------
-            return Err(format!("Error on line {}: Unexpected section '{}'", ini_section.line_number, section_name));
+            return Err(format!("Error on line {}: Unexpected section '{}'", ini_section.line_number, section_name).into());
         }
     }
 
@@ -881,7 +882,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // -------------------------------------------------------------------------------------
     for (ras_name, line, targets_str, trigger_str, action_str) in ras_defs {
         if model.ras_systems.iter().any(|r| r.name == ras_name) {
-            return Err(format!("Error on line {}: RAS '{}' declared more than once", line, ras_name));
+            return Err(format!("Error on line {}: RAS '{}' declared more than once", line, ras_name).into());
         }
         // Resolve targets: one or more acc.<group> references, flattened to
         // member accounts in group-then-row order
@@ -923,14 +924,14 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         let is_group = model.account_manager.get_group_idx(target).is_some();
         if !is_account && !is_group {
             return Err(format!("Unknown account or account group '{}' in reference '{}'. \
-                Accounts are declared in [acc.*] sections.", target, name));
+                Accounts are declared in [acc.*] sections.", target, name).into());
         }
         let allowed: &[&str] = if is_account { &ACCOUNT_SERIES_FIELDS } else { &GROUP_SERIES_FIELDS };
         if !allowed.contains(&field) {
             return Err(format!("Unknown field '{}' in reference '{}'. Available for {}: {}",
                 field, name,
                 if is_account { "an account" } else { "an account group" },
-                allowed.join(", ")));
+                allowed.join(", ")).into());
         }
     }
 

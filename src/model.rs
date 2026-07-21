@@ -7,6 +7,7 @@ use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::hydrology::allocation_systems::ras::RasSystem;
 use crate::io::csv_io::write_ts;
+use crate::io::error::KalixIoError;
 use crate::io::pixie_io;
 use crate::io::custom_ini_parser::IniDocument;
 use crate::misc::configuration::Configuration;
@@ -678,10 +679,10 @@ impl Model {
     /// Responsible for remembering how the input was loaded (original path, alias) and for resolving the path.
     /// Construction of the TimeseriesInput is delegated to the TimeseriesInput::load function.
     pub fn load_input_data(
-        &mut self, 
-        file_path: &str, 
+        &mut self,
+        file_path: &str,
         alias: Option<&str>
-    ) -> Result<usize, String> {
+    ) -> Result<usize, KalixIoError> {
         // Remember the ORIGINAL input file path (for serialization/display)
         self.input_file_paths.push(file_path.to_string());
         // Remember also the alias if provided

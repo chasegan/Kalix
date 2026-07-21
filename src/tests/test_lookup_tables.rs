@@ -236,7 +236,7 @@ fn test_model_table_error_cases() {
     // Bad n_cols
     assert!(read("[kalix]\n[table.t]\nn_cols = two\nvalues = 0, 0, 1, 1\n").is_err());
     // Malformed table body surfaces the table parser's error
-    let err = read("[kalix]\n[table.t]\nvalues = 0, 0, 1\n").err().expect("malformed table should fail");
+    let err = read("[kalix]\n[table.t]\nvalues = 0, 0, 1\n").err().expect("malformed table should fail").to_string();
     assert!(err.contains("table.t"), "error should name the table: {}", err);
 }
 

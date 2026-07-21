@@ -17,15 +17,6 @@ from kalix._util import PathLike, build_time_indexed_df
 
 __all__ = ["Model", "new_model", "load_file", "load_string"]
 
-# `IniModelIO::read_model_file` (python/src/lib.rs) folds a genuine
-# file-read failure and an INI parse failure into the same native OSError,
-# always prefixing the former with this exact text. There's no Rust-side
-# distinction to hook into without changing the shared `IniModelIO` API
-# (also used by the CLI/IDE), so the split below is done here by sniffing
-# for this marker. If that Rust message format ever changes, update this
-# to match -- see `IniModelIO::read_model_file`.
-_FILE_READ_FAILURE_MARKER = "Failed to read file '"
-
 
 class Model:
     """A Kalix hydrological model.
@@ -74,8 +65,8 @@ class Model:
         try:
             self._inner._from_file(str(model_path))
         except OSError as e:
-            if _FILE_READ_FAILURE_MARKER in str(e):
-                raise OSError(f"Failed to load model from '{model_path}': {e}") from e
+            raise OSError(f"Failed to load model from '{model_path}': {e}") from e
+        except ValueError as e:
             raise ValueError(f"Model '{model_path}' is not a valid model INI: {e}") from e
         except RuntimeError as e:
             raise RuntimeError(f"Model '{model_path}' failed validation: {e}") from e
@@ -99,6 +90,9 @@ class Model:
         ------
         ValueError
             If the string is not a valid model INI.
+        OSError
+            If the string references a data file (e.g. via ``[inputs]``)
+            that could not be read.
         RuntimeError
             If the model parsed but failed validation.
 
@@ -110,8 +104,10 @@ class Model:
         """
         try:
             self._inner._from_model_string(model_string)
-        except OSError as e:
+        except ValueError as e:
             raise ValueError(f"Failed to parse model string: {e}") from e
+        except OSError as e:
+            raise OSError(f"Failed to load model referenced by model string: {e}") from e
         except RuntimeError as e:
             raise RuntimeError(f"Model string failed validation: {e}") from e
         return self
@@ -196,6 +192,10 @@ class Model:
         ValueError
             If `patch_string` is not valid INI, or if applying it produces an
             invalid model. This `Model` is left untouched in that case.
+        OSError
+            If applying the patch references a data file (e.g. a new
+            ``[inputs]`` entry) that could not be read. This `Model` is left
+            untouched in that case.
         """
         if mode == "update":
             self._inner._patch(patch_string, mode=_PatchMode.Update)

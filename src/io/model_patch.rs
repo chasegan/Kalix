@@ -2,6 +2,7 @@
 //! programatically, especially via the Python package.
 
 use crate::io::custom_ini_parser::IniDocument;
+use crate::io::error::KalixIoError;
 use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
 
@@ -9,11 +10,11 @@ fn apply_patch(
     model: &Model,
     patch_string: &str,
     mutate: impl FnOnce(&mut IniDocument, IniDocument) -> Result<(), String>,
-) -> Result<Model, String> {
+) -> Result<Model, KalixIoError> {
     // Clone ensures that we do not modify the original model's ini_document -
     // in case the modification is invalid
     let mut model_ini_doc = model.ini_document.clone().map(Ok).unwrap_or(Err(
-        "Patch cannot be called on an empty model - use load instead.",
+        KalixIoError::Parse("Patch cannot be called on an empty model - use load instead.".to_string()),
     ))?;
     let patch_ini = IniDocument::parse(patch_string)?;
 
@@ -32,7 +33,7 @@ fn apply_patch(
 /// patch, updates it if present or creates it otherwise; sections not yet
 /// present are created and appended to the bottom of the file. Properties
 /// and sections omitted from the patch are left untouched.
-pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, String> {
+pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, KalixIoError> {
     let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
         for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
             for (property_name, property_content) in patch_ini_section.properties {
@@ -53,7 +54,7 @@ pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, String> 
 /// patch are dropped, unlike `patch_update`). An overridden section keeps its
 /// original position; a section not yet present is appended to the bottom of
 /// the file.
-pub fn patch_override(model: &Model, patch_string: &str) -> Result<Model, String> {
+pub fn patch_override(model: &Model, patch_string: &str) -> Result<Model, KalixIoError> {
     let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
         for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
             model_ini_doc.set_section(patch_section_name, patch_ini_section);
@@ -68,7 +69,7 @@ pub fn patch_override(model: &Model, patch_string: &str) -> Result<Model, String
 /// section must list no properties). If `missing_ok` is `false`, patching a
 /// section that does not exist in the original model is an error; if `true`,
 /// it is silently ignored.
-pub fn patch_delete(model: &Model, patch_string: &str, missing_ok: bool) -> Result<Model, String> {
+pub fn patch_delete(model: &Model, patch_string: &str, missing_ok: bool) -> Result<Model, KalixIoError> {
     let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
         for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
             // Verify that patch string is OK
@@ -405,5 +406,23 @@ mod tests {
 
         let result = patch_delete(&model, "[node.bh]\n", false);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn patch_update_referencing_missing_input_file_is_io_error() {
+        // A patch that introduces an [inputs] entry pointing at a file that
+        // doesn't exist must surface as KalixIoError::Io, not ::Parse - same
+        // distinction as the top-level load path (see ini_model_io.rs tests).
+        let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
+
+        let result = patch_update(
+            &model,
+            "[inputs]\n./does_not_exist_patch_test.csv\n",
+        );
+        match result {
+            Ok(_) => panic!("expected an error, got Ok"),
+            Err(KalixIoError::Io(_)) => {}
+            Err(other) => panic!("expected KalixIoError::Io, got {:?}", other),
+        }
     }
 }

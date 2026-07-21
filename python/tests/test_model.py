@@ -159,6 +159,15 @@ def test_patch_update_invalid_result_raises_value_error():
         )
 
 
+def test_patch_referencing_missing_input_file_raises_oserror():
+    """A patch that introduces an [inputs] entry pointing at a nonexistent
+    file must raise OSError, not ValueError -- same Io/Parse distinction as
+    the load path (see test_load_string_missing_referenced_input_file_raises_oserror)."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(OSError):
+        model.patch("[inputs]\n./does_not_exist_test_model_py.csv\n")
+
+
 def test_patch_update_leaves_model_untouched_on_failure():
     """A rejected patch must not damage the already-loaded model -- it
     should still run exactly as before the failed patch attempt."""
@@ -359,9 +368,10 @@ def test_load_string_invalid_message_is_informative():
 
 
 def test_load_file_distinguishes_missing_file_from_invalid_content(tmp_path):
-    """The split is based on sniffing the native error message, not just on
-    OSError being "any failure" -- lock in that a missing file and a bad
-    file get different, non-overlapping exception types."""
+    """The split comes from a typed Io/Parse distinction threaded through the
+    whole read chain in Rust (not from sniffing the error message in
+    Python) -- lock in that a missing file and a bad file get different,
+    non-overlapping exception types."""
     missing = tmp_path / "does_not_exist.ini"
     bad = tmp_path / "bad.ini"
     bad.write_text("this is not valid kalix ini syntax {{{")
@@ -373,6 +383,48 @@ def test_load_file_distinguishes_missing_file_from_invalid_content(tmp_path):
 
     assert not isinstance(missing_exc.value, ValueError)
     assert not isinstance(bad_exc.value, OSError)
+
+
+def test_load_string_missing_referenced_input_file_raises_oserror():
+    """A model string that parses fine but references a missing input CSV
+    must raise OSError, not ValueError -- a real filesystem problem must not
+    be mistaken for a syntax error (the bug this typed error chain fixes)."""
+    ini = (
+        "[kalix]\n"
+        "start = 2000-01-01T00:00:00\n"
+        "end = 2000-01-10T00:00:00\n"
+        "\n"
+        "[inputs]\n"
+        "./does_not_exist_test_model_py.csv\n"
+        "\n"
+        "[node.my_node]\n"
+        "loc = 0,0\n"
+        "type = inflow\n"
+        "inflow = 1.0\n"
+    )
+    with pytest.raises(OSError):
+        kalix.load_string(ini)
+
+
+def test_load_file_missing_referenced_input_file_raises_oserror(tmp_path):
+    """Same as test_load_string_missing_referenced_input_file_raises_oserror,
+    but via a model file rather than an in-memory string."""
+    model_file = tmp_path / "model.ini"
+    model_file.write_text(
+        "[kalix]\n"
+        "start = 2000-01-01T00:00:00\n"
+        "end = 2000-01-10T00:00:00\n"
+        "\n"
+        "[inputs]\n"
+        "./does_not_exist_test_model_py.csv\n"
+        "\n"
+        "[node.my_node]\n"
+        "loc = 0,0\n"
+        "type = inflow\n"
+        "inflow = 1.0\n"
+    )
+    with pytest.raises(OSError):
+        kalix.load_file(str(model_file))
 
 
 def test_load_file_accepts_pathlib_path():

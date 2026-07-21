@@ -1,3 +1,4 @@
+use crate::io::error::KalixIoError;
 use crate::timeseries::Timeseries;
 use crate::misc::misc_functions::sanitize_name;
 use std::path::Path;
@@ -31,7 +32,7 @@ impl TimeseriesInput {
     /// # Arguments
     /// * `file_path` - Path to the CSV file to load
     /// * `alias` - Optional user-provided alias for this file (e.g., "climate" instead of "climate_data_2020_csv")
-    pub fn load(file_path: &str, alias: Option<&str>) -> Result<Vec<TimeseriesInput>, String> {
+    pub fn load(file_path: &str, alias: Option<&str>) -> Result<Vec<TimeseriesInput>, KalixIoError> {
         match crate::io::csv_io::read_ts(file_path) {
             Ok(vts) => {
                 let mut vinputts: Vec<TimeseriesInput> = vec![];
@@ -71,8 +72,8 @@ impl TimeseriesInput {
                 }
                 Ok(vinputts)
             }
-            Err(s) => {
-                Err(format!("Error reading {}: {}", file_path, s))
+            Err(e) => {
+                Err(e.with_context(&format!("Error reading {}: ", file_path)))
             }
         }
     }

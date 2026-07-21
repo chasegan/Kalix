@@ -3,6 +3,7 @@
 //! v0.1: just Pixie (.pxt/.pxb) I/O. Functions are prefixed with `_` and re-exported
 //! through the Python `kalix` package, which adds pandas/numpy ergonomics.
 
+use kalix::io::error::KalixIoError;
 use kalix::io::ini_model_io::IniModelIO;
 use kalix::io::model_patch::{patch_delete, patch_override, patch_update};
 use kalix::io::pixie_io;
@@ -14,6 +15,16 @@ use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+
+/// Maps the engine's Io/Parse distinction to the corresponding Python
+/// exception type: a genuine filesystem failure becomes `OSError`, a content
+/// problem (bad INI syntax, invalid model config) becomes `ValueError`.
+fn io_err_to_py(e: KalixIoError) -> PyErr {
+    match e {
+        KalixIoError::Io(msg) => PyIOError::new_err(msg),
+        KalixIoError::Parse(msg) => PyValueError::new_err(msg),
+    }
+}
 
 /// Strip `.pxt` or `.pxb` extension from a path, returning the base.
 fn strip_ext(path: &str) -> &str {
@@ -281,7 +292,7 @@ impl PyModel {
         model_path: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
         let mut model = IniModelIO::read_model_file(model_path)
-            .map_err(|e| PyIOError::new_err(format!("Failed to load model: {}", e)))?;
+            .map_err(|e| io_err_to_py(e.with_context("Failed to load model: ")))?;
         // Verification step
         model
             .configure()
@@ -300,7 +311,7 @@ impl PyModel {
         model_string: &str,
     ) -> PyResult<PyRefMut<'py, Self>> {
         let mut model = IniModelIO::read_model_string(model_string)
-            .map_err(|e| PyIOError::new_err(format!("Failed to load model: {}", e)))?;
+            .map_err(|e| io_err_to_py(e.with_context("Failed to load model: ")))?;
         // Verification step
         model
             .configure()
@@ -334,7 +345,7 @@ impl PyModel {
             PatchMode::Delete => patch_delete(&slf.inner, patch_string, false),
             PatchMode::DeleteMissingOk => patch_delete(&slf.inner, patch_string, true),
         }
-        .map_err(PyValueError::new_err)?;
+        .map_err(io_err_to_py)?;
         slf.inner = new_model;
         slf.has_run = false;
         Ok(slf)

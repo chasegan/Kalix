@@ -55,7 +55,7 @@ fn unknown_variant_is_an_error() {
     let result = IniModelIO::read_model_string(&model_ini("variant = gr4x\n"));
     match result {
         Ok(_) => panic!("expected an error for an unknown variant"),
-        Err(err) => assert!(err.contains("variant"), "error should mention the variant: {err}"),
+        Err(err) => assert!(err.to_string().contains("variant"), "error should mention the variant: {err}"),
     }
 }
 

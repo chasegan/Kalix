@@ -21,7 +21,7 @@ use crate::model::Model;
 fn load_err(ini: &str) -> String {
     match IniModelIO::read_model_string(ini) {
         Ok(_) => panic!("expected a load error, but the model loaded"),
-        Err(e) => e,
+        Err(e) => e.to_string(),
     }
 }
 

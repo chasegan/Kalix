@@ -5,7 +5,7 @@ fn load(ini: &str) -> crate::model::Model {
 }
 
 fn load_err(ini: &str) -> String {
-    IniModelIO::read_model_string(ini).err().expect("expected a load error")
+    IniModelIO::read_model_string(ini).err().expect("expected a load error").to_string()
 }
 
 fn run(ini: &str) -> crate::model::Model {

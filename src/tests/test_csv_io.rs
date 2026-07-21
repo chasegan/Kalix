@@ -222,7 +222,7 @@ fn test_csv_reader_rejects_irregular_timestamps() {
     match result {
         Ok(_) => panic!("Irregularly-spaced timestamps should be rejected"),
         Err(err) => assert!(
-            err.contains("not regularly spaced"),
+            err.to_string().contains("not regularly spaced"),
             "Error should mention irregular spacing: {}", err
         ),
     }

@@ -1,5 +1,6 @@
 extern crate csv;
 
+use crate::io::error::KalixIoError;
 use crate::timeseries::Timeseries;
 use crate::tid::utils::{append_date_string_for_step_size, date_string_to_u64_flexible, date_string_to_u64_with_format};
 use std::fs;
@@ -22,7 +23,7 @@ impl From<CsvError> for String {
     }
 }
 
-pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
+pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, KalixIoError> {
     // Here is where we will construct our result
     let mut answer: Vec<Timeseries> = Vec::new();
 
@@ -31,7 +32,7 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
     let mut reader = csv::ReaderBuilder::new()
         .flexible(true)
         .from_path(filename)
-        .map_err(|e| format!("Failed to open file '{}': {}", filename, e))?;
+        .map_err(|e| KalixIoError::Io(format!("Failed to open file '{}': {}", filename, e)))?;
 
     // Get the first row (what csv crate thinks are headers)
     let first_row = reader.headers()
@@ -43,7 +44,7 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
             // If it parses as a date, then this is data, not a header
             date_string_to_u64_flexible(first_cell).is_err()
         }
-        None => return Err(format!("Empty file '{}'", filename))
+        None => return Err(format!("Empty file '{}'", filename).into())
     };
 
     // Calculate effective header length, ignoring trailing empty columns (from trailing commas)
@@ -119,7 +120,7 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
             Ok(true) => {}
             Ok(false) => break,
             Err(e) => return Err(
-                format!("Error reading '{}' line {}: {}", filename, file_line + 1, e)),
+                format!("Error reading '{}' line {}: {}", filename, file_line + 1, e).into()),
         }
         file_line += 1;
 

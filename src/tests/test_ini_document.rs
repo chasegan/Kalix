@@ -27,7 +27,7 @@ params = 0.01, 40.0, 23.0,
         Ok(_) => println!("✅ Line continuation parsing successful!"),
         Err(e) => {
             // Expected to fail at model building stage, not parsing stage
-            assert!(!e.contains("Invalid line format"), "Should not fail at parsing stage: {}", e);
+            assert!(!e.to_string().contains("Invalid line format"), "Should not fail at parsing stage: {}", e);
             println!("✅ Parsing succeeded, model building failed as expected: {}", e);
         }
     }
