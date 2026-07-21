@@ -8,7 +8,7 @@ use crate::model::Model;
 fn apply_patch(
     model: &Model,
     patch_string: &str,
-    mutate: impl FnOnce(&mut IniDocument, IniDocument),
+    mutate: impl FnOnce(&mut IniDocument, IniDocument) -> Result<(), String>,
 ) -> Result<Model, String> {
     // Clone ensures that we do not modify the original model's ini_document -
     // in case the modification is invalid
@@ -17,7 +17,7 @@ fn apply_patch(
     ))?;
     let patch_ini = IniDocument::parse(patch_string)?;
 
-    mutate(&mut model_ini_doc, patch_ini);
+    mutate(&mut model_ini_doc, patch_ini)?;
 
     let mut patched_model = IniModelIO::read_model_string_with_working_directory(
         &model_ini_doc.to_string(),
@@ -43,6 +43,7 @@ pub fn patch_update(model: &Model, patch_string: &str) -> Result<Model, String> 
                 );
             }
         }
+        Ok(())
     };
     apply_patch(model, patch_string, mutate)
 }
@@ -59,35 +60,35 @@ pub fn patch_override(model: &Model, patch_string: &str) -> Result<Model, String
                 .sections
                 .insert(patch_section_name, patch_ini_section);
         }
+        Ok(())
     };
     apply_patch(model, patch_string, mutate)
 }
 
-/// Apply `patch_string` to `model`'s `IniDocument`. For each section in the
-/// patch: if it lists properties, only those properties are removed from the
-/// model (the section itself is kept, even if left empty); if it lists none,
-/// the entire section is removed. Sections/properties not present in the
-/// model are silently ignored.
-pub fn patch_delete(model: &Model, patch_string: &str) -> Result<Model, String> {
+/// Apply `patch_string` to `model`'s `IniDocument`, deleting each named
+/// section wholesale (property-level deletion is not supported - a patch
+/// section must list no properties). If `missing_ok` is `false`, patching a
+/// section that does not exist in the original model is an error; if `true`,
+/// it is silently ignored.
+pub fn patch_delete(model: &Model, patch_string: &str, missing_ok: bool) -> Result<Model, String> {
     let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
-            for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
-            if patch_ini_section.properties.is_empty() {
-                model_ini_doc
-                    .sections
-                    .shift_remove(&patch_section_name.to_string());
-            } else {
-                if let Some(model_ini_section) = model_ini_doc
-                    .sections
-                    .get_mut(&patch_section_name.to_string())
-                {
-                    for (property_name, _) in patch_ini_section.properties {
-                        model_ini_section
-                            .properties
-                            .shift_remove(&property_name.to_string());
-                    }
-                }
+        for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
+            // Verify that patch string is OK
+            if !patch_ini_section.properties.is_empty() {
+                return Err(format!(
+                    "Patch string specifies section {} with non-empty property content.",
+                    patch_section_name
+                ));
             }
+            if !missing_ok && !model_ini_doc.sections.contains_key(&patch_section_name) {
+                return Err(format!(
+                    "Patch string specifies section {} which does not exist in original model - specify `missing_ok` if this is intended",
+                    patch_section_name
+                ));
+            }
+            model_ini_doc.sections.shift_remove(&patch_section_name);
         }
+        Ok(())
     };
     apply_patch(model, patch_string, mutate)
 }
@@ -294,17 +295,11 @@ mod tests {
     }
 
     #[test]
-    fn patch_delete_removes_listed_properties_but_keeps_section() {
+    fn patch_delete_rejects_properties() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let patched = patch_delete(&model, "[node.g]\nparams =\n").expect("patch should apply");
-
-        let ini_doc = patched
-            .ini_document
-            .as_ref()
-            .expect("patched model should have an ini_document");
-        assert_eq!(ini_doc.get_property("node.g", "params"), None);
-        assert_eq!(ini_doc.get_property("node.g", "type"), Some("gr4j"));
+        let result = patch_delete(&model, "[node.g]\nparams =\n", false);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -312,7 +307,7 @@ mod tests {
         let model =
             IniModelIO::read_model_string(model_ini_with_extra_node()).expect("model should parse");
 
-        let patched = patch_delete(&model, "[node.bh2]\n").expect("patch should apply");
+        let patched = patch_delete(&model, "[node.bh2]\n", false).expect("patch should apply");
 
         let ini_doc = patched
             .ini_document
@@ -327,23 +322,17 @@ mod tests {
     fn patch_delete_ignores_missing_section() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let patched = patch_delete(&model, "[node.missing]\n").expect("patch should apply");
+        let patched = patch_delete(&model, "[node.missing]\n", true).expect("patch should apply");
 
         assert_eq!(patched.nodes.len(), 2);
     }
 
     #[test]
-    fn patch_delete_ignores_missing_property() {
+    fn patch_delete_rejects_missing_section_when_not_missing_ok() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let patched =
-            patch_delete(&model, "[node.g]\nnot_a_real_property =\n").expect("patch should apply");
-
-        let ini_doc = patched
-            .ini_document
-            .as_ref()
-            .expect("patched model should have an ini_document");
-        assert_eq!(ini_doc.get_property("node.g", "type"), Some("gr4j"));
+        let result = patch_delete(&model, "[node.missing]\n", false);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -352,7 +341,7 @@ mod tests {
             IniModelIO::read_model_string(model_ini_with_extra_node()).expect("model should parse");
         let original = model.clone();
 
-        let _patched = patch_delete(&model, "[node.bh2]\n").expect("patch should apply");
+        let _patched = patch_delete(&model, "[node.bh2]\n", false).expect("patch should apply");
 
         let original_ini_doc = original
             .ini_document
@@ -366,11 +355,12 @@ mod tests {
 
     #[test]
     fn patch_delete_preserves_working_directory() {
-        let mut model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
+        let mut model = IniModelIO::read_model_string(model_ini_with_extra_node())
+            .expect("model should parse");
         model.working_directory = std::path::PathBuf::from("some/working/dir");
         let working_directory = model.working_directory.clone();
 
-        let patched = patch_delete(&model, "[node.g]\nparams =\n").expect("patch should apply");
+        let patched = patch_delete(&model, "[node.bh2]\n", false).expect("patch should apply");
 
         assert_eq!(patched.working_directory, working_directory);
     }
@@ -379,28 +369,8 @@ mod tests {
     fn patch_delete_rejects_invalid_patch_string() {
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let result = patch_delete(&model, "not valid ini [[[");
+        let result = patch_delete(&model, "not valid ini [[[", false);
         assert!(result.is_err());
-    }
-
-    /// Like `model_ini`, but with a storage node whose `dimensions` table has
-    /// no safe fallback if removed (unlike gr4j's `params`, which silently
-    /// keeps working `Gr4j::new()` defaults) - deleting it is only caught by
-    /// `configure()`, not by ini parsing alone.
-    fn model_ini_with_storage_node() -> &'static str {
-        "[kalix]\n\
-         start = 2000-01-01T00:00:00\n\
-         end = 2000-01-10T00:00:00\n\
-         \n\
-         [node.s]\n\
-         type = storage\n\
-         loc = 10, 20\n\
-         dimensions = 90, 0, 0, 0,\n         91, 100, 1, 0,\n\
-         ds_1 = bh\n\
-         \n\
-         [node.bh]\n\
-         type = blackhole\n\
-         loc = 1, 2\n"
     }
 
     #[test]
@@ -427,10 +397,12 @@ mod tests {
 
     #[test]
     fn patch_delete_rejects_patch_that_fails_configure() {
-        let model = IniModelIO::read_model_string(model_ini_with_storage_node())
-            .expect("model should parse");
+        // node.g's `ds_1 = bh` references node.bh - deleting node.bh leaves a
+        // dangling downstream reference, which is only caught by
+        // `configure()`, not by ini parsing alone.
+        let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let result = patch_delete(&model, "[node.s]\ndimensions =\n");
+        let result = patch_delete(&model, "[node.bh]\n", false);
         assert!(result.is_err());
     }
 }
