@@ -10,7 +10,9 @@ use crate::numerical::mathfn::u64_subtraction;
 #[derive(Default)]
 pub struct Timeseries {
     //Name, start timestamp, and step_size
-    pub name: String,              //The name of the timeseries
+    pub name: String,              //The name of the timeseries, in its canonical stored casing
+                                    //(data_cache lookups are case-insensitive, so a series may be
+                                    //registered/requested under a different casing than this)
     pub start_timestamp: u64,      //The timestamp to be used for the first value
     pub step_size: u64,            //The amount of time between consecutive timestamps. (Notionally in seconds).
 

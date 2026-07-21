@@ -886,8 +886,15 @@ impl Model {
     /// Output series to export, in declaration order.
     ///
     /// `names = None` selects all declared outputs, silently omitting any that
-    /// are unpopulated (see `collect_output_series`).
-    /// Named series that are undeclared or unpopulated are an error.
+    /// are unpopulated (see `collect_output_series`). Named series that are
+    /// undeclared or unpopulated are an error. Name matching is
+    /// case-insensitive throughout. Requesting the same output more than once
+    /// is not an error - the returned vector has exactly one entry per
+    /// requested name, in request order (i.e. it is never deduplicated).
+    ///
+    /// Each returned `Timeseries` carries its *canonical stored* name (see
+    /// `Timeseries::name`) - the casing it was registered/declared under -
+    /// which may differ from the casing a caller requested it with.
     ///
     /// Used for Python bindings.
     pub fn get_output_series(
