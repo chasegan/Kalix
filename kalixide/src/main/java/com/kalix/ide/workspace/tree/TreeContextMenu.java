@@ -89,12 +89,12 @@ class TreeContextMenu {
         return List.of(
             // Primary
             List.of(
-                item("Open", TreeContextMenu::isSingleFile,
+                item("Open", TreeContextMenu::isSingleNonZipFile,
                     sel -> host.openFile(file(sel)))
             ),
             // Context-specific
             List.of(
-                item("Compare with active editor", TreeContextMenu::isSingleFile,
+                item("Compare with active editor", TreeContextMenu::isSingleNonZipFile,
                     sel -> host.compareWithActiveEditor(file(sel))),
                 item("Compare files", TreeContextMenu::isTwoFiles,
                     sel -> host.compareFiles(file(sel, 0), file(sel, 1))),
@@ -178,8 +178,8 @@ class TreeContextMenu {
         return sel.size() == 1;
     }
 
-    private static boolean isSingleFile(List<FileTreeNode> sel) {
-        return sel.size() == 1 && !sel.get(0).isDirectory();
+    private static boolean isSingleNonZipFile(List<FileTreeNode> sel) {
+        return sel.size() == 1 && !sel.getFirst().isDirectory() && isNotZip(sel);
     }
 
     private static boolean isTwoFiles(List<FileTreeNode> sel) {
