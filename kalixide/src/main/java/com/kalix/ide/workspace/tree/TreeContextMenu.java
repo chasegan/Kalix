@@ -183,7 +183,7 @@ class TreeContextMenu {
     }
 
     private static boolean isTwoFiles(List<FileTreeNode> sel) {
-        return sel.size() == 2 && sel.stream().noneMatch(FileTreeNode::isDirectory);
+        return sel.size() == 2 && sel.stream().noneMatch(FileTreeNode::isDirectory) && isNotZip(sel);
     }
 
     private static boolean hasDirectory(List<FileTreeNode> sel) {

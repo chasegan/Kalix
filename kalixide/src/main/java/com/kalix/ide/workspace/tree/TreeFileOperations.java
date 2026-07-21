@@ -490,7 +490,7 @@ class TreeFileOperations {
         }
         // Ensure no name collision
         String zipFileName = baseZFName + ".zip";
-        int i = 0;
+        int i = 1;
         while (new File(zipFileName).exists()) {
             zipFileName = baseZFName + " (" + i + ").zip";
             i++;
@@ -513,10 +513,11 @@ class TreeFileOperations {
     }
 
     /**
-     * Detect if {@code file} is a zip file.
+     * Detect if {@code file} is a zip file. Case-insensitive: Windows and macOS filesystems
+     * are case-insensitive, so ".ZIP"/".Zip" are just as much a zip as ".zip".
      */
     static boolean isZip(File file) {
-        return file.toString().endsWith(".zip");
+        return file.toString().toLowerCase().endsWith(".zip");
     }
 
     // TODO double click zip folder to unzip
@@ -539,11 +540,15 @@ class TreeFileOperations {
         }
     }
 
-    /** The zip entry names that would overwrite a file already present in {@code targetDir}. */
+    /**
+     * The zip entry names that would overwrite a file already present in {@code targetDir}.
+     * Directory entries are skipped: extracting into an existing folder merges its contents
+     * rather than overwriting the folder itself, so it isn't a collision.
+     */
     private static List<String> collidingEntries(ZipFile zipFile, File targetDir) throws IOException {
         List<String> collisions = new ArrayList<>();
         for (FileHeader header : zipFile.getFileHeaders()) {
-            if (new File(targetDir, header.getFileName()).exists()) {
+            if (!header.isDirectory() && new File(targetDir, header.getFileName()).exists()) {
                 collisions.add(header.getFileName());
             }
         }
