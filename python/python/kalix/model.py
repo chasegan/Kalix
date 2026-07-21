@@ -112,23 +112,6 @@ class Model:
             raise RuntimeError(f"Model string failed validation: {e}") from e
         return self
 
-    def load_snippet(self, model_string: str) -> "Model":
-        """Merge a partial model ("snippet") into the model already held.
-
-        Not yet implemented.
-
-        Raises
-        ------
-        NotImplementedError
-            Always -- merging a partial model into an existing one isn't
-            implemented yet.
-        """
-        raise NotImplementedError(
-            "Model.load_snippet() is not implemented yet (merging a partial "
-            "model into an existing one). Use Model.from_file()/"
-            "Model.from_string() to replace the whole model instead."
-        )
-
     def run(self) -> "Model":
         """Configure and run the model's simulation.
 
