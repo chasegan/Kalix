@@ -325,8 +325,8 @@ impl PyModel {
     /// `self` untouched on failure (mirrors `_load_file`).
     fn _patch<'py>(
         mut slf: PyRefMut<'py, Self>,
-        mode: PatchMode,
         patch_string: &str,
+        mode: PatchMode,
     ) -> PyResult<PyRefMut<'py, Self>> {
         let new_model = match mode {
             PatchMode::Update => patch_update(&slf.inner, patch_string),
