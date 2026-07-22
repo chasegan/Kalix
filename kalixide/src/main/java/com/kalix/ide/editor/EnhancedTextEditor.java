@@ -690,24 +690,12 @@ public class EnhancedTextEditor extends JPanel {
             return false;
         }
 
-        // Create executor and perform rename
+        // Create executor and perform rename. Success is silent: the rename is visible in
+        // the editor and on the map, so a confirmation dialog would only be in the way.
         CommandExecutor executor =
             new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
 
-        boolean success = executor.renameNode(nodeName, trimmedNewName, parsedModel);
-
-        if (success) {
-            javax.swing.SwingUtilities.invokeLater(() -> {
-                javax.swing.JOptionPane.showMessageDialog(
-                    commandParentFrame,
-                    "Renamed '" + nodeName + "' to '" + trimmedNewName + "'",
-                    "Done",
-                    javax.swing.JOptionPane.INFORMATION_MESSAGE
-                );
-            });
-        }
-
-        return success;
+        return executor.renameNode(nodeName, trimmedNewName, parsedModel);
     }
 
     /**
@@ -715,22 +703,30 @@ public class EnhancedTextEditor extends JPanel {
      * new node's {@code loc} is the given world location; its section goes below the
      * last selected node, or at the bottom when nothing is selected.
      *
+     * <p>Auto-linking: with exactly one node selected, the new node is linked from it
+     * (first free {@code ds_N} in the upstream section). With a link selected
+     * ({@code spliceLink}), the new node is inserted <em>into</em> that link — the
+     * upstream's {@code ds_N} re-points at the new node, which gains its own
+     * {@code ds_1} to the old downstream. Both are single atomic edits.</p>
+     *
      * @param nodeType          The template key (e.g. "gr4j", "storage")
      * @param worldX            The map x-coordinate for the new node's {@code loc}
      * @param worldY            The map y-coordinate for the new node's {@code loc}
      * @param selectedNodeNames The currently selected nodes (may be empty or null)
-     * @return true if the template was inserted, false on failure
+     * @param spliceLink        The selected link to insert the node into, or null
+     * @return the new node's name, or null on failure
      */
-    public boolean insertNodeTemplate(String nodeType, double worldX, double worldY,
-                                      java.util.Collection<String> selectedNodeNames) {
+    public String insertNodeTemplate(String nodeType, double worldX, double worldY,
+                                     java.util.Collection<String> selectedNodeNames,
+                                     com.kalix.ide.model.ModelLink spliceLink) {
         if (commandParentFrame == null) {
             logger.warn("Context commands not initialized - cannot insert node template");
-            return false;
+            return null;
         }
 
         CommandExecutor executor = new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
 
-        return executor.insertNodeTemplateAtLocation(nodeType, worldX, worldY, selectedNodeNames);
+        return executor.insertNodeTemplateAtLocation(nodeType, worldX, worldY, selectedNodeNames, spliceLink);
     }
 
     private void setupKeyBindings() {
