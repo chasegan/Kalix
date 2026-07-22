@@ -214,14 +214,50 @@ type = blackhole
 }
 
 
+/// A declaration doesn't need the `=` — the custom INI parser treats a bare
+/// key line (no `=`, same syntax as a direct file path) and `alias =` as
+/// identical (key present, value empty), and the model-loading code only
+/// ever branches on the value being empty plus the key being a valid bare
+/// name. So `observed_flows` on its own line must declare the alias exactly
+/// like `observed_flows =` does.
+#[test]
+fn test_declared_input_without_equals_sign() {
+    let ini = "\
+[inputs]
+observed_flows
+
+[node.src]
+type = inflow
+inflow = 1
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+";
+    let mut model = IniModelIO::read_model_string(ini)
+        .expect("Model with a bare (no '=') declaration should parse");
+
+    assert_eq!(model.input_columns().count(), 0);
+
+    let err = model.configure().expect_err(
+        "configure() must reject a declared-but-unsupplied input");
+    assert!(
+        err.contains("observed_flows") && err.contains("declared but not supplied"),
+        "Error should name the unsupplied input. Got: {}",
+        err
+    );
+}
+
+
 /// Round-trip fidelity: the enum -> [inputs] mapping must re-emit exactly what
-/// the parser read — a bare declaration, a direct file path, and an aliased
-/// file path all survive a to_string() round trip.
+/// the parser read — a bare declaration (with and without `=`), a direct file
+/// path, and an aliased file path all survive a to_string() round trip.
 #[test]
 fn test_inputs_section_round_trips() {
     let ini = "\
 [inputs]
 observed_flows =
+rainfall
 ./src/tests/example_data/test.csv
 climate = ./src/tests/example_data/test.csv
 ";
@@ -231,6 +267,7 @@ climate = ./src/tests/example_data/test.csv
 
     for line in [
         "observed_flows =",
+        "rainfall",
         "./src/tests/example_data/test.csv",
         "climate = ./src/tests/example_data/test.csv",
     ] {
