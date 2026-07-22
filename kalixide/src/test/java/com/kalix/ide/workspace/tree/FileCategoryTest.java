@@ -67,4 +67,25 @@ class FileCategoryTest {
         FileTreeNode node = new FileTreeNode(file.toFile(), () -> true);
         assertFalse(node.containsModelFile());
     }
+
+    @Test
+    void ordersDirectoriesThenHiddenThenNaturalName(@TempDir Path dir) throws Exception {
+        Files.createDirectory(dir.resolve("2024_runs"));
+        Files.createDirectory(dir.resolve(".git"));
+        Files.createDirectory(dir.resolve("archive"));
+        Files.createFile(dir.resolve("model2.ini"));
+        Files.createFile(dir.resolve("model10.ini"));
+        Files.createFile(dir.resolve(".gitignore"));
+
+        java.io.File[] entries = dir.toFile().listFiles();
+        java.util.Arrays.sort(entries, FileTreeNode.FILE_ORDER);
+        java.util.List<String> names = java.util.Arrays.stream(entries)
+            .map(java.io.File::getName).toList();
+
+        // Directories before files; hidden first within each group (deliberately, even
+        // above digit-led names, per file-tree-colour §2.7); then natural number-aware order.
+        assertEquals(java.util.List.of(
+            ".git", "2024_runs", "archive",
+            ".gitignore", "model2.ini", "model10.ini"), names);
+    }
 }

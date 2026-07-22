@@ -98,11 +98,8 @@ class TreeContextMenu {
                     sel -> host.compareWithActiveEditor(file(sel))),
                 item("Compare files", TreeContextMenu::isTwoFiles,
                     sel -> host.compareFiles(file(sel, 0), file(sel, 1))),
-                item("Zip", TreeContextMenu::isNotSingleZip,
-                        sel -> fileOps.zipFiles(files(sel), tree.getRootFile())),
                 item("Unzip", TreeContextMenu::isSingleZip,
                         sel -> fileOps.unzipFile(file(sel)))
-
             ),
             // External handoff
             List.of(
@@ -131,7 +128,11 @@ class TreeContextMenu {
                 item("Rename…", TreeContextMenu::isSingle,
                     sel -> fileOps.rename(file(sel))),
                 item("Duplicate…", TreeContextMenu::isSingle,
-                    sel -> fileOps.duplicate(file(sel)))
+                    sel -> fileOps.duplicate(file(sel))),
+                // Derives a new archive from the selection, like Duplicate derives a copy —
+                // and keeps it from surfacing as a folder's first (= primary-looking) item.
+                item("Zip", TreeContextMenu::isNotSingleZip,
+                    sel -> fileOps.zipFiles(files(sel), tree.getRootFile()))
             ),
             // Destructive (isolated)
             List.of(

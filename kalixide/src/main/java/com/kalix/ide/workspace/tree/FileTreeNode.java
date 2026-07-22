@@ -13,19 +13,34 @@ import java.util.function.BooleanSupplier;
  * first expansion (see {@link #ensureLoaded()}), so opening a large project folder does not
  * eagerly walk the whole tree.
  *
- * <p>Ordering: directories first, then files, each alphabetically (case-insensitive).
- * Hidden entries (names starting with ".") are omitted unless {@code showHidden} returns true;
- * the supplier is read at load time so the tree's "show hidden files" toggle takes effect on the
- * next (re)load of a directory without reconstructing nodes.
+ * <p>Ordering: directories first, then files; within each group hidden (dot-prefixed) entries
+ * first, then natural (number-aware, case-insensitive) name order. Hidden entries are omitted
+ * unless {@code showHidden} returns true; the supplier is read at load time so the tree's
+ * "show hidden files" toggle takes effect on the next (re)load of a directory without
+ * reconstructing nodes.
  */
 public class FileTreeNode extends DefaultMutableTreeNode {
 
-    /** Directories first, then files, each in natural (number-aware) order by name. */
+    /**
+     * Directories first, then files; hidden entries first within each group; then natural
+     * (number-aware) order by name.
+     *
+     * <p>The hidden-first rule is deliberate, not the ASCII accident it is in most trees
+     * ("." happening to sort before letters): it pins dotfiles to the conventional top slot
+     * regardless of the natural sort's digits-before-letters rule (so {@code .git} sits above
+     * {@code 2024_runs}). Position follows convention; de-emphasis is the colour tiers' job
+     * (per file-tree-colour §2.7).
+     */
     static final Comparator<File> FILE_ORDER = (a, b) -> {
         boolean ad = a.isDirectory();
         boolean bd = b.isDirectory();
         if (ad != bd) {
             return ad ? -1 : 1;
+        }
+        boolean ah = isHidden(a);
+        boolean bh = isHidden(b);
+        if (ah != bh) {
+            return ah ? -1 : 1;
         }
         return NaturalSortUtils.naturalCompare(a.getName(), b.getName());
     };

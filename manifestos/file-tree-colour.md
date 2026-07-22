@@ -39,6 +39,12 @@ recognises, stepped-back greys for the rest, accent hues on icons only.*
   run the signal up every chain to the root and drown it.
 - **2.6 Selection wins.** Selected rows always keep the selection foreground;
   de-emphasis never fights selection contrast.
+- **2.7 Position follows convention; colour carries importance.** Hidden
+  entries sort first within their group — deliberately, not as the ASCII
+  accident most trees inherit ("." happening to sort before letters) — because
+  the top is where every tool users know puts them. Their de-emphasis is
+  already done by the grey tiers (§2.1); ordering is never bent to re-encode
+  importance.
 
 ## 3. Worked example
 
