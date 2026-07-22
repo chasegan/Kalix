@@ -18,7 +18,7 @@ use crate::misc::simulation_context::{
 use crate::ordering::simple_nodewise_ordering::SimpleNodewiseOrderingSystem;
 use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
-use crate::timeseries_input::TimeseriesInput;
+use crate::timeseries_input::{TimeseriesInput, TimeseriesInputDefinition};
 use crate::model_inputs::DynamicInput;
 
 /// One entry in the model's interleaved execution layout: nodes and var
@@ -108,10 +108,11 @@ pub struct Model {
 
     // ---- Cold path: load/configure/serialize time only, not touched per-step ----
 
-    pub inputs: Vec<TimeseriesInput>,
-    pub input_file_paths: Vec<String>,
-    /// Maps file_path to the alias provided for quick lookup
-    pub alias_map: HashMap<String, String>,
+    /// Pre-run input sources ([inputs] entries), one per file/alias. Each source
+    /// holds its own data columns (see TimeseriesInputDefinition). Folds together
+    /// what used to be three loosely-coupled fields (the per-column data, the
+    /// file paths, and the alias map).
+    pub input_sources: Vec<TimeseriesInputDefinition>,
     pub outputs: Vec<String>,
 
     /// Working directory for resolving relative file paths
@@ -145,11 +146,9 @@ impl Model {
     pub fn new() -> Model {
         Model {
             configuration: Configuration::new(),
-            inputs: vec![],
-            input_file_paths: vec![],
+            input_sources: vec![],
             outputs: vec![],
             working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-            alias_map: HashMap::new(),
             ..Default::default()
         }
     }
@@ -163,8 +162,7 @@ impl Model {
         let configured = !self.execution_order.is_empty();
         Model {
             configuration: self.configuration.clone(),
-            inputs: if configured { vec![] } else { self.inputs.clone() },
-            input_file_paths: vec![],
+            input_sources: if configured { vec![] } else { self.input_sources.clone() },
             outputs: self.outputs.clone(),
             account_manager: self.account_manager.clone(),
             ras_systems: self.ras_systems.clone(),
@@ -181,7 +179,6 @@ impl Model {
             node_lookup: self.node_lookup.clone(),
             ini_document: None,
             baseline_canonical: None,
-            alias_map: self.alias_map.clone(),
         }
     }
 
@@ -229,6 +226,23 @@ impl Model {
     /// May be used to validate a model.
     pub fn configure(&mut self) -> Result<(), String> {
 
+        //0) Reject any input that was declared but never supplied. Nothing in
+        //   the engine can supply a bare declaration, so an empty-valued
+        //   [inputs] entry is a configure-time error rather than a downstream
+        //   reference-resolution failure.
+        let undeclared: Vec<&str> = self.input_sources.iter()
+            .filter_map(|s| match s {
+                TimeseriesInputDefinition::Declaration { alias } => Some(alias.as_str()),
+                _ => None,
+            })
+            .collect();
+        if !undeclared.is_empty() {
+            return Err(format!(
+                "input '{}' declared but not supplied",
+                undeclared.join("', '")
+            ));
+        }
+
         //TASKS
         //1) Define output series
         for series_name in self.outputs.iter() {
@@ -252,63 +266,69 @@ impl Model {
         //5) Supports sim period specified by user (done in the same step)
         self.auto_determine_simulation_period()?;
 
-        //6) Load input data into the data_cache, properly aligned with simulation period
-        for i in 0..self.inputs.len() {
-            let input_ts = &self.inputs[i].timeseries;
+        //6) Load input data into the data_cache, properly aligned with simulation period.
+        //   Iterate the input_sources field directly (source -> column) rather than
+        //   the input_columns() helper: the inner fill takes &mut self.data_cache, and
+        //   the disjoint-field borrow only holds when input_sources is borrowed as a
+        //   direct field access.
+        for source in &self.input_sources {
+            for col in source.columns() {
+                let input_ts = &col.timeseries;
 
-            // Validate that input step size matches simulation step size
-            if input_ts.step_size != self.configuration.sim_stepsize {
-                return Err(format!(
-                    "Input timeseries '{}' has step_size {} but simulation requires step_size {}",
-                    input_ts.name, input_ts.step_size, self.configuration.sim_stepsize
-                ));
-            }
+                // Validate that input step size matches simulation step size
+                if input_ts.step_size != self.configuration.sim_stepsize {
+                    return Err(format!(
+                        "Input timeseries '{}' has step_size {} but simulation requires step_size {}",
+                        input_ts.name, input_ts.step_size, self.configuration.sim_stepsize
+                    ));
+                }
 
-            // Calculate how many timesteps we need for the simulation
-            let sim_steps = 1 + ((self.configuration.sim_end_timestamp
-                - self.configuration.sim_start_timestamp)
-                / self.configuration.sim_stepsize) as usize;
+                // Calculate how many timesteps we need for the simulation
+                let sim_steps = 1 + ((self.configuration.sim_end_timestamp
+                    - self.configuration.sim_start_timestamp)
+                    / self.configuration.sim_stepsize) as usize;
 
-            //Fill any data that might be using the column name as a reference
-            //Fill any data that might be using the column number as a reference
-            //Also fill alias paths if they exist
-            let mut paths_to_fill = vec![
-                self.inputs[i].full_colname_path.clone(),
-                self.inputs[i].full_colindex_path.clone(),
-            ];
-            if let Some(alias_colname) = &self.inputs[i].alias_colname_path {
-                paths_to_fill.push(alias_colname.clone());
-            }
-            if let Some(alias_colindex) = &self.inputs[i].alias_colindex_path {
-                paths_to_fill.push(alias_colindex.clone());
-            }
-            for full_path in paths_to_fill {
-                if let Some(idx) = self.data_cache.get_series_idx(&*full_path, false) {
-                    self.data_cache.series[idx].values.clear();
-                    self.data_cache.series[idx].start_timestamp = self.configuration.sim_start_timestamp;
-                    self.data_cache.series[idx].step_size = self.configuration.sim_stepsize;
+                //Fill any data that might be using the column name as a reference
+                //Fill any data that might be using the column number as a reference
+                //Also fill alias paths if they exist
+                let mut paths_to_fill = vec![
+                    col.full_colname_path.clone(),
+                    col.full_colindex_path.clone(),
+                ];
+                if let Some(alias_colname) = &col.alias_colname_path {
+                    paths_to_fill.push(alias_colname.clone());
+                }
+                if let Some(alias_colindex) = &col.alias_colindex_path {
+                    paths_to_fill.push(alias_colindex.clone());
+                }
+                for full_path in paths_to_fill {
+                    if let Some(idx) = self.data_cache.get_series_idx(&*full_path, false) {
+                        self.data_cache.series[idx].values.clear();
+                        self.data_cache.series[idx].start_timestamp = self.configuration.sim_start_timestamp;
+                        self.data_cache.series[idx].step_size = self.configuration.sim_stepsize;
 
-                    // For each simulation timestep, find corresponding input value
-                    for step in 0..sim_steps {
-                        let sim_timestamp = self.configuration.sim_start_timestamp
-                            + (step as u64 * self.configuration.sim_stepsize);
+                        // For each simulation timestep, find corresponding input value
+                        for step in 0..sim_steps {
+                            let sim_timestamp = self.configuration.sim_start_timestamp
+                                + (step as u64 * self.configuration.sim_stepsize);
 
-                        // Find value at this timestamp in input data
-                        let value = if sim_timestamp >= input_ts.start_timestamp {
-                            let steps_from_input_start = (sim_timestamp - input_ts.start_timestamp)
-                                / input_ts.step_size;
-                            let input_idx = steps_from_input_start as usize;
+                            // Find value at this timestamp in input data
+                            let value = if sim_timestamp >= input_ts.start_timestamp {
+                                let steps_from_input_start = (sim_timestamp - input_ts.start_timestamp)
+                                    / input_ts.step_size;
+                                let input_idx = steps_from_input_start as usize;
 
-                            if input_idx < input_ts.values.len() {
-                                input_ts.values[input_idx]
+                                if input_idx < input_ts.values.len() {
+                                    input_ts.values[input_idx]
+                                } else {
+                                    f64::NAN  // Beyond input data range
+                                }
                             } else {
-                                f64::NAN  // Beyond input data range
-                            }
-                        } else {
-                            f64::NAN  // Before input data starts
-                        };
+                                f64::NAN  // Before input data starts
+                            };
 
-                        self.data_cache.series[idx].push_value(value);
+                            self.data_cache.series[idx].push_value(value);
+                        }
                     }
                 }
             }
@@ -335,7 +355,7 @@ impl Model {
             if name.starts_with("data.") {
                 let name_lower = name.to_lowercase();
                 let mut found = false;
-                for ts in self.inputs.iter() {
+                for ts in self.input_columns() {
                     if name_lower == ts.full_colindex_path || name_lower == ts.full_colname_path {
                         found = true;
                         break;
@@ -485,7 +505,7 @@ impl Model {
 
             // Searching for timeseries that matches ci
             let mut found : bool = false;
-            for ts in self.inputs.iter() {
+            for ts in self.input_columns() {
                 let matches = (ci_lower == ts.full_colindex_path)
                     || (ci_lower == ts.full_colname_path)
                     || (ts.alias_colindex_path.as_ref().map_or(false, |p| ci_lower == *p))
@@ -494,23 +514,19 @@ impl Model {
                 if matches {
                     found = true;
 
-                    // This timeseries appears to be the one we're looking for!
-                    // If it is a critical input AND THE SOURCE IS A FILE then the model run
-                    // will be limited by the data available in the file.
-                    if ts.source_path != "" {
-                        match critical_data_availability_mask {
-                            None => {
-                                //This is the first critical data file
-                                // println!("Initial mask based on {}", ts.source_path);
-                                critical_data_availability_mask = Some(ts.timeseries.clone());
-                            }
-                            Some(ref mut mask) => {
-                                // println!("Mask updated based on {}", ts.source_path);
-                                mask.mask_with(&ts.timeseries);
-                            }
+                    // This column is the critical input we're looking for. Its data
+                    // limits the simulation period — this holds for both file-backed
+                    // and in-memory sources, and every column reaching this loop
+                    // carries real data (declarations have none), so it always
+                    // contributes to the mask.
+                    match critical_data_availability_mask {
+                        None => {
+                            //This is the first critical data source
+                            critical_data_availability_mask = Some(ts.timeseries.clone());
                         }
-                    } else {
-                        // println!("Mask not influenced by {}", ts.source_path);
+                        Some(ref mut mask) => {
+                            mask.mask_with(&ts.timeseries);
+                        }
                     }
                 }
             }
@@ -683,7 +699,16 @@ impl Model {
 
 
     pub fn empty_input_data(&mut self) {
-        self.inputs.clear();
+        self.input_sources.clear();
+    }
+
+    /// Every input data column across all sources, flattened. The read-only
+    /// convenience for consumers that don't care which source a column came
+    /// from (validation, sim-period determination). Borrows all of `self`, so
+    /// it can't be used where another `self` field is mutated in the same loop —
+    /// iterate the `input_sources` field directly there.
+    pub fn input_columns(&self) -> impl Iterator<Item = &TimeseriesInput> {
+        self.input_sources.iter().flat_map(|s| s.columns())
     }
 
     /// Resolve a file path relative to the model's working directory.
@@ -694,30 +719,41 @@ impl Model {
         Ok(kp.resolved)
     }
 
-    /// Load input data from a file and store it in the model's inputs vector.
-    /// Responsible for remembering how the input was loaded (original path, alias) and for resolving the path.
-    /// Construction of the TimeseriesInput is delegated to the TimeseriesInput::load function.
+    /// Declare an input alias with no backing data (an empty-valued `[inputs]`
+    /// entry). Nothing here supplies it, so `configure()` will reject it unless
+    /// something fills it in first (e.g. `set_input()`).
+    pub fn declare_alias(&mut self, alias: &str) {
+        self.input_sources.push(TimeseriesInputDefinition::Declaration {
+            alias: alias.to_string(),
+        });
+    }
+
+    /// Load input data from a file and store it as a new input source.
+    /// Responsible for remembering how the input was loaded (original path,
+    /// alias) and for resolving the path. Construction of the per-column
+    /// TimeseriesInputs is delegated to TimeseriesInput::load. Returns the
+    /// number of columns loaded.
     pub fn load_input_data(
         &mut self,
         file_path: &str,
         alias: Option<&str>
     ) -> Result<usize, KalixIoError> {
-        // Remember the ORIGINAL input file path (for serialization/display)
-        self.input_file_paths.push(file_path.to_string());
-        // Remember also the alias if provided
-        if let Some(alias_str) = alias {
-            self.alias_map.insert(file_path.to_string(), alias_str.to_string());
-        }
-
         // Resolve the path (supports absolute, relative, and trailhead paths)
         let resolved_path = self.resolve_path(file_path)?;
 
         // Load all the data using the resolved path
         let resolved_path_str = resolved_path.to_str()
             .ok_or_else(|| format!("Invalid path: {}", file_path))?;
-        let mut x = TimeseriesInput::load(resolved_path_str, alias)?;
-        let len = x.len();
-        self.inputs.append(&mut x);
+        let columns = TimeseriesInput::load(resolved_path_str, alias)?;
+        let len = columns.len();
+
+        // Remember the ORIGINAL file path (for serialization/display), not the
+        // resolved one, so a round-trip preserves what the user wrote.
+        self.input_sources.push(TimeseriesInputDefinition::FileDefinition {
+            path: file_path.to_string(),
+            alias: alias.map(|a| a.to_string()),
+            columns,
+        });
         Ok(len)
     }
 
@@ -852,18 +888,34 @@ impl Model {
         report
     }
 
-    /// Prints all the inputs to the console, one on each line.
+    /// Prints all the input sources to the console, one column on each line.
     pub fn print_inputs(&self) {
-        let mut i = 0;
-        for input in &self.inputs {
-            println!("Input: {} {} {}", i, input.full_colname_path, input.full_colindex_path);
-            if let Some(alias) = &input.alias {
-                println!("  Alias: {} (also accessible as {} and {})",
-                    alias,
-                    input.alias_colname_path.as_ref().unwrap_or(&String::new()),
-                    input.alias_colindex_path.as_ref().unwrap_or(&String::new()));
+        for source in &self.input_sources {
+            match source {
+                TimeseriesInputDefinition::Declaration { alias } => {
+                    println!("Source (declared, no data): {}", alias);
+                }
+                TimeseriesInputDefinition::FileDefinition { path, alias, .. } => {
+                    println!("Source (file): {}{}", path,
+                        alias.as_ref().map(|a| format!(" [alias: {}]", a)).unwrap_or_default());
+                }
+                TimeseriesInputDefinition::InMemoryDefinition { path, alias, .. } => {
+                    println!("Source (in-memory): {}{}",
+                        alias.as_deref().or(path.as_deref()).unwrap_or("<unnamed>"),
+                        path.as_ref().map(|p| format!(" (stands in for {})", p)).unwrap_or_default());
+                }
             }
-            i += 1;
+            let mut i = 0;
+            for col in source.columns() {
+                println!("  Input: {} {} {}", i, col.full_colname_path, col.full_colindex_path);
+                if let Some(alias) = &col.alias {
+                    println!("    Alias: {} (also accessible as {} and {})",
+                        alias,
+                        col.alias_colname_path.as_ref().unwrap_or(&String::new()),
+                        col.alias_colindex_path.as_ref().unwrap_or(&String::new()));
+                }
+                i += 1;
+            }
         }
     }
 

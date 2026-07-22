@@ -231,13 +231,25 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // Parsing inputs
             // -------------------------------------------------------------------------------------
             for (name, ini_property) in ini_section.properties {
-                // Input files can be specified in two formats:
-                // 1. Direct file path: ./path/to/file.csv (value is empty, key is the path)
+                // Input entries take three forms:
+                // 1. Direct file path: ./path/to/file.csv (value empty, key is the path)
                 // 2. Aliased file path: alias = ./path/to/file.csv (value is the path, key is the alias)
+                // 3. Alias declaration: alias = <blank> (value empty, key is a bare name)
+                //
+                // Forms 1 and 3 both have an empty value; they are told apart by the
+                // key: a bare name (no path separators/extension) is a declaration,
+                // anything else is a file path. Existing models rely on bare
+                // path keys like `./rex_mpot.csv`, so this stays backward compatible.
                 if ini_property.value.is_empty() {
-                    // Direct file path (no alias)
-                    model.load_input_data(name.as_str(), None)
-                        .map_err(|e| e.with_context(&format!("Error on line {}: ", ini_property.line_number)))?;
+                    if is_valid_bare_name(&name) {
+                        // Declared input with no backing data — must be supplied
+                        // before a run, else configure() rejects it.
+                        model.declare_alias(name.as_str());
+                    } else {
+                        // Direct file path (no alias)
+                        model.load_input_data(name.as_str(), None)
+                            .map_err(|e| e.with_context(&format!("Error on line {}: ", ini_property.line_number)))?;
+                    }
                 } else {
                     // Aliased file path: name is the alias, value is the file path
                     model.load_input_data(ini_property.value.as_str(), Some(name.as_str()))
@@ -982,14 +994,12 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
         ini_doc.set_property("kalix", "end", &u64_to_date_string_for_step_size(end_timestamp, sim_stepsize));
     }
 
-    // List all input files
-    for file_path in &model.input_file_paths {
-        let alias = model.alias_map.get(file_path);
-        let (k, v) = match alias {
-            Some(alias_string) => (alias_string.as_str(), file_path.as_str()),
-            None => (file_path.as_str(), ""),
-        };
-        ini_doc.set_property("inputs", k, v);
+    // List all input sources, one [inputs] line each. Each source knows how it
+    // re-declares itself (file path, aliased path, or bare declaration) via
+    // ini_entry(), so this stays in lock-step with the parser.
+    for source in &model.input_sources {
+        let (k, v) = source.ini_entry();
+        ini_doc.set_property("inputs", k.as_str(), v.as_str());
     }
 
     // List all constants

@@ -12,10 +12,12 @@ fn test_model_1_io_ini_read() {
     let mut m= match  IniModelIO::read_model_file(model_filename) {
         Ok(v) => {
             println!("Model read okay from file.");
-            println!("number of inputs = {}", v.inputs.len());
+            println!("number of input columns = {}", v.input_columns().count());
             v.print_inputs();
             println!("inputs[0]:");
-            v.inputs[0].print();
+            if let Some(col) = v.input_columns().next() {
+                col.print();
+            }
             v
         },
         Err(s) => {
@@ -82,10 +84,12 @@ fn test_model_3_io_ini_read() {
     let mut m= match  IniModelIO::read_model_file(model_filename) {
         Ok(v) => {
             println!("Model read okay from file.");
-            println!("number of inputs = {}", v.inputs.len());
+            println!("number of input columns = {}", v.input_columns().count());
             v.print_inputs();
             println!("inputs[0]:");
-            v.inputs[0].print();
+            if let Some(col) = v.input_columns().next() {
+                col.print();
+            }
             v
         },
         Err(s) => {

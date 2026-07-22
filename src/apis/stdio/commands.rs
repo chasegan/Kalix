@@ -288,7 +288,7 @@ impl Command for LoadModelFileCommand {
         let model_info = session.get_model()
             .map(|m| serde_json::json!({
                 "nodes_count": m.nodes.len(),
-                "inputs_count": m.inputs.len(),
+                "inputs_count": m.input_columns().count(),
                 "outputs_count": m.outputs.len()
             }))
             .unwrap_or(serde_json::json!({}));
@@ -348,7 +348,7 @@ impl Command for LoadModelStringCommand {
         let model_info = session.get_model()
             .map(|m| serde_json::json!({
                 "nodes_count": m.nodes.len(),
-                "inputs_count": m.inputs.len(),
+                "inputs_count": m.input_columns().count(),
                 "outputs_count": m.outputs.len()
             }))
             .unwrap_or(serde_json::json!({}));
@@ -552,7 +552,7 @@ impl Command for RunSimulationCommand {
             .ok_or(CommandError::ModelNotLoaded)?;
 
         // Check if model has input data
-        // if model.inputs.is_empty() {
+        // if model.input_sources.is_empty() {
         //     return Err(CommandError::DataNotLoaded);
         // }
 

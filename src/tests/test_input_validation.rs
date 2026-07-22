@@ -179,3 +179,65 @@ fn test_multiple_invalid_references_caught() {
         error_message
     );
 }
+
+
+/// A declared-but-unsupplied input (an empty-valued [inputs] entry with a bare
+/// alias name) must load fine but be rejected at configure time, since nothing
+/// in the engine can supply it.
+#[test]
+fn test_declared_input_not_supplied_fails_at_configure() {
+    let ini = "\
+[inputs]
+observed_flows =
+
+[node.src]
+type = inflow
+inflow = 1
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+";
+    let mut model = IniModelIO::read_model_string(ini)
+        .expect("Model with a bare declaration should parse");
+
+    // The declaration is recorded as a source with no columns.
+    assert_eq!(model.input_columns().count(), 0);
+
+    let err = model.configure().expect_err(
+        "configure() must reject a declared-but-unsupplied input");
+    assert!(
+        err.contains("observed_flows") && err.contains("declared but not supplied"),
+        "Error should name the unsupplied input. Got: {}",
+        err
+    );
+}
+
+
+/// Round-trip fidelity: the enum -> [inputs] mapping must re-emit exactly what
+/// the parser read — a bare declaration, a direct file path, and an aliased
+/// file path all survive a to_string() round trip.
+#[test]
+fn test_inputs_section_round_trips() {
+    let ini = "\
+[inputs]
+observed_flows =
+./src/tests/example_data/test.csv
+climate = ./src/tests/example_data/test.csv
+";
+    let model = IniModelIO::read_model_string(ini)
+        .expect("Model should parse");
+    let rendered = IniModelIO::model_to_string(&model);
+
+    for line in [
+        "observed_flows =",
+        "./src/tests/example_data/test.csv",
+        "climate = ./src/tests/example_data/test.csv",
+    ] {
+        assert!(
+            rendered.contains(line),
+            "Rendered model should preserve input line '{}'. Got:\n{}",
+            line, rendered
+        );
+    }
+}

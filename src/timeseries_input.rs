@@ -3,6 +3,69 @@ use crate::timeseries::Timeseries;
 use crate::misc::misc_functions::sanitize_name;
 use std::path::Path;
 
+/// One pre-run input *source*, as declared in `[inputs]`. A single source can
+/// expand to several data columns — each a `TimeseriesInput` — so the columns
+/// live inside the source rather than being flattened into the model.
+#[derive(Clone)]
+pub enum TimeseriesInputDefinition {
+    /// Declared alias with no backing data yet. Rejected at configure time.
+    Declaration { alias: String },
+    /// Backed by a file on disk; `columns` are the loaded per-column inputs.
+    FileDefinition {
+        path: String,
+        alias: Option<String>,
+        columns: Vec<TimeseriesInput>,
+    },
+    /// Data supplied in memory; c.f. model_input_swap.rs.
+    InMemoryDefinition {
+        path: Option<String>,
+        alias: Option<String>,
+        columns: Vec<TimeseriesInput>,
+    },
+}
+
+impl TimeseriesInputDefinition {
+    /// The data columns of this source. Empty for a bare `Declaration`.
+    pub fn columns(&self) -> &[TimeseriesInput] {
+        match self {
+            TimeseriesInputDefinition::Declaration { .. } => &[],
+            TimeseriesInputDefinition::FileDefinition { columns, .. } => columns,
+            TimeseriesInputDefinition::InMemoryDefinition { columns, .. } => columns,
+        }
+    }
+
+    /// The user-provided alias for this source, if any.
+    pub fn alias(&self) -> Option<&str> {
+        match self {
+            TimeseriesInputDefinition::Declaration { alias } => Some(alias.as_str()),
+            TimeseriesInputDefinition::FileDefinition { alias, .. } => alias.as_deref(),
+            TimeseriesInputDefinition::InMemoryDefinition { alias, .. } => alias.as_deref(),
+        }
+    }
+
+    /// The `[inputs]` `key = value` pair that re-declares this source. The
+    /// single place the source->INI mapping is defined, so serialization stays
+    /// in lock-step with parsing.
+    pub fn ini_entry(&self) -> (String, String) {
+        match self {
+            TimeseriesInputDefinition::Declaration { alias } => (alias.clone(), String::new()),
+            TimeseriesInputDefinition::FileDefinition { path, alias, .. } => match alias {
+                Some(a) => (a.clone(), path.clone()),
+                None => (path.clone(), String::new()),
+            },
+            // An in-memory source still declares the file it stands in for, so a
+            // round-trip keeps the INI as the complete manifest.
+            TimeseriesInputDefinition::InMemoryDefinition { path, alias, .. } => match (alias, path) {
+                (Some(a), Some(p)) => (a.clone(), p.clone()),
+                (Some(a), None) => (a.clone(), String::new()),
+                (None, Some(p)) => (p.clone(), String::new()),
+                (None, None) => unreachable!(),
+            },
+        }
+    }
+}
+
+
 #[derive(Clone)]
 #[derive(Default)]
 pub struct TimeseriesInput {
