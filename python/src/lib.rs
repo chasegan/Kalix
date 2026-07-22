@@ -6,15 +6,15 @@
 use kalix::io::error::KalixIoError;
 use kalix::io::ini_model_io::IniModelIO;
 use kalix::io::model_patch::{patch_delete, patch_merge, patch_replace};
-use kalix::io::pixie_io;
+use kalix::io::{model_query, pixie_io};
 use kalix::model::Model;
 use kalix::run;
 use kalix::tid::utils::{wrap_to_i64, wrap_to_u64};
 use kalix::timeseries::Timeseries;
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
-use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyIOError, PyKeyError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyList};
 
 /// Maps the engine's Io/Parse distinction to the corresponding Python
 /// exception type: a genuine filesystem failure becomes `OSError`, a content
@@ -389,6 +389,73 @@ impl PyModel {
             .map(|ts| (ts.name.clone(), ts.values.clone().into_pyarray_bound(py)))
             .collect();
         Ok((start, step, size, series_list))
+    }
+
+    fn _sections<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        Ok(PyList::new_bound(py, model_query::list_sections(&self.inner)))
+    }
+
+    /// Returns the named section as `{property: value}`, or `None` if the
+    /// section doesn't exist. A bare (list-style) line comes back with an
+    /// empty-string value, matching `IniProperty::value`'s own convention.
+    fn _get_section<'py>(
+        &self,
+        py: Python<'py>,
+        section_name: &str,
+    ) -> PyResult<Option<Bound<'py, PyDict>>> {
+        let Some(section) = model_query::get_section(&self.inner, section_name) else {
+            return Ok(None);
+        };
+        let dict = PyDict::new_bound(py);
+        for (key, property) in &section.properties {
+            dict.set_item(key, &property.value)?;
+        }
+        Ok(Some(dict))
+    }
+
+    fn _has_section(&self, section_name: &str) -> PyResult<bool> {
+        Ok(model_query::has_section(&self.inner, section_name))
+    }
+
+    fn _get_property(&self, section_name: &str, property_name: &str) -> PyResult<String> {
+        if !model_query::has_section(&self.inner, section_name) {
+            return Err(PyKeyError::new_err(format!("No such section: {section_name:?}")));
+        }
+        model_query::get_property(&self.inner, section_name, property_name).ok_or_else(|| {
+            PyKeyError::new_err(format!("No such property: {section_name:?}.{property_name:?}"))
+        })
+    }
+
+    fn _get_property_by_designation(&self, property_designation: &str) -> PyResult<String> {
+        model_query::get_property_by_designation(&self.inner, property_designation).map_err(|e| {
+            match e {
+                model_query::PropertyLookupError::InvalidFormat(designation) => {
+                    PyKeyError::new_err(format!(
+                        "Not a valid '<section>.<property>' designation: {designation:?}"
+                    ))
+                }
+                model_query::PropertyLookupError::NoSuchSection(section_name) => {
+                    PyKeyError::new_err(format!("No such section: {section_name:?}"))
+                }
+                model_query::PropertyLookupError::NoSuchProperty {
+                    section_name,
+                    property_name,
+                } => PyKeyError::new_err(format!(
+                    "No such property: {section_name:?}.{property_name:?}"
+                )),
+            }
+        })
+    }
+
+    fn _to_string(&self) -> PyResult<String> {
+        Ok(IniModelIO::model_to_string(&self.inner))
+    }
+
+    fn _save<'py>(slf: PyRefMut<'py, Self>, filename: &str) -> PyResult<PyRefMut<'py, Self>> {
+        slf.inner
+            .save_ini_to_file(filename)
+            .map_err(PyRuntimeError::new_err)?;
+        Ok(slf)
     }
 }
 

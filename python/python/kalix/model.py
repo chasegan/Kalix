@@ -337,6 +337,112 @@ class Model:
     def __repr__(self) -> str:
         return "<kalix.Model>"
 
+    def sections(self) -> list:
+        """List the model's INI section names, in file order.
+
+        Returns
+        -------
+        list[str]
+            Section names as they appear in the model, e.g. ``"node.myreach"``.
+        """
+        return self._inner._sections()
+
+    def has_section(self, section_name: str) -> bool:
+        """Check whether a section exists in the model.
+
+        Parameters
+        ----------
+        section_name
+            The section name, e.g. ``"node.myreach"``.
+
+        Returns
+        -------
+        bool
+            True if the section is present.
+        """
+        return self._inner._has_section(section_name)
+
+    def get_section(self, section_name: str) -> dict[str, str]:
+        """Retrieve a section's properties as a plain dict.
+
+        This is a snapshot, not a live view -- mutating the returned dict
+        does not touch the model; the only write path is `patch()`. A
+        list-style section (e.g. ``[inputs]``, ``[outputs]``) comes back
+        with each bare line as a key mapped to an empty-string value.
+
+        Parameters
+        ----------
+        section_name
+            The section name, e.g. ``"node.myreach"``.
+
+        Returns
+        -------
+        dict[str, str]
+            Property name -> value, in file order.
+
+        Raises
+        ------
+        KeyError
+            If the section does not exist. Use `has_section()` to probe.
+        """
+        section = self._inner._get_section(section_name)
+        if section is None:
+            raise KeyError(f"No such section: {section_name!r}")
+        return section
+
+    def get(self, property_designation: str) -> str:
+        """Retrieve a single property's value by dotted designation.
+
+        Parameters
+        ----------
+        property_designation
+            A dotted ``"<section>.<property>"`` string, e.g.
+            ``"node.myreach.lag"``. The section name is everything before
+            the last dot, so section names that themselves contain dots
+            (as node section names do) are handled correctly.
+
+        Returns
+        -------
+        str
+            The property's value.
+
+        Raises
+        ------
+        KeyError
+            If the section or property does not exist.
+        """
+        return self._inner._get_property_by_designation(property_designation)
+
+    def to_string(self) -> str:
+        """Convert the model back to its INI representation.
+
+        Returns
+        -------
+        str
+            The round-tripped INI text, with original formatting preserved
+            for unchanged properties.
+        """
+        return self._inner._to_string()
+
+    def save(self, filename: PathLike) -> "Model":
+        """Write the model's INI representation to a file.
+
+        Parameters
+        ----------
+        filename
+            Path to write to.
+
+        Returns
+        -------
+        Model
+            `self`, for chaining.
+        """
+        self._inner._save(str(filename))
+        return self
+
+
+
+
 
 def load_file(model_path: PathLike) -> Model:
     """Create a `Model` and load it from an INI file.

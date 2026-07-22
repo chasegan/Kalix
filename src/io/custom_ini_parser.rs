@@ -285,6 +285,18 @@ impl IniDocument {
             .map(|property| property.value.as_str())
     }
 
+    pub fn get_section_names(&self) -> Vec<String> {
+        self.sections.keys().cloned().collect()
+    }
+
+    pub fn get_section(&self, section_name: &str) -> Option<&IniSection> {
+        self.sections.get(section_name)
+    }
+
+    pub fn has_section(&self, section_name: &str) -> bool {
+        self.sections.contains_key(section_name)
+    }
+
     /// Inserts `section` under `section_name`, replacing it wholesale if
     /// already present (in place) or appending it otherwise. Returns a
     /// mutable reference to the inserted section for further modifications.
