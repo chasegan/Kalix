@@ -76,10 +76,31 @@ public class KeyboardShortcutManager {
             return null;
         }
         String mods = InputEvent.getModifiersExText(ks.getModifiers());
-        String key = KeyEvent.getKeyText(ks.getKeyCode());
+        String key = keyText(ks.getKeyCode());
         if (mods.isEmpty()) {
             return key;
         }
         return IS_MAC ? mods + key : mods + "+" + key;
+    }
+
+    /**
+     * The display text for a key code. Punctuation keys get their literal glyph —
+     * {@link KeyEvent#getKeyText} would render VK_OPEN_BRACKET as "Open Bracket",
+     * turning a tidy "⌘[" hint into "⌘Open Bracket".
+     */
+    private static String keyText(int keyCode) {
+        return switch (keyCode) {
+            case KeyEvent.VK_OPEN_BRACKET -> "[";
+            case KeyEvent.VK_CLOSE_BRACKET -> "]";
+            case KeyEvent.VK_SLASH -> "/";
+            case KeyEvent.VK_BACK_SLASH -> "\\";
+            case KeyEvent.VK_COMMA -> ",";
+            case KeyEvent.VK_PERIOD -> ".";
+            case KeyEvent.VK_SEMICOLON -> ";";
+            case KeyEvent.VK_QUOTE -> "'";
+            case KeyEvent.VK_MINUS -> "-";
+            case KeyEvent.VK_EQUALS -> "=";
+            default -> KeyEvent.getKeyText(keyCode);
+        };
     }
 }

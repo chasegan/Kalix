@@ -2,6 +2,7 @@ package com.kalix.ide.builders;
 
 import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.kalix.ide.constants.AppConstants;
+import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.icons.KalixIcon;
 import com.kalix.ide.utils.ThemeUtils;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
@@ -88,28 +89,28 @@ public class ToolBarBuilder {
         // File operations
         toolBar.add(createToolBarButton(
             "New",
-            AppConstants.getToolbarNewTooltip(),
+            AppShortcut.NEW_MODEL.tooltip(),
             FontIcon.of(KalixIcon.FILE_CIRCLE_PLUS, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.newModel()
         ));
 
         toolBar.add(createToolBarButton(
             "Open",
-            AppConstants.getToolbarOpenTooltip(),
+            AppShortcut.OPEN_MODEL.tooltip(),
             FontIcon.of(FontAwesomeSolid.FILE, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.openModel()
         ));
 
         toolBar.add(createToolBarButton(
             "Open Folder",
-            AppConstants.getToolbarOpenFolderTooltip(),
+            AppShortcut.OPEN_FOLDER.tooltip(),
             FontIcon.of(FontAwesomeSolid.FOLDER_OPEN, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.openFolder()
         ));
 
         toolBar.add(createToolBarButton(
             "Save",
-            AppConstants.getToolbarSaveTooltip(),
+            AppShortcut.SAVE_MODEL.tooltip(),
             FontIcon.of(FontAwesomeSolid.SAVE, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.saveModel()
         ));
@@ -119,7 +120,7 @@ public class ToolBarBuilder {
         // Navigation buttons
         JButton backButton = createToolBarButton(
             "Back",
-            AppConstants.getToolbarBackTooltip(),
+            AppShortcut.NAVIGATE_BACK.tooltip(),
             FontIcon.of(FontAwesomeSolid.ARROW_LEFT, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.navigateBack()
         );
@@ -128,7 +129,7 @@ public class ToolBarBuilder {
 
         JButton forwardButton = createToolBarButton(
             "Forward",
-            AppConstants.getToolbarForwardTooltip(),
+            AppShortcut.NAVIGATE_FORWARD.tooltip(),
             FontIcon.of(FontAwesomeSolid.ARROW_RIGHT, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.navigateForward()
         );
@@ -138,14 +139,14 @@ public class ToolBarBuilder {
         // Utility operations
         toolBar.add(createToolBarButton(
             "Find",
-            AppConstants.getToolbarSearchTooltip(),
+            AppShortcut.FIND.tooltip(),
             FontIcon.of(FontAwesomeSolid.SEARCH, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.searchModel()
         ));
 
         toolBar.add(createToolBarButton(
             "Find on Map",
-            AppConstants.getToolbarFindOnMapTooltip(),
+            "Find on Map",
             FontIcon.of(FontAwesomeSolid.SEARCH_LOCATION, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.findNodeOnMap()
         ));
@@ -162,7 +163,7 @@ public class ToolBarBuilder {
         // Model operations
         toolBar.add(createToolBarButton(
             "Run Model",
-            AppConstants.getToolbarRunModelTooltip(),
+            AppShortcut.RUN_MODEL.tooltip(),
             FontIcon.of(FontAwesomeSolid.PLAY, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.runModelFromMemory()
         ));
