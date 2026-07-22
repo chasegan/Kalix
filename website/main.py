@@ -158,8 +158,7 @@ def _render_hero(fm, body) -> str:
         '<p class="kx-dl-eyebrow">Latest release</p>',
         f'<div class="kx-dl-hero-head">{"".join(head)}</div>', "",
     ]
-    if _has_notes(body):
-        parts += ['<div class="kx-dl-notes" markdown>', "", body, "", "</div>", ""]
+    # Download links first (the page's job), then the notes below them.
     btns = [
         f'<a class="kx-dl-btn" href="{url}">{label}'
         + (f'<span class="kx-dl-btn-ext">.{ext}</span>' if ext else "")
@@ -173,6 +172,8 @@ def _render_hero(fm, body) -> str:
             '<div class="kx-dl-pip"><span class="kx-dl-pip-label">or via PyPI</span>'
             f'<code>{fm["pip"]}</code></div>', "",
         ]
+    if _has_notes(body):
+        parts += ['<div class="kx-dl-notes" markdown>', "", body, "", "</div>", ""]
     parts.append("</div>")
     return "\n".join(parts)
 
@@ -190,14 +191,15 @@ def _render_history_item(fm, body) -> str:
         '<div class="kx-rel-item" markdown>', "",
         f'<div class="kx-rel-head">{"".join(head)}</div>', "",
     ]
-    if _has_notes(body):
-        parts += [body, ""]
+    # Download links first, then the notes below them (matches the hero card).
     dl = [
         f'<a href="{url}">{label}' + (f"&nbsp;.{ext}" if ext else "") + "</a>"
         for label, url, ext in _asset_links(fm)
     ]
     if dl:
         parts += ['<div class="kx-rel-dl">' + "".join(dl) + "</div>", ""]
+    if _has_notes(body):
+        parts += [body, ""]
     parts.append("</div>")
     return "\n".join(parts)
 
