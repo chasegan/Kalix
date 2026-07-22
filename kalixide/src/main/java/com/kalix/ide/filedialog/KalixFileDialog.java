@@ -46,9 +46,9 @@ import java.util.Optional;
  * as they are in the project tree.
  *
  * <p>Layout: sidebar (pins / places / volumes / recents) on the left; a breadcrumb bar with
- * up, pin, hidden and view toggles on top; the listing centre — either the classic list view
- * or macOS-style Miller columns, the user's choice persisting across dialogs; name field,
- * filter combo and buttons in the footer.
+ * navigation, folder-action and view toggles on top; the listing centre — either the classic
+ * list view or macOS-style Miller columns, the user's choice persisting across dialogs; one
+ * name-or-path text field plus buttons in the footer.
  *
  * <p>Usage:
  * <pre>{@code
@@ -82,14 +82,20 @@ public final class KalixFileDialog implements FileViewHost {
     private JPanel breadcrumb;
     private JToggleButton pinToggle;
     private JToggleButton hiddenToggle;
-    private JTextField nameField;
     private JComboBox<FileDialogFilter> filterCombo;
     private JLabel statusLabel;
     private JButton okButton;
 
     private JButton backButton;
     private JButton forwardButton;
+    /**
+     * The dialog's single text field: shows the selected entry's <em>name</em> while the
+     * user works the views, doubles as the save-as name in save mode, and accepts typed or
+     * pasted paths (Enter navigates). One box, standard dialog behaviour.
+     */
     private JTextField pathField;
+    /** Save mode: the file name to restore into the field after a pasted-path navigation. */
+    private String pendingSaveName = "";
 
     private Path currentDir;
     private FsEntry selectedEntry;
@@ -179,10 +185,11 @@ public final class KalixFileDialog implements FileViewHost {
         }
         navigateTo(start);
         if (mode == Mode.SAVE_FILE) {
-            nameField.setText(suggestedName);
-            nameField.requestFocusInWindow();
+            pendingSaveName = suggestedName;
+            pathField.setText(suggestedName);
+            pathField.requestFocusInWindow();
             int dot = suggestedName.lastIndexOf('.');
-            nameField.select(0, dot > 0 ? dot : suggestedName.length());
+            pathField.select(0, dot > 0 ? dot : suggestedName.length());
         }
         dialog.setVisible(true); // modal; blocks until accept/cancel disposes
         lister.dispose();
@@ -218,7 +225,7 @@ public final class KalixFileDialog implements FileViewHost {
         rebuildBreadcrumb();
         pinToggle.setSelected(FileDialogSidebar.isPinned(dir));
         recordVisit(dir);
-        reflectPath(dir);
+        reflectNavigation();
         updateOkEnablement();
     }
 
@@ -226,16 +233,21 @@ public final class KalixFileDialog implements FileViewHost {
     public void selectionChanged(FsEntry entry) {
         selectedEntry = entry;
         if (mode == Mode.SAVE_FILE && entry != null && !entry.directory()) {
-            nameField.setText(entry.name());
+            pendingSaveName = entry.name();
         }
-        reflectPath(entry != null ? entry.path() : currentDir);
+        // The field shows the selected entry's NAME (standard dialog behaviour); it never
+        // updates while the user is typing in it.
+        if (pathField != null && !pathField.isFocusOwner() && entry != null) {
+            pathField.setText(entry.name());
+        }
         updateOkEnablement();
     }
 
     @Override
     public void entryActivated(FsEntry entry) {
         if (mode == Mode.SAVE_FILE) {
-            nameField.setText(entry.name());
+            pendingSaveName = entry.name();
+            pathField.setText(entry.name());
             return;
         }
         selectedEntry = entry;
@@ -438,44 +450,36 @@ public final class KalixFileDialog implements FileViewHost {
         statusRow.add(statusLabel, BorderLayout.CENTER);
         footer.add(statusRow);
 
-        if (mode == Mode.SAVE_FILE) {
-            JPanel nameRow = new JPanel(new BorderLayout(6, 0));
-            nameRow.setOpaque(false);
-            nameRow.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
-            nameRow.add(new JLabel("Save as:"), BorderLayout.WEST);
-            nameField = new JTextField();
-            nameField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-                @Override
-                public void insertUpdate(javax.swing.event.DocumentEvent e) {
-                    updateOkEnablement();
-                }
-
-                @Override
-                public void removeUpdate(javax.swing.event.DocumentEvent e) {
-                    updateOkEnablement();
-                }
-
-                @Override
-                public void changedUpdate(javax.swing.event.DocumentEvent e) {
-                    updateOkEnablement();
-                }
-            });
-            nameRow.add(nameField, BorderLayout.CENTER);
-            footer.add(nameRow);
-        }
-
         JPanel controlsRow = new JPanel(new BorderLayout(8, 0));
         controlsRow.setOpaque(false);
 
-        // Editable path: pasteable, Enter navigates (see onPathEntered); mirrors the
-        // current folder / selection when the user isn't typing in it.
+        // The one text field (see the field's javadoc): selection name, save-as name, and
+        // pasteable path entry all in one, standard-dialog style.
         pathField = new JTextField();
+        pathField.putClientProperty("JTextField.placeholderText",
+            mode == Mode.SAVE_FILE ? "File name, or a path to navigate to" : "Name or path");
         pathField.addActionListener(e -> onPathEntered());
+        pathField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                updateOkEnablement();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                updateOkEnablement();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                updateOkEnablement();
+            }
+        });
         controlsRow.add(pathField, BorderLayout.CENTER);
 
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         right.setOpaque(false);
-        if (!filters.isEmpty() && mode != Mode.CHOOSE_FOLDER) {
+        if (!filters.isEmpty() && mode == Mode.OPEN_FILE) {
             List<FileDialogFilter> all = new ArrayList<>(filters);
             all.add(FileDialogFilter.ALL_FILES);
             filterCombo = new JComboBox<>(all.toArray(new FileDialogFilter[0]));
@@ -504,27 +508,28 @@ public final class KalixFileDialog implements FileViewHost {
     }
 
     /**
-     * Enter in the path field: navigate to the typed/pasted path. A directory becomes the
-     * current folder; a file selects itself in its parent folder; in both cases focus moves
-     * to the OK button (Enter again accepts). An invalid path changes nothing and keeps
-     * focus in the field, with the reason in the status line.
+     * Enter in the field. Text resolving (against the current folder, so bare names and
+     * relative paths work too) to an existing directory navigates there; to an existing
+     * file, selects it in its parent — focus then moves to the OK button so Enter again
+     * accepts. In save mode a bare non-path name means "save as this" and accepts
+     * directly. Anything else changes nothing and keeps focus in the field, with the
+     * reason in the status line.
      */
     private void onPathEntered() {
         String text = pathField.getText().trim();
         if (text.isEmpty()) {
             return;
         }
-        Path typed;
-        try {
-            typed = Path.of(text).toAbsolutePath().normalize();
-        } catch (java.nio.file.InvalidPathException ex) {
-            showStatus("Not a valid path: " + text);
-            return;
-        }
-        if (Files.isDirectory(typed)) {
+        Path typed = resolveTyped(text);
+        if (typed != null && Files.isDirectory(typed)) {
             navigateTo(typed);
-            okButton.requestFocusInWindow();
-        } else if (Files.isRegularFile(typed) && typed.getParent() != null) {
+            if (mode == Mode.SAVE_FILE) {
+                pathField.setText(pendingSaveName); // back to being the name box
+            }
+            if (okButton.isEnabled()) {
+                okButton.requestFocusInWindow();
+            }
+        } else if (typed != null && Files.isRegularFile(typed) && typed.getParent() != null) {
             navigateTo(typed.getParent());
             String name = typed.getFileName().toString();
             if (columnsMode) {
@@ -532,18 +537,33 @@ public final class KalixFileDialog implements FileViewHost {
             } else {
                 listView.selectName(name);
             }
-            okButton.requestFocusInWindow();
+            if (mode == Mode.SAVE_FILE) {
+                pendingSaveName = name;
+                pathField.setText(name);
+            }
+            if (okButton.isEnabled()) {
+                okButton.requestFocusInWindow();
+            }
+        } else if (mode == Mode.SAVE_FILE && !looksLikePath(text)) {
+            accept(); // a fresh file name: Enter means save
         } else {
             showStatus("Path not found: " + text);
             // Focus deliberately stays in the field for correction.
         }
     }
 
-    /** Mirrors a path into the path field unless the user is editing it. */
-    private void reflectPath(Path path) {
-        if (pathField != null && !pathField.isFocusOwner() && path != null) {
-            pathField.setText(path.toString());
+    /** Resolves typed text against the current folder (absolute input wins), or null. */
+    private Path resolveTyped(String text) {
+        try {
+            Path base = currentDir != null ? currentDir : Path.of(System.getProperty("user.home"));
+            return base.resolve(text).toAbsolutePath().normalize();
+        } catch (java.nio.file.InvalidPathException ex) {
+            return null;
         }
+    }
+
+    private static boolean looksLikePath(String text) {
+        return text.contains("/") || text.contains(File.separator);
     }
 
     private void showStatus(String message) {
@@ -581,7 +601,7 @@ public final class KalixFileDialog implements FileViewHost {
         rebuildBreadcrumb();
         pinToggle.setSelected(FileDialogSidebar.isPinned(dir));
         recordVisit(dir);
-        reflectPath(dir);
+        reflectNavigation();
         if (columnsMode) {
             columnsView.navigateTo(dir);
         } else {
@@ -707,6 +727,14 @@ public final class KalixFileDialog implements FileViewHost {
         breadcrumb.repaint();
     }
 
+    /** After navigation the field returns to being a name box: empty, or the save name. */
+    private void reflectNavigation() {
+        if (pathField == null || pathField.isFocusOwner()) {
+            return;
+        }
+        pathField.setText(mode == Mode.SAVE_FILE ? pendingSaveName : "");
+    }
+
     /** The breadcrumb separator: a path-style slash in the muted tone, full label size. */
     private static JLabel separator() {
         JLabel slash = new JLabel("/");
@@ -727,7 +755,7 @@ public final class KalixFileDialog implements FileViewHost {
     private void updateOkEnablement() {
         okButton.setEnabled(switch (mode) {
             case OPEN_FILE -> selectedEntry != null && !selectedEntry.directory();
-            case SAVE_FILE -> nameField != null && !nameField.getText().isBlank();
+            case SAVE_FILE -> pathField != null && !pathField.getText().isBlank();
             case CHOOSE_FOLDER -> chosenFolder() != null;
         });
     }
@@ -754,22 +782,22 @@ public final class KalixFileDialog implements FileViewHost {
                 finish(selectedEntry.path().toFile(), selectedEntry.path().getParent());
             }
             case SAVE_FILE -> {
-                String name = nameField.getText().trim();
+                // The typed name is taken verbatim — any extension, or none, is accepted
+                // (the suggested name carries the conventional one; the modeller decides).
+                // A pasted path resolves too, so saving to an absolute target just works.
+                String name = pathField.getText().trim();
                 if (name.isEmpty() || currentDir == null) {
                     return;
                 }
-                if (!name.contains(".")) {
-                    // Default extension: the active filter's, else the first specific
-                    // filter's (the common case now that "All files" is the default).
-                    String ext = activeFilter().defaultExtension();
-                    if (ext == null && !filters.isEmpty()) {
-                        ext = filters.get(0).defaultExtension();
-                    }
-                    if (ext != null) {
-                        name = name + "." + ext;
-                    }
+                Path target = resolveTyped(name);
+                if (target == null) {
+                    showStatus("Not a valid file name: " + name);
+                    return;
                 }
-                Path target = currentDir.resolve(name);
+                if (Files.isDirectory(target)) {
+                    navigateTo(target); // Enter on a folder name browses into it, never saves onto it
+                    return;
+                }
                 if (Files.exists(target)) {
                     int choice = JOptionPane.showConfirmDialog(dialog,
                         "\"" + name + "\" already exists. Replace it?",
@@ -778,7 +806,7 @@ public final class KalixFileDialog implements FileViewHost {
                         return;
                     }
                 }
-                finish(target.toFile(), currentDir);
+                finish(target.toFile(), target.getParent() != null ? target.getParent() : currentDir);
             }
             case CHOOSE_FOLDER -> {
                 Path folder = chosenFolder();

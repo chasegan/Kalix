@@ -232,11 +232,12 @@ public class FileOperationsManager {
         }
         // The dialog handles default-extension appending and overwrite confirmation.
         File currentFile = document.getFile();
+        // No filter for save: the suggested name carries the conventional extension, and
+        // whatever name the modeller types is accepted verbatim.
         java.util.Optional<File> chosen = KalixFileDialog.saveFile(ownerWindow())
             .title("Save As")
             .startIn(currentFile)
             .suggestedName(currentFile != null ? currentFile.getName() : "model.ini")
-            .filters(modelFilter())
             .show();
         if (chosen.isEmpty()) {
             return;
