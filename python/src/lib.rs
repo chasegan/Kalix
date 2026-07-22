@@ -5,6 +5,7 @@
 
 use kalix::io::error::KalixIoError;
 use kalix::io::ini_model_io::IniModelIO;
+use kalix::io::model_input_swap;
 use kalix::io::model_patch::{patch_delete, patch_merge, patch_replace};
 use kalix::io::{model_query, pixie_io};
 use kalix::model::Model;
@@ -455,6 +456,77 @@ impl PyModel {
         slf.inner
             .save_ini_to_file(filename)
             .map_err(PyRuntimeError::new_err)?;
+        Ok(slf)
+    }
+
+    /// Supply in-memory data for a declared `[inputs]` alias (`set_input()`).
+    ///
+    /// - `column_names`: one per array in `values_per_column`.
+    /// - `timestamps_unix_seconds`: 1-D numpy array (int64) of Unix seconds;
+    ///   must be regular, same rule as `_write_pixie_raw`.
+    /// - `values_per_column`: list of 1-D numpy arrays (float64), same length
+    ///   as `timestamps_unix_seconds`.
+    ///
+    /// Resets `has_run`, same as `_patch`: supplying new data invalidates any
+    /// prior run's results.
+    fn _set_input<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        alias: &str,
+        column_names: Vec<String>,
+        timestamps_unix_seconds: PyReadonlyArray1<i64>,
+        values_per_column: Vec<PyReadonlyArray1<f64>>,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        if column_names.len() != values_per_column.len() {
+            return Err(PyValueError::new_err(
+                "column_names and values_per_column must have the same length",
+            ));
+        }
+        let ts = timestamps_unix_seconds.as_slice()?;
+        if ts.is_empty() {
+            return Err(PyValueError::new_err("No data supplied"));
+        }
+
+        let step_size: u64 = if ts.len() >= 2 {
+            let diff = ts[1] - ts[0];
+            if diff <= 0 {
+                return Err(PyValueError::new_err("Timestamps must be strictly increasing"));
+            }
+            diff as u64
+        } else {
+            86400
+        };
+        for i in 2..ts.len() {
+            if (ts[i] - ts[i - 1]) as u64 != step_size {
+                return Err(PyValueError::new_err(format!(
+                    "Irregular timestep at index {}: expected step {}, got {}",
+                    i,
+                    step_size,
+                    ts[i] - ts[i - 1]
+                )));
+            }
+        }
+        let start_timestamp = wrap_to_u64(ts[0]);
+
+        let mut columns = Vec::with_capacity(column_names.len());
+        for (name, arr) in column_names.into_iter().zip(values_per_column.iter()) {
+            let values_slice = arr.as_slice()?;
+            if values_slice.len() != ts.len() {
+                return Err(PyValueError::new_err(format!(
+                    "Column '{}' has {} values, expected {}",
+                    name,
+                    values_slice.len(),
+                    ts.len()
+                )));
+            }
+            columns.push(model_input_swap::InMemoryColumn {
+                name,
+                values: values_slice.to_vec(),
+            });
+        }
+
+        model_input_swap::set_input(&mut slf.inner, alias, start_timestamp, step_size, columns)
+            .map_err(PyValueError::new_err)?;
+        slf.has_run = false;
         Ok(slf)
     }
 }

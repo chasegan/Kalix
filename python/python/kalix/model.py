@@ -441,6 +441,56 @@ class Model:
         """
         self._inner._save(str(filename))
         return self
+    
+    def set_input(self, alias: str, data: "pd.DataFrame | pd.Series") -> "Model":
+        """Supply in-memory data for a declared `[inputs]` alias.
+
+        `alias` must already be declared in `[inputs]` -- either a bare
+        declaration (``observed_flows =``) or an aliased file (``climate_data
+        = climate.csv``, where the supplied data takes precedence over the
+        file). `set_input()` fills an existing declaration; it does not
+        create one -- declare the alias first (e.g. via `patch()`) if it
+        isn't there yet.
+
+        Parameters
+        ----------
+        alias
+            The `[inputs]` alias to supply data for.
+        data
+            A `pd.DataFrame` (or bare `pd.Series`, accepted as sugar for a
+            one-column frame) indexed by a `DatetimeIndex` with a regular
+            step equal to the simulation timestep -- the same requirement as
+            `write_pixie()`. A naive index is assumed UTC. Column names are
+            addressable via `by_name` (standard sanitisation); column order
+            via `by_index` (1-based) -- both exactly as if a file had been
+            loaded under this alias. Values are coerced to float64.
+
+        Returns
+        -------
+        Model
+            `self`, for chaining.
+        """
+        if isinstance(data, pd.Series):
+            data = data.to_frame(name=data.name if data.name is not None else "value")
+
+        index = data.index
+        if not isinstance(index, pd.DatetimeIndex):
+            raise TypeError(
+                f"set_input() requires a DatetimeIndex, got {type(index).__name__}"
+            )
+        index = index.tz_localize("UTC") if index.tz is None else index.tz_convert("UTC")
+
+        # Explicit unit conversion: pandas 3.0 defaults to microseconds (was
+        # nanoseconds in 2.x), so don't assume astype("int64") gives seconds.
+        timestamps_sec = np.asarray(index.as_unit("s").asi8, dtype=np.int64)
+        column_names = [str(col) for col in data.columns]
+        values_per_column = [
+            np.ascontiguousarray(data[col].to_numpy(), dtype=np.float64)
+            for col in data.columns
+        ]
+
+        self._inner._set_input(alias, column_names, timestamps_sec, values_per_column)
+        return self
 
 
 
