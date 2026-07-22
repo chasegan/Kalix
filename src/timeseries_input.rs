@@ -3,6 +3,18 @@ use crate::timeseries::Timeseries;
 use crate::misc::misc_functions::sanitize_name;
 use std::path::Path;
 
+/// How an in-memory source declares itself in `[inputs]`. Every variant carries
+/// at least one name, so an in-memory source can *always* be rendered back to an
+/// `[inputs]` line — there is no nameless state to guard against at render time.
+#[derive(Clone)]
+pub enum InMemoryOrigin {
+    /// Supplied against a bare alias declaration (`observed_flows =`).
+    Alias(String),
+    /// Overlays a file-backed source, retaining its declaration so the INI still
+    /// names the file it stands in for (§6.2).
+    File { path: String, alias: Option<String> },
+}
+
 /// One pre-run input *source*, as declared in `[inputs]`. A single source can
 /// expand to several data columns — each a `TimeseriesInput` — so the columns
 /// live inside the source rather than being flattened into the model.
@@ -16,10 +28,10 @@ pub enum TimeseriesInputDefinition {
         alias: Option<String>,
         columns: Vec<TimeseriesInput>,
     },
-    /// Data supplied in memory; c.f. model_input_swap.rs.
+    /// Data supplied in memory; c.f. model_input_swap.rs. The `origin` carries
+    /// how the source declares itself, guaranteeing it always has a name.
     InMemoryDefinition {
-        path: Option<String>,
-        alias: Option<String>,
+        origin: InMemoryOrigin,
         columns: Vec<TimeseriesInput>,
     },
 }
@@ -39,7 +51,10 @@ impl TimeseriesInputDefinition {
         match self {
             TimeseriesInputDefinition::Declaration { alias } => Some(alias.as_str()),
             TimeseriesInputDefinition::FileDefinition { alias, .. } => alias.as_deref(),
-            TimeseriesInputDefinition::InMemoryDefinition { alias, .. } => alias.as_deref(),
+            TimeseriesInputDefinition::InMemoryDefinition { origin, .. } => match origin {
+                InMemoryOrigin::Alias(a) => Some(a.as_str()),
+                InMemoryOrigin::File { alias, .. } => alias.as_deref(),
+            },
         }
     }
 
@@ -54,12 +69,12 @@ impl TimeseriesInputDefinition {
                 None => (path.clone(), String::new()),
             },
             // An in-memory source still declares the file it stands in for, so a
-            // round-trip keeps the INI as the complete manifest.
-            TimeseriesInputDefinition::InMemoryDefinition { path, alias, .. } => match (alias, path) {
-                (Some(a), Some(p)) => (a.clone(), p.clone()),
-                (Some(a), None) => (a.clone(), String::new()),
-                (None, Some(p)) => (p.clone(), String::new()),
-                (None, None) => unreachable!(),
+            // round-trip keeps the INI as the complete manifest. The origin
+            // guarantees a name, so every arm renders — no nameless case.
+            TimeseriesInputDefinition::InMemoryDefinition { origin, .. } => match origin {
+                InMemoryOrigin::Alias(a) => (a.clone(), String::new()),
+                InMemoryOrigin::File { path, alias: Some(a) } => (a.clone(), path.clone()),
+                InMemoryOrigin::File { path, alias: None } => (path.clone(), String::new()),
             },
         }
     }

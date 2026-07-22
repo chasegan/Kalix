@@ -18,7 +18,7 @@ use crate::misc::simulation_context::{
 use crate::ordering::simple_nodewise_ordering::SimpleNodewiseOrderingSystem;
 use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
-use crate::timeseries_input::{TimeseriesInput, TimeseriesInputDefinition};
+use crate::timeseries_input::{TimeseriesInput, TimeseriesInputDefinition, InMemoryOrigin};
 use crate::model_inputs::DynamicInput;
 
 /// One entry in the model's interleaved execution layout: nodes and var
@@ -899,10 +899,16 @@ impl Model {
                     println!("Source (file): {}{}", path,
                         alias.as_ref().map(|a| format!(" [alias: {}]", a)).unwrap_or_default());
                 }
-                TimeseriesInputDefinition::InMemoryDefinition { path, alias, .. } => {
-                    println!("Source (in-memory): {}{}",
-                        alias.as_deref().or(path.as_deref()).unwrap_or("<unnamed>"),
-                        path.as_ref().map(|p| format!(" (stands in for {})", p)).unwrap_or_default());
+                TimeseriesInputDefinition::InMemoryDefinition { origin, .. } => {
+                    match origin {
+                        InMemoryOrigin::Alias(a) => {
+                            println!("Source (in-memory): {}", a);
+                        }
+                        InMemoryOrigin::File { path, alias } => {
+                            println!("Source (in-memory): {} (stands in for {})",
+                                alias.as_deref().unwrap_or(path.as_str()), path);
+                        }
+                    }
                 }
             }
             let mut i = 0;
