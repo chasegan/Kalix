@@ -930,3 +930,232 @@ def test_save_accepts_pathlib_path(tmp_path):
     out_path = tmp_path / "saved.ini"
     model.save(out_path)
     assert out_path.exists()
+
+
+# --- set_input() ------------------------------------------------------------
+# A model with a bare declared alias ("obs =", no backing file) plus an
+# inflow node addressing both a named and an indexed column of it -- the
+# minimal shape set_input() is meant to fill.
+
+_MODEL_WITH_DECLARED_INPUT_INI = (
+    "[kalix]\n"
+    "start = 2000-01-01T00:00:00\n"
+    "end = 2000-01-05T00:00:00\n"
+    "\n"
+    "[inputs]\n"
+    "obs =\n"
+    "\n"
+    "[node.src]\n"
+    "loc = 0,0\n"
+    "type = inflow\n"
+    "inflow = data.obs.by_name.flow\n"
+    "ds_1 = sink\n"
+    "\n"
+    "[node.sink]\n"
+    "loc = 1,1\n"
+    "type = blackhole\n"
+    "\n"
+    "[outputs]\n"
+    "node.src.dsflow\n"
+)
+
+
+def _obs_frame():
+    index = pd.date_range("2000-01-01", periods=5, freq="D")
+    return pd.DataFrame({"flow": [1.0, 2.0, 3.0, 4.0, 5.0]}, index=index)
+
+
+def test_set_input_returns_same_instance_for_chaining():
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    result = model.set_input("obs", _obs_frame())
+    assert result is model
+
+
+def test_set_input_supplies_a_declared_alias_and_model_runs():
+    """A bare declaration configure() would otherwise reject as "declared but
+    not supplied" is filled by set_input(), and the values it supplies flow
+    straight through an inflow node's dsflow output."""
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    model.set_input("obs", _obs_frame())
+    df = model.run().get_outputs()
+    assert list(df["node.src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
+
+
+def test_set_input_accepts_a_bare_series_as_one_column_frame():
+    """A `pd.Series` is sugar for a single-column frame, named after the
+    series (falling back to "value" if the series itself has no name) --
+    here the series is named "flow", matching the alias's by_name lookup."""
+    index = pd.date_range("2000-01-01", periods=5, freq="D")
+    series = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0], index=index, name="flow")
+
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    model.set_input("obs", series)
+    df = model.run().get_outputs()
+    assert list(df["node.src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
+
+
+def test_set_input_column_addressable_by_index_too():
+    ini = _MODEL_WITH_DECLARED_INPUT_INI.replace(
+        "data.obs.by_name.flow", "data.obs.by_index.1"
+    )
+    model = kalix.load_string(ini)
+    model.set_input("obs", _obs_frame())
+    df = model.run().get_outputs()
+    assert list(df["node.src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
+
+
+def test_set_input_naive_index_assumed_utc():
+    """A tz-naive DatetimeIndex is localized to UTC rather than rejected --
+    mirroring write_pixie()'s handling of naive indexes."""
+    index = pd.date_range("2000-01-01", periods=5, freq="D", tz=None)
+    assert index.tz is None
+    frame = pd.DataFrame({"flow": [1.0, 2.0, 3.0, 4.0, 5.0]}, index=index)
+
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    model.set_input("obs", frame)
+    df = model.run().get_outputs()
+    assert list(df["node.src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
+
+
+def test_set_input_non_datetime_index_raises_type_error():
+    frame = pd.DataFrame({"flow": [1.0, 2.0, 3.0]}, index=[0, 1, 2])
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    with pytest.raises(TypeError):
+        model.set_input("obs", frame)
+
+
+def test_set_input_undeclared_alias_raises_value_error():
+    """set_input() fills an existing [inputs] declaration -- it does not
+    create one, so an alias absent from [inputs] altogether is rejected."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(ValueError, match="not declared"):
+        model.set_input("obs", _obs_frame())
+
+
+def test_set_input_irregular_timestep_raises_value_error():
+    index = pd.DatetimeIndex(
+        ["2000-01-01", "2000-01-02", "2000-01-04", "2000-01-05", "2000-01-06"], tz="UTC"
+    )
+    frame = pd.DataFrame({"flow": [1.0, 2.0, 3.0, 4.0, 5.0]}, index=index)
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    with pytest.raises(ValueError):
+        model.set_input("obs", frame)
+
+
+def test_set_input_resets_has_run():
+    """Supplying new input data invalidates a prior run's results, same as
+    patch() (sec. get_outputs()'s "has not been run" contract)."""
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    model.set_input("obs", _obs_frame())
+    model.run()
+    model.set_input("obs", _obs_frame() * 2)
+    with pytest.raises(ValueError, match="has not been run"):
+        model.get_outputs()
+    df = model.run().get_outputs()
+    assert list(df["node.src.dsflow"]) == [2.0, 4.0, 6.0, 8.0, 10.0]
+
+
+def test_set_input_overrides_an_aliased_file():
+    """An `[inputs]` entry that already names a file (`climate = ...`) is
+    still a valid target for set_input() -- the supplied data takes
+    precedence over the file."""
+    ini = (
+        "[kalix]\n"
+        "start = 2000-01-01T00:00:00\n"
+        "end = 2000-01-05T00:00:00\n"
+        "\n"
+        "[inputs]\n"
+        f"climate = {_REPO_ROOT / 'src/tests/example_data/test.csv'}\n"
+        "\n"
+        "[node.src]\n"
+        "loc = 0,0\n"
+        "type = inflow\n"
+        "inflow = data.climate.by_name.flow\n"
+        "ds_1 = sink\n"
+        "\n"
+        "[node.sink]\n"
+        "loc = 1,1\n"
+        "type = blackhole\n"
+        "\n"
+        "[outputs]\n"
+        "node.src.dsflow\n"
+    )
+    model = kalix.load_string(ini)
+    model.set_input("climate", _obs_frame())
+    df = model.run().get_outputs()
+    assert list(df["node.src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
+
+
+def test_set_input_column_values_coerced_to_float64():
+    index = pd.date_range("2000-01-01", periods=5, freq="D")
+    frame = pd.DataFrame({"flow": [1, 2, 3, 4, 5]}, index=index)  # int64
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    model.set_input("obs", frame)
+    df = model.run().get_outputs()
+    assert list(df["node.src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
+
+
+# A two-column supply: one node reads the alias by column name, the other by
+# 1-based index, so a multi-column frame's columns must stay independently
+# addressable (not collapsed to the first, nor mis-ordered).
+_MODEL_WITH_TWO_INPUT_COLUMNS_INI = (
+    "[kalix]\n"
+    "start = 2000-01-01T00:00:00\n"
+    "end = 2000-01-05T00:00:00\n"
+    "\n"
+    "[inputs]\n"
+    "obs =\n"
+    "\n"
+    "[node.rain_src]\n"
+    "loc = 0,0\n"
+    "type = inflow\n"
+    "inflow = data.obs.by_name.rain\n"
+    "ds_1 = sink\n"
+    "\n"
+    "[node.flow_src]\n"
+    "loc = 1,0\n"
+    "type = inflow\n"
+    "inflow = data.obs.by_index.2\n"
+    "ds_1 = sink\n"
+    "\n"
+    "[node.sink]\n"
+    "loc = 2,2\n"
+    "type = blackhole\n"
+    "\n"
+    "[outputs]\n"
+    "node.rain_src.dsflow\n"
+    "node.flow_src.dsflow\n"
+)
+
+
+def test_set_input_multi_column_frame_addresses_each_column_independently():
+    """A DataFrame with several columns fills one alias whose columns stay
+    separately addressable -- `rain` by name, the second column by index --
+    so neither collapses to the first nor swaps order."""
+    index = pd.date_range("2000-01-01", periods=5, freq="D")
+    frame = pd.DataFrame(
+        {
+            "rain": [1.0, 2.0, 3.0, 4.0, 5.0],
+            "flow": [10.0, 20.0, 30.0, 40.0, 50.0],
+        },
+        index=index,
+    )
+    model = kalix.load_string(_MODEL_WITH_TWO_INPUT_COLUMNS_INI)
+    model.set_input("obs", frame)
+    df = model.run().get_outputs()
+    assert list(df["node.rain_src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
+    assert list(df["node.flow_src.dsflow"]) == [10.0, 20.0, 30.0, 40.0, 50.0]
+
+
+def test_set_input_tz_aware_index_converted_to_utc():
+    """A tz-aware index is converted to UTC (not just stripped): a midnight
+    New York timestamp lands on the correct UTC instant, so the data still
+    aligns to a UTC-midnight simulation step."""
+    index = pd.date_range("2000-01-01", periods=5, freq="D", tz="UTC").tz_convert(
+        "America/New_York"
+    )
+    frame = pd.DataFrame({"flow": [1.0, 2.0, 3.0, 4.0, 5.0]}, index=index)
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    model.set_input("obs", frame)
+    df = model.run().get_outputs()
+    assert list(df["node.src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
