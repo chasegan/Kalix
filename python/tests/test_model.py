@@ -770,3 +770,112 @@ def test_get_outputs_on_inline_model():
     assert (df["node.my_node.ds_1"] == 1.0).all()
     assert len(df) == 10  # 2000-01-01 to 2000-01-10 inclusive, daily default step
     assert df.index[0] == pd.Timestamp("2000-01-01", tz="UTC")
+
+
+# --- Interrogating the model definition (spec sec. 5) -----------------------
+
+
+def test_sections_lists_names_in_file_order():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    assert model.sections() == ["kalix", "node.my_node", "outputs"]
+
+
+def test_has_section_true_for_existing_section():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    assert model.has_section("node.my_node") is True
+
+
+def test_has_section_false_for_missing_section():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    assert model.has_section("node.nonexistent") is False
+
+
+def test_get_section_returns_properties_as_dict():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    assert model.get_section("node.my_node") == {
+        "loc": "0,0",
+        "type": "inflow",
+        "inflow": "1.0",
+    }
+
+
+def test_get_section_is_a_snapshot_not_a_live_view():
+    """Mutating the returned dict must not touch the model (sec. 5.1) --
+    the only write path is `patch()`."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    section = model.get_section("node.my_node")
+    section["type"] = "mutated"
+    del section["loc"]
+    assert model.get_section("node.my_node") == {
+        "loc": "0,0",
+        "type": "inflow",
+        "inflow": "1.0",
+    }
+
+
+def test_get_section_missing_section_raises_key_error():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(KeyError, match="node.nonexistent"):
+        model.get_section("node.nonexistent")
+
+
+def test_get_section_list_style_section_has_empty_string_values():
+    """`[outputs]` is list-style: bare lines come back as keys mapped to
+    empty-string values (sec. 5.2)."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    assert model.get_section("outputs") == {"node.my_node.ds_1": ""}
+
+
+def test_get_returns_property_value_by_dotted_designation():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    assert model.get("node.my_node.inflow") == "1.0"
+
+
+def test_get_handles_section_names_that_themselves_contain_dots():
+    """Section names are dotted (e.g. "node.my_node"), so `get()` must split
+    on the *last* dot, not the first."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    assert model.get("node.my_node.type") == "inflow"
+
+
+def test_get_missing_section_raises_key_error():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(KeyError, match="node.nonexistent"):
+        model.get("node.nonexistent.inflow")
+
+
+def test_get_missing_property_raises_key_error():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(KeyError, match="nonexistent"):
+        model.get("node.my_node.nonexistent")
+
+
+def test_get_malformed_designation_without_dot_raises_key_error():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    with pytest.raises(KeyError):
+        model.get("no_dot_here")
+
+
+def test_to_string_round_trips_model_content():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    text = model.to_string()
+    assert isinstance(text, str)
+    assert "node.my_node" in text
+    assert kalix.load_string(text).sections() == model.sections()
+
+
+def test_save_writes_to_string_content_to_disk_and_returns_self(tmp_path):
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    out_path = tmp_path / "saved.ini"
+
+    result = model.save(str(out_path))
+
+    assert result is model
+    assert out_path.read_text() == model.to_string()
+
+
+def test_save_accepts_pathlib_path(tmp_path):
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    out_path = tmp_path / "saved.ini"
+    model.save(out_path)
+    assert out_path.exists()

@@ -448,7 +448,7 @@ impl PyModel {
     }
 
     fn _to_string(&self) -> PyResult<String> {
-        Ok(IniModelIO::model_to_string(&self.inner))
+        self.inner.get_ini_string().map_err(PyRuntimeError::new_err)
     }
 
     fn _save<'py>(slf: PyRefMut<'py, Self>, filename: &str) -> PyResult<PyRefMut<'py, Self>> {
