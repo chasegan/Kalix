@@ -57,7 +57,9 @@ Three commitments follow from Kalix's broader philosophy:
 
 - ***Fast.*** Assessing an allocation policy means simulating whole-of-system reliability over century-scale climate sequences, across ensembles of options. Engine speed turns that from a project into a loop.
 
-## How it works {#how}
+<a id="how"></a>
+
+## How it works
 
 Concretely, those dials are just two model components plus a property on the water users.
 
