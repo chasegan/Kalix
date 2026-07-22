@@ -1,0 +1,585 @@
+package com.kalix.ide.filedialog;
+
+import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.utils.ThemeUtils;
+import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
+import org.kordamp.ikonli.swing.FontIcon;
+
+import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.ButtonGroup;
+import javax.swing.JButton;
+import javax.swing.JComboBox;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
+import javax.swing.JToggleButton;
+import javax.swing.KeyStroke;
+import javax.swing.UIManager;
+import java.awt.BorderLayout;
+import java.awt.CardLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Window;
+import java.awt.event.ActionEvent;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Kalix's own file dialog — the replacement for {@code JFileChooser} across the IDE.
+ *
+ * <p>Two commitments define it. <b>Performance:</b> every listing is one batched background
+ * enumeration ({@link DirectoryLister}), rendered with zero per-entry I/O — so network
+ * drives behave like local ones instead of crawling through N+1 stats. <b>Language:</b>
+ * entries render in the Kalix file visual language ({@code FileVisuals},
+ * {@code manifestos/file-tree-colour.md}), so model files are as recognisable in the dialog
+ * as they are in the project tree.
+ *
+ * <p>Layout: sidebar (pins / places / volumes / recents) on the left; a breadcrumb bar with
+ * up, pin, hidden and view toggles on top; the listing centre — either the classic list view
+ * or macOS-style Miller columns, the user's choice persisting across dialogs; name field,
+ * filter combo and buttons in the footer.
+ *
+ * <p>Usage:
+ * <pre>{@code
+ * Optional<File> file = KalixFileDialog.openFile(window)
+ *     .title("Open Kalix Model")
+ *     .startIn(currentModelDir)
+ *     .filters(FileDialogFilter.of("Kalix models (*.ini)", "ini"))
+ *     .show();
+ * }</pre>
+ */
+public final class KalixFileDialog implements FileViewHost {
+
+    /** What the dialog is for; drives OK-button semantics and selectability. */
+    public enum Mode {OPEN_FILE, SAVE_FILE, CHOOSE_FOLDER}
+
+    // --- Builder state ---
+    private final Mode mode;
+    private final Window owner;
+    private String title;
+    private Path startDir;
+    private final List<FileDialogFilter> filters = new ArrayList<>();
+    private String suggestedName = "";
+
+    // --- UI state ---
+    private JDialog dialog;
+    private final DirectoryLister lister = new DirectoryLister();
+    private ListFileView listView;
+    private ColumnsFileView columnsView;
+    private FileDialogSidebar sidebar;
+    private JPanel viewCards;
+    private JPanel breadcrumb;
+    private JToggleButton pinToggle;
+    private JToggleButton hiddenToggle;
+    private JTextField nameField;
+    private JComboBox<FileDialogFilter> filterCombo;
+    private JLabel statusLabel;
+    private JButton okButton;
+
+    private Path currentDir;
+    private FsEntry selectedEntry;
+    private boolean columnsMode;
+    private File result;
+
+    private KalixFileDialog(Mode mode, Window owner) {
+        this.mode = mode;
+        this.owner = owner;
+        this.title = switch (mode) {
+            case OPEN_FILE -> "Open";
+            case SAVE_FILE -> "Save";
+            case CHOOSE_FOLDER -> "Choose Folder";
+        };
+    }
+
+    // --- Builder API ---
+
+    public static KalixFileDialog openFile(Window owner) {
+        return new KalixFileDialog(Mode.OPEN_FILE, owner);
+    }
+
+    public static KalixFileDialog saveFile(Window owner) {
+        return new KalixFileDialog(Mode.SAVE_FILE, owner);
+    }
+
+    public static KalixFileDialog chooseFolder(Window owner) {
+        return new KalixFileDialog(Mode.CHOOSE_FOLDER, owner);
+    }
+
+    public KalixFileDialog title(String title) {
+        this.title = title;
+        return this;
+    }
+
+    /** Starting directory; a file resolves to its parent. Null is ignored (last-used wins). */
+    public KalixFileDialog startIn(File fileOrDir) {
+        if (fileOrDir != null) {
+            File dir = fileOrDir.isDirectory() ? fileOrDir : fileOrDir.getParentFile();
+            if (dir != null && dir.isDirectory()) {
+                this.startDir = dir.toPath();
+            }
+        }
+        return this;
+    }
+
+    public KalixFileDialog filters(FileDialogFilter... specs) {
+        filters.addAll(List.of(specs));
+        return this;
+    }
+
+    /** Pre-filled file name for save dialogs. */
+    public KalixFileDialog suggestedName(String name) {
+        if (name != null) {
+            this.suggestedName = name;
+        }
+        return this;
+    }
+
+    /**
+     * Shows the modal dialog and blocks until it closes.
+     *
+     * @return the chosen file/folder, or empty if cancelled
+     */
+    public Optional<File> show() {
+        buildUi();
+        Path start = startDir != null ? startDir : FileDialogHistory.lastDirectory();
+        if (start == null || !Files.isDirectory(start)) {
+            start = Path.of(System.getProperty("user.home"));
+        }
+        navigateTo(start);
+        if (mode == Mode.SAVE_FILE) {
+            nameField.setText(suggestedName);
+            nameField.requestFocusInWindow();
+            int dot = suggestedName.lastIndexOf('.');
+            nameField.select(0, dot > 0 ? dot : suggestedName.length());
+        }
+        dialog.setVisible(true); // modal; blocks until accept/cancel disposes
+        lister.dispose();
+        return Optional.ofNullable(result);
+    }
+
+    // --- FileViewHost ---
+
+    @Override
+    public DirectoryLister lister() {
+        return lister;
+    }
+
+    @Override
+    public boolean showHidden() {
+        return hiddenToggle.isSelected();
+    }
+
+    @Override
+    public boolean passesFilter(FsEntry entry) {
+        return activeFilter().accepts(entry);
+    }
+
+    @Override
+    public boolean directoriesOnly() {
+        return mode == Mode.CHOOSE_FOLDER;
+    }
+
+    @Override
+    public void directoryShown(Path dir) {
+        currentDir = dir;
+        statusLabel.setText(" ");
+        rebuildBreadcrumb();
+        pinToggle.setSelected(FileDialogSidebar.isPinned(dir));
+        updateOkEnablement();
+    }
+
+    @Override
+    public void selectionChanged(FsEntry entry) {
+        selectedEntry = entry;
+        if (mode == Mode.SAVE_FILE && entry != null && !entry.directory()) {
+            nameField.setText(entry.name());
+        }
+        updateOkEnablement();
+    }
+
+    @Override
+    public void entryActivated(FsEntry entry) {
+        if (mode == Mode.SAVE_FILE) {
+            nameField.setText(entry.name());
+            return;
+        }
+        selectedEntry = entry;
+        accept();
+    }
+
+    @Override
+    public void listingFailed(String message) {
+        statusLabel.setText(message);
+    }
+
+    // --- UI assembly ---
+
+    private void buildUi() {
+        dialog = new JDialog(owner, title, java.awt.Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+
+        listView = new ListFileView(this);
+        columnsView = new ColumnsFileView(this);
+        sidebar = new FileDialogSidebar(this::navigateFromSidebar);
+
+        viewCards = new JPanel(new CardLayout());
+        viewCards.add(listView.component(), "list");
+        viewCards.add(columnsView.component(), "columns");
+        columnsMode = "columns".equals(PreferenceKeys.FILE_DIALOG_VIEW.get());
+
+        JPanel content = new JPanel(new BorderLayout());
+        content.add(buildToolbar(), BorderLayout.NORTH);
+        content.add(sidebar.component(), BorderLayout.WEST);
+        content.add(viewCards, BorderLayout.CENTER);
+        content.add(buildFooter(), BorderLayout.SOUTH);
+        dialog.setContentPane(content);
+
+        ((CardLayout) viewCards.getLayout()).show(viewCards, columnsMode ? "columns" : "list");
+
+        // Esc cancels; Enter accepts via the default button.
+        dialog.getRootPane().setDefaultButton(okButton);
+        dialog.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+            .put(KeyStroke.getKeyStroke("ESCAPE"), "cancel");
+        dialog.getRootPane().getActionMap().put("cancel", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                cancel();
+            }
+        });
+
+        dialog.setSize(880, 540);
+        dialog.setMinimumSize(new Dimension(640, 400));
+        dialog.setLocationRelativeTo(owner);
+    }
+
+    private JComponent buildToolbar() {
+        JPanel bar = new JPanel(new BorderLayout(6, 0));
+        bar.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
+
+        JButton upButton = iconButton(FontAwesomeSolid.LEVEL_UP_ALT, "Parent folder");
+        upButton.addActionListener(e -> {
+            Path parent = currentDir != null ? currentDir.getParent() : null;
+            if (parent != null) {
+                navigateTo(parent);
+            }
+        });
+
+        breadcrumb = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        breadcrumb.setOpaque(false);
+
+        JPanel left = new JPanel(new BorderLayout(6, 0));
+        left.setOpaque(false);
+        left.add(upButton, BorderLayout.WEST);
+        left.add(breadcrumb, BorderLayout.CENTER);
+
+        pinToggle = iconToggle(FontAwesomeSolid.THUMBTACK, "Pin this folder to the sidebar");
+        pinToggle.addActionListener(e -> {
+            FileDialogSidebar.togglePin(currentDir);
+            sidebar.rebuild();
+        });
+
+        hiddenToggle = iconToggle(FontAwesomeSolid.EYE_SLASH, "Show hidden files");
+        hiddenToggle.setSelected(PreferenceKeys.FILE_DIALOG_SHOW_HIDDEN.get());
+        hiddenToggle.addActionListener(e -> {
+            PreferenceKeys.FILE_DIALOG_SHOW_HIDDEN.set(hiddenToggle.isSelected());
+            refilterViews();
+        });
+
+        JToggleButton listToggle = iconToggle(FontAwesomeSolid.LIST, "List view");
+        JToggleButton columnsToggle = iconToggle(FontAwesomeSolid.COLUMNS, "Columns view");
+        ButtonGroup viewGroup = new ButtonGroup();
+        viewGroup.add(listToggle);
+        viewGroup.add(columnsToggle);
+        (columnsMode ? columnsToggle : listToggle).setSelected(true);
+        listToggle.addActionListener(e -> switchView(false));
+        columnsToggle.addActionListener(e -> switchView(true));
+
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+        right.setOpaque(false);
+        right.add(pinToggle);
+        right.add(hiddenToggle);
+        right.add(Box.createHorizontalStrut(8));
+        right.add(listToggle);
+        right.add(columnsToggle);
+
+        bar.add(left, BorderLayout.CENTER);
+        bar.add(right, BorderLayout.EAST);
+        return bar;
+    }
+
+    private JComponent buildFooter() {
+        JPanel footer = new JPanel(new BorderLayout(8, 4));
+        footer.setBorder(BorderFactory.createEmptyBorder(4, 10, 8, 10));
+
+        statusLabel = new JLabel(" ");
+        statusLabel.setForeground(UIManager.getColor("Kalix.tree.mutedForeground"));
+        Color muted = UIManager.getColor("Kalix.tree.mutedForeground");
+        if (muted != null) {
+            statusLabel.setForeground(muted);
+        }
+
+        JPanel middle = new JPanel(new BorderLayout(8, 0));
+        middle.setOpaque(false);
+        if (mode == Mode.SAVE_FILE) {
+            JPanel namePanel = new JPanel(new BorderLayout(6, 0));
+            namePanel.setOpaque(false);
+            namePanel.add(new JLabel("Save as:"), BorderLayout.WEST);
+            nameField = new JTextField();
+            nameField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+                @Override
+                public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                    updateOkEnablement();
+                }
+
+                @Override
+                public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                    updateOkEnablement();
+                }
+
+                @Override
+                public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                    updateOkEnablement();
+                }
+            });
+            namePanel.add(nameField, BorderLayout.CENTER);
+            middle.add(namePanel, BorderLayout.CENTER);
+        }
+        if (!filters.isEmpty() && mode != Mode.CHOOSE_FOLDER) {
+            List<FileDialogFilter> all = new ArrayList<>(filters);
+            all.add(FileDialogFilter.ALL_FILES);
+            filterCombo = new JComboBox<>(all.toArray(new FileDialogFilter[0]));
+            filterCombo.addActionListener(e -> refilterViews());
+            middle.add(filterCombo, BorderLayout.EAST);
+        }
+
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        buttons.setOpaque(false);
+        if (mode != Mode.OPEN_FILE) {
+            JButton newFolder = new JButton("New folder…");
+            newFolder.addActionListener(e -> createNewFolder());
+            buttons.add(newFolder);
+            buttons.add(Box.createHorizontalStrut(12));
+        }
+        JButton cancelButton = new JButton("Cancel");
+        cancelButton.addActionListener(e -> cancel());
+        okButton = new JButton(switch (mode) {
+            case OPEN_FILE -> "Open";
+            case SAVE_FILE -> "Save";
+            case CHOOSE_FOLDER -> "Choose";
+        });
+        okButton.addActionListener(e -> accept());
+        buttons.add(cancelButton);
+        buttons.add(okButton);
+
+        footer.add(statusLabel, BorderLayout.NORTH);
+        footer.add(middle, BorderLayout.CENTER);
+        footer.add(buttons, BorderLayout.EAST);
+        return footer;
+    }
+
+    private JButton iconButton(org.kordamp.ikonli.Ikon glyph, String tooltip) {
+        JButton button = new JButton(FontIcon.of(glyph, 13,
+            ThemeUtils.iconColor(UIManager.getColor("Panel.background"))));
+        button.setToolTipText(tooltip);
+        button.setFocusable(false);
+        return button;
+    }
+
+    private JToggleButton iconToggle(org.kordamp.ikonli.Ikon glyph, String tooltip) {
+        JToggleButton button = new JToggleButton(FontIcon.of(glyph, 13,
+            ThemeUtils.iconColor(UIManager.getColor("Panel.background"))));
+        button.setToolTipText(tooltip);
+        button.setFocusable(false);
+        return button;
+    }
+
+    // --- Navigation & state ---
+
+    private void navigateTo(Path dir) {
+        currentDir = dir;
+        selectedEntry = null;
+        statusLabel.setText(" ");
+        rebuildBreadcrumb();
+        pinToggle.setSelected(FileDialogSidebar.isPinned(dir));
+        if (columnsMode) {
+            columnsView.navigateTo(dir);
+        } else {
+            listView.navigateTo(dir);
+        }
+        updateOkEnablement();
+    }
+
+    private void navigateFromSidebar(Path dir) {
+        if (Files.isDirectory(dir)) {
+            navigateTo(dir);
+        } else {
+            statusLabel.setText("Folder no longer exists: " + dir);
+            sidebar.clearSelection();
+        }
+    }
+
+    private void switchView(boolean columns) {
+        if (columnsMode == columns) {
+            return;
+        }
+        columnsMode = columns;
+        PreferenceKeys.FILE_DIALOG_VIEW.set(columns ? "columns" : "list");
+        ((CardLayout) viewCards.getLayout()).show(viewCards, columns ? "columns" : "list");
+        // Sync the newly shown view to where the user is.
+        if (currentDir != null) {
+            if (columns) {
+                columnsView.navigateTo(currentDir);
+                columnsView.focusView();
+            } else {
+                listView.navigateTo(currentDir);
+                listView.focusView();
+            }
+        }
+    }
+
+    private void refilterViews() {
+        listView.refilter();
+        columnsView.refilter();
+    }
+
+    private void rebuildBreadcrumb() {
+        breadcrumb.removeAll();
+        if (currentDir == null) {
+            return;
+        }
+        List<Path> chain = new ArrayList<>();
+        for (Path p = currentDir.toAbsolutePath().normalize(); p != null; p = p.getParent()) {
+            chain.add(0, p);
+        }
+        int first = Math.max(0, chain.size() - 5);
+        if (first > 0) {
+            JLabel ellipsis = new JLabel("…");
+            ellipsis.setToolTipText(chain.get(first - 1).toString());
+            breadcrumb.add(ellipsis);
+            breadcrumb.add(new JLabel("›"));
+        }
+        for (int i = first; i < chain.size(); i++) {
+            Path p = chain.get(i);
+            Path name = p.getFileName();
+            JButton segment = new JButton(name != null ? name.toString() : p.toString());
+            segment.putClientProperty("JButton.buttonType", "toolBarButton");
+            segment.setFocusable(false);
+            segment.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+            segment.setContentAreaFilled(false);
+            segment.addActionListener(e -> navigateTo(p));
+            breadcrumb.add(segment);
+            if (i < chain.size() - 1) {
+                breadcrumb.add(new JLabel("›"));
+            }
+        }
+        breadcrumb.revalidate();
+        breadcrumb.repaint();
+    }
+
+    private FileDialogFilter activeFilter() {
+        if (filterCombo != null && filterCombo.getSelectedItem() instanceof FileDialogFilter f) {
+            return f;
+        }
+        return filters.isEmpty() ? FileDialogFilter.ALL_FILES : filters.get(0);
+    }
+
+    private void updateOkEnablement() {
+        okButton.setEnabled(switch (mode) {
+            case OPEN_FILE -> selectedEntry != null && !selectedEntry.directory();
+            case SAVE_FILE -> nameField != null && !nameField.getText().isBlank();
+            case CHOOSE_FOLDER -> chosenFolder() != null;
+        });
+    }
+
+    /** Folder mode's answer: the selected directory, else the current one. */
+    private Path chosenFolder() {
+        if (selectedEntry != null && selectedEntry.directory()) {
+            return selectedEntry.path();
+        }
+        if (columnsMode && columnsView.deepestDirectory() != null) {
+            return columnsView.deepestDirectory();
+        }
+        return currentDir;
+    }
+
+    // --- Accept / cancel ---
+
+    private void accept() {
+        switch (mode) {
+            case OPEN_FILE -> {
+                if (selectedEntry == null || selectedEntry.directory()) {
+                    return;
+                }
+                finish(selectedEntry.path().toFile(), selectedEntry.path().getParent());
+            }
+            case SAVE_FILE -> {
+                String name = nameField.getText().trim();
+                if (name.isEmpty() || currentDir == null) {
+                    return;
+                }
+                if (!name.contains(".")) {
+                    String ext = activeFilter().defaultExtension();
+                    if (ext != null) {
+                        name = name + "." + ext;
+                    }
+                }
+                Path target = currentDir.resolve(name);
+                if (Files.exists(target)) {
+                    int choice = JOptionPane.showConfirmDialog(dialog,
+                        "\"" + name + "\" already exists. Replace it?",
+                        "Replace File", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                    if (choice != JOptionPane.YES_OPTION) {
+                        return;
+                    }
+                }
+                finish(target.toFile(), currentDir);
+            }
+            case CHOOSE_FOLDER -> {
+                Path folder = chosenFolder();
+                if (folder == null) {
+                    return;
+                }
+                finish(folder.toFile(), folder);
+            }
+        }
+    }
+
+    private void finish(File chosen, Path rememberDir) {
+        result = chosen;
+        FileDialogHistory.recordAccepted(rememberDir);
+        dialog.dispose();
+    }
+
+    private void cancel() {
+        result = null;
+        dialog.dispose();
+    }
+
+    private void createNewFolder() {
+        if (currentDir == null) {
+            return;
+        }
+        String name = JOptionPane.showInputDialog(dialog, "New folder name:", "New Folder",
+            JOptionPane.PLAIN_MESSAGE);
+        if (name == null || name.isBlank()) {
+            return;
+        }
+        try {
+            Path created = Files.createDirectory(currentDir.resolve(name.trim()));
+            navigateTo(created);
+        } catch (IOException ex) {
+            statusLabel.setText("Could not create folder: " + ex.getMessage());
+        }
+    }
+}

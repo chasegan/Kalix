@@ -1,12 +1,13 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.constants.AppConstants;
+import com.kalix.ide.filedialog.FileDialogFilter;
+import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.*;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.Component;
 import java.io.File;
 import java.io.IOException;
@@ -89,13 +90,12 @@ public class FileOperationsManager {
      * Shows an open file dialog and loads the selected model file.
      */
     public void openModel() {
-        JFileChooser fileChooser = createFileChooser();
-
-        int result = fileChooser.showOpenDialog(parentComponent);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
-            loadModelFile(selectedFile);
-        }
+        KalixFileDialog.openFile(ownerWindow())
+            .title("Open Kalix Model")
+            .startIn(getCurrentFile())
+            .filters(modelFilter())
+            .show()
+            .ifPresent(this::loadModelFile);
     }
 
     /**
@@ -230,66 +230,56 @@ public class FileOperationsManager {
         if (document == null) {
             return;
         }
-        JFileChooser fileChooser = createFileChooser();
-        fileChooser.setDialogTitle("Save Kalix Model");
-
-        // Set default filename if there's a current file
+        // The dialog handles default-extension appending and overwrite confirmation.
         File currentFile = document.getFile();
-        if (currentFile != null) {
-            fileChooser.setSelectedFile(currentFile);
-        } else {
-            fileChooser.setSelectedFile(new File("model.ini"));
+        java.util.Optional<File> chosen = KalixFileDialog.saveFile(ownerWindow())
+            .title("Save Kalix Model")
+            .startIn(currentFile)
+            .suggestedName(currentFile != null ? currentFile.getName() : "model.ini")
+            .filters(modelFilter())
+            .show();
+        if (chosen.isEmpty()) {
+            return;
+        }
+        File selectedFile = chosen.get();
+
+        // Refuse to save onto a file already open in a different tab — that would
+        // leave two documents backed by the same file (ambiguous for findByFile,
+        // the watcher, and session save/restore).
+        KalixDocument other = documentManager.findByFile(selectedFile);
+        if (other != null && other != document) {
+            JOptionPane.showMessageDialog(parentComponent,
+                "\"" + selectedFile.getName() + "\" is already open in another tab.\n\n"
+                    + "Close that tab first, or choose a different name.",
+                "File Already Open", JOptionPane.WARNING_MESSAGE);
+            return;
         }
 
-        int result = fileChooser.showSaveDialog(parentComponent);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
+        try {
+            // Prevent file watcher from reloading the file we're about to save
+            fileWatcherManager.ignoreNextChange(selectedFile);
 
-            // Add extension if not present
-            String fileName = selectedFile.getName();
-            if (!fileName.contains(".")) {
-                // Default to .ini extension
-                selectedFile = new File(selectedFile.getAbsolutePath() + ".ini");
-            }
+            String content = document.getText();
+            Files.writeString(selectedFile.toPath(), content);
 
-            // Refuse to save onto a file already open in a different tab — that would
-            // leave two documents backed by the same file (ambiguous for findByFile,
-            // the watcher, and session save/restore).
-            KalixDocument other = documentManager.findByFile(selectedFile);
-            if (other != null && other != document) {
-                JOptionPane.showMessageDialog(parentComponent,
-                    "\"" + selectedFile.getName() + "\" is already open in another tab.\n\n"
-                        + "Close that tab first, or choose a different name.",
-                    "File Already Open", JOptionPane.WARNING_MESSAGE);
-                return;
-            }
+            // Update current file and reset dirty state
+            document.setFile(selectedFile);
+            document.setDirty(false);
 
-            try {
-                // Prevent file watcher from reloading the file we're about to save
-                fileWatcherManager.ignoreNextChange(selectedFile);
+            // Add to recent files
+            addRecentFileCallback.accept(selectedFile.getAbsolutePath());
 
-                String content = document.getText();
-                Files.writeString(selectedFile.toPath(), content);
+            // Save as last opened file for session restoration
+            PreferenceKeys.LAST_OPENED_FILE.set(selectedFile.getAbsolutePath());
 
-                // Update current file and reset dirty state
-                document.setFile(selectedFile);
-                document.setDirty(false);
+            String statusMessage = String.format("Saved model as: %s", selectedFile.getName());
+            statusUpdateCallback.accept(statusMessage);
 
-                // Add to recent files
-                addRecentFileCallback.accept(selectedFile.getAbsolutePath());
+            // Notify title bar of file change
+            fileChangedCallback.run();
 
-                // Save as last opened file for session restoration
-                PreferenceKeys.LAST_OPENED_FILE.set(selectedFile.getAbsolutePath());
-
-                String statusMessage = String.format("Saved model as: %s", selectedFile.getName());
-                statusUpdateCallback.accept(statusMessage);
-
-                // Notify title bar of file change
-                fileChangedCallback.run();
-
-            } catch (IOException e) {
-                showFileSaveError(selectedFile, e);
-            }
+        } catch (IOException e) {
+            showFileSaveError(selectedFile, e);
         }
     }
 
@@ -323,29 +313,15 @@ public class FileOperationsManager {
         return false;
     }
     
-    /**
-     * Creates a configured file chooser for model files.
-     */
-    private JFileChooser createFileChooser() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Open Kalix Model");
+    /** The model-files extension filter shared by the open and save dialogs. */
+    private static FileDialogFilter modelFilter() {
+        return FileDialogFilter.of(AppConstants.MODEL_FILES_DESCRIPTION, "ini");
+    }
 
-        // Set initial directory to current file's directory if available
-        File currentFile = getCurrentFile();
-        if (currentFile != null) {
-            fileChooser.setCurrentDirectory(currentFile.getParentFile());
-        }
-
-        // Set file filters for supported model formats
-        FileNameExtensionFilter allModelsFilter = new FileNameExtensionFilter(
-            AppConstants.MODEL_FILES_DESCRIPTION, "ini");
-        FileNameExtensionFilter iniFilter = new FileNameExtensionFilter(
-            AppConstants.INI_FILES_DESCRIPTION, "ini");
-
-        fileChooser.setFileFilter(allModelsFilter);
-        fileChooser.addChoosableFileFilter(iniFilter);
-
-        return fileChooser;
+    /** The window owning our dialogs (the dialog builder wants a Window, not a Component). */
+    private java.awt.Window ownerWindow() {
+        return parentComponent instanceof java.awt.Window w
+            ? w : javax.swing.SwingUtilities.getWindowAncestor(parentComponent);
     }
     
     /**

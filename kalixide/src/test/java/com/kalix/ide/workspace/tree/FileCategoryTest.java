@@ -1,5 +1,7 @@
 package com.kalix.ide.workspace.tree;
 
+import com.kalix.ide.io.FileCategory;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

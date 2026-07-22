@@ -1011,18 +1011,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     @Override
     public void openFolder() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Open Project Folder");
-        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         File current = projectTreePanel.getRootFile();
-        if (current != null && current.getParentFile() != null) {
-            chooser.setCurrentDirectory(current.getParentFile());
-        }
-        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File folder = chooser.getSelectedFile();
-            loadModelFolder(folder.getAbsolutePath());
-            recentFoldersManager.addRecentFile(folder.getAbsolutePath());
-        }
+        com.kalix.ide.filedialog.KalixFileDialog.chooseFolder(this)
+            .title("Open Project Folder")
+            .startIn(current != null ? current.getParentFile() : null)
+            .show()
+            .ifPresent(folder -> {
+                loadModelFolder(folder.getAbsolutePath());
+                recentFoldersManager.addRecentFile(folder.getAbsolutePath());
+            });
     }
 
     /**
