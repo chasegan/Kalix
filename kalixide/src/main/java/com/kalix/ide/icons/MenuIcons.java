@@ -60,6 +60,6 @@ public final class MenuIcons {
         if (background == null) {
             background = UIManager.getColor("Menu.background");
         }
-        return com.kalix.ide.utils.ThemeUtils.isDark(background) ? Color.LIGHT_GRAY : Color.DARK_GRAY;
+        return com.kalix.ide.utils.ThemeUtils.iconColor(background);
     }
 }

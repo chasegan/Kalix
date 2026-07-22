@@ -37,6 +37,12 @@ public class FileTreeNode extends DefaultMutableTreeNode {
     /** Live "show hidden files" state, read each time a directory loads; shared with all nodes. */
     private final BooleanSupplier showHidden;
     private boolean loaded;
+    /**
+     * Whether this directory directly contains a model file — lazily computed and cached
+     * ({@code null} = not yet computed), because the renderer asks per cell per repaint.
+     * {@link ProjectTree} invalidates it when the watcher reports a change in this directory.
+     */
+    private Boolean containsModel;
 
     public FileTreeNode(File file, BooleanSupplier showHidden) {
         super(file);
@@ -95,6 +101,46 @@ public class FileTreeNode extends DefaultMutableTreeNode {
 
     static boolean isHidden(File f) {
         return f.getName().startsWith(".");
+    }
+
+    /**
+     * Whether this directory directly contains a model ({@code *.ini}) file — the "model folder"
+     * signal the renderer colours by. Always false for files.
+     *
+     * <p>The first ask costs one name listing of the directory (bounded by the rows actually
+     * rendered, since only visible folders are asked); the result is cached until
+     * {@link #invalidateContainsModelFile()}. Deliberately independent of the tree's children
+     * (which may not be loaded) and of the hidden-files filter: a folder whose only model is a
+     * dot-file still <em>contains</em> a model.
+     */
+    public boolean containsModelFile() {
+        if (!directory) {
+            return false;
+        }
+        if (containsModel == null) {
+            containsModel = scanForModelFile();
+        }
+        return containsModel;
+    }
+
+    /** Drops the cached {@link #containsModelFile()} answer; recomputed on next ask. */
+    void invalidateContainsModelFile() {
+        containsModel = null;
+    }
+
+    private boolean scanForModelFile() {
+        String[] names = file.list();
+        if (names == null) {
+            return false;
+        }
+        for (String name : names) {
+            // The isFile stat only runs for *.ini-named entries, so the common case stays
+            // a single directory listing; it guards against a directory named "x.ini".
+            if (FileCategory.ofName(name) == FileCategory.MODEL && new File(file, name).isFile()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

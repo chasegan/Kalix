@@ -155,7 +155,15 @@ public class ProjectTree extends JTree {
         for (int i = 0; i < node.getChildCount(); i++) {
             FileTreeNode child = (FileTreeNode) node.getChildAt(i);
             if (child.isDirectory()) {
-                resyncLoadedSubtree(child);
+                if (child.isLoaded()) {
+                    resyncLoadedSubtree(child);
+                } else {
+                    // Not loaded, so there is nothing to resync — but this deep resync runs
+                    // when events may have been missed (OVERFLOW) or the filter changed, so
+                    // the cached model-folder flag can be stale too.
+                    child.invalidateContainsModelFile();
+                    model.nodeChanged(child);
+                }
             }
         }
     }
@@ -407,8 +415,16 @@ public class ProjectTree extends JTree {
             case DELETE: {
                 File parent = event.path().toFile().getParentFile();
                 FileTreeNode node = findNode(parent);
-                if (node != null && node.isLoaded()) {
-                    resyncDirectory(node);
+                if (node == null) {
+                    break;
+                }
+                if (node.isLoaded()) {
+                    resyncDirectory(node); // also refreshes the model-folder flag
+                } else {
+                    // Visible but never expanded: no children to resync, but the change may
+                    // have added/removed a model file, so recolour the folder row.
+                    node.invalidateContainsModelFile();
+                    model.nodeChanged(node);
                 }
                 break;
             }
@@ -435,6 +451,9 @@ public class ProjectTree extends JTree {
         if (dirNode == null || !dirNode.isLoaded()) {
             return;
         }
+        // The directory's contents changed, so its model-folder colouring may have too.
+        dirNode.invalidateContainsModelFile();
+        model.nodeChanged(dirNode);
         File[] entries = dirNode.getFile().listFiles();
         Set<File> onDisk = new HashSet<>();
         if (entries != null) {

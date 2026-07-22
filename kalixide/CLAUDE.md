@@ -203,7 +203,7 @@ folder), registered with stable ids in `ThemeRegistry`:
 - **Properties-based**: colours are data (`resources/themes/*.properties`), loaded into `UnifiedThemeDefinition` and handed to FlatLaf via `ThemeCompatibilityAdapter`/`FlatPropertiesLaf`
 - **Snapshot-pinned**: `ThemePropertiesSnapshotTest` compares every generated theme byte-for-byte against `src/test/resources/themes/snapshots/`
 - **Platform-aware**: Cross-platform title bar handling with `Platform` enum (macOS, Windows, Linux)
-- **Custom properties**: MapPanel.background, MapPanel.gridlineColor, TitlePane.background, Kalix.plot.*
+- **Custom properties**: MapPanel.background, MapPanel.gridlineColor, TitlePane.background, Kalix.plot.*, Kalix.tree.* (file-tree icon accents for model files, input data, and Source .res.csv exports; muted colours for unrecognised rows)
 
 Key files: `ThemeManager.java`, `ThemeRegistry.java`, `KalixTheme.java`, `ThemeCompatibilityAdapter.java`
 

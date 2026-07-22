@@ -402,8 +402,7 @@ public class ToolBarBuilder {
      * @return Color for toolbar icons that contrasts with the current theme
      */
     private Color getThemeAwareIconColor() {
-        return ThemeUtils.isDark(UIManager.getColor("ToolBar.background"))
-            ? Color.LIGHT_GRAY : Color.DARK_GRAY;
+        return ThemeUtils.iconColor(UIManager.getColor("ToolBar.background"));
     }
 
     /**

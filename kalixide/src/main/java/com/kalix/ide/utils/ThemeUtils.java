@@ -30,4 +30,17 @@ public final class ThemeUtils {
         int sum = background.getRed() + background.getGreen() + background.getBlue();
         return sum < UIConstants.Theme.LIGHT_THEME_RGB_THRESHOLD;
     }
+
+    /**
+     * The standard theme-aware icon grey — dark grey on light themes, light grey on dark —
+     * shared by the toolbar buttons, menu icons, and the project tree's folder glyphs so
+     * they all read as one family.
+     *
+     * @param background the surface the icon sits on (drives the dark check; may be null,
+     *                   which classifies as light)
+     * @return the icon colour for that surface
+     */
+    public static Color iconColor(Color background) {
+        return isDark(background) ? Color.LIGHT_GRAY : Color.DARK_GRAY;
+    }
 }
