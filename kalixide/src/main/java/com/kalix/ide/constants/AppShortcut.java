@@ -38,6 +38,8 @@ public enum AppShortcut {
     TOGGLE_COMMENT("Toggle Comment", KeyEvent.VK_SLASH),
     FIND("Find", KeyEvent.VK_F),
     FIND_AND_REPLACE("Find and Replace", KeyEvent.VK_H),
+    /** Editor-only: bound in {@code EnhancedTextEditor}; has no menu item. */
+    GO_TO_LINE("Go to Line", KeyEvent.VK_G),
     TOGGLE_FILE_TREE("Toggle File Tree", KeyEvent.VK_B),
     RUN_MODEL("Run Model", KeyEvent.VK_R),
     NAVIGATE_BACK("Navigate Back", KeyEvent.VK_OPEN_BRACKET),
@@ -66,6 +68,15 @@ public enum AppShortcut {
     public KeyStroke keyStroke() {
         return KeyStroke.getKeyStroke(keyCode,
             Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | extraModifiers);
+    }
+
+    /**
+     * The keystroke with an explicit primary modifier in place of the platform one —
+     * for callers that deliberately register both the Cmd and Ctrl variants (the
+     * editor's belt-and-braces bindings).
+     */
+    public KeyStroke keyStrokeWith(int primaryModifier) {
+        return KeyStroke.getKeyStroke(keyCode, primaryModifier | extraModifiers);
     }
 
     /** The display hint for this stroke, e.g. {@code ⇧⌘O} on macOS, {@code Ctrl+Shift+O} elsewhere. */

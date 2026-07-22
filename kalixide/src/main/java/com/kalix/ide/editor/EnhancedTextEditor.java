@@ -1,5 +1,6 @@
 package com.kalix.ide.editor;
 
+import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.editor.commands.CommandExecutor;
 import com.kalix.ide.linter.parsing.INIModelParser.ParsedModel;
 import org.slf4j.Logger;
@@ -736,12 +737,12 @@ public class EnhancedTextEditor extends JPanel {
         InputMap inputMap = textArea.getInputMap();
         ActionMap actionMap = textArea.getActionMap();
 
-        // Undo/Redo
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.META_DOWN_MASK), "undo");
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK), "undo");
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.META_DOWN_MASK), "redo");
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Y, InputEvent.CTRL_DOWN_MASK), "redo");
-        // macOS convention: Cmd+Shift+Z also redoes.
+        // Every stroke here derives from AppShortcut — the same declarations behind the
+        // menu accelerators and toolbar tooltips — so binding, accelerator, and hint can
+        // never disagree. bind() registers both the Cmd and Ctrl variants (see its javadoc).
+        bind(inputMap, AppShortcut.UNDO, "undo");
+        bind(inputMap, AppShortcut.REDO, "redo");
+        // macOS convention: Cmd+Shift+Z also redoes (an alias beyond the canonical stroke).
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.META_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK), "redo");
         
         actionMap.put("undo", new AbstractAction() {
@@ -759,9 +760,8 @@ public class EnhancedTextEditor extends JPanel {
         });
         
         // Go to line
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_G, InputEvent.META_DOWN_MASK), "goToLine");
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_G, InputEvent.CTRL_DOWN_MASK), "goToLine");
-        
+        bind(inputMap, AppShortcut.GO_TO_LINE, "goToLine");
+
         actionMap.put("goToLine", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -770,9 +770,8 @@ public class EnhancedTextEditor extends JPanel {
         });
         
         // Find
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.META_DOWN_MASK), "find");
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK), "find");
-        
+        bind(inputMap, AppShortcut.FIND, "find");
+
         actionMap.put("find", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -781,8 +780,7 @@ public class EnhancedTextEditor extends JPanel {
         });
         
         // Find and Replace
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_H, InputEvent.META_DOWN_MASK), "replace");
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_H, InputEvent.CTRL_DOWN_MASK), "replace");
+        bind(inputMap, AppShortcut.FIND_AND_REPLACE, "replace");
 
         actionMap.put("replace", new AbstractAction() {
             @Override
@@ -792,8 +790,7 @@ public class EnhancedTextEditor extends JPanel {
         });
 
         // Toggle Comment
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SLASH, InputEvent.META_DOWN_MASK), "toggleComment");
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SLASH, InputEvent.CTRL_DOWN_MASK), "toggleComment");
+        bind(inputMap, AppShortcut.TOGGLE_COMMENT, "toggleComment");
 
         actionMap.put("toggleComment", new AbstractAction() {
             @Override
@@ -803,8 +800,7 @@ public class EnhancedTextEditor extends JPanel {
         });
 
         // Navigate Back
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_OPEN_BRACKET, InputEvent.META_DOWN_MASK), "navigateBack");
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_OPEN_BRACKET, InputEvent.CTRL_DOWN_MASK), "navigateBack");
+        bind(inputMap, AppShortcut.NAVIGATE_BACK, "navigateBack");
 
         actionMap.put("navigateBack", new AbstractAction() {
             @Override
@@ -814,8 +810,7 @@ public class EnhancedTextEditor extends JPanel {
         });
 
         // Navigate Forward
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_CLOSE_BRACKET, InputEvent.META_DOWN_MASK), "navigateForward");
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_CLOSE_BRACKET, InputEvent.CTRL_DOWN_MASK), "navigateForward");
+        bind(inputMap, AppShortcut.NAVIGATE_FORWARD, "navigateForward");
 
         actionMap.put("navigateForward", new AbstractAction() {
             @Override
@@ -828,6 +823,18 @@ public class EnhancedTextEditor extends JPanel {
         // separately by ContextCommandManager.installCommandShortcuts, after the
         // commands have been registered. Each command's metadata declares its own
         // KeyStroke once, so the binding and the menu hint cannot disagree.
+    }
+
+    /**
+     * Registers an editor binding for an {@link AppShortcut} under both the Cmd (META)
+     * and Ctrl variants of its stroke — deliberate belt-and-braces so cross-platform
+     * muscle memory works (e.g. Ctrl+Z still undoes on macOS). The key itself is declared
+     * once in {@link AppShortcut}, shared with the menu accelerators and toolbar
+     * tooltips, so binding and hint cannot drift apart.
+     */
+    private static void bind(InputMap inputMap, AppShortcut shortcut, String actionKey) {
+        inputMap.put(shortcut.keyStrokeWith(InputEvent.META_DOWN_MASK), actionKey);
+        inputMap.put(shortcut.keyStrokeWith(InputEvent.CTRL_DOWN_MASK), actionKey);
     }
     
     private void setupDocumentListener() {
