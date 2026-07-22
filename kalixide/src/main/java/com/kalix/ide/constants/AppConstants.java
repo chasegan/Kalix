@@ -1,7 +1,10 @@
 package com.kalix.ide.constants;
 
 import com.kalix.ide.managers.KeyboardShortcutManager;
+import javax.swing.KeyStroke;
 import java.awt.*;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyEvent;
 
 /**
  * Constants used throughout the Kalix IDE application.
@@ -97,7 +100,13 @@ public final class AppConstants {
     public static final int TOOLBAR_ICON_SIZE = 16;
     public static String getToolbarNewTooltip() { return "New Model (" + KeyboardShortcutManager.getInstance().getShortcutString("N") + ")"; }
     public static String getToolbarOpenTooltip() { return "Open Model (" + KeyboardShortcutManager.getInstance().getShortcutString("O") + ")"; }
-    public static String getToolbarOpenFolderTooltip() { return "Open Folder"; }
+    // Shift+shortcut strokes go through formatKeyStroke (getShortcutString only covers the
+    // plain platform modifier). The stroke here must match MenuBarBuilder's accelerator.
+    public static String getToolbarOpenFolderTooltip() {
+        return "Open Folder (" + KeyboardShortcutManager.getInstance().formatKeyStroke(
+            KeyStroke.getKeyStroke(KeyEvent.VK_O,
+                Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | InputEvent.SHIFT_DOWN_MASK)) + ")";
+    }
     public static String getToolbarSaveTooltip() { return "Save Model (" + KeyboardShortcutManager.getInstance().getShortcutString("S") + ")"; }
     public static String getToolbarSearchTooltip() { return "Find (" + KeyboardShortcutManager.getInstance().getShortcutString("F") + ")"; }
     public static String getToolbarFindOnMapTooltip() { return "Find on Map (" + KeyboardShortcutManager.getInstance().getShortcutString("F") + ")"; }
