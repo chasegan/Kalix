@@ -222,28 +222,13 @@ impl Model {
         self.node_lookup.get(&name.to_lowercase()).copied()
     }
 
-    /// Model configuration needs to be done once, after loading the model, but not for every run.
-    /// May be used to validate a model.
-    pub fn configure(&mut self) -> Result<(), String> {
-
-        //0) Reject any input that was declared but never supplied. Nothing in
-        //   the engine can supply a bare declaration, so an empty-valued
-        //   [inputs] entry is a configure-time error rather than a downstream
-        //   reference-resolution failure.
-        let undeclared: Vec<&str> = self.input_sources.iter()
-            .filter_map(|s| match s {
-                TimeseriesInputDefinition::Declaration { alias } => Some(alias.as_str()),
-                _ => None,
-            })
-            .collect();
-        if !undeclared.is_empty() {
-            return Err(format!(
-                "input '{}' declared but not supplied",
-                undeclared.join("', '")
-            ));
-        }
-
-        //TASKS
+    /// The structural half of [`configure`](Self::configure): register output
+    /// series and initialise nodes (link wiring, data-reference resolution) --
+    /// every check that needs no input *data*. Split out so `load`/`patch` can
+    /// validate a model's shape without requiring its `[inputs]` to be supplied
+    /// yet (e.g. a bare declaration awaiting `set_input()`). `configure()` runs
+    /// this first, then the data-dependent steps that only `run()` needs.
+    pub fn configure_model_structure(&mut self) -> Result<(), String> {
         //1) Define output series
         for series_name in self.outputs.iter() {
             let idx = self.data_cache.get_or_add_new_series(series_name, false);
@@ -257,6 +242,36 @@ impl Model {
 
         //2) Nodes ask data_cache for idx of relevant data series for input
         self.initialize_nodes()?;
+        Ok(())
+    }
+
+    /// Model configuration needs to be done once, after loading the model, but not for every run.
+    /// May be used to validate a model.
+    pub fn configure(&mut self) -> Result<(), String> {
+        //TASKS
+        //1) Define output series
+        //2) Nodes ask data_cache for idx of relevant data series for input
+        //   (both delegated to configure_model_structure)
+        self.configure_model_structure()?;
+
+        //2b) Reject any input that was declared but never supplied. Nothing in
+        //   the engine can supply a bare declaration, so an empty-valued
+        //   [inputs] entry is a configure-time error rather than a downstream
+        //   reference-resolution failure. Deferred until here (not part of the
+        //   structural step) so load/patch can accept a not-yet-supplied
+        //   declaration that set_input() will fill before run().
+        let undeclared: Vec<&str> = self.input_sources.iter()
+            .filter_map(|s| match s {
+                TimeseriesInputDefinition::Declaration { alias } => Some(alias.as_str()),
+                _ => None,
+            })
+            .collect();
+        if !undeclared.is_empty() {
+            return Err(format!(
+                "input '{}' declared but not supplied",
+                undeclared.join("', '")
+            ));
+        }
 
         //3) Read the input data from file
         // TODO: Here is where we would load data IF we wanted to read only the stuff that was required.

@@ -296,7 +296,7 @@ impl PyModel {
             .map_err(|e| io_err_to_py(e.with_context("Failed to load model: ")))?;
         // Verification step
         model
-            .configure()
+            .configure_model_structure()
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
         // Model OK, swap into inner
         slf.inner = model;
@@ -315,7 +315,7 @@ impl PyModel {
             .map_err(|e| io_err_to_py(e.with_context("Failed to load model: ")))?;
         // Verification step
         model
-            .configure()
+            .configure_model_structure()
             .map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
         // Model OK, swap into inner
         slf.inner = model;
