@@ -63,11 +63,11 @@ Three commitments follow from Kalix's broader philosophy:
 
 Concretely, those dials are just two model components plus a property on the water users.
 
-- **[`[acc.*]`](accounts.md) — the accounts.** A group of accounts is declared as a small table: a name and a cap per row. Accounts are pure ledgers — they hold a balance and nothing else, no behaviour of their own.
+- **[`[acc.*]`](accounts.md) — the accounts.** A group of accounts is declared as a small table: a name and an account size per row. Accounts are pure ledgers — they hold a balance and nothing else, no behaviour of their own.
 
 - **[`[ras.*]`](ras.md) — the resource allocation systems.** Each is one rule: *on this trigger, do this action, to these account groups*. The actions are the credit/debit/reset/announce verbs; the triggers are calendar boundaries or authored conditions. The `[ras.*]` sections, read together, are the water sharing plan.
 
-- **[`accounts =`](accounts.md#referencing-accounts-from-nodes) on a user node.** A [regulated](regulated-user.md) or [unregulated](unregulated-user.md) user lists the accounts it draws on; its take is capped by the balance and debited from it.
+- **[`accounts =`](accounts.md#referencing-accounts-from-nodes) on a user node.** A [regulated](regulated-user.md) or [unregulated](unregulated-user.md) user lists the accounts it draws on; its take is limited by the balance and debited from it.
 
 Nothing changes an account balance except a `[ras.*]` action or a user's take — so "what can touch this water?" always has a one-place answer.
 

@@ -23,7 +23,7 @@ you can reference and record individually.
 
 ## Accounts are pure state
 
-An account holds a name, a cap (`size`), and a running balance — nothing else.
+An account holds a name, a `size`, and a running balance — nothing else.
 It has **no behaviour and no calendar**: a row never resets, never refills, and
 never schedules anything. Every change to a balance is either a [`[ras.*]`
 action](ras.md) or a water user's take. A group that no RAS targets is
@@ -37,7 +37,7 @@ are the *verbs*. See [Allocation systems](allocation-systems.md) for the why.
 | Column | Required | Meaning |
 | --- | --- | --- |
 | `name` | yes, first | Account name — a bare lowercase identifier, unique across every group. |
-| `size` | yes | Account cap [ML]. May be an expression. |
+| `size` | yes | Account size [ML] — the entitlement volume that percentages are taken of. May be an expression. |
 | `initial` | no (defaults to 0) | Opening balance [ML] at the start of the run, within `[0, size]`. |
 
 Columns are addressed by the header, not by position, so `name, size, initial`
@@ -76,7 +76,7 @@ Account state is published as ordinary series — readable in any
 | `acc.<name>.closing_balance` | Balance at the end of the step. |
 | `acc.<name>.debits` | Water taken by users this step (not policy changes). |
 | `acc.<name>.allocation` | Allocation to date: balance plus use since the last reset (see [Allocation systems](allocation-systems.md)). |
-| `acc.<name>.size` | Account cap. |
+| `acc.<name>.size` | Account size. |
 
 <a id="groups"></a>Every field except `size` is also published for the **group
 aggregate**, summed over its members: `acc.<group>.closing_balance`,
@@ -92,5 +92,5 @@ same step needs the previous-step offset, e.g. `acc.smith.closing_balance[-1, 0]
   namespace — every name, account or group, must be unique.
 - A user drawing its balance down does **not** reduce its `allocation`; the
   water moves from the balance into the use tally.
-- Accounts carry no behaviour. To reset, refill, cap, or announce, use a
+- Accounts carry no behaviour. To reset, refill, limit, or announce, use a
   [`[ras.*]`](ras.md) section.

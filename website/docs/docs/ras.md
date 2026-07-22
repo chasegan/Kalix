@@ -73,7 +73,7 @@ expressions, evaluated once per firing:
 | `credit(x)` | Add `x`. |
 | `debit(x)` | Subtract `x`. |
 | `scale(x)` | Multiply the balance by `x`. |
-| `reduce_to(x)` | Lower the balance to `x` if it is above (a carryover cap). |
+| `reduce_to(x)` | Lower the balance to `x` if it is above (a carryover limit). |
 
 **Announcement actions** implement announced allocation:
 
