@@ -513,6 +513,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         setupNavigationStateListener();
         refreshModelStatus();
         revealActiveFileInTree();
+
+        // Re-derive the file watch here as well as on open/close: the open listener fires
+        // when a document is registered, which is BEFORE loadModelFile assigns its file —
+        // refreshing only there left the most recently opened (or only) document unwatched,
+        // so neither auto-reload nor external delete/rename detection covered it.
+        refreshWatchedFiles();
     }
 
     /**
