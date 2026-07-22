@@ -80,7 +80,7 @@ public class FileValidator implements ValidationStrategy {
         }
 
         // Fallback to section start line if not found
-        INIModelParser.Section inputsSection = model.getSections().get("inputs");
+        INIModelParser.Section inputsSection = model.getSections().get("data");
         return inputsSection != null ? inputsSection.getStartLine() + 1 : 1;
     }
 }

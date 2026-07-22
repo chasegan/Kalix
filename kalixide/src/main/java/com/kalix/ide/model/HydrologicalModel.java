@@ -364,6 +364,24 @@ public class HydrologicalModel {
     }
 
     /**
+     * The selected link, when the selection is exactly one link and nothing else — the
+     * precondition for "insert a node into this link". Null otherwise (including when the
+     * selected id no longer matches a live link after a re-parse).
+     */
+    public ModelLink getSingleSelectedLink() {
+        if (selectedLinks.size() != 1 || !selectedNodes.isEmpty()) {
+            return null;
+        }
+        String id = selectedLinks.iterator().next();
+        for (ModelLink link : links) {
+            if (getLinkId(link).equals(id)) {
+                return link;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Select a link, optionally adding to current selection
      * @param link Link to select
      * @param addToSelection If true, add to selection; if false, replace selection

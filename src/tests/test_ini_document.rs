@@ -9,7 +9,7 @@ fn test_line_continuation_integration() {
 [kalix]
 version = 0.0.1
 
-[inputs]
+[data]
 ./src/tests/example_models/1/flows.csv
 
 [node.test_node]
@@ -104,7 +104,7 @@ fn test_round_trip() {
     let content = r#"[kalix]
 version = 0.0.1
 
-[inputs]
+[data]
 ./data/input1.csv
 ./data/input2.csv
 
@@ -199,7 +199,7 @@ fn test_full_model_round_trip() {
 
     let original_ini = r#"[kalix]
 
-[inputs]
+[data]
 ./src/tests/example_models/1/rex_rain.csv
 ./src/tests/example_models/1/rex_mpot.csv
 
@@ -268,7 +268,7 @@ fn test_save_and_reload_from_file() {
 
     let original_ini = r#"[kalix]
 
-[inputs]
+[data]
 ./example_models/1/rex_rain.csv
 
 [node.simple_node]
@@ -327,7 +327,7 @@ fn test_exact_round_trip_every_node_type_model() {
     // The regression model that exercises every node type, plus the awkward
     // formatting cases this DOM must survive untouched: whole-line and inline
     // comments (`#` only — `;` is not a comment char), blank lines, aligned multi-line
-    // continuations with trailing commas, bare-line [inputs]/[outputs]
+    // continuations with trailing commas, bare-line [data]/[outputs]
     // sections, and trailing blank lines at end of file.
     //
     // Parsing then serialising with NO mutation must reproduce the file

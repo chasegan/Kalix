@@ -134,7 +134,7 @@ public class INIModelParser {
                 Matcher kvMatcher = KEY_VALUE_PATTERN.matcher(line);
                 // inputs section handled separately
                 if (kvMatcher.matches() && currentSection != null
-                        && !("inputs".equals(currentSection.getName()))) {
+                        && !("data".equals(currentSection.getName()))) {
                     String key = kvMatcher.group(1).trim();
                     String value = kvMatcher.group(2).trim();
 
@@ -156,7 +156,7 @@ public class INIModelParser {
 
                 // Handle special sections without key-value pairs
                 if (currentSection != null) {
-                    if ("inputs".equals(currentSection.getName())) {
+                    if ("data".equals(currentSection.getName())) {
                         // Input files can be:
                         // 1. Key-value pairs: alias = ./path/to/file.csv
                         // 2. Direct file paths: ./path/to/file.csv

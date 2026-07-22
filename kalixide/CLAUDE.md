@@ -67,6 +67,23 @@ Key files: `SourceResCsvImporter/Exporter/Header`, `SourceResCsvHeaderReader`, `
 
 Loaded names carry no `file.<filename>` prefix, so they collate with runs by name; the file stays distinct via `DatasetSeries.datasetId` (absolute path). Note: run output names are *not* sanitised (engine keys off them) but dataset names are — so collation matches for identifier-style names, not for node names with spaces/punctuation.
 
+### Custom File Dialogs (July 2026)
+`com.kalix.ide.filedialog` — `KalixFileDialog` replaces `JFileChooser` (builder API:
+`openFile/saveFile/chooseFolder(window)…show()` returning `Optional<File>`).
+- **Performance doctrine**: one batched background enumeration per directory
+  (`DirectoryLister`: `walkFileTree` depth-1 harvests attributes from the listing itself,
+  incremental sorted batches to the EDT, cancellable handles) and zero per-entry I/O at
+  render time — this is the anti-`JFileChooser`, built for network drives.
+- **Visual language**: entries render via `io.FileVisuals`, the shared glyph/colour mapping
+  also used by the project tree (per `manifestos/file-tree-colour.md`).
+- **Views**: list (table) and macOS-style Miller columns, user-switchable, persisted.
+- **Sidebar**: pinned folders (file-based prefs — team-shareable), places, volumes
+  (path-derived names only; no shell display-name calls), recents (OS prefs).
+- **Migrated so far**: `FileOperationsManager` open/save-as, `KalixIDE.openFolder`. The
+  remaining `JFileChooser` sites should migrate to `KalixFileDialog` as they're touched.
+
+Key files: `KalixFileDialog.java`, `DirectoryLister.java`, `FileVisuals.java`
+
 ### Manager Pattern Architecture
 Comprehensive refactoring using manager pattern:
 
@@ -203,7 +220,7 @@ folder), registered with stable ids in `ThemeRegistry`:
 - **Properties-based**: colours are data (`resources/themes/*.properties`), loaded into `UnifiedThemeDefinition` and handed to FlatLaf via `ThemeCompatibilityAdapter`/`FlatPropertiesLaf`
 - **Snapshot-pinned**: `ThemePropertiesSnapshotTest` compares every generated theme byte-for-byte against `src/test/resources/themes/snapshots/`
 - **Platform-aware**: Cross-platform title bar handling with `Platform` enum (macOS, Windows, Linux)
-- **Custom properties**: MapPanel.background, MapPanel.gridlineColor, TitlePane.background, Kalix.plot.*
+- **Custom properties**: MapPanel.background, MapPanel.gridlineColor, TitlePane.background, Kalix.plot.*, Kalix.tree.* (file-tree icon accents for model files, input data, and Source .res.csv exports; muted colours for unrecognised rows)
 
 Key files: `ThemeManager.java`, `ThemeRegistry.java`, `KalixTheme.java`, `ThemeCompatibilityAdapter.java`
 

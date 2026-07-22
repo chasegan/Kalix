@@ -673,7 +673,7 @@ impl Model {
         // Accounting policy: [ras.*] systems run in file order at the top of
         // the step, before ordering and flow — today's orders and takes see
         // today's announcements (kalix-allocation-components.md §3.3).
-        for ras in &self.ras_systems {
+        for ras in &mut self.ras_systems {
             ras.run(&mut self.data_cache, &mut self.account_manager);
         }
 

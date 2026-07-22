@@ -224,7 +224,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         processExecutor = new ProcessExecutor();
 
         // File watcher manager
-        fileWatcherManager = new FileWatcherManager(this::handleFileReload);
+        fileWatcherManager = new FileWatcherManager(this::handleFileReload, this::handleFileMissing);
 
         // Schema manager for linting
         schemaManager = new SchemaManager();
@@ -250,6 +250,27 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             AppConstants.RECENT_FOLDER_PREF_PREFIX,
             "Folder"
         );
+
+        // The file dialogs' sidebar shares the File menu's navigation memory: recent
+        // folders, plus the folders recent files live in. One list, not two.
+        com.kalix.ide.filedialog.KalixFileDialog.setRecentFoldersProvider(() -> {
+            java.util.LinkedHashSet<java.nio.file.Path> recents = new java.util.LinkedHashSet<>();
+            for (String p : recentFoldersManager.getRecentFiles()) {
+                recents.add(java.nio.file.Path.of(p));
+            }
+            for (String p : recentFilesManager.getRecentFiles()) {
+                java.nio.file.Path parent = java.nio.file.Path.of(p).getParent();
+                if (parent != null) {
+                    recents.add(parent);
+                }
+            }
+            return recents.stream().limit(8).toList();
+        });
+
+        // Renames made inside a file dialog re-point open editor tabs, exactly as the
+        // project tree's renames do.
+        com.kalix.ide.filedialog.KalixFileDialog.setPathMovedListener(
+            (oldPath, newPath) -> relinkOpenDocuments(oldPath.toFile(), newPath.toFile()));
     }
 
     /**
@@ -492,6 +513,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         setupNavigationStateListener();
         refreshModelStatus();
         revealActiveFileInTree();
+
+        // Re-derive the file watch here as well as on open/close: the open listener fires
+        // when a document is registered, which is BEFORE loadModelFile assigns its file —
+        // refreshing only there left the most recently opened (or only) document unwatched,
+        // so neither auto-reload nor external delete/rename detection covered it.
+        refreshWatchedFiles();
     }
 
     /**
@@ -583,6 +610,63 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
+     * Re-points open documents after a file or folder was renamed/moved (by the project tree
+     * or a file dialog): any document backed by the old path — or by a path underneath it,
+     * for folder moves — gets its backing file remapped, its tab refreshed, and the watcher
+     * re-derived. Without this, a renamed file's tab kept the dead path and a later Save
+     * silently resurrected the old file name.
+     */
+    private void relinkOpenDocuments(File oldPath, File newPath) {
+        java.nio.file.Path oldP = oldPath.toPath().toAbsolutePath().normalize();
+        boolean relinked = false;
+        for (KalixDocument document : documentManager.getDocuments()) {
+            File backing = document.getFile();
+            if (backing == null) {
+                continue;
+            }
+            java.nio.file.Path p = backing.toPath().toAbsolutePath().normalize();
+            File remapped;
+            if (p.equals(oldP)) {
+                remapped = newPath;
+            } else if (p.startsWith(oldP)) {
+                remapped = newPath.toPath().resolve(oldP.relativize(p)).toFile();
+            } else {
+                continue;
+            }
+            document.setFile(remapped);
+            documentTabPane.refreshTab(document);
+            if (document == documentManager.getActiveDocument()) {
+                titleBarManager.updateTitle(document.isDirty(), document::getFile);
+                revealActiveFileInTree();
+            }
+            if (backing.getAbsolutePath().equals(PreferenceKeys.LAST_OPENED_FILE.get())) {
+                PreferenceKeys.LAST_OPENED_FILE.set(remapped.getAbsolutePath());
+            }
+            relinked = true;
+        }
+        if (relinked) {
+            refreshWatchedFiles();
+        }
+    }
+
+    /**
+     * An open document's backing file vanished from disk (external delete, or an external
+     * rename we cannot correlate — the watcher only sees an uncorrelatable delete+create
+     * pair). The document is kept, marked dirty (so closing warns and Save knowingly
+     * recreates the file), and the user is told.
+     */
+    private void handleFileMissing(File file) {
+        KalixDocument document = documentManager.findByFile(file);
+        if (document == null) {
+            return;
+        }
+        document.setDirty(true);
+        documentTabPane.refreshTab(document);
+        updateStatus("File deleted or renamed on disk: " + file.getName()
+            + " — Save will recreate it at the old path");
+    }
+
+    /**
      * Updates the file watcher with the files of all open documents, so every tab — not just
      * the active one — is auto-reloaded on external changes.
      */
@@ -667,6 +751,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             @Override
             public boolean isShowHiddenFiles() {
                 return KalixIDE.this.isShowHiddenFiles();
+            }
+
+            @Override
+            public void pathMoved(File oldPath, File newPath) {
+                relinkOpenDocuments(oldPath, newPath);
             }
         });
         // Apply the persisted "show hidden files" choice before any folder is restored into the tree.
@@ -1011,18 +1100,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     @Override
     public void openFolder() {
-        JFileChooser chooser = new JFileChooser();
-        chooser.setDialogTitle("Open Project Folder");
-        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         File current = projectTreePanel.getRootFile();
-        if (current != null && current.getParentFile() != null) {
-            chooser.setCurrentDirectory(current.getParentFile());
-        }
-        if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File folder = chooser.getSelectedFile();
-            loadModelFolder(folder.getAbsolutePath());
-            recentFoldersManager.addRecentFile(folder.getAbsolutePath());
-        }
+        com.kalix.ide.filedialog.KalixFileDialog.chooseFolder(this)
+            .title("Open Folder")
+            .startIn(current != null ? current.getParentFile() : null)
+            .show()
+            .ifPresent(folder -> {
+                loadModelFolder(folder.getAbsolutePath());
+                recentFoldersManager.addRecentFile(folder.getAbsolutePath());
+            });
     }
 
     /**

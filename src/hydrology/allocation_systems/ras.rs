@@ -48,6 +48,17 @@ pub enum RasAction {
     Debit(DynamicInput),
     Scale(DynamicInput),
     ReduceTo(DynamicInput),
+
+    /// Announce an allocation percentage (0–100) for the target accounts.
+    /// Distributive in effect but stencilled in form: the percentage is
+    /// computed once and each account's allocation is raised to that share of
+    /// its own entitlement, never lowered (§3.4). The modeller supplies the
+    /// percentage — typically a `table.*` lookup over assessed resources — so
+    /// the action carries no assessment machinery of its own.
+    Allocate(DynamicInput),
+
+    /// Start a new allocation period: allocation to date returns to zero.
+    ResetAllocation,
 }
 
 /// A resource allocation system ([ras.<name>] section): one trigger, one
@@ -68,9 +79,18 @@ pub struct RasSystem {
     pub trigger_original: String,
     pub action_original: String,
 
+    /// Last percentage announced by an `allocate` action, for the `pct`
+    /// recorder. Not policy state: the allocation itself lives in the accounts.
+    pub last_pct: f64,
+
     /// Recorder for the `ras.<name>.fired` series (0/1 per step), opt-in via
     /// [outputs] like every recorder.
     pub recorder_idx_fired: Option<usize>,
+
+    /// Recorder for `ras.<name>.pct` — the percentage an `allocate` action
+    /// announced this step (carried forward on steps where it did not fire, so
+    /// the series reads as the standing announcement).
+    pub recorder_idx_pct: Option<usize>,
 }
 
 impl RasSystem {
@@ -78,19 +98,24 @@ impl RasSystem {
     pub fn initialize_recorders(&mut self, data_cache: &mut DataCache) {
         self.recorder_idx_fired = data_cache.get_series_idx(
             format!("ras.{}.fired", self.name).as_str(), false);
+        self.recorder_idx_pct = data_cache.get_series_idx(
+            format!("ras.{}.pct", self.name).as_str(), false);
     }
 
     /// Evaluate the trigger and, if it fires, apply the action to every target
     /// account. Records the `fired` series if requested; returns whether it fired.
-    pub fn run(&self, data_cache: &mut DataCache, account_manager: &mut AccountManager) -> bool {
+    pub fn run(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) -> bool {
         let fired = self.run_inner(data_cache, account_manager);
         if let Some(idx) = self.recorder_idx_fired {
             data_cache.add_value_at_index(idx, if fired { 1.0 } else { 0.0 });
         }
+        if let Some(idx) = self.recorder_idx_pct {
+            data_cache.add_value_at_index(idx, self.last_pct);
+        }
         fired
     }
 
-    fn run_inner(&self, data_cache: &mut DataCache, account_manager: &mut AccountManager) -> bool {
+    fn run_inner(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) -> bool {
         if !self.trigger.is_triggered(data_cache) {
             return false;
         }
@@ -143,6 +168,18 @@ impl RasSystem {
                     if balance > cap {
                         account_manager.set_account_balance_safely(idx, cap);
                     }
+                }
+            }
+            RasAction::Allocate(input) => {
+                let pct = input.get_value(data_cache);
+                self.last_pct = pct;
+                for &idx in &self.target_account_ids {
+                    account_manager.allocate(idx, pct);
+                }
+            }
+            RasAction::ResetAllocation => {
+                for &idx in &self.target_account_ids {
+                    account_manager.reset_allocation(idx);
                 }
             }
         }

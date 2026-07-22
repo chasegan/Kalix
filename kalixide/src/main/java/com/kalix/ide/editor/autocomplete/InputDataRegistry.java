@@ -78,7 +78,7 @@ public class InputDataRegistry {
      * Triggers a non-blocking refresh check. Compares the current input file list
      * with the last-seen list and submits background reads for new or changed files.
      *
-     * @param inputFiles the current list of input file paths from [inputs] section
+     * @param inputFiles the current list of input file paths from [data] section
      */
     public void refresh(List<String> inputFiles) {
         if (inputFiles == null) {
@@ -138,7 +138,7 @@ public class InputDataRegistry {
 
     private void submitRead(String filePath) {
         executor.submit(() -> {
-            // The file may have been removed from [inputs] while this read sat in
+            // The file may have been removed from [data] while this read sat in
             // the queue — don't do work for it, and above all don't re-insert it.
             if (!lastInputFiles.contains(filePath)) {
                 return;

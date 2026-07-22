@@ -135,7 +135,7 @@ public class ContextDetector {
                 return builder.type(EditorContext.ContextType.OUTPUT_REFERENCE).build();
             case "const":
                 return builder.type(EditorContext.ContextType.CONSTANTS).build();
-            case "inputs":
+            case "data":
                 String line = position.getCurrentLine().trim();
                 if (!line.isEmpty() && !line.startsWith("#")) {
                     // Parser stores input-file line numbers 1-based.

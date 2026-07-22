@@ -14,7 +14,7 @@ import java.util.function.Supplier;
 
 /**
  * Maintains a cached listing of the CSV files under the model's base directory,
- * for the {@code [inputs]} autocomplete popup.
+ * for the {@code [data]} autocomplete popup.
  *
  * <p>The recursive directory walk used to run synchronously on the EDT every time
  * the popup opened. This class follows the {@link InputDataRegistry} pattern next

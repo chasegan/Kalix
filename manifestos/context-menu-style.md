@@ -142,6 +142,13 @@ icons then read as landmarks for scanning, exactly as intended.
   informative — i.e. the user should know the action *exists* but isn't
   available yet (e.g. `Paste` with an empty clipboard).
 - Never leave an empty separator block when a whole group is hidden.
+- **Empty space is not subject-less.** A right-click that lands on no item acts
+  on the **containing folder** being viewed (a tree's open root, a dialog
+  column's directory) — the same grammar, with the container as subject, and
+  the usual predicates hiding what doesn't apply. Two verbs never apply to the
+  root container itself: the identity-changing (`Rename…`, `Duplicate…`) and
+  the destructive (`Delete`) — an empty-space click must never be able to
+  destroy or rename the thing the user is standing in.
 
 ---
 

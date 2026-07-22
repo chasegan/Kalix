@@ -26,6 +26,9 @@ they are for, and how to write one. Read it before adding to this folder.
   execution order: the file reads downstream and runs as written. The engine
   validates order and never sorts; automatic arrangement belongs in tools that
   rewrite the file, visibly.
+- **[File-tree colour](file-tree-colour.md)** — prominence is contrast, not hue:
+  recognised rows (models, data, model folders) keep full-strength text, the rest
+  step back through two derived grey tiers; accent colours live on icons, never text.
 - **[Performance](performance.md)** — fast by default (no waiting for a profiler to
   grant permission); bare-metal on the engine's hot path. No hash maps, no branches,
   no allocation in the inner loop; clarity still leads on the cold path.

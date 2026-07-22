@@ -56,7 +56,7 @@ The model operates on a constant timestep (typically a daily timestep, but this 
 [kalix]
 version = 0.0.1
 
-[inputs]
+[data]
 ./data/rex_mpot.csv
 ./data/rex_rain.csv
 

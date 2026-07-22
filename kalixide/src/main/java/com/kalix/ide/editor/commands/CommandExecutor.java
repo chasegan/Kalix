@@ -71,7 +71,7 @@ public class CommandExecutor {
     /**
      * Renames an input file path throughout the document.
      * Finds all legitimate references and renames them atomically (single undo).
-     * This includes: the file path in [inputs], and all data.{alias}.* references
+     * This includes: the file path in [data], and all data.{alias}.* references
      * in property values and output references.
      *
      * @param oldPath     The current input file path
@@ -103,7 +103,7 @@ public class CommandExecutor {
     /**
      * Renames an input file alias throughout the document.
      * Finds all legitimate references and renames them atomically (single undo).
-     * This includes: the file path in [inputs], and all data.{alias}.* references
+     * This includes: the file path in [data], and all data.{alias}.* references
      * in property values and output references.
      *
      * @param oldAlias    The current input file alias
@@ -135,7 +135,7 @@ public class CommandExecutor {
     /**
      * Renames an input file to use a new alias throughout the document.
      * Finds all legitimate references and renames them atomically (single undo).
-     * This includes: the file path in [inputs], and all data.{alias}.* references
+     * This includes: the file path in [data], and all data.{alias}.* references
      * in property values and output references.
      *
      * @param oldPath    The current input file path
@@ -306,7 +306,7 @@ public class CommandExecutor {
         String oldPathSanitised = EngineNames.sanitizeFileName(oldPath);
         String newPathSanitised = EngineNames.sanitizeFileName(newPath);
 
-        // 1. Replace the input file path in [inputs] section
+        // 1. Replace the input file path in [data] section
         addInputsLinePathReplacement(replacements, lines, parsedModel, oldPath, newPath);
 
         // 2 & 3. Rewrite data.{name}.* references in property values and output references
@@ -331,7 +331,7 @@ public class CommandExecutor {
         String oldPathSanitised = EngineNames.sanitizeFileName(oldPath);
         String newAliasSanitised = EngineNames.sanitize(newAlias);
 
-        // 1. Replace the input file path in [inputs] section with alias = path format
+        // 1. Replace the input file path in [data] section with alias = path format
         addInputsLinePathReplacement(replacements, lines, parsedModel, oldPath, newAlias + " = " + oldPath);
 
         // 2 & 3. Rewrite data.{name}.* references in property values and output references
@@ -356,7 +356,7 @@ public class CommandExecutor {
         String oldAliasSanitised = EngineNames.sanitize(oldAlias);
         String newAliasSanitised = EngineNames.sanitize(newAlias);
 
-        // 1. Replace the alias key on its "alias = path" line in the [inputs] section.
+        // 1. Replace the alias key on its "alias = path" line in the [data] section.
         // Anchored to the key position so a path that happens to contain the alias
         // text is never rewritten.
         Integer inputLineNumber = parsedModel.getInputFileAliasLineNumbers().get(oldAlias);
@@ -384,7 +384,7 @@ public class CommandExecutor {
     }
 
     /**
-     * Adds the replacement of an input file path on its [inputs] line, anchored to
+     * Adds the replacement of an input file path on its [data] line, anchored to
      * the exact position of the path text (searched backwards so the path portion of
      * an "alias = path" line is matched, never the alias).
      */
@@ -568,11 +568,89 @@ public class CommandExecutor {
      * @param selectedNodeNames The currently selected nodes (may be empty or null)
      * @return true if the template was inserted, false on failure
      */
-    public boolean insertNodeTemplateAtLocation(String nodeType, double worldX, double worldY,
-                                                 java.util.Collection<String> selectedNodeNames) {
+    public String insertNodeTemplateAtLocation(String nodeType, double worldX, double worldY,
+                                                java.util.Collection<String> selectedNodeNames,
+                                                com.kalix.ide.model.ModelLink spliceLink) {
+        try {
+            if (spliceLink != null) {
+                return insertNodeIntoLink(nodeType, worldX, worldY, spliceLink);
+            }
+            String text = editor.getText();
+            String uniqueName = uniqueNodeName(nodeType, text);
+            String templateText = buildTemplateText(nodeType, uniqueName, worldX, worldY);
+
+            // A single selected node auto-links to the new one: the first free ds_N in the
+            // upstream node's section gets the new node's name. Computed before any edit;
+            // both edits land in one atomic block below.
+            String autoLinkFrom = selectedNodeNames != null && selectedNodeNames.size() == 1
+                ? selectedNodeNames.iterator().next() : null;
+            TextEdit dsEdit = autoLinkFrom != null
+                ? dsLineInsertion(text, autoLinkFrom, uniqueName) : null;
+            if (autoLinkFrom != null && dsEdit == null) {
+                // Stale selection (node no longer in the text): insert without the link.
+                logger.warn("Auto-link skipped: no section found for selected node '{}'", autoLinkFrom);
+            }
+
+            editor.beginAtomicEdit();
+            try {
+                if (dsEdit != null) {
+                    applyEdit(dsEdit);
+                }
+                // Recompute on the post-ds text so the splice offsets are current.
+                String current = editor.getText();
+                applySplice(current, NodeInsertionPoint.forSelection(current, selectedNodeNames), templateText);
+            } finally {
+                editor.endAtomicEdit();
+            }
+            logger.info("Inserted node template '{}' as '{}' at ({}, {}){}", nodeType, uniqueName,
+                worldX, worldY, dsEdit != null ? " linked from '" + autoLinkFrom + "'" : "");
+            return uniqueName;
+        } catch (Exception e) {
+            logger.error("Error inserting node template", e);
+            showError("Failed to insert node template: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Inserts a new node <em>into</em> the selected link, atomically: the upstream node's
+     * {@code ds_N} that pointed at the old downstream node is re-pointed at the new node,
+     * and the new node's template gains its own {@code ds_1} (first free) to the old
+     * downstream — so the new node now sits on the flow path the link described. The new
+     * section lands below the upstream node's.
+     *
+     * @return the new node's name, or null if the link's {@code ds_} property could not be
+     *         found (in which case nothing was changed)
+     */
+    private String insertNodeIntoLink(String nodeType, double worldX, double worldY,
+                                      com.kalix.ide.model.ModelLink link) throws Exception {
+        String upstream = link.getUpstreamTerminus();
+        String downstream = link.getDownstreamTerminus();
         String text = editor.getText();
-        return insertNodeTemplate(nodeType, worldX, worldY, text,
-            NodeInsertionPoint.forSelection(text, selectedNodeNames));
+        String uniqueName = uniqueNodeName(nodeType, text);
+
+        TextEdit reassign = dsValueReassignment(text, upstream, downstream, uniqueName);
+        if (reassign == null) {
+            showError("Cannot insert into this link: no ds_ property from '" + upstream
+                + "' to '" + downstream + "' was found.");
+            return null;
+        }
+
+        String body = buildTemplateText(nodeType, uniqueName, worldX, worldY);
+        String templateText = body + "\nds_" + firstFreeDsIndex(body) + " = " + downstream;
+
+        editor.beginAtomicEdit();
+        try {
+            applyEdit(reassign);
+            // Recompute on the post-reassignment text so the splice offsets are current.
+            String current = editor.getText();
+            applySplice(current,
+                NodeInsertionPoint.forSelection(current, java.util.List.of(upstream)), templateText);
+        } finally {
+            editor.endAtomicEdit();
+        }
+        logger.info("Inserted node '{}' into link {} -> {}", uniqueName, upstream, downstream);
+        return uniqueName;
     }
 
     /**
@@ -586,23 +664,23 @@ public class CommandExecutor {
      * @param worldY   The map y-coordinate to insert into the template's {@code loc}
      * @return true if the template was inserted, false on failure
      */
-    public boolean insertNodeTemplateNearCursor(String nodeType, double worldX, double worldY) {
-        String text = editor.getText();
-        return insertNodeTemplate(nodeType, worldX, worldY, text,
-            NodeInsertionPoint.forAnchor(text, editor.getCaretPosition()));
-    }
-
-    private boolean insertNodeTemplate(String nodeType, double worldX, double worldY, String text, int offset) {
+    public String insertNodeTemplateNearCursor(String nodeType, double worldX, double worldY) {
         try {
+            String text = editor.getText();
             String uniqueName = uniqueNodeName(nodeType, text);
             String templateText = buildTemplateText(nodeType, uniqueName, worldX, worldY);
-            insertTemplateAt(offset, templateText);
+            editor.beginAtomicEdit();
+            try {
+                applySplice(text, NodeInsertionPoint.forAnchor(text, editor.getCaretPosition()), templateText);
+            } finally {
+                editor.endAtomicEdit();
+            }
             logger.info("Inserted node template '{}' as '{}' at ({}, {})", nodeType, uniqueName, worldX, worldY);
-            return true;
+            return uniqueName;
         } catch (Exception e) {
             logger.error("Error inserting node template", e);
             showError("Failed to insert node template: " + e.getMessage());
-            return false;
+            return null;
         }
     }
 
@@ -650,20 +728,104 @@ public class CommandExecutor {
     }
 
     /**
-     * Applies {@link SectionSplice} to the document as a single atomic edit, so the
-     * insertion undoes in one step.
+     * One text edit: {@code [start, end)} replaced by {@code replacement} (a pure insertion
+     * when {@code start == end}). Offsets address the text the edit was computed from —
+     * callers apply each edit before computing the next, inside one atomic block.
      */
-    private void insertTemplateAt(int offset, String templateText) throws javax.swing.text.BadLocationException {
-        SectionSplice.Splice splice = SectionSplice.compute(editor.getText(), offset, templateText);
+    record TextEdit(int start, int end, String replacement) {
+    }
 
-        editor.beginAtomicEdit();
-        try {
-            javax.swing.text.Document doc = editor.getDocument();
-            doc.remove(splice.start(), splice.end() - splice.start());
-            doc.insertString(splice.start(), splice.text(), null);
-        } finally {
-            editor.endAtomicEdit();
+    /** Applies one edit to the document. Caller owns the atomic-edit block. */
+    private void applyEdit(TextEdit edit) throws javax.swing.text.BadLocationException {
+        javax.swing.text.Document doc = editor.getDocument();
+        doc.remove(edit.start(), edit.end() - edit.start());
+        doc.insertString(edit.start(), edit.replacement(), null);
+    }
+
+    /**
+     * Computes {@link SectionSplice} for {@code text} and applies it to the document
+     * (which must currently hold {@code text}). Caller owns the atomic-edit block.
+     */
+    private void applySplice(String text, int offset, String block) throws javax.swing.text.BadLocationException {
+        SectionSplice.Splice splice = SectionSplice.compute(text, offset, block);
+        javax.swing.text.Document doc = editor.getDocument();
+        doc.remove(splice.start(), splice.end() - splice.start());
+        doc.insertString(splice.start(), splice.text(), null);
+    }
+
+    // --- ds_N link-specifier text surgery (auto-link on insert) ---
+
+    /** Matches a trimmed {@code ds_N = ...} property line, capturing N. */
+    private static final java.util.regex.Pattern DS_KEY_PATTERN =
+        java.util.regex.Pattern.compile("^ds_(\\d+)\\s*=");
+
+    /**
+     * The first free {@code ds_N} index (from 1) among the given lines — a node section's
+     * text, or a template body. Only real {@code ds_N =} property lines count; a "ds_2"
+     * inside a comment or table row does not.
+     */
+    static int firstFreeDsIndex(String lines) {
+        java.util.Set<Integer> used = new java.util.HashSet<>();
+        for (String line : lines.split("\n", -1)) {
+            java.util.regex.Matcher m = DS_KEY_PATTERN.matcher(line.trim());
+            if (m.find()) {
+                used.add(Integer.parseInt(m.group(1)));
+            }
         }
+        int n = 1;
+        while (used.contains(n)) {
+            n++;
+        }
+        return n;
+    }
+
+    /**
+     * Computes the insertion of a new {@code ds_N = targetName} line (first free N) at the
+     * end of {@code nodeName}'s section content — the conventional position for downstream
+     * links. Returns null when the node has no section in the text.
+     */
+    static TextEdit dsLineInsertion(String text, String nodeName, String targetName) {
+        NodeSectionLocator.NodeSection section = NodeSectionLocator.find(text, nodeName);
+        if (section == null) {
+            return null;
+        }
+        int n = firstFreeDsIndex(text.substring(section.start(), section.contentEnd()));
+        int at = section.contentEnd();
+        String line = "ds_" + n + " = " + targetName + "\n";
+        if (at > 0 && text.charAt(at - 1) != '\n') {
+            line = "\n" + line; // section ends at EOF without a trailing newline
+        }
+        return new TextEdit(at, at, line);
+    }
+
+    /**
+     * Computes the exact value-range replacement that re-points {@code upstreamNode}'s
+     * {@code ds_N = oldTarget} property at {@code newTarget}. Range-anchored to the value
+     * only, so keys and same-line comments cannot be touched. Returns null when no such
+     * property exists (e.g. a link not backed by a ds specifier) — the caller must then
+     * change nothing.
+     */
+    static TextEdit dsValueReassignment(String text, String upstreamNode, String oldTarget, String newTarget) {
+        for (NodeSectionLocator.DsReference ref : NodeSectionLocator.findDsReferences(text)) {
+            if (!ref.sourceNode().equals(upstreamNode) || !ref.target().equals(oldTarget)) {
+                continue;
+            }
+            String line = text.substring(ref.lineStart(), ref.lineEnd());
+            int eq = line.indexOf('=');
+            if (eq < 0) {
+                continue;
+            }
+            int valueStart = eq + 1;
+            while (valueStart < line.length() && Character.isWhitespace(line.charAt(valueStart))) {
+                valueStart++;
+            }
+            if (!line.startsWith(oldTarget, valueStart)) {
+                continue; // defensive: the reference's target must sit exactly here
+            }
+            return new TextEdit(ref.lineStart() + valueStart,
+                ref.lineStart() + valueStart + oldTarget.length(), newTarget);
+        }
+        return null;
     }
 
     /**

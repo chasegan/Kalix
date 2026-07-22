@@ -9,7 +9,7 @@ import java.util.function.Supplier;
 
 /**
  * Command to rename an input file path throughout the document.
- * Updates the file path in [inputs] section and all data.{alias}.* references
+ * Updates the file path in [data] section and all data.{alias}.* references
  * in property values and output references.
  */
 public class RenameInputFileCommand implements EditorCommand {

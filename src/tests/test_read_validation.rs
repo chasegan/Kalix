@@ -89,3 +89,24 @@ fn test_offset_reference_is_legal() {
     assert!((values[1] - 1.5).abs() < 1e-12, "day 1 should see yesterday's b, got {}", values[1]);
     assert!((values[2] - 2.5).abs() < 1e-12, "day 2, got {}", values[2]);
 }
+
+#[test]
+fn test_renamed_inputs_section_gives_migration_hint() {
+    // [inputs] was renamed to [data]. Every model predating the rename has the
+    // old header, so the error names the new section rather than a bare
+    // "unexpected section".
+    let ini = "[kalix]\n\
+               start = 2020-01-01\n\
+               end = 2020-01-02\n\
+               \n\
+               [inputs]\n\
+               ./flows.csv\n\
+               \n\
+               [node.a]\n\
+               loc = 0, 0\n\
+               type = inflow\n\
+               inflow = 1\n";
+    let err = IniModelIO::new().read_model_string(ini).err().expect("old [inputs] must fail to load");
+    assert!(err.contains("[inputs]") && err.contains("[data]") && err.contains("renamed"),
+        "error should point [inputs] users at [data], got: {}", err);
+}

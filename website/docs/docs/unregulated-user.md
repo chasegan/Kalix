@@ -29,8 +29,8 @@ ds_1 = my_other_node
 | flow\_threshold (optional) | Use this to leave a certain amount of flow in the river (not extract it). This can be used to set flow conditions as may be associated with unregulated licence conditions. Example: `flow_threshold = 100.0` |
 | annual\_cap (optional) | Use this to set an annual diversion limit. Specify the cap volume (ML), and the month in which the annual cap resets.  Example:  `annual_cap = 2250, 7` |
 | demand\_carryover (optional) | Turn on/off demand carryover. This behaviour is off be default. Set this to “true” if you want the user to carryover unmet demands to the following timestep.  Example:  `demand_carryover = true` And if you want the carryover to reset each year, then also specify the month when that should happen. Example:  `demand_carryover = true, 7` |
+| accounts (optional) | Names of the [accounts](accounts.md) this user draws on, comma-separated in order of use. Availability is capped by the accounts' combined balance and diversions are debited from them in order, so an [allocation system](allocation-systems.md) can constrain the user. Example: `accounts = harvest_licence` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
-| account (...) |  |
 
 ## Results associated with this node
 
@@ -69,6 +69,14 @@ Limits diversions on an annual basis. Diversion accounting starts on the first t
 #### Demand carryover
 
 If demand carryover is allowed, then unmet demands will be carried forward with the hope of satisfying them in the next timestep. If a reset month is been specified, the carryover will be reset to 0 at the start of the first timestep on that calendar month each year.
+
+#### Accounts
+
+If the node lists `accounts`, availability is further capped by the combined
+account balance, and each diversion is debited from the accounts in the order
+listed. This lets an [allocation system](allocation-systems.md) govern
+opportunistic take — for example an account credited only on flow events. See
+[`[acc.*]`](accounts.md).
 
 #### Diversion
 

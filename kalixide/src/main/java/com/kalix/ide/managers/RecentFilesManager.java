@@ -99,6 +99,11 @@ public class RecentFilesManager {
     /**
      * Clears all recent files and updates the menu immediately.
      */
+    /** @return the tracked recent paths, most recent first (read-only view) */
+    public List<String> getRecentFiles() {
+        return Collections.unmodifiableList(recentFiles);
+    }
+
     public void clearRecentFiles() {
         recentFiles.clear();
         saveRecentFiles();

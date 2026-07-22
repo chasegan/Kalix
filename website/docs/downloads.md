@@ -9,7 +9,7 @@ hide:
 
 # Downloads
 
-<p class="kx-dl-lead">Every Kalix release, newest first. Download a build for your platform, or install from PyPI.</p>
+<p class="kx-dl-lead">Grab the latest Kalix for your platform, or <code>pip install</code> it from PyPI.</p>
 
 {{ render_releases() }}
 

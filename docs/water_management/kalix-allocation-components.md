@@ -245,15 +245,20 @@ for one account knowing nothing of any other account or shared total?
   group table (`reduce_to(carryover_limit)`). `set_full`/`set_empty` exist
   today as `MaintenanceType`; this vocabulary subsumes and replaces the
   hard-coded refill rule.
-- **Distributive actions** (no — one shared quantity computed once, then
-  divided among the target group's accounts by a stated method; this is what
-  makes a RAS a RAS): `allocate(amount, method)`,
-  `apportion_loss(amount, method)`, and the storage-sharing pair
+- **Allocation actions** — `allocate(pct)` and `reset_allocation` (§3.4). One
+  percentage is computed for the group and each account's *allocation* is
+  raised to that share of its own entitlement. Stencilled in form, group-wide
+  in effect: because each account takes a percentage of its own size,
+  pro-rata distribution is intrinsic and needs no method argument.
+- **Distributive actions** (no — one shared *volume* computed once, then
+  divided among the target group's accounts by a stated method):
+  `apportion_loss(amount, method)` and the storage-sharing pair
   `share_inflow` / `reconcile` (§3.5). Methods to start: `prorata_by_size`,
   `prorata_by_balance`, `fill_in_order` (group-table row order). Pretending a
   distributive rule is stencilled would force every account to duplicate the
-  shared assessment and hope they agree — the same inconsistent-specification
+  shared computation and hope they agree — the same inconsistent-specification
   failure the account table eliminates for data, reappearing for behaviour.
+  *(Phase 3.)*
 
 **Timing within the step.** RAS sections run in the account-maintenance slot at
 the top of `run_timestep`, in file order — so today's orders and takes see
@@ -270,7 +275,7 @@ state per §3.6), SA-style aged credits, and the two-account ABA/SWA stack
 (two accounts + transfer rules + a spill write-down). That is most of the
 review's configuration table before any storage or ordering work.
 
-### 3.4 Allocation methods in practice
+### 3.4 Announced allocation — `allocate` and `reset_allocation`
 
 The review's three credit methods are not section *types* — they are the
 distributive and stencilled actions of §3.3, applied through the same
@@ -278,28 +283,62 @@ target/trigger/action anatomy. The account group is the "water allocation
 group" (WAF's entitlements that are "apples and apples"); the RAS sections
 targeting it are its rules.
 
-**Announced allocation** is `allocate` on a schedule:
+**Allocation is a property of the account, not of the RAS.** An account's
+allocation to date is `balance + use since the last reset` — everything
+credited this period, whether still held or already taken. Announcing a
+percentage therefore *sets* that quantity rather than crediting an increment
+the system has to remember making:
+
+```
+target_i = pct/100 × size_i
+if target_i > balance_i + use_i:  balance_i += target_i − (balance_i + use_i)
+```
+
+Three consequences worth stating, because they are what make this simple:
+
+- **A user drawing their balance down does not reduce their allocation** — the
+  water moves from the balance term into the use term, leaving the sum
+  unchanged. Re-announcing the same percentage is a no-op however much has
+  been taken, which is exactly the real-world rule.
+- **Monotonicity is intrinsic, not calendar-based.** The announcement only
+  ever raises (announcements only rise — Barma pp. 9–10), so a level-semantic
+  trigger that stays true simply re-announces harmlessly, and the engine needs
+  no notion of a water year to enforce it.
+- **The system holds no state between steps.** Everything needed lives in the
+  accounts, which is also why the answer is self-correcting.
+
+**Announced allocation** is then `allocate` on a schedule, with the percentage
+supplied by the modeller — typically a lookup curve over assessed resources,
+which is how water plans actually publish them:
 
 ```ini
+[ras.border_gs_reset]
+targets = acc.border_gs
+trigger = start_water_year(const.wy)
+action  = reset_allocation
+
 [ras.border_gs_alloc]
 targets = acc.border_gs
 trigger = start_month
-action  = allocate(node.dam1.volume + table.min_inflow(sim.month)
-                   - acc.hp_reserve.opening_balance - acc.loss_reserve.opening_balance,
-                   prorata_by_size)
+action  = allocate(table.gs_curve(node.dam1.volume + table.min_inflow(sim.month)
+                                  - acc.hp_reserve.opening_balance))
 ```
 
-- Allocation fraction = clamp(assessment / Σ target sizes, 0, 1), *monotone
-  non-decreasing within the water year* (announcements only rise — Barma
-  pp. 9–10); each firing credits the increment pro-rata. Since announcements
-  are monotone, a level-semantic expression trigger that stays true simply
-  re-assesses harmlessly.
-- The first argument *is* the resource-assessment definition: NSW's
+- `pct` is a **percentage, 0–100**, and values above 100 are allowed — some
+  schemes announce them — so the balance is not clamped to the account size.
+- Resource assessment is an ordinary expression: NSW's
   storage-plus-minimum-inflows, Goulburn's %-of-99%-reliable-inflows, or
-  Ord-style counter-cyclical rules are all just different expressions. Note
-  there is no `storage =` property — a RAS has no structural link to any node;
-  whatever the pool physically is enters through the expression. The RAS only
-  reads series and writes account state; the storages are unaware of it.
+  Ord-style counter-cyclical rules are all just different expressions feeding
+  a different curve. Note there is no `storage =` property — a RAS has no
+  structural link to any node; whatever the pool physically is enters through
+  the expression. The RAS only reads series and writes account state; the
+  storages are unaware of it.
+- `reset_allocation` starts a new allocation period: both terms go to zero, so
+  the next announcement credits from scratch instead of being suppressed as
+  "not an increase". It is a separate section with its own trigger, and file
+  order puts it before the announcement on the day they coincide. *Carryover —
+  letting unused water survive the reset — is not yet designed; the actions
+  here assume a non-carryover scheme.*
 
 **Event credits** (unregulated announcements, supplementary access,
 conductivity-triggered groundwater) are the stencilled `credit(x)` under an
@@ -316,9 +355,10 @@ commitment). Reserves are ordinary accounts — credited by their own RAS,
 debited by loss/priority draws — exactly the review's "reserves are accounts"
 observation.
 
-Every announcement and credit is recordable: `ras.border_gs_alloc.fraction`,
-`ras.border_gs_alloc.assessment`, per-account credit series. The modeller can
-audit the whole chain, St-George-spreadsheet style.
+Every announcement and credit is recordable: `ras.<name>.pct` (the standing
+announcement), `acc.<name>.allocation` and its group aggregate, alongside the
+balance and debit series of §3.2. The modeller can audit the whole chain,
+St-George-spreadsheet style.
 
 ### 3.5 Storage ownership — a ledger over storage fluxes, not storage physics
 
@@ -547,7 +587,7 @@ The corpus supplies numerical ground truth; encode it as regression tests:
      series shipped in 0.3.6 — so `[acc.*]` is the only spelling that
      achieves consistency without a breaking change.
    - **Allocation groups: `[ras.*]`** ("Resource Allocation System") with
-     series prefix `ras.` (`ras.<name>.fraction`, `.assessment`, …).
+     series prefix `ras.` (`ras.<name>.fired`, `.pct`, …).
      Chosen over `[alloc.*]` because the section names an *actor* whose
      remit is wider than allocating — assessment, announcements, loss
      apportionment, forfeiture, write-offs, reconciliation are all "what a

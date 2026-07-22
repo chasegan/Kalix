@@ -1,7 +1,7 @@
 Backend: CLI (/Users/chas/github/Kalix/target/release/kalix)
 Searching for model files in: /Users/chas/github/Kalix/regression_tests/simulations
 ================================================================================
-Found 31 model file(s)
+Found 32 model file(s)
 
 Verifying: 10_different_data_periods/model_with_different_data_periods.ini
   [PASS] VERIFIED!
@@ -123,6 +123,11 @@ Verifying: 31_model_with_table/model.ini
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
+Verifying: 32_model_with_ras/model.ini
+  [PASS] VERIFIED!
+  [PASS] VERIFIED! (no-op save is byte-identical)
+  [PASS] VERIFIED! (canonical resave round-trip)
+
 Verifying: 3_calibrate_constants/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
@@ -161,9 +166,9 @@ Verifying: 9_hundred_sacr/kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-07-20T15:03:51.902412
-Total: 93
-Passed: 93
+Timestamp: 2026-07-23T09:13:24.997555
+Total: 96
+Passed: 96
 Failed: 0
 
 [PASS] All models verified successfully!

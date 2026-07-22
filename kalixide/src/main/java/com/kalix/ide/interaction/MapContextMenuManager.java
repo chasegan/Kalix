@@ -164,8 +164,18 @@ public class MapContextMenuManager {
                     // where its section lands in the text. They are independent.
                     double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
                     double worldY = (lastContextMenuLocation.y - mapPanel.getPanY()) / mapPanel.getZoomLevel();
-                    if (textEditor.insertNodeTemplate(template.id(), worldX, worldY, model.getSelectedNodes())) {
+                    String newName = textEditor.insertNodeTemplate(template.id(), worldX, worldY,
+                        model.getSelectedNodes(), model.getSingleSelectedLink());
+                    if (newName != null) {
                         mapPanel.repaint();
+                        // As if the user had clicked the new node: show its section in the
+                        // editor and select it on the map. Selection is deferred one EDT
+                        // cycle so the queued re-parse has registered the node first.
+                        textEditor.scrollToNode(newName);
+                        javax.swing.SwingUtilities.invokeLater(() -> {
+                            model.selectNode(newName, false);
+                            mapPanel.repaint();
+                        });
                     }
                 }
             });

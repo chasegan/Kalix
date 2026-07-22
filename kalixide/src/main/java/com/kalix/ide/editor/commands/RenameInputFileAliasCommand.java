@@ -9,7 +9,7 @@ import java.util.function.Supplier;
 
 /**
  * Command to rename an input file alias throughout the document.
- * Updates the alias on its {@code alias = path} line in the [inputs] section and
+ * Updates the alias on its {@code alias = path} line in the [data] section and
  * all {@code data.{alias}.*} references in property values and output references.
  */
 public class RenameInputFileAliasCommand implements EditorCommand {

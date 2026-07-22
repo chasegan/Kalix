@@ -1,0 +1,25 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 5
+  Timesteps: 7671
+  Stepsize (s): 86400
+  Period: 2000-01-01T00:00:00.000Z, 2020-12-31T00:00:00.000Z
+  Note: units are ML/timestep
+
+INFLOW NODES
+  in1, 257.09816190848653
+
+REGULATED_USER NODES
+  rum_runner_farming_co, -183.84524730884164
+  soggy_council_tws, -17.96115239212619
+
+STORAGE NODES
+  paradise_dam, -0.000000538245174350765
+
+GAUGE NODES
+  eos, 0
+
+----------------------------------
+TOTAL = 55.29176166927354
+----------------------------------

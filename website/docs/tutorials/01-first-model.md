@@ -44,12 +44,12 @@ end = 2009-12-31
 
 If you leave `start` and `end` out, Kalix will infer the simulation period from the available input data. Setting them explicitly is good practice — it documents your intent and lets you simulate a sub-period without touching the data files.
 
-### Step 2 — The `[inputs]` section
+### Step 2 — The `[data]` section
 
-The `[inputs]` section lists the data files the model will load. Bare filenames are resolved relative to the model file's folder, which is what we want here.
+The `[data]` section lists the data files the model will load. Bare filenames are resolved relative to the model file's folder, which is what we want here.
 
 ```ini
-[inputs]
+[data]
 climate_data.csv
 observed.csv
 ```
@@ -98,7 +98,7 @@ Line by line:
 As of kalix v0.3.1, input file aliases have been added, e.g.
 
 ```ini
-[inputs]
+[data]
 climate_alias = climate_data.csv
 ```
 
@@ -169,7 +169,7 @@ Putting it all together, `stringybark_sacramento.ini` should look like this:
 start = 1980-01-01
 end = 2009-12-31
 
-[inputs]
+[data]
 climate_data.csv
 observed.csv
 

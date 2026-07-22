@@ -213,10 +213,10 @@ public class ValidationUtils {
 
     /** Fields published per account, per account group, and per RAS. */
     private static final java.util.Set<String> ACCOUNT_OUTPUT_FIELDS =
-        java.util.Set.of("opening_balance", "closing_balance", "debits", "size");
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "size");
     private static final java.util.Set<String> ACCOUNT_GROUP_OUTPUT_FIELDS =
-        java.util.Set.of("opening_balance", "closing_balance", "debits");
-    private static final java.util.Set<String> RAS_OUTPUT_FIELDS = java.util.Set.of("fired");
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation");
+    private static final java.util.Set<String> RAS_OUTPUT_FIELDS = java.util.Set.of("fired", "pct");
 
     /**
      * Validate an accounting series reference in {@code [outputs]}:

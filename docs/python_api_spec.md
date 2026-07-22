@@ -218,7 +218,7 @@ m.patch({"node.myreach": section}, mode="replace")
 
 ### 5.2 List-style sections
 
-`[inputs]` and `[outputs]` hold bare lines rather than `key = value` pairs.
+`[data]` and `[outputs]` hold bare lines rather than `key = value` pairs.
 The DOM (and therefore this API) represents a bare line as a key with an
 empty-string value, so every section is uniformly `dict[str, str]`:
 
@@ -244,7 +244,7 @@ do not survive. (Merge preserves the comments of untouched properties.)
 
 For fully disk-free workflows, datasets can be supplied directly instead of
 being read from CSV paths. An in-memory input stands in for a *file*: one
-alias names one potentially-multi-column dataset, exactly as an `[inputs]`
+alias names one potentially-multi-column dataset, exactly as a `[data]`
 entry does in the old world.
 
 ```python
@@ -255,7 +255,7 @@ m.set_input("climate_data", df)     # pd.DataFrame; returns self
 
 `set_input()` does not modify the model definition — it *supplies values*
 for an input the definition already declares (think binding parameters to a
-prepared statement). The alias must therefore exist in `[inputs]`;
+prepared statement). The alias must therefore exist in `[data]`;
 `set_input()` on an undeclared alias raises immediately. This keeps two
 guarantees intact:
 
@@ -273,7 +273,7 @@ guarantees intact:
 Two declaration forms serve the two use cases:
 
 ```ini
-[inputs]
+[data]
 climate_data = climate.csv   # file-backed: set_input() substitutes the
                              # file's data — the "swap scenario data without
                              # touching the model" move
@@ -292,7 +292,7 @@ Adding a brand-new in-memory input to a model is therefore honestly two
 steps, which chaining keeps painless:
 
 ```python
-m.patch({"inputs": {"climate_data": ""}}).set_input("climate_data", df).run()
+m.patch({"data": {"climate_data": ""}}).set_input("climate_data", df).run()
 ```
 
 ### 6.2 Dataset semantics

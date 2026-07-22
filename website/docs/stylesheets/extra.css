@@ -217,7 +217,13 @@
   font-size: var(--kx-text-4xl); letter-spacing: -0.01em; line-height: 1; color: var(--kx-text);
 }
 .kx-dl-date { font-family: var(--kx-font-mono); font-size: var(--kx-text-sm); color: var(--kx-text-subtle); }
-.md-typeset .kx-dl-notes { font-size: var(--kx-text-sm); color: var(--kx-text-muted); margin-bottom: var(--kx-space-5); }
+/* Notes now sit below the download links, divided by a rule for a clean
+   "download above / what's new below" split. */
+.md-typeset .kx-dl-notes {
+  font-size: var(--kx-text-sm); color: var(--kx-text-muted);
+  margin-top: var(--kx-space-6); margin-bottom: 0;
+  padding-top: var(--kx-space-5); border-top: var(--kx-border-line);
+}
 .md-typeset .kx-dl-notes > :first-child { margin-top: 0; }
 .md-typeset .kx-dl-notes > :last-child { margin-bottom: 0; }
 .kx-dl-btns { display: flex; flex-wrap: wrap; gap: var(--kx-space-3); }

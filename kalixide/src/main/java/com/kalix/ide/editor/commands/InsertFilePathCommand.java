@@ -39,9 +39,9 @@ public class InsertFilePathCommand implements EditorCommand {
 
     @Override
     public boolean isApplicable(EditorContext context) {
-        // Applicable when anywhere in the [inputs] section
+        // Applicable when anywhere in the [data] section
         return context.getSectionName().isPresent()
-            && context.getSectionName().get().equals("inputs");
+            && context.getSectionName().get().equals("data");
     }
 
     @Override

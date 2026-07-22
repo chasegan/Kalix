@@ -19,7 +19,13 @@ Each `<id>.properties` file contains:
   defaults.
 - Everything else — FlatLaf UI keys (`Panel.background`, `Button.hoverBackground`,
   `Slider.thumb`, ...) plus Kalix custom keys (`MapPanel.background`,
-  `MapPanel.gridlineColor`). Every key set here reaches FlatLaf verbatim.
+  `MapPanel.gridlineColor`, `Kalix.plot.*`, and the `Kalix.tree.*` file-tree
+  keys: `modelFileColor`, `dataFileColor`, and `sourceResultFileColor`
+  (Source's `.res.csv` exports, not the Kalix result format) icon accents,
+  plus two de-emphasis tiers between `Tree.foreground` and `Tree.background` —
+  `mutedForeground` for model-less folders and `faintForeground` (10% closer
+  to the background) for unrecognised files). Every key set here reaches
+  FlatLaf verbatim.
 
 ## Defaults
 
@@ -40,6 +46,11 @@ from commissioned designer mocks in `kalixide/docs/design_guides/` — one
 self-contained HTML per theme defining every colour as a role-named CSS custom
 property. Those files are the source of truth for the dark values here and for
 the matching `NodeTheme` / `SyntaxTheme` palettes; change them in step.
+
+One scoped exception: the `Kalix.tree.*` keys post-date the mocks and have no
+roles there. Their accent values are chosen per theme, and the two grey tiers
+are *derived* from each theme's `Tree.background`/`Tree.foreground` (see
+`manifestos/file-tree-colour.md` §2.3) — do not look for them in the guides.
 
 ## Editing and adding themes
 

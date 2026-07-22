@@ -36,8 +36,9 @@ import java.util.Set;
  * a native directory watcher (FSEvents on macOS via {@code io.methvin:directory-watcher}).
  *
  * <p>Provides full-width row hover, path tooltips, a right-click context menu (Open, Reveal,
- * New File/Folder, Rename, Delete, Refresh), and open-on-double-click / Enter. Files are
- * opened through the supplied consumer (which adds them as editor tabs).
+ * New File/Folder, Rename, Delete, Refresh), and open-on-double-click / Enter (zip archives
+ * are unzipped instead of opened). Files are opened through the supplied consumer (which adds
+ * them as editor tabs).
  *
  * <p>All model mutations happen on the EDT; watcher callbacks marshal onto it.
  */
@@ -90,7 +91,7 @@ public class ProjectTree extends JTree {
             }
         });
 
-        this.fileOps = new TreeFileOperations(this, host::activeFile);
+        this.fileOps = new TreeFileOperations(this, host::activeFile, host::pathMoved);
         this.contextMenu = new TreeContextMenu(this, fileOps, host);
 
         // Drag selected entries out; accept drops onto a folder node (move, or copy with a
@@ -154,7 +155,15 @@ public class ProjectTree extends JTree {
         for (int i = 0; i < node.getChildCount(); i++) {
             FileTreeNode child = (FileTreeNode) node.getChildAt(i);
             if (child.isDirectory()) {
-                resyncLoadedSubtree(child);
+                if (child.isLoaded()) {
+                    resyncLoadedSubtree(child);
+                } else {
+                    // Not loaded, so there is nothing to resync — but this deep resync runs
+                    // when events may have been missed (OVERFLOW) or the filter changed, so
+                    // the cached model-folder flag can be stale too.
+                    child.invalidateContainsModelFile();
+                    model.nodeChanged(child);
+                }
             }
         }
     }
@@ -256,20 +265,20 @@ public class ProjectTree extends JTree {
                 if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
                     FileTreeNode node = nodeAt(e.getX(), e.getY());
                     if (node != null && node.getFile().isFile()) {
-                        host.openFile(node.getFile());
+                        openOrUnzip(node.getFile());
                     }
                 }
             }
         });
 
-        // Enter opens the selected file.
+        // Enter opens the selected file (or unzips it, if it's a zip archive).
         getInputMap().put(javax.swing.KeyStroke.getKeyStroke("ENTER"), "openSelected");
         getActionMap().put("openSelected", new javax.swing.AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
                 List<FileTreeNode> selection = selectedNodes();
                 if (selection.size() == 1 && !selection.get(0).isDirectory()) {
-                    host.openFile(selection.get(0).getFile());
+                    openOrUnzip(selection.get(0).getFile());
                 }
             }
         });
@@ -304,7 +313,18 @@ public class ProjectTree extends JTree {
         });
     }
 
-    private boolean isRoot(FileTreeNode node) {
+    /** Unzips {@code file} if it's a zip archive, otherwise opens it as an editor tab. */
+    private void openOrUnzip(File file) {
+        if (TreeFileOperations.isZip(file)) {
+            fileOps.unzipFile(file);
+        } else {
+            host.openFile(file);
+        }
+    }
+
+    /** Whether this node is the (hidden) root — package-private for the context menu's
+     *  root guards (per context-menu-style §4: rename/duplicate/delete never apply). */
+    boolean isRoot(FileTreeNode node) {
         return model != null && node == model.getRoot();
     }
 
@@ -320,14 +340,21 @@ public class ProjectTree extends JTree {
             return;
         }
         int row = getRowForLocation(e.getX(), e.getY());
+        List<FileTreeNode> subject;
         if (row < 0) {
+            // Empty space is not subject-less: the click acts on the open folder itself
+            // (context-menu-style §4) — so New file…/New folder… etc. work at the root.
             clearSelection();
-        } else if (!isRowSelected(row)) {
-            // Right-clicking a row outside the current selection acts on that row alone;
-            // right-clicking within a multi-selection keeps it, so the menu acts on all of it.
-            setSelectionRow(row);
+            subject = model != null ? List.of((FileTreeNode) model.getRoot()) : List.of();
+        } else {
+            if (!isRowSelected(row)) {
+                // Right-clicking a row outside the current selection acts on that row alone;
+                // right-clicking within a multi-selection keeps it, so the menu acts on all of it.
+                setSelectionRow(row);
+            }
+            subject = selectedNodes();
         }
-        JPopupMenu menu = contextMenu.build(selectedNodes());
+        JPopupMenu menu = contextMenu.build(subject);
         if (menu != null) {
             menu.show(this, e.getX(), e.getY());
         }
@@ -397,8 +424,16 @@ public class ProjectTree extends JTree {
             case DELETE: {
                 File parent = event.path().toFile().getParentFile();
                 FileTreeNode node = findNode(parent);
-                if (node != null && node.isLoaded()) {
-                    resyncDirectory(node);
+                if (node == null) {
+                    break;
+                }
+                if (node.isLoaded()) {
+                    resyncDirectory(node); // also refreshes the model-folder flag
+                } else {
+                    // Visible but never expanded: no children to resync, but the change may
+                    // have added/removed a model file, so recolour the folder row.
+                    node.invalidateContainsModelFile();
+                    model.nodeChanged(node);
                 }
                 break;
             }
@@ -425,6 +460,9 @@ public class ProjectTree extends JTree {
         if (dirNode == null || !dirNode.isLoaded()) {
             return;
         }
+        // The directory's contents changed, so its model-folder colouring may have too.
+        dirNode.invalidateContainsModelFile();
+        model.nodeChanged(dirNode);
         File[] entries = dirNode.getFile().listFiles();
         Set<File> onDisk = new HashSet<>();
         if (entries != null) {

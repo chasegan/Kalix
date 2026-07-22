@@ -53,7 +53,7 @@ class TreeContextMenu {
         for (List<Entry> group : groups) {
             List<Entry> visible = group.stream()
                 .filter(e -> e.visible.test(selection))
-                .collect(Collectors.toList());
+                .toList();
             if (visible.isEmpty()) {
                 continue;
             }
@@ -87,22 +87,28 @@ class TreeContextMenu {
         // primary -> context-specific -> external handoff -> clipboard -> create ->
         // modify -> destructive (isolated) -> view/state. Labels are sentence case.
         return List.of(
+            // Primary
             List.of(
-                item("Open", TreeContextMenu::isSingleFile,
+                item("Open", TreeContextMenu::isSingleNonZipFile,
                     sel -> host.openFile(file(sel)))
             ),
+            // Context-specific
             List.of(
-                item("Compare with active editor", TreeContextMenu::isSingleFile,
+                item("Compare with active editor", TreeContextMenu::isSingleNonZipFile,
                     sel -> host.compareWithActiveEditor(file(sel))),
                 item("Compare files", TreeContextMenu::isTwoFiles,
-                    sel -> host.compareFiles(file(sel, 0), file(sel, 1)))
+                    sel -> host.compareFiles(file(sel, 0), file(sel, 1))),
+                item("Unzip", TreeContextMenu::isSingleZip,
+                        sel -> fileOps.unzipFile(file(sel)))
             ),
+            // External handoff
             List.of(
                 item(revealLabel(), TreeContextMenu::isSingle,
                     sel -> fileOps.reveal(file(sel))),
                 item("Launch Terminal", TreeContextMenu::isSingle,
                     sel -> fileOps.openTerminal(file(sel)))
             ),
+            // Clipboard
             List.of(
                 item("Copy relative path", TreeContextMenu::any,
                     sel -> fileOps.copyRelativePaths(files(sel))),
@@ -111,22 +117,30 @@ class TreeContextMenu {
                 item("Copy trailhead path", TreeContextMenu::any,
                     sel -> fileOps.copyTrailheadPaths(files(sel)))
             ),
+            // Create
             List.of(
                 item("New file…", TreeContextMenu::isSingle,
                     sel -> fileOps.createChild(file(sel), false)),
                 item("New folder…", TreeContextMenu::isSingle,
-                    sel -> fileOps.createChild(file(sel), true))
-            ),
+                    sel -> fileOps.createChild(file(sel), true))),
+            // Modify — identity-changing verbs never apply to the root the user is
+            // standing in (context-menu-style §4), which empty-space clicks select.
             List.of(
-                item("Rename…", TreeContextMenu::isSingle,
+                item("Rename…", sel -> isSingle(sel) && noneIsRoot(sel),
                     sel -> fileOps.rename(file(sel))),
-                item("Duplicate…", TreeContextMenu::isSingle,
-                    sel -> fileOps.duplicate(file(sel)))
+                item("Duplicate…", sel -> isSingle(sel) && noneIsRoot(sel),
+                    sel -> fileOps.duplicate(file(sel))),
+                // Derives a new archive from the selection, like Duplicate derives a copy —
+                // and keeps it from surfacing as a folder's first (= primary-looking) item.
+                item("Zip", TreeContextMenu::isNotSingleZip,
+                    sel -> fileOps.zipFiles(files(sel), tree.getRootFile()))
             ),
+            // Destructive (isolated) — never the root (context-menu-style §4).
             List.of(
-                item("Delete", TreeContextMenu::any,
+                item("Delete", sel -> any(sel) && noneIsRoot(sel),
                     sel -> fileOps.delete(files(sel)), MenuIcons::delete)
             ),
+            // View
             List.of(
                 item("Expand children", TreeContextMenu::hasDirectory,
                     sel -> directories(sel).forEach(tree::expandSubtree)),
@@ -166,22 +180,42 @@ class TreeContextMenu {
         return sel.size() == 1;
     }
 
-    private static boolean isSingleFile(List<FileTreeNode> sel) {
-        return sel.size() == 1 && !sel.get(0).isDirectory();
+    private static boolean isSingleNonZipFile(List<FileTreeNode> sel) {
+        return sel.size() == 1 && !sel.getFirst().isDirectory() && isNotZip(sel);
     }
 
     private static boolean isTwoFiles(List<FileTreeNode> sel) {
-        return sel.size() == 2 && sel.stream().noneMatch(FileTreeNode::isDirectory);
+        return sel.size() == 2 && sel.stream().noneMatch(FileTreeNode::isDirectory) && isNotZip(sel);
     }
 
     private static boolean hasDirectory(List<FileTreeNode> sel) {
         return sel.stream().anyMatch(FileTreeNode::isDirectory);
     }
 
+    private static boolean isSingleZip(List<FileTreeNode> sel) {
+        return sel.size() == 1 && TreeFileOperations.isZip(file(sel));
+    }
+
+    /** True when the selection contains no root node — the empty-space subject. */
+    private boolean noneIsRoot(List<FileTreeNode> sel) {
+        return sel.stream().noneMatch(tree::isRoot);
+    }
+
+    private static boolean isNotSingleZip(List<FileTreeNode> sel) {
+        return any(sel) && isNotZip(sel);
+    }
+
+    /**
+     * Return true if none of {@code sel} are zip files
+     */
+    private static boolean isNotZip(List<FileTreeNode> sel) {
+        return sel.stream().noneMatch((x) -> TreeFileOperations.isZip(x.getFile()));
+    }
+
     // --- Selection accessors ---
 
     private static File file(List<FileTreeNode> sel) {
-        return sel.get(0).getFile();
+        return sel.getFirst().getFile();
     }
 
     private static File file(List<FileTreeNode> sel, int index) {

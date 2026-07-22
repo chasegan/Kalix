@@ -9,7 +9,7 @@ import java.util.function.Supplier;
 
 /**
  * Command to add an alias for an input file.
- * Converts the file's [inputs] line to {@code alias = path} form and rewrites all
+ * Converts the file's [data] line to {@code alias = path} form and rewrites all
  * {@code data.{file}.*} references in property values and output references to
  * {@code data.{alias}.*}.
  */

@@ -2,10 +2,10 @@
 
 ## Importing Data
 
-To import timeseries data into your Kalix model, list your CSV files in the `[inputs]` section of your model file:
+To import timeseries data into your Kalix model, list your CSV files in the `[data]` section of your model file:
 
 ```ini
-[inputs]
+[data]
 ./data/climate.csv
 ./data/streamflow.csv
 ```
@@ -13,7 +13,7 @@ To import timeseries data into your Kalix model, list your CSV files in the `[in
 You may optionally give data files aliases:
 
 ```ini
-[inputs]
+[data]
 climate = ./data/climate.csv
 streamflow = ./data/streamflow.csv
 ```

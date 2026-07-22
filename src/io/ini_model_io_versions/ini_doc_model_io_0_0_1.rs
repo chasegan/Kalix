@@ -226,9 +226,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     model.configuration.specified_sim_end_timestamp = Some(timestamp);
                 }
             }
-        } else if section_name == "inputs" {
+        } else if section_name == "data" {
             // -------------------------------------------------------------------------------------
-            // Parsing inputs
+            // Parsing input data
             // -------------------------------------------------------------------------------------
             for (name, ini_property) in ini_section.properties {
                 // Input entries take three forms:
@@ -870,6 +870,13 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             // User-defined functions — already parsed in the pre-pass above
             // -------------------------------------------------------------------------------------
+        } else if section_name == "inputs" {
+            // -------------------------------------------------------------------------------------
+            // Renamed section — helpful error (every model predating the rename has this)
+            // -------------------------------------------------------------------------------------
+            return Err(format!("Error on line {}: The '[inputs]' section was renamed to '[data]' \
+                (matching the 'data.' reference prefix). Rename the section header; the file paths and \
+                'data.*' references inside it are unchanged.", ini_section.line_number));
         } else {
             // -------------------------------------------------------------------------------------
             // Unexpected section
@@ -918,6 +925,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             trigger_original: trigger_str,
             action_original: action_str,
             recorder_idx_fired: None,
+            recorder_idx_pct: None,
+            last_pct: 0.0,
         });
     }
 
@@ -999,7 +1008,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
     // ini_entry(), so this stays in lock-step with the parser.
     for source in &model.input_sources {
         let (k, v) = source.ini_entry();
-        ini_doc.set_property("inputs", k.as_str(), v.as_str());
+        ini_doc.set_property("data", k.as_str(), v.as_str());
     }
 
     // List all constants
@@ -1320,7 +1329,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 }
             }
             // A section the source declared but that carries no properties (an empty
-            // `[inputs]`, say) has no counterpart in the canonical render, so the loop
+            // `[data]`, say) has no counterpart in the canonical render, so the loop
             // above never validated it and the sweep would drop it — taking any comments
             // attached to it with it. It holds no model-meaningful content, so there is
             // nothing in it that *could* have changed: keep it verbatim.
@@ -1498,6 +1507,7 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hy
     match trimmed {
         "set_full" => return Ok(RasAction::SetFull),
         "set_empty" => return Ok(RasAction::SetEmpty),
+        "reset_allocation" => return Ok(RasAction::ResetAllocation),
         _ => {}
     }
     let open = trimmed.find('(');
@@ -1505,7 +1515,8 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hy
         (Some(p), true) => (trimmed[..p].trim(), trimmed[p + 1..trimmed.len() - 1].trim()),
         _ => {
             return Err(format!("Error on line {}: Invalid RAS action '{}'. Expected one of: set_full, \
-                set_empty, set(x), set_fraction(x), credit(x), debit(x), scale(x), reduce_to(x)", line, trimmed));
+                set_empty, reset_allocation, set(x), set_fraction(x), credit(x), debit(x), scale(x), \
+                reduce_to(x), allocate(pct)", line, trimmed));
         }
     };
     let input = DynamicInput::from_string(arg, &mut model.data_cache, true, None)
@@ -1517,8 +1528,10 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hy
         "debit" => Ok(RasAction::Debit(input)),
         "scale" => Ok(RasAction::Scale(input)),
         "reduce_to" => Ok(RasAction::ReduceTo(input)),
+        "allocate" => Ok(RasAction::Allocate(input)),
         other => Err(format!("Error on line {}: Unknown RAS action '{}'. Expected one of: set_full, \
-            set_empty, set(x), set_fraction(x), credit(x), debit(x), scale(x), reduce_to(x)", line, other)),
+            set_empty, reset_allocation, set(x), set_fraction(x), credit(x), debit(x), scale(x), \
+            reduce_to(x), allocate(pct)", line, other)),
     }
 }
 

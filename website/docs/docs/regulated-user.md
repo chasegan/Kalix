@@ -25,6 +25,7 @@ ds_1 = my_other_node
 | loc (compulsory) | The location of the node in cartesian coordinates.  Example: `loc = 20, 30` |
 | order (optional) | This property specifies how much the regulated user will order [ML] each timestep. In regulated systems with nonzero travel times, the demand will be lagged to give enough time for the water to arrive.  Example: `order = data.extendeddataset.by_name.urban_demand` |
 | pump (optional) | Use this to limit the amount of water the user can extract each timestep. Example: `pump = 86.4` |
+| accounts (optional) | Names of the [accounts](accounts.md) this user draws on, comma-separated in order of use. Orders are capped by the accounts' combined balance and deliveries are debited from them, so an [allocation system](allocation-systems.md) can constrain the user. Example: `accounts = smith_carryover, smith_annual` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
 ## Results associated with this node
@@ -56,6 +57,14 @@ Flow available for diversion is limited by the specified pump capacity.
 `diversion=min(usflow,demand)`
 
 `dsflow=usflow−diversion`
+
+#### Accounts
+
+If the node lists `accounts`, its order is capped at order time by the combined
+account balance, and each delivery is debited from the accounts in the order
+listed (the first is drawn down before the second). This is how an
+[allocation system](allocation-systems.md) limits the user: a low announced
+allocation means a low balance, which caps ordering. See [`[acc.*]`](accounts.md).
 
 ## References
 

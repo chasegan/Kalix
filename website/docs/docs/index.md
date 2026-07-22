@@ -13,7 +13,7 @@ Model components, top to bottom.
 <span style="position: absolute; left: -8px; top: 6px; width: 14px; height: 14px; border-radius: 4px; background: var(--kx-accent-600); border: 3px solid var(--kx-bg);"></span>
 <a class="kx-section-chip" href="model-file-structure/" style="justify-self: start; font-family: var(--kx-font-mono); font-size: 14px; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;">[kalix]</a>
 <span style="font-size: 14.5px; color: var(--kx-text-muted); line-height: 1.5;">Run settings — timestep, start and end dates, model version.</span>
-<a class="kx-section-chip" href="input-data/" style="justify-self: start; font-family: var(--kx-font-mono); font-size: 14px; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;">[inputs]</a>
+<a class="kx-section-chip" href="input-data/" style="justify-self: start; font-family: var(--kx-font-mono); font-size: 14px; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;">[data]</a>
 <span style="font-size: 14.5px; color: var(--kx-text-muted); line-height: 1.5;">Input data series the model can reference.</span>
 <a class="kx-section-chip" href="constants/" style="justify-self: start; font-family: var(--kx-font-mono); font-size: 14px; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;">[const]</a>
 <span style="font-size: 14.5px; color: var(--kx-text-muted); line-height: 1.5;">Named fixed values reused across nodes.</span>
@@ -52,6 +52,10 @@ Model components, top to bottom.
 <span style="font-size: 14.5px; color: var(--kx-text-muted); line-height: 1.5;">Lookup tables — rating curves and relationships, callable from any expression.</span>
 <a class="kx-section-chip" href="fn/" style="justify-self: start; font-family: var(--kx-font-mono); font-size: 14px; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;">[fn]</a>
 <span style="font-size: 14.5px; color: var(--kx-text-muted); line-height: 1.5;">User-defined functions, written once and called from any expression.</span>
+<a class="kx-section-chip" href="accounts/" style="justify-self: start; font-family: var(--kx-font-mono); font-size: 14px; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;">[acc.*]</a>
+<span style="font-size: 14.5px; color: var(--kx-text-muted); line-height: 1.5;">Water accounts — the ledgers an allocation system credits and debits.</span>
+<a class="kx-section-chip" href="ras/" style="justify-self: start; font-family: var(--kx-font-mono); font-size: 14px; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;">[ras.*]</a>
+<span style="font-size: 14.5px; color: var(--kx-text-muted); line-height: 1.5;">Resource allocation systems — triggered rules that credit and debit accounts.</span>
 </div>
 
 <!-- SPINE: bottom zone -->

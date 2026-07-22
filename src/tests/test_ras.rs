@@ -15,6 +15,12 @@ fn run(ini: &str) -> crate::model::Model {
     model
 }
 
+fn series(model: &mut crate::model::Model, name: &str) -> Vec<f64> {
+    let idx = model.data_cache.get_series_idx(name, false)
+        .unwrap_or_else(|| panic!("no series '{}'", name));
+    model.data_cache.series[idx].values.clone()
+}
+
 fn balance(model: &crate::model::Model, name: &str) -> f64 {
     let idx = model.account_manager.get_account_idx(name).unwrap();
     model.account_manager.get_account_balance(idx)
@@ -598,4 +604,219 @@ node.src.dsflow
                   [ras.first]\ntargets = acc.g1\ntrigger = every_step\naction  = set(10)\n");
     let model = run(&reversed);
     assert_eq!(balance(&model, "a1"), 10.0, "debit then set leaves the set value");
+}
+
+// ==================== allocate / reset_allocation (§3.4) ====================
+
+#[test]
+fn test_allocate_sets_allocation_not_balance() {
+    // allocate(pct) raises each account's *allocation* — balance plus use to
+    // date — to pct% of its entitlement. With no use yet, that is a plain
+    // credit: 60% of 100 = 60.
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size,
+           a1, 100,
+           a2, 50,
+
+[ras.announce]
+targets = acc.g1
+trigger = every_step
+action  = allocate(60)
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "a1"), 60.0, "60% of 100");
+    assert_eq!(balance(&model, "a2"), 30.0, "60% of 50 — pro-rata by entitlement");
+}
+
+#[test]
+fn test_allocate_is_monotone_and_use_does_not_reduce_allocation() {
+    // The account holds 100 ML entitlement. Announce 50% (balance 50), the
+    // user takes 20 (balance 30, allocation still 50), then the announcement
+    // is repeated at 50% — nothing should happen, because allocation has not
+    // fallen. Announce 80% and the account gains the 30 ML increment only.
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-04
+
+[const]
+const.day3 = 3
+
+[acc.g1]
+accounts = name, size,
+           a1, 100,
+
+[ras.announce]
+targets = acc.g1
+trigger = every_step
+action  = allocate(if(sim.day >= const.day3, 80, 50))
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = u1
+
+[node.u1]
+type = unregulated_user
+loc = 0, 10
+demand = if(sim.day == 2, 20, 0)
+accounts = a1
+
+[outputs]
+acc.a1.closing_balance
+acc.a1.allocation
+"#;
+    let mut model = run(ini);
+
+    let bal = series(&mut model, "acc.a1.closing_balance");
+    let alloc = series(&mut model, "acc.a1.allocation");
+
+    // Day 1: announce 50 -> balance 50. Day 2: take 20 -> balance 30.
+    // Day 3: announce 80 -> allocation 50 rises to 80, balance 30 + 30 = 60.
+    // Day 4: announce 80 again -> no change.
+    assert_eq!(bal, vec![50.0, 30.0, 60.0, 60.0], "balances");
+    assert_eq!(alloc, vec![50.0, 50.0, 80.0, 80.0],
+        "allocation never falls: use moves water from balance into the use term");
+}
+
+#[test]
+fn test_allocate_from_lookup_table() {
+    // The percentage normally comes from a lookup over assessed resources.
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[table.alloc_curve]
+values = 0, 0,
+         500, 40,
+         1000, 100,
+
+[acc.g1]
+accounts = name, size,
+           a1, 200,
+
+[ras.announce]
+targets = acc.g1
+trigger = every_step
+action  = allocate(table.alloc_curve(750))
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "a1"), 140.0, "70% interpolated from the curve, of 200");
+}
+
+#[test]
+fn test_reset_allocation_starts_a_new_year() {
+    // Announce 100%, use some, then reset at the water-year boundary: both
+    // terms of the allocation go to zero, so the next announcement credits
+    // from scratch rather than being suppressed as "not an increase".
+    let ini = r#"
+[kalix]
+start = 2020-06-29
+end = 2020-07-02
+
+[acc.g1]
+accounts = name, size,
+           a1, 100,
+
+[ras.reset]
+targets = acc.g1
+trigger = start_water_year(7)
+action  = reset_allocation
+
+[ras.announce]
+targets = acc.g1
+trigger = every_step
+action  = allocate(if(sim.month == 7, 20, 100))
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = u1
+
+[node.u1]
+type = unregulated_user
+loc = 0, 10
+demand = if(sim.day == 30, 40, 0)
+accounts = a1
+
+[outputs]
+acc.a1.closing_balance
+acc.a1.allocation
+"#;
+    let mut model = run(ini);
+    let bal = series(&mut model, "acc.a1.closing_balance");
+    let alloc = series(&mut model, "acc.a1.allocation");
+
+    // Jun 29: announce 100 -> 100. Jun 30: take 40 -> balance 60, allocation 100.
+    // Jul 1: reset (file order: reset runs before announce) then announce 20 -> 20.
+    // Jul 2: announce 20 again -> no change.
+    assert_eq!(bal, vec![100.0, 60.0, 20.0, 20.0], "balances across the rollover");
+    assert_eq!(alloc, vec![100.0, 100.0, 20.0, 20.0], "allocation restarts at the reset");
+}
+
+#[test]
+fn test_allocate_above_100_percent_is_allowed() {
+    // Some schemes announce more than 100% of entitlement; the balance is not
+    // clamped to the account size for allocation.
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size,
+           a1, 100,
+
+[ras.announce]
+targets = acc.g1
+trigger = every_step
+action  = allocate(150)
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "a1"), 150.0, "150% of entitlement");
+}
+
+#[test]
+fn test_allocate_recorders() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size,
+           a1, 100,
+
+[ras.announce]
+targets = acc.g1
+trigger = every_step
+action  = allocate(60)
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 10
+
+[outputs]
+ras.announce.pct
+acc.g1.allocation
+"#);
+    let mut model = run(&ini);
+    let pct = series(&mut model, "ras.announce.pct");
+    assert_eq!(pct, vec![60.0, 60.0], "announced percentage recorded");
+    let grp = series(&mut model, "acc.g1.allocation");
+    assert_eq!(grp, vec![60.0, 60.0], "group allocation aggregate");
 }

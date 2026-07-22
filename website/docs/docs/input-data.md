@@ -1,10 +1,10 @@
 ---
-title: "[inputs]"
+title: "[data]"
 ---
 
-# [inputs]
+# [data]
 
-Specify input data files in the `[inputs]` section of your model.
+Specify input data files in the `[data]` section of your model.
 
 - Each input file should be specified on a new line. Find out how to delcare input data at [Declaring Input Data](input-data.md).
 
@@ -16,10 +16,10 @@ Specify input data files in the `[inputs]` section of your model.
 
 ## Declaring Input Data
 
-Kalix models declare input data files by listing them in the `[inputs]` section of your model file:
+Kalix models declare input data files by listing them in the `[data]` section of your model file:
 
 ```ini
-[inputs]
+[data]
 c:/data/climate_data.csv
 c:/data/streamflow_data.csv
 c:/data/misc.csv

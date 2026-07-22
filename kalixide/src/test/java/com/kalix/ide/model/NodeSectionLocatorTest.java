@@ -297,11 +297,11 @@ class NodeSectionLocatorTest {
 
     @Test
     void findAllSkipsNonNodeSections() {
-        String text = "[kalix]\nstart = 2000-01-01\n\n[node.a]\nloc = 1, 1\n\n[inputs]\nx = y.csv\n\n[node.b]\nloc = 2, 2\n";
+        String text = "[kalix]\nstart = 2000-01-01\n\n[node.a]\nloc = 1, 1\n\n[data]\nx = y.csv\n\n[node.b]\nloc = 2, 2\n";
         List<NodeSection> sections = NodeSectionLocator.findAll(text);
         assertEquals(List.of("a", "b"), sections.stream().map(NodeSection::nodeName).toList());
-        // [node.a] is closed by [inputs], not carried across it
-        assertEquals(text.indexOf("[inputs]"), sections.get(0).end());
+        // [node.a] is closed by [data], not carried across it
+        assertEquals(text.indexOf("[data]"), sections.get(0).end());
     }
 
     @Test

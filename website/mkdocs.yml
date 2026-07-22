@@ -136,7 +136,7 @@ nav:
       - Components:
           - docs/index.md   # make the 'Components' header link back to the Docs page
           - "[kalix]": docs/model-file-structure.md
-          - "[inputs]": docs/input-data.md
+          - "[data]": docs/input-data.md
           - "[constants]": docs/constants.md
           - "[var.*]": docs/vars.md
           - "[node.*]":
@@ -157,6 +157,8 @@ nav:
                   - Storage tables: docs/storage-tables.md
               - Unregulated user: docs/unregulated-user.md
           - "[table.*]": docs/tables.md
+          - "[acc.*]": docs/accounts.md
+          - "[ras.*]": docs/ras.md
           - "[fn]": docs/fn.md
           - "[outputs]": docs/model-outputs.md
       - KalixIDE: docs/ide.md

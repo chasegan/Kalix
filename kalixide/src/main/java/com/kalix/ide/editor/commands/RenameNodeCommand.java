@@ -71,12 +71,9 @@ public class RenameNodeCommand implements EditorCommand {
             return;
         }
 
-        // Execute the rename
-        boolean success = executor.renameNode(oldName, newName, parsedModel);
-
-        if (success) {
-            showSuccess(oldName, newName);
-        }
+        // Execute the rename. Success is silent: the result is visible in the editor and
+        // on the map, so a confirmation dialog would only be in the way.
+        executor.renameNode(oldName, newName, parsedModel);
     }
 
     /**
@@ -97,17 +94,4 @@ public class RenameNodeCommand implements EditorCommand {
         );
     }
 
-    /**
-     * Shows a success message after renaming.
-     */
-    private void showSuccess(String oldName, String newName) {
-        SwingUtilities.invokeLater(() -> {
-            JOptionPane.showMessageDialog(
-                parentFrame,
-                "Renamed '" + oldName + "' to '" + newName + "'",
-                "Done",
-                JOptionPane.INFORMATION_MESSAGE
-            );
-        });
-    }
 }

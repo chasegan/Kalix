@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Tests for {@link InputDataRegistry} caching behaviour: header reads populate
  * the cache, missing files are negative-cached (so completion popups stop
- * resubmitting reads), and entries removed from {@code [inputs]} never
+ * resubmitting reads), and entries removed from {@code [data]} never
  * reappear via a stale pending read.
  */
 class InputDataRegistryTest {
@@ -110,6 +110,6 @@ class InputDataRegistryTest {
 
         Thread.sleep(200);  // let any queued read run to completion
         assertNull(reg.getDataSources().get("gone.csv"),
-            "a stale pending read must not resurrect a removed [inputs] entry");
+            "a stale pending read must not resurrect a removed [data] entry");
     }
 }
