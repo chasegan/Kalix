@@ -202,13 +202,13 @@ public final class PreferenceKeys {
     public static final Pref<List<String>> FILE_DIALOG_PINNED =
         Pref.fileStringList("fileDialog.pinnedFolders", List.of());
 
-    /** Recent file-dialog folders, newline-separated, most recent first. Machine-specific. */
-    public static final Pref<String> FILE_DIALOG_RECENTS =
-        Pref.osString("fileDialog.recentFolders", "");
-
     /** The directory the file dialogs last accepted in, used as the default start. */
     public static final Pref<String> FILE_DIALOG_LAST_DIR =
         Pref.osString("fileDialog.lastDirectory", "");
+
+    /** File-dialog sidebar width in pixels (user-adjustable via the split divider). */
+    public static final Pref<Integer> FILE_DIALOG_SIDEBAR_WIDTH =
+        Pref.osInt("fileDialog.sidebarWidth", 185);
 
     // Private constructor to prevent instantiation
     private PreferenceKeys() {

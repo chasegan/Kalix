@@ -91,7 +91,7 @@ public class FileOperationsManager {
      */
     public void openModel() {
         KalixFileDialog.openFile(ownerWindow())
-            .title("Open Kalix Model")
+            .title("Open Model")
             .startIn(getCurrentFile())
             .filters(modelFilter())
             .show()
@@ -233,7 +233,7 @@ public class FileOperationsManager {
         // The dialog handles default-extension appending and overwrite confirmation.
         File currentFile = document.getFile();
         java.util.Optional<File> chosen = KalixFileDialog.saveFile(ownerWindow())
-            .title("Save Kalix Model")
+            .title("Save As")
             .startIn(currentFile)
             .suggestedName(currentFile != null ? currentFile.getName() : "model.ini")
             .filters(modelFilter())

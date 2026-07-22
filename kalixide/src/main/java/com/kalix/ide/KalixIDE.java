@@ -250,6 +250,22 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             AppConstants.RECENT_FOLDER_PREF_PREFIX,
             "Folder"
         );
+
+        // The file dialogs' sidebar shares the File menu's navigation memory: recent
+        // folders, plus the folders recent files live in. One list, not two.
+        com.kalix.ide.filedialog.KalixFileDialog.setRecentFoldersProvider(() -> {
+            java.util.LinkedHashSet<java.nio.file.Path> recents = new java.util.LinkedHashSet<>();
+            for (String p : recentFoldersManager.getRecentFiles()) {
+                recents.add(java.nio.file.Path.of(p));
+            }
+            for (String p : recentFilesManager.getRecentFiles()) {
+                java.nio.file.Path parent = java.nio.file.Path.of(p).getParent();
+                if (parent != null) {
+                    recents.add(parent);
+                }
+            }
+            return recents.stream().limit(8).toList();
+        });
     }
 
     /**
@@ -1013,7 +1029,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void openFolder() {
         File current = projectTreePanel.getRootFile();
         com.kalix.ide.filedialog.KalixFileDialog.chooseFolder(this)
-            .title("Open Project Folder")
+            .title("Open Folder")
             .startIn(current != null ? current.getParentFile() : null)
             .show()
             .ifPresent(folder -> {

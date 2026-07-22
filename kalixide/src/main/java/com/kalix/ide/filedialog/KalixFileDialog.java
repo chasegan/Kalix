@@ -87,10 +87,30 @@ public final class KalixFileDialog implements FileViewHost {
     private JLabel statusLabel;
     private JButton okButton;
 
+    private JButton backButton;
+    private JButton forwardButton;
+
     private Path currentDir;
     private FsEntry selectedEntry;
     private boolean columnsMode;
     private File result;
+
+    // Back/forward history of visited directories, same idiom as the editor's navigation.
+    private final List<Path> visited = new ArrayList<>();
+    private int visitIndex = -1;
+    private boolean traversingHistory;
+
+    /** Recent folders shared from the main window's Recent Files/Folders tracking. */
+    private static java.util.function.Supplier<List<Path>> recentFoldersProvider;
+
+    /**
+     * Registers the app-wide source of the sidebar's Recent section. Called once at startup
+     * with a supplier backed by the main window's Recent Files / Recent Folders managers, so
+     * the dialogs and the File menu share one navigation memory.
+     */
+    public static void setRecentFoldersProvider(java.util.function.Supplier<List<Path>> provider) {
+        recentFoldersProvider = provider;
+    }
 
     private KalixFileDialog(Mode mode, Window owner) {
         this.mode = mode;
@@ -196,6 +216,7 @@ public final class KalixFileDialog implements FileViewHost {
         statusLabel.setText(" ");
         rebuildBreadcrumb();
         pinToggle.setSelected(FileDialogSidebar.isPinned(dir));
+        recordVisit(dir);
         updateOkEnablement();
     }
 
@@ -231,17 +252,26 @@ public final class KalixFileDialog implements FileViewHost {
 
         listView = new ListFileView(this);
         columnsView = new ColumnsFileView(this);
-        sidebar = new FileDialogSidebar(this::navigateFromSidebar);
+        sidebar = new FileDialogSidebar(this::navigateFromSidebar, recentFoldersProvider);
 
         viewCards = new JPanel(new CardLayout());
         viewCards.add(listView.component(), "list");
         viewCards.add(columnsView.component(), "columns");
         columnsMode = "columns".equals(PreferenceKeys.FILE_DIALOG_VIEW.get());
 
+        // Adjustable sidebar, width persisted (same split idiom as the main workspace).
+        javax.swing.JSplitPane split = new javax.swing.JSplitPane(
+            javax.swing.JSplitPane.HORIZONTAL_SPLIT, sidebar.component(), viewCards);
+        split.setContinuousLayout(true);
+        split.setBorder(null);
+        split.setResizeWeight(0.0); // the listing absorbs dialog resizes; the sidebar keeps its width
+        split.setDividerLocation(PreferenceKeys.FILE_DIALOG_SIDEBAR_WIDTH.get());
+        split.addPropertyChangeListener(javax.swing.JSplitPane.DIVIDER_LOCATION_PROPERTY,
+            e -> PreferenceKeys.FILE_DIALOG_SIDEBAR_WIDTH.set(split.getDividerLocation()));
+
         JPanel content = new JPanel(new BorderLayout());
         content.add(buildToolbar(), BorderLayout.NORTH);
-        content.add(sidebar.component(), BorderLayout.WEST);
-        content.add(viewCards, BorderLayout.CENTER);
+        content.add(split, BorderLayout.CENTER);
         content.add(buildFooter(), BorderLayout.SOUTH);
         dialog.setContentPane(content);
 
@@ -267,6 +297,13 @@ public final class KalixFileDialog implements FileViewHost {
         JPanel bar = new JPanel(new BorderLayout(6, 0));
         bar.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
 
+        // Back/forward use the main toolbar's navigation glyphs, so the idiom carries over.
+        backButton = iconButton(FontAwesomeSolid.ARROW_LEFT, "Back");
+        backButton.addActionListener(e -> goBack());
+        forwardButton = iconButton(FontAwesomeSolid.ARROW_RIGHT, "Forward");
+        forwardButton.addActionListener(e -> goForward());
+        updateNavButtons();
+
         JButton upButton = iconButton(FontAwesomeSolid.LEVEL_UP_ALT, "Parent folder");
         upButton.addActionListener(e -> {
             Path parent = currentDir != null ? currentDir.getParent() : null;
@@ -278,9 +315,15 @@ public final class KalixFileDialog implements FileViewHost {
         breadcrumb = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
         breadcrumb.setOpaque(false);
 
+        JPanel navButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        navButtons.setOpaque(false);
+        navButtons.add(backButton);
+        navButtons.add(forwardButton);
+        navButtons.add(upButton);
+
         JPanel left = new JPanel(new BorderLayout(6, 0));
         left.setOpaque(false);
-        left.add(upButton, BorderLayout.WEST);
+        left.add(navButtons, BorderLayout.WEST);
         left.add(breadcrumb, BorderLayout.CENTER);
 
         pinToggle = iconToggle(FontAwesomeSolid.THUMBTACK, "Pin this folder to the sidebar");
@@ -359,6 +402,10 @@ public final class KalixFileDialog implements FileViewHost {
             List<FileDialogFilter> all = new ArrayList<>(filters);
             all.add(FileDialogFilter.ALL_FILES);
             filterCombo = new JComboBox<>(all.toArray(new FileDialogFilter[0]));
+            // Filtering starts OFF: all files visible, with the specific filters one click
+            // away. Modellers live among mixed inputs/outputs; hiding everything but .ini
+            // by default made the folder look emptier than it is.
+            filterCombo.setSelectedIndex(all.size() - 1);
             filterCombo.addActionListener(e -> refilterViews());
             middle.add(filterCombo, BorderLayout.EAST);
         }
@@ -412,12 +459,60 @@ public final class KalixFileDialog implements FileViewHost {
         statusLabel.setText(" ");
         rebuildBreadcrumb();
         pinToggle.setSelected(FileDialogSidebar.isPinned(dir));
+        recordVisit(dir);
         if (columnsMode) {
             columnsView.navigateTo(dir);
         } else {
             listView.navigateTo(dir);
         }
         updateOkEnablement();
+    }
+
+    // --- Back / forward history ---
+
+    private void recordVisit(Path dir) {
+        if (traversingHistory || dir == null) {
+            return;
+        }
+        if (visitIndex >= 0 && visited.get(visitIndex).equals(dir)) {
+            return; // same place (e.g. breadcrumb refresh); not a new hop
+        }
+        // A new hop truncates any forward history, as in every browser.
+        while (visited.size() > visitIndex + 1) {
+            visited.remove(visited.size() - 1);
+        }
+        visited.add(dir);
+        visitIndex = visited.size() - 1;
+        updateNavButtons();
+    }
+
+    private void goBack() {
+        if (visitIndex > 0) {
+            visitIndex--;
+            traverseTo(visited.get(visitIndex));
+        }
+    }
+
+    private void goForward() {
+        if (visitIndex < visited.size() - 1) {
+            visitIndex++;
+            traverseTo(visited.get(visitIndex));
+        }
+    }
+
+    private void traverseTo(Path dir) {
+        traversingHistory = true;
+        try {
+            navigateTo(dir);
+        } finally {
+            traversingHistory = false;
+        }
+        updateNavButtons();
+    }
+
+    private void updateNavButtons() {
+        backButton.setEnabled(visitIndex > 0);
+        forwardButton.setEnabled(visitIndex < visited.size() - 1);
     }
 
     private void navigateFromSidebar(Path dir) {
@@ -529,7 +624,12 @@ public final class KalixFileDialog implements FileViewHost {
                     return;
                 }
                 if (!name.contains(".")) {
+                    // Default extension: the active filter's, else the first specific
+                    // filter's (the common case now that "All files" is the default).
                     String ext = activeFilter().defaultExtension();
+                    if (ext == null && !filters.isEmpty()) {
+                        ext = filters.get(0).defaultExtension();
+                    }
                     if (ext != null) {
                         name = name + "." + ext;
                     }

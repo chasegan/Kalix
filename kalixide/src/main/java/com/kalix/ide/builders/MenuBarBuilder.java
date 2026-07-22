@@ -211,7 +211,7 @@ public class MenuBarBuilder {
         fileMenu = new JMenu("File");
 
         fileMenu.add(createMenuItem("New", KeyEvent.VK_N, e -> callbacks.newModel()));
-        fileMenu.add(createMenuItem("Open", KeyEvent.VK_O, e -> callbacks.openModel()));
+        fileMenu.add(createMenuItem("Open Model...", KeyEvent.VK_O, e -> callbacks.openModel()));
         fileMenu.add(createMenuItem("Open Folder...", KeyEvent.VK_O, InputEvent.SHIFT_DOWN_MASK,
                 e -> callbacks.openFolder()));
 

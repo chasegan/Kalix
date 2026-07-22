@@ -165,6 +165,16 @@ final class ColumnsFileView {
             columnScroll.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1,
                 UIManager.getColor("Component.borderColor") != null
                     ? UIManager.getColor("Component.borderColor") : Color.LIGHT_GRAY));
+            // Horizontal wheel/trackpad gestures arrive as shift+wheel and would be swallowed
+            // by this column's (vertical-only) scroll pane; hand them to the trail scroller so
+            // sideways scrolling works wherever the pointer is.
+            columnScroll.addMouseWheelListener(e -> {
+                if (e.isShiftDown()) {
+                    javax.swing.JScrollBar bar = scroll.getHorizontalScrollBar();
+                    bar.setValue(bar.getValue()
+                        + (int) Math.round(e.getPreciseWheelRotation() * bar.getUnitIncrement() * 3));
+                }
+            });
             panel.add(columnScroll, java.awt.BorderLayout.CENTER);
             Dimension size = new Dimension(COLUMN_WIDTH, 10);
             panel.setPreferredSize(null);

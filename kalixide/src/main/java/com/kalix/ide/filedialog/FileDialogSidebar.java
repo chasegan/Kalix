@@ -17,6 +17,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.UIManager;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -52,13 +53,19 @@ final class FileDialogSidebar {
     private final JList<Item> list = new JList<>(model);
     private final JScrollPane scroll;
     private final Consumer<Path> onNavigate;
+    /** Recent folders shared with the main window's File menu (may be null: section omitted). */
+    private final java.util.function.Supplier<List<Path>> recentFolders;
 
-    FileDialogSidebar(Consumer<Path> onNavigate) {
+    FileDialogSidebar(Consumer<Path> onNavigate, java.util.function.Supplier<List<Path>> recentFolders) {
         this.onNavigate = onNavigate;
+        this.recentFolders = recentFolders;
 
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         list.setCellRenderer(new SidebarRenderer());
         list.setFixedCellHeight(-1);
+        // A distinct surface (the panel colour, not the listing's List.background) so the
+        // sidebar reads as a frame around the file views, like the main window's tree region.
+        list.setBackground(UIManager.getColor("Panel.background"));
         rebuild();
 
         list.addListSelectionListener(e -> {
@@ -91,8 +98,7 @@ final class FileDialogSidebar {
             JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
         scroll.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1,
             UIManager.getColor("Component.borderColor")));
-        scroll.setPreferredSize(new Dimension(185, 10));
-        scroll.setMinimumSize(new Dimension(140, 10));
+        scroll.setMinimumSize(new Dimension(120, 10));
     }
 
     JComponent component() {
@@ -130,11 +136,14 @@ final class FileDialogSidebar {
             volumes.forEach(model::addElement);
         }
 
-        List<String> recents = FileDialogHistory.recentPaths();
+        // Recent folders come from the same tracking as the File menu's "Recent files" /
+        // "Recent folders" submenus — one navigation memory, not a dialog-private one.
+        // Existence is deliberately not checked here: a stat on a dead network path
+        // could hang the sidebar build, and navigation copes with missing folders.
+        List<Path> recents = recentFolders != null ? recentFolders.get() : List.of();
         if (!recents.isEmpty()) {
             model.addElement(new Item("Recent", null, null));
-            for (String p : recents) {
-                Path path = Path.of(p);
+            for (Path path : recents) {
                 model.addElement(new Item(labelFor(path), path, FontAwesomeSolid.HISTORY));
             }
         }
@@ -226,14 +235,24 @@ final class FileDialogSidebar {
             JLabel label = (JLabel) super.getListCellRendererComponent(
                 jList, item.label(), index, !item.isHeader() && selected, false);
             if (item.isHeader()) {
-                Font base = label.getFont();
-                label.setFont(base.deriveFont(Font.BOLD, base.getSize2D() - 2f));
-                label.setForeground(UIManager.getColor("Kalix.tree.mutedForeground"));
+                // Same styling as the project-tree header in the main window
+                // (ProjectTreePanel.applyHeaderStyle): bold default label font on the
+                // menu bar's background, so the two read as one visual idiom.
+                Font base = UIManager.getFont("Label.font");
+                if (base != null) {
+                    label.setFont(base.deriveFont(Font.BOLD));
+                }
+                Color headerBg = UIManager.getColor("MenuBar.background");
+                if (headerBg != null) {
+                    label.setOpaque(true);
+                    label.setBackground(new Color(headerBg.getRGB()));
+                }
+                label.setForeground(UIManager.getColor("Label.foreground"));
                 label.setIcon(null);
-                label.setBorder(BorderFactory.createEmptyBorder(index == 0 ? 8 : 14, 10, 2, 8));
+                label.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
             } else {
                 label.setIcon(FontIcon.of(item.glyph(), 13,
-                    ThemeUtils.iconColor(UIManager.getColor("List.background"))));
+                    ThemeUtils.iconColor(UIManager.getColor("Panel.background"))));
                 label.setBorder(BorderFactory.createEmptyBorder(3, 18, 3, 8));
             }
             return label;
