@@ -29,7 +29,7 @@ fn apply_patch(
         Some(model.working_directory.clone()),
     )?;
     // Reject poorly configured models
-    patched_model.configure_model_structure()?;
+    patched_model.validate_model_structure()?;
     Ok(patched_model)
 }
 

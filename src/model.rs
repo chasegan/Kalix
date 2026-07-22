@@ -228,7 +228,7 @@ impl Model {
     /// validate a model's shape without requiring its `[inputs]` to be supplied
     /// yet (e.g. a bare declaration awaiting `set_input()`). `configure()` runs
     /// this first, then the data-dependent steps that only `run()` needs.
-    pub fn configure_model_structure(&mut self) -> Result<(), String> {
+    fn configure_model_structure(&mut self) -> Result<(), String> {
         //1) Define output series
         for series_name in self.outputs.iter() {
             let idx = self.data_cache.get_or_add_new_series(series_name, false);
@@ -242,6 +242,81 @@ impl Model {
 
         //2) Nodes ask data_cache for idx of relevant data series for input
         self.initialize_nodes()?;
+
+        //3) Validate link ordering (structural only, no input data required).
+        //   Also re-checked in initialize_network() before every run(), since
+        //   that call additionally resets per-run node/ordering state -- but
+        //   without it here, structural link errors were invisible to callers
+        //   that only ever reach configure_model_structure() (e.g. via
+        //   validate_model_structure(), used by the Python API's
+        //   from_file/from_model_string) and never call run().
+        self.check_execution_order()?;
+
+        Ok(())
+    }
+
+    /// Every `data.*` series must resolve to an actual input column. Internal
+    /// building block for `configure()` and `validate_model_structure()`,
+    /// which need different tolerance for aliases still awaiting `set_input()`:
+    ///
+    /// - `allow_pending_declarations = false` (used by `configure()`, after its
+    ///   own "declared but not supplied" check has already rejected any input
+    ///   that's still unfilled): a reference into an open declaration is an
+    ///   error, same as any other unresolved reference.
+    /// - `allow_pending_declarations = true` (used by `validate_model_structure()`,
+    ///   which runs at load/patch time, before `set_input()` gets a chance to
+    ///   run): a reference into a still-open declared-but-unsupplied alias is
+    ///   skipped rather than reported as unknown -- it isn't a typo, just pending.
+    fn validate_data_references(&self, allow_pending_declarations: bool) -> Result<(), String> {
+        let pending_aliases: HashSet<String> = if allow_pending_declarations {
+            self.input_sources.iter()
+                .filter_map(|s| match s {
+                    TimeseriesInputDefinition::Declaration { alias } => Some(alias.to_lowercase()),
+                    _ => None,
+                })
+                .collect()
+        } else {
+            HashSet::new()
+        };
+
+        for idx in 0..self.data_cache.series.len() {
+            let name = &self.data_cache.series_name[idx];
+            if name.starts_with("data.") {
+                let name_lower = name.to_lowercase();
+                // segment 1 of "data.<alias>.<...>" is the alias/source name
+                if let Some(alias) = name_lower.split('.').nth(1) {
+                    if pending_aliases.contains(alias) {
+                        continue;
+                    }
+                }
+                let mut found = false;
+                for ts in self.input_columns() {
+                    if name_lower == ts.full_colindex_path || name_lower == ts.full_colname_path {
+                        found = true;
+                        break;
+                    }
+                    // Also check alias paths if they exist
+                    if let Some(alias_colname) = &ts.alias_colname_path {
+                        if name_lower == *alias_colname {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if let Some(alias_colindex) = &ts.alias_colindex_path {
+                        if name_lower == *alias_colindex {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+                if !found {
+                    return Err(format!(
+                        "Data reference '{}' was not found in any input file. Check for typos in your model file.",
+                        name
+                    ));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -365,40 +440,19 @@ impl Model {
         //   validation in auto_determine_simulation_period() doesn't check.
         //   Note: We only check that the reference is valid (exists in an input file),
         //   not that it has values - non-critical data is allowed to have missing values.
-        for idx in 0..self.data_cache.series.len() {
-            let name = &self.data_cache.series_name[idx];
-            if name.starts_with("data.") {
-                let name_lower = name.to_lowercase();
-                let mut found = false;
-                for ts in self.input_columns() {
-                    if name_lower == ts.full_colindex_path || name_lower == ts.full_colname_path {
-                        found = true;
-                        break;
-                    }
-                    // Also check alias paths if they exist
-                    if let Some(alias_colname) = &ts.alias_colname_path {
-                        if name_lower == *alias_colname {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if let Some(alias_colindex) = &ts.alias_colindex_path {
-                        if name_lower == *alias_colindex {
-                            found = true;
-                            break;
-                        }
-                    }
-                }
-                if !found {
-                    return Err(format!(
-                        "Data reference '{}' was not found in any input file. Check for typos in your model file.",
-                        name
-                    ));
-                }
-            }
-        }
+        self.validate_data_references(false)?;
 
         // Return
+        Ok(())
+    }
+
+    /// Validate a model's shape and its `data.*` references without requiring
+    /// `[inputs]` to be fully supplied yet -- the load/patch-time counterpart
+    /// to `configure()`, which additionally requires the simulation period and
+    /// input data itself.
+    pub fn validate_model_structure(&mut self) -> Result<(), String> {
+        self.configure_model_structure()?;
+        self.validate_data_references(true)?;
         Ok(())
     }
 
