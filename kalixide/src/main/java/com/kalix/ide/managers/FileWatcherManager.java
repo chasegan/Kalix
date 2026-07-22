@@ -38,7 +38,16 @@ public class FileWatcherManager {
      */
     private static final long SELF_SAVE_IGNORE_WINDOW_MS = 2000;
 
+    /**
+     * How long after a DELETE event to wait before declaring the file missing. External
+     * renames and editors' safe-write saves produce delete+create bursts; the delay lets the
+     * file "come back" (same path) before we alarm the user.
+     */
+    private static final int MISSING_FILE_DEBOUNCE_MS = 600;
+
     private final Consumer<File> fileReloadCallback;
+    /** Notified when an open file has verifiably vanished from disk (may be null). */
+    private final Consumer<File> fileMissingCallback;
     private final FsWatcher fsWatcher;
 
     /**
@@ -54,10 +63,14 @@ public class FileWatcherManager {
     /**
      * Creates a new FileWatcherManager.
      *
-     * @param fileReloadCallback Callback (invoked on the EDT) when a file should be reloaded
+     * @param fileReloadCallback  Callback (invoked on the EDT) when a file should be reloaded
+     * @param fileMissingCallback Callback (invoked on the EDT) when an open file has vanished
+     *                            from disk — an external delete, or a rename the watcher only
+     *                            sees as an uncorrelatable delete+create pair. May be null.
      */
-    public FileWatcherManager(Consumer<File> fileReloadCallback) {
+    public FileWatcherManager(Consumer<File> fileReloadCallback, Consumer<File> fileMissingCallback) {
         this.fileReloadCallback = fileReloadCallback;
+        this.fileMissingCallback = fileMissingCallback;
         this.fsWatcher = new FsWatcher(this::onFsEvent);
     }
 
@@ -145,8 +158,12 @@ public class FileWatcherManager {
      * is a content change (create/modify), and isn't within the self-save ignore window.
      */
     private void onFsEvent(FsWatcher.Event event) {
+        if (event.kind() == FsWatcher.Kind.DELETE) {
+            onFileDeleted(event);
+            return;
+        }
         if (event.kind() != FsWatcher.Kind.MODIFY && event.kind() != FsWatcher.Kind.CREATE) {
-            return; // structural events don't change an open file's content
+            return; // other structural events don't change an open file's content
         }
         File changed = canonical(event.path().toFile());
         File original = watchedByCanonical.get(changed);
@@ -163,6 +180,39 @@ public class FileWatcherManager {
         // Hand back the original (as-opened) file, not the canonical form: documents are keyed
         // by the path the user opened, so the reload lookup must use that.
         fileReloadCallback.accept(original);
+    }
+
+    /**
+     * A DELETE arrived for one of the open files. Debounce before alarming: external renames
+     * and safe-write saves show up as delete+create bursts, so only report the file missing
+     * if it still doesn't exist after the wait (and we didn't just save it ourselves).
+     */
+    private void onFileDeleted(FsWatcher.Event event) {
+        if (fileMissingCallback == null) {
+            return;
+        }
+        // The path no longer exists, so canonical() falls back to the absolute form; look up
+        // by both to be safe.
+        File deleted = event.path().toFile();
+        File original = watchedByCanonical.get(canonical(deleted));
+        if (original == null) {
+            original = watchedByCanonical.get(deleted.getAbsoluteFile());
+        }
+        if (original == null) {
+            return; // a sibling in a watched directory; not one of our files
+        }
+        Long until = ignoreUntil.get(canonical(deleted));
+        if (until != null && System.currentTimeMillis() < until) {
+            return; // our own (safe-)save of this file
+        }
+        File finalOriginal = original;
+        javax.swing.Timer timer = new javax.swing.Timer(MISSING_FILE_DEBOUNCE_MS, e -> {
+            if (!finalOriginal.exists() && watchedByCanonical.containsValue(finalOriginal)) {
+                fileMissingCallback.accept(finalOriginal);
+            }
+        });
+        timer.setRepeats(false);
+        timer.start();
     }
 
     /**

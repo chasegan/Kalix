@@ -37,4 +37,11 @@ public interface TreeHost {
 
     /** @return whether hidden (dot-prefixed) entries are currently shown. */
     boolean isShowHiddenFiles();
+
+    /**
+     * A file or folder was renamed or moved by a tree operation. Fired on the EDT after the
+     * filesystem change succeeds, so the host can re-point anything holding the old path —
+     * most importantly open editor tabs (including documents under a renamed folder).
+     */
+    void pathMoved(File oldPath, File newPath);
 }

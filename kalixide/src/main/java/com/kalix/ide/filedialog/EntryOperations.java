@@ -30,30 +30,31 @@ final class EntryOperations {
     /**
      * Prompts for a new name and renames the entry.
      *
-     * @return true if the filesystem changed (so the caller should refresh)
+     * @return the new path if the filesystem changed (so the caller should refresh and
+     *         re-point any open editors), or null if cancelled/failed
      */
-    static boolean rename(Component parent, FsEntry entry) {
+    static Path rename(Component parent, FsEntry entry) {
         String name = (String) JOptionPane.showInputDialog(parent,
             "New name:", "Rename",
             JOptionPane.PLAIN_MESSAGE, null, null, entry.name());
         if (name == null || name.isBlank() || name.trim().equals(entry.name())) {
-            return false;
+            return null;
         }
         Path target = entry.path().resolveSibling(name.trim());
         if (Files.exists(target)) {
             JOptionPane.showMessageDialog(parent,
                 "A file or folder named \"" + name.trim() + "\" already exists.",
                 "Rename Failed", JOptionPane.WARNING_MESSAGE);
-            return false;
+            return null;
         }
         try {
             Files.move(entry.path(), target);
-            return true;
+            return target;
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(parent,
                 "Could not rename \"" + entry.name() + "\": " + ex.getMessage(),
                 "Rename Failed", JOptionPane.WARNING_MESSAGE);
-            return false;
+            return null;
         }
     }
 

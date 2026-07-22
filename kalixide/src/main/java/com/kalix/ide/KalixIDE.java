@@ -224,7 +224,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         processExecutor = new ProcessExecutor();
 
         // File watcher manager
-        fileWatcherManager = new FileWatcherManager(this::handleFileReload);
+        fileWatcherManager = new FileWatcherManager(this::handleFileReload, this::handleFileMissing);
 
         // Schema manager for linting
         schemaManager = new SchemaManager();
@@ -266,6 +266,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             }
             return recents.stream().limit(8).toList();
         });
+
+        // Renames made inside a file dialog re-point open editor tabs, exactly as the
+        // project tree's renames do.
+        com.kalix.ide.filedialog.KalixFileDialog.setPathMovedListener(
+            (oldPath, newPath) -> relinkOpenDocuments(oldPath.toFile(), newPath.toFile()));
     }
 
     /**
@@ -599,6 +604,63 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
+     * Re-points open documents after a file or folder was renamed/moved (by the project tree
+     * or a file dialog): any document backed by the old path — or by a path underneath it,
+     * for folder moves — gets its backing file remapped, its tab refreshed, and the watcher
+     * re-derived. Without this, a renamed file's tab kept the dead path and a later Save
+     * silently resurrected the old file name.
+     */
+    private void relinkOpenDocuments(File oldPath, File newPath) {
+        java.nio.file.Path oldP = oldPath.toPath().toAbsolutePath().normalize();
+        boolean relinked = false;
+        for (KalixDocument document : documentManager.getDocuments()) {
+            File backing = document.getFile();
+            if (backing == null) {
+                continue;
+            }
+            java.nio.file.Path p = backing.toPath().toAbsolutePath().normalize();
+            File remapped;
+            if (p.equals(oldP)) {
+                remapped = newPath;
+            } else if (p.startsWith(oldP)) {
+                remapped = newPath.toPath().resolve(oldP.relativize(p)).toFile();
+            } else {
+                continue;
+            }
+            document.setFile(remapped);
+            documentTabPane.refreshTab(document);
+            if (document == documentManager.getActiveDocument()) {
+                titleBarManager.updateTitle(document.isDirty(), document::getFile);
+                revealActiveFileInTree();
+            }
+            if (backing.getAbsolutePath().equals(PreferenceKeys.LAST_OPENED_FILE.get())) {
+                PreferenceKeys.LAST_OPENED_FILE.set(remapped.getAbsolutePath());
+            }
+            relinked = true;
+        }
+        if (relinked) {
+            refreshWatchedFiles();
+        }
+    }
+
+    /**
+     * An open document's backing file vanished from disk (external delete, or an external
+     * rename we cannot correlate — the watcher only sees an uncorrelatable delete+create
+     * pair). The document is kept, marked dirty (so closing warns and Save knowingly
+     * recreates the file), and the user is told.
+     */
+    private void handleFileMissing(File file) {
+        KalixDocument document = documentManager.findByFile(file);
+        if (document == null) {
+            return;
+        }
+        document.setDirty(true);
+        documentTabPane.refreshTab(document);
+        updateStatus("File deleted or renamed on disk: " + file.getName()
+            + " — Save will recreate it at the old path");
+    }
+
+    /**
      * Updates the file watcher with the files of all open documents, so every tab — not just
      * the active one — is auto-reloaded on external changes.
      */
@@ -683,6 +745,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             @Override
             public boolean isShowHiddenFiles() {
                 return KalixIDE.this.isShowHiddenFiles();
+            }
+
+            @Override
+            public void pathMoved(File oldPath, File newPath) {
+                relinkOpenDocuments(oldPath, newPath);
             }
         });
         // Apply the persisted "show hidden files" choice before any folder is restored into the tree.

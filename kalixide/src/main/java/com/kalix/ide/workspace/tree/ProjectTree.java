@@ -91,7 +91,7 @@ public class ProjectTree extends JTree {
             }
         });
 
-        this.fileOps = new TreeFileOperations(this, host::activeFile);
+        this.fileOps = new TreeFileOperations(this, host::activeFile, host::pathMoved);
         this.contextMenu = new TreeContextMenu(this, fileOps, host);
 
         // Drag selected entries out; accept drops onto a folder node (move, or copy with a

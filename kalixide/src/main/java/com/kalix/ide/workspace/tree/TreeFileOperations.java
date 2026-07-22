@@ -45,10 +45,14 @@ class TreeFileOperations {
     private final Component parent;
     /** Supplies the active document's file (or null if untitled/none), for relative paths. */
     private final Supplier<File> activeFileSupplier;
+    /** Notified (on the EDT) after a successful rename/move, so open editors can re-point. */
+    private final java.util.function.BiConsumer<File, File> pathMovedCallback;
 
-    TreeFileOperations(Component parent, Supplier<File> activeFileSupplier) {
+    TreeFileOperations(Component parent, Supplier<File> activeFileSupplier,
+                       java.util.function.BiConsumer<File, File> pathMovedCallback) {
         this.parent = parent;
         this.activeFileSupplier = activeFileSupplier;
+        this.pathMovedCallback = pathMovedCallback;
     }
 
     // --- Background execution ---
@@ -174,6 +178,9 @@ class TreeFileOperations {
         }
         try {
             Files.move(file.toPath(), target.toPath());
+            // Re-point open editors (tabs) at the new path before the watcher's
+            // delete+create pair arrives — the pair alone can't be correlated.
+            pathMovedCallback.accept(file, target);
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(parent,
                 "Could not rename \"" + file.getName() + "\": " + ex.getMessage(),
@@ -372,6 +379,7 @@ class TreeFileOperations {
         // Copies recurse into whole folder trees; run the transfer off the EDT and report
         // all failures in one summary dialog when it finishes.
         List<String> failures = new ArrayList<>();
+        List<File[]> moved = new ArrayList<>(); // {source, dest} pairs for editor re-pointing
         offEdt(() -> {
             for (File source : sources) {
                 File dest = new File(targetDir, source.getName());
@@ -390,12 +398,17 @@ class TreeFileOperations {
                         }
                     } else {
                         Files.move(source.toPath(), dest.toPath());
+                        moved.add(new File[] {source, dest});
                     }
                 } catch (IOException ex) {
                     failures.add(source.getName() + " (" + ex.getMessage() + ")");
                 }
             }
         }, error -> {
+            // Re-point open editors at moved paths (on the EDT, after the transfer).
+            for (File[] pair : moved) {
+                pathMovedCallback.accept(pair[0], pair[1]);
+            }
             if (!failures.isEmpty()) {
                 JOptionPane.showMessageDialog(parent,
                     (copy ? "Some items could not be copied:\n\n" : "Some items could not be moved:\n\n")

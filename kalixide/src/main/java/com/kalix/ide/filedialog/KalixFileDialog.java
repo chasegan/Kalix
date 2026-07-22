@@ -110,6 +110,9 @@ public final class KalixFileDialog implements FileViewHost {
     /** Recent folders shared from the main window's Recent Files/Folders tracking. */
     private static java.util.function.Supplier<List<Path>> recentFoldersProvider;
 
+    /** Notified after an in-dialog rename, so open editor tabs can re-point (may be null). */
+    private static java.util.function.BiConsumer<Path, Path> pathMovedListener;
+
     /**
      * Registers the app-wide source of the sidebar's Recent section. Called once at startup
      * with a supplier backed by the main window's Recent Files / Recent Folders managers, so
@@ -117,6 +120,15 @@ public final class KalixFileDialog implements FileViewHost {
      */
     public static void setRecentFoldersProvider(java.util.function.Supplier<List<Path>> provider) {
         recentFoldersProvider = provider;
+    }
+
+    /**
+     * Registers the app-wide listener for in-dialog renames (old path, new path), so
+     * documents open in editor tabs survive being renamed from inside a file dialog —
+     * the same re-pointing the project tree's rename does.
+     */
+    public static void setPathMovedListener(java.util.function.BiConsumer<Path, Path> listener) {
+        pathMovedListener = listener;
     }
 
     private KalixFileDialog(Mode mode, Window owner) {
@@ -272,7 +284,11 @@ public final class KalixFileDialog implements FileViewHost {
         menu.addSeparator();
         javax.swing.JMenuItem rename = new javax.swing.JMenuItem("Rename…");
         rename.addActionListener(e -> {
-            if (EntryOperations.rename(dialog, entry)) {
+            Path renamedTo = EntryOperations.rename(dialog, entry);
+            if (renamedTo != null) {
+                if (pathMovedListener != null) {
+                    pathMovedListener.accept(entry.path(), renamedTo);
+                }
                 refreshAfterMutation(entry);
             }
         });
