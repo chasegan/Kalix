@@ -193,10 +193,6 @@ public final class PreferenceKeys {
     public static final Pref<String> FILE_DIALOG_VIEW =
         Pref.fileString("fileDialog.view", "list");
 
-    /** Whether the file dialogs show hidden (dot-prefixed) entries. */
-    public static final Pref<Boolean> FILE_DIALOG_SHOW_HIDDEN =
-        Pref.fileBoolean("fileDialog.showHidden", false);
-
     /** Pinned sidebar folders (absolute paths). File-based deliberately: a team can ship
      *  shared pins (e.g. the modelling network drive) with the project's preference file. */
     public static final Pref<List<String>> FILE_DIALOG_PINNED =

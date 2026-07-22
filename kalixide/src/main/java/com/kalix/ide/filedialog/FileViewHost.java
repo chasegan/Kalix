@@ -32,4 +32,7 @@ interface FileViewHost {
 
     /** A listing failed; show the message in the dialog's status area. */
     void listingFailed(String message);
+
+    /** Right-click on an entry: show the rename/delete context menu at the given point. */
+    void showEntryContextMenu(FsEntry entry, java.awt.Component invoker, int x, int y);
 }

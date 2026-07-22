@@ -99,6 +99,22 @@ final class ColumnsFileView {
         columns.forEach(BrowserColumn::reload);
     }
 
+    /**
+     * Re-lists just the column showing {@code dir} (no-op if it isn't on the trail),
+     * optionally selecting {@code selectName} once the fresh listing arrives. Used after
+     * in-dialog mutations (new folder, rename, delete) — the dialog has no filesystem
+     * watcher, so changes it makes are reflected explicitly.
+     */
+    void reloadColumn(Path dir, String selectName) {
+        for (BrowserColumn column : columns) {
+            if (column.directory.equals(dir)) {
+                column.pendingSelection = selectName;
+                column.reload();
+                return;
+            }
+        }
+    }
+
     /** The deepest directory on the trail (the dialog's current directory in this view). */
     Path deepestDirectory() {
         return columns.isEmpty() ? null : columns.get(columns.size() - 1).directory;
@@ -198,6 +214,28 @@ final class ColumnsFileView {
                         }
                     }
                 }
+
+                @Override
+                public void mousePressed(MouseEvent e) {
+                    maybeShowPopup(e);
+                }
+
+                @Override
+                public void mouseReleased(MouseEvent e) {
+                    maybeShowPopup(e);
+                }
+
+                private void maybeShowPopup(MouseEvent e) {
+                    if (!e.isPopupTrigger()) {
+                        return;
+                    }
+                    int index = list.locationToIndex(e.getPoint());
+                    if (index < 0 || !list.getCellBounds(index, index).contains(e.getPoint())) {
+                        return;
+                    }
+                    list.setSelectedIndex(index); // right-click selects, as in the project tree
+                    host.showEntryContextMenu(model.get(index), list, e.getX(), e.getY());
+                }
             });
             list.addKeyListener(new KeyAdapter() {
                 @Override
@@ -275,6 +313,9 @@ final class ColumnsFileView {
                             break;
                         }
                     }
+                    // One-shot: consumed now, so later refilters (hidden toggle, filter
+                    // change) don't yank the selection back to this entry.
+                    pendingSelection = null;
                 } else if (selected != null) {
                     int i = model.indexOf(selected);
                     if (i >= 0) {

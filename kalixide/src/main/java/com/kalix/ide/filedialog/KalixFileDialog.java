@@ -213,7 +213,7 @@ public final class KalixFileDialog implements FileViewHost {
     @Override
     public void directoryShown(Path dir) {
         currentDir = dir;
-        statusLabel.setText(" ");
+        clearStatus();
         rebuildBreadcrumb();
         pinToggle.setSelected(FileDialogSidebar.isPinned(dir));
         recordVisit(dir);
@@ -241,7 +241,50 @@ public final class KalixFileDialog implements FileViewHost {
 
     @Override
     public void listingFailed(String message) {
-        statusLabel.setText(message);
+        showStatus(message);
+    }
+
+    @Override
+    public void showEntryContextMenu(FsEntry entry, java.awt.Component invoker, int x, int y) {
+        // Same shape as the project tree's menu (context-menu-style: modify group, then the
+        // destructive item isolated with its landmark icon), scoped to what makes sense
+        // mid-dialog: fixing a name, removing a mistake.
+        javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+        javax.swing.JMenuItem rename = new javax.swing.JMenuItem("Rename…");
+        rename.addActionListener(e -> {
+            if (EntryOperations.rename(dialog, entry)) {
+                refreshAfterMutation(entry);
+            }
+        });
+        menu.add(rename);
+        menu.addSeparator();
+        javax.swing.JMenuItem delete =
+            new javax.swing.JMenuItem("Delete", com.kalix.ide.icons.MenuIcons.delete());
+        delete.addActionListener(e -> {
+            if (EntryOperations.delete(dialog, entry)) {
+                refreshAfterMutation(entry);
+            }
+        });
+        menu.add(delete);
+        menu.show(invoker, x, y);
+    }
+
+    /**
+     * Reflects an in-dialog mutation (rename/delete) back into the views. The dialog has no
+     * filesystem watcher, so what it changes it must also redraw.
+     */
+    private void refreshAfterMutation(FsEntry entry) {
+        selectedEntry = null;
+        Path parent = entry.path().getParent();
+        if (columnsMode) {
+            columnsView.reloadColumn(parent, null);
+            if (entry.directory() && parent != null) {
+                navigateTo(parent); // collapse any trail rooted in the renamed/deleted folder
+            }
+        } else {
+            listView.refresh();
+        }
+        updateOkEnablement();
     }
 
     // --- UI assembly ---
@@ -332,10 +375,13 @@ public final class KalixFileDialog implements FileViewHost {
             sidebar.rebuild();
         });
 
+        // One "show hidden files" truth across the app: the dialog reads and writes the
+        // same preference as the main window's project tree (View menu / tree context
+        // menu), so the two never disagree at next open.
         hiddenToggle = iconToggle(FontAwesomeSolid.EYE_SLASH, "Show hidden files");
-        hiddenToggle.setSelected(PreferenceKeys.FILE_DIALOG_SHOW_HIDDEN.get());
+        hiddenToggle.setSelected(PreferenceKeys.TREE_SHOW_HIDDEN_FILES.get());
         hiddenToggle.addActionListener(e -> {
-            PreferenceKeys.FILE_DIALOG_SHOW_HIDDEN.set(hiddenToggle.isSelected());
+            PreferenceKeys.TREE_SHOW_HIDDEN_FILES.set(hiddenToggle.isSelected());
             refilterViews();
         });
 
@@ -362,18 +408,20 @@ public final class KalixFileDialog implements FileViewHost {
     }
 
     private JComponent buildFooter() {
-        JPanel footer = new JPanel(new BorderLayout(8, 4));
+        // One controls row; the status line above it stays invisible (zero height) until
+        // there is actually something to say, so the footer carries no dead space.
+        JPanel footer = new JPanel(new BorderLayout(8, 2));
         footer.setBorder(BorderFactory.createEmptyBorder(4, 10, 8, 10));
 
-        statusLabel = new JLabel(" ");
-        statusLabel.setForeground(UIManager.getColor("Kalix.tree.mutedForeground"));
+        statusLabel = new JLabel();
+        statusLabel.setVisible(false);
         Color muted = UIManager.getColor("Kalix.tree.mutedForeground");
         if (muted != null) {
             statusLabel.setForeground(muted);
         }
 
-        JPanel middle = new JPanel(new BorderLayout(8, 0));
-        middle.setOpaque(false);
+        JPanel row = new JPanel(new BorderLayout(8, 0));
+        row.setOpaque(false);
         if (mode == Mode.SAVE_FILE) {
             JPanel namePanel = new JPanel(new BorderLayout(6, 0));
             namePanel.setOpaque(false);
@@ -396,8 +444,11 @@ public final class KalixFileDialog implements FileViewHost {
                 }
             });
             namePanel.add(nameField, BorderLayout.CENTER);
-            middle.add(namePanel, BorderLayout.CENTER);
+            row.add(namePanel, BorderLayout.CENTER);
         }
+
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        right.setOpaque(false);
         if (!filters.isEmpty() && mode != Mode.CHOOSE_FOLDER) {
             List<FileDialogFilter> all = new ArrayList<>(filters);
             all.add(FileDialogFilter.ALL_FILES);
@@ -407,16 +458,14 @@ public final class KalixFileDialog implements FileViewHost {
             // by default made the folder look emptier than it is.
             filterCombo.setSelectedIndex(all.size() - 1);
             filterCombo.addActionListener(e -> refilterViews());
-            middle.add(filterCombo, BorderLayout.EAST);
+            right.add(filterCombo);
+            right.add(Box.createHorizontalStrut(6));
         }
-
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        buttons.setOpaque(false);
         if (mode != Mode.OPEN_FILE) {
             JButton newFolder = new JButton("New folder…");
             newFolder.addActionListener(e -> createNewFolder());
-            buttons.add(newFolder);
-            buttons.add(Box.createHorizontalStrut(12));
+            right.add(newFolder);
+            right.add(Box.createHorizontalStrut(12));
         }
         JButton cancelButton = new JButton("Cancel");
         cancelButton.addActionListener(e -> cancel());
@@ -426,13 +475,23 @@ public final class KalixFileDialog implements FileViewHost {
             case CHOOSE_FOLDER -> "Choose";
         });
         okButton.addActionListener(e -> accept());
-        buttons.add(cancelButton);
-        buttons.add(okButton);
+        right.add(cancelButton);
+        right.add(okButton);
+        row.add(right, BorderLayout.EAST);
 
         footer.add(statusLabel, BorderLayout.NORTH);
-        footer.add(middle, BorderLayout.CENTER);
-        footer.add(buttons, BorderLayout.EAST);
+        footer.add(row, BorderLayout.CENTER);
         return footer;
+    }
+
+    private void showStatus(String message) {
+        statusLabel.setText(message);
+        statusLabel.setVisible(true);
+    }
+
+    private void clearStatus() {
+        statusLabel.setText("");
+        statusLabel.setVisible(false);
     }
 
     private JButton iconButton(org.kordamp.ikonli.Ikon glyph, String tooltip) {
@@ -456,7 +515,7 @@ public final class KalixFileDialog implements FileViewHost {
     private void navigateTo(Path dir) {
         currentDir = dir;
         selectedEntry = null;
-        statusLabel.setText(" ");
+        clearStatus();
         rebuildBreadcrumb();
         pinToggle.setSelected(FileDialogSidebar.isPinned(dir));
         recordVisit(dir);
@@ -519,7 +578,7 @@ public final class KalixFileDialog implements FileViewHost {
         if (Files.isDirectory(dir)) {
             navigateTo(dir);
         } else {
-            statusLabel.setText("Folder no longer exists: " + dir);
+            showStatus("Folder no longer exists: " + dir);
             sidebar.clearSelection();
         }
     }
@@ -562,7 +621,7 @@ public final class KalixFileDialog implements FileViewHost {
             JLabel ellipsis = new JLabel("…");
             ellipsis.setToolTipText(chain.get(first - 1).toString());
             breadcrumb.add(ellipsis);
-            breadcrumb.add(new JLabel("›"));
+            breadcrumb.add(separator());
         }
         for (int i = first; i < chain.size(); i++) {
             Path p = chain.get(i);
@@ -575,11 +634,21 @@ public final class KalixFileDialog implements FileViewHost {
             segment.addActionListener(e -> navigateTo(p));
             breadcrumb.add(segment);
             if (i < chain.size() - 1) {
-                breadcrumb.add(new JLabel("›"));
+                breadcrumb.add(separator());
             }
         }
         breadcrumb.revalidate();
         breadcrumb.repaint();
+    }
+
+    /** The breadcrumb separator: a path-style slash in the muted tone, full label size. */
+    private static JLabel separator() {
+        JLabel slash = new JLabel("/");
+        Color muted = UIManager.getColor("Kalix.tree.mutedForeground");
+        if (muted != null) {
+            slash.setForeground(muted);
+        }
+        return slash;
     }
 
     private FileDialogFilter activeFilter() {
@@ -677,9 +746,14 @@ public final class KalixFileDialog implements FileViewHost {
         }
         try {
             Path created = Files.createDirectory(currentDir.resolve(name.trim()));
+            // No watcher in the dialog: explicitly refresh the parent's (cached) column so
+            // the new folder appears in the trail, then step into it.
+            if (columnsMode) {
+                columnsView.reloadColumn(currentDir, created.getFileName().toString());
+            }
             navigateTo(created);
         } catch (IOException ex) {
-            statusLabel.setText("Could not create folder: " + ex.getMessage());
+            showStatus("Could not create folder: " + ex.getMessage());
         }
     }
 }
