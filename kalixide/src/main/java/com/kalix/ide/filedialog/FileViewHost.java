@@ -35,4 +35,10 @@ interface FileViewHost {
 
     /** Right-click on an entry: show the rename/delete context menu at the given point. */
     void showEntryContextMenu(FsEntry entry, java.awt.Component invoker, int x, int y);
+
+    /**
+     * Right-click on empty space: the subject is the containing folder being viewed
+     * (context-menu-style §4) — the current directory, or a specific column's directory.
+     */
+    void showContainerContextMenu(java.nio.file.Path dir, java.awt.Component invoker, int x, int y);
 }

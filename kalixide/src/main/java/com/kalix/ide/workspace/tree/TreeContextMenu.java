@@ -123,20 +123,21 @@ class TreeContextMenu {
                     sel -> fileOps.createChild(file(sel), false)),
                 item("New folder…", TreeContextMenu::isSingle,
                     sel -> fileOps.createChild(file(sel), true))),
-            // Modify
+            // Modify — identity-changing verbs never apply to the root the user is
+            // standing in (context-menu-style §4), which empty-space clicks select.
             List.of(
-                item("Rename…", TreeContextMenu::isSingle,
+                item("Rename…", sel -> isSingle(sel) && noneIsRoot(sel),
                     sel -> fileOps.rename(file(sel))),
-                item("Duplicate…", TreeContextMenu::isSingle,
+                item("Duplicate…", sel -> isSingle(sel) && noneIsRoot(sel),
                     sel -> fileOps.duplicate(file(sel))),
                 // Derives a new archive from the selection, like Duplicate derives a copy —
                 // and keeps it from surfacing as a folder's first (= primary-looking) item.
                 item("Zip", TreeContextMenu::isNotSingleZip,
                     sel -> fileOps.zipFiles(files(sel), tree.getRootFile()))
             ),
-            // Destructive (isolated)
+            // Destructive (isolated) — never the root (context-menu-style §4).
             List.of(
-                item("Delete", TreeContextMenu::any,
+                item("Delete", sel -> any(sel) && noneIsRoot(sel),
                     sel -> fileOps.delete(files(sel)), MenuIcons::delete)
             ),
             // View
@@ -193,6 +194,11 @@ class TreeContextMenu {
 
     private static boolean isSingleZip(List<FileTreeNode> sel) {
         return sel.size() == 1 && TreeFileOperations.isZip(file(sel));
+    }
+
+    /** True when the selection contains no root node — the empty-space subject. */
+    private boolean noneIsRoot(List<FileTreeNode> sel) {
+        return sel.stream().noneMatch(tree::isRoot);
     }
 
     private static boolean isNotSingleZip(List<FileTreeNode> sel) {

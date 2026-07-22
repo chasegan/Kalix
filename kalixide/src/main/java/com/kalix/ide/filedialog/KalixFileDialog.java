@@ -289,6 +289,28 @@ public final class KalixFileDialog implements FileViewHost {
         menu.show(invoker, x, y);
     }
 
+    @Override
+    public void showContainerContextMenu(Path dir, java.awt.Component invoker, int x, int y) {
+        // Empty space acts on the containing folder (context-menu-style §4): the create
+        // verb, then the view group. Identity-changing/destructive verbs never appear for
+        // the container the user is standing in.
+        javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+        javax.swing.JMenuItem newFolder = new javax.swing.JMenuItem("New folder…");
+        newFolder.addActionListener(e -> createNewFolderIn(dir));
+        menu.add(newFolder);
+        menu.addSeparator();
+        javax.swing.JMenuItem refresh = new javax.swing.JMenuItem("Refresh");
+        refresh.addActionListener(e -> {
+            if (columnsMode) {
+                columnsView.reloadColumn(dir, null);
+            } else {
+                listView.refresh();
+            }
+        });
+        menu.add(refresh);
+        menu.show(invoker, x, y);
+    }
+
     /**
      * Reflects an in-dialog mutation (rename/delete) back into the views. The dialog has no
      * filesystem watcher, so what it changes it must also redraw.

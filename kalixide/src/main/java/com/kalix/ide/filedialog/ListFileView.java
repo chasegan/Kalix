@@ -234,6 +234,10 @@ final class ListFileView {
         }
         int viewRow = table.rowAtPoint(e.getPoint());
         if (viewRow < 0) {
+            // Empty space acts on the folder being viewed (context-menu-style §4).
+            if (directory != null) {
+                host.showContainerContextMenu(directory, table, e.getX(), e.getY());
+            }
             return;
         }
         table.setRowSelectionInterval(viewRow, viewRow);

@@ -322,7 +322,9 @@ public class ProjectTree extends JTree {
         }
     }
 
-    private boolean isRoot(FileTreeNode node) {
+    /** Whether this node is the (hidden) root — package-private for the context menu's
+     *  root guards (per context-menu-style §4: rename/duplicate/delete never apply). */
+    boolean isRoot(FileTreeNode node) {
         return model != null && node == model.getRoot();
     }
 
@@ -338,14 +340,21 @@ public class ProjectTree extends JTree {
             return;
         }
         int row = getRowForLocation(e.getX(), e.getY());
+        List<FileTreeNode> subject;
         if (row < 0) {
+            // Empty space is not subject-less: the click acts on the open folder itself
+            // (context-menu-style §4) — so New file…/New folder… etc. work at the root.
             clearSelection();
-        } else if (!isRowSelected(row)) {
-            // Right-clicking a row outside the current selection acts on that row alone;
-            // right-clicking within a multi-selection keeps it, so the menu acts on all of it.
-            setSelectionRow(row);
+            subject = model != null ? List.of((FileTreeNode) model.getRoot()) : List.of();
+        } else {
+            if (!isRowSelected(row)) {
+                // Right-clicking a row outside the current selection acts on that row alone;
+                // right-clicking within a multi-selection keeps it, so the menu acts on all of it.
+                setSelectionRow(row);
+            }
+            subject = selectedNodes();
         }
-        JPopupMenu menu = contextMenu.build(selectedNodes());
+        JPopupMenu menu = contextMenu.build(subject);
         if (menu != null) {
             menu.show(this, e.getX(), e.getY());
         }

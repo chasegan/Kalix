@@ -53,6 +53,26 @@ final class ColumnsFileView {
         JPanel aligner = new JPanel(new java.awt.BorderLayout());
         aligner.setBackground(UIManager.getColor("List.background"));
         aligner.add(trail, java.awt.BorderLayout.WEST);
+        // The open area right of the last column belongs to the deepest folder on the
+        // trail (context-menu-style §4: empty space acts on the containing folder).
+        aligner.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                maybeShowPopup(e);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                maybeShowPopup(e);
+            }
+
+            private void maybeShowPopup(MouseEvent e) {
+                Path deepest = deepestDirectory();
+                if (e.isPopupTrigger() && deepest != null) {
+                    host.showContainerContextMenu(deepest, aligner, e.getX(), e.getY());
+                }
+            }
+        });
         scroll = new JScrollPane(aligner,
             JScrollPane.VERTICAL_SCROLLBAR_NEVER, JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
         scroll.getHorizontalScrollBar().setUnitIncrement(COLUMN_WIDTH / 4);
@@ -249,6 +269,9 @@ final class ColumnsFileView {
                     }
                     int index = list.locationToIndex(e.getPoint());
                     if (index < 0 || !list.getCellBounds(index, index).contains(e.getPoint())) {
+                        // Empty space in a column acts on that column's own folder
+                        // (context-menu-style §4) — each column knows its subject.
+                        host.showContainerContextMenu(directory, list, e.getX(), e.getY());
                         return;
                     }
                     list.setSelectedIndex(index); // right-click selects, as in the project tree
