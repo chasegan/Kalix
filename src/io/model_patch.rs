@@ -6,6 +6,10 @@ use crate::io::error::KalixIoError;
 use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
 
+/// Helper function for defining the patch functions. Note this is a full
+/// reuild/reparse for safety reasons - an invalid patch is rejected and won't
+/// invalidate the original model. This function is on the cold path, not called
+/// during simulation.
 fn apply_patch(
     model: &Model,
     patch_string: &str,
