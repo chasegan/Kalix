@@ -772,6 +772,49 @@ def test_get_outputs_on_inline_model():
     assert df.index[0] == pd.Timestamp("2000-01-01", tz="UTC")
 
 
+# --- get_outputs() casing --------------------------------------------------
+# [outputs] declares "Node.MyNode.DsFlow" in deliberately mixed case, to pin
+# that name matching is case-insensitive but the returned column always
+# carries the casing declared in [outputs] -- not whatever casing the caller
+# passed to get_outputs(), and not lower-cased either.
+
+_MIXED_CASE_OUTPUT_INI = (
+    "[kalix]\n"
+    "start = 2000-01-01T00:00:00\n"
+    "end = 2000-01-05T00:00:00\n"
+    "\n"
+    "[node.my_node]\n"
+    "loc = 0,0\n"
+    "type = inflow\n"
+    "inflow = 1.0\n"
+    "\n"
+    "[outputs]\n"
+    "Node.My_Node.Ds_1\n"
+)
+
+
+def test_get_outputs_column_name_matches_declared_casing():
+    model = kalix.load_string(_MIXED_CASE_OUTPUT_INI).run()
+    df = model.get_outputs()
+    assert list(df.columns) == ["Node.My_Node.Ds_1"]
+
+
+def test_get_outputs_explicit_name_lookup_is_case_insensitive():
+    """Requesting the output under a different casing than it was declared
+    under still succeeds -- lookup is case-insensitive."""
+    model = kalix.load_string(_MIXED_CASE_OUTPUT_INI).run()
+    df = model.get_outputs(["node.my_node.ds_1"])
+    assert len(df) > 0
+
+
+def test_get_outputs_explicit_name_returns_declared_casing():
+    """...but the returned column is still named with the casing declared
+    in [outputs], not the casing passed to get_outputs()."""
+    model = kalix.load_string(_MIXED_CASE_OUTPUT_INI).run()
+    df = model.get_outputs(["node.my_node.ds_1"])
+    assert list(df.columns) == ["Node.My_Node.Ds_1"]
+
+
 # --- Interrogating the model definition (spec sec. 5) -----------------------
 
 
