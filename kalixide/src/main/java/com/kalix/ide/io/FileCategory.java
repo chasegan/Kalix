@@ -1,4 +1,4 @@
-package com.kalix.ide.workspace.tree;
+package com.kalix.ide.io;
 
 import java.io.File;
 
@@ -7,10 +7,10 @@ import java.io.File;
  * everything else. Classification is by filename only (no disk access), so it is safe to call
  * from the cell renderer on every repaint.
  *
- * <p>Case-insensitive, matching {@link TreeFileOperations#isZip}: common desktop filesystems
+ * <p>Case-insensitive, matching {@code TreeFileOperations.isZip}: common desktop filesystems
  * are case-insensitive, so {@code MODEL.INI} is just as much a model as {@code model.ini}.
  */
-enum FileCategory {
+public enum FileCategory {
 
     /** A Kalix model file ({@code *.ini}). */
     MODEL,
@@ -24,11 +24,11 @@ enum FileCategory {
     /** Any other file. */
     OTHER;
 
-    static FileCategory of(File file) {
+    public static FileCategory of(File file) {
         return ofName(file.getName());
     }
 
-    static FileCategory ofName(String name) {
+    public static FileCategory ofName(String name) {
         String lower = name.toLowerCase();
         if (lower.endsWith(".ini")) {
             return MODEL;

@@ -1,6 +1,7 @@
 package com.kalix.ide.builders;
 
 import com.kalix.ide.constants.AppConstants;
+import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.themes.NodeTheme;
 
@@ -9,14 +10,10 @@ import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
-import javax.swing.KeyStroke;
 import javax.swing.event.MenuEvent;
 import javax.swing.event.MenuListener;
 import javax.swing.text.DefaultEditorKit;
-import java.awt.Toolkit;
 import java.awt.event.ActionListener;
-import java.awt.event.InputEvent;
-import java.awt.event.KeyEvent;
 import java.io.File;
 import java.util.List;
 import java.util.function.Consumer;
@@ -210,9 +207,9 @@ public class MenuBarBuilder {
     private JMenu createFileMenu() {
         fileMenu = new JMenu("File");
 
-        fileMenu.add(createMenuItem("New", KeyEvent.VK_N, e -> callbacks.newModel()));
-        fileMenu.add(createMenuItem("Open", KeyEvent.VK_O, e -> callbacks.openModel()));
-        fileMenu.add(createMenuItem("Open Folder...", KeyEvent.VK_O, InputEvent.SHIFT_DOWN_MASK,
+        fileMenu.add(createMenuItem("New", AppShortcut.NEW_MODEL, e -> callbacks.newModel()));
+        fileMenu.add(createMenuItem("Open Model...", AppShortcut.OPEN_MODEL, e -> callbacks.openModel()));
+        fileMenu.add(createMenuItem("Open Folder...", AppShortcut.OPEN_FOLDER,
                 e -> callbacks.openFolder()));
 
         fileMenu.addSeparator();
@@ -222,12 +219,12 @@ public class MenuBarBuilder {
         fileMenu.add(recentFoldersSubMenu);
 
         fileMenu.addSeparator();
-        fileMenu.add(createMenuItem("Save", KeyEvent.VK_S, e -> callbacks.saveModel()));
-        fileMenu.add(createMenuItem("Save As...", KeyEvent.VK_S, InputEvent.SHIFT_DOWN_MASK,
+        fileMenu.add(createMenuItem("Save", AppShortcut.SAVE_MODEL, e -> callbacks.saveModel()));
+        fileMenu.add(createMenuItem("Save As...", AppShortcut.SAVE_MODEL_AS,
                 e -> callbacks.saveAsModel()));
         fileMenu.add(createMenuItem("Save All", e -> callbacks.saveAllModels()));
         fileMenu.addSeparator();
-        fileMenu.add(createMenuItem("Preferences", KeyEvent.VK_COMMA,
+        fileMenu.add(createMenuItem("Preferences", AppShortcut.PREFERENCES,
                 e -> callbacks.showPreferences()));
 
         // Add initial separator and Exit - will be rebuilt when recent files are loaded
@@ -243,8 +240,8 @@ public class MenuBarBuilder {
     private JMenu createEditMenu() {
         JMenu editMenu = new JMenu("Edit");
 
-        JMenuItem undoItem = createMenuItem("Undo", KeyEvent.VK_Z, e -> callbacks.undoAction());
-        JMenuItem redoItem = createMenuItem("Redo", KeyEvent.VK_Y, e -> callbacks.redoAction());
+        JMenuItem undoItem = createMenuItem("Undo", AppShortcut.UNDO, e -> callbacks.undoAction());
+        JMenuItem redoItem = createMenuItem("Redo", AppShortcut.REDO, e -> callbacks.redoAction());
         editMenu.add(undoItem);
         editMenu.add(redoItem);
         // Grey out Undo/Redo when there's nothing to undo/redo. Refreshed each time the
@@ -263,15 +260,15 @@ public class MenuBarBuilder {
             public void menuCanceled(MenuEvent e) { }
         });
         editMenu.addSeparator();
-        editMenu.add(createTextActionItem("Cut", new DefaultEditorKit.CutAction(), KeyEvent.VK_X));
-        editMenu.add(createTextActionItem("Copy", new DefaultEditorKit.CopyAction(), KeyEvent.VK_C));
-        editMenu.add(createTextActionItem("Paste", new DefaultEditorKit.PasteAction(), KeyEvent.VK_V));
+        editMenu.add(createTextActionItem("Cut", new DefaultEditorKit.CutAction(), AppShortcut.CUT));
+        editMenu.add(createTextActionItem("Copy", new DefaultEditorKit.CopyAction(), AppShortcut.COPY));
+        editMenu.add(createTextActionItem("Paste", new DefaultEditorKit.PasteAction(), AppShortcut.PASTE));
         editMenu.addSeparator();
-        editMenu.add(createMenuItem("Toggle Comment", KeyEvent.VK_SLASH, e -> callbacks.toggleCommentAction()));
+        editMenu.add(createMenuItem("Toggle Comment", AppShortcut.TOGGLE_COMMENT, e -> callbacks.toggleCommentAction()));
         editMenu.add(createMenuItem("Normalize Line Endings", e -> callbacks.normalizeLineEndings()));
         editMenu.addSeparator();
-        editMenu.add(createMenuItem("Find...", KeyEvent.VK_F, e -> callbacks.searchModel()));
-        editMenu.add(createMenuItem("Find and Replace...", KeyEvent.VK_H, e -> callbacks.showFindReplaceDialog()));
+        editMenu.add(createMenuItem("Find...", AppShortcut.FIND, e -> callbacks.searchModel()));
+        editMenu.add(createMenuItem("Find and Replace...", AppShortcut.FIND_AND_REPLACE, e -> callbacks.showFindReplaceDialog()));
         editMenu.add(createMenuItem("Find on Map...", e -> callbacks.findNodeOnMap()));
 
         return editMenu;
@@ -285,7 +282,7 @@ public class MenuBarBuilder {
         JMenu viewMenu = new JMenu("View");
 
         // Panel visibility toggles at the top
-        viewMenu.add(createMenuItem("Toggle File Tree", KeyEvent.VK_B, e -> callbacks.toggleFileTree()));
+        viewMenu.add(createMenuItem("Toggle File Tree", AppShortcut.TOGGLE_FILE_TREE, e -> callbacks.toggleFileTree()));
         viewMenu.add(createMenuItem("Toggle Map", e -> callbacks.toggleMap()));
 
         // Tree content toggle: reflect the live state each time the menu opens, since it can also be
@@ -326,7 +323,7 @@ public class MenuBarBuilder {
      */
     private JMenu createRunMenu() {
         JMenu runMenu = new JMenu("Run");
-        runMenu.add(createMenuItem("Run Model", KeyEvent.VK_R, e -> callbacks.runModelFromMemory()));
+        runMenu.add(createMenuItem("Run Model", AppShortcut.RUN_MODEL, e -> callbacks.runModelFromMemory()));
         runMenu.addSeparator();
         runMenu.add(createMenuItem("Optimiser", e -> callbacks.showOptimisation()));
         runMenu.add(createMenuItem("Run Manager", e -> callbacks.showRunManager()));
@@ -395,46 +392,22 @@ public class MenuBarBuilder {
     }
 
     /**
-     * Creates a menu item with a real {@link JMenuItem#setAccelerator accelerator}
-     * for the given key code, using the platform menu shortcut modifier
-     * (Cmd on macOS, Ctrl elsewhere). The accelerator is rendered by the
-     * look-and-feel as a native accelerator hint - right-aligned and styled
-     * consistently with all other accelerator-bearing items in the menu bar.
+     * Creates a menu item whose accelerator comes from the given {@link AppShortcut} —
+     * the single source of truth shared with the toolbar tooltips, so the accelerator
+     * shown here and the hint shown there cannot disagree. The look-and-feel renders it
+     * as a native accelerator hint, right-aligned and styled consistently.
      *
      * <p>When a text component has focus and shares the same keystroke in its
      * own input map, the text component handles the keystroke first; the
      * accelerator only fires as a fallback when focus is elsewhere. No double
      * execution.</p>
      */
-    private JMenuItem createMenuItem(String text, int keyCode, ActionListener listener) {
+    private JMenuItem createMenuItem(String text, AppShortcut shortcut, ActionListener listener) {
         JMenuItem item = new JMenuItem(text);
-        item.setAccelerator(platformAccelerator(keyCode));
+        item.setAccelerator(shortcut.keyStroke());
         item.addActionListener(listener);
         return item;
     }
-
-    /**
-     * Creates a menu item with custom modifiers in addition to the platform menu
-     * shortcut key (Cmd on macOS, Ctrl elsewhere). The accelerator is rendered by
-     * the look-and-feel as a native accelerator hint.
-     *
-     * @param text The menu item text
-     * @param keyCode The key code (e.g., KeyEvent.VK_S)
-     * @param additionalModifiers Additional modifiers to combine with the platform
-     *                            modifier (e.g., InputEvent.ALT_DOWN_MASK)
-     * @param listener The action listener
-     * @return The configured JMenuItem
-     */
-    private JMenuItem createMenuItem(String text, int keyCode,
-                                     int additionalModifiers,
-                                     ActionListener listener) {
-        JMenuItem item = new JMenuItem(text);
-        int modifiers = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | additionalModifiers;
-        item.setAccelerator(KeyStroke.getKeyStroke(keyCode, modifiers));
-        item.addActionListener(listener);
-        return item;
-    }
-
 
     /**
      * Creates an Edit-menu item backed by a standard text-editing action
@@ -442,16 +415,11 @@ public class MenuBarBuilder {
      * text component most recently held focus - the idiomatic Swing way to wire
      * Cut/Copy/Paste menu items with no manual routing.
      */
-    private JMenuItem createTextActionItem(String label, Action action, int keyCode) {
+    private JMenuItem createTextActionItem(String label, Action action, AppShortcut shortcut) {
         JMenuItem item = new JMenuItem(action);
         item.setText(label);
-        item.setAccelerator(platformAccelerator(keyCode));
+        item.setAccelerator(shortcut.keyStroke());
         return item;
-    }
-
-    private static KeyStroke platformAccelerator(int keyCode) {
-        return KeyStroke.getKeyStroke(keyCode,
-                Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx());
     }
 
 }

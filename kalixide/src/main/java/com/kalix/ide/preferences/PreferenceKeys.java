@@ -189,6 +189,23 @@ public final class PreferenceKeys {
     public static final Pref<String> LAST_OPENED_FILE =
         Pref.osString("lastOpenedFile", "");
 
+    /** File dialog view mode: "list" or "columns". */
+    public static final Pref<String> FILE_DIALOG_VIEW =
+        Pref.fileString("fileDialog.view", "list");
+
+    /** Pinned sidebar folders (absolute paths). File-based deliberately: a team can ship
+     *  shared pins (e.g. the modelling network drive) with the project's preference file. */
+    public static final Pref<List<String>> FILE_DIALOG_PINNED =
+        Pref.fileStringList("fileDialog.pinnedFolders", List.of());
+
+    /** The directory the file dialogs last accepted in, used as the default start. */
+    public static final Pref<String> FILE_DIALOG_LAST_DIR =
+        Pref.osString("fileDialog.lastDirectory", "");
+
+    /** File-dialog sidebar width in pixels (user-adjustable via the split divider). */
+    public static final Pref<Integer> FILE_DIALOG_SIDEBAR_WIDTH =
+        Pref.osInt("fileDialog.sidebarWidth", 185);
+
     // Private constructor to prevent instantiation
     private PreferenceKeys() {
         throw new UnsupportedOperationException("This is a constants class");

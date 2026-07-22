@@ -1,5 +1,7 @@
 package com.kalix.ide.workspace.tree;
 
+import com.kalix.ide.io.FileCategory;
+
 import com.kalix.ide.utils.NaturalSortUtils;
 
 import javax.swing.tree.DefaultMutableTreeNode;

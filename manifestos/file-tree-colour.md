@@ -56,8 +56,10 @@ most light themes.
 
 ## 4. Enforcement
 
-Partly structural: all tiers resolve through `Kalix.tree.*` theme keys in one
-renderer (`FileTreeCellRenderer`), and `ThemePropertiesSnapshotTest` pins every
-theme's generated keys, so a missing or altered value surfaces as a baseline
-diff. The text-never-accented rule (§2.1) is **Advisory** — held by review and
-by citing this document.
+Partly structural: all glyph and colour selection lives in one shared mapping
+(`FileVisuals`), used by every place files are rendered (the project tree, the
+file dialogs), and all tiers resolve through `Kalix.tree.*` theme keys pinned
+by `ThemePropertiesSnapshotTest` — so a missing or altered value surfaces as a
+baseline diff, and a new file-rendering surface gets the language by using the
+mapping rather than re-deriving it. The text-never-accented rule (§2.1) is
+**Advisory** — held by review and by citing this document.
