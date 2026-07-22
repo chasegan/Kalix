@@ -18,7 +18,7 @@ use crate::misc::simulation_context::{
 use crate::ordering::simple_nodewise_ordering::SimpleNodewiseOrderingSystem;
 use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
-use crate::timeseries_input::{TimeseriesInput, TimeseriesInputDefinition, InMemoryOrigin};
+use crate::timeseries_input::{TimeseriesInput, TimeseriesInputDefinition, SourceOrigin};
 use crate::model_inputs::DynamicInput;
 
 /// One entry in the model's interleaved execution layout: nodes and var
@@ -750,8 +750,10 @@ impl Model {
         // Remember the ORIGINAL file path (for serialization/display), not the
         // resolved one, so a round-trip preserves what the user wrote.
         self.input_sources.push(TimeseriesInputDefinition::FileDefinition {
-            path: file_path.to_string(),
-            alias: alias.map(|a| a.to_string()),
+            origin: SourceOrigin::File {
+                path: file_path.to_string(),
+                alias: alias.map(|a| a.to_string()),
+            },
             columns,
         });
         Ok(len)
@@ -890,25 +892,24 @@ impl Model {
 
     /// Prints all the input sources to the console, one column on each line.
     pub fn print_inputs(&self) {
+        // Renders a source's identity line, e.g. "Source (file): climate.csv [alias: climate]".
+        fn print_source_origin(kind: &str, origin: &SourceOrigin) {
+            match origin {
+                SourceOrigin::Alias(a) => println!("Source ({}): {}", kind, a),
+                SourceOrigin::File { path, alias } => println!("Source ({}): {}{}", kind, path,
+                    alias.as_ref().map(|a| format!(" [alias: {}]", a)).unwrap_or_default()),
+            }
+        }
         for source in &self.input_sources {
             match source {
                 TimeseriesInputDefinition::Declaration { alias } => {
                     println!("Source (declared, no data): {}", alias);
                 }
-                TimeseriesInputDefinition::FileDefinition { path, alias, .. } => {
-                    println!("Source (file): {}{}", path,
-                        alias.as_ref().map(|a| format!(" [alias: {}]", a)).unwrap_or_default());
+                TimeseriesInputDefinition::FileDefinition { origin, .. } => {
+                    print_source_origin("file", origin);
                 }
                 TimeseriesInputDefinition::InMemoryDefinition { origin, .. } => {
-                    match origin {
-                        InMemoryOrigin::Alias(a) => {
-                            println!("Source (in-memory): {}", a);
-                        }
-                        InMemoryOrigin::File { path, alias } => {
-                            println!("Source (in-memory): {} (stands in for {})",
-                                alias.as_deref().unwrap_or(path.as_str()), path);
-                        }
-                    }
+                    print_source_origin("in-memory", origin);
                 }
             }
             let mut i = 0;

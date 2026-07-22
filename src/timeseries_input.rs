@@ -3,35 +3,58 @@ use crate::timeseries::Timeseries;
 use crate::misc::misc_functions::sanitize_name;
 use std::path::Path;
 
-/// How an in-memory source declares itself in `[inputs]`. Every variant carries
-/// at least one name, so an in-memory source can *always* be rendered back to an
+/// How an input source declares itself in `[inputs]` — the source's identity,
+/// independent of where its values come from (file vs in memory). Every variant
+/// carries at least one name, so a source can *always* be rendered back to an
 /// `[inputs]` line — there is no nameless state to guard against at render time.
 #[derive(Clone)]
-pub enum InMemoryOrigin {
-    /// Supplied against a bare alias declaration (`observed_flows =`).
+pub enum SourceOrigin {
+    /// A bare alias declaration (`observed_flows =`), no file behind it.
     Alias(String),
-    /// Overlays a file-backed source, retaining its declaration so the INI still
-    /// names the file it stands in for (§6.2).
+    /// A file path with an optional alias (`climate = climate.csv`).
     File { path: String, alias: Option<String> },
+}
+
+impl SourceOrigin {
+    /// The user-provided alias, if any.
+    pub fn alias(&self) -> Option<&str> {
+        match self {
+            SourceOrigin::Alias(a) => Some(a.as_str()),
+            SourceOrigin::File { alias, .. } => alias.as_deref(),
+        }
+    }
+
+    /// The `[inputs]` `key = value` pair that re-declares this source. Total by
+    /// construction — every origin has a name, so there is no nameless case.
+    pub fn ini_entry(&self) -> (String, String) {
+        match self {
+            SourceOrigin::Alias(a) => (a.clone(), String::new()),
+            SourceOrigin::File { path, alias: Some(a) } => (a.clone(), path.clone()),
+            SourceOrigin::File { path, alias: None } => (path.clone(), String::new()),
+        }
+    }
 }
 
 /// One pre-run input *source*, as declared in `[inputs]`. A single source can
 /// expand to several data columns — each a `TimeseriesInput` — so the columns
 /// live inside the source rather than being flattened into the model.
+///
+/// `FileDefinition` and `InMemoryDefinition` share the same `SourceOrigin` (how
+/// the source is named) but are kept as distinct variants deliberately: where
+/// the values come from is semantically meaningful and the two may diverge
+/// later (e.g. reload-on-run behaviour, provenance).
 #[derive(Clone)]
 pub enum TimeseriesInputDefinition {
     /// Declared alias with no backing data yet. Rejected at configure time.
     Declaration { alias: String },
     /// Backed by a file on disk; `columns` are the loaded per-column inputs.
     FileDefinition {
-        path: String,
-        alias: Option<String>,
+        origin: SourceOrigin,
         columns: Vec<TimeseriesInput>,
     },
-    /// Data supplied in memory; c.f. model_input_swap.rs. The `origin` carries
-    /// how the source declares itself, guaranteeing it always has a name.
+    /// Data supplied in memory; c.f. model_input_swap.rs.
     InMemoryDefinition {
-        origin: InMemoryOrigin,
+        origin: SourceOrigin,
         columns: Vec<TimeseriesInput>,
     },
 }
@@ -50,11 +73,8 @@ impl TimeseriesInputDefinition {
     pub fn alias(&self) -> Option<&str> {
         match self {
             TimeseriesInputDefinition::Declaration { alias } => Some(alias.as_str()),
-            TimeseriesInputDefinition::FileDefinition { alias, .. } => alias.as_deref(),
-            TimeseriesInputDefinition::InMemoryDefinition { origin, .. } => match origin {
-                InMemoryOrigin::Alias(a) => Some(a.as_str()),
-                InMemoryOrigin::File { alias, .. } => alias.as_deref(),
-            },
+            TimeseriesInputDefinition::FileDefinition { origin, .. } => origin.alias(),
+            TimeseriesInputDefinition::InMemoryDefinition { origin, .. } => origin.alias(),
         }
     }
 
@@ -64,18 +84,11 @@ impl TimeseriesInputDefinition {
     pub fn ini_entry(&self) -> (String, String) {
         match self {
             TimeseriesInputDefinition::Declaration { alias } => (alias.clone(), String::new()),
-            TimeseriesInputDefinition::FileDefinition { path, alias, .. } => match alias {
-                Some(a) => (a.clone(), path.clone()),
-                None => (path.clone(), String::new()),
-            },
-            // An in-memory source still declares the file it stands in for, so a
-            // round-trip keeps the INI as the complete manifest. The origin
-            // guarantees a name, so every arm renders — no nameless case.
-            TimeseriesInputDefinition::InMemoryDefinition { origin, .. } => match origin {
-                InMemoryOrigin::Alias(a) => (a.clone(), String::new()),
-                InMemoryOrigin::File { path, alias: Some(a) } => (a.clone(), path.clone()),
-                InMemoryOrigin::File { path, alias: None } => (path.clone(), String::new()),
-            },
+            // Both definitions delegate to their origin — an in-memory source
+            // still declares the file it stands in for, keeping the INI the
+            // complete manifest.
+            TimeseriesInputDefinition::FileDefinition { origin, .. } => origin.ini_entry(),
+            TimeseriesInputDefinition::InMemoryDefinition { origin, .. } => origin.ini_entry(),
         }
     }
 }
