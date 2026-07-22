@@ -57,53 +57,72 @@ pub struct VarBlock {
 
 #[derive(Default, Clone)]
 pub struct Model {
+    // ---- Hot path: read or written every timestep during run_timestep() ----
+
+    /// Hot path: all phases, read in run_timestep().
     pub configuration: Configuration,
+    /// Hot path: all phases, read/written in run_timestep().
+    pub data_cache: DataCache,
+    /// Hot path: start/record, read in run_timestep().
+    pub account_manager: AccountManager,
+    /// Hot path: policy phase, read in run_timestep().
+    /// Resource allocation systems ([ras.*] sections), in file order —
+    /// execution order is declaration order, as for nodes and var blocks
+    pub ras_systems: Vec<RasSystem>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    pub nodes: Vec<NodeEnum>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    /// Var blocks ([var.*] sections): published calculations executed at their
+    /// file position within the flow phase (structured_expressions_design.md §9)
+    pub var_blocks: Vec<VarBlock>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    /// Interleaved execution layout: nodes and var blocks in definition order.
+    /// Built as sections are added (add_node / add_var_block), so file order
+    /// IS execution order for var blocks exactly as it is for nodes
+    /// (node-definition-order §1 extended to calculations). Only consulted
+    /// when var_blocks is non-empty; the plain node loop uses execution_order.
+    pub exec_items: Vec<ExecItem>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    pub links: Vec<Link>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    /// Adjacency list for O(1) link lookup.
+    /// `outgoing_links[node_idx]` = vec of link indices
+    pub outgoing_links: Vec<Vec<usize>>,  
+    /// Hot path: ordering setup, read in initialize_network().
+    /// Adjacency list for O(1) link lookup.
+    /// `incoming_links[node_idx]` = vec of link indices
+    pub incoming_links: Vec<Vec<usize>>,  
+
+    /// Hot path: flow phase, read in run_timestep().
+    /// Pre-computed execution order, rebuilt by check_execution_order() at
+    /// initialize_network() time; walked every step when there are no var blocks.
+    pub execution_order: Vec<usize>,
+
+    /// Hot path: order phase, read in run_timestep().
+    pub simple_ordering_system: SimpleNodewiseOrderingSystem,
+
+    // ---- Cold path: load/configure/serialize time only, not touched per-step ----
+
     pub inputs: Vec<TimeseriesInput>,
     pub input_file_paths: Vec<String>,
     /// Maps file_path to the alias provided for quick lookup
-    pub alias_map: HashMap<String, String>, 
+    pub alias_map: HashMap<String, String>,
     pub outputs: Vec<String>,
-    pub account_manager: AccountManager,
-    // Resource allocation systems ([ras.*] sections), in file order —
-    // execution order is declaration order, as for nodes and var blocks
-    pub ras_systems: Vec<RasSystem>,
-    pub data_cache: DataCache,
 
     /// Working directory for resolving relative file paths
     /// - Set to model file's directory when loaded from INI file
     /// - Set to current working directory when created programmatically
     pub working_directory: PathBuf,
 
-    // Nodes
-    pub nodes: Vec<NodeEnum>,
-
-    // Var blocks ([var.*] sections): published calculations executed at their
-    // file position within the flow phase (structured_expressions_design.md §9)
-    pub var_blocks: Vec<VarBlock>,
-
-    // Interleaved execution layout: nodes and var blocks in definition order.
-    // Built as sections are added (add_node / add_var_block), so file order
-    // IS execution order for var blocks exactly as it is for nodes
-    // (node-definition-order §1 extended to calculations).
-    pub exec_items: Vec<ExecItem>,
-
-    // Links
-    pub links: Vec<Link>,
-
-    // Adjacency lists for O(1) link lookup
-    pub outgoing_links: Vec<Vec<usize>>,  // outgoing_links[node_idx] = vec of link indices
-    pub incoming_links: Vec<Vec<usize>>,  // incoming_links[node_idx] = vec of link indices
-
-    // Pre-computed execution order
-    pub execution_order: Vec<usize>,
-
-    // Ordering system
-    pub simple_ordering_system: SimpleNodewiseOrderingSystem,
-
-    // Fast node name lookup (keys are lowercase for case-insensitive matching)
+    /// Fast node name lookup (keys are lowercase for case-insensitive matching).
     pub node_lookup: FxHashMap<String, usize>, // node_lookup[node_name.to_lowercase()] = node index
 
-    // INI document for round-trip serialization
+    /// INI document for round-trip serialization.
     pub ini_document: Option<IniDocument>,
 
     /// Canonical render of the model exactly as loaded, captured before any
