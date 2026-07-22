@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.JOptionPane;
+import javax.swing.SwingWorker;
 import java.awt.Component;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
@@ -14,6 +15,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -29,7 +32,11 @@ import net.lingala.zip4j.model.FileHeader;
  * a list); the tree's filesystem watcher reflects create/rename/delete back into the model, so
  * none of these methods touch the tree model directly.
  *
- * <p>All methods run on the EDT (invoked from menu/key handlers) and may show dialogs.
+ * <p>All methods are invoked on the EDT (from menu/key handlers). Prompts and confirmations
+ * happen synchronously there, but the bulk file I/O — recursive copy/delete/move, zip, unzip —
+ * runs on a background worker via {@link #offEdt}, with any failure dialog marshalled back onto
+ * the EDT. A large operation therefore never freezes the UI (same pattern as
+ * {@link com.kalix.ide.utils.TerminalActions}).
  */
 class TreeFileOperations {
 
@@ -42,6 +49,48 @@ class TreeFileOperations {
     TreeFileOperations(Component parent, Supplier<File> activeFileSupplier) {
         this.parent = parent;
         this.activeFileSupplier = activeFileSupplier;
+    }
+
+    // --- Background execution ---
+
+    /**
+     * Runs file I/O off the EDT, then hands the outcome back on it: {@code onDone} receives
+     * null on success, or the failure message when {@code work} threw. Dialogs belong in
+     * {@code onDone} (or in state captured by it), never in {@code work} — the worker thread
+     * must not touch Swing.
+     */
+    private static void offEdt(IoRunnable work, Consumer<String> onDone) {
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() {
+                try {
+                    work.run();
+                    return null;
+                } catch (Exception ex) {
+                    logger.warn("Background file operation failed", ex);
+                    return ex.getMessage() != null ? ex.getMessage() : ex.toString();
+                }
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    onDone.accept(get());
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                } catch (ExecutionException ex) {
+                    // Unreachable in practice: doInBackground catches Exception, so only an
+                    // Error lands here.
+                    logger.error("Background file operation error", ex);
+                }
+            }
+        }.execute();
+    }
+
+    /** A unit of file I/O for {@link #offEdt}; any exception becomes the failure message. */
+    @FunctionalInterface
+    private interface IoRunnable {
+        void run() throws Exception;
     }
 
     // --- Reveal ---
@@ -155,18 +204,21 @@ class TreeFileOperations {
                 "Duplicate Failed", JOptionPane.WARNING_MESSAGE);
             return;
         }
-        try {
+        // A folder tree can be arbitrarily large; copy it off the EDT. The watcher adds the
+        // resulting node.
+        offEdt(() -> {
             if (file.isDirectory()) {
                 copyRecursively(file.toPath(), target.toPath());
             } else {
                 Files.copy(file.toPath(), target.toPath());
             }
-            // The watcher will add the node; no manual model change required.
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(parent,
-                "Failed to duplicate \"" + file.getName() + "\": " + ex.getMessage(),
-                "Duplicate Failed", JOptionPane.ERROR_MESSAGE);
-        }
+        }, error -> {
+            if (error != null) {
+                JOptionPane.showMessageDialog(parent,
+                    "Failed to duplicate \"" + file.getName() + "\": " + error,
+                    "Duplicate Failed", JOptionPane.ERROR_MESSAGE);
+            }
+        });
     }
 
     /**
@@ -208,6 +260,7 @@ class TreeFileOperations {
      * Deletes the given files after a single confirmation. Entries whose ancestor is also in the
      * selection are dropped first (deleting the ancestor already removes them), so a folder and a
      * file inside it can be selected together without a spurious "already gone" error.
+     * Failures are collected and reported in one summary dialog when the deletion finishes.
      */
     void delete(List<File> files) {
         List<File> targets = withoutDescendants(files);
@@ -217,9 +270,24 @@ class TreeFileOperations {
         if (!confirmDelete(targets)) {
             return;
         }
-        for (File file : targets) {
-            deleteOne(file);
-        }
+        // A recursive delete can touch thousands of entries; run it off the EDT. The list is
+        // filled by the worker before onDone reads it (offEdt orders the two).
+        List<String> failures = new ArrayList<>();
+        offEdt(() -> {
+            for (File file : targets) {
+                try {
+                    deleteOne(file);
+                } catch (IOException ex) {
+                    failures.add(file.getName() + " (" + ex.getMessage() + ")");
+                }
+            }
+        }, error -> {
+            if (!failures.isEmpty()) {
+                JOptionPane.showMessageDialog(parent,
+                    "Some items could not be deleted:\n\n" + String.join("\n", failures),
+                    "Delete", JOptionPane.WARNING_MESSAGE);
+            }
+        });
         // The watcher reports the deletions; the tree re-syncs automatically.
     }
 
@@ -239,25 +307,19 @@ class TreeFileOperations {
         return choice == JOptionPane.YES_OPTION;
     }
 
-    private void deleteOne(File file) {
-        try {
-            if (file.isDirectory()) {
-                // Delete depth-first (children before parents). Files.delete throws on
-                // failure, so a locked/read-only entry surfaces as an error rather than a
-                // silently half-deleted folder.
-                try (Stream<Path> walk = Files.walk(file.toPath())) {
-                    List<Path> paths = walk.sorted(Comparator.reverseOrder()).collect(Collectors.toList());
-                    for (Path path : paths) {
-                        Files.delete(path);
-                    }
+    private static void deleteOne(File file) throws IOException {
+        if (file.isDirectory()) {
+            // Delete depth-first (children before parents). Files.delete throws on
+            // failure, so a locked/read-only entry surfaces as an error rather than a
+            // silently half-deleted folder.
+            try (Stream<Path> walk = Files.walk(file.toPath())) {
+                List<Path> paths = walk.sorted(Comparator.reverseOrder()).collect(Collectors.toList());
+                for (Path path : paths) {
+                    Files.delete(path);
                 }
-            } else {
-                Files.delete(file.toPath());
             }
-        } catch (IOException ex) {
-            JOptionPane.showMessageDialog(parent,
-                "Failed to delete \"" + file.getName() + "\": " + ex.getMessage(),
-                "Delete Failed", JOptionPane.ERROR_MESSAGE);
+        } else {
+            Files.delete(file.toPath());
         }
     }
 
@@ -294,7 +356,7 @@ class TreeFileOperations {
      * Name collisions in the target are reported and skipped (move) or auto-renamed (copy). The
      * filesystem watcher reflects the result back into the tree.
      *
-     * @return true if the operation went ahead (regardless of per-entry success), false if
+     * @return true if the operation was started (regardless of per-entry success), false if
      *         cancelled or there was nothing to do
      */
     boolean moveInto(List<File> files, File targetDir, boolean copy) {
@@ -307,35 +369,40 @@ class TreeFileOperations {
         if (!copy && !confirmMove(sources, targetDir)) {
             return false;
         }
+        // Copies recurse into whole folder trees; run the transfer off the EDT and report
+        // all failures in one summary dialog when it finishes.
         List<String> failures = new ArrayList<>();
-        for (File source : sources) {
-            File dest = new File(targetDir, source.getName());
-            if (!copy && dest.exists()) {
-                failures.add(source.getName() + " (already exists in the target folder)");
-                continue;
-            }
-            try {
-                if (copy) {
-                    if (dest.exists()) {
-                        String targetName = generateDuplicateName(dest);
-                        File duplicateDestination = new File(dest.getParentFile(), targetName.trim());
-                        copyRecursively(source.toPath(), duplicateDestination.toPath());
-                    } else {
-                        copyRecursively(source.toPath(), dest.toPath());
-                    }
-                } else {
-                    Files.move(source.toPath(), dest.toPath());
+        offEdt(() -> {
+            for (File source : sources) {
+                File dest = new File(targetDir, source.getName());
+                if (!copy && dest.exists()) {
+                    failures.add(source.getName() + " (already exists in the target folder)");
+                    continue;
                 }
-            } catch (IOException ex) {
-                failures.add(source.getName() + " (" + ex.getMessage() + ")");
+                try {
+                    if (copy) {
+                        if (dest.exists()) {
+                            String targetName = generateDuplicateName(dest);
+                            File duplicateDestination = new File(dest.getParentFile(), targetName.trim());
+                            copyRecursively(source.toPath(), duplicateDestination.toPath());
+                        } else {
+                            copyRecursively(source.toPath(), dest.toPath());
+                        }
+                    } else {
+                        Files.move(source.toPath(), dest.toPath());
+                    }
+                } catch (IOException ex) {
+                    failures.add(source.getName() + " (" + ex.getMessage() + ")");
+                }
             }
-        }
-        if (!failures.isEmpty()) {
-            JOptionPane.showMessageDialog(parent,
-                (copy ? "Some items could not be copied:\n\n" : "Some items could not be moved:\n\n")
-                    + String.join("\n", failures),
-                copy ? "Copy" : "Move", JOptionPane.WARNING_MESSAGE);
-        }
+        }, error -> {
+            if (!failures.isEmpty()) {
+                JOptionPane.showMessageDialog(parent,
+                    (copy ? "Some items could not be copied:\n\n" : "Some items could not be moved:\n\n")
+                        + String.join("\n", failures),
+                    copy ? "Copy" : "Move", JOptionPane.WARNING_MESSAGE);
+            }
+        });
         return true;
     }
 
@@ -450,17 +517,22 @@ class TreeFileOperations {
         if (files == null || files.isEmpty()) { return; }
         List<File> targets = withoutDescendants(files);
         String zipFileName = getZipFileName(targets, rootFile);
-        try (ZipFile zipFile = new ZipFile(zipFileName);) {
-            for (File file : targets) {
-                if (file.isDirectory()) {
-                    zipFile.addFolder(file);
-                } else {
-                    zipFile.addFile(file);
+        // Compressing a data folder is slow; run it off the EDT. The watcher adds the archive.
+        offEdt(() -> {
+            try (ZipFile zipFile = new ZipFile(zipFileName)) {
+                for (File file : targets) {
+                    if (file.isDirectory()) {
+                        zipFile.addFolder(file);
+                    } else {
+                        zipFile.addFile(file);
+                    }
                 }
             }
-        } catch (IllegalStateException | IOException ex) {
-            showPathError(ex.getMessage());
-        }
+        }, error -> {
+            if (error != null) {
+                JOptionPane.showMessageDialog(parent, error, "Zip", JOptionPane.WARNING_MESSAGE);
+            }
+        });
     }
 
     /**
@@ -527,15 +599,28 @@ class TreeFileOperations {
      */
     void unzipFile(File file) {
         File targetDir = file.getParentFile();
+        // The collision scan only reads the zip's central directory — quick even for a large
+        // archive, and the answer is needed before we can prompt. Extraction is the heavy
+        // part, so that alone goes off the EDT (reopening the zip on the worker).
+        List<String> collisions;
         try (ZipFile zipFile = new ZipFile(file)) {
-            List<String> collisions = collidingEntries(zipFile, targetDir);
-            if (!collisions.isEmpty() && !confirmOverwrite(collisions)) {
-                return;
-            }
-            zipFile.extractAll(targetDir.getAbsolutePath());
+            collisions = collidingEntries(zipFile, targetDir);
         } catch (IllegalStateException | IOException ex) {
-            showPathError(ex.getMessage());
+            JOptionPane.showMessageDialog(parent, ex.getMessage(), "Unzip", JOptionPane.WARNING_MESSAGE);
+            return;
         }
+        if (!collisions.isEmpty() && !confirmOverwrite(collisions)) {
+            return;
+        }
+        offEdt(() -> {
+            try (ZipFile zipFile = new ZipFile(file)) {
+                zipFile.extractAll(targetDir.getAbsolutePath());
+            }
+        }, error -> {
+            if (error != null) {
+                JOptionPane.showMessageDialog(parent, error, "Unzip", JOptionPane.WARNING_MESSAGE);
+            }
+        });
     }
 
     /**
