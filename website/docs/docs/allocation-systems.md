@@ -57,6 +57,51 @@ Three commitments follow from Kalix's broader philosophy:
 
 - ***Fast.*** Assessing an allocation policy means simulating whole-of-system reliability over century-scale climate sequences, across ensembles of options. Engine speed turns that from a project into a loop.
 
+## How it works {#how}
+
+Concretely, those dials are just two model components plus a property on the water users.
+
+- **[`[acc.*]`](accounts.md) — the accounts.** A group of accounts is declared as a small table: a name and a cap per row. Accounts are pure ledgers — they hold a balance and nothing else, no behaviour of their own.
+
+- **[`[ras.*]`](ras.md) — the resource allocation systems.** Each is one rule: *on this trigger, do this action, to these account groups*. The actions are the credit/debit/reset/announce verbs; the triggers are calendar boundaries or authored conditions. The `[ras.*]` sections, read together, are the water sharing plan.
+
+- **[`accounts =`](accounts.md#referencing-accounts-from-nodes) on a user node.** A [regulated](regulated-user.md) or [unregulated](unregulated-user.md) user lists the accounts it draws on; its take is capped by the balance and debited from it.
+
+Nothing changes an account balance except a `[ras.*]` action or a user's take — so "what can touch this water?" always has a one-place answer.
+
+### Annual allocation, in full
+
+An announced annual allocation — assess the resource, announce a percentage of entitlement, credit it, reset at year end — is two `[ras.*]` sections over one account group:
+
+```ini
+[acc.entitlements]
+accounts = name,  size,
+           smith, 150,
+           jones, 420,
+
+# storage volume -> announced % of entitlement
+[table.alloc_curve]
+values = Volume [ML], Percent,
+         0          , 0,
+         120000     , 100,
+
+[ras.reset]                              # start of the water year: wipe last year
+targets = acc.entitlements
+trigger = start_water_year(7)
+action  = reset_allocation
+
+[ras.announce]                           # then announce this year against the resource
+targets = acc.entitlements
+trigger = start_water_year(7)
+action  = allocate(table.alloc_curve(node.dam.volume[-1, 0]))
+```
+
+The percentage comes from an authored assessment — here a lookup over storage volume, but it could be storage plus minimum inflows, a share of reliable inflows, or any expression. An account's **allocation** is the water credited to it this year, held or already used, so a user drawing its balance down does not reduce its allocation, and re-announcing the same percentage does nothing. Announcements only ever rise.
+
+**Priority tiers** — a high-priority town supply filled before medium-priority irrigators — are just more `[ras.*]` sections: one `allocate` per class, each with its own curve, running in file order. **Reserves** are ordinary accounts credited by their own rule. A plain balance can be held to a **carryover limit** at year end with [`reduce_to`](ras.md#actions) rather than zeroed.
+
+For the full grammar see **[`[acc.*]`](accounts.md)** and **[`[ras.*]`](ras.md)**.
+
 ## Further reading
 
 - Barma Water Resources et al. (2011), *Water allocation systems: exploring opportunities for reform*, Waterlines Report No 65, National Water Commission, Canberra.

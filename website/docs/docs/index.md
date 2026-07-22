@@ -52,6 +52,10 @@ Model components, top to bottom.
 <span style="font-size: 14.5px; color: var(--kx-text-muted); line-height: 1.5;">Lookup tables — rating curves and relationships, callable from any expression.</span>
 <a class="kx-section-chip" href="fn/" style="justify-self: start; font-family: var(--kx-font-mono); font-size: 14px; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;">[fn]</a>
 <span style="font-size: 14.5px; color: var(--kx-text-muted); line-height: 1.5;">User-defined functions, written once and called from any expression.</span>
+<a class="kx-section-chip" href="accounts/" style="justify-self: start; font-family: var(--kx-font-mono); font-size: 14px; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;">[acc.*]</a>
+<span style="font-size: 14.5px; color: var(--kx-text-muted); line-height: 1.5;">Water accounts — the ledgers an allocation system credits and debits.</span>
+<a class="kx-section-chip" href="ras/" style="justify-self: start; font-family: var(--kx-font-mono); font-size: 14px; color: var(--kx-primary-700); text-decoration: none; background: var(--kx-primary-50); border: 1px solid var(--kx-primary-200); border-radius: var(--kx-radius-sm); padding: 8px 14px;">[ras.*]</a>
+<span style="font-size: 14.5px; color: var(--kx-text-muted); line-height: 1.5;">Resource allocation systems — triggered rules that credit and debit accounts.</span>
 </div>
 
 <!-- SPINE: bottom zone -->
