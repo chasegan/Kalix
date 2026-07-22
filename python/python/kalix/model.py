@@ -326,6 +326,8 @@ class Model:
             resets its run state), or if a requested name is not a declared
             output, or was declared but not found/wrong length.
         """
+        if isinstance(names, str):
+            names = [names]
         try:
             start, step, size, series_list = self._inner._get_outputs(names)
         except ValueError as e:
