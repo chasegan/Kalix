@@ -35,7 +35,7 @@ pub fn set_input(
     let source_idx = model
         .input_sources
         .iter()
-        .position(|s| s.alias() == Some(alias_sanitized.as_str()))
+        .position(|s| s.alias().map(sanitize_name).as_deref() == Some(alias_sanitized.as_str()))
         .ok_or_else(|| format!(
             "input '{alias}' is not declared in [inputs] -- set_input() supplies values \
              for an existing declaration, it does not add one (declare it first, e.g. via patch)"

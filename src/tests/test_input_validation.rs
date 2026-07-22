@@ -4,6 +4,7 @@ use crate::nodes::blackhole_node::BlackholeNode;
 use crate::nodes::NodeEnum;
 use crate::model_inputs::DynamicInput;
 use crate::io::ini_model_io::IniModelIO;
+use crate::io::model_input_swap::{self, InMemoryColumn};
 
 /// Test that a typo in a data reference (using ".csv" instead of "_csv" in the path)
 /// produces a helpful error message at configure time, rather than a runtime panic.
@@ -277,4 +278,33 @@ climate = ./src/tests/example_data/test.csv
             line, rendered
         );
     }
+}
+
+
+/// `set_input()` must find a declared alias regardless of the casing it was
+/// declared with. An aliased-file declaration (`Alias = path.csv`) keeps its
+/// alias exactly as written in the INI -- unlike a bare declaration, it isn't
+/// restricted to already-sanitized (lowercase) text -- so the lookup has to
+/// sanitize the stored alias before comparing, not just the incoming one.
+#[test]
+fn test_set_input_finds_mixed_case_aliased_file_declaration() {
+    let ini = "\
+[inputs]
+Climate_Data = ./src/tests/example_data/test.csv
+";
+    let mut model = IniModelIO::read_model_string(ini)
+        .expect("Model with an aliased file declaration should parse");
+
+    let columns = vec![InMemoryColumn {
+        name: "value".to_string(),
+        values: vec![1.0, 2.0, 3.0],
+    }];
+
+    model_input_swap::set_input(&mut model, "Climate_Data", 0, 86400, columns)
+        .expect("set_input() should find the declared alias regardless of casing");
+
+    let source = model.input_sources.iter()
+        .find(|s| s.columns().iter().any(|c| c.full_colname_path == "data.climate_data.by_name.value"))
+        .expect("Supplied data should be addressable under the sanitized alias");
+    assert_eq!(source.columns()[0].timeseries.values, vec![1.0, 2.0, 3.0]);
 }
