@@ -368,7 +368,7 @@ const.low_flow_threshold = 10.0
 const.annual_cap = 15000.0
 const.per_capita = 0.00042
 
-[inputs]
+[data]
 ./data.csv
 
 [table.monthly_demand]      # tables: passive, live anywhere

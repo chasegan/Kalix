@@ -136,7 +136,7 @@ nav:
       - Components:
           - docs/index.md   # make the 'Components' header link back to the Docs page
           - "[kalix]": docs/model-file-structure.md
-          - "[inputs]": docs/input-data.md
+          - "[data]": docs/input-data.md
           - "[constants]": docs/constants.md
           - "[var.*]": docs/vars.md
           - "[node.*]":

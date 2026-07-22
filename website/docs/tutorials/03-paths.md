@@ -37,7 +37,7 @@ A small project with shared input data in one place and two model variants — a
 
 ## The three path styles
 
-Kalix accepts three styles of path in `[inputs]`:
+Kalix accepts three styles of path in `[data]`:
 
 | Style | Example | How it resolves |
 | --- | --- | --- |
@@ -49,10 +49,10 @@ For the full reference on path syntax and resolution, see [Declaring Input Data]
 
 ## Step 1 — Run the baseline
 
-Open `models/baseline/stringybark.ini` in Kalix IDE. The `[inputs]` section uses **relative paths** — each one starts with `../../` to step up out of `baseline/` and `models/`, then into `data/`:
+Open `models/baseline/stringybark.ini` in Kalix IDE. The `[data]` section uses **relative paths** — each one starts with `../../` to step up out of `baseline/` and `models/`, then into `data/`:
 
 ```ini
-[inputs]
+[data]
 ../../data/climate_data.csv
 ../../data/observed.csv
 ../../data/rain_north.csv
@@ -102,10 +102,10 @@ It fails. Kalix tells you it can't find the input files. Why? The new file lives
 
 ### Option A — Patch the relative paths
 
-You could change the wetter model's `[inputs]` from `../../data/...` to `../../../data/...` (one more `../` to climb the extra level):
+You could change the wetter model's `[data]` from `../../data/...` to `../../../data/...` (one more `../` to climb the extra level):
 
 ```ini
-[inputs]
+[data]
 ../../../data/climate_data.csv
 ../../../data/observed.csv
 ../../../data/rain_north.csv
@@ -113,7 +113,7 @@ You could change the wetter model's `[inputs]` from `../../data/...` to `../../.
 ../../../data/rain_south.csv
 ```
 
-This works. But every time you add a deeper scenario folder, or move a model around, you have to re-count `../` segments and edit every line in `[inputs]`. The number of `../` segments depends on *where each model lives*, which is fragile.
+This works. But every time you add a deeper scenario folder, or move a model around, you have to re-count `../` segments and edit every line in `[data]`. The number of `../` segments depends on *where each model lives*, which is fragile.
 
 ### Option B — Switch to trailhead paths
 
@@ -122,7 +122,7 @@ The `^/` prefix turns the path into a **trailhead path** — Kalix starts at the
 Replace `../../` (or `../../../`) with `^/`:
 
 ```ini
-[inputs]
+[data]
 ^/data/climate_data.csv
 ^/data/observed.csv
 ^/data/rain_north.csv
@@ -134,7 +134,7 @@ Whether your model is at `models/baseline/` or `models/scenarios/wetter/sensitiv
 
 ## Step 5 — Apply trailhead paths to both models
 
-Update the `[inputs]` section in **both** `models/baseline/stringybark.ini` *and* `models/scenarios/wetter/stringybark.ini` to use the trailhead form shown above. Save both files. Now both models share the same `[inputs]` block — literally the same five lines — even though they live at different depths.
+Update the `[data]` section in **both** `models/baseline/stringybark.ini` *and* `models/scenarios/wetter/stringybark.ini` to use the trailhead form shown above. Save both files. Now both models share the same `[data]` block — literally the same five lines — even though they live at different depths.
 
 ## Run both and compare
 
@@ -152,7 +152,7 @@ Open the **Run Manager** and overlay `node.0002_ga_widebridge.ds_1` from each ru
 
 3. **Move the** `data/` **folder** — try moving `data/` from `003/data/` to `003/raw/data/`. Now the trailhead paths break. Update them to `^/raw/data/...` in one model and confirm it works.
 
-4. **Mix and match** — leave one input as an absolute path, the rest as trailhead. Kalix happily mixes styles within a single `[inputs]` block.
+4. **Mix and match** — leave one input as an absolute path, the rest as trailhead. Kalix happily mixes styles within a single `[data]` block.
 
 ## Where to go from here
 

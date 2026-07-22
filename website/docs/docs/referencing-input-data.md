@@ -7,7 +7,7 @@ title: "Referencing Input Data"
 The page [Declaring Input Data](input-data.md) explains how to import data in your Kalix model. Here’s a reminder:
 
 ```
-[inputs]
+[data]
 ./data/climate.csv
 ./data/streamflow.csv
 ```

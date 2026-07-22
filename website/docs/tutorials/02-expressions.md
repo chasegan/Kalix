@@ -61,10 +61,10 @@ For the full expression language reference, see [Dynamic Expressions](../docs/dy
 
 Open Kalix IDE and create a new model file called `stringybark_expressions.ini` in the same folder as the five CSVs. The fastest way is to copy your Tutorial 1 model file (`stringybark_sacramento.ini`) and rename the copy. The structure is identical except for two small changes below.
 
-### Step 1 — Add the three station files to `[inputs]`
+### Step 1 — Add the three station files to `[data]`
 
 ```ini
-[inputs]
+[data]
 climate_data.csv
 observed.csv
 rain_north.csv
@@ -107,7 +107,7 @@ The rest of the file is unchanged from Tutorial 1. Putting it all together:
 start = 1980-01-01
 end = 2009-12-31
 
-[inputs]
+[data]
 climate_data.csv
 observed.csv
 rain_north.csv
@@ -164,7 +164,7 @@ Ask yourself: how has the average runoff changed? What does the flow-duration cu
 
 You can also inspect the model-file changes that drove this difference. Right-click the Tutorial 1 run in the Run Manager and choose **"Show Model Changes"**. This opens a side-by-side diff between the model that produced the selected run (Tutorial 1's `stringybark_sacramento.ini`) and the model currently loaded in the editor (Tutorial 2's `stringybark_expressions.ini`). You should see two regions of difference:
 
-- The `[inputs]` section, with the three new station files added
+- The `[data]` section, with the three new station files added
 
 - The `rain = …` line, with the single-column reference replaced by the three-line weighted expression
 
