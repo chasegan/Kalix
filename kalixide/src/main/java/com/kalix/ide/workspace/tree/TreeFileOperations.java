@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import net.lingala.zip4j.ZipFile;
+import net.lingala.zip4j.model.FileHeader;
 
 /**
  * The side-effecting file operations behind the project tree's context menu and keyboard
@@ -439,5 +441,127 @@ class TreeFileOperations {
 
     private void showPathError(String message) {
         JOptionPane.showMessageDialog(parent, message, "Copy Path", JOptionPane.WARNING_MESSAGE);
+    }
+
+    /**
+     * Zip the chosen file(s) in the file tree.
+     */
+    void zipFiles(List<File> files, File rootFile) {
+        if (files == null || files.isEmpty()) { return; }
+        List<File> targets = withoutDescendants(files);
+        String zipFileName = getZipFileName(targets, rootFile);
+        try (ZipFile zipFile = new ZipFile(zipFileName);) {
+            for (File file : targets) {
+                if (file.isDirectory()) {
+                    zipFile.addFolder(file);
+                } else {
+                    zipFile.addFile(file);
+                }
+            }
+        } catch (IllegalStateException | IOException ex) {
+            showPathError(ex.getMessage());
+        }
+    }
+
+    /**
+     * Determine the zip file name to be used in {@link TreeFileOperations#zipFiles(List, File)}
+     * <br><br>
+     * If {@code files} is length 1, returns the file/folder name with .zip in that directory.
+     * Else it creates a files.zip in the common ancestor directory of all selected files
+     * (bounded below by {@code rootFile}'s parent, in case the selection has no closer
+     * common ancestor within the workspace).
+     * If there is a name collision, it will append {@code (n)} where {@code n} is incremented
+     * until there is no name collision.
+     */
+    private static String getZipFileName(List<File> selFiles, File rootFile) {
+        String baseZFName;
+        if (selFiles.size() == 1) { baseZFName = selFiles.getFirst().getAbsolutePath(); }
+        else {
+            Path rootDirPath = Path.of(rootFile.getParent()).toAbsolutePath().normalize();
+            Path commonAncestor = null;
+            for (File file : selFiles) {
+                Path parent = file.toPath().toAbsolutePath().normalize().getParent();
+                commonAncestor = (commonAncestor == null) ? parent : commonAncestor(commonAncestor, parent);
+            }
+            if (commonAncestor == null || !commonAncestor.startsWith(rootDirPath)) {
+                commonAncestor = rootDirPath;
+            }
+            baseZFName = commonAncestor.resolve("files").toString();
+        }
+        // Ensure no name collision
+        String zipFileName = baseZFName + ".zip";
+        int i = 1;
+        while (new File(zipFileName).exists()) {
+            zipFileName = baseZFName + " (" + i + ").zip";
+            i++;
+        }
+        return zipFileName;
+    }
+
+    /**
+     * The deepest shared ancestor directory of two absolute, normalized paths, or {@code null}
+     * if they share no path components (e.g. different filesystem roots).
+     */
+    private static Path commonAncestor(Path a, Path b) {
+        if (!a.getRoot().equals(b.getRoot())) { return null; }
+        Path result = a.getRoot();
+        int count = Math.min(a.getNameCount(), b.getNameCount());
+        for (int i = 0; i < count && a.getName(i).equals(b.getName(i)); i++) {
+            result = result.resolve(a.getName(i));
+        }
+        return result;
+    }
+
+    /**
+     * Detect if {@code file} is a zip file. Case-insensitive: Windows and macOS filesystems
+     * are case-insensitive, so ".ZIP"/".Zip" are just as much a zip as ".zip".
+     */
+    static boolean isZip(File file) {
+        return file.toString().toLowerCase().endsWith(".zip");
+    }
+
+    /**
+     * Unzip the selected zip folder into the same directory. Zip4j extracts by overwriting any
+     * existing file of the same name without warning, so entries that would collide with
+     * existing files are surfaced in a confirmation prompt first.
+     */
+    void unzipFile(File file) {
+        File targetDir = file.getParentFile();
+        try (ZipFile zipFile = new ZipFile(file)) {
+            List<String> collisions = collidingEntries(zipFile, targetDir);
+            if (!collisions.isEmpty() && !confirmOverwrite(collisions)) {
+                return;
+            }
+            zipFile.extractAll(targetDir.getAbsolutePath());
+        } catch (IllegalStateException | IOException ex) {
+            showPathError(ex.getMessage());
+        }
+    }
+
+    /**
+     * The zip entry names that would overwrite a file already present in {@code targetDir}.
+     * Directory entries are skipped: extracting into an existing folder merges its contents
+     * rather than overwriting the folder itself, so it isn't a collision.
+     */
+    private static List<String> collidingEntries(ZipFile zipFile, File targetDir) throws IOException {
+        List<String> collisions = new ArrayList<>();
+        for (FileHeader header : zipFile.getFileHeaders()) {
+            if (!header.isDirectory() && new File(targetDir, header.getFileName()).exists()) {
+                collisions.add(header.getFileName());
+            }
+        }
+        return collisions;
+    }
+
+    private boolean confirmOverwrite(List<String> collisions) {
+        String message = (collisions.size() == 1
+            ? "\"" + collisions.get(0) + "\" already exists and will be overwritten."
+            : collisions.size() + " items already exist and will be overwritten:\n\n"
+                + String.join("\n", collisions.subList(0, Math.min(collisions.size(), 10)))
+                + (collisions.size() > 10 ? "\n..." : ""))
+            + "\n\nContinue?";
+        int choice = JOptionPane.showConfirmDialog(parent, message,
+            "Unzip", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+        return choice == JOptionPane.YES_OPTION;
     }
 }
