@@ -362,10 +362,12 @@ impl PyModel {
     ///       order. A `dict` would silently collapse repeated names into one
     ///       entry, so this returns a list instead: requesting the same
     ///       output twice must come back as two (identical) entries, not one.
+    #[pyo3(signature = (names, missing_ok=false))]
     fn _get_outputs<'py>(
         &mut self,
         py: Python<'py>,
         names: Option<Vec<String>>,
+        missing_ok: bool,
     ) -> PyResult<(i64, u64, usize, Vec<(String, Bound<'py, PyArray1<f64>>)>)> {
         if !self.has_run {
             return Err(PyValueError::new_err(
@@ -375,7 +377,7 @@ impl PyModel {
         }
         let outputs = self
             .inner
-            .get_output_series(names)
+            .get_output_series(names, missing_ok)
             .map_err(PyValueError::new_err)?;
         let (start, step, size) = match outputs.first() {
             Some(first) => (

@@ -723,6 +723,37 @@ def test_get_outputs_undeclared_name_raises_value_error():
         model.get_outputs(["node.not_a_real_output.dsflow"])
 
 
+def test_get_outputs_missing_ok_returns_zero_filled_column():
+    """An undeclared name with `missing_ok=True` comes back as an all-zero
+    column, of the same length as a normal run, instead of raising."""
+    model = kalix.load_file(str(_MODEL_INI)).run()
+    df = model.get_outputs(["node.not_a_real_output.dsflow"], missing_ok=True)
+    assert list(df.columns) == ["node.not_a_real_output.dsflow"]
+    assert len(df) == len(model.get_outputs())
+    assert (df["node.not_a_real_output.dsflow"] == 0.0).all()
+
+
+def test_get_outputs_missing_ok_mixes_real_and_zero_filled_columns():
+    """A mix of one real, populated name and one undeclared name with
+    `missing_ok=True` returns both columns, in request order -- the real one
+    with real values, the fake one all zeros."""
+    model = kalix.load_file(str(_MODEL_INI)).run()
+    df = model.get_outputs(
+        ["node.node1.dsflow", "node.not_a_real_output.dsflow"], missing_ok=True
+    )
+    assert list(df.columns) == ["node.node1.dsflow", "node.not_a_real_output.dsflow"]
+    assert (df["node.not_a_real_output.dsflow"] == 0.0).all()
+    assert not (df["node.node1.dsflow"] == 0.0).all()
+
+
+def test_get_outputs_missing_ok_does_not_suppress_not_run_error():
+    """`missing_ok=True` only applies to name-related errors; the "model has
+    not been run yet" check happens earlier and still fires."""
+    model = kalix.load_file(str(_MODEL_INI))
+    with pytest.raises(ValueError, match="has not been run"):
+        model.get_outputs(["node.not_a_real_output.dsflow"], missing_ok=True)
+
+
 def test_get_outputs_before_run_with_explicit_name_raises_value_error():
     """An unrun model fails fast with a message naming the actual problem,
     not silently empty/absent data."""

@@ -297,7 +297,11 @@ class Model:
             raise ValueError(f"Unknown patch mode: {mode!r}")
         return self
 
-    def get_outputs(self, names: Optional[str | List[str]] = None) -> pd.DataFrame:
+    def get_outputs(
+        self,
+        names: Optional[str | List[str]] = None,
+        missing_ok: bool = False,
+    ) -> pd.DataFrame:
         """Retrieve the model's output time series after a run.
 
         Parameters
@@ -308,6 +312,14 @@ class Model:
             Matching is case-insensitive. Requesting the same name more than
             once is not an error -- it produces that many duplicate columns,
             matching `names` position-for-position.
+        missing_ok
+            Only affects explicitly requested `names` (has no effect when
+            `names` is ``None``). If ``False`` (default), a requested name
+            that is undeclared, not found, or wrong length raises
+            ``ValueError``. If ``True``, any such name instead comes back as
+            an all-zero column of the correct simulation length, so a mix of
+            valid and missing names in one call returns a mix of real and
+            zero-filled columns, in request order.
 
         Returns
         -------
@@ -317,19 +329,23 @@ class Model:
             declaration order for ``names=None``). Column names are the
             outputs' *canonical stored* names -- the casing they were
             declared under -- which may differ from the casing passed in
-            `names`.
+            `names`. Zero-filled stand-ins (`missing_ok=True`) carry the
+            requested casing instead, since there is no canonical name to
+            fall back on.
 
         Raises
         ------
         ValueError
             If the model has not been run yet (loading or patching a model
-            resets its run state), or if a requested name is not a declared
-            output, or was declared but not found/wrong length.
+            resets its run state) -- this check applies regardless of
+            `missing_ok`. Also, when `missing_ok` is ``False``, if a
+            requested name is not a declared output, or was declared but not
+            found/wrong length.
         """
         if isinstance(names, str):
             names = [names]
         try:
-            start, step, size, series_list = self._inner._get_outputs(names)
+            start, step, size, series_list = self._inner._get_outputs(names, missing_ok)
         except ValueError as e:
             raise ValueError(f"Failed to retrieve model outputs: {e}") from e
 

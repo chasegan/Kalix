@@ -1031,48 +1031,80 @@ impl Model {
             .collect()
     }
 
+    /// Builds a zero-filled `Timeseries` of the simulation's length, used as
+    /// the `missing_ok` stand-in for a requested output that is undeclared,
+    /// not found, or the wrong length. Named with whatever casing the caller
+    /// originally requested, since there may be no canonical declared name
+    /// to fall back on (e.g. an undeclared name).
+    fn zero_output_series(&self, requested_name: &str, expected_len: usize) -> Timeseries {
+        let mut ts = Timeseries::new(self.configuration.sim_stepsize);
+        ts.start_timestamp = self.configuration.sim_start_timestamp;
+        ts.name = requested_name.to_string();
+        ts.values = vec![0.0; expected_len];
+        ts
+    }
+
     /// Output series to export, in declaration order.
     ///
     /// `names = None` selects all declared outputs, silently omitting any that
     /// are unpopulated (see `collect_output_series`). Named series that are
-    /// undeclared or unpopulated are an error. Name matching is
-    /// case-insensitive throughout. Requesting the same output more than once
-    /// is not an error - the returned vector has exactly one entry per
-    /// requested name, in request order (i.e. it is never deduplicated).
+    /// undeclared or unpopulated are an error, unless `missing_ok` is `true`,
+    /// in which case such a requested name is instead returned as a
+    /// zero-filled series of the simulation's length (see
+    /// `zero_output_series`) rather than failing the whole call. Name
+    /// matching is case-insensitive throughout. Requesting the same output
+    /// more than once is not an error - the returned vector has exactly one
+    /// entry per requested name, in request order (i.e. it is never
+    /// deduplicated).
     ///
     /// Each returned `Timeseries` carries its *canonical stored* name (see
     /// `Timeseries::name`) - the casing it was registered/declared under -
-    /// which may differ from the casing a caller requested it with.
+    /// which may differ from the casing a caller requested it with. Zero-fill
+    /// stand-ins carry the requested casing instead, since there may be no
+    /// canonical name to use.
     ///
     /// Used for Python bindings.
     pub fn get_output_series(
         &self,
         output_names: Option<Vec<String>>,
-    ) -> Result<Vec<&Timeseries>, String> {
+        missing_ok: bool,
+    ) -> Result<Vec<Timeseries>, String> {
         let Some(vec_names) = output_names else {
-            return Ok(self.collect_output_series());
+            return Ok(self.collect_output_series().into_iter().cloned().collect());
         };
 
         let expected_len = self.configuration.sim_nsteps as usize;
         let names_hash: HashSet<String> =
             HashSet::from_iter(self.outputs.iter().map(|x| x.to_lowercase()));
-        let mut vec_ts: Vec<&Timeseries> = Vec::with_capacity(vec_names.len());
+        let mut vec_ts: Vec<Timeseries> = Vec::with_capacity(vec_names.len());
         for output_name in vec_names {
             if !names_hash.contains(&output_name.to_lowercase()) {
+                if missing_ok {
+                    vec_ts.push(self.zero_output_series(&output_name, expected_len));
+                    continue;
+                }
                 return Err(format!(
                     "Output {} undeclared in model [outputs]",
                     output_name
                 ));
             }
             match self.lookup_output_series(&output_name, expected_len) {
-                OutputLookup::Populated(ts) => vec_ts.push(ts),
+                OutputLookup::Populated(ts) => vec_ts.push(ts.clone()),
                 OutputLookup::WrongLength(len) => {
+                    if missing_ok {
+                        vec_ts.push(self.zero_output_series(&output_name, expected_len));
+                        continue;
+                    }
                     return Err(format!(
                         "Output series {} found but wrong length, length {} but expected {}",
                         output_name, len, expected_len
                     ));
                 }
                 OutputLookup::NotFound => {
+                    if missing_ok {
+                        vec_ts.push(self.zero_output_series(&output_name, expected_len));
+                        continue;
+                    }
                     return Err(format!("Output {} not found", output_name));
                 }
             }

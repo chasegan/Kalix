@@ -37,7 +37,7 @@ Node.A.DsFlow
 #[test]
 fn test_output_lookup_is_case_insensitive() {
     let model = build_and_run();
-    let result = model.get_output_series(Some(vec!["node.a.dsflow".to_string()]));
+    let result = model.get_output_series(Some(vec!["node.a.dsflow".to_string()]), false);
     assert!(
         result.is_ok(),
         "lookup should be case-insensitive: {:?}",
@@ -49,7 +49,7 @@ fn test_output_lookup_is_case_insensitive() {
 fn test_output_series_retains_declared_casing() {
     let model = build_and_run();
     let series = model
-        .get_output_series(Some(vec!["NODE.A.DSFLOW".to_string()]))
+        .get_output_series(Some(vec!["NODE.A.DSFLOW".to_string()]), false)
         .expect("case-insensitive lookup should succeed");
     assert_eq!(series.len(), 1);
     assert_eq!(
@@ -62,7 +62,7 @@ fn test_output_series_retains_declared_casing() {
 fn test_collect_output_series_uses_declared_casing() {
     let model = build_and_run();
     let series = model
-        .get_output_series(None)
+        .get_output_series(None, false)
         .expect("collecting all outputs should succeed");
     assert_eq!(series.len(), 1);
     assert_eq!(series[0].name, "Node.A.DsFlow");
@@ -71,7 +71,7 @@ fn test_collect_output_series_uses_declared_casing() {
 #[test]
 fn test_undeclared_output_case_insensitive_error() {
     let model = build_and_run();
-    let result = model.get_output_series(Some(vec!["node.a.notreal".to_string()]));
+    let result = model.get_output_series(Some(vec!["node.a.notreal".to_string()]), false);
     let err = match result {
         Err(e) => e,
         Ok(_) => panic!("undeclared output should error regardless of casing"),
