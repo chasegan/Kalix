@@ -225,9 +225,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     model.configuration.specified_sim_end_timestamp = Some(timestamp);
                 }
             }
-        } else if section_name == "inputs" {
+        } else if section_name == "data" {
             // -------------------------------------------------------------------------------------
-            // Parsing inputs
+            // Parsing input data
             // -------------------------------------------------------------------------------------
             for (name, ini_property) in ini_section.properties {
                 // Input files can be specified in two formats:
@@ -857,6 +857,13 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             // User-defined functions — already parsed in the pre-pass above
             // -------------------------------------------------------------------------------------
+        } else if section_name == "inputs" {
+            // -------------------------------------------------------------------------------------
+            // Renamed section — helpful error (every model predating the rename has this)
+            // -------------------------------------------------------------------------------------
+            return Err(format!("Error on line {}: The '[inputs]' section was renamed to '[data]' \
+                (matching the 'data.' reference prefix). Rename the section header; the file paths and \
+                'data.*' references inside it are unchanged.", ini_section.line_number));
         } else {
             // -------------------------------------------------------------------------------------
             // Unexpected section
@@ -990,7 +997,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
             Some(alias_string) => (alias_string.as_str(), file_path.as_str()),
             None => (file_path.as_str(), ""),
         };
-        ini_doc.set_property("inputs", k, v);
+        ini_doc.set_property("data", k, v);
     }
 
     // List all constants
@@ -1311,7 +1318,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
                 }
             }
             // A section the source declared but that carries no properties (an empty
-            // `[inputs]`, say) has no counterpart in the canonical render, so the loop
+            // `[data]`, say) has no counterpart in the canonical render, so the loop
             // above never validated it and the sweep would drop it — taking any comments
             // attached to it with it. It holds no model-meaningful content, so there is
             // nothing in it that *could* have changed: keep it verbatim.

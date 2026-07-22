@@ -170,7 +170,7 @@ impl IniDocument {
                 line_idx = next_line_idx;
                 continue;
             } else {
-                // Handle list items (lines without = in sections like [inputs] or [outputs])
+                // Handle list items (lines without = in sections like [data] or [outputs])
                 match &state {
                     ParseState::InSection(section_name) => {
                         // Use the line content as the key, empty value indicates list item
@@ -515,7 +515,7 @@ key2 = value2,  # First part
             // Verify compatibility with legacy format
             let legacy = doc.to_legacy_format();
             assert!(legacy.contains_key("kalix"));
-            assert!(legacy.contains_key("inputs"));
+            assert!(legacy.contains_key("data"));
             assert!(legacy.contains_key("outputs"));
 
             // Check a node was parsed correctly

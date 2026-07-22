@@ -96,7 +96,7 @@ class ModelBuilder:
         self.outputs = []
 
     def inputs(self, *files):
-        self.lines += ["[inputs]"] + list(files) + [""]
+        self.lines += ["[data]"] + list(files) + [""]
 
     def node(self, name, node_type, x, y, props):
         self.lines += [f"[node.{name}]", f"loc = {x:.1f}, {y:.1f}", f"type = {node_type}"]
