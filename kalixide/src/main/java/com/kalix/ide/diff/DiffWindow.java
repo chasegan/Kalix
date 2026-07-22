@@ -407,8 +407,9 @@ public class DiffWindow extends JFrame {
             rightTextArea.setCaretPosition(offset);
 
             // Center the line in view
-            Rectangle rect = leftTextArea.modelToView(offset);
-            if (rect != null) {
+            java.awt.geom.Rectangle2D rect2D = leftTextArea.modelToView2D(offset);
+            if (rect2D != null) {
+                Rectangle rect = rect2D.getBounds();
                 rect.y -= leftScrollPane.getViewport().getHeight() / 2;
                 leftTextArea.scrollRectToVisible(rect);
             }

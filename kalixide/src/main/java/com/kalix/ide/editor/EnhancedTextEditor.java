@@ -288,10 +288,10 @@ public class EnhancedTextEditor extends JPanel {
             // Smart scroll: position the node at 1/4 from the top of the viewport
             if (textArea.getParent() instanceof javax.swing.JViewport viewport) {
                 java.awt.Rectangle viewRect = viewport.getViewRect();
-                java.awt.Rectangle caretRect = textArea.modelToView(offset);
+                java.awt.geom.Rectangle2D caretRect = textArea.modelToView2D(offset);
 
                 if (caretRect != null) {
-                    int desiredY = caretRect.y - (viewRect.height / 4);
+                    int desiredY = (int) caretRect.getY() - (viewRect.height / 4);
                     desiredY = Math.max(0, desiredY);
                     viewport.setViewPosition(new java.awt.Point(viewRect.x, desiredY));
                 }
@@ -344,10 +344,10 @@ public class EnhancedTextEditor extends JPanel {
             // Smart scroll: position at 1/4 from the top of the viewport
             if (textArea.getParent() instanceof javax.swing.JViewport viewport) {
                 java.awt.Rectangle viewRect = viewport.getViewRect();
-                java.awt.Rectangle caretRect = textArea.modelToView(position.offset());
+                java.awt.geom.Rectangle2D caretRect = textArea.modelToView2D(position.offset());
 
                 if (caretRect != null) {
-                    int desiredY = caretRect.y - (viewRect.height / 4);
+                    int desiredY = (int) caretRect.getY() - (viewRect.height / 4);
                     desiredY = Math.max(0, desiredY);
                     viewport.setViewPosition(new java.awt.Point(viewRect.x, desiredY));
                 }

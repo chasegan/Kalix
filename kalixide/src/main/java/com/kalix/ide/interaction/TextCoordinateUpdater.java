@@ -132,10 +132,10 @@ public class TextCoordinateUpdater {
                 // This provides good context and matches common editor behavior
                 if (textEditor.getTextArea().getParent() instanceof JViewport viewport) {
                     Rectangle viewRect = viewport.getViewRect();
-                    Rectangle caretRect = textEditor.getTextArea().modelToView(section.start());
+                    java.awt.geom.Rectangle2D caretRect = textEditor.getTextArea().modelToView2D(section.start());
 
                     // Position caret at 1/4 from top of viewport
-                    int desiredY = caretRect.y - (viewRect.height / 4);
+                    int desiredY = (int) caretRect.getY() - (viewRect.height / 4);
                     desiredY = Math.max(0, desiredY); // Don't scroll past document start
 
                     // Scroll to position
