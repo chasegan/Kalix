@@ -1,5 +1,4 @@
-//! This file contains code relating to the extraction of information from
-//! Models and the contained IniDocuments.
+//! Read-only queries against a Model's `IniDocument` (the parsed INI DOM).
 
 use crate::{io::custom_ini_parser::IniSection, model::Model};
 

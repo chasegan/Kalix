@@ -1,5 +1,5 @@
-//! Applies INI patch strings to a `Model`. Used to modify a model
-//! programatically, especially via the Python package.
+//! Applies patch strings that mutate a Model's `IniDocument` (the parsed INI DOM),
+//! reparsing the result into a brand-new `Model`.
 
 use crate::io::custom_ini_parser::IniDocument;
 use crate::io::error::KalixIoError;
