@@ -16,8 +16,8 @@ public class EditorContext {
         PROPERTY,              // On a property line (key = value)
         TABLE_VALUE,           // Inside a multi-line table
         OUTPUT_REFERENCE,      // In [outputs] section
-        INPUT_FILE,            // In [inputs] section on a file path line with no alias
-        INPUT_FILE_WITH_ALIAS, // In [inputs] section on a file path line with an alias
+        INPUT_FILE,            // In [data] section on a file path line with no alias
+        INPUT_FILE_WITH_ALIAS, // In [data] section on a file path line with an alias
         SECTION_HEADER,        // On a section header line
         CONSTANTS,             // In [const] section
         UNKNOWN

@@ -138,7 +138,7 @@ class CommandExecutorRenameTest {
     void aliasRenameIsAnchoredToTheKeyNotThePath() {
         // The path contains the alias text; only the key must be renamed.
         String model = """
-            [inputs]
+            [data]
             rain = ./rain/rain.csv
 
             [node.a]
@@ -152,7 +152,7 @@ class CommandExecutorRenameTest {
         String result = apply(model, reps);
 
         String expected = """
-            [inputs]
+            [data]
             climate = ./rain/rain.csv
 
             [node.a]
@@ -165,7 +165,7 @@ class CommandExecutorRenameTest {
     @Test
     void inputFilePathRenameMatchesThePathPortionOfAnAliasedLine() {
         String model = """
-            [inputs]
+            [data]
             data = ./data
 
             [outputs]

@@ -246,7 +246,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             if (!position.isInValuePosition()) {
                 // Outside a value: pick the per-section bare-line context, or
                 // fall through to property-name / section-header completions.
-                if ("inputs".equals(ctx.sectionName)) {
+                if ("data".equals(ctx.sectionName)) {
                     ctx.type = ContextType.INPUT_FILE_DEFINITIONS;
                 } else if ("outputs".equals(ctx.sectionName)) {
                     ctx.type = ContextType.OUTPUT_RECORDERS;
@@ -485,7 +485,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             }
         }
 
-        // Data series references from [inputs] section
+        // Data series references from [data] section
         addDataSeriesCompletions(model);
 
         // Lookup table calls from [table.*] sections

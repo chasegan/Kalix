@@ -15,7 +15,7 @@ import java.util.function.Supplier;
 
 /**
  * Command to reveal an input file in the system's file manager.
- * Applicable when the cursor is on an input file path in the [inputs] section.
+ * Applicable when the cursor is on an input file path in the [data] section.
  * Resolves the path (including trailhead paths) and opens the containing folder.
  */
 public class RevealInputFileCommand implements EditorCommand {

@@ -11,7 +11,7 @@
         }
       }
     },
-    "inputs": {
+    "data": {
       "required": false,
       "validation": "file_paths"
     },

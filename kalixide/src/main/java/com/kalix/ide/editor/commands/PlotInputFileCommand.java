@@ -13,7 +13,7 @@ import java.util.function.Supplier;
 
 /**
  * Command to plot an input file in a FlowViz window.
- * Applicable when the cursor is on an input file path in the [inputs] section.
+ * Applicable when the cursor is on an input file path in the [data] section.
  */
 public class PlotInputFileCommand implements EditorCommand {
 

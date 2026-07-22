@@ -71,7 +71,7 @@ public class CommandExecutor {
     /**
      * Renames an input file path throughout the document.
      * Finds all legitimate references and renames them atomically (single undo).
-     * This includes: the file path in [inputs], and all data.{alias}.* references
+     * This includes: the file path in [data], and all data.{alias}.* references
      * in property values and output references.
      *
      * @param oldPath     The current input file path
@@ -103,7 +103,7 @@ public class CommandExecutor {
     /**
      * Renames an input file alias throughout the document.
      * Finds all legitimate references and renames them atomically (single undo).
-     * This includes: the file path in [inputs], and all data.{alias}.* references
+     * This includes: the file path in [data], and all data.{alias}.* references
      * in property values and output references.
      *
      * @param oldAlias    The current input file alias
@@ -135,7 +135,7 @@ public class CommandExecutor {
     /**
      * Renames an input file to use a new alias throughout the document.
      * Finds all legitimate references and renames them atomically (single undo).
-     * This includes: the file path in [inputs], and all data.{alias}.* references
+     * This includes: the file path in [data], and all data.{alias}.* references
      * in property values and output references.
      *
      * @param oldPath    The current input file path
@@ -306,7 +306,7 @@ public class CommandExecutor {
         String oldPathSanitised = EngineNames.sanitizeFileName(oldPath);
         String newPathSanitised = EngineNames.sanitizeFileName(newPath);
 
-        // 1. Replace the input file path in [inputs] section
+        // 1. Replace the input file path in [data] section
         addInputsLinePathReplacement(replacements, lines, parsedModel, oldPath, newPath);
 
         // 2 & 3. Rewrite data.{name}.* references in property values and output references
@@ -331,7 +331,7 @@ public class CommandExecutor {
         String oldPathSanitised = EngineNames.sanitizeFileName(oldPath);
         String newAliasSanitised = EngineNames.sanitize(newAlias);
 
-        // 1. Replace the input file path in [inputs] section with alias = path format
+        // 1. Replace the input file path in [data] section with alias = path format
         addInputsLinePathReplacement(replacements, lines, parsedModel, oldPath, newAlias + " = " + oldPath);
 
         // 2 & 3. Rewrite data.{name}.* references in property values and output references
@@ -356,7 +356,7 @@ public class CommandExecutor {
         String oldAliasSanitised = EngineNames.sanitize(oldAlias);
         String newAliasSanitised = EngineNames.sanitize(newAlias);
 
-        // 1. Replace the alias key on its "alias = path" line in the [inputs] section.
+        // 1. Replace the alias key on its "alias = path" line in the [data] section.
         // Anchored to the key position so a path that happens to contain the alias
         // text is never rewritten.
         Integer inputLineNumber = parsedModel.getInputFileAliasLineNumbers().get(oldAlias);
@@ -384,7 +384,7 @@ public class CommandExecutor {
     }
 
     /**
-     * Adds the replacement of an input file path on its [inputs] line, anchored to
+     * Adds the replacement of an input file path on its [data] line, anchored to
      * the exact position of the path text (searched backwards so the path portion of
      * an "alias = path" line is matched, never the alias).
      */

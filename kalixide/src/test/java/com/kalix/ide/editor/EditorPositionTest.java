@@ -93,13 +93,13 @@ class EditorPositionTest {
     }
 
     @Test
-    void cursorOnInputsHeaderLine_returnsInputs() {
+    void cursorOnDataHeaderLine_returnsData() {
         // Off-by-one fix from ContextDetector: cursor on a non-node section
         // header is now correctly inside the section.
-        String text = "[inputs]\ndata.csv\n";
-        int caret = after(text, "[inp");
+        String text = "[data]\ndata.csv\n";
+        int caret = after(text, "[da");
         EditorPosition p = analyze(text, caret);
-        assertEquals("inputs", p.getSectionName());
+        assertEquals("data", p.getSectionName());
     }
 
     @Test
