@@ -50,6 +50,8 @@ final class ListFileView {
     private Path directory;
     private DirectoryLister.Handle handle;
     private boolean programmaticSelection;
+    /** One-shot: select this name on the next refilter (pasted-path selection). */
+    private String pendingSelectName;
 
     ListFileView(FileViewHost host) {
         this.host = host;
@@ -150,10 +152,23 @@ final class ListFileView {
                 visible.add(entry);
             }
         }
+        FsEntry toNotify = null;
         programmaticSelection = true;
         try {
             model.setEntries(visible);
-            if (selected != null) {
+            if (pendingSelectName != null) {
+                for (int modelRow = 0; modelRow < visible.size(); modelRow++) {
+                    if (visible.get(modelRow).name().equals(pendingSelectName)) {
+                        int viewRow = table.convertRowIndexToView(modelRow);
+                        table.setRowSelectionInterval(viewRow, viewRow);
+                        table.scrollRectToVisible(table.getCellRect(viewRow, 0, true));
+                        toNotify = visible.get(modelRow);
+                        break;
+                    }
+                }
+                // One-shot: consumed even when not found (the name may not exist here).
+                pendingSelectName = null;
+            } else if (selected != null) {
                 int modelRow = visible.indexOf(selected);
                 if (modelRow >= 0) {
                     int viewRow = table.convertRowIndexToView(modelRow);
@@ -163,6 +178,15 @@ final class ListFileView {
         } finally {
             programmaticSelection = false;
         }
+        if (toNotify != null) {
+            host.selectionChanged(selectableEntry(toNotify));
+        }
+    }
+
+    /** Selects the entry with this name (now, or when its listing batch arrives). */
+    void selectName(String name) {
+        pendingSelectName = name;
+        refilter();
     }
 
     /** Re-lists the current directory. */

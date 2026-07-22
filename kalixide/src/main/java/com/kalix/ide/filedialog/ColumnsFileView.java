@@ -120,6 +120,24 @@ final class ColumnsFileView {
         return columns.isEmpty() ? null : columns.get(columns.size() - 1).directory;
     }
 
+    /**
+     * Selects the named entry in the deepest column — now if its listing has arrived,
+     * otherwise when it does — and reports the selection to the host (pasted-path flow).
+     */
+    void selectName(String name) {
+        if (columns.isEmpty()) {
+            return;
+        }
+        BrowserColumn last = columns.get(columns.size() - 1);
+        last.pendingSelection = name;
+        last.refilter();
+        FsEntry selected = last.list.getSelectedValue();
+        if (selected != null && selected.name().equals(name)) {
+            host.selectionChanged(
+                !selected.directory() && host.directoriesOnly() ? null : selected);
+        }
+    }
+
     void focusView() {
         if (!columns.isEmpty()) {
             columns.get(columns.size() - 1).list.requestFocusInWindow();

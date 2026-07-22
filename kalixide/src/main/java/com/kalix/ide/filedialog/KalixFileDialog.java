@@ -89,6 +89,7 @@ public final class KalixFileDialog implements FileViewHost {
 
     private JButton backButton;
     private JButton forwardButton;
+    private JTextField pathField;
 
     private Path currentDir;
     private FsEntry selectedEntry;
@@ -217,6 +218,7 @@ public final class KalixFileDialog implements FileViewHost {
         rebuildBreadcrumb();
         pinToggle.setSelected(FileDialogSidebar.isPinned(dir));
         recordVisit(dir);
+        reflectPath(dir);
         updateOkEnablement();
     }
 
@@ -226,6 +228,7 @@ public final class KalixFileDialog implements FileViewHost {
         if (mode == Mode.SAVE_FILE && entry != null && !entry.directory()) {
             nameField.setText(entry.name());
         }
+        reflectPath(entry != null ? entry.path() : currentDir);
         updateOkEnablement();
     }
 
@@ -246,10 +249,15 @@ public final class KalixFileDialog implements FileViewHost {
 
     @Override
     public void showEntryContextMenu(FsEntry entry, java.awt.Component invoker, int x, int y) {
-        // Same shape as the project tree's menu (context-menu-style: modify group, then the
-        // destructive item isolated with its landmark icon), scoped to what makes sense
-        // mid-dialog: fixing a name, removing a mistake.
+        // Same grammar as the project tree's menu (context-menu-style §1 skeleton: create,
+        // then modify, then the destructive item isolated with its landmark icon), scoped
+        // to what makes sense mid-dialog.
         javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+        javax.swing.JMenuItem newFolder = new javax.swing.JMenuItem("New folder…");
+        newFolder.addActionListener(e -> createNewFolderIn(
+            entry.directory() ? entry.path() : entry.path().getParent()));
+        menu.add(newFolder);
+        menu.addSeparator();
         javax.swing.JMenuItem rename = new javax.swing.JMenuItem("Rename…");
         rename.addActionListener(e -> {
             if (EntryOperations.rename(dialog, entry)) {
@@ -302,9 +310,15 @@ public final class KalixFileDialog implements FileViewHost {
         viewCards.add(columnsView.component(), "columns");
         columnsMode = "columns".equals(PreferenceKeys.FILE_DIALOG_VIEW.get());
 
+        // The footer lives inside the split's right side, so the path field and buttons
+        // align with the listing area's left edge (the sidebar frames the full height).
+        JPanel listingRegion = new JPanel(new BorderLayout());
+        listingRegion.add(viewCards, BorderLayout.CENTER);
+        listingRegion.add(buildFooter(), BorderLayout.SOUTH);
+
         // Adjustable sidebar, width persisted (same split idiom as the main workspace).
         javax.swing.JSplitPane split = new javax.swing.JSplitPane(
-            javax.swing.JSplitPane.HORIZONTAL_SPLIT, sidebar.component(), viewCards);
+            javax.swing.JSplitPane.HORIZONTAL_SPLIT, sidebar.component(), listingRegion);
         split.setContinuousLayout(true);
         split.setBorder(null);
         split.setResizeWeight(0.0); // the listing absorbs dialog resizes; the sidebar keeps its width
@@ -315,7 +329,6 @@ public final class KalixFileDialog implements FileViewHost {
         JPanel content = new JPanel(new BorderLayout());
         content.add(buildToolbar(), BorderLayout.NORTH);
         content.add(split, BorderLayout.CENTER);
-        content.add(buildFooter(), BorderLayout.SOUTH);
         dialog.setContentPane(content);
 
         ((CardLayout) viewCards.getLayout()).show(viewCards, columnsMode ? "columns" : "list");
@@ -340,6 +353,9 @@ public final class KalixFileDialog implements FileViewHost {
         JPanel bar = new JPanel(new BorderLayout(6, 0));
         bar.setBorder(BorderFactory.createEmptyBorder(6, 8, 6, 8));
 
+        breadcrumb = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+        breadcrumb.setOpaque(false);
+
         // Back/forward use the main toolbar's navigation glyphs, so the idiom carries over.
         backButton = iconButton(FontAwesomeSolid.ARROW_LEFT, "Back");
         backButton.addActionListener(e -> goBack());
@@ -355,19 +371,8 @@ public final class KalixFileDialog implements FileViewHost {
             }
         });
 
-        breadcrumb = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
-        breadcrumb.setOpaque(false);
-
-        JPanel navButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
-        navButtons.setOpaque(false);
-        navButtons.add(backButton);
-        navButtons.add(forwardButton);
-        navButtons.add(upButton);
-
-        JPanel left = new JPanel(new BorderLayout(6, 0));
-        left.setOpaque(false);
-        left.add(navButtons, BorderLayout.WEST);
-        left.add(breadcrumb, BorderLayout.CENTER);
+        JButton newFolderButton = iconButton(FontAwesomeSolid.FOLDER_PLUS, "New folder…");
+        newFolderButton.addActionListener(e -> createNewFolderIn(currentDir));
 
         pinToggle = iconToggle(FontAwesomeSolid.THUMBTACK, "Pin this folder to the sidebar");
         pinToggle.addActionListener(e -> {
@@ -394,24 +399,33 @@ public final class KalixFileDialog implements FileViewHost {
         listToggle.addActionListener(e -> switchView(false));
         columnsToggle.addActionListener(e -> switchView(true));
 
+        // All controls sit right of the breadcrumb, in three groups:
+        // navigation | folder actions | view.
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         right.setOpaque(false);
+        right.add(backButton);
+        right.add(forwardButton);
+        right.add(upButton);
+        right.add(Box.createHorizontalStrut(8));
+        right.add(newFolderButton);
         right.add(pinToggle);
         right.add(hiddenToggle);
         right.add(Box.createHorizontalStrut(8));
         right.add(listToggle);
         right.add(columnsToggle);
 
-        bar.add(left, BorderLayout.CENTER);
+        bar.add(breadcrumb, BorderLayout.CENTER);
         bar.add(right, BorderLayout.EAST);
         return bar;
     }
 
     private JComponent buildFooter() {
-        // One controls row; the status line above it stays invisible (zero height) until
-        // there is actually something to say, so the footer carries no dead space.
-        JPanel footer = new JPanel(new BorderLayout(8, 2));
-        footer.setBorder(BorderFactory.createEmptyBorder(4, 10, 8, 10));
+        // Stacked rows, top to bottom: status (collapsed while silent), the save-as name
+        // row (save mode only), and the controls row — path field stretching left,
+        // filter/buttons right. The whole footer sits right of the sidebar, so the path
+        // field's left edge aligns with the listing area.
+        javax.swing.Box footer = javax.swing.Box.createVerticalBox();
+        footer.setBorder(BorderFactory.createEmptyBorder(4, 8, 8, 8));
 
         statusLabel = new JLabel();
         statusLabel.setVisible(false);
@@ -419,13 +433,16 @@ public final class KalixFileDialog implements FileViewHost {
         if (muted != null) {
             statusLabel.setForeground(muted);
         }
+        JPanel statusRow = new JPanel(new BorderLayout());
+        statusRow.setOpaque(false);
+        statusRow.add(statusLabel, BorderLayout.CENTER);
+        footer.add(statusRow);
 
-        JPanel row = new JPanel(new BorderLayout(8, 0));
-        row.setOpaque(false);
         if (mode == Mode.SAVE_FILE) {
-            JPanel namePanel = new JPanel(new BorderLayout(6, 0));
-            namePanel.setOpaque(false);
-            namePanel.add(new JLabel("Save as:"), BorderLayout.WEST);
+            JPanel nameRow = new JPanel(new BorderLayout(6, 0));
+            nameRow.setOpaque(false);
+            nameRow.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
+            nameRow.add(new JLabel("Save as:"), BorderLayout.WEST);
             nameField = new JTextField();
             nameField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
                 @Override
@@ -443,9 +460,18 @@ public final class KalixFileDialog implements FileViewHost {
                     updateOkEnablement();
                 }
             });
-            namePanel.add(nameField, BorderLayout.CENTER);
-            row.add(namePanel, BorderLayout.CENTER);
+            nameRow.add(nameField, BorderLayout.CENTER);
+            footer.add(nameRow);
         }
+
+        JPanel controlsRow = new JPanel(new BorderLayout(8, 0));
+        controlsRow.setOpaque(false);
+
+        // Editable path: pasteable, Enter navigates (see onPathEntered); mirrors the
+        // current folder / selection when the user isn't typing in it.
+        pathField = new JTextField();
+        pathField.addActionListener(e -> onPathEntered());
+        controlsRow.add(pathField, BorderLayout.CENTER);
 
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         right.setOpaque(false);
@@ -461,12 +487,6 @@ public final class KalixFileDialog implements FileViewHost {
             right.add(filterCombo);
             right.add(Box.createHorizontalStrut(6));
         }
-        if (mode != Mode.OPEN_FILE) {
-            JButton newFolder = new JButton("New folder…");
-            newFolder.addActionListener(e -> createNewFolder());
-            right.add(newFolder);
-            right.add(Box.createHorizontalStrut(12));
-        }
         JButton cancelButton = new JButton("Cancel");
         cancelButton.addActionListener(e -> cancel());
         okButton = new JButton(switch (mode) {
@@ -477,11 +497,53 @@ public final class KalixFileDialog implements FileViewHost {
         okButton.addActionListener(e -> accept());
         right.add(cancelButton);
         right.add(okButton);
-        row.add(right, BorderLayout.EAST);
+        controlsRow.add(right, BorderLayout.EAST);
+        footer.add(controlsRow);
 
-        footer.add(statusLabel, BorderLayout.NORTH);
-        footer.add(row, BorderLayout.CENTER);
         return footer;
+    }
+
+    /**
+     * Enter in the path field: navigate to the typed/pasted path. A directory becomes the
+     * current folder; a file selects itself in its parent folder; in both cases focus moves
+     * to the OK button (Enter again accepts). An invalid path changes nothing and keeps
+     * focus in the field, with the reason in the status line.
+     */
+    private void onPathEntered() {
+        String text = pathField.getText().trim();
+        if (text.isEmpty()) {
+            return;
+        }
+        Path typed;
+        try {
+            typed = Path.of(text).toAbsolutePath().normalize();
+        } catch (java.nio.file.InvalidPathException ex) {
+            showStatus("Not a valid path: " + text);
+            return;
+        }
+        if (Files.isDirectory(typed)) {
+            navigateTo(typed);
+            okButton.requestFocusInWindow();
+        } else if (Files.isRegularFile(typed) && typed.getParent() != null) {
+            navigateTo(typed.getParent());
+            String name = typed.getFileName().toString();
+            if (columnsMode) {
+                columnsView.selectName(name);
+            } else {
+                listView.selectName(name);
+            }
+            okButton.requestFocusInWindow();
+        } else {
+            showStatus("Path not found: " + text);
+            // Focus deliberately stays in the field for correction.
+        }
+    }
+
+    /** Mirrors a path into the path field unless the user is editing it. */
+    private void reflectPath(Path path) {
+        if (pathField != null && !pathField.isFocusOwner() && path != null) {
+            pathField.setText(path.toString());
+        }
     }
 
     private void showStatus(String message) {
@@ -519,6 +581,7 @@ public final class KalixFileDialog implements FileViewHost {
         rebuildBreadcrumb();
         pinToggle.setSelected(FileDialogSidebar.isPinned(dir));
         recordVisit(dir);
+        reflectPath(dir);
         if (columnsMode) {
             columnsView.navigateTo(dir);
         } else {
@@ -626,14 +689,17 @@ public final class KalixFileDialog implements FileViewHost {
         for (int i = first; i < chain.size(); i++) {
             Path p = chain.get(i);
             Path name = p.getFileName();
-            JButton segment = new JButton(name != null ? name.toString() : p.toString());
+            boolean isRoot = name == null; // "/" on Unix, "C:\" on Windows
+            JButton segment = new JButton(isRoot ? p.toString() : name.toString());
             segment.putClientProperty("JButton.buttonType", "toolBarButton");
             segment.setFocusable(false);
             segment.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
             segment.setContentAreaFilled(false);
             segment.addActionListener(e -> navigateTo(p));
             breadcrumb.add(segment);
-            if (i < chain.size() - 1) {
+            // No separator straight after the root: its own label already IS the path
+            // separator ("/"), so adding one produced the "/ / Users" double-slash.
+            if (i < chain.size() - 1 && !isRoot) {
                 breadcrumb.add(separator());
             }
         }
@@ -735,8 +801,10 @@ public final class KalixFileDialog implements FileViewHost {
         dialog.dispose();
     }
 
-    private void createNewFolder() {
-        if (currentDir == null) {
+    /** Creates a folder inside {@code base} (toolbar: the current folder; context menu:
+     *  the clicked folder, or the clicked file's parent) and steps into it. */
+    private void createNewFolderIn(Path base) {
+        if (base == null) {
             return;
         }
         String name = JOptionPane.showInputDialog(dialog, "New folder name:", "New Folder",
@@ -745,11 +813,11 @@ public final class KalixFileDialog implements FileViewHost {
             return;
         }
         try {
-            Path created = Files.createDirectory(currentDir.resolve(name.trim()));
+            Path created = Files.createDirectory(base.resolve(name.trim()));
             // No watcher in the dialog: explicitly refresh the parent's (cached) column so
             // the new folder appears in the trail, then step into it.
             if (columnsMode) {
-                columnsView.reloadColumn(currentDir, created.getFileName().toString());
+                columnsView.reloadColumn(base, created.getFileName().toString());
             }
             navigateTo(created);
         } catch (IOException ex) {
