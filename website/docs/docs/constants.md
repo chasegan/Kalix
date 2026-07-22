@@ -4,11 +4,16 @@ title: "[const]"
 
 # [const]
 
-The `[const]` section defines named fixed values, reusable from any
-[dynamic expression](dynamic-expressions.md) in the model. A constant is a
-single number given a name, so a value that appears in several places — a
-threshold, a factor, a water-year month — is written once and referred to
-everywhere else.
+The `[const]` section defines named fixed values. A constant is a single number
+given a name, so a value that recurs across the model — a threshold, a factor, a
+water-year month — is written once and referenced by name wherever it is needed.
+
+A constant may be used **anywhere a [dynamic expression](dynamic-expressions.md)
+is accepted** — a node property, a [`[var.*]`](vars.md) key, a
+[`[ras.*]`](ras.md) trigger or action, a [`[table.*]`](tables.md) lookup
+argument. That is the scope: `const.*` is an expression term, not a general text
+substitution, so it does not resolve in places that take a plain literal rather
+than an expression (a section header, a node name, or another constant's value).
 
 ```ini
 [const]
