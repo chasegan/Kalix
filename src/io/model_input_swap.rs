@@ -17,12 +17,14 @@ pub struct InMemoryColumn {
 
 /// Supply in-memory data for a declared `[data]` alias (`set_input()`).
 ///
-/// `alias` must already name a source in `[data]` — either a bare
-/// declaration (`observed_flows =`) or an aliased file (`climate_data =
-/// climate.csv`, still overridable: supplied data takes precedence over the
-/// file). An alias that isn't declared is rejected rather than silently
-/// creating an unused dataset — the model definition stays the single source
-/// of truth for what it consumes.
+/// `alias` must already name a source in `[data]` — either a bare declaration
+/// (`observed_flows =`) or an aliased file (`climate_data = climate.csv`, still
+/// overridable: supplied data takes precedence over the file). An alias that
+/// isn't declared is rejected rather than silently creating an unused dataset —
+/// the model definition stays the single source of truth for what it consumes.
+///
+/// The only failure path for this function is if the input `alias` if not
+/// declared in the `[data]` section.
 pub fn set_input(
     model: &mut Model,
     alias: &str,
