@@ -125,3 +125,53 @@ When a GR4J or Sacramento node's `rain` input is a **linear combination of stati
 | `rf_d0` … `rf_d<n−2>` | Relative distribution between the n stations | 0 – 1, linear |
 
 These calibrate the rainfall weighting itself alongside the model parameters; the optimised weights are written back into the node's `rain` expression when the model is saved. A single-station input exposes only `rf_bias`.
+
+Note that `rf_bias` and `rf_d<i>` are not the station weights themselves — they are a re-parameterisation of them. The section below describes how the weights written in the model convert to and from these optimisation parameters.
+
+## How linear-combination weights become optimisation parameters
+
+When Kalix detects that an input is a linear combination of data series,
+
+```ini
+rain = 0.3 * data.rain1 + 0.7 * data.rain2
+```
+
+it does not expose the coefficients to the optimiser directly. Instead the n coefficients are re-parameterised as:
+
+- a **bias** (`rf_bias`) — the sum of all coefficients, i.e. the total volume multiplier; and
+- **n − 1 distribution parameters** (`rf_d0` … `rf_d<n−2>`), each in `[0, 1]`, controlling how that total is shared among the stations.
+
+This split exists for two reasons. First, total input volume is the dominant sensitivity in a calibration, while the mix between nearby stations is second-order; factoring the sum out as its own parameter aligns the search axes with that structure instead of entangling the two. Second, Kalix optimisers search a box (each gene in `[0, 1]`), but "shares that are non-negative and sum to one" is not a box — the distribution parameters exist to map a box onto that constraint so the optimiser never has to see it.
+
+The section is written in terms of the rainfall parameters because that is where the scheme currently surfaces (the `rain` input of `gr4j` and `sacramento` nodes), but the parameterisation itself applies to any linear combination of input data — it is about weighted sums, not about rainfall specifically.
+
+### From parameters to weights
+
+Stations are taken in the order they appear in the expression. Each distribution parameter assigns its station a fraction of the weight *remaining* at its turn, and the last station takes whatever is left ("stick-breaking"):
+
+```
+v_i     = 1 - (1 - u_i)^(1 / (n - 1 - i))     # u_i is rf_d<i>
+share_i = v_i × remaining_i                   # remaining_0 = 1
+a_i     = rf_bias × share_i                   # coefficient written to the model
+```
+
+The exponent `1/(n−1−i)` is a correction chosen so that a uniform search of the distribution parameters is an exactly uniform search of the possible weight distributions: no station is statistically favoured or penalised by the order the modeller happened to write them in. Two consequences worth knowing:
+
+- **Exact zero weights are reachable** at the ends of the `[0, 1]` range, so the optimiser can switch an uninformative station off completely. `lin_range(g(#), 0, 1)` is the natural mapping, whatever n is.
+- For **n = 2**, `rf_d0` is simply station 0's fractional share of the total.
+- For **n > 2**, equal weighting is *not* at `rf_d = 0.5`; it is at `u_i = 1 - (m/(m+1))^m` where `m = n-1-i` (e.g. `0.5556, 0.5` for three stations).
+
+Because each parameter divides what earlier ones left behind, an individual `rf_d<i>` is not a per-station knob for `i > 0` — it sets station i's share *of the remainder*, conditioned on the parameters before it.
+
+### From weights to parameters
+
+The map is exactly invertible, and Kalix inverts it when the model loads: the coefficients written in the expression are converted back to `(rf_bias, rf_d*)`. This means:
+
+- an optimisation **warm-starts from the weights already in the model file**, not from a default; and
+- setting only a *subset* of the parameters (for example calibrating `rf_bias` alone) scales or adjusts the written weights while leaving the rest of the distribution intact.
+
+Weight vectors that the scheme cannot represent — any negative coefficient, or several stations whose coefficients sum to zero — fall back to an equal-weight distribution, with `rf_bias` still initialised to the coefficient sum.
+
+### Version note
+
+This scheme was introduced in Kalix 0.4.0, replacing an earlier softmax-based parameterisation. Bounds written in existing `[parameters]` sections remain valid (`rf_d*` is still `[0, 1]`, `rf_bias` unchanged), but optimised `rf_d*` *values* from earlier versions do not mean the same thing under the new scheme and should not be carried over.
