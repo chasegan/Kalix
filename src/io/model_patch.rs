@@ -8,21 +8,37 @@ use crate::misc::misc_functions::sanitize_name;
 use crate::model::Model;
 use crate::timeseries_input::TimeseriesInputDefinition;
 
+/// Helper enum to qualify the methods of failure.
+#[derive(Debug, thiserror::Error)]
+pub enum PatchError {
+    #[error("Patch cannot be called on an empty model - use load instead.")]
+    EmptyModel,
+    #[error("{0}")]
+    ValidationError(String),
+    #[error("Patch string delete mode specifies non-existent section {0} (`missing_ok=false`)")]
+    DeleteKeyErr(String),
+    #[error(transparent)]
+    IoError(#[from] KalixIoError),
+}
+
 /// Helper function for defining the patch functions. Note this is a full
 /// reuild/reparse for safety reasons - an invalid patch is rejected and won't
 /// invalidate the original model. This function is on the cold path, not called
 /// during simulation.
-fn apply_patch(
+fn apply_patch<F: FnOnce(&mut IniDocument, IniDocument) -> Result<(), PatchError>>(
     model: &Model,
     patch_string: &str,
-    mutate: impl FnOnce(&mut IniDocument, IniDocument) -> Result<(), String>,
-) -> Result<Model, KalixIoError> {
+    mutate: F,
+) -> Result<Model, PatchError> {
     // Clone ensures that we do not modify the original model's ini_document -
     // in case the modification is invalid
-    let mut model_ini_doc = model.ini_document.clone().map(Ok).unwrap_or(Err(
-        KalixIoError::Parse("Patch cannot be called on an empty model - use load instead.".to_string()),
-    ))?;
-    let patch_ini = IniDocument::parse(patch_string)?;
+    let mut model_ini_doc = model
+        .ini_document
+        .clone()
+        .map(Ok)
+        .unwrap_or(Err(PatchError::EmptyModel))?;
+    let patch_ini = IniDocument::parse(patch_string)
+        .map_err(KalixIoError::Parse)?;
 
     mutate(&mut model_ini_doc, patch_ini)?;
 
@@ -54,7 +70,9 @@ fn apply_patch(
     }
 
     // Reject poorly configured models
-    patched_model.validate_model_structure()?;
+    patched_model
+        .validate_model_structure()
+        .map_err(PatchError::ValidationError)?;
     Ok(patched_model)
 }
 
@@ -62,7 +80,7 @@ fn apply_patch(
 /// patch, updates it if present or creates it otherwise; sections not yet
 /// present are created and appended to the bottom of the file. Properties
 /// and sections omitted from the patch are left untouched.
-pub fn patch_merge(model: &Model, patch_string: &str) -> Result<Model, KalixIoError> {
+pub fn patch_merge(model: &Model, patch_string: &str) -> Result<Model, PatchError> {
     let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
         for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
             for (property_name, property_content) in patch_ini_section.properties {
@@ -83,7 +101,7 @@ pub fn patch_merge(model: &Model, patch_string: &str) -> Result<Model, KalixIoEr
 /// patch are dropped, unlike `patch_merge`). An overridden section keeps its
 /// original position; a section not yet present is appended to the bottom of
 /// the file.
-pub fn patch_replace(model: &Model, patch_string: &str) -> Result<Model, KalixIoError> {
+pub fn patch_replace(model: &Model, patch_string: &str) -> Result<Model, PatchError> {
     let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
         for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
             model_ini_doc.set_section(patch_section_name, patch_ini_section);
@@ -98,24 +116,25 @@ pub fn patch_replace(model: &Model, patch_string: &str) -> Result<Model, KalixIo
 /// section must list no properties). If `missing_ok` is `false`, patching a
 /// section that does not exist in the original model is an error; if `true`,
 /// it is silently ignored.
-pub fn patch_delete(model: &Model, patch_string: &str, missing_ok: bool) -> Result<Model, KalixIoError> {
+pub fn patch_delete(
+    model: &Model,
+    patch_string: &str,
+    missing_ok: bool,
+) -> Result<Model, PatchError> {
     let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
         for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
-            // Verify that patch string is OK
             if !patch_ini_section.properties.is_empty() {
-                return Err(format!(
+                return Err(KalixIoError::Parse(format!(
                     "Patch string specifies section {} with non-empty property content.",
                     patch_section_name
-                ));
+                ))
+                .into());
             }
             match model_ini_doc.remove_section(&patch_section_name) {
                 Ok(_) => {}
                 Err(_) if missing_ok => {}
                 Err(_) => {
-                    return Err(format!(
-                        "Patch string specifies section {} which does not exist in original model - specify `missing_ok` if this is intended",
-                        patch_section_name
-                    ));
+                    return Err(PatchError::DeleteKeyErr(patch_section_name));
                 }
             }
         }
@@ -133,7 +152,9 @@ mod tests {
     // 2000-01-01T00:00:00Z in Kalix's 2^63-biased unix-seconds, matching the
     // [kalix] start in `model_ini_with_declared_input` (see model_input_swap
     // tests for why set_input() timestamps are biased, not raw epoch).
-    fn start() -> u64 { wrap_to_u64(946_684_800) }
+    fn start() -> u64 {
+        wrap_to_u64(946_684_800)
+    }
     const DAY: u64 = 86_400;
 
     /// A model whose only input is a bare declaration (`obs =`), referenced by
@@ -209,18 +230,36 @@ mod tests {
         // discarded (which would leave `obs` "declared but not supplied").
         let mut model = IniModelIO::read_model_string(model_ini_with_declared_input())
             .expect("model should parse");
-        set_input(&mut model, "obs", start(), DAY,
-            vec![InMemoryColumn { name: "flow".into(), values: vec![1.0, 2.0, 3.0, 4.0, 5.0] }])
-            .expect("set_input should fill the declaration");
+        set_input(
+            &mut model,
+            "obs",
+            start(),
+            DAY,
+            vec![InMemoryColumn {
+                name: "flow".into(),
+                values: vec![1.0, 2.0, 3.0, 4.0, 5.0],
+            }],
+        )
+        .expect("set_input should fill the declaration");
 
         // A patch that touches something unrelated must not drop the input data.
         let mut patched = patch_merge(&model, "[const]\nk = 1\n")
             .expect("patch should apply and preserve the supplied input");
 
-        patched.configure().expect("configure should succeed on the patched model");
-        patched.run().expect("run should succeed on the patched model");
-        let idx = patched.data_cache.get_existing_series_idx("node.src.dsflow").unwrap();
-        assert_eq!(patched.data_cache.series[idx].values, vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+        patched
+            .configure()
+            .expect("configure should succeed on the patched model");
+        patched
+            .run()
+            .expect("run should succeed on the patched model");
+        let idx = patched
+            .data_cache
+            .get_existing_series_idx("node.src.dsflow")
+            .unwrap();
+        assert_eq!(
+            patched.data_cache.series[idx].values,
+            vec![1.0, 2.0, 3.0, 4.0, 5.0]
+        );
     }
 
     #[test]
@@ -232,9 +271,17 @@ mod tests {
         // lookup failure.
         let mut model = IniModelIO::read_model_string(model_ini_with_declared_input())
             .expect("model should parse");
-        set_input(&mut model, "obs", start(), DAY,
-            vec![InMemoryColumn { name: "value".into(), values: vec![1.0, 2.0, 3.0, 4.0, 5.0] }])
-            .expect("set_input supplies data regardless of whether a reference matches");
+        set_input(
+            &mut model,
+            "obs",
+            start(),
+            DAY,
+            vec![InMemoryColumn {
+                name: "value".into(),
+                values: vec![1.0, 2.0, 3.0, 4.0, 5.0],
+            }],
+        )
+        .expect("set_input supplies data regardless of whether a reference matches");
 
         let err = patch_merge(&model, "[const]\nk = 1\n")
             .err()
@@ -463,8 +510,8 @@ mod tests {
 
     #[test]
     fn patch_delete_preserves_working_directory() {
-        let mut model = IniModelIO::read_model_string(model_ini_with_extra_node())
-            .expect("model should parse");
+        let mut model =
+            IniModelIO::read_model_string(model_ini_with_extra_node()).expect("model should parse");
         model.working_directory = std::path::PathBuf::from("some/working/dir");
         let working_directory = model.working_directory.clone();
 
@@ -521,14 +568,11 @@ mod tests {
         // distinction as the top-level load path (see ini_model_io.rs tests).
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
-        let result = patch_merge(
-            &model,
-            "[data]\n./does_not_exist_patch_test.csv\n",
-        );
+        let result = patch_merge(&model, "[data]\n./does_not_exist_patch_test.csv\n");
         match result {
             Ok(_) => panic!("expected an error, got Ok"),
-            Err(KalixIoError::Io(_)) => {}
-            Err(other) => panic!("expected KalixIoError::Io, got {:?}", other),
+            Err(PatchError::IoError(KalixIoError::Io(_))) => {}
+            Err(other) => panic!("expected PatchError::IoError(KalixIoError::Io), got {:?}", other),
         }
     }
 }
