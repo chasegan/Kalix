@@ -8,24 +8,33 @@ mod error;
 use kalix::io::error::KalixIoError;
 use kalix::io::ini_model_io::IniModelIO;
 use kalix::io::model_input_swap;
-use kalix::io::model_patch::{patch_delete, patch_merge, patch_replace};
+use kalix::io::model_patch::{patch_delete, patch_merge, patch_replace, PatchError};
 use kalix::io::{model_query, pixie_io};
 use kalix::model::Model;
 use kalix::run;
 use kalix::tid::utils::{wrap_to_i64, wrap_to_u64};
 use kalix::timeseries::Timeseries;
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
-use pyo3::exceptions::{PyIOError, PyKeyError, PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
-/// Maps the engine's Io/Parse distinction to the corresponding Python
+/// Maps the engine's Io/Parse/Validate distinction to the corresponding Python
 /// exception type: a genuine filesystem failure becomes `OSError`, a content
 /// problem (bad INI syntax, invalid model config) becomes `ValueError`.
 fn io_err_to_py(e: KalixIoError) -> PyErr {
     match e {
         KalixIoError::Io(msg) => PyIOError::new_err(msg),
-        KalixIoError::Parse(msg) => PyValueError::new_err(msg),
+        KalixIoError::Parse(msg) => error::ModelParseError::new_err(msg),
+    }
+}
+
+fn patch_err_to_py<'py>(py: Python<'py>, e: PatchError) -> PyErr {
+    match e {
+        PatchError::DeleteKeyErr(_) => error::new_kalix_key_error(py, e.to_string()),
+        PatchError::EmptyModel => error::new_kalix_runtime_error(py, e.to_string()),
+        PatchError::IoError(io_err) => io_err_to_py(io_err),
+        PatchError::ValidationError(_) => error::ModelValidationError::new_err(e.to_string()),
     }
 }
 
@@ -305,9 +314,9 @@ impl PyModel {
         let mut model = IniModelIO::read_model_file(model_path)
             .map_err(|e| io_err_to_py(e.with_context("Failed to load model: ")))?;
         // Verification step
-        model
-            .validate_model_structure()
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
+        model.validate_model_structure().map_err(|e| {
+            error::ModelValidationError::new_err(format!("Failed to validate model: {}", e))
+        })?;
         // Model OK, swap into inner
         slf.inner = model;
         slf.has_run = false;
@@ -324,9 +333,9 @@ impl PyModel {
         let mut model = IniModelIO::read_model_string(model_string)
             .map_err(|e| io_err_to_py(e.with_context("Failed to load model: ")))?;
         // Verification step
-        model
-            .validate_model_structure()
-            .map_err(|e| PyRuntimeError::new_err(format!("Failed to validate model: {}", e)))?;
+        model.validate_model_structure().map_err(|e| {
+            error::ModelValidationError::new_err(format!("Failed to validate model: {}", e))
+        })?;
         // Model OK, swap into inner
         slf.inner = model;
         slf.has_run = false;
@@ -347,7 +356,9 @@ impl PyModel {
     ) -> PyResult<PyRefMut<'py, Self>> {
         // A failed configure/run leaves no trustworthy results behind.
         slf.has_run = false;
-        slf.inner.configure().map_err(PyRuntimeError::new_err)?;
+        slf.inner
+            .configure()
+            .map_err(error::ModelValidationError::new_err)?;
 
         let progress_callback: Option<Box<dyn FnMut(u64, u64) + Send>> = progress.map(|callable| {
             let cb: Box<dyn FnMut(u64, u64) + Send> = Box::new(move |step: u64, total: u64| {
@@ -385,7 +396,7 @@ impl PyModel {
             };
             (*model_ptr.0).run_with_interrupt(|| false, progress_callback)
         })
-        .map_err(PyRuntimeError::new_err)?;
+        .map_err(error::SimulationError::new_err)?;
         slf.has_run = true;
         Ok(slf)
     }
@@ -394,6 +405,7 @@ impl PyModel {
     /// `self` untouched on failure (mirrors `_load_file`).
     fn _patch<'py>(
         mut slf: PyRefMut<'py, Self>,
+        py: Python<'py>,
         patch_string: &str,
         mode: PatchMode,
     ) -> PyResult<PyRefMut<'py, Self>> {
@@ -403,7 +415,7 @@ impl PyModel {
             PatchMode::Delete => patch_delete(&slf.inner, patch_string, false),
             PatchMode::DeleteMissingOk => patch_delete(&slf.inner, patch_string, true),
         }
-        .map_err(io_err_to_py)?;
+        .map_err(|e| patch_err_to_py(py, e))?;
         slf.inner = new_model;
         slf.has_run = false;
         Ok(slf)
@@ -427,7 +439,8 @@ impl PyModel {
         missing_ok: bool,
     ) -> PyResult<(i64, u64, usize, Vec<(String, Bound<'py, PyArray1<f64>>)>)> {
         if !self.has_run {
-            return Err(PyValueError::new_err(
+            return Err(error::new_kalix_runtime_error(
+                py,
                 "The model has not been run yet (loading/patching invalidates the results). \
                  Call run() before get_outputs()",
             ));
@@ -435,7 +448,7 @@ impl PyModel {
         let outputs = self
             .inner
             .get_output_series(names, missing_ok)
-            .map_err(PyValueError::new_err)?;
+            .map_err(|e| error::new_kalix_key_error(py, e))?;
         let (start, step, size) = match outputs.first() {
             Some(first) => (
                 wrap_to_i64(first.start_timestamp),
@@ -454,9 +467,13 @@ impl PyModel {
     /// Per-node mass balance (ML/timestep) after a run, as parallel lists:
     /// node names, node type names, and values, all in the same report order
     /// as `generate_mass_balance_report` (`Model::get_mass_balance_data`).
-    fn _get_mass_balance(&self) -> PyResult<(Vec<String>, Vec<String>, Vec<f64>)> {
+    fn _get_mass_balance<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Vec<String>, Vec<String>, Vec<f64>)> {
         if !self.has_run {
-            return Err(PyValueError::new_err(
+            return Err(error::new_kalix_runtime_error(
+                py,
                 "The model has not been run yet (loading/patching invalidates the results). \
                  Call run() before get_mass_balance()",
             ));
@@ -495,55 +512,82 @@ impl PyModel {
         for (key, property) in &section.properties {
             dict.set_item(key, &property.value)?;
         }
-        Ok(Some(dict))
+        Ok(dict)
     }
 
     fn _has_section(&self, section_name: &str) -> PyResult<bool> {
         Ok(model_query::has_section(&self.inner, section_name))
     }
 
-    fn _get_property(&self, section_name: &str, property_name: &str) -> PyResult<String> {
+    fn _get_property(
+        &self,
+        py: Python<'_>,
+        section_name: &str,
+        property_name: &str,
+    ) -> PyResult<String> {
         if !model_query::has_section(&self.inner, section_name) {
-            return Err(PyKeyError::new_err(format!(
-                "No such section: {section_name:?}"
-            )));
+            return Err(error::new_kalix_key_error(
+                py,
+                format!("No such section: {section_name:?}"),
+            ));
         }
         model_query::get_property(&self.inner, section_name, property_name).ok_or_else(|| {
-            PyKeyError::new_err(format!(
-                "No such property: {section_name:?}.{property_name:?}"
-            ))
+            error::new_kalix_key_error(
+                py,
+                format!("No such property: {section_name:?}.{property_name:?}"),
+            )
         })
     }
 
-    fn _get_property_by_designation(&self, property_designation: &str) -> PyResult<String> {
+    fn _get_property_by_designation<'py>(
+        &self,
+        py: Python<'py>,
+        property_designation: &str,
+    ) -> PyResult<String> {
         model_query::get_property_by_designation(&self.inner, property_designation).map_err(|e| {
             match e {
                 model_query::PropertyLookupError::InvalidFormat(designation) => {
-                    PyKeyError::new_err(format!(
+                    PyValueError::new_err(format!(
                         "Not a valid '<section>.<property>' designation: {designation:?}"
                     ))
                 }
                 model_query::PropertyLookupError::NoSuchSection(section_name) => {
-                    PyKeyError::new_err(format!("No such section: {section_name:?}"))
+                    error::new_kalix_key_error(py, format!("No such section: {section_name:?}"))
                 }
                 model_query::PropertyLookupError::NoSuchProperty {
                     section_name,
                     property_name,
-                } => PyKeyError::new_err(format!(
-                    "No such property: {section_name:?}.{property_name:?}"
-                )),
+                } => error::new_kalix_key_error(
+                    py,
+                    format!("No such property: {section_name:?}.{property_name:?}"),
+                ),
             }
         })
     }
 
-    fn _to_string(&self) -> PyResult<String> {
-        self.inner.get_ini_string().map_err(PyRuntimeError::new_err)
+    fn _to_string<'py>(&self, py: Python<'py>) -> PyResult<String> {
+        self.inner
+            .get_ini_string()
+            .map_err(|msg| error::new_kalix_runtime_error(py, msg))
     }
 
-    fn _save<'py>(slf: PyRefMut<'py, Self>, filename: &str) -> PyResult<PyRefMut<'py, Self>> {
+    fn _save<'py>(
+        slf: PyRefMut<'py, Self>,
+        py: Python<'py>,
+        filename: &str,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        // Note: model.save_ini_to_file returns Err(String) for both "no attached
+        // INI document" and actual write failures - check the former up front so
+        // the two cases surface as distinct Python exceptions.
+        if slf.inner.ini_document.is_none() {
+            return Err(error::new_kalix_runtime_error(
+                py,
+                "Save called on empty model.",
+            ));
+        }
         slf.inner
             .save_ini_to_file(filename)
-            .map_err(PyRuntimeError::new_err)?;
+            .map_err(PyIOError::new_err)?;
         Ok(slf)
     }
 
@@ -559,6 +603,7 @@ impl PyModel {
     /// prior run's results.
     fn _set_input<'py>(
         mut slf: PyRefMut<'py, Self>,
+        py: Python<'py>,
         alias: &str,
         column_names: Vec<String>,
         timestamps_unix_seconds: PyReadonlyArray1<i64>,
@@ -615,7 +660,7 @@ impl PyModel {
         }
 
         model_input_swap::set_input(&mut slf.inner, alias, start_timestamp, step_size, columns)
-            .map_err(PyValueError::new_err)?;
+            .map_err(|err_msg| error::new_kalix_key_error(py, err_msg))?;
         slf.has_run = false;
         Ok(slf)
     }
