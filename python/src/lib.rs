@@ -324,11 +324,58 @@ impl PyModel {
     }
 
     /// Configure and run the model's simulation.
-    fn _run(mut slf: PyRefMut<'_, Self>) -> PyResult<PyRefMut<'_, Self>> {
+    ///
+    /// `progress`, if given, must be a Python callable. It is invoked with
+    /// `(step, total)` after each completed timestep, mirroring
+    /// `_optimise_from_file`'s progress callback. The GIL is released for
+    /// the run itself and re-acquired per callback invocation.
+    #[pyo3(signature = (progress=None))]
+    fn _run<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        py: Python<'py>,
+        progress: Option<PyObject>,
+    ) -> PyResult<PyRefMut<'py, Self>> {
         // A failed configure/run leaves no trustworthy results behind.
         slf.has_run = false;
         slf.inner.configure().map_err(PyRuntimeError::new_err)?;
-        slf.inner.run().map_err(PyRuntimeError::new_err)?; // self-resetting
+
+        let progress_callback: Option<Box<dyn FnMut(u64, u64) + Send>> = progress.map(|callable| {
+            let cb: Box<dyn FnMut(u64, u64) + Send> = Box::new(move |step: u64, total: u64| {
+                Python::with_gil(|py| {
+                    // Ignore any exception raised by the user's callback.
+                    let _ = callable.call1(py, (step, total));
+                });
+            });
+            cb
+        });
+
+        // `slf` (a `PyRefMut`) is tied to the GIL and can't cross an
+        // `allow_threads` closure boundary itself; go via a raw pointer to
+        // `inner`, wrapped so it's `Send`, so only genuinely GIL-free work is
+        // released. Sound because `allow_threads` runs the closure inline on
+        // this same thread -- it just lets *other* Python threads proceed
+        // while the GIL is released, it doesn't hand `inner` to another
+        // thread.
+        struct SendPtr(*mut Model);
+        unsafe impl Send for SendPtr {}
+        let model_ptr = SendPtr(&mut slf.inner as *mut Model);
+        py.allow_threads(move || unsafe {
+            // Force capture of the whole `SendPtr`/`Send` box, not just their
+            // inner fields -- Rust 2021's disjoint closure capture would
+            // otherwise capture the bare (non-`Send`) field directly and
+            // defeat the wrappers.
+            let model_ptr = model_ptr;
+            let progress_callback = progress_callback;
+            // Drop the `Send` bound only here, inside the closure that
+            // `allow_threads` runs inline on this thread -- captured above as
+            // `Send` purely so the closure itself satisfies `Ungil`.
+            let progress_callback: Option<Box<dyn FnMut(u64, u64)>> = match progress_callback {
+                Some(cb) => Some(cb),
+                None => None,
+            };
+            (*model_ptr.0).run_with_interrupt(|| false, progress_callback)
+        })
+        .map_err(PyRuntimeError::new_err)?;
         slf.has_run = true;
         Ok(slf)
     }
@@ -392,6 +439,28 @@ impl PyModel {
             .map(|ts| (ts.name.clone(), ts.values.clone().into_pyarray_bound(py)))
             .collect();
         Ok((start, step, size, series_list))
+    }
+
+    /// Per-node mass balance (ML/timestep) after a run, as parallel lists:
+    /// node names, node type names, and values, all in the same report order
+    /// as `generate_mass_balance_report` (`Model::get_mass_balance_data`).
+    fn _get_mass_balance(&self) -> PyResult<(Vec<String>, Vec<String>, Vec<f64>)> {
+        if !self.has_run {
+            return Err(PyValueError::new_err(
+                "The model has not been run yet (loading/patching invalidates the results). \
+                 Call run() before get_mass_balance()",
+            ));
+        }
+        let data = self.inner.get_mass_balance_data();
+        let mut names = Vec::with_capacity(data.len());
+        let mut types = Vec::with_capacity(data.len());
+        let mut values = Vec::with_capacity(data.len());
+        for (name, type_name, value) in data {
+            names.push(name);
+            types.push(type_name);
+            values.push(value);
+        }
+        Ok((names, types, values))
     }
 
     fn _sections<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {

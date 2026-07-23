@@ -878,7 +878,55 @@ impl Model {
         None
     }
 
+    /// Each node's mass balance per timestep (ML/timestep), as
+    /// `(node_name, type_name, value)`, ordered by node type (preferred
+    /// types first, then any others alphabetically) and by node name within
+    /// a type. `generate_mass_balance_report` and the Python `_get_mass_balance`
+    /// binding are both projections of this same ordered list, so the text
+    /// report and the DataFrame can't drift apart.
+    pub fn get_mass_balance_data(&self) -> Vec<(String, String, f64)> {
+        let mut remaining_nodes: Vec<String> = self.nodes
+            .iter().map(|node| node.get_name().to_string()).collect();
+        remaining_nodes.sort();
+
+        let mut by_type: HashMap<String, Vec<(String, f64)>> = HashMap::new();
+        for node_name in &remaining_nodes {
+            let node = self.get_node(node_name).unwrap();
+            let type_name = node.get_type_as_string();
+            let mbal_per_timestep = node.get_mass_balance() / (self.configuration.sim_nsteps as f64);
+            by_type.entry(type_name).or_default().push((node_name.clone(), mbal_per_timestep));
+        }
+
+        // Preferred type order first, then any other type names (e.g. newly
+        // added ones) alphabetically, so nothing silently vanishes.
+        let preferred_order = [
+            "inflow",
+            "sacramento", "gr4j",
+            "regulated_user", "unregulated_user", "order_control", "loss",
+            "storage", "routing",
+            "splitter", "confluence", "gauge",
+            "blackhole"];
+
+        let mut result = Vec::with_capacity(remaining_nodes.len());
+        for type_name in preferred_order {
+            if let Some(nodes) = by_type.remove(type_name) {
+                for (name, value) in nodes {
+                    result.push((name, type_name.to_string(), value));
+                }
+            }
+        }
+        let mut leftover_types: Vec<_> = by_type.into_iter().collect();
+        leftover_types.sort_by(|a, b| a.0.cmp(&b.0));
+        for (type_name, nodes) in leftover_types {
+            for (name, value) in nodes {
+                result.push((name, type_name.clone(), value));
+            }
+        }
+        result
+    }
+
     pub fn generate_mass_balance_report(&self) -> String {
+        let data = self.get_mass_balance_data();
 
         let mut report = "".to_string();
         report.push_str("==================================\n");
@@ -894,59 +942,22 @@ impl Model {
         report.push_str(format!("  Period: {}, {}\n", start_str, end_str).as_str());
         report.push_str(format!("  Note: units are ML/timestep\n\n").as_str());
 
-        // Remaining nodes (<--- here is where you might allow people to organise nodes manually
-        let mut remaining_nodes: Vec<String> = self.nodes
-            .iter().map(|node| node.get_name().to_string()).collect();
-        remaining_nodes.sort();
-
-        // Get keys and values in sorted order
-        // let mut items: Vec<(&String, &f64)> = blah.iter().collect();
-        // items.sort_by_key(|&(key, _)| key);
-
-        // Keep track of the total
+        // Section per node type, in `data`'s order; a type change in the
+        // (already-ordered) list starts a new section.
         let mut total_mbal = 0f64;
-
-        // Nodes by type
-        let mut report_section_dict: HashMap<String, String> = HashMap::new();
-        for node_name in &remaining_nodes {
-
-            // Get the section for this node type (start that section if needed)
-            let node = self.get_node(node_name).unwrap();
-            let type_name = node.get_type_as_string();
-            if !report_section_dict.contains_key(&type_name) {
-                report_section_dict.insert(type_name.clone(), format!("{} NODES\n", type_name.to_uppercase()));
+        let mut current_type: Option<&str> = None;
+        for (node_name, type_name, mbal_per_timestep) in &data {
+            if current_type != Some(type_name.as_str()) {
+                if current_type.is_some() {
+                    report.push_str("\n");
+                }
+                report.push_str(format!("{} NODES\n", type_name.to_uppercase()).as_str());
+                current_type = Some(type_name.as_str());
             }
-
-            // Add a line for this node
-            let mbal_per_timestep = node.get_mass_balance() / (self.configuration.sim_nsteps as f64);
-            let mut section = report_section_dict.remove(&type_name).unwrap();
-            section.push_str(format!("  {}, {}\n", node_name, mbal_per_timestep).as_str());
-            report_section_dict.insert(type_name.clone(), section);
-
-            //Keep track of the total
+            report.push_str(format!("  {}, {}\n", node_name, mbal_per_timestep).as_str());
             total_mbal += mbal_per_timestep;
         }
-
-        // Now put all the sections together: the preferred order first, then
-        // any node types not in the list (e.g. newly added ones) so nothing
-        // silently vanishes from the report.
-        let preferred_order = [
-            "inflow",
-            "sacramento", "gr4j",
-            "regulated_user", "unregulated_user", "order_control", "loss",
-            "storage", "routing",
-            "splitter", "confluence", "gauge",
-            "blackhole"];
-        for type_name in preferred_order {
-            if let Some(s) = report_section_dict.remove(type_name) {
-                report.push_str(&s);
-                report.push_str("\n");
-            }
-        }
-        let mut leftovers: Vec<_> = report_section_dict.into_iter().collect();
-        leftovers.sort_by(|a, b| a.0.cmp(&b.0));
-        for (_, s) in leftovers {
-            report.push_str(&s);
+        if current_type.is_some() {
             report.push_str("\n");
         }
 

@@ -7,10 +7,9 @@ go through `Model` (or the module-level convenience functions below)
 instead.
 """
 from __future__ import annotations
-import typing
 from collections.abc import Mapping
 
-from typing import List, Literal, Optional, overload
+from typing import Callable, List, Literal, Optional, overload
 import numpy as np
 import pandas as pd
 
@@ -175,12 +174,21 @@ class Model:
             raise RuntimeError(f"Model string failed validation: {e}") from e
         return self
 
-    def run(self) -> "Model":
+    def run(self, progress: Optional[Callable[[int, int], None]] = None) -> "Model":
         """Configure and run the model's simulation.
 
         Safe to call more than once on the same `Model` -- each run resets
         node and account state and rewinds internal recording, so repeated
         calls behave as independent runs.
+
+        Parameters
+        ----------
+        progress
+            Optional callback invoked as ``progress(step, total)`` after each
+            completed timestep, in the same spirit as `kalix.optimise`'s
+            progress callback. Runs with the GIL re-acquired, so it can
+            safely touch Python state; any exception it raises is swallowed
+            so a faulty reporter can't abort the run.
 
         Returns
         -------
@@ -195,7 +203,7 @@ class Model:
         try:
             # This is the intended use - the underscore indicates that this is a
             # function from Rust-land
-            self._inner._run()
+            self._inner._run(progress)
         except RuntimeError as e:
             raise RuntimeError(f"Model run failed: {e}") from e
         return self
@@ -363,6 +371,31 @@ class Model:
 
         timestamps_sec = start + step * np.arange(size, dtype=np.int64)
         return build_time_indexed_df(timestamps_sec, series_list)
+
+    def get_mass_balance(self) -> pd.DataFrame:
+        """Retrieve the model's mass balance report after a run.
+
+        The same per-node balance the CLI's ``-m`` flag writes to a file,
+        returned as a `DataFrame` instead.
+
+        Returns
+        -------
+        DataFrame
+            One row per node, columns ``"node"``, ``"type"``, and
+            ``"mass_balance"`` (ML/timestep), in the report's grouping order
+            (by node type, then alphabetically by node name).
+
+        Raises
+        ------
+        ValueError
+            If the model has not been run yet (loading or patching a model
+            resets its run state).
+        """
+        try:
+            names, types, values = self._inner._get_mass_balance()
+        except ValueError as e:
+            raise ValueError(f"Failed to retrieve mass balance: {e}") from e
+        return pd.DataFrame({"node": names, "type": types, "mass_balance": values})
 
     def __repr__(self) -> str:
         return "<kalix.Model>"
