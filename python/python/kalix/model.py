@@ -35,8 +35,10 @@ class Model:
     """
     # pylint: disable=protected-access
 
-    def __init__(self) -> None:
-        self._inner = _Model()
+    def __init__(self, *, _inner: Optional[_Model] = None) -> None:
+        if _inner is None:
+            _inner = _Model()
+        self._inner = _inner
 
     @classmethod
     def from_file(cls, model_path: PathLike) -> "Model":
@@ -95,6 +97,10 @@ class Model:
         resolved against the current working directory.
         """
         return cls().load_string(model_string)
+
+    def copy(self) -> "Model":
+        """Create a deep, independent copy of this model."""
+        return Model(_inner=self._inner.copy())
 
     def load_file(self, model_path: PathLike) -> "Model":
         """Replace the model this instance holds with the contents of an INI file.

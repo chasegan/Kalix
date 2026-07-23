@@ -1219,3 +1219,86 @@ def test_set_input_tz_aware_index_converted_to_utc():
     model.set_input("obs", frame)
     df = model.run().get_outputs()
     assert list(df["node.src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
+
+
+# --- copy() ----------------------------------------------------------
+
+
+def test_copy_returns_new_model_instance():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    result = model.copy()
+    assert isinstance(result, kalix.Model)
+    assert result is not model
+
+
+def test_copy_preserves_the_model_definition():
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    copy = model.copy()
+    assert copy.to_string() == model.to_string()
+    assert copy.sections() == model.sections()
+
+
+def test_copy_is_independent_of_original_after_patching_original():
+    """Patching the original after copying must not leak into the copy."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    copy = model.copy()
+    model.patch("[node.my_node]\ninflow = 99\n")
+    assert copy.get("node.my_node.inflow") == "1.0"
+    assert model.get("node.my_node.inflow") == "99"
+
+
+def test_copy_is_independent_of_original_after_patching_copy():
+    """Patching the copy must not leak back into the original."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    copy = model.copy()
+    copy.patch("[node.my_node]\ninflow = 99\n")
+    assert model.get("node.my_node.inflow") == "1.0"
+    assert copy.get("node.my_node.inflow") == "99"
+
+
+def test_copy_does_not_carry_run_results():
+    """copy() copies the definition, not run results (sec 8) -- even though
+    the source has already been run, the copy starts out unrun."""
+    model = kalix.load_string(_INLINE_MODEL_INI).run()
+    model.get_outputs()  # sanity: the original does have results
+
+    copy = model.copy()
+    with pytest.raises(ValueError):
+        copy.get_outputs()
+
+
+def test_copy_runs_independently_and_matches_original():
+    """An unpatched copy, run on its own, reproduces the original's results --
+    "branch this model and try three variants" (sec 8) starts from parity."""
+    model = kalix.load_string(_INLINE_MODEL_INI)
+    baseline = model.run().get_outputs()
+
+    copy = model.copy()
+    result = copy.run().get_outputs()
+    pd.testing.assert_frame_equal(result, baseline)
+
+
+def test_copy_preserves_set_input_supplied_data():
+    """copy() copies the definition "and in-memory inputs" (sec 8) -- data
+    supplied via set_input() survives the copy without being re-supplied."""
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    model.set_input("obs", _obs_frame())
+
+    copy = model.copy()
+    df = copy.run().get_outputs()
+    assert list(df["node.src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
+
+
+def test_copy_in_memory_input_is_independent():
+    """The copy's in-memory input is its own -- re-supplying it on the copy
+    must not affect what the original sees on its next run."""
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    model.set_input("obs", _obs_frame())
+    copy = model.copy()
+
+    copy.set_input("obs", _obs_frame() * 10)
+
+    df_original = model.run().get_outputs()
+    df_copy = copy.run().get_outputs()
+    assert list(df_original["node.src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
+    assert list(df_copy["node.src.dsflow"]) == [10.0, 20.0, 30.0, 40.0, 50.0]

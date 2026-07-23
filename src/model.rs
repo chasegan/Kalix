@@ -240,6 +240,31 @@ impl Model {
         }
     }
 
+    /// Clone for an independent model and definition, everything post-parse,
+    /// ready to configure and run.
+    pub fn clone_for_new_model(&self) -> Model {
+        Model {
+            configuration: self.configuration.clone(),
+            input_sources: self.input_sources.clone(),
+            outputs: self.outputs.clone(),
+            account_manager: self.account_manager.clone(),
+            ras_systems: self.ras_systems.clone(),
+            data_cache: self.data_cache.clone(),
+            working_directory: self.working_directory.clone(),
+            nodes: self.nodes.clone(),
+            var_blocks: self.var_blocks.clone(),
+            exec_items: self.exec_items.clone(),
+            links: self.links.clone(),
+            outgoing_links: self.outgoing_links.clone(),
+            incoming_links: self.incoming_links.clone(),
+            execution_order: vec![],
+            simple_ordering_system: SimpleNodewiseOrderingSystem::new(),
+            node_lookup: self.node_lookup.clone(),
+            ini_document: self.ini_document.clone(),
+            baseline_canonical: self.baseline_canonical.clone(),
+        }
+    }
+
     /// Adds a node to the model and returns its index
     pub fn add_node(&mut self, node: NodeEnum) -> usize {
         let idx = self.nodes.len();

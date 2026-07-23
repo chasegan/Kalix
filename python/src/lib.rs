@@ -285,6 +285,14 @@ impl PyModel {
         })
     }
 
+    /// Copy a deep, independent model.
+    fn copy(&self) -> PyResult<PyModel> {
+        Ok(PyModel{
+            inner: self.inner.clone_for_new_model(),
+            has_run: false,
+        })
+    }
+
     /// Load a model from an INI file, replacing any model already held.
     /// Validates via `Model::configure` before accepting; leaves `self`
     /// untouched on failure.
