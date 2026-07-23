@@ -268,17 +268,25 @@ class Model:
             ``[data]`` entry) that could not be read. This `Model` is left
             untouched in that case.
         """
-        if isinstance(patch_content, list):
+        if isinstance(patch_content, str):
+            # Already a raw INI snippet -- assembled below as-is. Handled first
+            # so `str` is out of the union before the Mapping branch: otherwise
+            # a type checker can't prove str isn't a Mapping and leaves a
+            # `str & Mapping[Unknown, object]` intersection whose value type is
+            # `object`, breaking the `.items()` access below.
+            pass
+        elif isinstance(patch_content, list):
             if mode != "delete":
                 raise ValueError(
                     "The list-of-names form of `patch_content` is only valid "
                     f"with mode='delete' (got mode={mode!r})"
                 )
             patch_content = '\n'.join('[' + name.strip() + ']' for name in patch_content)
-        elif isinstance(patch_content, Mapping):
+        else:
+            # Dict form: {section: {property: value}} -> INI text.
             lines = []
             for section_name, section_content in patch_content.items():
-                lines.append('[' + section_name + ']')
+                lines.append('[' + str(section_name) + ']')
                 for property_name, property_value in section_content.items():
                     if property_value == "":
                         lines.append(property_name)

@@ -544,13 +544,13 @@ def test_patch_list_merge_rejects_list_form():
     empty sections."""
     model = kalix.load_string(_INLINE_MODEL_INI)
     with pytest.raises(ValueError):
-        model.patch(["node.my_node"])
+        model.patch(["node.my_node"]) # type: ignore
 
 
 def test_patch_list_replace_rejects_list_form():
     model = kalix.load_string(_INLINE_MODEL_INI)
     with pytest.raises(ValueError):
-        model.patch(["node.my_node"], mode="replace")
+        model.patch(["node.my_node"], mode="replace") # type: ignore
 
 
 def test_patch_list_delete_leaves_model_untouched_on_failure():
