@@ -454,10 +454,7 @@ class Model:
         KeyError
             If the section does not exist. Use `has_section()` to probe.
         """
-        section = self._inner._get_section(section_name)
-        if section is None:
-            raise KeyError(f"No such section: {section_name!r}")
-        return section
+        return self._inner._get_section(section_name)
 
     def get(self, property_designation: str) -> str:
         """Retrieve a single property's value by dotted designation.

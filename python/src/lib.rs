@@ -504,9 +504,12 @@ impl PyModel {
         &self,
         py: Python<'py>,
         section_name: &str,
-    ) -> PyResult<Option<Bound<'py, PyDict>>> {
+    ) -> PyResult<Bound<'py, PyDict>> {
         let Some(section) = model_query::get_section(&self.inner, section_name) else {
-            return Ok(None);
+            return Err(error::new_kalix_key_error(
+                py,
+                format!("No such section: {section_name}"),
+            ));
         };
         let dict = PyDict::new_bound(py);
         for (key, property) in &section.properties {
