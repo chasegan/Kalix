@@ -8,6 +8,7 @@ instead.
 """
 from __future__ import annotations
 import typing
+from collections.abc import Mapping
 
 from typing import List, Literal, Optional, overload
 import numpy as np
@@ -17,6 +18,9 @@ from kalix._native import _Model, _PatchMode
 from kalix._util import PathLike, build_time_indexed_df
 
 __all__ = ["Model", "load_file", "load_string"]
+
+# A dict-form patch: {section: {property: value}}
+PatchDict = Mapping[str, Mapping[str, object]]
 
 
 class Model:
@@ -198,25 +202,25 @@ class Model:
 
     @overload
     def patch(
-            self,
-            patch_content: str | dict[str, dict[str, str]],
-            *,
-            mode: Literal["merge", "replace", "delete"] = "merge",
-            missing_ok: bool = False
+        self,
+        patch_content: str | PatchDict,
+        *,
+        mode: Literal["merge", "replace", "delete"] = "merge",
+        missing_ok: bool = False
     ) -> "Model": ...
 
     @overload
     def patch(
-            self,
-            patch_content: list[str],
-            *,
-            mode: Literal["delete"],
-            missing_ok: bool = False
+        self,
+        patch_content: list[str],
+        *,
+        mode: Literal["delete"],
+        missing_ok: bool = False
     ) -> "Model": ...
 
     def patch(
             self,
-            patch_content: str | dict[str, dict[str, str]] | list[str],
+            patch_content: str | PatchDict | list[str],
             *,
             mode: Literal["merge", "replace", "delete"] = "merge",
             missing_ok: bool = False
@@ -271,7 +275,7 @@ class Model:
                     f"with mode='delete' (got mode={mode!r})"
                 )
             patch_content = '\n'.join('[' + name.strip() + ']' for name in patch_content)
-        elif isinstance(patch_content, dict):
+        elif isinstance(patch_content, Mapping):
             lines = []
             for section_name, section_content in patch_content.items():
                 lines.append('[' + section_name + ']')
@@ -457,7 +461,7 @@ class Model:
         """
         self._inner._save(str(filename))
         return self
-    
+
     def set_input(self, alias: str, data: "pd.DataFrame | pd.Series") -> "Model":
         """Supply in-memory data for a declared `[data]` alias.
 
@@ -507,9 +511,6 @@ class Model:
 
         self._inner._set_input(alias, column_names, timestamps_sec, values_per_column)
         return self
-
-
-
 
 
 def load_file(model_path: PathLike) -> Model:
