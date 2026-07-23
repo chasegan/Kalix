@@ -3,6 +3,8 @@
 //! v0.1: just Pixie (.pxt/.pxb) I/O. Functions are prefixed with `_` and re-exported
 //! through the Python `kalix` package, which adds pandas/numpy ergonomics.
 
+mod error;
+
 use kalix::io::error::KalixIoError;
 use kalix::io::ini_model_io::IniModelIO;
 use kalix::io::model_input_swap;
@@ -627,5 +629,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_optimise_from_file, m)?)?;
     m.add_class::<PyModel>()?;
     m.add_class::<PatchMode>()?;
+    error::register(m)?;
     Ok(())
 }
