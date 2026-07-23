@@ -60,22 +60,47 @@ pub struct Model {
     // ---- Hot path: read or written every timestep during run_timestep() ----
 
     /// Hot path: all phases, read in run_timestep().
+    ///
+    /// Populated: constructed empty (`Configuration::new()`) at `Model::new()`.
+    /// Parsing fills in `specified_sim_start_timestamp`/`specified_sim_end_timestamp`
+    /// from `[kalix]` if given; the effective `sim_stepsize`/`sim_start_timestamp`/
+    /// `sim_end_timestamp`/`sim_nsteps` are only computed later, by `configure()`'s
+    /// `auto_determine_simulation_period()`.
     pub configuration: Configuration,
+
     /// Hot path: all phases, read/written in run_timestep().
+    ///
+    /// Populated: constructed empty at `Model::new()`. Output series are
+    /// registered and node input references resolved during `configure()`
+    /// (`configure_model_structure()`), which also loads and fills in input
+    /// data; per-step values are then written during `run()`.
     pub data_cache: DataCache,
+
     /// Hot path: start/record, read in run_timestep().
+    ///
+    /// Populated: accounts/groups added while parsing `[account.*]` sections
+    /// (or built programmatically); per-run state is (re)initialised by
+    /// `initialize_network()` at the start of every `run()`.
     pub account_manager: AccountManager,
+
     /// Hot path: policy phase, read in run_timestep().
     /// Resource allocation systems ([ras.*] sections), in file order —
     /// execution order is declaration order, as for nodes and var blocks
+    ///
+    /// Populated: added while parsing `[ras.*]` sections; recorders are
+    /// (re)initialised at the start of every `run()`.
     pub ras_systems: Vec<RasSystem>,
 
     /// Hot path: flow phase, read in run_timestep().
+    ///
+    /// Populated: during parsing or programmatic construction, via `add_node()`.
     pub nodes: Vec<NodeEnum>,
 
     /// Hot path: flow phase, read in run_timestep().
     /// Var blocks ([var.*] sections): published calculations executed at their
     /// file position within the flow phase (structured_expressions_design.md §9)
+    ///
+    /// Populated: during parsing or programmatic construction, via `add_var_block()`.
     pub var_blocks: Vec<VarBlock>,
 
     /// Hot path: flow phase, read in run_timestep().
@@ -84,26 +109,43 @@ pub struct Model {
     /// IS execution order for var blocks exactly as it is for nodes
     /// (node-definition-order §1 extended to calculations). Only consulted
     /// when var_blocks is non-empty; the plain node loop uses execution_order.
+    ///
+    /// Populated: alongside `nodes`/`var_blocks`, via `add_node()`/`add_var_block()`.
     pub exec_items: Vec<ExecItem>,
 
     /// Hot path: flow phase, read in run_timestep().
+    ///
+    /// Populated: during parsing or programmatic construction, via `add_link()`.
     pub links: Vec<Link>,
 
     /// Hot path: flow phase, read in run_timestep().
     /// Adjacency list for O(1) link lookup.
     /// `outgoing_links[node_idx]` = vec of link indices
-    pub outgoing_links: Vec<Vec<usize>>,  
+    ///
+    /// Populated: an empty vec is pushed per node by `add_node()`; link
+    /// indices are appended by `add_link()`.
+    pub outgoing_links: Vec<Vec<usize>>,
+
     /// Hot path: ordering setup, read in initialize_network().
     /// Adjacency list for O(1) link lookup.
     /// `incoming_links[node_idx]` = vec of link indices
-    pub incoming_links: Vec<Vec<usize>>,  
+    ///
+    /// Populated: an empty vec is pushed per node by `add_node()`; link
+    /// indices are appended by `add_link()`.
+    pub incoming_links: Vec<Vec<usize>>,
 
     /// Hot path: flow phase, read in run_timestep().
     /// Pre-computed execution order, rebuilt by check_execution_order() at
     /// initialize_network() time; walked every step when there are no var blocks.
+    ///
+    /// Populated: computed by `check_execution_order()`, called from both
+    /// `configure()` and `initialize_network()` (start of every `run()`).
     pub execution_order: Vec<usize>,
 
     /// Hot path: order phase, read in run_timestep().
+    ///
+    /// Populated: initialised by `initialize_network()` at the start of every
+    /// `run()`, once the execution order is resolved.
     pub simple_ordering_system: SimpleNodewiseOrderingSystem,
 
     // ---- Cold path: load/configure/serialize time only, not touched per-step ----
@@ -112,18 +154,32 @@ pub struct Model {
     /// holds its own data columns (see TimeseriesInputDefinition). Folds together
     /// what used to be three loosely-coupled fields (the per-column data, the
     /// file paths, and the alias map).
+    ///
+    /// Populated: during parsing, via `load_input_data()`/`declare_alias()`;
+    /// a declared alias's data may later be supplied in-memory via `set_input()`.
     pub input_sources: Vec<TimeseriesInputDefinition>,
+
+    /// Requested recorders from ini document.
+    ///
+    /// Populated: during parsing, from the `[outputs]` section.
     pub outputs: Vec<String>,
 
     /// Working directory for resolving relative file paths
     /// - Set to model file's directory when loaded from INI file
     /// - Set to current working directory when created programmatically
+    ///
+    /// Populated: at construction/load time; fixed thereafter.
     pub working_directory: PathBuf,
 
     /// Fast node name lookup (keys are lowercase for case-insensitive matching).
+    ///
+    /// Populated: alongside `nodes`, via `add_node()`.
     pub node_lookup: FxHashMap<String, usize>, // node_lookup[node_name.to_lowercase()] = node index
 
     /// INI document for round-trip serialization.
+    ///
+    /// Populated: at load time, when parsed from an INI file/string; `None`
+    /// for models built programmatically.
     pub ini_document: Option<IniDocument>,
 
     /// Canonical render of the model exactly as loaded, captured before any
@@ -131,6 +187,8 @@ pub struct Model {
     /// time identifies which sections actually changed, so a formatting-
     /// preserving save can re-emit only those (state-diff). `None` for models
     /// built programmatically, where there is nothing to preserve.
+    ///
+    /// Populated: at load time, alongside `ini_document`.
     pub baseline_canonical: Option<IniDocument>,
 }
 
