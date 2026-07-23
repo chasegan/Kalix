@@ -876,7 +876,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             return Err(format!("Error on line {}: The '[inputs]' section was renamed to '[data]' \
                 (matching the 'data.' reference prefix). Rename the section header; the file paths and \
-                'data.*' references inside it are unchanged.", ini_section.line_number));
+                'data.*' references inside it are unchanged.", ini_section.line_number).into());
         } else {
             // -------------------------------------------------------------------------------------
             // Unexpected section
@@ -1003,7 +1003,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
         ini_doc.set_property("kalix", "end", &u64_to_date_string_for_step_size(end_timestamp, sim_stepsize));
     }
 
-    // List all input sources, one [inputs] line each. Each source knows how it
+    // List all input sources, one [data] line each. Each source knows how it
     // re-declares itself (file path, aliased path, or bare declaration) via
     // ini_entry(), so this stays in lock-step with the parser.
     for source in &model.input_sources {

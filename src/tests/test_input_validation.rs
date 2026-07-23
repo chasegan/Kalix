@@ -182,13 +182,13 @@ fn test_multiple_invalid_references_caught() {
 }
 
 
-/// A declared-but-unsupplied input (an empty-valued [inputs] entry with a bare
+/// A declared-but-unsupplied input (an empty-valued [data] entry with a bare
 /// alias name) must load fine but be rejected at configure time, since nothing
 /// in the engine can supply it.
 #[test]
 fn test_declared_input_not_supplied_fails_at_configure() {
     let ini = "\
-[inputs]
+[data]
 observed_flows =
 
 [node.src]
@@ -224,7 +224,7 @@ type = blackhole
 #[test]
 fn test_declared_input_without_equals_sign() {
     let ini = "\
-[inputs]
+[data]
 observed_flows
 
 [node.src]
@@ -250,13 +250,13 @@ type = blackhole
 }
 
 
-/// Round-trip fidelity: the enum -> [inputs] mapping must re-emit exactly what
+/// Round-trip fidelity: the enum -> [data] mapping must re-emit exactly what
 /// the parser read — a bare declaration (with and without `=`), a direct file
 /// path, and an aliased file path all survive a to_string() round trip.
 #[test]
 fn test_inputs_section_round_trips() {
     let ini = "\
-[inputs]
+[data]
 observed_flows =
 rainfall
 ./src/tests/example_data/test.csv
@@ -289,7 +289,7 @@ climate = ./src/tests/example_data/test.csv
 #[test]
 fn test_set_input_finds_mixed_case_aliased_file_declaration() {
     let ini = "\
-[inputs]
+[data]
 Climate_Data = ./src/tests/example_data/test.csv
 ";
     let mut model = IniModelIO::read_model_string(ini)

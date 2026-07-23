@@ -159,12 +159,12 @@ def test_patch_merge_invalid_result_raises_value_error():
 
 
 def test_patch_referencing_missing_input_file_raises_oserror():
-    """A patch that introduces an [inputs] entry pointing at a nonexistent
+    """A patch that introduces an [data] entry pointing at a nonexistent
     file must raise OSError, not ValueError -- same Io/Parse distinction as
     the load path (see test_load_string_missing_referenced_input_file_raises_oserror)."""
     model = kalix.load_string(_INLINE_MODEL_INI)
     with pytest.raises(OSError):
-        model.patch("[inputs]\n./does_not_exist_test_model_py.csv\n")
+        model.patch("[data]\n./does_not_exist_test_model_py.csv\n")
 
 
 def test_patch_merge_leaves_model_untouched_on_failure():
@@ -608,7 +608,7 @@ def test_load_string_missing_referenced_input_file_raises_oserror():
         "start = 2000-01-01T00:00:00\n"
         "end = 2000-01-10T00:00:00\n"
         "\n"
-        "[inputs]\n"
+        "[data]\n"
         "./does_not_exist_test_model_py.csv\n"
         "\n"
         "[node.my_node]\n"
@@ -629,7 +629,7 @@ def test_load_file_missing_referenced_input_file_raises_oserror(tmp_path):
         "start = 2000-01-01T00:00:00\n"
         "end = 2000-01-10T00:00:00\n"
         "\n"
-        "[inputs]\n"
+        "[data]\n"
         "./does_not_exist_test_model_py.csv\n"
         "\n"
         "[node.my_node]\n"
@@ -973,7 +973,7 @@ _MODEL_WITH_DECLARED_INPUT_INI = (
     "start = 2000-01-01T00:00:00\n"
     "end = 2000-01-05T00:00:00\n"
     "\n"
-    "[inputs]\n"
+    "[data]\n"
     "obs =\n"
     "\n"
     "[node.src]\n"
@@ -1056,8 +1056,8 @@ def test_set_input_non_datetime_index_raises_type_error():
 
 
 def test_set_input_undeclared_alias_raises_value_error():
-    """set_input() fills an existing [inputs] declaration -- it does not
-    create one, so an alias absent from [inputs] altogether is rejected."""
+    """set_input() fills an existing [data] declaration -- it does not
+    create one, so an alias absent from [data] altogether is rejected."""
     model = kalix.load_string(_INLINE_MODEL_INI)
     with pytest.raises(ValueError, match="not declared"):
         model.set_input("obs", _obs_frame())
@@ -1087,7 +1087,7 @@ def test_set_input_resets_has_run():
 
 
 def test_set_input_overrides_an_aliased_file():
-    """An `[inputs]` entry that already names a file (`climate = ...`) is
+    """An `[data]` entry that already names a file (`climate = ...`) is
     still a valid target for set_input() -- the supplied data takes
     precedence over the file."""
     ini = (
@@ -1095,7 +1095,7 @@ def test_set_input_overrides_an_aliased_file():
         "start = 2000-01-01T00:00:00\n"
         "end = 2000-01-05T00:00:00\n"
         "\n"
-        "[inputs]\n"
+        "[data]\n"
         f"climate = {_REPO_ROOT / 'src/tests/example_data/test.csv'}\n"
         "\n"
         "[node.src]\n"
@@ -1134,7 +1134,7 @@ _MODEL_WITH_TWO_INPUT_COLUMNS_INI = (
     "start = 2000-01-01T00:00:00\n"
     "end = 2000-01-05T00:00:00\n"
     "\n"
-    "[inputs]\n"
+    "[data]\n"
     "obs =\n"
     "\n"
     "[node.rain_src]\n"

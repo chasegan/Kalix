@@ -106,7 +106,7 @@ fn test_renamed_inputs_section_gives_migration_hint() {
                loc = 0, 0\n\
                type = inflow\n\
                inflow = 1\n";
-    let err = IniModelIO::new().read_model_string(ini).err().expect("old [inputs] must fail to load");
+    let err = IniModelIO::read_model_string(ini).err().expect("old [inputs] must fail to load").to_string();
     assert!(err.contains("[inputs]") && err.contains("[data]") && err.contains("renamed"),
         "error should point [inputs] users at [data], got: {}", err);
 }

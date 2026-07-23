@@ -461,7 +461,7 @@ impl PyModel {
         Ok(slf)
     }
 
-    /// Supply in-memory data for a declared `[inputs]` alias (`set_input()`).
+    /// Supply in-memory data for a declared `[data]` alias (`set_input()`).
     ///
     /// - `column_names`: one per array in `values_per_column`.
     /// - `timestamps_unix_seconds`: 1-D numpy array (int64) of Unix seconds;

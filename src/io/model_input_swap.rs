@@ -15,9 +15,9 @@ pub struct InMemoryColumn {
     pub values: Vec<f64>,
 }
 
-/// Supply in-memory data for a declared `[inputs]` alias (`set_input()`).
+/// Supply in-memory data for a declared `[data]` alias (`set_input()`).
 ///
-/// `alias` must already name a source in `[inputs]` — either a bare
+/// `alias` must already name a source in `[data]` — either a bare
 /// declaration (`observed_flows =`) or an aliased file (`climate_data =
 /// climate.csv`, still overridable: supplied data takes precedence over the
 /// file). An alias that isn't declared is rejected rather than silently
@@ -37,7 +37,7 @@ pub fn set_input(
         .iter()
         .position(|s| s.alias().map(sanitize_name).as_deref() == Some(alias_sanitized.as_str()))
         .ok_or_else(|| format!(
-            "input '{alias}' is not declared in [inputs] -- set_input() supplies values \
+            "input '{alias}' is not declared in [data] -- set_input() supplies values \
              for an existing declaration, it does not add one (declare it first, e.g. via patch)"
         ))?;
 
@@ -116,7 +116,7 @@ mod tests {
          start = 2000-01-01T00:00:00\n\
          end = 2000-01-05T00:00:00\n\
          \n\
-         [inputs]\n\
+         [data]\n\
          obs =\n\
          \n\
          [node.src]\n\
@@ -159,7 +159,7 @@ mod tests {
              start = 2000-01-01T00:00:00\n\
              end = 2000-01-05T00:00:00\n\
              \n\
-             [inputs]\n\
+             [data]\n\
              obs =\n\
              \n\
              [node.src]\n\
@@ -206,7 +206,7 @@ mod tests {
              start = 2000-01-01T00:00:00\n\
              end = 2000-01-05T00:00:00\n\
              \n\
-             [inputs]\n\
+             [data]\n\
              obs =\n\
              other =\n\
              \n\
@@ -237,7 +237,7 @@ mod tests {
              start = 2000-01-01T00:00:00\n\
              end = 2000-01-05T00:00:00\n\
              \n\
-             [inputs]\n\
+             [data]\n\
              climate = ./src/tests/example_data/test.csv\n\
              \n\
              [node.src]\n\
@@ -307,7 +307,7 @@ mod tests {
              start = 2000-01-01T00:00:00\n\
              end = 2000-01-05T00:00:00\n\
              \n\
-             [inputs]\n\
+             [data]\n\
              obs =\n\
              \n\
              [node.rain_src]\n\

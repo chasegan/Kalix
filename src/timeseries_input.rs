@@ -3,10 +3,10 @@ use crate::timeseries::Timeseries;
 use crate::misc::misc_functions::sanitize_name;
 use std::path::Path;
 
-/// How an input source declares itself in `[inputs]` — the source's identity,
+/// How an input source declares itself in `[data]` — the source's identity,
 /// independent of where its values come from (file vs in memory). Every variant
 /// carries at least one name, so a source can *always* be rendered back to an
-/// `[inputs]` line — there is no nameless state to guard against at render time.
+/// `[data]` line — there is no nameless state to guard against at render time.
 #[derive(Clone)]
 pub enum SourceOrigin {
     /// A bare alias declaration (`observed_flows =`), no file behind it.
@@ -24,7 +24,7 @@ impl SourceOrigin {
         }
     }
 
-    /// The `[inputs]` `key = value` pair that re-declares this source. Total by
+    /// The `[data]` `key = value` pair that re-declares this source. Total by
     /// construction — every origin has a name, so there is no nameless case.
     pub fn ini_entry(&self) -> (String, String) {
         match self {
@@ -35,7 +35,7 @@ impl SourceOrigin {
     }
 }
 
-/// One pre-run input *source*, as declared in `[inputs]`. A single source can
+/// One pre-run input *source*, as declared in `[data]`. A single source can
 /// expand to several data columns — each a `TimeseriesInput` — so the columns
 /// live inside the source rather than being flattened into the model.
 ///
@@ -78,7 +78,7 @@ impl TimeseriesInputDefinition {
         }
     }
 
-    /// The `[inputs]` `key = value` pair that re-declares this source. The
+    /// The `[data]` `key = value` pair that re-declares this source. The
     /// single place the source->INI mapping is defined, so serialization stays
     /// in lock-step with parsing.
     pub fn ini_entry(&self) -> (String, String) {

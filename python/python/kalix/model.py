@@ -150,7 +150,7 @@ class Model:
         ValueError
             If the string is not a valid model INI.
         OSError
-            If the string references a data file (e.g. via ``[inputs]``)
+            If the string references a data file (e.g. via ``[data]``)
             that could not be read.
         RuntimeError
             If the model parsed but failed validation.
@@ -261,7 +261,7 @@ class Model:
             `Model` is left untouched in that case.
         OSError
             If applying the patch references a data file (e.g. a new
-            ``[inputs]`` entry) that could not be read. This `Model` is left
+            ``[data]`` entry) that could not be read. This `Model` is left
             untouched in that case.
         """
         if isinstance(patch_content, list):
@@ -385,7 +385,7 @@ class Model:
 
         This is a snapshot, not a live view -- mutating the returned dict
         does not touch the model; the only write path is `patch()`. A
-        list-style section (e.g. ``[inputs]``, ``[outputs]``) comes back
+        list-style section (e.g. ``[data]``, ``[outputs]``) comes back
         with each bare line as a key mapped to an empty-string value.
 
         Parameters
@@ -459,9 +459,9 @@ class Model:
         return self
     
     def set_input(self, alias: str, data: "pd.DataFrame | pd.Series") -> "Model":
-        """Supply in-memory data for a declared `[inputs]` alias.
+        """Supply in-memory data for a declared `[data]` alias.
 
-        `alias` must already be declared in `[inputs]` -- either a bare
+        `alias` must already be declared in `[data]` -- either a bare
         declaration (``observed_flows =``) or an aliased file (``climate_data
         = climate.csv``, where the supplied data takes precedence over the
         file). `set_input()` fills an existing declaration; it does not
@@ -471,7 +471,7 @@ class Model:
         Parameters
         ----------
         alias
-            The `[inputs]` alias to supply data for.
+            The `[data]` alias to supply data for.
         data
             A `pd.DataFrame` (or bare `pd.Series`, accepted as sugar for a
             one-column frame) indexed by a `DatetimeIndex` with a regular

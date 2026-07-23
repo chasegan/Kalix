@@ -414,14 +414,14 @@ mod tests {
 
     #[test]
     fn patch_update_referencing_missing_input_file_is_io_error() {
-        // A patch that introduces an [inputs] entry pointing at a file that
+        // A patch that introduces an [data] entry pointing at a file that
         // doesn't exist must surface as KalixIoError::Io, not ::Parse - same
         // distinction as the top-level load path (see ini_model_io.rs tests).
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
         let result = patch_merge(
             &model,
-            "[inputs]\n./does_not_exist_patch_test.csv\n",
+            "[data]\n./does_not_exist_patch_test.csv\n",
         );
         match result {
             Ok(_) => panic!("expected an error, got Ok"),

@@ -108,7 +108,7 @@ pub struct Model {
 
     // ---- Cold path: load/configure/serialize time only, not touched per-step ----
 
-    /// Pre-run input sources ([inputs] entries), one per file/alias. Each source
+    /// Pre-run input sources ([data] entries), one per file/alias. Each source
     /// holds its own data columns (see TimeseriesInputDefinition). Folds together
     /// what used to be three loosely-coupled fields (the per-column data, the
     /// file paths, and the alias map).
@@ -225,7 +225,7 @@ impl Model {
     /// The structural half of [`configure`](Self::configure): register output
     /// series and initialise nodes (link wiring, data-reference resolution) --
     /// every check that needs no input *data*. Split out so `load`/`patch` can
-    /// validate a model's shape without requiring its `[inputs]` to be supplied
+    /// validate a model's shape without requiring its `[data]` to be supplied
     /// yet (e.g. a bare declaration awaiting `set_input()`). `configure()` runs
     /// this first, then the data-dependent steps that only `run()` needs.
     fn configure_model_structure(&mut self) -> Result<(), String> {
@@ -331,7 +331,7 @@ impl Model {
 
         //2b) Reject any input that was declared but never supplied. Nothing in
         //   the engine can supply a bare declaration, so an empty-valued
-        //   [inputs] entry is a configure-time error rather than a downstream
+        //   [data] entry is a configure-time error rather than a downstream
         //   reference-resolution failure. Deferred until here (not part of the
         //   structural step) so load/patch can accept a not-yet-supplied
         //   declaration that set_input() will fill before run().
@@ -447,7 +447,7 @@ impl Model {
     }
 
     /// Validate a model's shape and its `data.*` references without requiring
-    /// `[inputs]` to be fully supplied yet -- the load/patch-time counterpart
+    /// `[data]` to be fully supplied yet -- the load/patch-time counterpart
     /// to `configure()`, which additionally requires the simulation period and
     /// input data itself.
     pub fn validate_model_structure(&mut self) -> Result<(), String> {
@@ -788,7 +788,7 @@ impl Model {
         Ok(kp.resolved)
     }
 
-    /// Declare an input alias with no backing data (an empty-valued `[inputs]`
+    /// Declare an input alias with no backing data (an empty-valued `[data]`
     /// entry). Nothing here supplies it, so `configure()` will reject it unless
     /// something fills it in first (e.g. `set_input()`).
     pub fn declare_alias(&mut self, alias: &str) {
