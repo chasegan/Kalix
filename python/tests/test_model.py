@@ -1087,9 +1087,11 @@ def test_set_input_resets_has_run():
 
 
 def test_set_input_overrides_an_aliased_file():
-    """An `[data]` entry that already names a file (`climate = ...`) is
-    still a valid target for set_input() -- the supplied data takes
-    precedence over the file."""
+    """A `[data]` entry that already names a file (`climate = ...`) is still a
+    valid target for set_input() -- the supplied data takes precedence over the
+    file. The referenced column must exist in the aliased file at load (it is a
+    non-declaration source), so the model names the file's real `value` column;
+    the override then supplies a fresh `value` column that run() picks up."""
     ini = (
         "[kalix]\n"
         "start = 2000-01-01T00:00:00\n"
@@ -1101,7 +1103,7 @@ def test_set_input_overrides_an_aliased_file():
         "[node.src]\n"
         "loc = 0,0\n"
         "type = inflow\n"
-        "inflow = data.climate.by_name.flow\n"
+        "inflow = data.climate.by_name.value\n"
         "ds_1 = sink\n"
         "\n"
         "[node.sink]\n"
@@ -1111,10 +1113,37 @@ def test_set_input_overrides_an_aliased_file():
         "[outputs]\n"
         "node.src.dsflow\n"
     )
+    index = pd.date_range("2000-01-01", periods=5, freq="D")
+    override = pd.DataFrame({"value": [1.0, 2.0, 3.0, 4.0, 5.0]}, index=index)
     model = kalix.load_string(ini)
-    model.set_input("climate", _obs_frame())
+    model.set_input("climate", override)
     df = model.run().get_outputs()
     assert list(df["node.src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
+
+
+def test_patch_preserves_set_input_data_supplied_for_a_declaration():
+    """set_input() data lives only in memory; patch() reparses the model from
+    text. The supplied data must survive the rebuild -- copied onto the matching
+    bare declaration -- rather than being silently discarded (which would leave
+    `obs` "declared but not supplied")."""
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    model.set_input("obs", _obs_frame())
+    patched = model.patch("[const]\nk = 1\n")
+    df = patched.run().get_outputs()
+    assert list(df["node.src.dsflow"]) == [1.0, 2.0, 3.0, 4.0, 5.0]
+
+
+def test_patch_catches_set_input_column_mismatch_for_a_declaration():
+    """The preserved in-memory data is validated at the patch stage: the model
+    references `data.obs.by_name.flow`, but the supplied column is named
+    `value`, so patch() must raise -- caught early, not deferred to a run-time
+    lookup failure."""
+    index = pd.date_range("2000-01-01", periods=5, freq="D")
+    wrong_column = pd.DataFrame({"value": [1.0, 2.0, 3.0, 4.0, 5.0]}, index=index)
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    model.set_input("obs", wrong_column)
+    with pytest.raises(ValueError, match="not found in any input file"):
+        model.patch("[const]\nk = 1\n")
 
 
 def test_set_input_column_values_coerced_to_float64():

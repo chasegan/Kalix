@@ -4,7 +4,9 @@
 use crate::io::custom_ini_parser::IniDocument;
 use crate::io::error::KalixIoError;
 use crate::io::ini_model_io::IniModelIO;
+use crate::misc::misc_functions::sanitize_name;
 use crate::model::Model;
+use crate::timeseries_input::TimeseriesInputDefinition;
 
 /// Helper function for defining the patch functions. Note this is a full
 /// reuild/reparse for safety reasons - an invalid patch is rejected and won't
@@ -28,6 +30,29 @@ fn apply_patch(
         &model_ini_doc.to_string(),
         Some(model.working_directory.clone()),
     )?;
+
+    // The above rebuild reparses from INI text, which does not preserve runtime
+    // set_input() data. Restore that data only onto
+    // `TimeseriesInputDefinition::Declaration`s (i.e. no associated file).
+    //
+    // TODO: this only covers set_input() data supplied for a bare declaration.
+    // In-memory data that *overrides an aliased file* is still dropped across a
+    // patch (the rebuilt source is a FileDefinition, which we deliberately leave
+    // untouched). Address before merging: decide how a file-backed override
+    // should survive a patch, and validate its references the same way.
+    for source in &mut patched_model.input_sources {
+        if let TimeseriesInputDefinition::Declaration { alias } = source {
+            let alias_key = sanitize_name(alias);
+            let in_memory = model.input_sources.iter().find(|s| {
+                matches!(s, TimeseriesInputDefinition::InMemoryDefinition { .. })
+                    && s.alias().map(sanitize_name).as_deref() == Some(alias_key.as_str())
+            });
+            if let Some(in_memory) = in_memory {
+                *source = in_memory.clone();
+            }
+        }
+    }
+
     // Reject poorly configured models
     patched_model.validate_model_structure()?;
     Ok(patched_model)
@@ -102,6 +127,38 @@ pub fn patch_delete(model: &Model, patch_string: &str, missing_ok: bool) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::io::model_input_swap::{set_input, InMemoryColumn};
+    use crate::tid::utils::wrap_to_u64;
+
+    // 2000-01-01T00:00:00Z in Kalix's 2^63-biased unix-seconds, matching the
+    // [kalix] start in `model_ini_with_declared_input` (see model_input_swap
+    // tests for why set_input() timestamps are biased, not raw epoch).
+    fn start() -> u64 { wrap_to_u64(946_684_800) }
+    const DAY: u64 = 86_400;
+
+    /// A model whose only input is a bare declaration (`obs =`), referenced by
+    /// name from an inflow node -- something set_input() is expected to fill.
+    fn model_ini_with_declared_input() -> &'static str {
+        "[kalix]\n\
+         start = 2000-01-01T00:00:00\n\
+         end = 2000-01-05T00:00:00\n\
+         \n\
+         [data]\n\
+         obs =\n\
+         \n\
+         [node.src]\n\
+         type = inflow\n\
+         loc = 0,0\n\
+         inflow = data.obs.by_name.flow\n\
+         ds_1 = sink\n\
+         \n\
+         [node.sink]\n\
+         type = blackhole\n\
+         loc = 1,1\n\
+         \n\
+         [outputs]\n\
+         node.src.dsflow\n"
+    }
 
     fn model_ini() -> &'static str {
         "[kalix]\n\
@@ -142,6 +199,51 @@ mod tests {
          [node.bh2]\n\
          type = blackhole\n\
          loc = 5, 5\n"
+    }
+
+    #[test]
+    fn patch_preserves_in_memory_data_supplied_for_a_declaration() {
+        // set_input() data lives only in memory, but a patch reparses the model
+        // from INI text. The supplied data must survive the rebuild -- copied
+        // onto the matching bare declaration -- rather than being silently
+        // discarded (which would leave `obs` "declared but not supplied").
+        let mut model = IniModelIO::read_model_string(model_ini_with_declared_input())
+            .expect("model should parse");
+        set_input(&mut model, "obs", start(), DAY,
+            vec![InMemoryColumn { name: "flow".into(), values: vec![1.0, 2.0, 3.0, 4.0, 5.0] }])
+            .expect("set_input should fill the declaration");
+
+        // A patch that touches something unrelated must not drop the input data.
+        let mut patched = patch_merge(&model, "[const]\nk = 1\n")
+            .expect("patch should apply and preserve the supplied input");
+
+        patched.configure().expect("configure should succeed on the patched model");
+        patched.run().expect("run should succeed on the patched model");
+        let idx = patched.data_cache.get_existing_series_idx("node.src.dsflow").unwrap();
+        assert_eq!(patched.data_cache.series[idx].values, vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+    }
+
+    #[test]
+    fn patch_catches_in_memory_column_mismatch_for_a_declaration() {
+        // The preserved in-memory data is validated at the patch stage: the
+        // model references `data.obs.by_name.flow`, but the supplied column is
+        // named `value`. validate_model_structure() (run inside apply_patch)
+        // must reject it, rather than letting it slip through to a run-time
+        // lookup failure.
+        let mut model = IniModelIO::read_model_string(model_ini_with_declared_input())
+            .expect("model should parse");
+        set_input(&mut model, "obs", start(), DAY,
+            vec![InMemoryColumn { name: "value".into(), values: vec![1.0, 2.0, 3.0, 4.0, 5.0] }])
+            .expect("set_input supplies data regardless of whether a reference matches");
+
+        let err = patch_merge(&model, "[const]\nk = 1\n")
+            .err()
+            .expect("patch must reject a reference the supplied columns don't satisfy")
+            .to_string();
+        assert!(
+            err.contains("data.obs.by_name.flow") && err.contains("not found in any input file"),
+            "error should name the unmatched reference. Got: {err}"
+        );
     }
 
     #[test]
