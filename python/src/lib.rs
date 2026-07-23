@@ -287,7 +287,7 @@ impl PyModel {
 
     /// Copy a deep, independent model.
     fn copy(&self) -> PyResult<PyModel> {
-        Ok(PyModel{
+        Ok(PyModel {
             inner: self.inner.clone_for_new_model(),
             has_run: false,
         })
@@ -472,7 +472,10 @@ impl PyModel {
     }
 
     fn _sections<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
-        Ok(PyList::new_bound(py, model_query::list_sections(&self.inner)))
+        Ok(PyList::new_bound(
+            py,
+            model_query::list_sections(&self.inner),
+        ))
     }
 
     /// Returns the named section as `{property: value}`, or `None` if the
@@ -499,10 +502,14 @@ impl PyModel {
 
     fn _get_property(&self, section_name: &str, property_name: &str) -> PyResult<String> {
         if !model_query::has_section(&self.inner, section_name) {
-            return Err(PyKeyError::new_err(format!("No such section: {section_name:?}")));
+            return Err(PyKeyError::new_err(format!(
+                "No such section: {section_name:?}"
+            )));
         }
         model_query::get_property(&self.inner, section_name, property_name).ok_or_else(|| {
-            PyKeyError::new_err(format!("No such property: {section_name:?}.{property_name:?}"))
+            PyKeyError::new_err(format!(
+                "No such property: {section_name:?}.{property_name:?}"
+            ))
         })
     }
 
@@ -568,7 +575,9 @@ impl PyModel {
         let step_size: u64 = if ts.len() >= 2 {
             let diff = ts[1] - ts[0];
             if diff <= 0 {
-                return Err(PyValueError::new_err("Timestamps must be strictly increasing"));
+                return Err(PyValueError::new_err(
+                    "Timestamps must be strictly increasing",
+                ));
             }
             diff as u64
         } else {
