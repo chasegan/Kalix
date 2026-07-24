@@ -8,7 +8,11 @@
 //! ├── KalixKeyError(KeyError)         -- missing sections/properties/outputs
 //! └── KalixRuntimeError(RuntimeError) -- equivalent to RuntimeError
 //! ```
-//! so `except kalix.KalixError` is always a safe catch-all.
+//! so `except kalix.KalixError` is always a safe catch-all for anything the
+//! engine reports.
+//!
+//! Exception: malformed arguments are caught before consulting the engine, so
+//! it stays outside this hierarchy.
 
 use pyo3::create_exception;
 use pyo3::exceptions::{PyException, PyKeyError, PyRuntimeError};

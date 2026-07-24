@@ -549,6 +549,8 @@ impl PyModel {
     ) -> PyResult<String> {
         model_query::get_property_by_designation(&self.inner, property_designation).map_err(|e| {
             match e {
+                // A ValueError from the user supplied string - not related to
+                // the engine so does not return a KalixError
                 model_query::PropertyLookupError::InvalidFormat(designation) => {
                     PyValueError::new_err(format!(
                         "Not a valid '<section>.<property>' designation: {designation:?}"
