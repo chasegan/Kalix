@@ -60,9 +60,9 @@ class Model:
         ------
         OSError
             If the file could not be read (not found, permission denied, etc.).
-        ValueError
+        kalix.ModelParseError
             If the file was read but its contents are not a valid model INI.
-        RuntimeError
+        kalix.ModelValidationError
             If the model parsed but failed validation.
         """
         return cls().load_file(model_path)
@@ -85,9 +85,9 @@ class Model:
 
         Raises
         ------
-        ValueError
+        kalix.ModelParseError
             If the string is not a valid model INI.
-        RuntimeError
+        kalix.ModelValidationError
             If the model parsed but failed validation.
 
         Notes
@@ -125,19 +125,15 @@ class Model:
         ------
         OSError
             If the file could not be read (not found, permission denied, etc.).
-        ValueError
+        kalix.ModelParseError
             If the file was read but its contents are not a valid model INI.
-        RuntimeError
+        kalix.ModelValidationError
             If the model parsed but failed validation.
         """
         try:
             self._inner._from_file(str(model_path))
         except OSError as e:
             raise OSError(f"Failed to load model from '{model_path}': {e}") from e
-        except ValueError as e:
-            raise ValueError(f"Model '{model_path}' is not a valid model INI: {e}") from e
-        except RuntimeError as e:
-            raise RuntimeError(f"Model '{model_path}' failed validation: {e}") from e
         return self
 
     def load_string(self, model_string: str) -> "Model":
@@ -156,12 +152,12 @@ class Model:
 
         Raises
         ------
-        ValueError
+        kalix.ModelParseError
             If the string is not a valid model INI.
         OSError
             If the string references a data file (e.g. via ``[data]``)
             that could not be read.
-        RuntimeError
+        kalix.ModelValidationError
             If the model parsed but failed validation.
 
         Notes
@@ -172,12 +168,8 @@ class Model:
         """
         try:
             self._inner._from_model_string(model_string)
-        except ValueError as e:
-            raise ValueError(f"Failed to parse model string: {e}") from e
         except OSError as e:
             raise OSError(f"Failed to load model referenced by model string: {e}") from e
-        except RuntimeError as e:
-            raise RuntimeError(f"Model string failed validation: {e}") from e
         return self
 
     def run(self, progress: Optional[Callable[[int, int], None]] = None) -> "Model":
@@ -203,15 +195,12 @@ class Model:
 
         Raises
         ------
-        RuntimeError
-            If configuration or the simulation itself fails.
+        kalix.ModelValidationError
+            If the model could not be configured for a run.
+        kalix.SimulationError
+            If the simulation itself fails.
         """
-        try:
-            # This is the intended use - the underscore indicates that this is a
-            # function from Rust-land
-            self._inner._run(progress)
-        except RuntimeError as e:
-            raise RuntimeError(f"Model run failed: {e}") from e
+        self._inner._run(progress)
         return self
 
     @overload
@@ -273,14 +262,26 @@ class Model:
         Raises
         ------
         ValueError
-            If `patch_content` is a list and `mode` is not `"delete"`; if
-            `patch_content` is not valid INI (after any dict/list
-            conversion); or if applying it produces an invalid model. This
-            `Model` is left untouched in that case.
+            If `patch_content` is a list and `mode` is not `"delete"` --
+            rejected here, before the engine is consulted, so this is a
+            plain builtin `ValueError` (see `kalix.error`).
+        kalix.ModelParseError
+            If `patch_content` is not valid INI, after any dict/list
+            conversion.
+        kalix.ModelValidationError
+            If the patch applies but produces an invalid model.
+        kalix.KalixKeyError
+            If ``mode="delete"`` names a section the model doesn't have and
+            `missing_ok` is ``False``.
+        kalix.KalixRuntimeError
+            If this `Model` is empty -- there is nothing to patch, so load a
+            model first.
         OSError
             If applying the patch references a data file (e.g. a new
-            ``[data]`` entry) that could not be read. This `Model` is left
-            untouched in that case.
+            ``[data]`` entry) that could not be read.
+
+        In every failing case this `Model` is left exactly as it was -- the
+        patch is applied to a copy and swapped in only on success.
         """
         if isinstance(patch_content, str):
             # Already a raw INI snippet -- assembled below as-is. Handled first
@@ -342,10 +343,10 @@ class Model:
             Only affects explicitly requested `names` (has no effect when
             `names` is ``None``). If ``False`` (default), a requested name
             that is undeclared, not found, or wrong length raises
-            ``ValueError``. If ``True``, any such name instead comes back as
-            an all-zero column of the correct simulation length, so a mix of
-            valid and missing names in one call returns a mix of real and
-            zero-filled columns, in request order.
+            ``kalix.KalixKeyError``. If ``True``, any such name instead comes
+            back as an all-zero column of the correct simulation length, so a
+            mix of valid and missing names in one call returns a mix of real
+            and zero-filled columns, in request order.
 
         Returns
         -------
@@ -361,19 +362,17 @@ class Model:
 
         Raises
         ------
-        ValueError
+        kalix.KalixRuntimeError
             If the model has not been run yet (loading or patching a model
             resets its run state) -- this check applies regardless of
-            `missing_ok`. Also, when `missing_ok` is ``False``, if a
-            requested name is not a declared output, or was declared but not
-            found/wrong length.
+            `missing_ok`.
+        kalix.KalixKeyError
+            When `missing_ok` is ``False``, if a requested name is not a
+            declared output, or was declared but not found/wrong length.
         """
         if isinstance(names, str):
             names = [names]
-        try:
-            start, step, size, series_list = self._inner._get_outputs(names, missing_ok)
-        except ValueError as e:
-            raise ValueError(f"Failed to retrieve model outputs: {e}") from e
+        start, step, size, series_list = self._inner._get_outputs(names, missing_ok)
 
         timestamps_sec = start + step * np.arange(size, dtype=np.int64)
         return build_time_indexed_df(timestamps_sec, series_list)
@@ -393,14 +392,11 @@ class Model:
 
         Raises
         ------
-        ValueError
+        kalix.KalixRuntimeError
             If the model has not been run yet (loading or patching a model
             resets its run state).
         """
-        try:
-            names, types, values = self._inner._get_mass_balance()
-        except ValueError as e:
-            raise ValueError(f"Failed to retrieve mass balance: {e}") from e
+        names, types, values = self._inner._get_mass_balance()
         return pd.DataFrame({"node": names, "type": types, "mass_balance": values})
 
     def __repr__(self) -> str:
@@ -451,7 +447,7 @@ class Model:
 
         Raises
         ------
-        KeyError
+        kalix.KalixKeyError
             If the section does not exist. Use `has_section()` to probe.
         """
         return self._inner._get_section(section_name)
@@ -474,8 +470,14 @@ class Model:
 
         Raises
         ------
-        KeyError
-            If the section or property does not exist.
+        ValueError
+            If `property_designation` is not of the form
+            ``"<section>.<property>"`` -- a malformed argument is a caller
+            mistake, so this is a plain builtin `ValueError` and is
+            deliberately *not* a `kalix.KalixError`.
+        kalix.KalixKeyError
+            If the designation is well formed but the section or property
+            does not exist.
         """
         return self._inner._get_property_by_designation(property_designation)
 
@@ -487,6 +489,12 @@ class Model:
         str
             The round-tripped INI text, with original formatting preserved
             for unchanged properties.
+
+        Raises
+        ------
+        kalix.KalixRuntimeError
+            If this `Model` has no INI document to serialise (i.e. nothing
+            has been loaded into it yet).
         """
         return self._inner._to_string()
 
@@ -502,6 +510,15 @@ class Model:
         -------
         Model
             `self`, for chaining.
+
+        Raises
+        ------
+        kalix.KalixRuntimeError
+            If this `Model` has no INI document to write (i.e. nothing has
+            been loaded into it yet) -- checked before the file is touched.
+        OSError
+            If the file could not be written (bad path, permission denied,
+            etc.).
         """
         self._inner._save(str(filename))
         return self
@@ -533,6 +550,19 @@ class Model:
         -------
         Model
             `self`, for chaining.
+
+        Raises
+        ------
+        kalix.KalixKeyError
+            If `alias` is not declared in the model's ``[data]`` section --
+            the only engine-side failure this call has.
+        TypeError
+            If `data` is not indexed by a `pd.DatetimeIndex`.
+        ValueError
+            If the index is empty or its step is not regular, or if a column
+            is not the same length as the index. Like the `TypeError` above,
+            these are argument problems rejected before the engine is
+            consulted, so they stay builtin (see `kalix.error`).
         """
         if isinstance(data, pd.Series):
             data = data.to_frame(name=data.name if data.name is not None else "value")
@@ -576,9 +606,9 @@ def load_file(model_path: PathLike) -> Model:
     ------
     OSError
         If the file could not be read (not found, permission denied, etc.).
-    ValueError
+    kalix.ModelParseError
         If the file was read but its contents are not a valid model INI.
-    RuntimeError
+    kalix.ModelValidationError
         If the model parsed but failed validation.
     """
     return Model.from_file(model_path)
@@ -601,9 +631,9 @@ def load_string(model_string: str) -> Model:
 
     Raises
     ------
-    ValueError
+    kalix.ModelParseError
         If the string is not a valid model INI.
-    RuntimeError
+    kalix.ModelValidationError
         If the model parsed but failed validation.
 
     Notes
