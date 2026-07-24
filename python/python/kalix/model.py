@@ -342,8 +342,10 @@ class Model:
         missing_ok
             Only affects explicitly requested `names` (has no effect when
             `names` is ``None``). If ``False`` (default), a requested name
-            that is undeclared, not found, or wrong length raises
-            ``kalix.KalixKeyError``. If ``True``, any such name instead comes
+            that is undeclared, not found, or declared-but-never-recorded
+            raises ``kalix.KalixKeyError``, and one whose recorded series is
+            a length other than the run's raises
+            ``kalix.KalixRuntimeError``. If ``True``, any such name comes
             back as an all-zero column of the correct simulation length, so a
             mix of valid and missing names in one call returns a mix of real
             and zero-filled columns, in request order.
@@ -365,10 +367,17 @@ class Model:
         kalix.KalixRuntimeError
             If the model has not been run yet (loading or patching a model
             resets its run state) -- this check applies regardless of
-            `missing_ok`.
+            `missing_ok`. Also, when `missing_ok` is ``False``, if a
+            requested name resolved to a *populated* series whose length
+            isn't the run's: the data behind the output contradicts the run
+            that just succeeded, which is engine state rather than a name
+            the caller got wrong.
         kalix.KalixKeyError
-            When `missing_ok` is ``False``, if a requested name is not a
-            declared output, or was declared but not found/wrong length.
+            When `missing_ok` is ``False``, if a requested name is not
+            declared in ``[outputs]``, is declared but has no series at all,
+            or is declared but was never recorded to (usually an
+            ``[outputs]`` entry naming a series the model doesn't produce).
+            All three are lookups that missed, and each says which.
         """
         if isinstance(names, str):
             names = [names]

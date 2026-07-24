@@ -197,6 +197,36 @@ enum OutputLookup<'a> {
     NotFound,
 }
 
+/// Why `Model::get_output_series` could not return a requested output.
+#[derive(Debug, thiserror::Error)]
+pub enum OutputLookupError {
+    /// The requested name is not listed in the model's `[outputs]`.
+    #[error("Output {0} undeclared in model [outputs]")]
+    Undeclared(String),
+    /// Declared, but no series is registered under that name at all.
+    #[error("Output {0} not found")]
+    NotFound(String),
+    /// Declared and registered, but empty — nothing ever recorded to it.
+    /// Reached when `[outputs]` names something no component produces, so the
+    /// message points at the declaration rather than at the empty series.
+    #[error(
+        "Output {0} is declared in [outputs] but nothing recorded it \
+         -- check the name matches a series the model actually produces"
+    )]
+    Unpopulated(String),
+    /// Populated, but not `sim_nsteps` long. Unlike the variants above this
+    /// is not a naming problem: reaching it after a successful run means a
+    /// recorder wrote a different number of steps than the run took.
+    #[error(
+        "Output series {name} found but wrong length, length {actual} but expected {expected}"
+    )]
+    WrongLength {
+        name: String,
+        actual: usize,
+        expected: usize,
+    },
+}
+
 impl Model {
     pub fn new() -> Model {
         Model {
@@ -1227,7 +1257,7 @@ impl Model {
         &self,
         output_names: Option<Vec<String>>,
         missing_ok: bool,
-    ) -> Result<Vec<Timeseries>, String> {
+    ) -> Result<Vec<Timeseries>, OutputLookupError> {
         let Some(vec_names) = output_names else {
             return Ok(self.collect_output_series().into_iter().cloned().collect());
         };
@@ -1242,10 +1272,7 @@ impl Model {
                     vec_ts.push(self.zero_output_series(&output_name, expected_len));
                     continue;
                 }
-                return Err(format!(
-                    "Output {} undeclared in model [outputs]",
-                    output_name
-                ));
+                return Err(OutputLookupError::Undeclared(output_name));
             }
             match self.lookup_output_series(&output_name, expected_len) {
                 OutputLookup::Populated(ts) => vec_ts.push(ts.clone()),
@@ -1254,17 +1281,25 @@ impl Model {
                         vec_ts.push(self.zero_output_series(&output_name, expected_len));
                         continue;
                     }
-                    return Err(format!(
-                        "Output series {} found but wrong length, length {} but expected {}",
-                        output_name, len, expected_len
-                    ));
+                    // Empty is the common, user-caused case (an `[outputs]`
+                    // entry naming a series nothing produces); any other
+                    // length is a recorder disagreeing with the run.
+                    return Err(if len == 0 {
+                        OutputLookupError::Unpopulated(output_name)
+                    } else {
+                        OutputLookupError::WrongLength {
+                            name: output_name,
+                            actual: len,
+                            expected: expected_len,
+                        }
+                    });
                 }
                 OutputLookup::NotFound => {
                     if missing_ok {
                         vec_ts.push(self.zero_output_series(&output_name, expected_len));
                         continue;
                     }
-                    return Err(format!("Output {} not found", output_name));
+                    return Err(OutputLookupError::NotFound(output_name));
                 }
             }
         }

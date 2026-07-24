@@ -5,7 +5,7 @@
 //! See `Model::get_output_series` doc comment and `docs/python_api_spec.md`.
 
 use crate::io::ini_model_io::IniModelIO;
-use crate::model::Model;
+use crate::model::{Model, OutputLookupError};
 
 /// One output, declared with deliberately mixed casing.
 fn build_and_run() -> Model {
@@ -76,5 +76,53 @@ fn test_undeclared_output_case_insensitive_error() {
         Err(e) => e,
         Ok(_) => panic!("undeclared output should error regardless of casing"),
     };
-    assert!(err.contains("node.a.notreal"));
+    // Variant, not just message text: `Undeclared` is what routes this to
+    // KalixKeyError at the PyO3 boundary (see `output_err_to_py`).
+    assert!(
+        matches!(err, OutputLookupError::Undeclared(ref name) if name == "node.a.notreal"),
+        "expected Undeclared naming the requested output, got {err:?}"
+    );
+}
+
+#[test]
+fn test_declared_but_unrecorded_output_is_unpopulated_not_wrong_length() {
+    // An `[outputs]` entry naming a series no component produces leaves an
+    // empty series registered under that name. Empty must report as
+    // `Unpopulated` -- a name problem, pointing the user at their
+    // declaration -- and not as `WrongLength { actual: 0 }`, which is
+    // technically true, routes to the wrong exception at the PyO3 boundary,
+    // and tells the user nothing about the typo that caused it.
+    let ini = "\
+[kalix]
+start = 2020-01-01
+end = 2020-01-04
+
+[node.a]
+loc = 0, 0
+type = inflow
+inflow = 1
+ds_1 = sink
+
+[node.sink]
+loc = 0, 10
+type = blackhole
+
+[outputs]
+node.a.dsflow
+node.a.notathing
+";
+    let mut model = IniModelIO::read_model_string(ini).expect("model should load");
+    model.configure().expect("configuration should succeed");
+    model.run().expect("run should succeed");
+
+    // `expect_err` is unavailable here: the Ok type (`Vec<Timeseries>`)
+    // doesn't implement Debug.
+    let err = match model.get_output_series(Some(vec!["node.a.notathing".to_string()]), false) {
+        Err(e) => e,
+        Ok(_) => panic!("a declared but unrecorded output should error"),
+    };
+    assert!(
+        matches!(err, OutputLookupError::Unpopulated(ref name) if name == "node.a.notathing"),
+        "expected Unpopulated, got {err:?}"
+    );
 }

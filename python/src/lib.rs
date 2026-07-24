@@ -10,7 +10,7 @@ use kalix::io::ini_model_io::IniModelIO;
 use kalix::io::model_input_swap;
 use kalix::io::model_patch::{patch_delete, patch_merge, patch_replace, PatchError};
 use kalix::io::{model_query, pixie_io};
-use kalix::model::Model;
+use kalix::model::{Model, OutputLookupError};
 use kalix::run;
 use kalix::tid::utils::{wrap_to_i64, wrap_to_u64};
 use kalix::timeseries::Timeseries;
@@ -28,6 +28,24 @@ fn io_err_to_py(e: KalixIoError) -> PyErr {
         KalixIoError::Io(msg) => PyIOError::new_err(msg),
         KalixIoError::Parse(msg) => error::ModelParseError::new_err(msg),
         KalixIoError::Validate(msg) => error::ModelValidationError::new_err(msg),
+    }
+}
+
+/// Maps a failed output lookup to its Python exception.
+///
+/// Undeclared/not-found/unpopulated are all the caller naming something that
+/// isn't there -- a lookup that missed -- so they stay `KalixKeyError`, each
+/// carrying its own message about *which* way it missed. A populated series
+/// of the wrong length is different in kind: the name resolved and the data
+/// behind it contradicts the run that just succeeded, which is engine state
+/// rather than a bad key, so it joins the other precondition failures as
+/// `KalixRuntimeError`.
+fn output_err_to_py(py: Python<'_>, e: OutputLookupError) -> PyErr {
+    match e {
+        OutputLookupError::Undeclared(_)
+        | OutputLookupError::NotFound(_)
+        | OutputLookupError::Unpopulated(_) => error::new_kalix_key_error(py, e.to_string()),
+        OutputLookupError::WrongLength { .. } => error::new_kalix_runtime_error(py, e.to_string()),
     }
 }
 
@@ -451,7 +469,7 @@ impl PyModel {
         let outputs = self
             .inner
             .get_output_series(names, missing_ok)
-            .map_err(|e| error::new_kalix_key_error(py, e))?;
+            .map_err(|e| output_err_to_py(py, e))?;
         let (start, step, size) = match outputs.first() {
             Some(first) => (
                 wrap_to_i64(first.start_timestamp),

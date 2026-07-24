@@ -731,6 +731,28 @@ def test_get_outputs_undeclared_name_raises_key_error():
         model.get_outputs(["node.not_a_real_output.dsflow"])
 
 
+def test_get_outputs_declared_but_never_recorded_raises_key_error():
+    """An `[outputs]` entry naming a series the model never produces is still
+    the caller naming something that isn't there, so it stays a KalixKeyError
+    -- and the message must point at the declaration, not report the empty
+    series as a length-0 mismatch (which is what the user actually sees, and
+    is useless for finding the typo)."""
+    # _INLINE_MODEL_INI ends with its [outputs] block, so this appends a
+    # second declared output that no component in the model produces.
+    model = kalix.load_string(_INLINE_MODEL_INI + "node.my_node.notathing\n").run()
+    with pytest.raises(kalix.KalixKeyError, match="nothing recorded it"):
+        model.get_outputs(["node.my_node.notathing"])
+
+
+def test_get_outputs_declared_but_never_recorded_is_zero_filled_when_missing_ok():
+    """The same name under `missing_ok=True` follows the ordinary stand-in
+    rule rather than raising."""
+    model = kalix.load_string(_INLINE_MODEL_INI + "node.my_node.notathing\n").run()
+    df = model.get_outputs(["node.my_node.notathing"], missing_ok=True)
+    assert (df["node.my_node.notathing"] == 0.0).all()
+    assert len(df) == len(model.get_outputs())
+
+
 def test_get_outputs_missing_ok_returns_zero_filled_column():
     """An undeclared name with `missing_ok=True` comes back as an all-zero
     column, of the same length as a normal run, instead of raising."""
