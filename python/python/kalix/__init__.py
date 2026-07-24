@@ -2,8 +2,9 @@
 
 Top-level façade — re-exports the most common user-facing names. Underlying
 implementations live in `kalix.io` (Pixie read/write), `kalix.sim`
-(simulation entry points), and `kalix.opt` (optimisation entry points). Power
-users may import from those submodules directly.
+(simulation entry points), `kalix.opt` (optimisation entry points), and
+`kalix.error` (the exception hierarchy). Power users may import from those
+submodules directly.
 """
 from __future__ import annotations
 
@@ -13,6 +14,14 @@ from kalix.io import read_pixie, write_pixie
 from kalix.opt import optimise
 from kalix.sim import simulate
 from kalix.model import Model, load_file, load_string
+from kalix.error import (
+    KalixError,
+    ModelParseError,
+    ModelValidationError,
+    SimulationError,
+    KalixKeyError,
+    KalixRuntimeError,
+)
 
 __all__ = [
     "simulate",
@@ -22,6 +31,12 @@ __all__ = [
     "Model",
     "load_file",
     "load_string",
+    "KalixError",
+    "ModelParseError",
+    "ModelValidationError",
+    "SimulationError",
+    "KalixKeyError",
+    "KalixRuntimeError",
     "__version__"
 ]
 

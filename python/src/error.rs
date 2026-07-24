@@ -88,8 +88,17 @@ pub fn new_kalix_runtime_error(py: Python<'_>, msg: impl AsRef<str>) -> PyErr {
 /// catch it. `create_exception!` only supports a single base, so this one is
 /// assembled by hand via Python's own `type()` builtin instead, and cached
 /// for reuse by `new_kalix_key_error()`.
+///
+/// Both hand-rolled types must have `__module__` set explicitly: `type()`
+/// otherwise infers it from the calling frame, which during module init is
+/// `importlib._bootstrap`. That name would then show up in every traceback,
+/// and pickling would fail (the class isn't reachable at that path), which
+/// in turn breaks propagating one of these across a process boundary.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
+
+    // Matches the `kalix._native` the `create_exception!` types report.
+    let module_name = "kalix._native";
 
     m.add("KalixError", py.get_type_bound::<KalixError>())?;
     m.add("ModelParseError", py.get_type_bound::<ModelParseError>())?;
@@ -107,6 +116,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         ],
     );
     let namespace = PyDict::new_bound(py);
+    namespace.set_item("__module__", module_name)?;
     let builtins = PyModule::import_bound(py, "builtins")?;
     let key_error_ty = builtins
         .getattr("type")?
@@ -126,6 +136,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         ],
     );
     let runtime_namespace = PyDict::new_bound(py);
+    runtime_namespace.set_item("__module__", module_name)?;
     let runtime_error_ty = builtins
         .getattr("type")?
         .call1(("KalixRuntimeError", runtime_bases, runtime_namespace))?
