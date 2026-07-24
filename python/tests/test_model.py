@@ -36,7 +36,7 @@ def test_load_file_missing_file_raises():
 def test_load_file_invalid_ini_raises(tmp_path):
     bad = tmp_path / "bad.ini"
     bad.write_text("this is not valid kalix ini syntax {{{")
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         kalix.load_file(str(bad))
 
 
@@ -56,8 +56,8 @@ def test_model_from_file_classmethod_constructs_new_model():
 def test_model_load_file_rejects_dangling_downstream_link(tmp_path):
     """A downstream link to a nonexistent node is caught during INI parsing
     itself (node/link wiring), not the later `configure()` validation step --
-    so it surfaces as a ValueError (content is invalid), not an OSError
-    (which is reserved for genuine file-read failures)."""
+    so it surfaces as a ModelParseError (the engine's INI mapper rejected the
+    content), not an OSError (reserved for genuine file-read failures)."""
     broken = tmp_path / "broken.ini"
     broken.write_text(
         "[kalix]\n"
@@ -68,7 +68,7 @@ def test_model_load_file_rejects_dangling_downstream_link(tmp_path):
         "inflow = 1.0\n"
         "ds_1 = node_that_does_not_exist\n"
     )
-    with pytest.raises(ValueError, match="node_that_does_not_exist"):
+    with pytest.raises(kalix.ModelParseError, match="node_that_does_not_exist"):
         kalix.load_file(str(broken))
 
 
@@ -96,7 +96,7 @@ def test_load_string_returns_configured_model():
 
 
 def test_load_string_invalid_ini_raises():
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         kalix.Model().load_string("this is not valid kalix ini syntax {{{")
 
 
@@ -143,16 +143,18 @@ def test_patch_merge_adds_new_section():
     assert isinstance(result, kalix.Model)
 
 
-def test_patch_merge_invalid_syntax_raises_value_error():
-    with pytest.raises(ValueError):
+def test_patch_merge_invalid_syntax_raises_parse_error():
+    with pytest.raises(kalix.ModelParseError):
         kalix.load_string(_INLINE_MODEL_INI).patch("not valid ini [[[")
 
 
-def test_patch_merge_invalid_result_raises_value_error():
+def test_patch_merge_invalid_result_raises_parse_error():
     """A syntactically valid patch that produces an invalid model (here, a
-    downstream link to a nonexistent node) is still a ValueError, not a
-    silent success or a panic."""
-    with pytest.raises(ValueError, match="node_that_does_not_exist"):
+    downstream link to a nonexistent node) is still rejected -- not a
+    silent success or a panic. The engine's mapper catches the dangling
+    link while reading, so this is a ModelParseError rather than a
+    ModelValidationError."""
+    with pytest.raises(kalix.ModelParseError, match="node_that_does_not_exist"):
         kalix.load_string(_INLINE_MODEL_INI).patch(
             "[node.my_node]\nds_1 = node_that_does_not_exist\n"
         )
@@ -160,7 +162,7 @@ def test_patch_merge_invalid_result_raises_value_error():
 
 def test_patch_referencing_missing_input_file_raises_oserror():
     """A patch that introduces an [data] entry pointing at a nonexistent
-    file must raise OSError, not ValueError -- same Io/Parse distinction as
+    file must raise OSError, not a KalixError -- same Io/Parse distinction as
     the load path (see test_load_string_missing_referenced_input_file_raises_oserror)."""
     model = kalix.load_string(_INLINE_MODEL_INI)
     with pytest.raises(OSError):
@@ -171,7 +173,7 @@ def test_patch_merge_leaves_model_untouched_on_failure():
     """A rejected patch must not damage the already-loaded model -- it
     should still run exactly as before the failed patch attempt."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         model.patch("not valid ini [[[")
     result = model.run()
     assert isinstance(result, kalix.Model)
@@ -221,9 +223,9 @@ def test_patch_replace_drops_properties_omitted_from_patch():
     """Unlike patch_merge, replace replaces the whole section -- a
     property that exists on the original but is omitted from the patch
     does not survive. Dropping the required `type` property here makes the
-    section unparseable, surfacing as a ValueError."""
+    section unparseable, surfacing as a ModelParseError."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         model.patch("[node.my_node]\ninflow = 2.0\n", mode="replace")
 
 
@@ -233,13 +235,13 @@ def test_patch_replace_adds_new_section():
     assert isinstance(result, kalix.Model)
 
 
-def test_patch_replace_invalid_syntax_raises_value_error():
-    with pytest.raises(ValueError):
+def test_patch_replace_invalid_syntax_raises_parse_error():
+    with pytest.raises(kalix.ModelParseError):
         kalix.load_string(_INLINE_MODEL_INI).patch("not valid ini [[[", mode="replace")
 
 
-def test_patch_replace_invalid_result_raises_value_error():
-    with pytest.raises(ValueError, match="node_that_does_not_exist"):
+def test_patch_replace_invalid_result_raises_parse_error():
+    with pytest.raises(kalix.ModelParseError, match="node_that_does_not_exist"):
         kalix.load_string(_INLINE_MODEL_INI).patch(
             "[node.my_node]\ntype = inflow\ninflow = 2.0\nloc = 0,0\nds_1 = node_that_does_not_exist\n",
             mode="replace",
@@ -248,7 +250,7 @@ def test_patch_replace_invalid_result_raises_value_error():
 
 def test_patch_replace_leaves_model_untouched_on_failure():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         model.patch("not valid ini [[[", mode="replace")
     result = model.run()
     assert isinstance(result, kalix.Model)
@@ -299,7 +301,7 @@ def test_patch_delete_of_required_property_fails_validation_on_patch():
     even a required one like `dimensions` -- is rejected outright (same rule
     as `test_patch_delete_rejects_properties`), not deferred to `run()`."""
     model = kalix.load_string(_INLINE_MODEL_WITH_STORAGE_NODE_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         model.patch("[node.my_storage]\ndimensions =\n", mode="delete")
 
 
@@ -312,7 +314,7 @@ def test_patch_delete_ignores_missing_section_when_missing_ok():
 
 def test_patch_delete_rejects_missing_section_when_not_missing_ok():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.KalixKeyError):
         model.patch("[node.missing]\n", mode="delete")
 
 
@@ -321,26 +323,26 @@ def test_patch_delete_rejects_properties():
     any properties is rejected outright, even if that property doesn't
     exist on the model."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         model.patch("[node.my_node]\nnot_a_real_property =\n", mode="delete")
 
 
-def test_patch_delete_invalid_syntax_raises_value_error():
-    with pytest.raises(ValueError):
+def test_patch_delete_invalid_syntax_raises_parse_error():
+    with pytest.raises(kalix.ModelParseError):
         kalix.load_string(_INLINE_MODEL_INI).patch("not valid ini [[[", mode="delete")
 
 
-def test_patch_delete_invalid_result_raises_value_error():
+def test_patch_delete_invalid_result_raises_parse_error():
     """Deleting a mid-chain node used as another node's downstream leaves
     a dangling link, caught at parse time (like the analogous update/override
     tests above)."""
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         kalix.load_file(str(_MODEL_INI)).patch("[node.reach4]\n", mode="delete")
 
 
 def test_patch_delete_leaves_model_untouched_on_failure():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         model.patch("not valid ini [[[", mode="delete")
     result = model.run()
     assert isinstance(result, kalix.Model)
@@ -386,8 +388,8 @@ def test_patch_dict_empty_string_value_emits_bare_line():
     assert isinstance(result, kalix.Model)
 
 
-def test_patch_dict_merge_invalid_result_raises_value_error():
-    with pytest.raises(ValueError, match="node_that_does_not_exist"):
+def test_patch_dict_merge_invalid_result_raises_parse_error():
+    with pytest.raises(kalix.ModelParseError, match="node_that_does_not_exist"):
         kalix.load_string(_INLINE_MODEL_INI).patch(
             {"node.my_node": {"ds_1": "node_that_does_not_exist"}}
         )
@@ -395,7 +397,7 @@ def test_patch_dict_merge_invalid_result_raises_value_error():
 
 def test_patch_dict_merge_leaves_model_untouched_on_failure():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         model.patch({"node.my_node": {"ds_1": "node_that_does_not_exist"}})
     result = model.run()
     assert isinstance(result, kalix.Model)
@@ -406,7 +408,7 @@ def test_patch_dict_merge_type_change_rejects_stale_properties():
     behind, which the new type doesn't recognise -- sec 4.4's rule holds
     for the dict form exactly as it does for the string form (sec 4.5)."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         model.patch({"node.my_node": {"type": "blackhole"}})
 
 
@@ -415,7 +417,7 @@ def test_patch_dict_replace_drops_properties_omitted_from_patch():
     original section -- omitting the required `type` here makes the
     section unparseable."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         model.patch({"node.my_node": {"inflow": 2.0}}, mode="replace")
 
 
@@ -442,7 +444,7 @@ def test_patch_dict_delete_rejects_properties():
     """Property-level deletion is unsupported for the dict form too -- a
     non-empty dict under a delete section is rejected outright."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         model.patch({"node.my_node": {"not_a_real_property": ""}}, mode="delete")
 
 
@@ -454,7 +456,7 @@ def test_patch_dict_delete_ignores_missing_section_when_missing_ok():
 
 def test_patch_dict_delete_rejects_missing_section_when_not_missing_ok():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.KalixKeyError):
         model.patch({"node.missing": {}}, mode="delete")
 
 
@@ -466,7 +468,7 @@ def test_patch_dict_multi_section_is_atomic_on_failure():
     model.run()
     baseline = model.get_outputs()
 
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         model.patch({
             "node.my_node": {"inflow": 999.0},
             "node.extra_node": {"bogus_property": "1"},
@@ -534,7 +536,7 @@ def test_patch_list_delete_ignores_missing_section_when_missing_ok():
 
 def test_patch_list_delete_rejects_missing_section_when_not_missing_ok():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.KalixKeyError):
         model.patch(["node.missing"], mode="delete")
 
 
@@ -555,7 +557,7 @@ def test_patch_list_replace_rejects_list_form():
 
 def test_patch_list_delete_leaves_model_untouched_on_failure():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.KalixKeyError):
         model.patch(["node.missing"], mode="delete")
     result = model.run()
     assert isinstance(result, kalix.Model)
@@ -569,15 +571,19 @@ def test_load_file_missing_file_message_is_informative():
         kalix.load_file(str(path))
 
 
-def test_load_file_invalid_ini_message_is_informative(tmp_path):
+def test_load_file_invalid_ini_message_names_the_syntax_problem(tmp_path):
+    """The message must say what is wrong and where, not merely that
+    something is. It does not name the file: the diagnostic comes straight
+    from the Rust parser, and the caller already holds the path it passed
+    in."""
     bad = tmp_path / "bad.ini"
     bad.write_text("this is not valid kalix ini syntax {{{")
-    with pytest.raises(ValueError, match=r"bad\.ini"):
+    with pytest.raises(kalix.ModelParseError, match=r"line 1"):
         kalix.load_file(str(bad))
 
 
-def test_load_string_invalid_message_is_informative():
-    with pytest.raises(ValueError, match="model string"):
+def test_load_string_invalid_message_names_the_syntax_problem():
+    with pytest.raises(kalix.ModelParseError, match=r"line 1"):
         kalix.load_string("this is not valid kalix ini syntax {{{")
 
 
@@ -592,16 +598,17 @@ def test_load_file_distinguishes_missing_file_from_invalid_content(tmp_path):
 
     with pytest.raises(OSError) as missing_exc:
         kalix.load_file(str(missing))
-    with pytest.raises(ValueError) as bad_exc:
+    with pytest.raises(kalix.ModelParseError) as bad_exc:
         kalix.load_file(str(bad))
 
-    assert not isinstance(missing_exc.value, ValueError)
+    # A filesystem failure is never a modelling error, and vice versa.
+    assert not isinstance(missing_exc.value, kalix.KalixError)
     assert not isinstance(bad_exc.value, OSError)
 
 
 def test_load_string_missing_referenced_input_file_raises_oserror():
     """A model string that parses fine but references a missing input CSV
-    must raise OSError, not ValueError -- a real filesystem problem must not
+    must raise OSError, not a KalixError -- a real filesystem problem must not
     be mistaken for a syntax error (the bug this typed error chain fixes)."""
     ini = (
         "[kalix]\n"
@@ -717,9 +724,9 @@ def test_get_outputs_row_count_matches_simulation_length():
     assert len(df) == len(model.get_outputs(["node.node1.dsflow"]))
 
 
-def test_get_outputs_undeclared_name_raises_value_error():
+def test_get_outputs_undeclared_name_raises_key_error():
     model = kalix.load_file(str(_MODEL_INI)).run()
-    with pytest.raises(ValueError, match="undeclared"):
+    with pytest.raises(kalix.KalixKeyError, match="undeclared"):
         model.get_outputs(["node.not_a_real_output.dsflow"])
 
 
@@ -750,23 +757,23 @@ def test_get_outputs_missing_ok_does_not_suppress_not_run_error():
     """`missing_ok=True` only applies to name-related errors; the "model has
     not been run yet" check happens earlier and still fires."""
     model = kalix.load_file(str(_MODEL_INI))
-    with pytest.raises(ValueError, match="has not been run"):
+    with pytest.raises(kalix.KalixRuntimeError, match="has not been run"):
         model.get_outputs(["node.not_a_real_output.dsflow"], missing_ok=True)
 
 
-def test_get_outputs_before_run_with_explicit_name_raises_value_error():
+def test_get_outputs_before_run_with_explicit_name_raises_runtime_error():
     """An unrun model fails fast with a message naming the actual problem,
     not silently empty/absent data."""
     model = kalix.load_file(str(_MODEL_INI))
-    with pytest.raises(ValueError, match="has not been run"):
+    with pytest.raises(kalix.KalixRuntimeError, match="has not been run"):
         model.get_outputs(["node.node1.dsflow"])
 
 
-def test_get_outputs_before_run_with_no_names_raises_value_error():
+def test_get_outputs_before_run_with_no_names_raises_runtime_error():
     """`names=None` fails fast on an unrun model too -- an empty DataFrame
     would silently hide a forgotten run()."""
     model = kalix.load_file(str(_MODEL_INI))
-    with pytest.raises(ValueError, match="has not been run"):
+    with pytest.raises(kalix.KalixRuntimeError, match="has not been run"):
         model.get_outputs()
 
 
@@ -776,7 +783,7 @@ def test_get_outputs_after_patch_raises_until_rerun():
     the patched model has been run again."""
     model = kalix.load_file(str(_MODEL_INI)).run()
     model.patch("[node.reach2]\nlag = 5\n")
-    with pytest.raises(ValueError, match="has not been run"):
+    with pytest.raises(kalix.KalixRuntimeError, match="has not been run"):
         model.get_outputs()
     df = model.run().get_outputs()
     assert isinstance(df, pd.DataFrame)
@@ -787,7 +794,7 @@ def test_get_outputs_after_failed_patch_still_works():
     """A rejected patch leaves the model -- and its run results -- intact,
     so get_outputs() keeps working."""
     model = kalix.load_file(str(_MODEL_INI)).run()
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.ModelParseError):
         model.patch("not valid ini [[[")
     df = model.get_outputs()
     assert len(df) > 0
@@ -798,7 +805,7 @@ def test_get_outputs_after_reload_raises_until_rerun():
     run's results."""
     model = kalix.load_file(str(_MODEL_INI)).run()
     model.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError, match="has not been run"):
+    with pytest.raises(kalix.KalixRuntimeError, match="has not been run"):
         model.get_outputs()
 
 
@@ -932,9 +939,9 @@ def test_get_missing_property_raises_key_error():
         model.get("node.my_node.nonexistent")
 
 
-def test_get_malformed_designation_without_dot_raises_key_error():
+def test_get_malformed_designation_without_dot_raises_value_error():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError):
         model.get("no_dot_here")
 
 
@@ -961,6 +968,32 @@ def test_save_accepts_pathlib_path(tmp_path):
     out_path = tmp_path / "saved.ini"
     model.save(out_path)
     assert out_path.exists()
+
+
+# --- the empty model --------------------------------------------------------
+# `Model()` holds no INI document at all. Every method that needs one must say
+# so plainly rather than failing obscurely downstream.
+
+def test_to_string_on_empty_model_raises_runtime_error():
+    with pytest.raises(kalix.KalixRuntimeError):
+        kalix.Model().to_string()
+
+
+def test_save_on_empty_model_raises_runtime_error(tmp_path):
+    """Checked before the file is touched, so a failed save leaves no
+    half-written artefact behind -- and the "nothing to save" case stays
+    distinct from a genuine write failure (which is an OSError)."""
+    out_path = tmp_path / "never_written.ini"
+    with pytest.raises(kalix.KalixRuntimeError):
+        kalix.Model().save(out_path)
+    assert not out_path.exists()
+
+
+def test_patch_on_empty_model_raises_runtime_error():
+    """There is nothing to patch: `patch()` modifies a loaded model, it does
+    not stand in for `load_string()`."""
+    with pytest.raises(kalix.KalixRuntimeError):
+        kalix.Model().patch("[node.my_node]\ninflow = 1.0\n")
 
 
 # --- set_input() ------------------------------------------------------------
@@ -1055,11 +1088,11 @@ def test_set_input_non_datetime_index_raises_type_error():
         model.set_input("obs", frame)
 
 
-def test_set_input_undeclared_alias_raises_value_error():
+def test_set_input_undeclared_alias_raises_key_error():
     """set_input() fills an existing [data] declaration -- it does not
     create one, so an alias absent from [data] altogether is rejected."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(ValueError, match="not declared"):
+    with pytest.raises(kalix.KalixKeyError, match="not declared"):
         model.set_input("obs", _obs_frame())
 
 
@@ -1080,7 +1113,7 @@ def test_set_input_resets_has_run():
     model.set_input("obs", _obs_frame())
     model.run()
     model.set_input("obs", _obs_frame() * 2)
-    with pytest.raises(ValueError, match="has not been run"):
+    with pytest.raises(kalix.KalixRuntimeError, match="has not been run"):
         model.get_outputs()
     df = model.run().get_outputs()
     assert list(df["node.src.dsflow"]) == [2.0, 4.0, 6.0, 8.0, 10.0]
@@ -1142,7 +1175,7 @@ def test_patch_catches_set_input_column_mismatch_for_a_declaration():
     wrong_column = pd.DataFrame({"value": [1.0, 2.0, 3.0, 4.0, 5.0]}, index=index)
     model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
     model.set_input("obs", wrong_column)
-    with pytest.raises(ValueError, match="not found in any input file"):
+    with pytest.raises(kalix.ModelValidationError, match="not found in any input file"):
         model.patch("[const]\nk = 1\n")
 
 
@@ -1263,7 +1296,7 @@ def test_copy_does_not_carry_run_results():
     model.get_outputs()  # sanity: the original does have results
 
     copy = model.copy()
-    with pytest.raises(ValueError):
+    with pytest.raises(kalix.KalixRuntimeError):
         copy.get_outputs()
 
 
