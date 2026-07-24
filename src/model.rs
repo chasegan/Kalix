@@ -1,25 +1,24 @@
-use std::collections::{HashMap, HashSet};
-use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::path::PathBuf;
-use rustc_hash::FxHashMap;
-use crate::nodes::{Node, NodeEnum, Link};
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::hydrology::allocation_systems::ras::RasSystem;
 use crate::io::csv_io::write_ts;
+use crate::io::custom_ini_parser::IniDocument;
 use crate::io::error::KalixIoError;
 use crate::io::pixie_io;
-use crate::io::custom_ini_parser::IniDocument;
 use crate::misc::configuration::Configuration;
 use crate::misc::simulation_context::{
-    set_context_phase, set_context_node,
-    clear_context, format_simulation_error, SimPhase
+    clear_context, format_simulation_error, set_context_node, set_context_phase, SimPhase,
 };
+use crate::model_inputs::DynamicInput;
+use crate::nodes::{Link, Node, NodeEnum};
 use crate::ordering::simple_nodewise_ordering::SimpleNodewiseOrderingSystem;
 use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
-use crate::timeseries_input::{TimeseriesInput, TimeseriesInputDefinition, SourceOrigin};
-use crate::model_inputs::DynamicInput;
+use crate::timeseries_input::{SourceOrigin, TimeseriesInput, TimeseriesInputDefinition};
+use rustc_hash::FxHashMap;
+use std::collections::{HashMap, HashSet};
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::path::PathBuf;
 
 /// One entry in the model's interleaved execution layout: nodes and var
 /// blocks run in definition order, exactly as the file reads.
@@ -58,7 +57,6 @@ pub struct VarBlock {
 #[derive(Default, Clone)]
 pub struct Model {
     // ---- Hot path: read or written every timestep during run_timestep() ----
-
     /// Hot path: all phases, read in run_timestep().
     ///
     /// Populated: constructed empty (`Configuration::new()`) at `Model::new()`.
@@ -149,7 +147,6 @@ pub struct Model {
     pub simple_ordering_system: SimpleNodewiseOrderingSystem,
 
     // ---- Cold path: load/configure/serialize time only, not touched per-step ----
-
     /// Pre-run input sources ([data] entries), one per file/alias. Each source
     /// holds its own data columns (see TimeseriesInputDefinition). Folds together
     /// what used to be three loosely-coupled fields (the per-column data, the
@@ -220,7 +217,11 @@ impl Model {
         let configured = !self.execution_order.is_empty();
         Model {
             configuration: self.configuration.clone(),
-            input_sources: if configured { vec![] } else { self.input_sources.clone() },
+            input_sources: if configured {
+                vec![]
+            } else {
+                self.input_sources.clone()
+            },
             outputs: self.outputs.clone(),
             account_manager: self.account_manager.clone(),
             ras_systems: self.ras_systems.clone(),
@@ -289,7 +290,13 @@ impl Model {
     }
 
     /// Adds a link between two nodes
-    pub fn add_link(&mut self, from_node: usize, to_node: usize, from_outlet: u8, to_inlet: u8) -> usize {
+    pub fn add_link(
+        &mut self,
+        from_node: usize,
+        to_node: usize,
+        from_outlet: u8,
+        to_inlet: u8,
+    ) -> usize {
         let link_idx = self.links.len();
         let link = Link::new(from_node, to_node, from_outlet, to_inlet);
 
@@ -352,7 +359,8 @@ impl Model {
     ///   skipped rather than reported as unknown -- it isn't a typo, just pending.
     fn validate_data_references(&self, allow_pending_declarations: bool) -> Result<(), String> {
         let pending_aliases: HashSet<String> = if allow_pending_declarations {
-            self.input_sources.iter()
+            self.input_sources
+                .iter()
                 .filter_map(|s| match s {
                     TimeseriesInputDefinition::Declaration { alias } => Some(alias.to_lowercase()),
                     _ => None,
@@ -418,7 +426,9 @@ impl Model {
         //   reference-resolution failure. Deferred until here (not part of the
         //   structural step) so load/patch can accept a not-yet-supplied
         //   declaration that set_input() will fill before run().
-        let undeclared: Vec<&str> = self.input_sources.iter()
+        let undeclared: Vec<&str> = self
+            .input_sources
+            .iter()
             .filter_map(|s| match s {
                 TimeseriesInputDefinition::Declaration { alias } => Some(alias.as_str()),
                 _ => None,
@@ -457,9 +467,10 @@ impl Model {
                 }
 
                 // Calculate how many timesteps we need for the simulation
-                let sim_steps = 1 + ((self.configuration.sim_end_timestamp
-                    - self.configuration.sim_start_timestamp)
-                    / self.configuration.sim_stepsize) as usize;
+                let sim_steps = 1
+                    + ((self.configuration.sim_end_timestamp
+                        - self.configuration.sim_start_timestamp)
+                        / self.configuration.sim_stepsize) as usize;
 
                 //Fill any data that might be using the column name as a reference
                 //Fill any data that might be using the column number as a reference
@@ -477,7 +488,8 @@ impl Model {
                 for full_path in paths_to_fill {
                     if let Some(idx) = self.data_cache.get_series_idx(&*full_path, false) {
                         self.data_cache.series[idx].values.clear();
-                        self.data_cache.series[idx].start_timestamp = self.configuration.sim_start_timestamp;
+                        self.data_cache.series[idx].start_timestamp =
+                            self.configuration.sim_start_timestamp;
                         self.data_cache.series[idx].step_size = self.configuration.sim_stepsize;
 
                         // For each simulation timestep, find corresponding input value
@@ -487,17 +499,17 @@ impl Model {
 
                             // Find value at this timestamp in input data
                             let value = if sim_timestamp >= input_ts.start_timestamp {
-                                let steps_from_input_start = (sim_timestamp - input_ts.start_timestamp)
-                                    / input_ts.step_size;
+                                let steps_from_input_start =
+                                    (sim_timestamp - input_ts.start_timestamp) / input_ts.step_size;
                                 let input_idx = steps_from_input_start as usize;
 
                                 if input_idx < input_ts.values.len() {
                                     input_ts.values[input_idx]
                                 } else {
-                                    f64::NAN  // Beyond input data range
+                                    f64::NAN // Beyond input data range
                                 }
                             } else {
-                                f64::NAN  // Before input data starts
+                                f64::NAN // Before input data starts
                             };
 
                             self.data_cache.series[idx].push_value(value);
@@ -506,14 +518,17 @@ impl Model {
                 }
             }
         }
-        self.data_cache.set_start_and_stepsize(self.configuration.sim_start_timestamp,
-                                               self.configuration.sim_stepsize);
+        self.data_cache.set_start_and_stepsize(
+            self.configuration.sim_start_timestamp,
+            self.configuration.sim_stepsize,
+        );
 
         // Reserve capacity in every cache series for the whole simulation, so
         // per-step recording never reallocates. Capacity only: series lengths
         // remain the computed-this-far watermark that the fail-fast read
         // contract depends on (see DataCache::get_current_value).
-        self.data_cache.reserve_all(self.configuration.sim_nsteps as usize);
+        self.data_cache
+            .reserve_all(self.configuration.sim_nsteps as usize);
 
         //7) Nodes ask data_cache for idx for modelled series they might be responsible for populating
         //TODO: I think this was already appropriately done in step 2.
@@ -544,8 +559,9 @@ impl Model {
     }
 
     pub fn run_with_interrupt<F>(
-        &mut self, interrupt_check: F, 
-        mut progress_callback: Option<Box<dyn FnMut(u64, u64)>>
+        &mut self,
+        interrupt_check: F,
+        mut progress_callback: Option<Box<dyn FnMut(u64, u64)>>,
     ) -> Result<bool, String>
     where
         F: Fn() -> bool,
@@ -563,8 +579,10 @@ impl Model {
         clear_context();
 
         //Calculate total steps for progress reporting
-        let total_steps = ((self.configuration.sim_end_timestamp - self.configuration.sim_start_timestamp)
-            / self.configuration.sim_stepsize) + 1;
+        let total_steps = ((self.configuration.sim_end_timestamp
+            - self.configuration.sim_start_timestamp)
+            / self.configuration.sim_stepsize)
+            + 1;
 
         //Run all timesteps. catch_unwind wraps the WHOLE loop, not each step:
         //one landing pad instead of one per timestep, and no per-step
@@ -575,7 +593,6 @@ impl Model {
         self.data_cache.set_current_step(0);
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             while self.data_cache.current_timestamp <= self.configuration.sim_end_timestamp {
-
                 // Check for interrupt at start of each timestep
                 if interrupt_check() {
                     return false; // Simulation was interrupted
@@ -612,7 +629,6 @@ impl Model {
 
     /// Determine the simulation period on the basis of the available input data
     pub fn auto_determine_simulation_period(&mut self) -> Result<(), String> {
-
         // Get a vec of the critical data from the data_cache
         let civ = self.data_cache.get_critical_input_names();
 
@@ -624,7 +640,10 @@ impl Model {
                     self.configuration.sim_start_timestamp = timestamp;
                 }
                 None => {
-                    return Err("There is no critical input data. Please specify start and end.".to_string());
+                    return Err(
+                        "There is no critical input data. Please specify start and end."
+                            .to_string(),
+                    );
                 }
             }
             match self.configuration.specified_sim_end_timestamp {
@@ -632,7 +651,10 @@ impl Model {
                     self.configuration.sim_end_timestamp = timestamp;
                 }
                 None => {
-                    return Err("There is no critical input data. Please specify start and end.".to_string());
+                    return Err(
+                        "There is no critical input data. Please specify start and end."
+                            .to_string(),
+                    );
                 }
             }
             if self.configuration.sim_start_timestamp > self.configuration.sim_end_timestamp {
@@ -641,8 +663,9 @@ impl Model {
 
             // Default to daily step size and calculate n_steps //TODO: make this customisable
             self.configuration.sim_stepsize = 86400;
-            self.configuration.sim_nsteps = 1 + (self.configuration.sim_end_timestamp -
-                self.configuration.sim_start_timestamp) / self.configuration.sim_stepsize;
+            self.configuration.sim_nsteps = 1
+                + (self.configuration.sim_end_timestamp - self.configuration.sim_start_timestamp)
+                    / self.configuration.sim_stepsize;
 
             // Return
             return Ok(());
@@ -652,16 +675,21 @@ impl Model {
         // As you find them, you can go ahead and update the mask of data availability.
         let mut critical_data_availability_mask: Option<Timeseries> = None;
         for ci in civ {
-
             let ci_lower = ci.to_lowercase();
 
             // Searching for timeseries that matches ci
-            let mut found : bool = false;
+            let mut found: bool = false;
             for ts in self.input_columns() {
                 let matches = (ci_lower == ts.full_colindex_path)
                     || (ci_lower == ts.full_colname_path)
-                    || (ts.alias_colindex_path.as_ref().map_or(false, |p| ci_lower == *p))
-                    || (ts.alias_colname_path.as_ref().map_or(false, |p| ci_lower == *p));
+                    || (ts
+                        .alias_colindex_path
+                        .as_ref()
+                        .map_or(false, |p| ci_lower == *p))
+                    || (ts
+                        .alias_colname_path
+                        .as_ref()
+                        .map_or(false, |p| ci_lower == *p));
 
                 if matches {
                     found = true;
@@ -724,25 +752,31 @@ impl Model {
         // Override with dates specified in the model, if relevant
         match self.configuration.specified_sim_start_timestamp {
             Some(timestamp) => {
-                if (timestamp < self.configuration.sim_start_timestamp) ||
-                    (timestamp > self.configuration.sim_end_timestamp) {
+                if (timestamp < self.configuration.sim_start_timestamp)
+                    || (timestamp > self.configuration.sim_end_timestamp)
+                {
                     return Err("Specified start inconsistent with input data.".to_string());
                 }
                 self.configuration.sim_start_timestamp = timestamp;
-                self.configuration.sim_nsteps = 1 + (self.configuration.sim_end_timestamp -
-                    self.configuration.sim_start_timestamp) / self.configuration.sim_stepsize;
+                self.configuration.sim_nsteps = 1
+                    + (self.configuration.sim_end_timestamp
+                        - self.configuration.sim_start_timestamp)
+                        / self.configuration.sim_stepsize;
             }
             None => {}
         }
         match self.configuration.specified_sim_end_timestamp {
             Some(timestamp) => {
-                if (timestamp < self.configuration.sim_start_timestamp) ||
-                    (timestamp > self.configuration.sim_end_timestamp) {
+                if (timestamp < self.configuration.sim_start_timestamp)
+                    || (timestamp > self.configuration.sim_end_timestamp)
+                {
                     return Err("Specified end inconsistent with input data.".to_string());
                 }
                 self.configuration.sim_end_timestamp = timestamp;
-                self.configuration.sim_nsteps = 1 + (self.configuration.sim_end_timestamp -
-                    self.configuration.sim_start_timestamp) / self.configuration.sim_stepsize;
+                self.configuration.sim_nsteps = 1
+                    + (self.configuration.sim_end_timestamp
+                        - self.configuration.sim_start_timestamp)
+                        / self.configuration.sim_stepsize;
             }
             None => {}
         }
@@ -752,7 +786,6 @@ impl Model {
     }
 
     pub fn run_timestep(&mut self, _t: u64) {
-
         // Accounting policy: [ras.*] systems run in file order at the top of
         // the step, before ordering and flow — today's orders and takes see
         // today's announcements (kalix-allocation-components.md §3.3).
@@ -766,7 +799,11 @@ impl Model {
 
         // Execute order phase
         set_context_phase(SimPhase::Ordering);
-        self.simple_ordering_system.run_ordering_phase(&mut self.nodes, &mut self.data_cache, &mut self.account_manager);
+        self.simple_ordering_system.run_ordering_phase(
+            &mut self.nodes,
+            &mut self.data_cache,
+            &mut self.account_manager,
+        );
 
         // Execute nodes and var blocks with flow phase, interleaved in
         // definition order (file position IS execution position for var
@@ -786,7 +823,8 @@ impl Model {
                 set_context_node(node_idx);
 
                 // Run the node's flow phase
-                self.nodes[node_idx].run_flow_phase(&mut self.data_cache, &mut self.account_manager);
+                self.nodes[node_idx]
+                    .run_flow_phase(&mut self.data_cache, &mut self.account_manager);
 
                 // Immediately propagate outflows to downstream nodes
                 for &link_idx in &self.outgoing_links[node_idx] {
@@ -803,7 +841,8 @@ impl Model {
                 match exec_item {
                     ExecItem::Node(node_idx) => {
                         set_context_node(node_idx);
-                        self.nodes[node_idx].run_flow_phase(&mut self.data_cache, &mut self.account_manager);
+                        self.nodes[node_idx]
+                            .run_flow_phase(&mut self.data_cache, &mut self.account_manager);
                         for &link_idx in &self.outgoing_links[node_idx] {
                             let link = &self.links[link_idx];
                             let outflow = self.nodes[node_idx].remove_dsflow(link.from_outlet);
@@ -833,7 +872,6 @@ impl Model {
     }
 
     pub fn initialize_network(&mut self) -> Result<(), String> {
-
         // Initialize the nodes and execution order
         self.initialize_nodes()?;
         self.check_execution_order()?;
@@ -841,14 +879,12 @@ impl Model {
 
         // Initialise the ordering system
         // TODO: I am doing this in "initialize_network" because it relies on execution order being resolved (which we do above).
-        self.simple_ordering_system.initialize(
-            &mut self.nodes, &self.links, &self.incoming_links
-        );
+        self.simple_ordering_system
+            .initialize(&mut self.nodes, &self.links, &self.incoming_links);
 
         // Return
         Ok(())
     }
-
 
     pub fn empty_input_data(&mut self) {
         self.input_sources.clear();
@@ -875,9 +911,10 @@ impl Model {
     /// entry). Nothing here supplies it, so `configure()` will reject it unless
     /// something fills it in first (e.g. `set_input()`).
     pub fn declare_alias(&mut self, alias: &str) {
-        self.input_sources.push(TimeseriesInputDefinition::Declaration {
-            alias: alias.to_string(),
-        });
+        self.input_sources
+            .push(TimeseriesInputDefinition::Declaration {
+                alias: alias.to_string(),
+            });
     }
 
     /// Load input data from a file and store it as a new input source.
@@ -888,7 +925,7 @@ impl Model {
     pub fn load_input_data(
         &mut self,
         file_path: &str,
-        alias: Option<&str>
+        alias: Option<&str>,
     ) -> Result<usize, KalixIoError> {
         // Resolve the path (supports absolute, relative, and trailhead paths)
         let resolved_path = self.resolve_path(file_path).map_err(KalixIoError::Io)?;
@@ -902,13 +939,14 @@ impl Model {
 
         // Remember the ORIGINAL file path (for serialization/display), not the
         // resolved one, so a round-trip preserves what the user wrote.
-        self.input_sources.push(TimeseriesInputDefinition::FileDefinition {
-            origin: SourceOrigin::File {
-                path: file_path.to_string(),
-                alias: alias.map(|a| a.to_string()),
-            },
-            columns,
-        });
+        self.input_sources
+            .push(TimeseriesInputDefinition::FileDefinition {
+                origin: SourceOrigin::File {
+                    path: file_path.to_string(),
+                    alias: alias.map(|a| a.to_string()),
+                },
+                columns,
+            });
         Ok(len)
     }
 
@@ -919,7 +957,6 @@ impl Model {
     /// otherwise. It deliberately does NOT topologically sort - the model
     /// file must remain a faithful, readable account of what runs.
     fn check_execution_order(&mut self) -> Result<(), String> {
-
         // Execution order according to node index
         self.execution_order.clear();
         for node_idx in 0..self.nodes.len() {
@@ -969,27 +1006,42 @@ impl Model {
     /// binding are both projections of this same ordered list, so the text
     /// report and the DataFrame can't drift apart.
     pub fn get_mass_balance_data(&self) -> Vec<(String, String, f64)> {
-        let mut remaining_nodes: Vec<String> = self.nodes
-            .iter().map(|node| node.get_name().to_string()).collect();
+        let mut remaining_nodes: Vec<String> = self
+            .nodes
+            .iter()
+            .map(|node| node.get_name().to_string())
+            .collect();
         remaining_nodes.sort();
 
         let mut by_type: HashMap<String, Vec<(String, f64)>> = HashMap::new();
         for node_name in &remaining_nodes {
             let node = self.get_node(node_name).unwrap();
             let type_name = node.get_type_as_string();
-            let mbal_per_timestep = node.get_mass_balance() / (self.configuration.sim_nsteps as f64);
-            by_type.entry(type_name).or_default().push((node_name.clone(), mbal_per_timestep));
+            let mbal_per_timestep =
+                node.get_mass_balance() / (self.configuration.sim_nsteps as f64);
+            by_type
+                .entry(type_name)
+                .or_default()
+                .push((node_name.clone(), mbal_per_timestep));
         }
 
         // Preferred type order first, then any other type names (e.g. newly
         // added ones) alphabetically, so nothing silently vanishes.
         let preferred_order = [
             "inflow",
-            "sacramento", "gr4j",
-            "regulated_user", "unregulated_user", "order_control", "loss",
-            "storage", "routing",
-            "splitter", "confluence", "gauge",
-            "blackhole"];
+            "sacramento",
+            "gr4j",
+            "regulated_user",
+            "unregulated_user",
+            "order_control",
+            "loss",
+            "storage",
+            "routing",
+            "splitter",
+            "confluence",
+            "gauge",
+            "blackhole",
+        ];
 
         let mut result = Vec::with_capacity(remaining_nodes.len());
         for type_name in preferred_order {
@@ -1060,8 +1112,15 @@ impl Model {
         fn print_source_origin(kind: &str, origin: &SourceOrigin) {
             match origin {
                 SourceOrigin::Alias(a) => println!("Source ({}): {}", kind, a),
-                SourceOrigin::File { path, alias } => println!("Source ({}): {}{}", kind, path,
-                    alias.as_ref().map(|a| format!(" [alias: {}]", a)).unwrap_or_default()),
+                SourceOrigin::File { path, alias } => println!(
+                    "Source ({}): {}{}",
+                    kind,
+                    path,
+                    alias
+                        .as_ref()
+                        .map(|a| format!(" [alias: {}]", a))
+                        .unwrap_or_default()
+                ),
             }
         }
         for source in &self.input_sources {
@@ -1078,12 +1137,17 @@ impl Model {
             }
             let mut i = 0;
             for col in source.columns() {
-                println!("  Input: {} {} {}", i, col.full_colname_path, col.full_colindex_path);
+                println!(
+                    "  Input: {} {} {}",
+                    i, col.full_colname_path, col.full_colindex_path
+                );
                 if let Some(alias) = &col.alias {
-                    println!("    Alias: {} (also accessible as {} and {})",
+                    println!(
+                        "    Alias: {} (also accessible as {} and {})",
                         alias,
                         col.alias_colname_path.as_ref().unwrap_or(&String::new()),
-                        col.alias_colindex_path.as_ref().unwrap_or(&String::new()));
+                        col.alias_colindex_path.as_ref().unwrap_or(&String::new())
+                    );
                 }
                 i += 1;
             }
@@ -1218,14 +1282,18 @@ impl Model {
             pixie_io::write_series(base_path, &vec_ts)
                 .map_err(|e| format!("Could not write file {}: {:?}", filename, e))
         } else {
-            write_ts(filename, vec_ts)
-                .map_err(|_| format!("Could not write file {}", filename))
+            write_ts(filename, vec_ts).map_err(|_| format!("Could not write file {}", filename))
         }
     }
 
     /// Update a node's parameter in the attached INI document
     /// This is typically used after parameter optimisation
-    pub fn update_node_parameter_in_ini(&mut self, node_name: &str, param_name: &str, value: &str) -> Result<(), String> {
+    pub fn update_node_parameter_in_ini(
+        &mut self,
+        node_name: &str,
+        param_name: &str,
+        value: &str,
+    ) -> Result<(), String> {
         if let Some(ref mut ini_doc) = self.ini_document {
             let section_name = format!("node.{}", node_name);
             ini_doc.set_property(&section_name, param_name, value);
