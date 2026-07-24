@@ -55,9 +55,10 @@ def test_model_from_file_classmethod_constructs_new_model():
 
 def test_model_load_file_rejects_dangling_downstream_link(tmp_path):
     """A downstream link to a nonexistent node is caught during INI parsing
-    itself (node/link wiring), not the later `configure()` validation step --
-    so it surfaces as a ModelParseError (the engine's INI mapper rejected the
-    content), not an OSError (reserved for genuine file-read failures)."""
+    itself (node/link wiring), not the later `configure()` validation step.
+    It is still a ModelValidationError, not a ModelParseError: the INI was
+    read fine, it is the model it describes that doesn't hold together. And
+    never an OSError, which is reserved for genuine file-read failures."""
     broken = tmp_path / "broken.ini"
     broken.write_text(
         "[kalix]\n"
@@ -68,7 +69,7 @@ def test_model_load_file_rejects_dangling_downstream_link(tmp_path):
         "inflow = 1.0\n"
         "ds_1 = node_that_does_not_exist\n"
     )
-    with pytest.raises(kalix.ModelParseError, match="node_that_does_not_exist"):
+    with pytest.raises(kalix.ModelValidationError, match="node_that_does_not_exist"):
         kalix.load_file(str(broken))
 
 
@@ -148,13 +149,12 @@ def test_patch_merge_invalid_syntax_raises_parse_error():
         kalix.load_string(_INLINE_MODEL_INI).patch("not valid ini [[[")
 
 
-def test_patch_merge_invalid_result_raises_parse_error():
+def test_patch_merge_invalid_result_raises_validation_error():
     """A syntactically valid patch that produces an invalid model (here, a
     downstream link to a nonexistent node) is still rejected -- not a
-    silent success or a panic. The engine's mapper catches the dangling
-    link while reading, so this is a ModelParseError rather than a
-    ModelValidationError."""
-    with pytest.raises(kalix.ModelParseError, match="node_that_does_not_exist"):
+    silent success or a panic. The link resolves against the assembled
+    model, so this is a ModelValidationError."""
+    with pytest.raises(kalix.ModelValidationError, match="node_that_does_not_exist"):
         kalix.load_string(_INLINE_MODEL_INI).patch(
             "[node.my_node]\nds_1 = node_that_does_not_exist\n"
         )
@@ -223,9 +223,10 @@ def test_patch_replace_drops_properties_omitted_from_patch():
     """Unlike patch_merge, replace replaces the whole section -- a
     property that exists on the original but is omitted from the patch
     does not survive. Dropping the required `type` property here makes the
-    section unparseable, surfacing as a ModelParseError."""
+    section incomplete -- a required property is now absent, which is a
+    ModelValidationError."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(kalix.ModelParseError):
+    with pytest.raises(kalix.ModelValidationError):
         model.patch("[node.my_node]\ninflow = 2.0\n", mode="replace")
 
 
@@ -240,8 +241,8 @@ def test_patch_replace_invalid_syntax_raises_parse_error():
         kalix.load_string(_INLINE_MODEL_INI).patch("not valid ini [[[", mode="replace")
 
 
-def test_patch_replace_invalid_result_raises_parse_error():
-    with pytest.raises(kalix.ModelParseError, match="node_that_does_not_exist"):
+def test_patch_replace_invalid_result_raises_validation_error():
+    with pytest.raises(kalix.ModelValidationError, match="node_that_does_not_exist"):
         kalix.load_string(_INLINE_MODEL_INI).patch(
             "[node.my_node]\ntype = inflow\ninflow = 2.0\nloc = 0,0\nds_1 = node_that_does_not_exist\n",
             mode="replace",
@@ -301,7 +302,7 @@ def test_patch_delete_of_required_property_fails_validation_on_patch():
     even a required one like `dimensions` -- is rejected outright (same rule
     as `test_patch_delete_rejects_properties`), not deferred to `run()`."""
     model = kalix.load_string(_INLINE_MODEL_WITH_STORAGE_NODE_INI)
-    with pytest.raises(kalix.ModelParseError):
+    with pytest.raises(ValueError):
         model.patch("[node.my_storage]\ndimensions =\n", mode="delete")
 
 
@@ -323,7 +324,7 @@ def test_patch_delete_rejects_properties():
     any properties is rejected outright, even if that property doesn't
     exist on the model."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(kalix.ModelParseError):
+    with pytest.raises(ValueError):
         model.patch("[node.my_node]\nnot_a_real_property =\n", mode="delete")
 
 
@@ -332,11 +333,11 @@ def test_patch_delete_invalid_syntax_raises_parse_error():
         kalix.load_string(_INLINE_MODEL_INI).patch("not valid ini [[[", mode="delete")
 
 
-def test_patch_delete_invalid_result_raises_parse_error():
+def test_patch_delete_invalid_result_raises_validation_error():
     """Deleting a mid-chain node used as another node's downstream leaves
     a dangling link, caught at parse time (like the analogous update/override
     tests above)."""
-    with pytest.raises(kalix.ModelParseError):
+    with pytest.raises(kalix.ModelValidationError):
         kalix.load_file(str(_MODEL_INI)).patch("[node.reach4]\n", mode="delete")
 
 
@@ -388,8 +389,8 @@ def test_patch_dict_empty_string_value_emits_bare_line():
     assert isinstance(result, kalix.Model)
 
 
-def test_patch_dict_merge_invalid_result_raises_parse_error():
-    with pytest.raises(kalix.ModelParseError, match="node_that_does_not_exist"):
+def test_patch_dict_merge_invalid_result_raises_validation_error():
+    with pytest.raises(kalix.ModelValidationError, match="node_that_does_not_exist"):
         kalix.load_string(_INLINE_MODEL_INI).patch(
             {"node.my_node": {"ds_1": "node_that_does_not_exist"}}
         )
@@ -397,7 +398,7 @@ def test_patch_dict_merge_invalid_result_raises_parse_error():
 
 def test_patch_dict_merge_leaves_model_untouched_on_failure():
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(kalix.ModelParseError):
+    with pytest.raises(kalix.ModelValidationError):
         model.patch({"node.my_node": {"ds_1": "node_that_does_not_exist"}})
     result = model.run()
     assert isinstance(result, kalix.Model)
@@ -408,7 +409,7 @@ def test_patch_dict_merge_type_change_rejects_stale_properties():
     behind, which the new type doesn't recognise -- sec 4.4's rule holds
     for the dict form exactly as it does for the string form (sec 4.5)."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(kalix.ModelParseError):
+    with pytest.raises(kalix.ModelValidationError):
         model.patch({"node.my_node": {"type": "blackhole"}})
 
 
@@ -417,7 +418,7 @@ def test_patch_dict_replace_drops_properties_omitted_from_patch():
     original section -- omitting the required `type` here makes the
     section unparseable."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(kalix.ModelParseError):
+    with pytest.raises(kalix.ModelValidationError):
         model.patch({"node.my_node": {"inflow": 2.0}}, mode="replace")
 
 
@@ -444,7 +445,7 @@ def test_patch_dict_delete_rejects_properties():
     """Property-level deletion is unsupported for the dict form too -- a
     non-empty dict under a delete section is rejected outright."""
     model = kalix.load_string(_INLINE_MODEL_INI)
-    with pytest.raises(kalix.ModelParseError):
+    with pytest.raises(ValueError):
         model.patch({"node.my_node": {"not_a_real_property": ""}}, mode="delete")
 
 
@@ -468,7 +469,7 @@ def test_patch_dict_multi_section_is_atomic_on_failure():
     model.run()
     baseline = model.get_outputs()
 
-    with pytest.raises(kalix.ModelParseError):
+    with pytest.raises(kalix.ModelValidationError):
         model.patch({
             "node.my_node": {"inflow": 999.0},
             "node.extra_node": {"bogus_property": "1"},

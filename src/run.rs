@@ -38,7 +38,10 @@ pub fn simulate_from_file(
     output_path: Option<&str>,
     mass_balance_path: Option<&str>,
 ) -> Result<(), String> {
-    let mut m = IniModelIO::read_model_file(model_path)?;
+    // This boundary keeps a `Result<_, String>` signature, so the typed
+    // KalixIoError is flattened explicitly here -- there is deliberately no
+    // `From<KalixIoError> for String` to do it implicitly.
+    let mut m = IniModelIO::read_model_file(model_path).map_err(|e| e.to_string())?;
     m.configure()?;
     m.run()?;
     if let Some(p) = output_path {
@@ -95,7 +98,7 @@ pub fn optimise_from_file(
         })?,
     };
 
-    let model = IniModelIO::read_model_file(model_file_path)?;
+    let model = IniModelIO::read_model_file(model_file_path).map_err(|e| e.to_string())?;
 
     // Build comparison pairs from terms (load each observed series).
     let mut comparisons: Vec<ComparisonPair> = Vec::with_capacity(config.terms.len());

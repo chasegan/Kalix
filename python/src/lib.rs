@@ -19,13 +19,15 @@ use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
-/// Maps the engine's Io/Parse/Validate distinction to the corresponding Python
-/// exception type: a genuine filesystem failure becomes `OSError`, a content
-/// problem (bad INI syntax, invalid model config) becomes `ValueError`.
+/// Maps the engine's Io/Parse/Validate distinction to the corresponding
+/// Python exception type: a genuine filesystem failure becomes `OSError`, a
+/// value that couldn't be read becomes `ModelParseError`, and a model that
+/// doesn't hold together becomes `ModelValidationError`.
 fn io_err_to_py(e: KalixIoError) -> PyErr {
     match e {
         KalixIoError::Io(msg) => PyIOError::new_err(msg),
         KalixIoError::Parse(msg) => error::ModelParseError::new_err(msg),
+        KalixIoError::Validate(msg) => error::ModelValidationError::new_err(msg),
     }
 }
 

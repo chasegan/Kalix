@@ -85,7 +85,7 @@ impl IniModelIO {
     /// * `Err(String)` - Error message describing parsing failure, validation error, or
     ///   unsupported format version.
     pub fn read_model_string_with_working_directory(ini_string: &str, working_directory: Option<std::path::PathBuf>) -> Result<Model, KalixIoError> {
-        let ini_doc = IniDocument::parse(ini_string)?;
+        let ini_doc = IniDocument::parse(ini_string).map_err(KalixIoError::Parse)?;
         let model = Self::ini_doc_to_model_with_working_directory(ini_doc, working_directory)?;
         Ok(model)
     }
@@ -136,7 +136,7 @@ impl IniModelIO {
             ini_doc_to_model_0_0_1(ini_doc, working_directory)
         } else {
             // Abort with error message
-            Err(format!("Wrong version! Kalix version = {}, but model specifies version = {}.", software_version, ini_version).into())
+            Err(KalixIoError::Validate(format!("Wrong version! Kalix version = {}, but model specifies version = {}.", software_version, ini_version)))
         }
 
         // match ini_format_version.as_str() {

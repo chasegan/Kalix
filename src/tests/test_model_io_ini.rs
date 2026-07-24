@@ -124,7 +124,7 @@ fn test_model_3_io_ini_read() {
 fn test_model_3_minimal_version() {
 
     fn run_model(model_filename: &str, output_filename: &str) -> Result<(), String> {
-        let mut m = IniModelIO::read_model_file(model_filename)?;
+        let mut m = IniModelIO::read_model_file(model_filename).map_err(|e| e.to_string())?;
         m.configure()?;
         m.run()?;
         m.write_outputs(output_filename)?;
@@ -142,7 +142,7 @@ fn test_model_3_minimal_version() {
 fn test_model_4() {
 
     fn run_model(model_filename: &str, output_filename: &str) -> Result<Model, String> {
-        let mut m = IniModelIO::read_model_file(model_filename)?;
+        let mut m = IniModelIO::read_model_file(model_filename).map_err(|e| e.to_string())?;
         m.configure()?;
         m.run()?;
         m.write_outputs(output_filename)?;

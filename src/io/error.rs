@@ -7,10 +7,15 @@
 /// (OSError vs ValueError) without sniffing message text.
 #[derive(Debug, thiserror::Error)]
 pub enum KalixIoError {
+    /// File error
     #[error("{0}")]
     Io(String),
+    /// Error with parsing model
     #[error("{0}")]
     Parse(String),
+    /// Invalid model
+    #[error("{0}")]
+    Validate(String),
 }
 
 impl KalixIoError {
@@ -22,30 +27,7 @@ impl KalixIoError {
         match self {
             KalixIoError::Io(msg) => KalixIoError::Io(format!("{prefix}{msg}")),
             KalixIoError::Parse(msg) => KalixIoError::Parse(format!("{prefix}{msg}")),
+            KalixIoError::Validate(msg) => KalixIoError::Validate(format!("{prefix}{msg}")),
         }
-    }
-}
-
-/// Any plain String error defaults to Parse. This is what makes the large
-/// majority of existing `.map_err(|e| format!(...))?` sites in
-/// ini_doc_model_io_0_0_1.rs compile unchanged -- `?`'s auto-Into reaches
-/// this impl.
-impl From<String> for KalixIoError {
-    fn from(s: String) -> Self {
-        KalixIoError::Parse(s)
-    }
-}
-
-impl From<&str> for KalixIoError {
-    fn from(s: &str) -> Self {
-        KalixIoError::Parse(s.to_string())
-    }
-}
-
-/// For boundary functions (run.rs) that intentionally keep a
-/// `Result<_, String>` public signature.
-impl From<KalixIoError> for String {
-    fn from(e: KalixIoError) -> Self {
-        e.to_string()
     }
 }

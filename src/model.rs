@@ -891,11 +891,12 @@ impl Model {
         alias: Option<&str>
     ) -> Result<usize, KalixIoError> {
         // Resolve the path (supports absolute, relative, and trailhead paths)
-        let resolved_path = self.resolve_path(file_path)?;
+        let resolved_path = self.resolve_path(file_path).map_err(KalixIoError::Io)?;
 
         // Load all the data using the resolved path
-        let resolved_path_str = resolved_path.to_str()
-            .ok_or_else(|| format!("Invalid path: {}", file_path))?;
+        let resolved_path_str = resolved_path
+            .to_str()
+            .ok_or_else(|| KalixIoError::Io(format!("Invalid path: {}", file_path)))?;
         let columns = TimeseriesInput::load(resolved_path_str, alias)?;
         let len = columns.len();
 
