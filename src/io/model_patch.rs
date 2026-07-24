@@ -17,6 +17,8 @@ pub enum PatchError {
     ValidationError(String),
     #[error("Patch string delete mode specifies non-existent section {0} (`missing_ok=false`)")]
     DeleteKeyErr(String),
+    #[error("Patch string specifies section {0} with non-empty property content -- delete mode only accepts bare section headers.")]
+    DeleteHasProperties(String),
     #[error(transparent)]
     IoError(#[from] KalixIoError),
 }
@@ -37,8 +39,7 @@ fn apply_patch<F: FnOnce(&mut IniDocument, IniDocument) -> Result<(), PatchError
         .clone()
         .map(Ok)
         .unwrap_or(Err(PatchError::EmptyModel))?;
-    let patch_ini = IniDocument::parse(patch_string)
-        .map_err(KalixIoError::Parse)?;
+    let patch_ini = IniDocument::parse(patch_string).map_err(KalixIoError::Parse)?;
 
     mutate(&mut model_ini_doc, patch_ini)?;
 
@@ -124,18 +125,10 @@ pub fn patch_delete(
     let mutate = |model_ini_doc: &mut IniDocument, patch_ini_doc: IniDocument| {
         for (patch_section_name, patch_ini_section) in patch_ini_doc.sections {
             if !patch_ini_section.properties.is_empty() {
-                return Err(KalixIoError::Parse(format!(
-                    "Patch string specifies section {} with non-empty property content.",
-                    patch_section_name
-                ))
-                .into());
+                return Err(PatchError::DeleteHasProperties(patch_section_name));
             }
-            match model_ini_doc.remove_section(&patch_section_name) {
-                Ok(_) => {}
-                Err(_) if missing_ok => {}
-                Err(_) => {
-                    return Err(PatchError::DeleteKeyErr(patch_section_name));
-                }
+            if model_ini_doc.remove_section(&patch_section_name).is_err() && !missing_ok {
+                return Err(PatchError::DeleteKeyErr(patch_section_name));
             }
         }
         Ok(())
@@ -572,7 +565,10 @@ mod tests {
         match result {
             Ok(_) => panic!("expected an error, got Ok"),
             Err(PatchError::IoError(KalixIoError::Io(_))) => {}
-            Err(other) => panic!("expected PatchError::IoError(KalixIoError::Io), got {:?}", other),
+            Err(other) => panic!(
+                "expected PatchError::IoError(KalixIoError::Io), got {:?}",
+                other
+            ),
         }
     }
 }

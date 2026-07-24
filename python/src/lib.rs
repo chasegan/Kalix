@@ -32,6 +32,7 @@ fn io_err_to_py(e: KalixIoError) -> PyErr {
 fn patch_err_to_py<'py>(py: Python<'py>, e: PatchError) -> PyErr {
     match e {
         PatchError::DeleteKeyErr(_) => error::new_kalix_key_error(py, e.to_string()),
+        PatchError::DeleteHasProperties(_) => PyValueError::new_err(e.to_string()),
         PatchError::EmptyModel => error::new_kalix_runtime_error(py, e.to_string()),
         PatchError::IoError(io_err) => io_err_to_py(io_err),
         PatchError::ValidationError(_) => error::ModelValidationError::new_err(e.to_string()),
