@@ -4,8 +4,8 @@ Defined in Rust (`kalix._native`, see `python/src/error.rs`) -- this module
 is a thin re-export::
 
     KalixError(Exception)
-    |-- ModelParseError                 -- snippet/string/file failed to parse
-    |-- ModelValidationError            -- parsed, but the model is invalid
+    |-- ModelParseError                 -- a value could not be read
+    |-- ModelValidationError            -- the model is invalid
     |-- SimulationError                 -- run() failed
     |-- KalixKeyError(KeyError)         -- missing sections/properties/outputs
     `-- KalixRuntimeError(RuntimeError) -- equivalent to RuntimeError

@@ -226,7 +226,7 @@ mod tests {
         set_input(&mut model, "obs", start(), DAY, one_column("flow", vec![1.0, 2.0, 3.0, 4.0, 5.0]))
             .expect("set_input should succeed for the alias it targets");
 
-        let err = model.configure().expect_err("the still-unfilled 'other' alias must be rejected");
+        let err = model.configure().expect_err("the still-unfilled 'other' alias must be rejected").to_string();
         assert!(err.contains("other") && err.contains("declared but not supplied"));
     }
 

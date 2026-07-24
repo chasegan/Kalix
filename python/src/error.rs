@@ -2,8 +2,8 @@
 //!
 //! ```text
 //! KalixError(Exception)
-//! ├── ModelParseError                 -- snippet/string/file failed to parse
-//! ├── ModelValidationError            -- parsed, but the resulting model is invalid
+//! ├── ModelParseError                 -- a value in the content could not be read
+//! ├── ModelValidationError            -- the model described is invalid
 //! ├── SimulationError                 -- run() failed
 //! ├── KalixKeyError(KeyError)         -- missing sections/properties/outputs
 //! └── KalixRuntimeError(RuntimeError) -- equivalent to RuntimeError
@@ -31,13 +31,14 @@ create_exception!(
     kalix._native,
     ModelParseError,
     KalixError,
-    "A model snippet/string/file failed to parse."
+    "A value in a model could not be read -- a bad number or date, a \
+     wrong-length value list, an unrecognised keyword."
 );
 create_exception!(
     kalix._native,
     ModelValidationError,
     KalixError,
-    "A model parsed, but the resulting model is invalid."
+    "A model was read, but the model it describes is invalid."
 );
 create_exception!(
     kalix._native,
