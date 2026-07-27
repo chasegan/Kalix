@@ -1110,7 +1110,6 @@ impl Model {
 
         // Section per node type, in `data`'s order; a type change in the
         // (already-ordered) list starts a new section.
-        let mut total_mbal = 0f64;
         let mut current_type: Option<&str> = None;
         for (node_name, type_name, mbal_per_timestep) in &data {
             if current_type != Some(type_name.as_str()) {
@@ -1121,11 +1120,19 @@ impl Model {
                 current_type = Some(type_name.as_str());
             }
             report.push_str(format!("  {}, {}\n", node_name, mbal_per_timestep).as_str());
-            total_mbal += mbal_per_timestep;
         }
         if current_type.is_some() {
             report.push_str("\n");
         }
+
+        // Sum in node-name order (not `data`'s type-grouped order): these
+        // values nearly cancel to zero, so floating-point addition is not
+        // associative here -- summation order must match the pre-refactor
+        // behaviour (alphabetical by name) or the total's rounding residual
+        // shifts and trips the regression suite's tight tolerance on this line.
+        let mut by_name: Vec<&(String, String, f64)> = data.iter().collect();
+        by_name.sort_by(|a, b| a.0.cmp(&b.0));
+        let total_mbal: f64 = by_name.iter().map(|(_, _, v)| v).sum();
 
         // Write the total line
         report.push_str("----------------------------------\n");
