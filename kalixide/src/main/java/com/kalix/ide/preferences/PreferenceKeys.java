@@ -92,6 +92,10 @@ public final class PreferenceKeys {
     public static final Pref<Boolean> MAP_SHOW_GRIDLINES =
         Pref.fileBoolean("map.showGridlines", true);
 
+    /** Map node-label visibility toggle. When off, labels still appear on hover. */
+    public static final Pref<Boolean> MAP_SHOW_LABELS =
+        Pref.fileBoolean("map.showLabels", true);
+
     /** Whether the project tree shows hidden (dot-prefixed) files/folders. */
     public static final Pref<Boolean> TREE_SHOW_HIDDEN_FILES =
         Pref.fileBoolean("tree.showHiddenFiles", true);

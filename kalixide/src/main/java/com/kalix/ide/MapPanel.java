@@ -87,6 +87,15 @@ public class MapPanel extends JPanel {
 
     // Display settings
     private boolean showGridlines = true;
+    private boolean showLabels = true;
+
+    /**
+     * Node whose label is shown transiently because the mouse is over it. Only ever
+     * set while {@link #showLabels} is false — with labels on there is nothing to
+     * reveal, so the hover hit-test is skipped entirely rather than computed and
+     * discarded (mouseMoved fires continuously; getNodeAtPoint is a linear scan).
+     */
+    private String hoveredNodeName = null;
 
     // Theme management (optional - for enhanced unified theme support)
 
@@ -188,7 +197,13 @@ public class MapPanel extends JPanel {
         MouseAdapter panningHandler = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
-                // Right-click: show context menu
+                // Right-click: show context menu.
+                //
+                // Deliberately isRightMouseButton and not the conventional isPopupTrigger:
+                // on macOS a Ctrl+left-click is a popup trigger, and Ctrl+left-click is the
+                // gesture that starts a rotation (see below). Honouring isPopupTrigger would
+                // open this menu instead of rotating, costing the gesture entirely. The
+                // trade is that macOS users reach this menu by right-click only.
                 if (SwingUtilities.isRightMouseButton(e)) {
                     requestFocusInWindow();
                     if (contextMenuManager != null) {
@@ -294,14 +309,26 @@ public class MapPanel extends JPanel {
             @Override
             public void mouseExited(MouseEvent e) {
                 mouseInPanel = false;
-                repaintCoordinateOverlay();
+                if (hoveredNodeName != null) {
+                    // Leaving the panel must retract a hover-revealed label, otherwise
+                    // it stays painted with the mouse nowhere near it.
+                    hoveredNodeName = null;
+                    repaint();
+                } else {
+                    repaintCoordinateOverlay();
+                }
             }
 
             @Override
             public void mouseMoved(MouseEvent e) {
-                mouseWorldX = (e.getX() - panX) / zoomLevel;
-                mouseWorldY = (e.getY() - panY) / zoomLevel;
+                mouseWorldX = toWorldX(e.getX());
+                mouseWorldY = toWorldY(e.getY());
                 mouseInPanel = true;
+
+                // With labels hidden, hovering a node reveals its label. Only the
+                // transition matters — an unchanged hover costs nothing beyond the
+                // coordinate overlay repaint below.
+                boolean hoverChanged = updateHoveredNode(e.getPoint());
 
                 // Show rotation cursor when Ctrl is held and multiple nodes are selected.
                 // Only touch the cursor on a state change — setCursor per event is wasteful.
@@ -314,16 +341,21 @@ public class MapPanel extends JPanel {
                     setCursor(desiredCursor);
                 }
 
-                // Idle mouse movement only changes the coordinate overlay — repaint
-                // just that region rather than the whole panel.
-                repaintCoordinateOverlay();
+                if (hoverChanged) {
+                    // A label appeared or disappeared — the overlay clip won't cover it.
+                    repaint();
+                } else {
+                    // Idle mouse movement only changes the coordinate overlay — repaint
+                    // just that region rather than the whole panel.
+                    repaintCoordinateOverlay();
+                }
             }
 
             @Override
             public void mouseDragged(MouseEvent e) {
                 // Update hover coordinates during drag too
-                mouseWorldX = (e.getX() - panX) / zoomLevel;
-                mouseWorldY = (e.getY() - panY) / zoomLevel;
+                mouseWorldX = toWorldX(e.getX());
+                mouseWorldY = toWorldY(e.getY());
                 mouseInPanel = true;
 
                 // Check if we should start node dragging. A drag only starts once the
@@ -397,8 +429,8 @@ public class MapPanel extends JPanel {
         double newZoom = clampZoom(zoomLevel * factor);
 
         // Convert anchor position to world coordinates before zoom
-        double worldX = (anchorScreenX - panX) / zoomLevel;
-        double worldY = (anchorScreenY - panY) / zoomLevel;
+        double worldX = toWorldX(anchorScreenX);
+        double worldY = toWorldY(anchorScreenY);
 
         zoomLevel = newZoom;
 
@@ -425,7 +457,7 @@ public class MapPanel extends JPanel {
 
         mapRenderer.renderMap(g2d, getWidth(), getHeight(), zoomLevel, panX, panY,
                              showGridlines, model, nodeTheme, selectionStart, selectionCurrent,
-                             mouseWorldX, mouseWorldY, mouseInPanel);
+                             mouseWorldX, mouseWorldY, mouseInPanel, showLabels, hoveredNodeName);
 
         g2d.dispose();
     }
@@ -510,6 +542,48 @@ public class MapPanel extends JPanel {
      */
     public boolean isShowGridlines() {
         return showGridlines;
+    }
+
+    /**
+     * Sets whether node labels should be shown on the map. With labels off, the label
+     * of the node under the mouse is still revealed on hover, so a node can always be
+     * identified without turning them back on.
+     *
+     * @param showLabels true to show all node labels, false to show them on hover only
+     */
+    public void setShowLabels(boolean showLabels) {
+        this.showLabels = showLabels;
+        // Turning labels on makes any pending hover reveal meaningless; turning them
+        // off must not inherit a hover computed while they were on (none was tracked).
+        this.hoveredNodeName = null;
+        repaint();
+    }
+
+    /**
+     * Gets whether node labels are currently shown on the map.
+     * @return true if labels are shown, false if they appear on hover only
+     */
+    public boolean isShowLabels() {
+        return showLabels;
+    }
+
+    /**
+     * Recomputes which node's label is revealed by hover, returning whether it changed.
+     *
+     * <p>With labels visible there is nothing to reveal, so no hit-test is performed —
+     * this is called from {@code mouseMoved}, which fires continuously, and
+     * {@link #getNodeAtPoint} scans every node.</p>
+     *
+     * @param screenPoint current mouse position
+     * @return true if the revealed node changed and the map needs repainting
+     */
+    private boolean updateHoveredNode(Point screenPoint) {
+        String hovered = showLabels ? null : getNodeAtPoint(screenPoint);
+        if (java.util.Objects.equals(hovered, hoveredNodeName)) {
+            return false;
+        }
+        hoveredNodeName = hovered;
+        return true;
     }
     
     // View-menu zoom operations anchor at the viewport centre so the content
@@ -632,9 +706,9 @@ public class MapPanel extends JPanel {
         // Check each node to see if the screen point is within its bounds
         for (ModelNode node : model.getAllNodes()) {
             // Transform node world coordinates to screen coordinates
-            double screenX = node.getX() * zoomLevel + panX;
-            double screenY = node.getY() * zoomLevel + panY;
-            
+            double screenX = toScreenX(node.getX());
+            double screenY = toScreenY(node.getY());
+
             // Calculate distance from screen point to node center
             double dx = screenPoint.x - screenX;
             double dy = screenPoint.y - screenY;
@@ -673,10 +747,10 @@ public class MapPanel extends JPanel {
             }
 
             // Transform node world coordinates to screen coordinates
-            double upstreamScreenX = upstreamNode.getX() * zoomLevel + panX;
-            double upstreamScreenY = upstreamNode.getY() * zoomLevel + panY;
-            double downstreamScreenX = downstreamNode.getX() * zoomLevel + panX;
-            double downstreamScreenY = downstreamNode.getY() * zoomLevel + panY;
+            double upstreamScreenX = toScreenX(upstreamNode.getX());
+            double upstreamScreenY = toScreenY(upstreamNode.getY());
+            double downstreamScreenX = toScreenX(downstreamNode.getX());
+            double downstreamScreenY = toScreenY(downstreamNode.getY());
 
             // Calculate distance from point to line segment
             double distance = pointToLineDistance(screenPoint.x, screenPoint.y,
@@ -770,27 +844,48 @@ public class MapPanel extends JPanel {
         }
     }
 
-    // Getters for MapInteractionManager
-    
-    public double getZoomLevel() {
-        return zoomLevel;
+    // View transform
+    //
+    // The map has exactly one transform: screen = world * zoom + pan. It is defined
+    // here and nowhere else — collaborators convert through these methods rather than
+    // reading zoom/pan and re-deriving the arithmetic, which is how eight subtly
+    // independent copies of it accumulated previously.
+    //
+    // Scalar rather than Point2D-returning: hit testing and rectangle selection call
+    // these once per node per gesture, and per performance §"no allocation in the
+    // inner loop" there is no reason to allocate to move two doubles.
+
+    /** Converts a screen X coordinate to world space. */
+    public double toWorldX(double screenX) {
+        return (screenX - panX) / zoomLevel;
     }
-    
-    public double getPanX() {
-        return panX;
+
+    /** Converts a screen Y coordinate to world space. */
+    public double toWorldY(double screenY) {
+        return (screenY - panY) / zoomLevel;
     }
-    
-    public double getPanY() {
-        return panY;
+
+    /** Converts a world X coordinate to screen space. */
+    public double toScreenX(double worldX) {
+        return worldX * zoomLevel + panX;
+    }
+
+    /** Converts a world Y coordinate to screen space. */
+    public double toScreenY(double worldY) {
+        return worldY * zoomLevel + panY;
+    }
+
+    /** Converts a screen point to world space. */
+    public java.awt.geom.Point2D.Double toWorld(Point screenPoint) {
+        return new java.awt.geom.Point2D.Double(toWorldX(screenPoint.x), toWorldY(screenPoint.y));
     }
 
     /**
      * Returns the world-space coordinate at the centre of the visible map viewport.
      */
     public java.awt.geom.Point2D.Double getCenterWorldPoint() {
-        double worldX = (getWidth() / 2.0 - panX) / zoomLevel;
-        double worldY = (getHeight() / 2.0 - panY) / zoomLevel;
-        return new java.awt.geom.Point2D.Double(worldX, worldY);
+        return new java.awt.geom.Point2D.Double(
+            toWorldX(getWidth() / 2.0), toWorldY(getHeight() / 2.0));
     }
 
     /**
@@ -850,8 +945,8 @@ public class MapPanel extends JPanel {
         // Paste (at center of viewport)
         bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_V, menuMask), "map.paste", () -> {
             if (clipboardManager != null && clipboardManager.hasClipboardContent()) {
-                double centerX = (getWidth() / 2.0 - panX) / zoomLevel;
-                double centerY = (getHeight() / 2.0 - panY) / zoomLevel;
+                double centerX = toWorldX(getWidth() / 2.0);
+                double centerY = toWorldY(getHeight() / 2.0);
                 clipboardManager.pasteAtMapLocation(centerX, centerY);
                 repaint();
             }
@@ -927,8 +1022,8 @@ public class MapPanel extends JPanel {
         // Find all nodes within the rectangle
         for (ModelNode node : model.getAllNodes()) {
             // Transform node world coordinates to screen coordinates
-            double screenX = node.getX() * zoomLevel + panX;
-            double screenY = node.getY() * zoomLevel + panY;
+            double screenX = toScreenX(node.getX());
+            double screenY = toScreenY(node.getY());
 
             // Check if node center is within the rectangle
             if (screenX >= rectX && screenX <= rectX + rectWidth &&
@@ -950,10 +1045,10 @@ public class MapPanel extends JPanel {
             }
 
             // Transform node world coordinates to screen coordinates
-            double upstreamScreenX = upstreamNode.getX() * zoomLevel + panX;
-            double upstreamScreenY = upstreamNode.getY() * zoomLevel + panY;
-            double downstreamScreenX = downstreamNode.getX() * zoomLevel + panX;
-            double downstreamScreenY = downstreamNode.getY() * zoomLevel + panY;
+            double upstreamScreenX = toScreenX(upstreamNode.getX());
+            double upstreamScreenY = toScreenY(upstreamNode.getY());
+            double downstreamScreenX = toScreenX(downstreamNode.getX());
+            double downstreamScreenY = toScreenY(downstreamNode.getY());
 
             // Check if link intersects with the rectangle
             if (lineIntersectsRectangle(upstreamScreenX, upstreamScreenY,

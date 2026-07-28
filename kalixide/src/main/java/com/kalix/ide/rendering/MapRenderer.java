@@ -92,12 +92,16 @@ public class MapRenderer {
      * @param mouseWorldX Mouse X in world coordinates
      * @param mouseWorldY Mouse Y in world coordinates
      * @param mouseInPanel Whether the mouse is currently over the panel
+     * @param showLabels Whether node name labels are shown for every node
+     * @param hoveredNodeName Node whose label is revealed by hover while {@code showLabels}
+     *                        is false; null when nothing is revealed
      */
     public void renderMap(Graphics2D g2d, int width, int height,
                          double zoomLevel, double panX, double panY,
                          boolean showGridlines, HydrologicalModel model,
                          NodeTheme nodeTheme, Point selectionStart, Point selectionCurrent,
-                         double mouseWorldX, double mouseWorldY, boolean mouseInPanel) {
+                         double mouseWorldX, double mouseWorldY, boolean mouseInPanel,
+                         boolean showLabels, String hoveredNodeName) {
 
         // Enable antialiasing for smoother graphics
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -120,7 +124,7 @@ public class MapRenderer {
         // Render screen-space elements (links first, then nodes, then selection, debug)
         if (model != null) {
             renderLinks(g2d, model, zoomLevel, panX, panY);
-            renderNodes(g2d, model, nodeTheme, zoomLevel, panX, panY);
+            renderNodes(g2d, model, nodeTheme, zoomLevel, panX, panY, showLabels, hoveredNodeName);
         }
 
         if (selectionStart != null && selectionCurrent != null) {
@@ -336,15 +340,19 @@ public class MapRenderer {
      * @param zoomLevel Current zoom level for coordinate transformation
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
+     * @param showLabels Whether every node's name label is drawn
+     * @param hoveredNodeName Node whose label is revealed by hover, or null
      */
     private void renderNodes(Graphics2D g2d, HydrologicalModel model, NodeTheme nodeTheme,
-                            double zoomLevel, double panX, double panY) {
+                            double zoomLevel, double panX, double panY,
+                            boolean showLabels, String hoveredNodeName) {
 
         AffineTransform originalTransform = g2d.getTransform();
 
         // Render each node
         for (ModelNode node : model.getAllNodes()) {
-            renderSingleNode(g2d, node, model, nodeTheme, zoomLevel, panX, panY, originalTransform);
+            renderSingleNode(g2d, node, model, nodeTheme, zoomLevel, panX, panY, originalTransform,
+                             showLabels, hoveredNodeName);
         }
 
         // Restore the original transform
@@ -362,10 +370,13 @@ public class MapRenderer {
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      * @param originalTransform Original screen-space transform
+     * @param showLabels Whether every node's name label is drawn
+     * @param hoveredNodeName Node whose label is revealed by hover, or null
      */
     private void renderSingleNode(Graphics2D g2d, ModelNode node, HydrologicalModel model,
                                  NodeTheme nodeTheme, double zoomLevel, double panX, double panY,
-                                 AffineTransform originalTransform) {
+                                 AffineTransform originalTransform,
+                                 boolean showLabels, String hoveredNodeName) {
 
         // Get node styling from theme
         Color nodeColor = nodeTheme.getColorForNodeType(node.getType());
@@ -393,8 +404,11 @@ public class MapRenderer {
         // Reset stroke for next node
         g2d.setStroke(DEFAULT_STROKE);
 
-        // Render node name text label below shape (unchanged)
-        renderNodeText(g2d, node.getName(), screenX, screenY, nodeTheme);
+        // Render node name text label below shape. With labels hidden, only the
+        // hovered node's label is drawn, so a node can still be identified in place.
+        if (showLabels || node.getName().equals(hoveredNodeName)) {
+            renderNodeText(g2d, node.getName(), screenX, screenY, nodeTheme);
+        }
     }
 
     /**

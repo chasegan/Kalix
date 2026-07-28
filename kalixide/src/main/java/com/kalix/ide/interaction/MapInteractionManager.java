@@ -241,14 +241,7 @@ public class MapInteractionManager {
      * @return World coordinates
      */
     private Point2D screenToWorld(Point screenPoint) {
-        double zoomLevel = mapPanel.getZoomLevel();
-        double panX = mapPanel.getPanX();
-        double panY = mapPanel.getPanY();
-        
-        double worldX = (screenPoint.x - panX) / zoomLevel;
-        double worldY = (screenPoint.y - panY) / zoomLevel;
-        
-        return new Point2D.Double(worldX, worldY);
+        return mapPanel.toWorld(screenPoint);
     }
     
     /**
