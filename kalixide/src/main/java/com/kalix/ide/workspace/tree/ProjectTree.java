@@ -634,9 +634,9 @@ public class ProjectTree extends JTree {
     public void showContextMenuForFiles(List<File> files, Component invoker, int x, int y) {
         List<FileTreeNode> nodes = files.stream()
                 .map(this::materializeNode)
-                .filter(node -> node != null)
+                .filter(java.util.Objects::nonNull)
                 .toList();
-        JPopupMenu menu = contextMenu.build(nodes);
+        JPopupMenu menu = contextMenu.buildFromEditorTab(nodes);
         if (menu != null) {
             menu.show(invoker, x, y);
         }
