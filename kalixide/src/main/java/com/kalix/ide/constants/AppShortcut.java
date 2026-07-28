@@ -38,6 +38,7 @@ public enum AppShortcut {
     TOGGLE_COMMENT("Toggle Comment", KeyEvent.VK_SLASH),
     FIND("Find", KeyEvent.VK_F),
     FIND_AND_REPLACE("Find and Replace", KeyEvent.VK_H),
+    TERMINAL("Terminal", KeyEvent.VK_BACK_QUOTE),
     /** Editor-only: bound in {@code EnhancedTextEditor}; has no menu item. */
     GO_TO_LINE("Go to Line", KeyEvent.VK_G),
     TOGGLE_FILE_TREE("Toggle File Tree", KeyEvent.VK_B),
