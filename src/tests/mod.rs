@@ -24,6 +24,7 @@ mod test_node_storage;
 
 #[cfg(test)]
 mod test_storage_exists;
+mod test_storage_floor_blowup;
 
 #[cfg(test)]
 mod test_model;
@@ -133,4 +134,5 @@ mod test_account_groups;
 mod test_ras;
 
 #[cfg(test)]
+mod test_opportunistic_demand;
 mod test_output_casing;

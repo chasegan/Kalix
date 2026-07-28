@@ -25,6 +25,7 @@ ds_1 = my_other_node
 | loc (compulsory) | The location of the node in cartesian coordinates.  Example: `loc = 20, 30` |
 | order (optional) | This property specifies how much the regulated user will order [ML] each timestep. In regulated systems with nonzero travel times, the demand will be lagged to give enough time for the water to arrive.  Example: `order = data.extendeddataset.by_name.urban_demand` |
 | pump (optional) | Use this to limit the amount of water the user can extract each timestep. Example: `pump = 86.4` |
+| opportunistic\_demand (optional) | Demand for water above the arriving order, evaluated at flow time — for access that is announced on conditions rather than ordered ahead, such as off-allocation. The opportunistic take is supplied from whatever availability the regulated delivery leaves behind, shares the pump limit, and is debited to the same accounts. Example: `opportunistic_demand = if(fn.oa_open(), 309.5, 0)` |
 | accounts (optional) | Names of the [accounts](accounts.md) this user draws on, comma-separated in order of use. Orders are capped by the accounts' combined balance and deliveries are debited from them, so an [allocation system](allocation-systems.md) can constrain the user. Example: `accounts = smith_carryover, smith_annual` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
@@ -39,7 +40,10 @@ ds_1 = my_other_node
 | order | The order placed today [ML] |
 | order\_due | The order previously placed, which is due to be delivered today [ML] |
 | demand | Demand at this node [ML] |
-| diversion | Diverted volume [ML] |
+| diversion | Diverted volume [ML] — the sum of the regulated and opportunistic takes |
+| diversion\_regulated | The part of the diversion that delivers the arriving order [ML] |
+| diversion\_opportunistic | The part of the diversion taken under opportunistic\_demand [ML] |
+| opportunistic\_demand | Today's opportunistic\_demand value [ML] (zero when the property is not set) |
 | pump | Pump capacity value [ML] which may vary due to functions |
 
 ## How the node works
@@ -57,6 +61,25 @@ Flow available for diversion is limited by the specified pump capacity.
 `diversion=min(usflow,demand)`
 
 `dsflow=usflow−diversion`
+
+#### Opportunistic demand
+
+`opportunistic_demand` lets the user extract water it did not order, when its
+expression says access is open — the pattern behind off-allocation and other
+announced surplus-access schemes. It is evaluated during the flow phase (order
+time is too early: the announcement typically depends on today's flows), so the
+expression can be gated on flow conditions, e.g.
+`if(fn.oa_open(), 309.5, 0)`.
+
+The arriving order has first claim on availability; the opportunistic take is
+supplied from what remains:
+
+`diversion_opportunistic = min(opportunistic_demand, available − diversion_regulated)`
+
+Both takes share the pump limit, and both are debited to the node's accounts —
+with the regulated delivery drawing on the balance first. The two parts are
+recorded separately (`diversion_regulated`, `diversion_opportunistic`) so a
+resource assessment can count regulated usage only.
 
 #### Accounts
 

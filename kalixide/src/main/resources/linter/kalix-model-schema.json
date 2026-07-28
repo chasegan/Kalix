@@ -298,6 +298,9 @@
         "order_due",
         "demand",
         "diversion",
+        "diversion_regulated",
+        "diversion_opportunistic",
+        "opportunistic_demand",
         "pump"
       ],
       "required_params": [
@@ -307,6 +310,7 @@
       "optional_params": [
         "order",
         "pump",
+        "opportunistic_demand",
         "accounts"
       ],
       "dsnode_params": [
@@ -329,6 +333,10 @@
         "pump": {
           "type": "function_expression",
           "description": "Pump capacity (data reference, constant, or expression)"
+        },
+        "opportunistic_demand": {
+          "type": "function_expression",
+          "description": "Flow-phase demand for water above the arriving order (e.g. off-allocation access); supplied from remaining availability and debited to the same accounts"
         },
         "accounts": {
           "type": "string",

@@ -21,6 +21,11 @@ pub struct RegulatedUserNode {
     pub order_value: f64, //Captured during the ordering phase if in regulated zones
     pub order_buffer: FifoBuffer,
     pub pump_capacity: DynamicInput,
+    /// Optional flow-phase demand for water above the arriving order (e.g.
+    /// off-allocation access announced on flow conditions). Evaluated at flow
+    /// time, supplied from what the regulated delivery leaves behind, and
+    /// debited to the same accounts.
+    pub opportunistic_demand: DynamicInput,
     /// Ordered account references (deemed order-of-use). Orders are capped by
     /// the summed balance at order time, deliveries are capped and debited at
     /// flow time — debit-on-use semantics (kalix-allocation-components.md §3.6).
@@ -41,6 +46,9 @@ pub struct RegulatedUserNode {
     recorder_idx_order_due: Option<usize>,
     recorder_idx_demand: Option<usize>,
     recorder_idx_diversion: Option<usize>,
+    recorder_idx_diversion_regulated: Option<usize>,
+    recorder_idx_diversion_opportunistic: Option<usize>,
+    recorder_idx_opportunistic_demand: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_ids_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
@@ -55,6 +63,7 @@ impl RegulatedUserNode {
             name: "".to_string(),
             pump_capacity: DynamicInput::default(),
             order_input: DynamicInput::default(),
+            opportunistic_demand: DynamicInput::default(),
             order_buffer: FifoBuffer::default(),
             ..Default::default()
         }
@@ -95,6 +104,9 @@ impl Node for RegulatedUserNode {
         self.recorder_idx_order_due = recorder(data_cache, &self.name, "order_due");
         self.recorder_idx_demand = recorder(data_cache, &self.name, "demand");
         self.recorder_idx_diversion = recorder(data_cache, &self.name, "diversion");
+        self.recorder_idx_diversion_regulated = recorder(data_cache, &self.name, "diversion_regulated");
+        self.recorder_idx_diversion_opportunistic = recorder(data_cache, &self.name, "diversion_opportunistic");
+        self.recorder_idx_opportunistic_demand = recorder(data_cache, &self.name, "opportunistic_demand");
         self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
         self.recorder_ids_ds_1 = recorder(data_cache, &self.name, "ds_1");
         self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
@@ -157,16 +169,32 @@ impl Node for RegulatedUserNode {
             }
         };
 
-        // Determine the diversion value
+        // Determine the regulated diversion value
         // assume demand = order_due
-        self.diversion = self.order_due.min(available);
+        let mut diversion_regulated = self.order_due.min(available);
+
+        // Opportunistic take: demand for water above the arriving order (e.g.
+        // off-allocation access), supplied from whatever availability the
+        // regulated delivery leaves behind
+        let mut opportunistic_demand_value = 0.0;
+        let mut diversion_opportunistic = 0.0;
+        match self.opportunistic_demand {
+            DynamicInput::None { .. } => {}
+            _ => {
+                opportunistic_demand_value = self.opportunistic_demand.get_value(data_cache).max(0.0);
+                diversion_opportunistic = opportunistic_demand_value.min(available - diversion_regulated);
+            }
+        };
 
         // Cap delivery by current holdings and debit the metered take across
         // accounts in order of use (debit-on-use; balances may have moved since
-        // the order was placed)
+        // the order was placed). The regulated delivery has first claim on the
+        // balance; the opportunistic take gets what remains.
         if !self.account_idxs.is_empty() {
-            self.diversion = self.diversion.min(self.total_account_balance(_account_manager));
-            let mut remaining = self.diversion;
+            let balance = self.total_account_balance(_account_manager);
+            diversion_regulated = diversion_regulated.min(balance);
+            diversion_opportunistic = diversion_opportunistic.min(balance - diversion_regulated);
+            let mut remaining = diversion_regulated + diversion_opportunistic;
             for &account_idx in &self.account_idxs {
                 if remaining <= 0.0 { break; }
                 let take = remaining.min(_account_manager.get_account_balance(account_idx).max(0.0));
@@ -176,6 +204,7 @@ impl Node for RegulatedUserNode {
                 }
             }
         }
+        self.diversion = diversion_regulated + diversion_opportunistic;
 
         // Extract the water and update mbal
         self.dsflow_primary = self.usflow - self.diversion;
@@ -184,6 +213,15 @@ impl Node for RegulatedUserNode {
         // Record results
         if let Some(idx) = self.recorder_idx_diversion {
             data_cache.add_value_at_index(idx, self.diversion);
+        }
+        if let Some(idx) = self.recorder_idx_diversion_regulated {
+            data_cache.add_value_at_index(idx, diversion_regulated);
+        }
+        if let Some(idx) = self.recorder_idx_diversion_opportunistic {
+            data_cache.add_value_at_index(idx, diversion_opportunistic);
+        }
+        if let Some(idx) = self.recorder_idx_opportunistic_demand {
+            data_cache.add_value_at_index(idx, opportunistic_demand_value);
         }
         if let Some(idx) = self.recorder_idx_pump_capacity {
             data_cache.add_value_at_index(idx, self.pump_capacity_value)

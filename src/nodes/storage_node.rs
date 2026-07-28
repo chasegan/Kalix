@@ -306,7 +306,7 @@ impl StorageNode {
             let effective_ds1 = if active & 1 != 0 { ds1_required_flow } else { 0.0 };
 
             // Find equilibrium volume
-            let (v_candidate, row) = self.find_equilibrium_volume(
+            let (v_candidate, row, clamped) = self.find_equilibrium_volume(
                 v_initial, net_rain_mm, effective_ds1, ds234_orders_due, nrows, hint
             );
 
@@ -314,9 +314,12 @@ impl StorageNode {
             let new_active = self.active_outlets_at_volume(v_candidate);
 
             if new_active == active {
-                // Converged - use row from bisection for spill lookup
+                // Converged - use row from bisection for spill lookup.
+                // A clamped equilibrium (table floor/ceiling) is NOT unconstrained:
+                // the demanded outflow was unmeetable, so the caller must cap the
+                // actual releases by mass balance, not trust the orders.
                 let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, v_candidate).max(0.0);
-                return (v_candidate, spill, active, row, true);
+                return (v_candidate, spill, active, row, !clamped);
             }
 
             // Only check threshold clamping on reactivation (oscillation).
@@ -371,7 +374,11 @@ impl StorageNode {
         ds234_orders: f64,
         nrows: usize,
         start_row: usize,
-    ) -> (f64, usize) {
+    ) -> (f64, usize, bool) {
+        // Returns (volume, row, clamped): `clamped` is true when the solution was
+        // pinned to the table floor or ceiling because the demanded outflow has no
+        // equilibrium inside the table - such a result must not be treated as
+        // unconstrained by the caller.
         // Error function: positive means solution is at or below this row
         let compute_error = |row: usize| -> f64 {
             let table_vol = self.dimensions.get_value(row, VOLU);
@@ -437,7 +444,7 @@ impl StorageNode {
 
         // Handle floor case (solution at or below row 0)
         if istop == 0 {
-            return (self.dimensions.get_value(0, VOLU), 0);
+            return (self.dimensions.get_value(0, VOLU), 0, true);
         }
         // Ceiling case (error_hi < 0): allow extrapolation beyond table max
         // by falling through to normal interpolation - x > 1.0 extrapolates
@@ -447,11 +454,36 @@ impl StorageNode {
         // so the cached error_lo is at the wrong position — recompute it.
         let row = istop - 1;
         let error_prev = if row == lo { error_lo } else { compute_error(row) };
-        let x = error_prev / (error_prev - error_hi);
+
+        // Floor case the istop check above cannot see: when the demanded outflow
+        // exceeds everything the storage holds, the error is positive at every
+        // row — there is no sign change to bracket — yet istop lands at 1, not 0,
+        // because the downward expansion stops at lo == 0 with error_lo still
+        // positive. Interpolating across such a "bracket" divides by the
+        // difference of two near-equal errors: if a row pair satisfies
+        // dVol ≈ net_rain·dArea (Talgai Weir rows 0-1 with net rain 0.1 mm made
+        // this difference exactly zero), x explodes and the volume lands at ±1e12.
+        // A non-negative error at the lower bracket row means the solution is at
+        // or below the table floor: drain to the floor and let the caller's
+        // mass-balance allocation cap the actual releases.
+        if error_prev >= 0.0 {
+            return (self.dimensions.get_value(0, VOLU), 0, true);
+        }
+
+        // With error_prev < 0 established: a genuine bracket (error_hi >= 0) gives
+        // x in (0, 1]. In the ceiling case (error_hi < 0) x > 1 extrapolates
+        // beyond the table, which is legitimate only while the errors still
+        // converge (error_hi > error_prev). If they diverge the extrapolation is
+        // meaningless — clamp to the top row instead of running away.
+        let denom = error_prev - error_hi;
+        if denom >= 0.0 {
+            return (self.dimensions.get_value(istop, VOLU), row, true);
+        }
+        let x = error_prev / denom;
         let v_lo = self.dimensions.get_value(row, VOLU);
         let v_hi = self.dimensions.get_value(istop, VOLU);
 
-        (v_lo + (v_hi - v_lo) * x, row)
+        (v_lo + (v_hi - v_lo) * x, row, false)
     }
 
     /// Finds which MOL threshold was crossed between old and new active sets.

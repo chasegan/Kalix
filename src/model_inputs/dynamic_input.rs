@@ -1132,11 +1132,12 @@ impl DynamicInput {
             // Resolve variable names to data cache indices
             for var_name in &linear_info.variables {
                 let lower_name = var_name.to_lowercase();
-                // node.* and var.* references are not critical inputs (they are
-                // computed during the run, not loaded)
+                // node.*, var.* and acc.* references are not critical inputs (they
+                // are computed during the run, not loaded)
                 let is_critical = flag_as_critical
                     && !lower_name.starts_with("node.")
-                    && !lower_name.starts_with("var.");
+                    && !lower_name.starts_with("var.")
+                    && !lower_name.starts_with("acc.");
                 let idx = data_cache.get_or_add_new_series(&lower_name, is_critical);
                 data_indices.push(idx);
             }
@@ -1395,7 +1396,8 @@ impl DynamicInput {
             } else if lower_name.starts_with("const.") {
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name, idx);
-            } else if lower_name.starts_with("node.") || lower_name.starts_with("var.") {
+            } else if lower_name.starts_with("node.") || lower_name.starts_with("var.")
+                || lower_name.starts_with("acc.") {
                 // Computed during the run, not loaded: never critical.
                 let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
                 data_variable_map.insert(lower_name, idx);
