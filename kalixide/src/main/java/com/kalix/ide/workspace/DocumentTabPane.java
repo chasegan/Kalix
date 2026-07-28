@@ -12,8 +12,10 @@ import java.awt.Cursor;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
+import java.util.List;
 
 /**
  * The centre region: a tab strip with one tab per open {@link KalixDocument}, each tab's
@@ -33,14 +35,23 @@ public class DocumentTabPane extends JPanel {
     private final JTabbedPane tabbedPane;
     private final DocumentManager documentManager;
     private final Consumer<KalixDocument> closeRequestHandler;
+    private final ContextMenuRequestHandler contextMenuRequestHandler;
 
     /** Suppresses selection-change feedback while we mutate the tab strip programmatically. */
     private boolean syncing = false;
 
-    public DocumentTabPane(DocumentManager documentManager, Consumer<KalixDocument> closeRequestHandler) {
+    /** Requests the tree's right-click context menu be shown for the given files. */
+    @FunctionalInterface
+    public interface ContextMenuRequestHandler {
+        void showContextMenu(List<File> files, Component invoker, int x, int y);
+    }
+
+    public DocumentTabPane(DocumentManager documentManager, Consumer<KalixDocument> closeRequestHandler,
+            ContextMenuRequestHandler contextMenuRequestHandler) {
         super(new BorderLayout());
         this.documentManager = documentManager;
         this.closeRequestHandler = closeRequestHandler;
+        this.contextMenuRequestHandler = contextMenuRequestHandler;
 
         tabbedPane = new JTabbedPane();
         tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
@@ -84,6 +95,35 @@ public class DocumentTabPane extends JPanel {
                         KalixDocument document = documentAt(tabIndex);
                         if (document != null) {
                             onTabCloseRequested(tabIndex);
+                        }
+                    }
+                }
+            }
+        });
+
+        // Add context menu support
+        tabbedPane.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                // Right click
+                if (e.getButton() == MouseEvent.BUTTON3) {
+                    int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
+
+                    // Check if click is actually on the tab header area, not just in content area
+                    Rectangle tabBounds = tabIndex >= 0 ? tabbedPane.getBoundsAt(tabIndex) : null;
+                    boolean clickOnTabHeader = tabBounds != null && tabBounds.contains(e.getX(), e.getY());
+
+                    if (clickOnTabHeader) {
+                        if (e.getID() == MouseEvent.MOUSE_RELEASED) {
+                            KalixDocument document = documentAt(tabIndex);
+                            if (document == null) {
+                                return;
+                            }
+                            File file = document.getFile();
+                            if (file != null) { // unsaved documents have no tree entry to show a menu for
+                                contextMenuRequestHandler.showContextMenu(
+                                        List.of(file), tabbedPane, e.getX(), e.getY());
+                            }
                         }
                     }
                 }
