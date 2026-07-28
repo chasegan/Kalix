@@ -278,7 +278,7 @@ public class TreeContextMenu {
     }
 
     private static boolean isNotSingleZip(List<FileTreeNode> sel) {
-        return any(sel) && isNotZip(sel);
+        return !sel.isEmpty() && any(sel) && isNotZip(sel);
     }
 
     /**
