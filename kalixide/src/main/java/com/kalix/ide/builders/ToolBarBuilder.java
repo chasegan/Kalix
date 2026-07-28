@@ -44,18 +44,21 @@ public class ToolBarBuilder {
         public final JToggleButton lintingToggleButton;
         public final JToggleButton autoReloadToggleButton;
         public final JToggleButton gridlinesToggleButton;
+        public final JToggleButton labelsToggleButton;
         public final JButton backButton;
         public final JButton forwardButton;
 
         public ToolBarComponents(JToolBar toolBar, JToggleButton fileTreeToggleButton,
                                  JToggleButton lintingToggleButton,
                                  JToggleButton autoReloadToggleButton, JToggleButton gridlinesToggleButton,
+                                 JToggleButton labelsToggleButton,
                                  JButton backButton, JButton forwardButton) {
             this.toolBar = toolBar;
             this.fileTreeToggleButton = fileTreeToggleButton;
             this.lintingToggleButton = lintingToggleButton;
             this.autoReloadToggleButton = autoReloadToggleButton;
             this.gridlinesToggleButton = gridlinesToggleButton;
+            this.labelsToggleButton = labelsToggleButton;
             this.backButton = backButton;
             this.forwardButton = forwardButton;
         }
@@ -200,13 +203,15 @@ public class ToolBarBuilder {
         JToggleButton lintingButton = createLintingToggleButton();
         JToggleButton autoReloadButton = createAutoReloadToggleButton();
         JToggleButton gridlinesButton = createGridToggleButton();
+        JToggleButton labelsButton = createLabelsToggleButton();
 
         toolBar.add(lintingButton);
         toolBar.add(autoReloadButton);
         toolBar.add(gridlinesButton);
+        toolBar.add(labelsButton);
 
         return new ToolBarComponents(toolBar, fileTreeButton, lintingButton, autoReloadButton,
-            gridlinesButton, backButton, forwardButton);
+            gridlinesButton, labelsButton, backButton, forwardButton);
     }
 
     /**
@@ -515,6 +520,43 @@ public class ToolBarBuilder {
         gridButton.getAccessibleContext().setAccessibleName("Toggle Gridlines");
 
         return gridButton;
+    }
+
+    /**
+     * Creates a toggle button for node labels with theme-aware tag icon.
+     * Mirrors {@link #createGridToggleButton()} — same shape, same state source.
+     *
+     * @return Configured JToggleButton for node labels
+     */
+    private JToggleButton createLabelsToggleButton() {
+        FontIcon icon = FontIcon.of(FontAwesomeSolid.TAG, AppConstants.TOOLBAR_ICON_SIZE);
+        Color iconColor = getThemeAwareIconColor();
+        icon.setIconColor(iconColor);
+
+        JToggleButton labelsButton = new JToggleButton(icon);
+        labelsButton.setFocusPainted(false);
+
+        // Set initial state
+        boolean labelsVisible = callbacks.isLabelsVisible();
+        labelsButton.setSelected(labelsVisible);
+        labelsButton.setToolTipText(labelsVisible
+            ? "Node labels visible - click to hide"
+            : "Node labels hidden (shown on hover) - click to show");
+
+        // Add action listener
+        labelsButton.addActionListener(e -> {
+            boolean newState = !callbacks.isLabelsVisible();
+            callbacks.toggleLabels(newState);
+            labelsButton.setSelected(newState);
+            labelsButton.setToolTipText(newState
+                ? "Node labels visible - click to hide"
+                : "Node labels hidden (shown on hover) - click to show");
+        });
+
+        // Set accessible name for screen readers
+        labelsButton.getAccessibleContext().setAccessibleName("Toggle Node Labels");
+
+        return labelsButton;
     }
 
 }

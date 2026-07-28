@@ -19,16 +19,16 @@ use crate::model::Model;
 /// Load a model expected to fail at parse/load, returning the error text.
 /// (`Model` is not `Debug`, so `Result::expect_err` cannot be used.)
 fn load_err(ini: &str) -> String {
-    match IniModelIO::new().read_model_string(ini) {
+    match IniModelIO::read_model_string(ini) {
         Ok(_) => panic!("expected a load error, but the model loaded"),
-        Err(e) => e,
+        Err(e) => e.to_string(),
     }
 }
 
 /// Load, configure and run a model from INI, panicking with context on any
 /// failure. Returns the configured, run model for series inspection.
 fn run_model(ini: &str) -> Model {
-    let mut model = IniModelIO::new().read_model_string(ini)
+    let mut model = IniModelIO::read_model_string(ini)
         .unwrap_or_else(|e| panic!("model should load: {e}"));
     model.configure().unwrap_or_else(|e| panic!("configure should succeed: {e}"));
     model.run().unwrap_or_else(|e| panic!("run should succeed: {e}"));
@@ -221,7 +221,7 @@ type = blackhole
 [outputs]
 var.calc.seen
 ";
-    let mut model = IniModelIO::new().read_model_string(before)
+    let mut model = IniModelIO::read_model_string(before)
         .expect("the before-position model still loads (validation is at run start)");
     model.configure().expect("configure should succeed");
     let err = model.run().expect_err("a this-step read of a node below the var must fail at run start");
@@ -514,7 +514,6 @@ node.gauge.reference_flow
 /// identical outputs.
 #[test]
 fn round_trip_reemits_var_at_file_position() {
-    let io = IniModelIO::new();
     let ini = "\
 [kalix]
 start = 2020-01-30
@@ -537,8 +536,8 @@ type = blackhole
 [outputs]
 var.accounting.inflow_wy
 ";
-    let m1 = io.read_model_string(ini).expect("model should load");
-    let serialised = io.model_to_string(&m1);
+    let m1 = IniModelIO::read_model_string(ini).expect("model should load");
+    let serialised = IniModelIO::model_to_string(&m1);
 
     // Position: the var header sits between the two node headers, in file order.
     let hw = serialised.find("[node.headwater]").expect("headwater header present");
@@ -590,7 +589,7 @@ type = blackhole
 [outputs]
 var.accounting.inflow_wy
 ";
-    let mut model = IniModelIO::new().read_model_string(ini).expect("model should load");
+    let mut model = IniModelIO::read_model_string(ini).expect("model should load");
     model.configure().expect("configure should succeed");
 
     model.run().expect("first run should succeed");

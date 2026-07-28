@@ -131,3 +131,6 @@ mod test_account_groups;
 
 #[cfg(test)]
 mod test_ras;
+
+#[cfg(test)]
+mod test_output_casing;

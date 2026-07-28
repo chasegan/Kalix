@@ -98,3 +98,6 @@ notion_integration
 
 # Kalix IDE local preferences (written next to the working dir in dev runs)
 kalix_prefs.json
+src/tests/example_models/1/outputs.csv
+src/tests/example_models/3/outputs.csv
+src/tests/example_models/4/outputs.csv

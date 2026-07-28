@@ -143,7 +143,7 @@ impl Session {
         StateInfo {
             model_loaded: self.model.is_some(),
             data_loaded: self.model.as_ref()
-                .map(|m| !m.inputs.is_empty())
+                .map(|m| !m.input_sources.is_empty())
                 .unwrap_or(false),
             last_simulation: self.results.get("last_simulation")
                 .and_then(|v| v.as_str())

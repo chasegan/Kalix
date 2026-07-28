@@ -1,7 +1,6 @@
 package com.kalix.ide.interaction;
 
 import com.kalix.ide.model.HydrologicalModel;
-import com.kalix.ide.model.ModelLink;
 import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.icons.MenuIcons;
@@ -83,15 +82,13 @@ public class MapContextMenuManager {
         // Store location for potential use by menu actions (e.g., paste at location)
         lastContextMenuLocation = clickPoint;
 
-        // Determine what's at the click point
-        String nodeAtPoint = mapPanel.getNodeAtPoint(clickPoint);
-        ModelLink linkAtPoint = mapPanel.getLinkAtPoint(clickPoint);
-
         // Build the context menu
         JPopupMenu menu = new JPopupMenu();
 
-        // Selection-based actions
-        addSelectionActions(menu, nodeAtPoint, linkAtPoint);
+        // Selection-based actions. Note these act on the *existing* selection, not on
+        // whatever sits under the click — right-clicking deliberately does not alter
+        // the selection, so the menu never silently retargets a multi-node selection.
+        addSelectionActions(menu);
 
         // Show the menu if it has items
         if (menu.getComponentCount() > 0) {
@@ -102,7 +99,7 @@ public class MapContextMenuManager {
     /**
      * Add selection-related actions to the menu.
      */
-    private void addSelectionActions(JPopupMenu menu, String nodeAtPoint, ModelLink linkAtPoint) {
+    private void addSelectionActions(JPopupMenu menu) {
         boolean hasNodeSelection = model.getSelectedNodeCount() > 0;
         boolean hasSelection = hasNodeSelection || model.getSelectedLinkCount() > 0;
         boolean hasClipboard = clipboardManager != null && clipboardManager.hasClipboardContent();
@@ -141,8 +138,8 @@ public class MapContextMenuManager {
         pasteItem.addActionListener(e -> {
             if (clipboardManager != null && lastContextMenuLocation != null) {
                 // Convert screen location to world coordinates
-                double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
-                double worldY = (lastContextMenuLocation.y - mapPanel.getPanY()) / mapPanel.getZoomLevel();
+                double worldX = mapPanel.toWorldX(lastContextMenuLocation.x);
+                double worldY = mapPanel.toWorldY(lastContextMenuLocation.y);
                 clipboardManager.pasteAtMapLocation(worldX, worldY);
                 mapPanel.repaint();
             }
@@ -162,8 +159,8 @@ public class MapContextMenuManager {
                 if (textEditor != null && lastContextMenuLocation != null) {
                     // The click sets where the node sits on the map; the selection sets
                     // where its section lands in the text. They are independent.
-                    double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
-                    double worldY = (lastContextMenuLocation.y - mapPanel.getPanY()) / mapPanel.getZoomLevel();
+                    double worldX = mapPanel.toWorldX(lastContextMenuLocation.x);
+                    double worldY = mapPanel.toWorldY(lastContextMenuLocation.y);
                     String newName = textEditor.insertNodeTemplate(template.id(), worldX, worldY,
                         model.getSelectedNodes(), model.getSingleSelectedLink());
                     if (newName != null) {
@@ -220,8 +217,8 @@ public class MapContextMenuManager {
         JMenuItem copyLocationItem = new JMenuItem("Copy location");
         copyLocationItem.addActionListener(e -> {
             if (lastContextMenuLocation != null) {
-                double worldX = (lastContextMenuLocation.x - mapPanel.getPanX()) / mapPanel.getZoomLevel();
-                double worldY = (lastContextMenuLocation.y - mapPanel.getPanY()) / mapPanel.getZoomLevel();
+                double worldX = mapPanel.toWorldX(lastContextMenuLocation.x);
+                double worldY = mapPanel.toWorldY(lastContextMenuLocation.y);
                 // Locale.ROOT: the copied text is pasted into model files (dot decimals).
                 String locationText = String.format(java.util.Locale.ROOT, "%.2f, %.2f", worldX, worldY);
                 java.awt.datatransfer.StringSelection selection =

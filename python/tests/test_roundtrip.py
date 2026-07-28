@@ -8,6 +8,8 @@ import pytest
 
 import kalix
 
+# pylint: disable=import-outside-toplevel
+
 # pandas on Python < 3.11 normalises datetime64[s] to datetime64[ns] on read-back;
 # relax the index dtype check on those versions.
 _CHECK_INDEX_TYPE = sys.version_info >= (3, 11)
@@ -21,7 +23,7 @@ def _make_df(n: int = 100,
                         periods=n,
                         freq="h",
                         tz="UTC",
-                        unit=unit)
+                        unit=unit) # type: ignore
     idx.name = "time"
     return pd.DataFrame(
         {
@@ -70,9 +72,9 @@ def test_read_accepts_base_path(tmp_path):
 
 def test_pre1970_timestamps(tmp_path):
     """1889-01-01 round-trip — the case that exposed the wrap_to_i64 bug earlier."""
-    idx = pd.date_range("1889-01-01", 
-                        periods=24, 
-                        freq="h", 
+    idx = pd.date_range("1889-01-01",
+                        periods=24,
+                        freq="h",
                         tz="UTC",
                         unit="s")
     idx.name = "time"
@@ -123,7 +125,7 @@ def test_write_naive_datetime_index_treated_as_utc(tmp_path):
 
     np.testing.assert_array_equal(df2["v"].to_numpy(), df["v"].to_numpy())
     assert df2.index[0] == pd.Timestamp("2020-01-01", tz="UTC")
-    assert df2.index.tz is not None
+    assert df2.index.tz is not None # type: ignore
 
 
 def test_write_promotes_zeroth_string_column_with_warning(tmp_path):
@@ -216,7 +218,8 @@ def test_simulate_roundtrip(tmp_path):
 def test_simulate_requires_keyword_output_file(tmp_path):
     """output_file must be passed by name, not position."""
     with pytest.raises(TypeError):
-        kalix.simulate("m.ini", str(tmp_path / "out.pxb"))  # type: ignore[misc]
+        # pylint: disable=E1121
+        kalix.simulate("m.ini", str(tmp_path / "out.pxb"))  # type: ignore
 
 
 def test_simulate_raises_on_missing_model(tmp_path):
@@ -288,6 +291,7 @@ def test_cli_pixie_output_is_readable(tmp_path):
         capture_output=True,
         text=True,
         timeout=60,
+        check=True,
     )
     assert result.returncode == 0, result.stderr
     assert (tmp_path / "sim.pxb").exists()

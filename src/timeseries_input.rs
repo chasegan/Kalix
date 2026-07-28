@@ -1,6 +1,98 @@
+use crate::io::error::KalixIoError;
 use crate::timeseries::Timeseries;
 use crate::misc::misc_functions::sanitize_name;
 use std::path::Path;
+
+/// How an input source declares itself in `[data]` — the source's identity,
+/// independent of where its values come from (file vs in memory). Every variant
+/// carries at least one name, so a source can *always* be rendered back to an
+/// `[data]` line — there is no nameless state to guard against at render time.
+#[derive(Clone)]
+pub enum SourceOrigin {
+    /// A bare alias declaration (`observed_flows =`), no file behind it.
+    Alias(String),
+    /// A file path with an optional alias (`climate = climate.csv`).
+    File { path: String, alias: Option<String> },
+}
+
+impl SourceOrigin {
+    /// The user-provided alias, if any.
+    pub fn alias(&self) -> Option<&str> {
+        match self {
+            SourceOrigin::Alias(a) => Some(a.as_str()),
+            SourceOrigin::File { alias, .. } => alias.as_deref(),
+        }
+    }
+
+    /// The `[data]` `key = value` pair that re-declares this source. Total by
+    /// construction — every origin has a name, so there is no nameless case.
+    pub fn ini_entry(&self) -> (String, String) {
+        match self {
+            SourceOrigin::Alias(a) => (a.clone(), String::new()),
+            SourceOrigin::File { path, alias: Some(a) } => (a.clone(), path.clone()),
+            SourceOrigin::File { path, alias: None } => (path.clone(), String::new()),
+        }
+    }
+}
+
+/// One pre-run input *source*, as declared in `[data]`. A single source can
+/// expand to several data columns — each a `TimeseriesInput` — so the columns
+/// live inside the source rather than being flattened into the model.
+///
+/// `FileDefinition` and `InMemoryDefinition` share the same `SourceOrigin` (how
+/// the source is named) but are kept as distinct variants deliberately: where
+/// the values come from is semantically meaningful and the two may diverge
+/// later (e.g. reload-on-run behaviour, provenance).
+#[derive(Clone)]
+pub enum TimeseriesInputDefinition {
+    /// Declared alias with no backing data yet. Rejected at configure time.
+    Declaration { alias: String },
+    /// Backed by a file on disk; `columns` are the loaded per-column inputs.
+    FileDefinition {
+        origin: SourceOrigin,
+        columns: Vec<TimeseriesInput>,
+    },
+    /// Data supplied in memory; c.f. model_input_swap.rs.
+    InMemoryDefinition {
+        origin: SourceOrigin,
+        columns: Vec<TimeseriesInput>,
+    },
+}
+
+impl TimeseriesInputDefinition {
+    /// The data columns of this source. Empty for a bare `Declaration`.
+    pub fn columns(&self) -> &[TimeseriesInput] {
+        match self {
+            TimeseriesInputDefinition::Declaration { .. } => &[],
+            TimeseriesInputDefinition::FileDefinition { columns, .. } => columns,
+            TimeseriesInputDefinition::InMemoryDefinition { columns, .. } => columns,
+        }
+    }
+
+    /// The user-provided alias for this source, if any.
+    pub fn alias(&self) -> Option<&str> {
+        match self {
+            TimeseriesInputDefinition::Declaration { alias } => Some(alias.as_str()),
+            TimeseriesInputDefinition::FileDefinition { origin, .. } => origin.alias(),
+            TimeseriesInputDefinition::InMemoryDefinition { origin, .. } => origin.alias(),
+        }
+    }
+
+    /// The `[data]` `key = value` pair that re-declares this source. The
+    /// single place the source->INI mapping is defined, so serialization stays
+    /// in lock-step with parsing.
+    pub fn ini_entry(&self) -> (String, String) {
+        match self {
+            TimeseriesInputDefinition::Declaration { alias } => (alias.clone(), String::new()),
+            // Both definitions delegate to their origin — an in-memory source
+            // still declares the file it stands in for, keeping the INI the
+            // complete manifest.
+            TimeseriesInputDefinition::FileDefinition { origin, .. } => origin.ini_entry(),
+            TimeseriesInputDefinition::InMemoryDefinition { origin, .. } => origin.ini_entry(),
+        }
+    }
+}
+
 
 #[derive(Clone)]
 #[derive(Default)]
@@ -31,7 +123,7 @@ impl TimeseriesInput {
     /// # Arguments
     /// * `file_path` - Path to the CSV file to load
     /// * `alias` - Optional user-provided alias for this file (e.g., "climate" instead of "climate_data_2020_csv")
-    pub fn load(file_path: &str, alias: Option<&str>) -> Result<Vec<TimeseriesInput>, String> {
+    pub fn load(file_path: &str, alias: Option<&str>) -> Result<Vec<TimeseriesInput>, KalixIoError> {
         match crate::io::csv_io::read_ts(file_path) {
             Ok(vts) => {
                 let mut vinputts: Vec<TimeseriesInput> = vec![];
@@ -71,8 +163,8 @@ impl TimeseriesInput {
                 }
                 Ok(vinputts)
             }
-            Err(s) => {
-                Err(format!("Error reading {}: {}", file_path, s))
+            Err(e) => {
+                Err(e.with_context(&format!("Error reading {}: ", file_path)))
             }
         }
     }

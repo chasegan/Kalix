@@ -6,17 +6,14 @@ files. Future readers/writers (CSV, etc.) will live alongside.
 from __future__ import annotations
 
 import warnings
-from pathlib import Path
-from typing import Union
 
 import numpy as np
 import pandas as pd
 
 from kalix._native import _read_pixie_raw, _write_pixie_raw
+from kalix._util import PathLike, build_time_indexed_df
 
 __all__ = ["read_pixie", "write_pixie"]
-
-PathLike = Union[str, Path]
 
 
 def read_pixie(path: PathLike) -> pd.DataFrame:
@@ -35,12 +32,7 @@ def read_pixie(path: PathLike) -> pd.DataFrame:
         names with float64 values.
     """
     timestamps_sec, series_dict = _read_pixie_raw(str(path))
-    # Keep seconds resolution so read-back mirrors write_pixie (which stores at
-    # second resolution): pd.to_datetime defaults to nanoseconds, so pin the
-    # unit to make the round-trip dtype-lossless.
-    index = pd.to_datetime(timestamps_sec, unit="s", utc=True).as_unit("s")
-    index.name = "time"
-    return pd.DataFrame(series_dict, index=index)
+    return build_time_indexed_df(timestamps_sec, series_dict)
 
 
 def _is_default_range_index(idx: pd.Index) -> bool:

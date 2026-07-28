@@ -14,9 +14,11 @@ import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.preferences.PreferenceKeys;
 
+import com.formdev.flatlaf.FlatClientProperties;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
@@ -32,6 +34,8 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -223,6 +227,13 @@ public class VisualizationTabManager {
         this.tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
         this.tabReorderer = new TabDragReorderer(tabbedPane, this::reorderTab);
 
+        // "New plot" affordance, pinned to the trailing edge of the tab strip rather
+        // than added as a real tab: `tabs` is index-aligned with the tabbedPane, and a
+        // placeholder tab would have to be excluded from insertion, reordering, closing
+        // and selection. A trailing component sits outside that arithmetic entirely.
+        this.tabbedPane.putClientProperty(
+            FlatClientProperties.TABBED_PANE_TRAILING_COMPONENT, createNewPlotTrailing());
+
         // Track tab changes for tree synchronization
         this.tabbedPane.addChangeListener(e -> {
             TabInfo active = getActiveTab();
@@ -276,12 +287,74 @@ public class VisualizationTabManager {
     }
 
     /**
+     * Builds the "+" affordance pinned to the trailing edge of the tab strip.
+     *
+     * <p>FlatLaf stretches the trailing component across the whole leftover strip, so the
+     * button cannot be handed over bare: it would be sized to that entire width, painting
+     * its glyph in the middle of empty space and — worse — making every blank pixel of the
+     * strip a live "new plot tab" click target. The holder panel absorbs the stretch and
+     * lets the button keep its preferred size at the trailing edge.</p>
+     */
+    private JComponent createNewPlotTrailing() {
+        // No explicit icon colour, matching the PLOT/STATS tab icons: an uncoloured
+        // FontIcon leaves the Graphics colour alone and so paints in the component's
+        // foreground, which follows the theme and survives updateComponentTreeUI.
+        // Setting one here would bake a colour that goes stale on the next theme switch.
+        FontIcon icon = FontIcon.of(FontAwesomeSolid.PLUS, UIConstants.TAB_ICON_SIZE);
+
+        JButton button = new JButton(icon);
+        button.setToolTipText("New plot tab");
+        button.putClientProperty(FlatClientProperties.BUTTON_TYPE,
+            FlatClientProperties.BUTTON_TYPE_TOOLBAR_BUTTON);
+        // Not a focus stop: the tab strip is navigated with the tabs themselves.
+        button.setFocusable(false);
+        button.getAccessibleContext().setAccessibleName("New plot tab");
+        button.addActionListener(e -> addEmptyPlotTab());
+
+        // GridBagLayout with an EAST anchor: trailing edge horizontally, centred
+        // vertically, button left at its preferred size. FlowLayout is wrong here —
+        // it stacks its row from the top of the container rather than centring it,
+        // which pinned the glyph high against the top of the strip.
+        JPanel holder = new JPanel(new GridBagLayout());
+        holder.setOpaque(false);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.weightx = 1.0;
+        gbc.weighty = 1.0;
+        gbc.anchor = GridBagConstraints.EAST;
+        gbc.fill = GridBagConstraints.NONE;
+        holder.add(button, gbc);
+        return holder;
+    }
+
+    /**
      * Adds a new plot tab with default settings from preferences.
      *
      * @return The created PlotPanel
      */
     public PlotPanel addPlotTab() {
         return addPlotTabFromSettings(TabSettings.getDefaults());
+    }
+
+    /**
+     * Adds a plot tab with <em>no series selected</em> — the blank-slate counterpart to
+     * duplicating a tab and clearing its selection by hand.
+     *
+     * <p>The checked <em>sources</em> are deliberately inherited from the active tab
+     * (left null, so {@link #inheritedSources} resolves them) while the series selection
+     * is set to an explicit empty set. Starting with no sources would empty the outputs
+     * tree too, forcing the source to be re-checked before any series could be picked —
+     * more work than the gesture this replaces, not less.</p>
+     *
+     * <p>The empty-but-non-null selection also marks this as a deliberate choice rather
+     * than "inherit", which is what makes {@link #addPlotTabFromSettings} focus the new
+     * tab on creation.</p>
+     *
+     * @return The created PlotPanel
+     */
+    public PlotPanel addEmptyPlotTab() {
+        TabSettings settings = TabSettings.getDefaults();
+        settings.selectedSeries = new LinkedHashSet<>();
+        return addPlotTabFromSettings(settings);
     }
 
     /**

@@ -33,8 +33,11 @@ and issues #30 and #249.
    second schema to maintain. New engine features are scriptable from Python
    the day they land, with zero binding work.
 5. **Clean reset per run.** `run()` clears internal state and produces
-   identical results for identical models every time. No locking; the onus is
-   on the user to retrieve outputs before further modification.
+   identical results for identical models every time. No locking: the onus is
+   on the user to retrieve outputs before further modification — and results
+   are tied to the model that produced them, so redefining the model discards
+   them rather than letting them be read against a definition that has since
+   moved on (§7).
 6. **Values are raw strings.** The API does not coerce INI values to types.
    Property values go in and come out as strings (`"2"`, `"40000, 0.75"`,
    `"(const.a - 5.5)^2"`). Typing is the engine mapper's business.
@@ -59,6 +62,7 @@ kalix.__version__
 # New
 kalix.Model                     # the stateful in-memory model class
 kalix.load_file(path)           # thin alias for kalix.Model.from_file(path)
+kalix.load_string(ini_text)     # thin alias for kalix.Model.from_string(...)
 ```
 
 `kalix.optimise()` is unchanged by this spec (calibration integration comes
@@ -319,6 +323,27 @@ file is not read); the declaration in the INI remains the source of truth
 for *what* the model needs, while `set_input()` decides *where the values
 come from* for this session.
 
+That precedence is scoped to *this model*. `patch()` builds a new model by
+reparsing the merged INI (§4.6), and the INI is the complete manifest
+(§6.1) — so a file-backed alias comes back file-backed, and an override
+supplied for it does not carry across the patch. Data supplied for a bare
+declaration *does* survive, because there is nothing for the reparse to
+fall back to: dropping it would leave the new model declared-but-unsupplied
+and unable to run at all. Both follow from the same rule — the reparsed
+model gets whatever the INI says, and `set_input()` state is re-applied only
+where the INI leaves a hole. Re-supply a file-backed override after
+patching:
+
+```python
+m.patch({"node.myreach": {"lag": "2"}}).set_input("climate_data", df).run()
+```
+
+Flagged, not settled: the asymmetry is defensible but it is quiet — the
+model reverts to real file data rather than failing, so a forgotten
+re-`set_input()` runs against the wrong inputs without complaint. Revisit
+if that bites in practice; the alternative is to carry file-backed
+overrides across a patch the way declarations already are.
+
 Open question (flagged, not settled): whether supplied inputs participate in
 automatic simulation-period determination the way critical file inputs do
 (proposed: yes, identically).
@@ -347,6 +372,7 @@ m.get_outputs()                          # all recorded outputs -> pd.DataFrame
 m.get_outputs("node.my_dam.volume")      # one name  -> pd.Series (index preserved)
 m.get_outputs(["node.my_dam.volume",
                "node.my_dam.level"])     # list      -> pd.DataFrame
+m.get_outputs([...], missing_ok=True)    # zero-fill anything absent (§7.1)
 ```
 
 - Index: UTC `DatetimeIndex` named `"time"`, `"s"` precision, matching
@@ -355,10 +381,47 @@ m.get_outputs(["node.my_dam.volume",
   raises, with a message pointing at the patch idiom:
   `m.patch({"outputs": {"node.x.dsflow": ""}}).run()`.
 - Calling `get_outputs()` before any successful run raises.
-- Results persist until the next `run()`. Patching does **not** clear them —
-  per the no-locking principle, the onus is on the user to pull outputs
-  before moving on. (`get_outputs()` after a patch returns the *pre-patch*
-  run's results; retrieve before you modify.)
+- Results do not outlive the model they describe. `run()` replaces them;
+  anything that redefines the model — `patch()`, `load_file()`,
+  `load_string()`, `set_input()` — discards them, and `get_outputs()` raises
+  `KalixRuntimeError` until the next `run()`. **Retrieve before you
+  modify.** This is deliberately stricter than the no-locking principle
+  requires: serving a *pre-patch* run's results against a *post-patch*
+  definition silently mislabels which model produced them, and the numbers
+  look perfectly plausible either way. Failing loudly costs a re-run; the
+  alternative costs a wrong answer nobody notices.
+
+### 7.1 `missing_ok`
+
+`missing_ok` applies only to explicitly requested `names` (it has no effect
+on `names=None`, which returns exactly what was recorded). Default `False`:
+a requested name that is undeclared, unpopulated, or the wrong length raises
+`KalixKeyError`. With `missing_ok=True` each such name instead comes back as
+an all-zero column of full simulation length, in request order, so one call
+can mix real and stand-in columns:
+
+```python
+df = m.run().get_outputs(["node.a.dsflow", "node.absent.dsflow"], missing_ok=True)
+# node.absent.dsflow -> [0.0, 0.0, ...]
+```
+
+This exists for the sweep case — assembling one uniformly-shaped frame
+across model variants that don't all declare the same outputs, where a
+`try`/`except` per name per variant is the worse code. It is opt-in, and
+deliberately so: zero is a *valid flow*, so a zero-filled column is
+indistinguishable from a real one downstream. `missing_ok=True` is a
+statement that the caller has already decided absence means zero for their
+purposes. Never reach for it to make an unexplained `KalixKeyError` go away
+— that exception is usually telling you an output is not declared in
+`[outputs]`, and the fix is the patch idiom above.
+
+Column naming follows the same rule as elsewhere: a real column carries its
+*canonical declared* casing, which may differ from the casing requested
+(lookup is case-insensitive); a zero-filled stand-in carries the requested
+casing, there being no canonical name to fall back on.
+
+Requesting the same name twice is not an error — it yields that many
+duplicate columns, matching `names` position-for-position.
 
 ### Mass balance
 
@@ -384,23 +447,104 @@ simply round-trip `to_string()`.
 
 ## 9. Errors
 
-All API errors derive from one root, so `except kalix.KalixError` is always a
-safe catch-all:
+Every error the **engine** reports derives from one root, so
+`except kalix.KalixError` is a safe catch-all for modelling failures:
 
 ```
 KalixError(Exception)
-├── ModelParseError        # snippet/string/file failed to parse
-├── ModelValidationError   # parsed, but the resulting model is invalid
-├── SimulationError        # run() failed
-└── KeyError is raised alongside for missing sections/properties/outputs
-    (via a KalixError subclass that also subclasses KeyError)
+├── ModelParseError                 # snippet/string/file failed to parse
+├── ModelValidationError            # parsed, but the resulting model is invalid
+├── SimulationError                 # the simulation itself failed
+├── KalixKeyError(KeyError)         # missing sections/properties/outputs/aliases
+└── KalixRuntimeError(RuntimeError) # state/precondition failures (see below)
 ```
+
+The two mixin classes subclass their builtin counterpart as well as
+`KalixError`, so pre-existing `except KeyError` / `except RuntimeError` code
+keeps working. The hierarchy is declared in `python/src/error.rs` and
+re-exported through `kalix.error` and the top-level `kalix` namespace.
 
 Messages must name the offending section/property — the atomic-swap
 guarantee is only as useful as the diagnostic that accompanies the rollback.
-Plain `RuntimeError` (as currently raised by `simulate()`/`optimise()`) is
-reserved for the legacy stateless functions; `Model` methods raise typed
-errors from day one.
+
+### 9.1 Caller errors stay builtin
+
+An argument that is malformed *before the engine is consulted* is a caller
+mistake, not a modelling failure. Those raise builtin `ValueError` /
+`TypeError` and deliberately sit **outside** `KalixError`: catching
+`KalixError` should not swallow a typo in your own calling code. Current
+cases:
+
+- `get()` given a designation that isn't `"<section>.<property>"`
+  (`ValueError`). A *well-formed* designation naming something absent did
+  consult the model, so that is `KalixKeyError`.
+- `patch()` given a list of section names with any `mode` other than
+  `"delete"` (`ValueError`), or a `mode="delete"` snippet carrying property
+  lines rather than bare section headers (`ValueError`).
+- `set_input()` given data not indexed by a `DatetimeIndex` (`TypeError`),
+  or with an empty/irregular index or mismatched column lengths
+  (`ValueError`).
+
+`OSError` likewise stays builtin throughout: a missing or unreadable file is
+a filesystem fact, not a statement about the model. The distinction is typed
+all the way through the Rust read chain, so a missing file and a malformed
+file are never conflated.
+
+### 9.2 Parse vs. validate
+
+The engine's `KalixIoError` carries the distinction the Python types expose,
+in three variants — `Io`, `Parse`, `Validate` — and the boundary
+(`io_err_to_py`) is a straight one-to-one mapping onto `OSError`,
+`ModelParseError`, and `ModelValidationError`. The line between the latter
+two:
+
+- **`ModelParseError` — a value could not be read.** A number that isn't
+  numeric, a malformed date or expression, a value list of the wrong length,
+  an unrecognised enumerated value (`type = nonesuch`), an identifier that
+  breaks the naming grammar, a malformed embedded table. Also genuine INI
+  syntax errors from the parser itself.
+- **`ModelValidationError` — the assembled model doesn't hold together.**
+  A required property absent (`Missing 'type'`), a parameter not applicable
+  to its node's type, a reference to a node/account/field that doesn't
+  exist, a duplicate declaration, a value outside a semantic range, an
+  unsupported feature.
+
+Both can arise from the same call: the INI mapper reads and assembles in one
+pass, so `load_file()` can raise either. What decides it is the *nature of
+the complaint*, not how far through the file the engine had got.
+
+### 9.3 Where each type is raised
+
+| Type | Raised by |
+|---|---|
+| `ModelParseError` | `load_file()`, `load_string()`, `patch()` — a value in the content could not be read |
+| `ModelValidationError` | the same three, when the model they describe doesn't hold together; also `run()`, when the model cannot be configured |
+| `SimulationError` | `run()`, when the simulation itself fails |
+| `KalixKeyError` | `get()`, `get_section()`, `get_outputs()` naming an output that isn't there (with `missing_ok=False`), `patch(mode="delete")` (with `missing_ok=False`), `set_input()` on an undeclared alias |
+| `KalixRuntimeError` | `get_outputs()`/`get_mass_balance()` before `run()`; `get_outputs()` on an output whose recorded series is a length other than the run's; `to_string()`/`save()`/`patch()` on a model with no INI document |
+
+The split within `get_outputs()` is the general rule in miniature. Three
+different things can go wrong with a requested name and all three are the
+caller **naming something that isn't there**, so all three are
+`KalixKeyError` — but each says so differently, which is the point of
+keeping them apart: the name is absent from `[outputs]`; or it is declared
+and nothing answers to it; or it is declared and registered but empty,
+because `[outputs]` names a series the model never produces (a typo there
+is the usual cause, and the message says so rather than reporting a length
+of zero). The fourth case is different in kind: a *populated* series whose
+length isn't the run's. The name resolved and the data contradicts the run
+that just succeeded — engine state, not a bad key — so that one is
+`KalixRuntimeError`.
+
+The engine keeps the four apart as typed variants (`OutputLookupError` in
+`src/model.rs`) so the boundary maps them without reading message text.
+
+### 9.4 Deviations from earlier drafts
+
+- The stateless `simulate()` / `optimise()` entry points still raise plain
+  `RuntimeError`, unchanged and outside the hierarchy. Migrating them is
+  deferred; they take a file path and return nothing, so they have no
+  `Model` state to describe.
 
 ---
 

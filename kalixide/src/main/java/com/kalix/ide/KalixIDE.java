@@ -105,6 +105,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private JToggleButton lintingToggleButton;
     private JToggleButton autoReloadToggleButton;
     private JToggleButton gridlinesToggleButton;
+    private JToggleButton labelsToggleButton;
 
     // Navigation buttons (stored for state synchronization)
     private JButton backButton;
@@ -463,6 +464,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // application theme's linked node palette).
         map.setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
         map.setShowGridlines(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
+        map.setShowLabels(PreferenceKeys.MAP_SHOW_LABELS.get());
 
         // Editor features, each bound to this document's own model and working directory.
         editor.initializeLinter(schemaManager);
@@ -695,6 +697,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         lintingToggleButton = components.lintingToggleButton;
         autoReloadToggleButton = components.autoReloadToggleButton;
         gridlinesToggleButton = components.gridlinesToggleButton;
+        labelsToggleButton = components.labelsToggleButton;
         backButton = components.backButton;
         forwardButton = components.forwardButton;
         add(toolBar, BorderLayout.NORTH);
@@ -869,6 +872,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             gridlinesToggleButton.setToolTipText(gridlinesVisible
                 ? "Gridlines visible - click to hide"
                 : "Gridlines hidden - click to show");
+        }
+
+        if (labelsToggleButton != null) {
+            boolean labelsVisible = isLabelsVisible();
+            labelsToggleButton.setSelected(labelsVisible);
+            labelsToggleButton.setToolTipText(labelsVisible
+                ? "Node labels visible - click to hide"
+                : "Node labels hidden (shown on hover) - click to show");
         }
     }
 
@@ -1715,6 +1726,16 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Save preference
         PreferenceKeys.MAP_SHOW_GRIDLINES.set(showGridlines);
     }
+
+    @Override
+    public void toggleLabels(boolean showLabels) {
+        // Apply to every open document's map so background tabs stay consistent.
+        for (KalixDocument document : documentManager.getDocuments()) {
+            document.getMapPanel().setShowLabels(showLabels);
+        }
+        // Save preference
+        PreferenceKeys.MAP_SHOW_LABELS.set(showLabels);
+    }
     
     @Override
     public void toggleShowHiddenFiles(boolean show) {
@@ -1737,6 +1758,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         return mapPanel != null
             ? mapPanel.isShowGridlines()
             : PreferenceKeys.MAP_SHOW_GRIDLINES.get();
+    }
+
+    @Override
+    public boolean isLabelsVisible() {
+        // Falls back to the saved preference before any document/map exists (toolbar build).
+        return mapPanel != null
+            ? mapPanel.isShowLabels()
+            : PreferenceKeys.MAP_SHOW_LABELS.get();
     }
 
     @Override
@@ -2033,6 +2062,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             lintingToggleButton = components.lintingToggleButton;
             autoReloadToggleButton = components.autoReloadToggleButton;
             gridlinesToggleButton = components.gridlinesToggleButton;
+            labelsToggleButton = components.labelsToggleButton;
             backButton = components.backButton;
             forwardButton = components.forwardButton;
             setupNavigationStateListener();

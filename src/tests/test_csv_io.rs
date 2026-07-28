@@ -222,7 +222,7 @@ fn test_csv_reader_rejects_irregular_timestamps() {
     match result {
         Ok(_) => panic!("Irregularly-spaced timestamps should be rejected"),
         Err(err) => assert!(
-            err.contains("not regularly spaced"),
+            err.to_string().contains("not regularly spaced"),
             "Error should mention irregular spacing: {}", err
         ),
     }
@@ -297,8 +297,7 @@ fn test_hourly_model_end_to_end_preserves_step_size() {
     use crate::io::ini_model_io::IniModelIO;
 
     let model_filename = "./src/tests/example_models/hourly_test/hourly.ini";
-    let mut m = IniModelIO::new()
-        .read_model_file(model_filename)
+    let mut m = IniModelIO::read_model_file(model_filename)
         .expect("Should load model");
 
     m.configure().expect("Configuration should succeed");

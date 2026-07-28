@@ -88,6 +88,8 @@ public class MenuBarBuilder {
         // Appearance menu
         void toggleGridlines(boolean showGridlines);
         boolean isGridlinesVisible();
+        void toggleLabels(boolean showLabels);
+        boolean isLabelsVisible();
         void toggleAutoReload(boolean enabled);
         boolean isAutoReloadEnabled();
 

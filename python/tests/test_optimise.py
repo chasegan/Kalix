@@ -144,7 +144,8 @@ def test_optimise_requires_keyword_model_file(tmp_path):
     """model_file and save_model are keyword-only, mirroring the CLI's flags."""
     cfg, model = _write_fixtures(tmp_path, model_file_in_config=False)
     with pytest.raises(TypeError):
-        kalix.optimise(cfg, model)  # type: ignore[misc]
+        # pylint: disable=too-many-function-args
+        kalix.optimise(cfg, model)  # type: ignore
 
 
 # --- progress reporting -----------------------------------------------------
@@ -188,6 +189,7 @@ def test_optimise_progress_callback_exception_swallowed(tmp_path):
 
 def test_throttle_fires_once_within_interval():
     fired: list[int] = []
+    # pylint: disable=protected-access
     throttled = opt._throttle(lambda p: fired.append(p["n_evaluations"]), min_interval=10.0)
     for n in (1, 2, 3):
         throttled({"n_evaluations": n, "best_objective": 0.0, "elapsed_seconds": 0.0})
@@ -203,6 +205,7 @@ def test_default_reporter_silent_when_non_interactive(monkeypatch):
             return False
 
     monkeypatch.setattr(sys, "stderr", NonTTY())
+    # pylint: disable=protected-access
     assert opt._default_reporter() is None
 
 
@@ -216,6 +219,7 @@ def test_default_reporter_writes_line_to_tty(monkeypatch):
 
     fake = TTY()
     monkeypatch.setattr(sys, "stderr", fake)
+    # pylint: disable=protected-access
     report = opt._default_reporter()
     assert report is not None
     report({"n_evaluations": 10, "best_objective": 1.5, "elapsed_seconds": 0.1})

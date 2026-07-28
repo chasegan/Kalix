@@ -6,14 +6,12 @@ is expected to remain at this layer indefinitely.
 """
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 from kalix._native import _simulate_from_file
+from kalix._util import PathLike
 
 __all__ = ["simulate"]
-
-PathLike = Union[str, Path]
 
 
 def simulate(
