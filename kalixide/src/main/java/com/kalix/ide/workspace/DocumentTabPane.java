@@ -13,9 +13,9 @@ import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
-import java.util.List;
 
 /**
  * The centre region: a tab strip with one tab per open {@link KalixDocument}, each tab's
@@ -120,6 +120,9 @@ public class DocumentTabPane extends JPanel {
                                 return;
                             }
                             File file = document.getFile();
+                            // QOL: Change active document
+                            documentManager.setActiveDocument(document);
+                            // Show context menu
                             if (file != null) { // unsaved documents have no tree entry to show a menu for
                                 contextMenuRequestHandler.showContextMenu(
                                         List.of(file), tabbedPane, e.getX(), e.getY());
