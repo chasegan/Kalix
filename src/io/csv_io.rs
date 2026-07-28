@@ -1,5 +1,6 @@
 extern crate csv;
 
+use crate::io::error::KalixIoError;
 use crate::timeseries::Timeseries;
 use crate::tid::utils::{append_date_string_for_step_size, date_string_to_u64_flexible, date_string_to_u64_with_format};
 use std::fs;
@@ -22,7 +23,7 @@ impl From<CsvError> for String {
     }
 }
 
-pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
+pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, KalixIoError> {
     // Here is where we will construct our result
     let mut answer: Vec<Timeseries> = Vec::new();
 
@@ -31,11 +32,11 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
     let mut reader = csv::ReaderBuilder::new()
         .flexible(true)
         .from_path(filename)
-        .map_err(|e| format!("Failed to open file '{}': {}", filename, e))?;
+        .map_err(|e| KalixIoError::Io(format!("Failed to open file '{}': {}", filename, e)))?;
 
     // Get the first row (what csv crate thinks are headers)
     let first_row = reader.headers()
-        .map_err(|_| format!("Error reading first row from '{}'", filename))?;
+        .map_err(|_| KalixIoError::Io(format!("Error reading first row from '{}'", filename)))?;
 
     // Check if the first cell is actually a date (meaning no header row exists)
     let has_header = match first_row.get(0) {
@@ -43,7 +44,7 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
             // If it parses as a date, then this is data, not a header
             date_string_to_u64_flexible(first_cell).is_err()
         }
-        None => return Err(format!("Empty file '{}'", filename))
+        None => return Err(KalixIoError::Parse(format!("Empty file '{}'", filename)))
     };
 
     // Calculate effective header length, ignoring trailing empty columns (from trailing commas)
@@ -85,24 +86,24 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
 
         // Parse the timestamp column (first column)
         let t_str = first_row.get(0)
-            .ok_or_else(|| format!("Missing timestamp in '{}' line {}", filename, file_line))?;
+            .ok_or_else(|| KalixIoError::Parse(format!("Missing timestamp in '{}' line {}", filename, file_line)))?;
 
         // Detect format on first data row
         let (t_u64, format) = date_string_to_u64_flexible(t_str)
-            .map_err(|e| format!("{} in '{}' line {}", e, filename, file_line))?;
+            .map_err(|e| KalixIoError::Parse(format!("{} in '{}' line {}", e, filename, file_line)))?;
         detected_format = Some(format);
 
         // Parse each data column into the respective timeseries
         for i in 0..n_data_cols {
             let field = first_row.get(i + 1)
-                .ok_or_else(|| format!("Missing data column {} in '{}' line {}", i + 1, filename, file_line))?;
+                .ok_or_else(|| KalixIoError::Parse(format!("Missing data column {} in '{}' line {}", i + 1, filename, file_line)))?;
 
             let value: f64 = if field.trim().is_empty() {
                 f64::NAN
             } else {
                 field.trim().parse()
-                    .map_err(|_| format!("Invalid number '{}' in '{}' line {} column {}",
-                        field, filename, file_line, i + 1))?
+                    .map_err(|_| KalixIoError::Parse(format!("Invalid number '{}' in '{}' line {} column {}",
+                        field, filename, file_line, i + 1)))?
             };
 
             answer[i].values.push(value);
@@ -119,31 +120,31 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
             Ok(true) => {}
             Ok(false) => break,
             Err(e) => return Err(
-                format!("Error reading '{}' line {}: {}", filename, file_line + 1, e)),
+                KalixIoError::Parse(format!("Error reading '{}' line {}: {}", filename, file_line + 1, e))),
         }
         file_line += 1;
 
         // Parse the timestamp column (first column)
         let t_str = record.get(0)
-            .ok_or_else(|| format!("Missing timestamp in '{}' line {}", filename, file_line))?;
+            .ok_or_else(|| KalixIoError::Parse(format!("Missing timestamp in '{}' line {}", filename, file_line)))?;
 
         // Detect format on first data row
         let t_u64 = if detected_format.is_none() {
             let (timestamp, format) = date_string_to_u64_flexible(t_str)
-                .map_err(|e| format!("{} in '{}' line {}", e, filename, file_line))?;
+                .map_err(|e| KalixIoError::Parse(format!("{} in '{}' line {}", e, filename, file_line)))?;
             detected_format = Some(format);
             timestamp
         } else {
             // Use detected format for subsequent rows (much faster)
             date_string_to_u64_with_format(t_str, detected_format.unwrap())
-                .map_err(|e| format!("Parse error in '{}' line {}: {}", filename, file_line, e))?
+                .map_err(|e| KalixIoError::Parse(format!("Parse error in '{}' line {}: {}", filename, file_line, e)))?
         };
 
         // Parse each data column into the respective timeseries
         for i in 0..n_data_cols {
             // Get the field value (might be empty for missing data)
             let field = record.get(i + 1)
-                .ok_or_else(|| format!("Missing data column {} in '{}' line {}", i + 1, filename, file_line))?;
+                .ok_or_else(|| KalixIoError::Parse(format!("Missing data column {} in '{}' line {}", i + 1, filename, file_line)))?;
 
             // Parse the data value as a float
             // If empty or whitespace-only, treat as missing data (NaN)
@@ -151,8 +152,8 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
                 f64::NAN
             } else {
                 field.trim().parse()
-                    .map_err(|_| format!("Invalid number '{}' in '{}' line {} column {}",
-                        field, filename, file_line, i + 1))?
+                    .map_err(|_| KalixIoError::Parse(format!("Invalid number '{}' in '{}' line {} column {}",
+                        field, filename, file_line, i + 1)))?
             };
 
             answer[i].values.push(value);
@@ -163,7 +164,7 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, String> {
     // Set the start_timestamp and infer step_size from the parsed row timestamps
     // (kept locally during the read: series store values only, on a regular grid).
     let inferred_step_size = infer_step_size(&row_timestamps)
-        .map_err(|e| format!("In '{}': {}", filename, e))?;
+        .map_err(|e| KalixIoError::Parse(format!("In '{}': {}", filename, e)))?;
     for ts in answer.iter_mut() {
         if ts.len() > 0 {
             ts.start_timestamp = row_timestamps[0];

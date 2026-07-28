@@ -2,6 +2,7 @@ use crate::hydrology::accounts::account::Account;
 use crate::hydrology::accounts::account_manager::{AccountGroup, ACCOUNT_SERIES_FIELDS, GROUP_SERIES_FIELDS};
 use crate::hydrology::allocation_systems::ras::RasSystem;
 use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
+use crate::io::error::KalixIoError;
 use crate::io::custom_ini_parser::{IniDocument, IniSection};
 use crate::misc::configuration::SaveMethod;
 use crate::misc::location::Location;
@@ -32,7 +33,7 @@ const DS_4_OUTLET: u8 = 3; //ds_4 is outlet 3
 /// * `ini_doc` - The parsed INI document
 /// * `working_directory` - Optional working directory for resolving relative paths.
 ///   If None, uses the current working directory.
-pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, String> {
+pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, KalixIoError> {
 
     // Create a new model
     let mut model = Model::new();
@@ -60,7 +61,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // Table names follow the same rules as constants, and additionally must not
             // contain '.' so that table.<name>(...) call syntax stays unambiguous.
             if !is_valid_variable_name(table_name) || table_name.contains('.') {
-                return Err(format!("Error on line {}: Invalid table name '{}'", ini_section.line_number, table_name));
+                return Err(KalixIoError::Parse(format!("Error on line {}: Invalid table name '{}'", ini_section.line_number, table_name)));
             }
 
             let mut ncols: usize = 2;
@@ -69,23 +70,23 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 match key.to_lowercase().as_str() {
                     "n_cols" => {
                         ncols = ini_property.value.trim().parse::<usize>()
-                            .map_err(|_| format!("Error on line {}: n_cols for table '{}' must be an integer, got '{}'",
-                                                 ini_property.line_number, table_name, ini_property.value))?;
+                            .map_err(|_| KalixIoError::Parse(format!("Error on line {}: n_cols for table '{}' must be an integer, got '{}'",
+                                                 ini_property.line_number, table_name, ini_property.value)))?;
                     }
                     "values" => values = Some(ini_property.value.as_str()),
                     other => {
-                        return Err(format!("Error on line {}: Unexpected property '{}' in section '[{}]'",
-                                           ini_property.line_number, other, section_name));
+                        return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected property '{}' in section '[{}]'",
+                                           ini_property.line_number, other, section_name)));
                     }
                 }
             }
-            let values = values.ok_or(format!("Error on line {}: Table '{}' has no 'values' property",
-                                              ini_section.line_number, table_name))?;
+            let values = values.ok_or(KalixIoError::Validate(format!("Error on line {}: Table '{}' has no 'values' property",
+                                              ini_section.line_number, table_name)))?;
 
             let table = LookupTable::from_ini_data(table_name, values, ncols)
-                .map_err(|e| format!("Error on line {}: {}", ini_section.line_number, e))?;
+                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_section.line_number, e)))?;
             model.data_cache.tables.insert(table)
-                .map_err(|e| format!("Error on line {}: {}", ini_section.line_number, e))?;
+                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_section.line_number, e)))?;
         }
     }
 
@@ -105,12 +106,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     if let Some(ini_section) = ini_doc.sections.get("fn") {
         for (key, ini_property) in &ini_section.properties {
             model.data_cache.fns.parse_and_insert(key, &ini_property.value)
-                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
         }
         // Verify the fn call graph is a DAG (no direct or mutual recursion), once at
         // load — so even an UNUSED cyclic definition is rejected.
         model.data_cache.fns.check_dag()
-            .map_err(|e| format!("Error on line {}: {}", ini_section.line_number, e))?;
+            .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_section.line_number, e)))?;
     }
 
     // -------------------------------------------------------------------------------------
@@ -124,7 +125,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     for (section_name, ini_section) in &ini_doc.sections {
         if let Some(group_name) = section_name.strip_prefix("acc.") {
             if !is_valid_bare_name(group_name) {
-                return Err(format!("Error on line {}: Invalid account group name '{}'", ini_section.line_number, group_name));
+                return Err(KalixIoError::Parse(format!("Error on line {}: Invalid account group name '{}'", ini_section.line_number, group_name)));
             }
             let mut accounts_prop = None;
             for (key, ini_property) in &ini_section.properties {
@@ -133,17 +134,17 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     // columns are data; anything behavioural belongs in [ras.*].
                     "accounts" => accounts_prop = Some(ini_property),
                     other => {
-                        return Err(format!("Error on line {}: Unexpected property '{}' in section '[{}]'. \
+                        return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected property '{}' in section '[{}]'. \
                             [acc.*] sections hold only the 'accounts' table; policy belongs in [ras.*] sections.",
-                            ini_property.line_number, other, section_name));
+                            ini_property.line_number, other, section_name)));
                     }
                 }
             }
-            let accounts_prop = accounts_prop.ok_or_else(|| format!(
-                "Error on line {}: Section '[{}]' is missing its 'accounts' table", ini_section.line_number, section_name))?;
+            let accounts_prop = accounts_prop.ok_or_else(|| KalixIoError::Validate(format!(
+                "Error on line {}: Section '[{}]' is missing its 'accounts' table", ini_section.line_number, section_name)))?;
 
             let table = parse_account_table(&accounts_prop.value)
-                .map_err(|e| format!("Error on line {}: {}", accounts_prop.line_number, e))?;
+                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", accounts_prop.line_number, e)))?;
 
             let mut member_ids = Vec::with_capacity(table.names.len());
             for (row, name) in table.names.iter().enumerate() {
@@ -154,14 +155,14 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     table.initials[row],
                 );
                 let account_idx = model.account_manager.add_account(account)
-                    .map_err(|e| format!("Error on line {}: {}", accounts_prop.line_number, e))?;
+                    .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", accounts_prop.line_number, e)))?;
                 member_ids.push(account_idx);
             }
             model.account_manager.add_group(AccountGroup {
                 name: group_name.to_string(),
                 member_ids,
                 columns: Vec::new(), // engine-known columns only for now; data columns arrive with the actions that read them
-            }).map_err(|e| format!("Error on line {}: {}", ini_section.line_number, e))?;
+            }).map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_section.line_number, e)))?;
         }
     }
 
@@ -177,26 +178,27 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     for (section_name, ini_section) in &ini_doc.sections {
         if let Some(ras_name) = section_name.strip_prefix("ras.") {
             if !is_valid_bare_name(ras_name) {
-                return Err(format!("Error on line {}: Invalid RAS name '{}'", ini_section.line_number, ras_name));
+                return Err(KalixIoError::Parse(format!("Error on line {}: Invalid RAS name '{}'", ini_section.line_number, ras_name)));
             }
             let mut targets = None;
             let mut trigger = None;
             let mut action = None;
             for (key, ini_property) in &ini_section.properties {
-                let v = require_non_empty(&ini_property.value, key, ini_property.line_number)?;
+                let v = require_non_empty(&ini_property.value, key, ini_property.line_number).map_err(KalixIoError::Validate)?;
                 match key.to_lowercase().as_str() {
                     "targets" => targets = Some(v.to_string()),
                     "trigger" => trigger = Some(v.to_string()),
                     "action" => action = Some(v.to_string()),
                     other => {
-                        return Err(format!("Error on line {}: Unexpected property '{}' in section '[{}]'. \
+                        return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected property '{}' in section '[{}]'. \
                             A RAS has exactly three properties: targets, trigger, action.",
-                            ini_property.line_number, other, section_name));
+                            ini_property.line_number, other, section_name)));
                     }
                 }
             }
             let line = ini_section.line_number;
-            let missing = |what: &str| format!("Error on line {}: Section '[{}]' is missing '{}'", line, section_name, what);
+            let missing = |what: &str| KalixIoError::Validate(
+                format!("Error on line {}: Section '[{}]' is missing '{}'", line, section_name, what));
             ras_defs.push((
                 ras_name.to_string(),
                 line,
@@ -218,10 +220,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 // Each property is a path to an input file
                 let name_lower = name.to_lowercase();
                 if name_lower == "start" {
-                    let timestamp = date_string_to_u64_flexible(ini_property.value.as_str())?.0;
+                    let timestamp = date_string_to_u64_flexible(ini_property.value.as_str()).map_err(KalixIoError::Parse)?.0;
                     model.configuration.specified_sim_start_timestamp = Some(timestamp);
                 } else if name_lower == "end" {
-                    let timestamp = date_string_to_u64_flexible(ini_property.value.as_str())?.0;
+                    let timestamp = date_string_to_u64_flexible(ini_property.value.as_str()).map_err(KalixIoError::Parse)?.0;
                     model.configuration.specified_sim_end_timestamp = Some(timestamp);
                 }
             }
@@ -230,17 +232,29 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // Parsing input data
             // -------------------------------------------------------------------------------------
             for (name, ini_property) in ini_section.properties {
-                // Input files can be specified in two formats:
-                // 1. Direct file path: ./path/to/file.csv (value is empty, key is the path)
+                // Input entries take three forms:
+                // 1. Direct file path: ./path/to/file.csv (value empty, key is the path)
                 // 2. Aliased file path: alias = ./path/to/file.csv (value is the path, key is the alias)
+                // 3. Alias declaration: alias = <blank> (value empty, key is a bare name)
+                //
+                // Forms 1 and 3 both have an empty value; they are told apart by the
+                // key: a bare name (no path separators/extension) is a declaration,
+                // anything else is a file path. Existing models rely on bare
+                // path keys like `./rex_mpot.csv`, so this stays backward compatible.
                 if ini_property.value.is_empty() {
-                    // Direct file path (no alias)
-                    model.load_input_data(name.as_str(), None)
-                        .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                    if is_valid_bare_name(&name) {
+                        // Declared input with no backing data — must be supplied
+                        // before a run, else configure() rejects it.
+                        model.declare_alias(name.as_str());
+                    } else {
+                        // Direct file path (no alias)
+                        model.load_input_data(name.as_str(), None)
+                            .map_err(|e| e.with_context(&format!("Error on line {}: ", ini_property.line_number)))?;
+                    }
                 } else {
                     // Aliased file path: name is the alias, value is the file path
                     model.load_input_data(ini_property.value.as_str(), Some(name.as_str()))
-                        .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        .map_err(|e| e.with_context(&format!("Error on line {}: ", ini_property.line_number)))?;
                 }
             }
         } else if section_name == "const" {
@@ -250,9 +264,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             for (name, ini_property) in ini_section.properties {
                 // Each name defines a constant, and each value should be a number
                 let const_name = name.to_lowercase();
-                if !is_valid_variable_name(&name) { Err(format!("Error on line {}: Invalid constant name '{}'", ini_property.line_number, const_name))?; }
+                if !is_valid_variable_name(&name) { Err(KalixIoError::Parse(format!("Error on line {}: Invalid constant name '{}'", ini_property.line_number, const_name)))?; }
                 let const_value = ini_property.value.parse::<f64>()
-                    .map_err(|_| format!("Error on line {}: Value for constant '{}': must be a number", ini_property.line_number, ini_property.value))?;
+                    .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Value for constant '{}': must be a number", ini_property.line_number, ini_property.value)))?;
                 model.data_cache.constants.set_value(const_name.as_str(), const_value);
             }
         } else if section_name.starts_with("node.") {
@@ -265,7 +279,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             let self_context = format!("node.{}", node_name);
             let self_ctx = Some(self_context.as_str());
             let node_type = ini_section.properties.get("type")
-                .ok_or(format!("Error on line {}: Missing 'type'", ini_section.line_number))?.value.to_lowercase();
+                .ok_or(KalixIoError::Validate(format!("Error on line {}: Missing 'type'", ini_section.line_number)))?.value.to_lowercase();
 
             // Now match on the type and do different stuff per type
             let node_enum= match node_type.as_str() {
@@ -274,17 +288,17 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                              ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::BlackholeNode(n)
@@ -294,19 +308,19 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "harmony_fraction" {
                             n.harmony_fraction = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'", ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'", ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::ConfluenceNode(n)
@@ -316,23 +330,23 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "force_flow" {
                             n.force_flow_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "reference_flow" {
                             n.reference_flow_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                              ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::GaugeNode(n)
@@ -342,30 +356,30 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "delay_order_steps" {
                             n.delay_order_steps = v.parse::<usize>().map_err(|_|
-                                format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
-                                        ini_property.line_number, name, node_name))?;
+                                KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
+                                        ini_property.line_number, name, node_name)))?;
                         } else if name_lower == "min_order" {
                             n.min_order_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "max_order" {
                             n.max_order_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "set_order" {
                             n.set_order_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                               ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                               ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::OrderControlNode(n)
@@ -375,24 +389,24 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "evap" {
                             n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "rain" {
                             n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "area" {
                             n.area_km2 = v.parse::<f64>()
-                                .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
-                                                     ini_property.line_number, name, node_name))?;
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                                     ini_property.line_number, name, node_name)))?;
                         } else if name_lower == "variant" {
                             // Model formulation. Absent/"gr4j" => classic daily; "gr4h" => sub-daily.
                             // Set the field directly; gr4j_model.initialize() (called during model
@@ -400,23 +414,23 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.gr4j_model.variant = match v.to_lowercase().as_str() {
                                 "gr4j" => Gr4Variant::Gr4j,
                                 "gr4h" => Gr4Variant::Gr4h,
-                                _ => return Err(format!("Error on line {}: Unknown gr4j variant '{}' for node '{}' (expected 'gr4j' or 'gr4h')",
-                                                        ini_property.line_number, v, node_name)),
+                                _ => return Err(KalixIoError::Parse(format!("Error on line {}: Unknown gr4j variant '{}' for node '{}' (expected 'gr4j' or 'gr4h')",
+                                                        ini_property.line_number, v, node_name))),
                             };
                         } else if name_lower == "params" {
                             let params = csv_string_to_f64_vec(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                             if params.len() != 4 {
-                                return Err(format!("Error on line {}: GR4J params must have 4 values, got {}",
-                                                   ini_property.line_number, params.len()));
+                                return Err(KalixIoError::Parse(format!("Error on line {}: GR4J params must have 4 values, got {}",
+                                                   ini_property.line_number, params.len())));
                             }
                             n.gr4j_model.x1 = params[0];
                             n.gr4j_model.x2 = params[1];
                             n.gr4j_model.x3 = params[2];
                             n.gr4j_model.x4 = params[3];
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                              ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::Gr4jNode(n)
@@ -426,23 +440,23 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "inflow" {
                             n.inflow_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "expected_inflow" {
                             n.expected_inflow_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                              ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::InflowNode(n)
@@ -452,21 +466,21 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "table" {
                             n.loss_table = Table::from_csv_string(v, 2, false)
-                                .map_err(|e| format!("Error on line {}: Could not parse loss table for node '{}': {}",
-                                                     ini_property.line_number, node_name, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse loss table for node '{}': {}",
+                                                     ini_property.line_number, node_name, e)))?;
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                              ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::LossNode(n)
@@ -476,58 +490,58 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "lag" {
                             n.set_lag(v.parse::<usize>()
-                                .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
-                                                     ini_property.line_number, name, node_name))?);
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
+                                                     ini_property.line_number, name, node_name)))?);
                         } else if name_lower == "n_divs" {
                             n.set_divs(v.parse::<usize>()
-                                .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
-                                                     ini_property.line_number, name, node_name))?);
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
+                                                     ini_property.line_number, name, node_name)))?);
                         } else if name_lower == "x" {
                             n.set_x(v.parse::<f64>()
-                                .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
-                                                     ini_property.line_number, name, node_name))?);
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                                     ini_property.line_number, name, node_name)))?);
                         } else if name_lower == "nlm" {
                             let all_values = csv_string_to_f64_vec(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                             if all_values.len() < 2 {
-                                return Err(format!("Error on line {}: Expected k and m values.", ini_property.line_number));
+                                return Err(KalixIoError::Parse(format!("Error on line {}: Expected k and m values.", ini_property.line_number)));
                             }
                             n.set_k(all_values[0]);
                             n.set_m(all_values[1]);
                         } else if name_lower == "pwl" {
                             let all_values = csv_string_to_f64_vec(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                             let nvals = all_values.len();
                             let nrows = nvals / 2;
                             if all_values.len() % 2 > 0 {
-                                return Err(format!("Error on line {}: Pwl table must contain an even number of elements, but found {}",
-                                                   ini_property.line_number, nvals));
+                                return Err(KalixIoError::Parse(format!("Error on line {}: Pwl table must contain an even number of elements, but found {}",
+                                                   ini_property.line_number, nvals)));
                             } else if nrows > 32 {
-                                return Err(format!("Error on line {}: Pwl table must contain no more than 32 rows but found {}",
-                                                   ini_property.line_number, nrows));
+                                return Err(KalixIoError::Parse(format!("Error on line {}: Pwl table must contain no more than 32 rows but found {}",
+                                                   ini_property.line_number, nrows)));
                             } else if nrows < 1 {
-                                return Err(format!("Error on line {}: Pwl table must contain at least one row",
-                                                   ini_property.line_number));
+                                return Err(KalixIoError::Parse(format!("Error on line {}: Pwl table must contain at least one row",
+                                                   ini_property.line_number)));
                             }
                             let (index_flows, index_times) = split_interleaved(&all_values);
                             n.set_routing_table(index_flows, index_times);
                         } else if name_lower == "typical_regulated_flow" {
                             n.typical_regulated_flow = v.parse::<f64>()
-                                .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
-                                                     ini_property.line_number, name, node_name))?;
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                                     ini_property.line_number, name, node_name)))?;
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                              ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::RoutingNode(n)
@@ -537,35 +551,35 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "evap" {
                             n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "rain" {
                             n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "area" {
                             n.area_km2 = v.parse::<f64>()
-                                .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
-                                                     ini_property.line_number, name, node_name))?;
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                                     ini_property.line_number, name, node_name)))?;
                         } else if name_lower == "params" {
                             let params = csv_string_to_f64_vec(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                             if params.len() < 17 {
-                                return Err(format!("Error on line {}: Sacramento params must have 17 values, got {}",
-                                                   ini_property.line_number, params.len()));
+                                return Err(KalixIoError::Parse(format!("Error on line {}: Sacramento params must have 17 values, got {}",
+                                                   ini_property.line_number, params.len())));
                             }
                             n.sacramento_model.set_params_by_vec(params);
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                              ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::SacramentoNode(n)
@@ -575,10 +589,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
@@ -587,11 +601,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_2_OUTLET, INLET))
                         } else if name_lower == "table" {
                             n.splitter_table = Table::from_csv_string(v, 2, false)
-                                .map_err(|e| format!("Error on line {}: Could not parse splitter table for node '{}': {}",
-                                                     ini_property.line_number, node_name, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse splitter table for node '{}': {}",
+                                                     ini_property.line_number, node_name, e)))?;
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                              ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::SplitterNode(n)
@@ -601,10 +615,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
@@ -618,59 +632,59 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if let Some(ds_num) = name_lower.strip_prefix("ds_")
                             .and_then(|s| s.strip_suffix("_outlet"))
                             .and_then(|s| s.parse::<i32>().ok()) {
-                            let params = csv_string_to_f64_vec(v)?;
+                            let params = csv_string_to_f64_vec(v).map_err(KalixIoError::Parse)?;
                             let i_outlet = (ds_num - 1) as usize;
                             match params.len() {
                                 0 => n.outlet_definition[i_outlet] = OutletDefinition::None,
                                 1 => n.outlet_definition[i_outlet] = OutletWithMOL(params[0]),
                                 2 => n.outlet_definition[i_outlet] = OutletWithMOLAndCapacity(params[0], params[1]),
-                                _ => return Err(format!("Error on line {}: Tabulated outlet not supported yet.", ini_property.line_number)),
+                                _ => return Err(KalixIoError::Validate(format!("Error on line {}: Tabulated outlet not supported yet.", ini_property.line_number))),
                             }
                         } else if let Some(ds_num) = name_lower.strip_prefix("ds_")
                             .and_then(|s| s.strip_suffix("_force_release"))
                             .and_then(|s| s.parse::<usize>().ok()) {
                             if ds_num < 1 || ds_num > n.ds_force_release_input.len() {
-                                return Err(format!(
+                                return Err(KalixIoError::Validate(format!(
                                     "Error on line {}: outlet index in '{}' must be between 1 and {}",
                                     ini_property.line_number, name, n.ds_force_release_input.len()
-                                ));
+                                )));
                             }
                             let i_outlet = ds_num - 1;
                             n.ds_force_release_input[i_outlet] = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "evap" {
                             n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "rain" {
                             n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "seep" {
                             n.seep_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "pond_demand" {
                             n.pond_demand_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "target_level" {
                             n.target_level = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "dimensions" {
                             n.dimensions = Table::from_csv_string(v, 4, false)
-                                .map_err(|e| format!("Error on line {}: Could not parse dimensions table for node '{}': {}",
-                                                     ini_property.line_number, node_name, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse dimensions table for node '{}': {}",
+                                                     ini_property.line_number, node_name, e)))?;
                         } else if name_lower == "initial_volume" {
                             n.vol_initial = v.parse::<f64>()
-                                .map_err(|_| format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
-                                                     ini_property.line_number, name, node_name))?;
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                                     ini_property.line_number, name, node_name)))?;
                         } else if name_lower == "order_through" {
                             (n.order_through, _) = parse_csv_to_bool_option_u8(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "exists" {
                             n.exists = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         }
                         else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                              ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::StorageNode(n)
@@ -680,42 +694,42 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "demand" {
                             n.demand_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "accounts" {
                             let account_idxs = resolve_account_references(v, &model.account_manager)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                             n.register_accounts(account_idxs);
                         } else if name_lower == "annual_cap" {
                             let params = csv_string_to_f64_vec(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                             if params.len() != 2 {
-                                return Err(format!("Error on line {}: User 'annual_cap' must have 2 values, got {}",
-                                                   ini_property.line_number, params.len()));
+                                return Err(KalixIoError::Parse(format!("Error on line {}: User 'annual_cap' must have 2 values, got {}",
+                                                   ini_property.line_number, params.len())));
                             }
                             n.annual_cap = Some(params[0]);
                             n.annual_cap_reset_month = params[1] as u8;
                         } else if name_lower == "pump" {
                             n.pump_capacity = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "flow_threshold" {
                             n.flow_threshold = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "demand_carryover" {
                             (n.demand_carryover_allowed, n.demand_carryover_reset_month) = parse_csv_to_bool_option_u8(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                              ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::UnregulatedUserNode(n)
@@ -725,27 +739,27 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)?;
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
                             n.location = Location::from_str(v)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "order" {
                             n.order_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "pump" {
                             n.pump_capacity = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "accounts" {
                             let account_idxs = resolve_account_references(v, &model.account_manager)
-                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                             n.register_accounts(account_idxs);
                         } else {
-                            return Err(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                               ini_property.line_number, name, node_name));
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                               ini_property.line_number, name, node_name)));
                         }
                     }
                     NodeEnum::RegulatedUserNode(n)
@@ -755,7 +769,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         Some(ini_property) => ini_property.line_number,
                         None => ini_section.line_number,
                     };
-                    return Err(format!("Error on line {}: Unknown node type '{}'",  line_number, node_type))
+                    return Err(KalixIoError::Parse(format!("Error on line {}: Unknown node type '{}'",  line_number, node_type)))
                 }
             };
             model.add_node(node_enum);
@@ -776,8 +790,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             let block_name = &section_name[4..];
             if !is_valid_bare_name(block_name) {
-                return Err(format!("Error on line {}: Invalid var block name '{}'",
-                                   ini_section.line_number, block_name));
+                return Err(KalixIoError::Parse(format!("Error on line {}: Invalid var block name '{}'",
+                                   ini_section.line_number, block_name)));
             }
 
             // Phase: 'flow' (default) runs at file position in the flow pass.
@@ -789,15 +803,15 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 match p.value.trim().to_lowercase().as_str() {
                     "flow" => phase_explicit = Some(p.value.trim().to_string()),
                     "order" => {
-                        return Err(format!(
+                        return Err(KalixIoError::Validate(format!(
                             "Error on line {}: phase = order is not yet implemented for \
                              [var.*] blocks (only phase = flow is supported)",
-                            p.line_number));
+                            p.line_number)));
                     }
                     other => {
-                        return Err(format!(
+                        return Err(KalixIoError::Parse(format!(
                             "Error on line {}: invalid phase '{}' for [{}] (expected 'flow' or 'order')",
-                            p.line_number, other, section_name));
+                            p.line_number, other, section_name)));
                     }
                 }
             }
@@ -808,15 +822,15 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     continue;
                 }
                 if !is_valid_bare_name(key) {
-                    return Err(format!("Error on line {}: Invalid var name '{}' in [{}]",
-                                       ini_property.line_number, key, section_name));
+                    return Err(KalixIoError::Parse(format!("Error on line {}: Invalid var name '{}' in [{}]",
+                                       ini_property.line_number, key, section_name)));
                 }
 
                 let series_name = format!("var.{}.{}", block_name, key).to_lowercase();
                 if model.data_cache.get_existing_series_idx(&series_name).is_some() {
-                    return Err(format!(
+                    return Err(KalixIoError::Validate(format!(
                         "Error on line {}: series '{}' already exists (duplicate var definition?)",
-                        ini_property.line_number, series_name));
+                        ini_property.line_number, series_name)));
                 }
                 // The block's own output series: registered before lowering
                 // the expression, so a self-reference with a [-1, default]
@@ -825,8 +839,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
 
                 let input = DynamicInput::from_string(
                     &ini_property.value, &mut model.data_cache, true, None)
-                    .map_err(|e| format!("Error on line {}: in '{}': {}",
-                                         ini_property.line_number, key, e))?;
+                    .map_err(|e| KalixIoError::Parse(format!("Error on line {}: in '{}': {}",
+                                         ini_property.line_number, key, e)))?;
 
                 defs.push(crate::model::VarDef {
                     key: key.clone(),
@@ -861,14 +875,14 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             // Renamed section — helpful error (every model predating the rename has this)
             // -------------------------------------------------------------------------------------
-            return Err(format!("Error on line {}: The '[inputs]' section was renamed to '[data]' \
+            return Err(KalixIoError::Validate(format!("Error on line {}: The '[inputs]' section was renamed to '[data]' \
                 (matching the 'data.' reference prefix). Rename the section header; the file paths and \
-                'data.*' references inside it are unchanged.", ini_section.line_number));
+                'data.*' references inside it are unchanged.", ini_section.line_number)));
         } else {
             // -------------------------------------------------------------------------------------
             // Unexpected section
             // -------------------------------------------------------------------------------------
-            return Err(format!("Error on line {}: Unexpected section '{}'", ini_section.line_number, section_name));
+            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected section '{}'", ini_section.line_number, section_name)));
         }
     }
 
@@ -877,9 +891,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // -------------------------------------------------------------------------------------
     for link_helper in vec_link_defs {
         let from_node_idx = model.get_node_idx(&link_helper.from_node_name)
-            .ok_or(format!("Node '{}' not found", link_helper.from_node_name))?;
+            .ok_or_else(|| KalixIoError::Validate(
+                format!("Node '{}' not found", link_helper.from_node_name)))?;
         let to_node_idx = model.get_node_idx(&link_helper.to_node_name)
-            .ok_or(format!("Node '{}' not found", link_helper.to_node_name))?;
+            .ok_or_else(|| KalixIoError::Validate(
+                format!("Node '{}' not found", link_helper.to_node_name)))?;
         model.add_link(from_node_idx, to_node_idx, link_helper.from_outlet, link_helper.to_inlet);
     }
 
@@ -888,21 +904,23 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // -------------------------------------------------------------------------------------
     for (ras_name, line, targets_str, trigger_str, action_str) in ras_defs {
         if model.ras_systems.iter().any(|r| r.name == ras_name) {
-            return Err(format!("Error on line {}: RAS '{}' declared more than once", line, ras_name));
+            return Err(KalixIoError::Validate(format!("Error on line {}: RAS '{}' declared more than once", line, ras_name)));
         }
         // Resolve targets: one or more acc.<group> references, flattened to
         // member accounts in group-then-row order
         let mut target_account_ids = Vec::new();
         for t in csv_to_string_vec(&targets_str) {
             let lower = t.to_lowercase();
-            let group_name = lower.strip_prefix("acc.").ok_or_else(|| format!(
-                "Error on line {}: RAS target '{}' must be an account group reference like 'acc.<group>'", line, t))?;
-            let group_idx = model.account_manager.get_group_idx(group_name).ok_or_else(|| format!(
-                "Error on line {}: Unknown account group '{}' in RAS targets", line, t))?;
+            let group_name = lower.strip_prefix("acc.").ok_or_else(|| KalixIoError::Parse(format!(
+                "Error on line {}: RAS target '{}' must be an account group reference like 'acc.<group>'", line, t)))?;
+            let group_idx = model.account_manager.get_group_idx(group_name).ok_or_else(|| KalixIoError::Validate(format!(
+                "Error on line {}: Unknown account group '{}' in RAS targets", line, t)))?;
             target_account_ids.extend(model.account_manager.get_group(group_idx).unwrap().member_ids.iter().copied());
         }
-        let trigger = parse_ras_trigger(&trigger_str, &mut model, line)?;
-        let action = parse_ras_action(&action_str, &mut model, line)?;
+        let trigger = parse_ras_trigger(&trigger_str, &mut model, line)
+            .map_err(KalixIoError::Parse)?;
+        let action = parse_ras_action(&action_str, &mut model, line)
+            .map_err(KalixIoError::Parse)?;
         model.ras_systems.push(RasSystem {
             name: ras_name,
             target_account_ids,
@@ -926,20 +944,20 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // reading as a silent NaN instead of an error.
     for name in model.data_cache.series_name.clone() {
         let Some(rest) = name.strip_prefix("acc.") else { continue };
-        let (target, field) = rest.rsplit_once('.').ok_or_else(|| format!(
-            "Invalid account reference 'acc.{}': expected 'acc.<account or group>.<field>'", rest))?;
+        let (target, field) = rest.rsplit_once('.').ok_or_else(|| KalixIoError::Parse(format!(
+            "Invalid account reference 'acc.{}': expected 'acc.<account or group>.<field>'", rest)))?;
         let is_account = model.account_manager.get_account_idx(target).is_some();
         let is_group = model.account_manager.get_group_idx(target).is_some();
         if !is_account && !is_group {
-            return Err(format!("Unknown account or account group '{}' in reference '{}'. \
-                Accounts are declared in [acc.*] sections.", target, name));
+            return Err(KalixIoError::Validate(format!("Unknown account or account group '{}' in reference '{}'. \
+                Accounts are declared in [acc.*] sections.", target, name)));
         }
         let allowed: &[&str] = if is_account { &ACCOUNT_SERIES_FIELDS } else { &GROUP_SERIES_FIELDS };
         if !allowed.contains(&field) {
-            return Err(format!("Unknown field '{}' in reference '{}'. Available for {}: {}",
+            return Err(KalixIoError::Validate(format!("Unknown field '{}' in reference '{}'. Available for {}: {}",
                 field, name,
                 if is_account { "an account" } else { "an account group" },
-                allowed.join(", ")));
+                allowed.join(", "))));
         }
     }
 
@@ -990,14 +1008,12 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
         ini_doc.set_property("kalix", "end", &u64_to_date_string_for_step_size(end_timestamp, sim_stepsize));
     }
 
-    // List all input files
-    for file_path in &model.input_file_paths {
-        let alias = model.alias_map.get(file_path);
-        let (k, v) = match alias {
-            Some(alias_string) => (alias_string.as_str(), file_path.as_str()),
-            None => (file_path.as_str(), ""),
-        };
-        ini_doc.set_property("data", k, v);
+    // List all input sources, one [data] line each. Each source knows how it
+    // re-declares itself (file path, aliased path, or bare declaration) via
+    // ini_entry(), so this stays in lock-step with the parser.
+    for source in &model.input_sources {
+        let (k, v) = source.ini_entry();
+        ini_doc.set_property("data", k.as_str(), v.as_str());
     }
 
     // List all constants

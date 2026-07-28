@@ -13,9 +13,9 @@ use crate::io::ini_model_io::IniModelIO;
 /// Load a model expected to fail, returning the error text. (`Model` is not
 /// `Debug`, so `Result::expect_err` cannot be used on the load result.)
 fn load_err(ini: &str) -> String {
-    match IniModelIO::new().read_model_string(ini) {
+    match IniModelIO::read_model_string(ini) {
         Ok(_) => panic!("expected a load error, but the model loaded"),
-        Err(e) => e,
+        Err(e) => e.to_string(),
     }
 }
 
@@ -36,7 +36,7 @@ net(a, b) = {
     s * 2
     }
 ";
-    let model = IniModelIO::new().read_model_string(ini)
+    let model = IniModelIO::read_model_string(ini)
         .expect("model with an [fn] section should parse");
 
     let double = model.data_cache.fns.get("double")
@@ -76,7 +76,7 @@ node.a.ds_1
 [fn]
 double(x) = x * 2
 ";
-    let mut model = IniModelIO::new().read_model_string(ini)
+    let mut model = IniModelIO::read_model_string(ini)
         .expect("[fn] after its callers should still load");
     model.configure().expect("configuration should succeed");
     model.run().expect("run should succeed");
@@ -162,7 +162,6 @@ min(x) = x
 /// re-loading the emitted text yields a registry with the same function names.
 #[test]
 fn fn_section_survives_a_full_round_trip() {
-    let io = IniModelIO::new();
     let ini = "\
 [kalix]
 start = 2020-01-01
@@ -175,14 +174,14 @@ net(a, b) = {
     s * 2
     }
 ";
-    let m1 = io.read_model_string(ini)
+    let m1 = IniModelIO::read_model_string(ini)
         .expect("model with an [fn] section should parse");
 
-    let serialised = io.model_to_string(&m1);
+    let serialised = IniModelIO::model_to_string(&m1);
     assert!(serialised.contains("double(x)"),
             "serialised model should re-emit the fn signatures:\n{serialised}");
 
-    let m2 = io.read_model_string(&serialised)
+    let m2 = IniModelIO::read_model_string(&serialised)
         .expect("re-emitted [fn] section should re-parse");
     assert!(m2.data_cache.fns.get("double").is_some(),
             "fn.double should survive the round-trip");

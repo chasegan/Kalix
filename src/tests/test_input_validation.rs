@@ -4,6 +4,7 @@ use crate::nodes::blackhole_node::BlackholeNode;
 use crate::nodes::NodeEnum;
 use crate::model_inputs::DynamicInput;
 use crate::io::ini_model_io::IniModelIO;
+use crate::io::model_input_swap::{self, InMemoryColumn};
 
 /// Test that a typo in a data reference (using ".csv" instead of "_csv" in the path)
 /// produces a helpful error message at configure time, rather than a runtime panic.
@@ -13,10 +14,8 @@ use crate::io::ini_model_io::IniModelIO;
 /// - picnic_sacr_broken.ini: uses incorrect path `data.formatted_11000A.csv.by_index.1`
 #[test]
 fn test_broken_model_file_invalid_data_reference() {
-    let io = IniModelIO::new();
-
     // The broken model should fail at configure time with a helpful error
-    let mut broken_model = io.read_model_file("./src/tests/example_models/8/picnic_sacr_broken.ini")
+    let mut broken_model = IniModelIO::read_model_file("./src/tests/example_models/8/picnic_sacr_broken.ini")
         .expect("Should be able to parse the model file");
 
     let result = broken_model.configure();
@@ -40,9 +39,7 @@ fn test_broken_model_file_invalid_data_reference() {
 /// Test that the working model file configures and runs successfully
 #[test]
 fn test_working_model_file_runs_successfully() {
-    let io = IniModelIO::new();
-
-    let mut working_model = io.read_model_file("./src/tests/example_models/8/picnic_sacr_working.ini")
+    let mut working_model = IniModelIO::read_model_file("./src/tests/example_models/8/picnic_sacr_working.ini")
         .expect("Should be able to parse the model file");
 
     working_model.configure().expect("Working model should configure successfully");
@@ -182,4 +179,132 @@ fn test_multiple_invalid_references_caught() {
         "Error message should indicate reference was not found. Got: {}",
         error_message
     );
+}
+
+
+/// A declared-but-unsupplied input (an empty-valued [data] entry with a bare
+/// alias name) must load fine but be rejected at configure time, since nothing
+/// in the engine can supply it.
+#[test]
+fn test_declared_input_not_supplied_fails_at_configure() {
+    let ini = "\
+[data]
+observed_flows =
+
+[node.src]
+type = inflow
+inflow = 1
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+";
+    let mut model = IniModelIO::read_model_string(ini)
+        .expect("Model with a bare declaration should parse");
+
+    // The declaration is recorded as a source with no columns.
+    assert_eq!(model.input_columns().count(), 0);
+
+    let err = model.configure().expect_err(
+        "configure() must reject a declared-but-unsupplied input");
+    assert!(
+        err.contains("observed_flows") && err.contains("declared but not supplied"),
+        "Error should name the unsupplied input. Got: {}",
+        err
+    );
+}
+
+
+/// A declaration doesn't need the `=` — the custom INI parser treats a bare
+/// key line (no `=`, same syntax as a direct file path) and `alias =` as
+/// identical (key present, value empty), and the model-loading code only
+/// ever branches on the value being empty plus the key being a valid bare
+/// name. So `observed_flows` on its own line must declare the alias exactly
+/// like `observed_flows =` does.
+#[test]
+fn test_declared_input_without_equals_sign() {
+    let ini = "\
+[data]
+observed_flows
+
+[node.src]
+type = inflow
+inflow = 1
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+";
+    let mut model = IniModelIO::read_model_string(ini)
+        .expect("Model with a bare (no '=') declaration should parse");
+
+    assert_eq!(model.input_columns().count(), 0);
+
+    let err = model.configure().expect_err(
+        "configure() must reject a declared-but-unsupplied input");
+    assert!(
+        err.contains("observed_flows") && err.contains("declared but not supplied"),
+        "Error should name the unsupplied input. Got: {}",
+        err
+    );
+}
+
+
+/// Round-trip fidelity: the enum -> [data] mapping must re-emit exactly what
+/// the parser read — a bare declaration (with and without `=`), a direct file
+/// path, and an aliased file path all survive a to_string() round trip.
+#[test]
+fn test_inputs_section_round_trips() {
+    let ini = "\
+[data]
+observed_flows =
+rainfall
+./src/tests/example_data/test.csv
+climate = ./src/tests/example_data/test.csv
+";
+    let model = IniModelIO::read_model_string(ini)
+        .expect("Model should parse");
+    let rendered = IniModelIO::model_to_string(&model);
+
+    for line in [
+        "observed_flows =",
+        "rainfall",
+        "./src/tests/example_data/test.csv",
+        "climate = ./src/tests/example_data/test.csv",
+    ] {
+        assert!(
+            rendered.contains(line),
+            "Rendered model should preserve input line '{}'. Got:\n{}",
+            line, rendered
+        );
+    }
+}
+
+
+/// `set_input()` must find a declared alias regardless of the casing it was
+/// declared with. An aliased-file declaration (`Alias = path.csv`) keeps its
+/// alias exactly as written in the INI -- unlike a bare declaration, it isn't
+/// restricted to already-sanitized (lowercase) text -- so the lookup has to
+/// sanitize the stored alias before comparing, not just the incoming one.
+#[test]
+fn test_set_input_finds_mixed_case_aliased_file_declaration() {
+    let ini = "\
+[data]
+Climate_Data = ./src/tests/example_data/test.csv
+";
+    let mut model = IniModelIO::read_model_string(ini)
+        .expect("Model with an aliased file declaration should parse");
+
+    let columns = vec![InMemoryColumn {
+        name: "value".to_string(),
+        values: vec![1.0, 2.0, 3.0],
+    }];
+
+    model_input_swap::set_input(&mut model, "Climate_Data", 0, 86400, columns)
+        .expect("set_input() should find the declared alias regardless of casing");
+
+    let source = model.input_sources.iter()
+        .find(|s| s.columns().iter().any(|c| c.full_colname_path == "data.climate_data.by_name.value"))
+        .expect("Supplied data should be addressable under the sanitized alias");
+    assert_eq!(source.columns()[0].timeseries.values, vec![1.0, 2.0, 3.0]);
 }

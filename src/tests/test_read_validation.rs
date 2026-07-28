@@ -37,8 +37,7 @@ fn model_ini(a_inflow_expression: &str) -> String {
 }
 
 fn run_model(a_inflow_expression: &str) -> Result<crate::model::Model, String> {
-    let mut model = IniModelIO::new()
-        .read_model_string(&model_ini(a_inflow_expression))
+    let mut model = IniModelIO::read_model_string(&model_ini(a_inflow_expression))
         .expect("model should parse");
     model.configure()?;
     model.run()?;
@@ -107,7 +106,7 @@ fn test_renamed_inputs_section_gives_migration_hint() {
                loc = 0, 0\n\
                type = inflow\n\
                inflow = 1\n";
-    let err = IniModelIO::new().read_model_string(ini).err().expect("old [inputs] must fail to load");
+    let err = IniModelIO::read_model_string(ini).err().expect("old [inputs] must fail to load").to_string();
     assert!(err.contains("[inputs]") && err.contains("[data]") && err.contains("renamed"),
         "error should point [inputs] users at [data], got: {}", err);
 }

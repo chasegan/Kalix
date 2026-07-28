@@ -8,12 +8,10 @@ use crate::numerical::opt::{DEConfig, DifferentialEvolution, ObjectiveFunction, 
 // Run it explicitly with: `cargo test -- --ignored test_model_constant_optimisation`
 #[ignore]
 fn test_model_constant_optimisation() {
-    let ini_reader = IniModelIO::new();
-
     //Read the model
     let model_filename = "./src/tests/example_models/5/model.ini";
     println!("model_file = {}", model_filename);
-    let mut m= ini_reader.read_model_file(model_filename).unwrap();
+    let mut m= IniModelIO::read_model_file(model_filename).unwrap();
 
     m.configure().expect("Configuration error");
     m.run().expect("Simulation error");

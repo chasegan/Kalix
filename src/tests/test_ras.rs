@@ -1,11 +1,11 @@
 use crate::io::ini_model_io::IniModelIO;
 
 fn load(ini: &str) -> crate::model::Model {
-    IniModelIO::new().read_model_string(ini).expect("model should load")
+    IniModelIO::read_model_string(ini).expect("model should load")
 }
 
 fn load_err(ini: &str) -> String {
-    IniModelIO::new().read_model_string(ini).err().expect("expected a load error")
+    IniModelIO::read_model_string(ini).err().expect("expected a load error").to_string()
 }
 
 fn run(ini: &str) -> crate::model::Model {
@@ -282,8 +282,8 @@ trigger = start_water_year(7)
 action  = set_full
 {TAIL}"#);
     let model = load(&ini);
-    let rendered = IniModelIO::new().model_to_string(&model);
-    let model2 = IniModelIO::new().read_model_string(&rendered)
+    let rendered = IniModelIO::model_to_string(&model);
+    let model2 = IniModelIO::read_model_string(&rendered)
         .unwrap_or_else(|e| panic!("canonical render should re-load, got: {}\n---\n{}", e, rendered));
     assert_eq!(model2.ras_systems.len(), 1, "RAS survives round-trip");
     assert!(rendered.contains("trigger = start_water_year(7)"), "trigger re-emitted as written:\n{}", rendered);

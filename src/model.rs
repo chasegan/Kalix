@@ -1,24 +1,24 @@
-use std::collections::HashMap;
-use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::path::PathBuf;
-use rustc_hash::FxHashMap;
-use crate::nodes::{Node, NodeEnum, Link};
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::hydrology::allocation_systems::ras::RasSystem;
 use crate::io::csv_io::write_ts;
-use crate::io::pixie_io;
 use crate::io::custom_ini_parser::IniDocument;
+use crate::io::error::KalixIoError;
+use crate::io::pixie_io;
 use crate::misc::configuration::Configuration;
 use crate::misc::simulation_context::{
-    set_context_phase, set_context_node,
-    clear_context, format_simulation_error, SimPhase
+    clear_context, format_simulation_error, set_context_node, set_context_phase, SimPhase,
 };
+use crate::model_inputs::DynamicInput;
+use crate::nodes::{Link, Node, NodeEnum};
 use crate::ordering::simple_nodewise_ordering::SimpleNodewiseOrderingSystem;
 use crate::tid::utils::u64_to_iso_datetime_string;
 use crate::timeseries::Timeseries;
-use crate::timeseries_input::TimeseriesInput;
-use crate::model_inputs::DynamicInput;
+use crate::timeseries_input::{SourceOrigin, TimeseriesInput, TimeseriesInputDefinition};
+use rustc_hash::FxHashMap;
+use std::collections::{HashMap, HashSet};
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::path::PathBuf;
 
 /// One entry in the model's interleaved execution layout: nodes and var
 /// blocks run in definition order, exactly as the file reads.
@@ -56,53 +56,127 @@ pub struct VarBlock {
 
 #[derive(Default, Clone)]
 pub struct Model {
+    // ---- Hot path: read or written every timestep during run_timestep() ----
+    /// Hot path: all phases, read in run_timestep().
+    ///
+    /// Populated: constructed empty (`Configuration::new()`) at `Model::new()`.
+    /// Parsing fills in `specified_sim_start_timestamp`/`specified_sim_end_timestamp`
+    /// from `[kalix]` if given; the effective `sim_stepsize`/`sim_start_timestamp`/
+    /// `sim_end_timestamp`/`sim_nsteps` are only computed later, by `configure()`'s
+    /// `auto_determine_simulation_period()`.
     pub configuration: Configuration,
-    pub inputs: Vec<TimeseriesInput>,
-    pub input_file_paths: Vec<String>,
-    /// Maps file_path to the alias provided for quick lookup
-    pub alias_map: HashMap<String, String>, 
-    pub outputs: Vec<String>,
-    pub account_manager: AccountManager,
-    // Resource allocation systems ([ras.*] sections), in file order —
-    // execution order is declaration order, as for nodes and var blocks
-    pub ras_systems: Vec<RasSystem>,
+
+    /// Hot path: all phases, read/written in run_timestep().
+    ///
+    /// Populated: constructed empty at `Model::new()`. Output series are
+    /// registered and node input references resolved during `configure()`
+    /// (`configure_model_structure()`), which also loads and fills in input
+    /// data; per-step values are then written during `run()`.
     pub data_cache: DataCache,
+
+    /// Hot path: start/record, read in run_timestep().
+    ///
+    /// Populated: accounts/groups added while parsing `[account.*]` sections
+    /// (or built programmatically); per-run state is (re)initialised by
+    /// `initialize_network()` at the start of every `run()`.
+    pub account_manager: AccountManager,
+
+    /// Hot path: policy phase, read in run_timestep().
+    /// Resource allocation systems ([ras.*] sections), in file order —
+    /// execution order is declaration order, as for nodes and var blocks
+    ///
+    /// Populated: added while parsing `[ras.*]` sections; recorders are
+    /// (re)initialised at the start of every `run()`.
+    pub ras_systems: Vec<RasSystem>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    ///
+    /// Populated: during parsing or programmatic construction, via `add_node()`.
+    pub nodes: Vec<NodeEnum>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    /// Var blocks ([var.*] sections): published calculations executed at their
+    /// file position within the flow phase (structured_expressions_design.md §9)
+    ///
+    /// Populated: during parsing or programmatic construction, via `add_var_block()`.
+    pub var_blocks: Vec<VarBlock>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    /// Interleaved execution layout: nodes and var blocks in definition order.
+    /// Built as sections are added (add_node / add_var_block), so file order
+    /// IS execution order for var blocks exactly as it is for nodes
+    /// (node-definition-order §1 extended to calculations). Only consulted
+    /// when var_blocks is non-empty; the plain node loop uses execution_order.
+    ///
+    /// Populated: alongside `nodes`/`var_blocks`, via `add_node()`/`add_var_block()`.
+    pub exec_items: Vec<ExecItem>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    ///
+    /// Populated: during parsing or programmatic construction, via `add_link()`.
+    pub links: Vec<Link>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    /// Adjacency list for O(1) link lookup.
+    /// `outgoing_links[node_idx]` = vec of link indices
+    ///
+    /// Populated: an empty vec is pushed per node by `add_node()`; link
+    /// indices are appended by `add_link()`.
+    pub outgoing_links: Vec<Vec<usize>>,
+
+    /// Hot path: ordering setup, read in initialize_network().
+    /// Adjacency list for O(1) link lookup.
+    /// `incoming_links[node_idx]` = vec of link indices
+    ///
+    /// Populated: an empty vec is pushed per node by `add_node()`; link
+    /// indices are appended by `add_link()`.
+    pub incoming_links: Vec<Vec<usize>>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    /// Pre-computed execution order, rebuilt by check_execution_order() at
+    /// initialize_network() time; walked every step when there are no var blocks.
+    ///
+    /// Populated: computed by `check_execution_order()`, called from both
+    /// `configure()` and `initialize_network()` (start of every `run()`).
+    pub execution_order: Vec<usize>,
+
+    /// Hot path: order phase, read in run_timestep().
+    ///
+    /// Populated: initialised by `initialize_network()` at the start of every
+    /// `run()`, once the execution order is resolved.
+    pub simple_ordering_system: SimpleNodewiseOrderingSystem,
+
+    // ---- Cold path: load/configure/serialize time only, not touched per-step ----
+    /// Pre-run input sources ([data] entries), one per file/alias. Each source
+    /// holds its own data columns (see TimeseriesInputDefinition). Folds together
+    /// what used to be three loosely-coupled fields (the per-column data, the
+    /// file paths, and the alias map).
+    ///
+    /// Populated: during parsing, via `load_input_data()`/`declare_alias()`;
+    /// a declared alias's data may later be supplied in-memory via `set_input()`.
+    pub input_sources: Vec<TimeseriesInputDefinition>,
+
+    /// Requested recorders from ini document.
+    ///
+    /// Populated: during parsing, from the `[outputs]` section.
+    pub outputs: Vec<String>,
 
     /// Working directory for resolving relative file paths
     /// - Set to model file's directory when loaded from INI file
     /// - Set to current working directory when created programmatically
+    ///
+    /// Populated: at construction/load time; fixed thereafter.
     pub working_directory: PathBuf,
 
-    // Nodes
-    pub nodes: Vec<NodeEnum>,
-
-    // Var blocks ([var.*] sections): published calculations executed at their
-    // file position within the flow phase (structured_expressions_design.md §9)
-    pub var_blocks: Vec<VarBlock>,
-
-    // Interleaved execution layout: nodes and var blocks in definition order.
-    // Built as sections are added (add_node / add_var_block), so file order
-    // IS execution order for var blocks exactly as it is for nodes
-    // (node-definition-order §1 extended to calculations).
-    pub exec_items: Vec<ExecItem>,
-
-    // Links
-    pub links: Vec<Link>,
-
-    // Adjacency lists for O(1) link lookup
-    pub outgoing_links: Vec<Vec<usize>>,  // outgoing_links[node_idx] = vec of link indices
-    pub incoming_links: Vec<Vec<usize>>,  // incoming_links[node_idx] = vec of link indices
-
-    // Pre-computed execution order
-    pub execution_order: Vec<usize>,
-
-    // Ordering system
-    pub simple_ordering_system: SimpleNodewiseOrderingSystem,
-
-    // Fast node name lookup (keys are lowercase for case-insensitive matching)
+    /// Fast node name lookup (keys are lowercase for case-insensitive matching).
+    ///
+    /// Populated: alongside `nodes`, via `add_node()`.
     pub node_lookup: FxHashMap<String, usize>, // node_lookup[node_name.to_lowercase()] = node index
 
-    // INI document for round-trip serialization
+    /// INI document for round-trip serialization.
+    ///
+    /// Populated: at load time, when parsed from an INI file/string; `None`
+    /// for models built programmatically.
     pub ini_document: Option<IniDocument>,
 
     /// Canonical render of the model exactly as loaded, captured before any
@@ -110,19 +184,56 @@ pub struct Model {
     /// time identifies which sections actually changed, so a formatting-
     /// preserving save can re-emit only those (state-diff). `None` for models
     /// built programmatically, where there is nothing to preserve.
+    ///
+    /// Populated: at load time, alongside `ini_document`.
     pub baseline_canonical: Option<IniDocument>,
 }
 
+/// Outcome of looking a named output up in the data cache, see
+/// `Model::lookup_output_series`.
+enum OutputLookup<'a> {
+    Populated(&'a Timeseries),
+    WrongLength(usize),
+    NotFound,
+}
+
+/// Why `Model::get_output_series` could not return a requested output.
+#[derive(Debug, thiserror::Error)]
+pub enum OutputLookupError {
+    /// The requested name is not listed in the model's `[outputs]`.
+    #[error("Output {0} undeclared in model [outputs]")]
+    Undeclared(String),
+    /// Declared, but no series is registered under that name at all.
+    #[error("Output {0} not found")]
+    NotFound(String),
+    /// Declared and registered, but empty — nothing ever recorded to it.
+    /// Reached when `[outputs]` names something no component produces, so the
+    /// message points at the declaration rather than at the empty series.
+    #[error(
+        "Output {0} is declared in [outputs] but nothing recorded it \
+         -- check the name matches a series the model actually produces"
+    )]
+    Unpopulated(String),
+    /// Populated, but not `sim_nsteps` long. Unlike the variants above this
+    /// is not a naming problem: reaching it after a successful run means a
+    /// recorder wrote a different number of steps than the run took.
+    #[error(
+        "Output series {name} found but wrong length, length {actual} but expected {expected}"
+    )]
+    WrongLength {
+        name: String,
+        actual: usize,
+        expected: usize,
+    },
+}
 
 impl Model {
     pub fn new() -> Model {
         Model {
             configuration: Configuration::new(),
-            inputs: vec![],
-            input_file_paths: vec![],
+            input_sources: vec![],
             outputs: vec![],
             working_directory: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
-            alias_map: HashMap::new(),
             ..Default::default()
         }
     }
@@ -136,8 +247,11 @@ impl Model {
         let configured = !self.execution_order.is_empty();
         Model {
             configuration: self.configuration.clone(),
-            inputs: if configured { vec![] } else { self.inputs.clone() },
-            input_file_paths: vec![],
+            input_sources: if configured {
+                vec![]
+            } else {
+                self.input_sources.clone()
+            },
             outputs: self.outputs.clone(),
             account_manager: self.account_manager.clone(),
             ras_systems: self.ras_systems.clone(),
@@ -154,7 +268,31 @@ impl Model {
             node_lookup: self.node_lookup.clone(),
             ini_document: None,
             baseline_canonical: None,
-            alias_map: self.alias_map.clone(),
+        }
+    }
+
+    /// Clone for an independent model and definition, everything post-parse,
+    /// ready to configure and run.
+    pub fn clone_for_new_model(&self) -> Model {
+        Model {
+            configuration: self.configuration.clone(),
+            input_sources: self.input_sources.clone(),
+            outputs: self.outputs.clone(),
+            account_manager: self.account_manager.clone(),
+            ras_systems: self.ras_systems.clone(),
+            data_cache: self.data_cache.clone(),
+            working_directory: self.working_directory.clone(),
+            nodes: self.nodes.clone(),
+            var_blocks: self.var_blocks.clone(),
+            exec_items: self.exec_items.clone(),
+            links: self.links.clone(),
+            outgoing_links: self.outgoing_links.clone(),
+            incoming_links: self.incoming_links.clone(),
+            execution_order: vec![],
+            simple_ordering_system: SimpleNodewiseOrderingSystem::new(),
+            node_lookup: self.node_lookup.clone(),
+            ini_document: self.ini_document.clone(),
+            baseline_canonical: self.baseline_canonical.clone(),
         }
     }
 
@@ -182,7 +320,13 @@ impl Model {
     }
 
     /// Adds a link between two nodes
-    pub fn add_link(&mut self, from_node: usize, to_node: usize, from_outlet: u8, to_inlet: u8) -> usize {
+    pub fn add_link(
+        &mut self,
+        from_node: usize,
+        to_node: usize,
+        from_outlet: u8,
+        to_inlet: u8,
+    ) -> usize {
         let link_idx = self.links.len();
         let link = Link::new(from_node, to_node, from_outlet, to_inlet);
 
@@ -198,13 +342,13 @@ impl Model {
         self.node_lookup.get(&name.to_lowercase()).copied()
     }
 
-
-    /*
-    Model configuration needs to be done once, after loading the model, but not for every run.
-     */
-    pub fn configure(&mut self) -> Result<(), String> {
-
-        //TASKS
+    /// The structural half of [`configure`](Self::configure): register output
+    /// series and initialise nodes (link wiring, data-reference resolution) --
+    /// every check that needs no input *data*. Split out so `load`/`patch` can
+    /// validate a model's shape without requiring its `[data]` to be supplied
+    /// yet (e.g. a bare declaration awaiting `set_input()`). `configure()` runs
+    /// this first, then the data-dependent steps that only `run()` needs.
+    fn configure_model_structure(&mut self) -> Result<(), String> {
         //1) Define output series
         for series_name in self.outputs.iter() {
             let idx = self.data_cache.get_or_add_new_series(series_name, false);
@@ -219,98 +363,55 @@ impl Model {
         //2) Nodes ask data_cache for idx of relevant data series for input
         self.initialize_nodes()?;
 
-        //3) Read the input data from file
-        // TODO: Here is where we would load data IF we wanted to read only the stuff that was required.
-        //       E.g. if we were doing reload on run with a subset of the data, or
+        //3) Validate link ordering (structural only, no input data required).
+        //   Also re-checked in initialize_network() before every run(), since
+        //   that call additionally resets per-run node/ordering state -- but
+        //   without it here, structural link errors were invisible to callers
+        //   that only ever reach configure_model_structure() (e.g. via
+        //   validate_model_structure(), used by the Python API's
+        //   from_file/from_model_string) and never call run().
+        self.check_execution_order()?;
 
-        //4) Determine simulation period
-        //5) Supports sim period specified by user (done in the same step)
-        self.auto_determine_simulation_period()?;
+        Ok(())
+    }
 
-        //6) Load input data into the data_cache, properly aligned with simulation period
-        for i in 0..self.inputs.len() {
-            let input_ts = &self.inputs[i].timeseries;
+    /// Every `data.*` series must resolve to an actual input column. Internal
+    /// building block for `configure()` and `validate_model_structure()`,
+    /// which need different tolerance for aliases still awaiting `set_input()`:
+    ///
+    /// - `allow_pending_declarations = false` (used by `configure()`, after its
+    ///   own "declared but not supplied" check has already rejected any input
+    ///   that's still unfilled): a reference into an open declaration is an
+    ///   error, same as any other unresolved reference.
+    /// - `allow_pending_declarations = true` (used by `validate_model_structure()`,
+    ///   which runs at load/patch time, before `set_input()` gets a chance to
+    ///   run): a reference into a still-open declared-but-unsupplied alias is
+    ///   skipped rather than reported as unknown -- it isn't a typo, just pending.
+    fn validate_data_references(&self, allow_pending_declarations: bool) -> Result<(), String> {
+        let pending_aliases: HashSet<String> = if allow_pending_declarations {
+            self.input_sources
+                .iter()
+                .filter_map(|s| match s {
+                    TimeseriesInputDefinition::Declaration { alias } => Some(alias.to_lowercase()),
+                    _ => None,
+                })
+                .collect()
+        } else {
+            HashSet::new()
+        };
 
-            // Validate that input step size matches simulation step size
-            if input_ts.step_size != self.configuration.sim_stepsize {
-                return Err(format!(
-                    "Input timeseries '{}' has step_size {} but simulation requires step_size {}",
-                    input_ts.name, input_ts.step_size, self.configuration.sim_stepsize
-                ));
-            }
-
-            // Calculate how many timesteps we need for the simulation
-            let sim_steps = 1 + ((self.configuration.sim_end_timestamp
-                - self.configuration.sim_start_timestamp)
-                / self.configuration.sim_stepsize) as usize;
-
-            //Fill any data that might be using the column name as a reference
-            //Fill any data that might be using the column number as a reference
-            //Also fill alias paths if they exist
-            let mut paths_to_fill = vec![
-                self.inputs[i].full_colname_path.clone(),
-                self.inputs[i].full_colindex_path.clone(),
-            ];
-            if let Some(alias_colname) = &self.inputs[i].alias_colname_path {
-                paths_to_fill.push(alias_colname.clone());
-            }
-            if let Some(alias_colindex) = &self.inputs[i].alias_colindex_path {
-                paths_to_fill.push(alias_colindex.clone());
-            }
-            for full_path in paths_to_fill {
-                if let Some(idx) = self.data_cache.get_series_idx(&*full_path, false) {
-                    self.data_cache.series[idx].values.clear();
-                    self.data_cache.series[idx].start_timestamp = self.configuration.sim_start_timestamp;
-                    self.data_cache.series[idx].step_size = self.configuration.sim_stepsize;
-
-                    // For each simulation timestep, find corresponding input value
-                    for step in 0..sim_steps {
-                        let sim_timestamp = self.configuration.sim_start_timestamp
-                            + (step as u64 * self.configuration.sim_stepsize);
-
-                        // Find value at this timestamp in input data
-                        let value = if sim_timestamp >= input_ts.start_timestamp {
-                            let steps_from_input_start = (sim_timestamp - input_ts.start_timestamp)
-                                / input_ts.step_size;
-                            let input_idx = steps_from_input_start as usize;
-
-                            if input_idx < input_ts.values.len() {
-                                input_ts.values[input_idx]
-                            } else {
-                                f64::NAN  // Beyond input data range
-                            }
-                        } else {
-                            f64::NAN  // Before input data starts
-                        };
-
-                        self.data_cache.series[idx].push_value(value);
-                    }
-                }
-            }
-        }
-        self.data_cache.set_start_and_stepsize(self.configuration.sim_start_timestamp,
-                                               self.configuration.sim_stepsize);
-
-        // Reserve capacity in every cache series for the whole simulation, so
-        // per-step recording never reallocates. Capacity only: series lengths
-        // remain the computed-this-far watermark that the fail-fast read
-        // contract depends on (see DataCache::get_current_value).
-        self.data_cache.reserve_all(self.configuration.sim_nsteps as usize);
-
-        //7) Nodes ask data_cache for idx for modelled series they might be responsible for populating
-        //TODO: I think this was already appropriately done in step 2.
-
-        //8) Validate that all data.* references correspond to actual input file columns.
-        //   This catches typos in non-critical data references that the existing
-        //   validation in auto_determine_simulation_period() doesn't check.
-        //   Note: We only check that the reference is valid (exists in an input file),
-        //   not that it has values - non-critical data is allowed to have missing values.
         for idx in 0..self.data_cache.series.len() {
             let name = &self.data_cache.series_name[idx];
             if name.starts_with("data.") {
                 let name_lower = name.to_lowercase();
+                // segment 1 of "data.<alias>.<...>" is the alias/source name
+                if let Some(alias) = name_lower.split('.').nth(1) {
+                    if pending_aliases.contains(alias) {
+                        continue;
+                    }
+                }
                 let mut found = false;
-                for ts in self.inputs.iter() {
+                for ts in self.input_columns() {
                     if name_lower == ts.full_colindex_path || name_lower == ts.full_colname_path {
                         found = true;
                         break;
@@ -337,17 +438,161 @@ impl Model {
                 }
             }
         }
+        Ok(())
+    }
+
+    /// Model configuration needs to be done once, after loading the model, but not for every run.
+    /// May be used to validate a model.
+    pub fn configure(&mut self) -> Result<(), String> {
+        //TASKS
+        //1) Define output series
+        //2) Nodes ask data_cache for idx of relevant data series for input
+        //   (both delegated to configure_model_structure)
+        self.configure_model_structure()?;
+
+        //2b) Reject any input that was declared but never supplied. Nothing in
+        //   the engine can supply a bare declaration, so an empty-valued
+        //   [data] entry is a configure-time error rather than a downstream
+        //   reference-resolution failure. Deferred until here (not part of the
+        //   structural step) so load/patch can accept a not-yet-supplied
+        //   declaration that set_input() will fill before run().
+        let undeclared: Vec<&str> = self
+            .input_sources
+            .iter()
+            .filter_map(|s| match s {
+                TimeseriesInputDefinition::Declaration { alias } => Some(alias.as_str()),
+                _ => None,
+            })
+            .collect();
+        if !undeclared.is_empty() {
+            return Err(format!(
+                "input '{}' declared but not supplied",
+                undeclared.join("', '")
+            ));
+        }
+
+        //3) Read the input data from file
+        // TODO: Here is where we would load data IF we wanted to read only the stuff that was required.
+        //       E.g. if we were doing reload on run with a subset of the data, or
+
+        //4) Determine simulation period
+        //5) Supports sim period specified by user (done in the same step)
+        self.auto_determine_simulation_period()?;
+
+        //6) Load input data into the data_cache, properly aligned with simulation period.
+        //   Iterate the input_sources field directly (source -> column) rather than
+        //   the input_columns() helper: the inner fill takes &mut self.data_cache, and
+        //   the disjoint-field borrow only holds when input_sources is borrowed as a
+        //   direct field access.
+        for source in &self.input_sources {
+            for col in source.columns() {
+                let input_ts = &col.timeseries;
+
+                // Validate that input step size matches simulation step size
+                if input_ts.step_size != self.configuration.sim_stepsize {
+                    return Err(format!(
+                        "Input timeseries '{}' has step_size {} but simulation requires step_size {}",
+                        input_ts.name, input_ts.step_size, self.configuration.sim_stepsize
+                    ));
+                }
+
+                // Calculate how many timesteps we need for the simulation
+                let sim_steps = 1
+                    + ((self.configuration.sim_end_timestamp
+                        - self.configuration.sim_start_timestamp)
+                        / self.configuration.sim_stepsize) as usize;
+
+                //Fill any data that might be using the column name as a reference
+                //Fill any data that might be using the column number as a reference
+                //Also fill alias paths if they exist
+                let mut paths_to_fill = vec![
+                    col.full_colname_path.clone(),
+                    col.full_colindex_path.clone(),
+                ];
+                if let Some(alias_colname) = &col.alias_colname_path {
+                    paths_to_fill.push(alias_colname.clone());
+                }
+                if let Some(alias_colindex) = &col.alias_colindex_path {
+                    paths_to_fill.push(alias_colindex.clone());
+                }
+                for full_path in paths_to_fill {
+                    if let Some(idx) = self.data_cache.get_series_idx(&*full_path, false) {
+                        self.data_cache.series[idx].values.clear();
+                        self.data_cache.series[idx].start_timestamp =
+                            self.configuration.sim_start_timestamp;
+                        self.data_cache.series[idx].step_size = self.configuration.sim_stepsize;
+
+                        // For each simulation timestep, find corresponding input value
+                        for step in 0..sim_steps {
+                            let sim_timestamp = self.configuration.sim_start_timestamp
+                                + (step as u64 * self.configuration.sim_stepsize);
+
+                            // Find value at this timestamp in input data
+                            let value = if sim_timestamp >= input_ts.start_timestamp {
+                                let steps_from_input_start =
+                                    (sim_timestamp - input_ts.start_timestamp) / input_ts.step_size;
+                                let input_idx = steps_from_input_start as usize;
+
+                                if input_idx < input_ts.values.len() {
+                                    input_ts.values[input_idx]
+                                } else {
+                                    f64::NAN // Beyond input data range
+                                }
+                            } else {
+                                f64::NAN // Before input data starts
+                            };
+
+                            self.data_cache.series[idx].push_value(value);
+                        }
+                    }
+                }
+            }
+        }
+        self.data_cache.set_start_and_stepsize(
+            self.configuration.sim_start_timestamp,
+            self.configuration.sim_stepsize,
+        );
+
+        // Reserve capacity in every cache series for the whole simulation, so
+        // per-step recording never reallocates. Capacity only: series lengths
+        // remain the computed-this-far watermark that the fail-fast read
+        // contract depends on (see DataCache::get_current_value).
+        self.data_cache
+            .reserve_all(self.configuration.sim_nsteps as usize);
+
+        //7) Nodes ask data_cache for idx for modelled series they might be responsible for populating
+        //TODO: I think this was already appropriately done in step 2.
+
+        //8) Validate that all data.* references correspond to actual input file columns.
+        //   This catches typos in non-critical data references that the existing
+        //   validation in auto_determine_simulation_period() doesn't check.
+        //   Note: We only check that the reference is valid (exists in an input file),
+        //   not that it has values - non-critical data is allowed to have missing values.
+        self.validate_data_references(false)?;
 
         // Return
         Ok(())
     }
 
+    /// Validate a model's shape and its `data.*` references without requiring
+    /// `[data]` to be fully supplied yet -- the load/patch-time counterpart
+    /// to `configure()`, which additionally requires the simulation period and
+    /// input data itself.
+    pub fn validate_model_structure(&mut self) -> Result<(), String> {
+        self.configure_model_structure()?;
+        self.validate_data_references(true)?;
+        Ok(())
+    }
 
     pub fn run(&mut self) -> Result<(), String> {
         self.run_with_interrupt(|| false, None).map(|_| ())
     }
 
-    pub fn run_with_interrupt<F>(&mut self, interrupt_check: F, mut progress_callback: Option<Box<dyn FnMut(u64, u64)>>) -> Result<bool, String>
+    pub fn run_with_interrupt<F>(
+        &mut self,
+        interrupt_check: F,
+        mut progress_callback: Option<Box<dyn FnMut(u64, u64)>>,
+    ) -> Result<bool, String>
     where
         F: Fn() -> bool,
     {
@@ -364,8 +609,10 @@ impl Model {
         clear_context();
 
         //Calculate total steps for progress reporting
-        let total_steps = ((self.configuration.sim_end_timestamp - self.configuration.sim_start_timestamp)
-            / self.configuration.sim_stepsize) + 1;
+        let total_steps = ((self.configuration.sim_end_timestamp
+            - self.configuration.sim_start_timestamp)
+            / self.configuration.sim_stepsize)
+            + 1;
 
         //Run all timesteps. catch_unwind wraps the WHOLE loop, not each step:
         //one landing pad instead of one per timestep, and no per-step
@@ -376,7 +623,6 @@ impl Model {
         self.data_cache.set_current_step(0);
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             while self.data_cache.current_timestamp <= self.configuration.sim_end_timestamp {
-
                 // Check for interrupt at start of each timestep
                 if interrupt_check() {
                     return false; // Simulation was interrupted
@@ -413,7 +659,6 @@ impl Model {
 
     /// Determine the simulation period on the basis of the available input data
     pub fn auto_determine_simulation_period(&mut self) -> Result<(), String> {
-
         // Get a vec of the critical data from the data_cache
         let civ = self.data_cache.get_critical_input_names();
 
@@ -425,7 +670,10 @@ impl Model {
                     self.configuration.sim_start_timestamp = timestamp;
                 }
                 None => {
-                    return Err("There is no critical input data. Please specify start and end.".to_string());
+                    return Err(
+                        "There is no critical input data. Please specify start and end."
+                            .to_string(),
+                    );
                 }
             }
             match self.configuration.specified_sim_end_timestamp {
@@ -433,7 +681,10 @@ impl Model {
                     self.configuration.sim_end_timestamp = timestamp;
                 }
                 None => {
-                    return Err("There is no critical input data. Please specify start and end.".to_string());
+                    return Err(
+                        "There is no critical input data. Please specify start and end."
+                            .to_string(),
+                    );
                 }
             }
             if self.configuration.sim_start_timestamp > self.configuration.sim_end_timestamp {
@@ -442,8 +693,9 @@ impl Model {
 
             // Default to daily step size and calculate n_steps //TODO: make this customisable
             self.configuration.sim_stepsize = 86400;
-            self.configuration.sim_nsteps = 1 + (self.configuration.sim_end_timestamp -
-                self.configuration.sim_start_timestamp) / self.configuration.sim_stepsize;
+            self.configuration.sim_nsteps = 1
+                + (self.configuration.sim_end_timestamp - self.configuration.sim_start_timestamp)
+                    / self.configuration.sim_stepsize;
 
             // Return
             return Ok(());
@@ -453,37 +705,38 @@ impl Model {
         // As you find them, you can go ahead and update the mask of data availability.
         let mut critical_data_availability_mask: Option<Timeseries> = None;
         for ci in civ {
-
             let ci_lower = ci.to_lowercase();
 
             // Searching for timeseries that matches ci
-            let mut found : bool = false;
-            for ts in self.inputs.iter() {
+            let mut found: bool = false;
+            for ts in self.input_columns() {
                 let matches = (ci_lower == ts.full_colindex_path)
                     || (ci_lower == ts.full_colname_path)
-                    || (ts.alias_colindex_path.as_ref().map_or(false, |p| ci_lower == *p))
-                    || (ts.alias_colname_path.as_ref().map_or(false, |p| ci_lower == *p));
+                    || (ts
+                        .alias_colindex_path
+                        .as_ref()
+                        .map_or(false, |p| ci_lower == *p))
+                    || (ts
+                        .alias_colname_path
+                        .as_ref()
+                        .map_or(false, |p| ci_lower == *p));
 
                 if matches {
                     found = true;
 
-                    // This timeseries appears to be the one we're looking for!
-                    // If it is a critical input AND THE SOURCE IS A FILE then the model run
-                    // will be limited by the data available in the file.
-                    if ts.source_path != "" {
-                        match critical_data_availability_mask {
-                            None => {
-                                //This is the first critical data file
-                                // println!("Initial mask based on {}", ts.source_path);
-                                critical_data_availability_mask = Some(ts.timeseries.clone());
-                            }
-                            Some(ref mut mask) => {
-                                // println!("Mask updated based on {}", ts.source_path);
-                                mask.mask_with(&ts.timeseries);
-                            }
+                    // This column is the critical input we're looking for. Its data
+                    // limits the simulation period — this holds for both file-backed
+                    // and in-memory sources, and every column reaching this loop
+                    // carries real data (declarations have none), so it always
+                    // contributes to the mask.
+                    match critical_data_availability_mask {
+                        None => {
+                            //This is the first critical data source
+                            critical_data_availability_mask = Some(ts.timeseries.clone());
                         }
-                    } else {
-                        // println!("Mask not influenced by {}", ts.source_path);
+                        Some(ref mut mask) => {
+                            mask.mask_with(&ts.timeseries);
+                        }
                     }
                 }
             }
@@ -529,25 +782,31 @@ impl Model {
         // Override with dates specified in the model, if relevant
         match self.configuration.specified_sim_start_timestamp {
             Some(timestamp) => {
-                if (timestamp < self.configuration.sim_start_timestamp) ||
-                    (timestamp > self.configuration.sim_end_timestamp) {
+                if (timestamp < self.configuration.sim_start_timestamp)
+                    || (timestamp > self.configuration.sim_end_timestamp)
+                {
                     return Err("Specified start inconsistent with input data.".to_string());
                 }
                 self.configuration.sim_start_timestamp = timestamp;
-                self.configuration.sim_nsteps = 1 + (self.configuration.sim_end_timestamp -
-                    self.configuration.sim_start_timestamp) / self.configuration.sim_stepsize;
+                self.configuration.sim_nsteps = 1
+                    + (self.configuration.sim_end_timestamp
+                        - self.configuration.sim_start_timestamp)
+                        / self.configuration.sim_stepsize;
             }
             None => {}
         }
         match self.configuration.specified_sim_end_timestamp {
             Some(timestamp) => {
-                if (timestamp < self.configuration.sim_start_timestamp) ||
-                    (timestamp > self.configuration.sim_end_timestamp) {
+                if (timestamp < self.configuration.sim_start_timestamp)
+                    || (timestamp > self.configuration.sim_end_timestamp)
+                {
                     return Err("Specified end inconsistent with input data.".to_string());
                 }
                 self.configuration.sim_end_timestamp = timestamp;
-                self.configuration.sim_nsteps = 1 + (self.configuration.sim_end_timestamp -
-                    self.configuration.sim_start_timestamp) / self.configuration.sim_stepsize;
+                self.configuration.sim_nsteps = 1
+                    + (self.configuration.sim_end_timestamp
+                        - self.configuration.sim_start_timestamp)
+                        / self.configuration.sim_stepsize;
             }
             None => {}
         }
@@ -556,9 +815,7 @@ impl Model {
         Ok(())
     }
 
-
     pub fn run_timestep(&mut self, _t: u64) {
-
         // Accounting policy: [ras.*] systems run in file order at the top of
         // the step, before ordering and flow — today's orders and takes see
         // today's announcements (kalix-allocation-components.md §3.3).
@@ -572,7 +829,11 @@ impl Model {
 
         // Execute order phase
         set_context_phase(SimPhase::Ordering);
-        self.simple_ordering_system.run_ordering_phase(&mut self.nodes, &mut self.data_cache, &mut self.account_manager);
+        self.simple_ordering_system.run_ordering_phase(
+            &mut self.nodes,
+            &mut self.data_cache,
+            &mut self.account_manager,
+        );
 
         // Execute nodes and var blocks with flow phase, interleaved in
         // definition order (file position IS execution position for var
@@ -592,7 +853,8 @@ impl Model {
                 set_context_node(node_idx);
 
                 // Run the node's flow phase
-                self.nodes[node_idx].run_flow_phase(&mut self.data_cache, &mut self.account_manager);
+                self.nodes[node_idx]
+                    .run_flow_phase(&mut self.data_cache, &mut self.account_manager);
 
                 // Immediately propagate outflows to downstream nodes
                 for &link_idx in &self.outgoing_links[node_idx] {
@@ -609,7 +871,8 @@ impl Model {
                 match exec_item {
                     ExecItem::Node(node_idx) => {
                         set_context_node(node_idx);
-                        self.nodes[node_idx].run_flow_phase(&mut self.data_cache, &mut self.account_manager);
+                        self.nodes[node_idx]
+                            .run_flow_phase(&mut self.data_cache, &mut self.account_manager);
                         for &link_idx in &self.outgoing_links[node_idx] {
                             let link = &self.links[link_idx];
                             let outflow = self.nodes[node_idx].remove_dsflow(link.from_outlet);
@@ -639,7 +902,6 @@ impl Model {
     }
 
     pub fn initialize_network(&mut self) -> Result<(), String> {
-
         // Initialize the nodes and execution order
         self.initialize_nodes()?;
         self.check_execution_order()?;
@@ -647,19 +909,25 @@ impl Model {
 
         // Initialise the ordering system
         // TODO: I am doing this in "initialize_network" because it relies on execution order being resolved (which we do above).
-        self.simple_ordering_system.initialize(
-            &mut self.nodes, &self.links, &self.incoming_links
-        );
+        self.simple_ordering_system
+            .initialize(&mut self.nodes, &self.links, &self.incoming_links);
 
         // Return
         Ok(())
     }
 
-
     pub fn empty_input_data(&mut self) {
-        self.inputs.clear();
+        self.input_sources.clear();
     }
-    
+
+    /// Every input data column across all sources, flattened. The read-only
+    /// convenience for consumers that don't care which source a column came
+    /// from (validation, sim-period determination). Borrows all of `self`, so
+    /// it can't be used where another `self` field is mutated in the same loop —
+    /// iterate the `input_sources` field directly there.
+    pub fn input_columns(&self) -> impl Iterator<Item = &TimeseriesInput> {
+        self.input_sources.iter().flat_map(|s| s.columns())
+    }
 
     /// Resolve a file path relative to the model's working directory.
     /// Supports absolute, relative, and trailhead (`^/`) paths.
@@ -669,29 +937,48 @@ impl Model {
         Ok(kp.resolved)
     }
 
-    /// Load input data from a file and store it in the model's inputs vector.
-    /// Responsible for remembering how the input was loaded (original path, alias) and for resolving the path.
-    /// Construction of the TimeseriesInput is delegated to the TimeseriesInput::load function.
-    pub fn load_input_data(&mut self, file_path: &str, alias: Option<&str>) -> Result<usize, String> {
-        // Remember the ORIGINAL input file path (for serialization/display)
-        self.input_file_paths.push(file_path.to_string());
-        // Remember also the alias if provided
-        if let Some(alias_str) = alias {
-            self.alias_map.insert(file_path.to_string(), alias_str.to_string());
-        }
-
-        // Resolve the path (supports absolute, relative, and trailhead paths)
-        let resolved_path = self.resolve_path(file_path)?;
-
-        // Load all the data using the resolved path
-        let resolved_path_str = resolved_path.to_str()
-            .ok_or_else(|| format!("Invalid path: {}", file_path))?;
-        let mut x = TimeseriesInput::load(resolved_path_str, alias)?;
-        let len = x.len();
-        self.inputs.append(&mut x);
-        Ok(len)
+    /// Declare an input alias with no backing data (an empty-valued `[data]`
+    /// entry). Nothing here supplies it, so `configure()` will reject it unless
+    /// something fills it in first (e.g. `set_input()`).
+    pub fn declare_alias(&mut self, alias: &str) {
+        self.input_sources
+            .push(TimeseriesInputDefinition::Declaration {
+                alias: alias.to_string(),
+            });
     }
 
+    /// Load input data from a file and store it as a new input source.
+    /// Responsible for remembering how the input was loaded (original path,
+    /// alias) and for resolving the path. Construction of the per-column
+    /// TimeseriesInputs is delegated to TimeseriesInput::load. Returns the
+    /// number of columns loaded.
+    pub fn load_input_data(
+        &mut self,
+        file_path: &str,
+        alias: Option<&str>,
+    ) -> Result<usize, KalixIoError> {
+        // Resolve the path (supports absolute, relative, and trailhead paths)
+        let resolved_path = self.resolve_path(file_path).map_err(KalixIoError::Io)?;
+
+        // Load all the data using the resolved path
+        let resolved_path_str = resolved_path
+            .to_str()
+            .ok_or_else(|| KalixIoError::Io(format!("Invalid path: {}", file_path)))?;
+        let columns = TimeseriesInput::load(resolved_path_str, alias)?;
+        let len = columns.len();
+
+        // Remember the ORIGINAL file path (for serialization/display), not the
+        // resolved one, so a round-trip preserves what the user wrote.
+        self.input_sources
+            .push(TimeseriesInputDefinition::FileDefinition {
+                origin: SourceOrigin::File {
+                    path: file_path.to_string(),
+                    alias: alias.map(|a| a.to_string()),
+                },
+                columns,
+            });
+        Ok(len)
+    }
 
     /// Check execution order.
     ///
@@ -700,7 +987,6 @@ impl Model {
     /// otherwise. It deliberately does NOT topologically sort - the model
     /// file must remain a faithful, readable account of what runs.
     fn check_execution_order(&mut self) -> Result<(), String> {
-
         // Execution order according to node index
         self.execution_order.clear();
         for node_idx in 0..self.nodes.len() {
@@ -743,9 +1029,70 @@ impl Model {
         None
     }
 
+    /// Each node's mass balance per timestep (ML/timestep), as
+    /// `(node_name, type_name, value)`, ordered by node type (preferred
+    /// types first, then any others alphabetically) and by node name within
+    /// a type. `generate_mass_balance_report` and the Python `_get_mass_balance`
+    /// binding are both projections of this same ordered list, so the text
+    /// report and the DataFrame can't drift apart.
+    pub fn get_mass_balance_data(&self) -> Vec<(String, String, f64)> {
+        let mut remaining_nodes: Vec<String> = self
+            .nodes
+            .iter()
+            .map(|node| node.get_name().to_string())
+            .collect();
+        remaining_nodes.sort();
 
-    ///
+        let mut by_type: HashMap<String, Vec<(String, f64)>> = HashMap::new();
+        for node_name in &remaining_nodes {
+            let node = self.get_node(node_name).unwrap();
+            let type_name = node.get_type_as_string();
+            let mbal_per_timestep =
+                node.get_mass_balance() / (self.configuration.sim_nsteps as f64);
+            by_type
+                .entry(type_name)
+                .or_default()
+                .push((node_name.clone(), mbal_per_timestep));
+        }
+
+        // Preferred type order first, then any other type names (e.g. newly
+        // added ones) alphabetically, so nothing silently vanishes.
+        let preferred_order = [
+            "inflow",
+            "sacramento",
+            "gr4j",
+            "regulated_user",
+            "unregulated_user",
+            "order_control",
+            "loss",
+            "storage",
+            "routing",
+            "splitter",
+            "confluence",
+            "gauge",
+            "blackhole",
+        ];
+
+        let mut result = Vec::with_capacity(remaining_nodes.len());
+        for type_name in preferred_order {
+            if let Some(nodes) = by_type.remove(type_name) {
+                for (name, value) in nodes {
+                    result.push((name, type_name.to_string(), value));
+                }
+            }
+        }
+        let mut leftover_types: Vec<_> = by_type.into_iter().collect();
+        leftover_types.sort_by(|a, b| a.0.cmp(&b.0));
+        for (type_name, nodes) in leftover_types {
+            for (name, value) in nodes {
+                result.push((name, type_name.clone(), value));
+            }
+        }
+        result
+    }
+
     pub fn generate_mass_balance_report(&self) -> String {
+        let data = self.get_mass_balance_data();
 
         let mut report = "".to_string();
         report.push_str("==================================\n");
@@ -761,61 +1108,31 @@ impl Model {
         report.push_str(format!("  Period: {}, {}\n", start_str, end_str).as_str());
         report.push_str(format!("  Note: units are ML/timestep\n\n").as_str());
 
-        // Remaining nodes (<--- here is where you might allow people to organise nodes manually
-        let mut remaining_nodes: Vec<String> = self.nodes
-            .iter().map(|node| node.get_name().to_string()).collect();
-        remaining_nodes.sort();
-
-        // Get keys and values in sorted order
-        // let mut items: Vec<(&String, &f64)> = blah.iter().collect();
-        // items.sort_by_key(|&(key, _)| key);
-
-        // Keep track of the total
-        let mut total_mbal = 0f64;
-
-        // Nodes by type
-        let mut report_section_dict: HashMap<String, String> = HashMap::new();
-        for node_name in &remaining_nodes {
-
-            // Get the section for this node type (start that section if needed)
-            let node = self.get_node(node_name).unwrap();
-            let type_name = node.get_type_as_string();
-            if !report_section_dict.contains_key(&type_name) {
-                report_section_dict.insert(type_name.clone(), format!("{} NODES\n", type_name.to_uppercase()));
+        // Section per node type, in `data`'s order; a type change in the
+        // (already-ordered) list starts a new section.
+        let mut current_type: Option<&str> = None;
+        for (node_name, type_name, mbal_per_timestep) in &data {
+            if current_type != Some(type_name.as_str()) {
+                if current_type.is_some() {
+                    report.push_str("\n");
+                }
+                report.push_str(format!("{} NODES\n", type_name.to_uppercase()).as_str());
+                current_type = Some(type_name.as_str());
             }
-
-            // Add a line for this node
-            let mbal_per_timestep = node.get_mass_balance() / (self.configuration.sim_nsteps as f64);
-            let mut section = report_section_dict.remove(&type_name).unwrap();
-            section.push_str(format!("  {}, {}\n", node_name, mbal_per_timestep).as_str());
-            report_section_dict.insert(type_name.clone(), section);
-
-            //Keep track of the total
-            total_mbal += mbal_per_timestep;
+            report.push_str(format!("  {}, {}\n", node_name, mbal_per_timestep).as_str());
         }
-
-        // Now put all the sections together: the preferred order first, then
-        // any node types not in the list (e.g. newly added ones) so nothing
-        // silently vanishes from the report.
-        let preferred_order = [
-            "inflow",
-            "sacramento", "gr4j",
-            "regulated_user", "unregulated_user", "order_control", "loss",
-            "storage", "routing",
-            "splitter", "confluence", "gauge",
-            "blackhole"];
-        for type_name in preferred_order {
-            if let Some(s) = report_section_dict.remove(type_name) {
-                report.push_str(&s);
-                report.push_str("\n");
-            }
-        }
-        let mut leftovers: Vec<_> = report_section_dict.into_iter().collect();
-        leftovers.sort_by(|a, b| a.0.cmp(&b.0));
-        for (_, s) in leftovers {
-            report.push_str(&s);
+        if current_type.is_some() {
             report.push_str("\n");
         }
+
+        // Sum in node-name order (not `data`'s type-grouped order): these
+        // values nearly cancel to zero, so floating-point addition is not
+        // associative here -- summation order must match the pre-refactor
+        // behaviour (alphabetical by name) or the total's rounding residual
+        // shifts and trips the regression suite's tight tolerance on this line.
+        let mut by_name: Vec<&(String, String, f64)> = data.iter().collect();
+        by_name.sort_by(|a, b| a.0.cmp(&b.0));
+        let total_mbal: f64 = by_name.iter().map(|(_, _, v)| v).sum();
 
         // Write the total line
         report.push_str("----------------------------------\n");
@@ -826,23 +1143,71 @@ impl Model {
         report
     }
 
-
-
-    /// Prints all the inputs to the console, one on each line.
+    /// Prints all the input sources to the console, one column on each line.
     pub fn print_inputs(&self) {
-        let mut i = 0;
-        for input in &self.inputs {
-            println!("Input: {} {} {}", i, input.full_colname_path, input.full_colindex_path);
-            if let Some(alias) = &input.alias {
-                println!("  Alias: {} (also accessible as {} and {})",
-                    alias,
-                    input.alias_colname_path.as_ref().unwrap_or(&String::new()),
-                    input.alias_colindex_path.as_ref().unwrap_or(&String::new()));
+        // Renders a source's identity line, e.g. "Source (file): climate.csv [alias: climate]".
+        fn print_source_origin(kind: &str, origin: &SourceOrigin) {
+            match origin {
+                SourceOrigin::Alias(a) => println!("Source ({}): {}", kind, a),
+                SourceOrigin::File { path, alias } => println!(
+                    "Source ({}): {}{}",
+                    kind,
+                    path,
+                    alias
+                        .as_ref()
+                        .map(|a| format!(" [alias: {}]", a))
+                        .unwrap_or_default()
+                ),
             }
-            i += 1;
+        }
+        for source in &self.input_sources {
+            match source {
+                TimeseriesInputDefinition::Declaration { alias } => {
+                    println!("Source (declared, no data): {}", alias);
+                }
+                TimeseriesInputDefinition::FileDefinition { origin, .. } => {
+                    print_source_origin("file", origin);
+                }
+                TimeseriesInputDefinition::InMemoryDefinition { origin, .. } => {
+                    print_source_origin("in-memory", origin);
+                }
+            }
+            let mut i = 0;
+            for col in source.columns() {
+                println!(
+                    "  Input: {} {} {}",
+                    i, col.full_colname_path, col.full_colindex_path
+                );
+                if let Some(alias) = &col.alias {
+                    println!(
+                        "    Alias: {} (also accessible as {} and {})",
+                        alias,
+                        col.alias_colname_path.as_ref().unwrap_or(&String::new()),
+                        col.alias_colindex_path.as_ref().unwrap_or(&String::new())
+                    );
+                }
+                i += 1;
+            }
         }
     }
 
+    /// Result of looking up a named output series in the data cache, checked
+    /// against the simulation horizon (`sim_nsteps`). The single place that
+    /// defines "populated" for an output — both `collect_output_series` and
+    /// `get_output_series` go through this so the rule can't drift between them.
+    fn lookup_output_series(&self, name: &str, expected_len: usize) -> OutputLookup<'_> {
+        match self.data_cache.get_existing_series_idx(name) {
+            None => OutputLookup::NotFound,
+            Some(idx) => {
+                let ts = &self.data_cache.series[idx];
+                if ts.values.len() == expected_len {
+                    OutputLookup::Populated(ts)
+                } else {
+                    OutputLookup::WrongLength(ts.values.len())
+                }
+            }
+        }
+    }
 
     /// Collects the output series that are valid to export — those whose length matches the
     /// simulation horizon (`sim_nsteps`). An output declared in `[outputs]` but never
@@ -851,20 +1216,104 @@ impl Model {
     /// export. Returned in the order the outputs are declared.
     pub(crate) fn collect_output_series(&self) -> Vec<&Timeseries> {
         let expected_len = self.configuration.sim_nsteps as usize;
-        let mut vec_ts: Vec<&Timeseries> = Vec::new();
-        for output_name in &self.outputs {
-            if let Some(idx) = self.data_cache.get_existing_series_idx(output_name) {
-                let ts = &self.data_cache.series[idx];
-                if ts.values.len() == expected_len {
-                    vec_ts.push(ts);
+        self.outputs
+            .iter()
+            .filter_map(
+                |output_name| match self.lookup_output_series(output_name, expected_len) {
+                    OutputLookup::Populated(ts) => Some(ts),
+                    OutputLookup::NotFound | OutputLookup::WrongLength(_) => None,
+                },
+            )
+            .collect()
+    }
+
+    /// Builds a zero-filled `Timeseries` of the simulation's length, used as
+    /// the `missing_ok` stand-in for a requested output that is undeclared,
+    /// not found, or the wrong length. Named with whatever casing the caller
+    /// originally requested, since there may be no canonical declared name
+    /// to fall back on (e.g. an undeclared name).
+    fn zero_output_series(&self, requested_name: &str, expected_len: usize) -> Timeseries {
+        let mut ts = Timeseries::new(self.configuration.sim_stepsize);
+        ts.start_timestamp = self.configuration.sim_start_timestamp;
+        ts.name = requested_name.to_string();
+        ts.values = vec![0.0; expected_len];
+        ts
+    }
+
+    /// Output series to export, in declaration order.
+    ///
+    /// `names = None` selects all declared outputs, silently omitting any that
+    /// are unpopulated (see `collect_output_series`). Named series that are
+    /// undeclared or unpopulated are an error, unless `missing_ok` is `true`,
+    /// in which case such a requested name is instead returned as a
+    /// zero-filled series of the simulation's length (see
+    /// `zero_output_series`) rather than failing the whole call. Name
+    /// matching is case-insensitive throughout. Requesting the same output
+    /// more than once is not an error - the returned vector has exactly one
+    /// entry per requested name, in request order (i.e. it is never
+    /// deduplicated).
+    ///
+    /// Each returned `Timeseries` carries its *canonical stored* name (see
+    /// `Timeseries::name`) - the casing it was registered/declared under -
+    /// which may differ from the casing a caller requested it with. Zero-fill
+    /// stand-ins carry the requested casing instead, since there may be no
+    /// canonical name to use.
+    ///
+    /// Used for Python bindings.
+    pub fn get_output_series(
+        &self,
+        output_names: Option<Vec<String>>,
+        missing_ok: bool,
+    ) -> Result<Vec<Timeseries>, OutputLookupError> {
+        let Some(vec_names) = output_names else {
+            return Ok(self.collect_output_series().into_iter().cloned().collect());
+        };
+
+        let expected_len = self.configuration.sim_nsteps as usize;
+        let names_hash: HashSet<String> =
+            HashSet::from_iter(self.outputs.iter().map(|x| x.to_lowercase()));
+        let mut vec_ts: Vec<Timeseries> = Vec::with_capacity(vec_names.len());
+        for output_name in vec_names {
+            if !names_hash.contains(&output_name.to_lowercase()) {
+                if missing_ok {
+                    vec_ts.push(self.zero_output_series(&output_name, expected_len));
+                    continue;
+                }
+                return Err(OutputLookupError::Undeclared(output_name));
+            }
+            match self.lookup_output_series(&output_name, expected_len) {
+                OutputLookup::Populated(ts) => vec_ts.push(ts.clone()),
+                OutputLookup::WrongLength(len) => {
+                    if missing_ok {
+                        vec_ts.push(self.zero_output_series(&output_name, expected_len));
+                        continue;
+                    }
+                    // Empty is the common, user-caused case (an `[outputs]`
+                    // entry naming a series nothing produces); any other
+                    // length is a recorder disagreeing with the run.
+                    return Err(if len == 0 {
+                        OutputLookupError::Unpopulated(output_name)
+                    } else {
+                        OutputLookupError::WrongLength {
+                            name: output_name,
+                            actual: len,
+                            expected: expected_len,
+                        }
+                    });
+                }
+                OutputLookup::NotFound => {
+                    if missing_ok {
+                        vec_ts.push(self.zero_output_series(&output_name, expected_len));
+                        continue;
+                    }
+                    return Err(OutputLookupError::NotFound(output_name));
                 }
             }
         }
-        vec_ts
+        Ok(vec_ts)
     }
 
     pub fn write_outputs(&self, filename: &str) -> Result<(), String> {
-
         let vec_ts = self.collect_output_series();
 
         // Dispatch by extension: .pxb or .pxt → paired Pixie format,
@@ -875,14 +1324,18 @@ impl Model {
             pixie_io::write_series(base_path, &vec_ts)
                 .map_err(|e| format!("Could not write file {}: {:?}", filename, e))
         } else {
-            write_ts(filename, vec_ts)
-                .map_err(|_| format!("Could not write file {}", filename))
+            write_ts(filename, vec_ts).map_err(|_| format!("Could not write file {}", filename))
         }
     }
 
     /// Update a node's parameter in the attached INI document
     /// This is typically used after parameter optimisation
-    pub fn update_node_parameter_in_ini(&mut self, node_name: &str, param_name: &str, value: &str) -> Result<(), String> {
+    pub fn update_node_parameter_in_ini(
+        &mut self,
+        node_name: &str,
+        param_name: &str,
+        value: &str,
+    ) -> Result<(), String> {
         if let Some(ref mut ini_doc) = self.ini_document {
             let section_name = format!("node.{}", node_name);
             ini_doc.set_property(&section_name, param_name, value);

@@ -3,26 +3,39 @@ use indexmap::IndexMap;
 
 #[derive(Debug, Clone)]
 pub struct IniProperty {
-    pub value: String,                // Clean, joined value
-    pub line_number: usize,           // Line where property starts
-    pub raw_lines: Vec<String>,       // Original lines for round-tripping
-    pub leading_lines: Vec<String>,    // Comments and blank lines before this property
-    pub comments: Vec<Option<String>>, // Inline comments indexed by continuation line (0=first line, 1=second line, etc.)
-    pub valid: bool,                  // Used for mark-and-sweep updates
+    /// Clean, joined value
+    pub value: String,
+    /// Line where property starts
+    pub line_number: usize,
+    /// Original lines for round-tripping
+    pub raw_lines: Vec<String>,
+    /// Comments and blank lines before this property
+    pub leading_lines: Vec<String>,
+    /// Inline comments indexed by continuation line (0=first line, 1=second line, etc.)
+    pub comments: Vec<Option<String>>,
+    /// Used for mark-and-sweep updates
+    pub valid: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct IniSection {
     pub properties: IndexMap<String, IniProperty>,
-    pub leading_lines: Vec<String>,    // Comments and blank lines before [section]
-    pub line_number: usize,            // Line where [section] appears
-    pub valid: bool,                   // Used for mark-and-sweep updates
+    /// Comments and blank lines before [section]
+    pub leading_lines: Vec<String>,
+    /// Line where [section] appears
+    pub line_number: usize,
+    /// Used for mark-and-sweep updates
+    pub valid: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct IniDocument {
+    /// Maps section name to `IniSection`, preserving file order. For node
+    /// sections this order is execution order and must not be resorted -
+    /// per manifestos/node-definition-order.md
     pub sections: IndexMap<String, IniSection>,
-    pub trailing_comments: Vec<String>, // Comments at end of file
+    /// Comments at end of file
+    pub trailing_comments: Vec<String>, 
 }
 
 #[derive(Debug)]
@@ -236,14 +249,10 @@ impl IniDocument {
     /// Returns a mutable reference to the section for further modifications
     pub fn set_property(&mut self, section_name: &str, key: &str, new_value: &str) -> &mut IniSection {
         // Get or create the section
-        let section = self.sections.entry(section_name.to_string()).or_insert_with(|| {
-            IniSection {
-                properties: IndexMap::new(),
-                leading_lines: Vec::new(),
-                line_number: 0, // New sections don't have a line number from original file
-                valid: true,
-            }
-        });
+        let section = self
+            .sections
+            .entry(section_name.to_string())
+            .or_insert_with(|| IniSection::default());
 
         // Mark section as valid
         section.valid = true;
@@ -257,14 +266,13 @@ impl IniDocument {
             property.valid = true; // Mark as valid
         } else {
             // Create new property
-            section.properties.insert(key.to_string(), IniProperty {
-                value: new_value.to_string(),
-                line_number: 0, // New properties don't have a line number from original file
-                raw_lines: Vec::new(), // Empty indicates newly created
-                leading_lines: Vec::new(),
-                comments: Vec::new(),
-                valid: true,
-            });
+            section.properties.insert(
+                key.to_string(),
+                IniProperty {
+                    value: new_value.to_string(),
+                    ..Default::default()
+                },
+            );
         }
 
         section
@@ -275,6 +283,38 @@ impl IniDocument {
         self.sections.get(section_name)
             .and_then(|section| section.properties.get(key))
             .map(|property| property.value.as_str())
+    }
+
+    pub fn get_section_names(&self) -> Vec<String> {
+        self.sections.keys().cloned().collect()
+    }
+
+    pub fn get_section(&self, section_name: &str) -> Option<&IniSection> {
+        self.sections.get(section_name)
+    }
+
+    pub fn has_section(&self, section_name: &str) -> bool {
+        self.sections.contains_key(section_name)
+    }
+
+    /// Inserts `section` under `section_name`, replacing it wholesale if
+    /// already present (in place) or appending it otherwise. Returns a
+    /// mutable reference to the inserted section for further modifications.
+    pub fn set_section(&mut self, section_name: String, section: IniSection) -> &mut IniSection {
+        match self.sections.entry(section_name) {
+            indexmap::map::Entry::Occupied(mut e) => {
+                *e.get_mut() = section;
+                e.into_mut()
+            }
+            indexmap::map::Entry::Vacant(e) => e.insert(section),
+        }
+    }
+
+    /// Removes `section_name` wholesale. Errors if the section does not exist.
+    pub fn remove_section(&mut self, section_name: &str) -> Result<IniSection, String> {
+        self.sections
+            .shift_remove(section_name)
+            .ok_or_else(|| format!("Section '{}' does not exist", section_name))
     }
 
     /// Mark all sections and properties as invalid
@@ -426,6 +466,36 @@ impl IniDocument {
         }
 
         result
+    }
+}
+
+impl Default for IniProperty {
+    fn default() -> Self {
+        IniProperty {
+            value: String::new(),
+            line_number: 0, // New properties don't have a line number from original file
+            raw_lines: Vec::new(), // Empty indicates newly created
+            leading_lines: Vec::new(),
+            comments: Vec::new(),
+            valid: true,
+        }
+    }
+}
+
+impl Default for IniSection {
+    fn default() -> Self {
+        IniSection {
+            properties: IndexMap::new(),
+            leading_lines: Vec::new(),
+            line_number: 0, // New sections don't have a line number from original file
+            valid: true,
+        }
+    }
+}
+
+impl Default for IniDocument {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

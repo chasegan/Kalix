@@ -367,7 +367,7 @@ type = blackhole
 [outputs]
 node.a.ds_1
 ";
-    let mut model = IniModelIO::new().read_model_string(ini)
+    let mut model = IniModelIO::read_model_string(ini)
         .expect("model with a program inflow should parse");
     model.configure().expect("configuration should succeed");
     model.run().expect("run should succeed");
@@ -414,7 +414,7 @@ type = blackhole
 [outputs]
 node.a.ds_1
 ";
-    let mut model = IniModelIO::new().read_model_string(ini)
+    let mut model = IniModelIO::read_model_string(ini)
         .expect("model should parse");
     model.configure().expect("configuration should succeed");
 
@@ -460,7 +460,7 @@ type = blackhole
 [outputs]
 node.a.ds_1
 ";
-    let mut model = IniModelIO::new().read_model_string(ini)
+    let mut model = IniModelIO::read_model_string(ini)
         .expect("model should parse");
     model.configure().expect("configuration should succeed");
 

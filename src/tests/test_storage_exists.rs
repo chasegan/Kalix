@@ -34,14 +34,14 @@ fn model_ini(exists_line: &str) -> String {
 
 #[test]
 fn exists_absent_leaves_the_input_unset() {
-    let m = IniModelIO::new().read_model_string(&model_ini("")).unwrap();
+    let m = IniModelIO::read_model_string(&model_ini("")).unwrap();
     assert!(matches!(exists_of(&m, "test_storage"), DynamicInput::None { .. }),
             "an absent `exists` must stay unset, so the storage always exists");
 }
 
 #[test]
 fn exists_constant_parses() {
-    let m = IniModelIO::new().read_model_string(&model_ini("exists = 0\n")).unwrap();
+    let m = IniModelIO::read_model_string(&model_ini("exists = 0\n")).unwrap();
     assert!(!matches!(exists_of(&m, "test_storage"), DynamicInput::None { .. }),
             "`exists = 0` must parse into a configured input");
 }
@@ -50,20 +50,17 @@ fn exists_constant_parses() {
 /// would write a parameter the modeller never typed.
 #[test]
 fn absent_exists_is_not_emitted() {
-    let io = IniModelIO::new();
-    let m = io.read_model_string(&model_ini("")).unwrap();
-    let serialised = io.model_to_string(&m);
+    let m = IniModelIO::read_model_string(&model_ini("")).unwrap();
+    let serialised = IniModelIO::model_to_string(&m);
     assert!(!serialised.contains("exists"),
             "absent `exists` should not be serialised, got:\n{}", serialised);
 }
 
 #[test]
 fn exists_survives_a_full_round_trip() {
-    let io = IniModelIO::new();
-
-    let m1 = io.read_model_string(&model_ini("exists = 1\n")).unwrap();
-    let serialised = io.model_to_string(&m1);
-    let m2 = io.read_model_string(&serialised).unwrap();
+    let m1 = IniModelIO::read_model_string(&model_ini("exists = 1\n")).unwrap();
+    let serialised = IniModelIO::model_to_string(&m1);
+    let m2 = IniModelIO::read_model_string(&serialised).unwrap();
 
     let before = exists_of(&m1, "test_storage").to_string();
     let after = exists_of(&m2, "test_storage").to_string();

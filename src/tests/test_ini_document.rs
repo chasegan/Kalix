@@ -20,15 +20,14 @@ params = 0.01, 40.0, 23.0,
          40.0, 0.245, 50.0, 40.0, 0.1
 "#;
 
-    let io = IniModelIO::new();
-    let result = io.read_model_string(content);
+    let result = IniModelIO::read_model_string(content);
 
     // Should parse successfully (though may fail model validation due to incomplete model)
     match result {
         Ok(_) => println!("✅ Line continuation parsing successful!"),
         Err(e) => {
             // Expected to fail at model building stage, not parsing stage
-            assert!(!e.contains("Invalid line format"), "Should not fail at parsing stage: {}", e);
+            assert!(!e.to_string().contains("Invalid line format"), "Should not fail at parsing stage: {}", e);
             println!("✅ Parsing succeeded, model building failed as expected: {}", e);
         }
     }
@@ -222,8 +221,7 @@ node.gr4j_node.dsflow
 "#;
 
     // Step 1: Load model
-    let ini_io = IniModelIO::new();
-    let mut model = ini_io.read_model_string(original_ini).unwrap();
+    let mut model = IniModelIO::read_model_string(original_ini).unwrap();
 
     // Verify INI document is attached
     assert!(model.ini_document.is_some());
@@ -237,7 +235,7 @@ node.gr4j_node.dsflow
     println!("Updated INI:\n{}", updated_ini);
 
     // Step 4: Reload from the updated string
-    let model2 = ini_io.read_model_string(&updated_ini).unwrap();
+    let model2 = IniModelIO::read_model_string(&updated_ini).unwrap();
 
     // Verify the parameter was updated
     if let Some(ref ini_doc) = model2.ini_document {
@@ -295,8 +293,7 @@ node.simple_node.dsflow
     }
 
     // Load model
-    let ini_io = IniModelIO::new();
-    let mut model = ini_io.read_model_string_with_working_directory(original_ini, Some(PathBuf::from( "./src/tests"))).unwrap();
+    let mut model = IniModelIO::read_model_string_with_working_directory(original_ini, Some(PathBuf::from( "./src/tests"))).unwrap();
 
     // Modify a parameter
     model.update_node_parameter_in_ini("simple_node", "loc", "15.0, 25.0").unwrap();
@@ -305,7 +302,7 @@ node.simple_node.dsflow
     model.save_ini_to_file(test_file_path).unwrap();
 
     // Reload from file
-    let model2 = ini_io.read_model_file(test_file_path).unwrap();
+    let model2 = IniModelIO::read_model_file(test_file_path).unwrap();
 
     // Verify the change
     if let Some(ref ini_doc) = model2.ini_document {

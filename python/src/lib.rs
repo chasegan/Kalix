@@ -3,14 +3,61 @@
 //! v0.1: just Pixie (.pxt/.pxb) I/O. Functions are prefixed with `_` and re-exported
 //! through the Python `kalix` package, which adds pandas/numpy ergonomics.
 
-use kalix::io::pixie_io;
+mod error;
+
+use kalix::io::error::KalixIoError;
+use kalix::io::ini_model_io::IniModelIO;
+use kalix::io::model_input_swap;
+use kalix::io::model_patch::{patch_delete, patch_merge, patch_replace, PatchError};
+use kalix::io::{model_query, pixie_io};
+use kalix::model::{Model, OutputLookupError};
 use kalix::run;
 use kalix::tid::utils::{wrap_to_i64, wrap_to_u64};
 use kalix::timeseries::Timeseries;
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::{PyIOError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyList};
+
+/// Maps the engine's Io/Parse/Validate distinction to the corresponding
+/// Python exception type: a genuine filesystem failure becomes `OSError`, a
+/// value that couldn't be read becomes `ModelParseError`, and a model that
+/// doesn't hold together becomes `ModelValidationError`.
+fn io_err_to_py(e: KalixIoError) -> PyErr {
+    match e {
+        KalixIoError::Io(msg) => PyIOError::new_err(msg),
+        KalixIoError::Parse(msg) => error::ModelParseError::new_err(msg),
+        KalixIoError::Validate(msg) => error::ModelValidationError::new_err(msg),
+    }
+}
+
+/// Maps a failed output lookup to its Python exception.
+///
+/// Undeclared/not-found/unpopulated are all the caller naming something that
+/// isn't there -- a lookup that missed -- so they stay `KalixKeyError`, each
+/// carrying its own message about *which* way it missed. A populated series
+/// of the wrong length is different in kind: the name resolved and the data
+/// behind it contradicts the run that just succeeded, which is engine state
+/// rather than a bad key, so it joins the other precondition failures as
+/// `KalixRuntimeError`.
+fn output_err_to_py(py: Python<'_>, e: OutputLookupError) -> PyErr {
+    match e {
+        OutputLookupError::Undeclared(_)
+        | OutputLookupError::NotFound(_)
+        | OutputLookupError::Unpopulated(_) => error::new_kalix_key_error(py, e.to_string()),
+        OutputLookupError::WrongLength { .. } => error::new_kalix_runtime_error(py, e.to_string()),
+    }
+}
+
+fn patch_err_to_py<'py>(py: Python<'py>, e: PatchError) -> PyErr {
+    match e {
+        PatchError::DeleteKeyErr(_) => error::new_kalix_key_error(py, e.to_string()),
+        PatchError::DeleteHasProperties(_) => PyValueError::new_err(e.to_string()),
+        PatchError::EmptyModel => error::new_kalix_runtime_error(py, e.to_string()),
+        PatchError::IoError(io_err) => io_err_to_py(io_err),
+        PatchError::ValidationError(_) => error::ModelValidationError::new_err(e.to_string()),
+    }
+}
 
 /// Strip `.pxt` or `.pxb` extension from a path, returning the base.
 fn strip_ext(path: &str) -> &str {
@@ -113,7 +160,9 @@ fn _write_pixie_raw(
         if (ts[i] - ts[i - 1]) as u64 != step_size {
             return Err(PyValueError::new_err(format!(
                 "Irregular timestep at index {}: expected step {}, got {}",
-                i, step_size, ts[i] - ts[i - 1]
+                i,
+                step_size,
+                ts[i] - ts[i - 1]
             )));
         }
     }
@@ -230,11 +279,427 @@ fn _optimise_from_file<'py>(
     Ok(result)
 }
 
+// --------------
+// Model bindings
+// --------------
+
+/// Mirrors `Model.patch()`'s `mode` argument (and, for deletes, `missing_ok`)
+/// on the Python side.
+#[pyclass]
+#[pyo3(name = "_PatchMode")]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PatchMode {
+    Merge,
+    Replace,
+    Delete,
+    DeleteMissingOk,
+}
+
+#[pyclass]
+#[pyo3(name = "_Model")]
+struct PyModel {
+    pub inner: Model,
+    /// True only while `inner` holds a complete set of results from a
+    /// finished `_run()`. Any operation that replaces or modifies the model
+    /// (loading, patching) resets it, so `_get_outputs` can fail fast with a
+    /// clear message instead of serving absent or stale results.
+    has_run: bool,
+}
+
+#[pymethods]
+impl PyModel {
+    /// Construct an empty, unconfigured model.
+    #[new]
+    fn new() -> PyResult<Self> {
+        Ok(PyModel {
+            inner: Model::new(),
+            has_run: false,
+        })
+    }
+
+    /// Copy a deep, independent model.
+    fn copy(&self) -> PyResult<PyModel> {
+        Ok(PyModel {
+            inner: self.inner.clone_for_new_model(),
+            has_run: false,
+        })
+    }
+
+    /// Load a model from an INI file, replacing any model already held.
+    /// Validates via `Model::configure` before accepting; leaves `self`
+    /// untouched on failure.
+    fn _from_file<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        model_path: &str,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        let mut model = IniModelIO::read_model_file(model_path)
+            .map_err(|e| io_err_to_py(e.with_context("Failed to load model: ")))?;
+        // Verification step
+        model.validate_model_structure().map_err(|e| {
+            error::ModelValidationError::new_err(format!("Failed to validate model: {}", e))
+        })?;
+        // Model OK, swap into inner
+        slf.inner = model;
+        slf.has_run = false;
+        Ok(slf)
+    }
+
+    /// Load a model from an in-memory INI string. Like `_load_file`, but
+    /// relative paths inside the INI resolve against the current working
+    /// directory (there's no containing file directory).
+    fn _from_model_string<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        model_string: &str,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        let mut model = IniModelIO::read_model_string(model_string)
+            .map_err(|e| io_err_to_py(e.with_context("Failed to load model: ")))?;
+        // Verification step
+        model.validate_model_structure().map_err(|e| {
+            error::ModelValidationError::new_err(format!("Failed to validate model: {}", e))
+        })?;
+        // Model OK, swap into inner
+        slf.inner = model;
+        slf.has_run = false;
+        Ok(slf)
+    }
+
+    /// Configure and run the model's simulation.
+    ///
+    /// `progress`, if given, must be a Python callable. It is invoked with
+    /// `(step, total)` after each completed timestep, mirroring
+    /// `_optimise_from_file`'s progress callback. The GIL is released for
+    /// the run itself and re-acquired per callback invocation.
+    #[pyo3(signature = (progress=None))]
+    fn _run<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        py: Python<'py>,
+        progress: Option<PyObject>,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        // A failed configure/run leaves no trustworthy results behind.
+        slf.has_run = false;
+        slf.inner
+            .configure()
+            .map_err(error::ModelValidationError::new_err)?;
+
+        let progress_callback: Option<Box<dyn FnMut(u64, u64) + Send>> = progress.map(|callable| {
+            let cb: Box<dyn FnMut(u64, u64) + Send> = Box::new(move |step: u64, total: u64| {
+                Python::with_gil(|py| {
+                    // Ignore any exception raised by the user's callback.
+                    let _ = callable.call1(py, (step, total));
+                });
+            });
+            cb
+        });
+
+        // `slf` (a `PyRefMut`) is tied to the GIL and can't cross an
+        // `allow_threads` closure boundary itself; go via a raw pointer to
+        // `inner`, wrapped so it's `Send`, so only genuinely GIL-free work is
+        // released. Sound because `allow_threads` runs the closure inline on
+        // this same thread -- it just lets *other* Python threads proceed
+        // while the GIL is released, it doesn't hand `inner` to another
+        // thread.
+        struct SendPtr(*mut Model);
+        unsafe impl Send for SendPtr {}
+        let model_ptr = SendPtr(&mut slf.inner as *mut Model);
+        py.allow_threads(move || unsafe {
+            // Force capture of the whole `SendPtr`/`Send` box, not just their
+            // inner fields -- Rust 2021's disjoint closure capture would
+            // otherwise capture the bare (non-`Send`) field directly and
+            // defeat the wrappers.
+            let model_ptr = model_ptr;
+            let progress_callback = progress_callback;
+            // Drop the `Send` bound only here, inside the closure that
+            // `allow_threads` runs inline on this thread -- captured above as
+            // `Send` purely so the closure itself satisfies `Ungil`.
+            let progress_callback: Option<Box<dyn FnMut(u64, u64)>> = match progress_callback {
+                Some(cb) => Some(cb),
+                None => None,
+            };
+            (*model_ptr.0).run_with_interrupt(|| false, progress_callback)
+        })
+        .map_err(error::SimulationError::new_err)?;
+        slf.has_run = true;
+        Ok(slf)
+    }
+
+    /// Apply parameter overrides to the currently loaded model. Leaves
+    /// `self` untouched on failure (mirrors `_load_file`).
+    fn _patch<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        py: Python<'py>,
+        patch_string: &str,
+        mode: PatchMode,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        let new_model = match mode {
+            PatchMode::Merge => patch_merge(&slf.inner, patch_string),
+            PatchMode::Replace => patch_replace(&slf.inner, patch_string),
+            PatchMode::Delete => patch_delete(&slf.inner, patch_string, false),
+            PatchMode::DeleteMissingOk => patch_delete(&slf.inner, patch_string, true),
+        }
+        .map_err(|e| patch_err_to_py(py, e))?;
+        slf.inner = new_model;
+        slf.has_run = false;
+        Ok(slf)
+    }
+
+    /// Retrieve the model's output time series after a run.
+    ///
+    /// Returns
+    ///     - start: i64 (real, unwrapped epoch seconds)
+    ///     - step: u64
+    ///     - size: usize
+    ///     - [(name, array), ...] - one entry per requested output, in request
+    ///       order. A `dict` would silently collapse repeated names into one
+    ///       entry, so this returns a list instead: requesting the same
+    ///       output twice must come back as two (identical) entries, not one.
+    #[pyo3(signature = (names, missing_ok=false))]
+    fn _get_outputs<'py>(
+        &mut self,
+        py: Python<'py>,
+        names: Option<Vec<String>>,
+        missing_ok: bool,
+    ) -> PyResult<(i64, u64, usize, Vec<(String, Bound<'py, PyArray1<f64>>)>)> {
+        if !self.has_run {
+            return Err(error::new_kalix_runtime_error(
+                py,
+                "The model has not been run yet (loading/patching invalidates the results). \
+                 Call run() before get_outputs()",
+            ));
+        }
+        let outputs = self
+            .inner
+            .get_output_series(names, missing_ok)
+            .map_err(|e| output_err_to_py(py, e))?;
+        let (start, step, size) = match outputs.first() {
+            Some(first) => (
+                wrap_to_i64(first.start_timestamp),
+                first.step_size,
+                first.values.len(),
+            ),
+            None => (0i64, 0u64, 0usize),
+        };
+        let series_list = outputs
+            .into_iter()
+            .map(|ts| (ts.name.clone(), ts.values.clone().into_pyarray_bound(py)))
+            .collect();
+        Ok((start, step, size, series_list))
+    }
+
+    /// Per-node mass balance (ML/timestep) after a run, as parallel lists:
+    /// node names, node type names, and values, all in the same report order
+    /// as `generate_mass_balance_report` (`Model::get_mass_balance_data`).
+    fn _get_mass_balance<'py>(
+        &self,
+        py: Python<'py>,
+    ) -> PyResult<(Vec<String>, Vec<String>, Vec<f64>)> {
+        if !self.has_run {
+            return Err(error::new_kalix_runtime_error(
+                py,
+                "The model has not been run yet (loading/patching invalidates the results). \
+                 Call run() before get_mass_balance()",
+            ));
+        }
+        let data = self.inner.get_mass_balance_data();
+        let mut names = Vec::with_capacity(data.len());
+        let mut types = Vec::with_capacity(data.len());
+        let mut values = Vec::with_capacity(data.len());
+        for (name, type_name, value) in data {
+            names.push(name);
+            types.push(type_name);
+            values.push(value);
+        }
+        Ok((names, types, values))
+    }
+
+    fn _sections<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyList>> {
+        Ok(PyList::new_bound(
+            py,
+            model_query::list_sections(&self.inner),
+        ))
+    }
+
+    /// Returns the named section as `{property: value}`, or `None` if the
+    /// section doesn't exist. A bare (list-style) line comes back with an
+    /// empty-string value, matching `IniProperty::value`'s own convention.
+    fn _get_section<'py>(
+        &self,
+        py: Python<'py>,
+        section_name: &str,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let Some(section) = model_query::get_section(&self.inner, section_name) else {
+            return Err(error::new_kalix_key_error(
+                py,
+                format!("No such section: {section_name}"),
+            ));
+        };
+        let dict = PyDict::new_bound(py);
+        for (key, property) in &section.properties {
+            dict.set_item(key, &property.value)?;
+        }
+        Ok(dict)
+    }
+
+    fn _has_section(&self, section_name: &str) -> PyResult<bool> {
+        Ok(model_query::has_section(&self.inner, section_name))
+    }
+
+    fn _get_property(
+        &self,
+        py: Python<'_>,
+        section_name: &str,
+        property_name: &str,
+    ) -> PyResult<String> {
+        if !model_query::has_section(&self.inner, section_name) {
+            return Err(error::new_kalix_key_error(
+                py,
+                format!("No such section: {section_name:?}"),
+            ));
+        }
+        model_query::get_property(&self.inner, section_name, property_name).ok_or_else(|| {
+            error::new_kalix_key_error(
+                py,
+                format!("No such property: {section_name:?}.{property_name:?}"),
+            )
+        })
+    }
+
+    fn _get_property_by_designation<'py>(
+        &self,
+        py: Python<'py>,
+        property_designation: &str,
+    ) -> PyResult<String> {
+        model_query::get_property_by_designation(&self.inner, property_designation).map_err(|e| {
+            match e {
+                // A ValueError from the user supplied string - not related to
+                // the engine so does not return a KalixError
+                model_query::PropertyLookupError::InvalidFormat(designation) => {
+                    PyValueError::new_err(format!(
+                        "Not a valid '<section>.<property>' designation: {designation:?}"
+                    ))
+                }
+                model_query::PropertyLookupError::NoSuchSection(section_name) => {
+                    error::new_kalix_key_error(py, format!("No such section: {section_name:?}"))
+                }
+                model_query::PropertyLookupError::NoSuchProperty {
+                    section_name,
+                    property_name,
+                } => error::new_kalix_key_error(
+                    py,
+                    format!("No such property: {section_name:?}.{property_name:?}"),
+                ),
+            }
+        })
+    }
+
+    fn _to_string<'py>(&self, py: Python<'py>) -> PyResult<String> {
+        self.inner
+            .get_ini_string()
+            .map_err(|msg| error::new_kalix_runtime_error(py, msg))
+    }
+
+    fn _save<'py>(
+        slf: PyRefMut<'py, Self>,
+        py: Python<'py>,
+        filename: &str,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        // Note: model.save_ini_to_file returns Err(String) for both "no attached
+        // INI document" and actual write failures - check the former up front so
+        // the two cases surface as distinct Python exceptions.
+        if slf.inner.ini_document.is_none() {
+            return Err(error::new_kalix_runtime_error(
+                py,
+                "Save called on empty model.",
+            ));
+        }
+        slf.inner
+            .save_ini_to_file(filename)
+            .map_err(PyIOError::new_err)?;
+        Ok(slf)
+    }
+
+    /// Supply in-memory data for a declared `[data]` alias (`set_input()`).
+    ///
+    /// - `column_names`: one per array in `values_per_column`.
+    /// - `timestamps_unix_seconds`: 1-D numpy array (int64) of Unix seconds;
+    ///   must be regular, same rule as `_write_pixie_raw`.
+    /// - `values_per_column`: list of 1-D numpy arrays (float64), same length
+    ///   as `timestamps_unix_seconds`.
+    ///
+    /// Resets `has_run`, same as `_patch`: supplying new data invalidates any
+    /// prior run's results.
+    fn _set_input<'py>(
+        mut slf: PyRefMut<'py, Self>,
+        py: Python<'py>,
+        alias: &str,
+        column_names: Vec<String>,
+        timestamps_unix_seconds: PyReadonlyArray1<i64>,
+        values_per_column: Vec<PyReadonlyArray1<f64>>,
+    ) -> PyResult<PyRefMut<'py, Self>> {
+        if column_names.len() != values_per_column.len() {
+            return Err(PyValueError::new_err(
+                "column_names and values_per_column must have the same length",
+            ));
+        }
+        let ts = timestamps_unix_seconds.as_slice()?;
+        if ts.is_empty() {
+            return Err(PyValueError::new_err("No data supplied"));
+        }
+
+        let step_size: u64 = if ts.len() >= 2 {
+            let diff = ts[1] - ts[0];
+            if diff <= 0 {
+                return Err(PyValueError::new_err(
+                    "Timestamps must be strictly increasing",
+                ));
+            }
+            diff as u64
+        } else {
+            86400
+        };
+        for i in 2..ts.len() {
+            if (ts[i] - ts[i - 1]) as u64 != step_size {
+                return Err(PyValueError::new_err(format!(
+                    "Irregular timestep at index {}: expected step {}, got {}",
+                    i,
+                    step_size,
+                    ts[i] - ts[i - 1]
+                )));
+            }
+        }
+        let start_timestamp = wrap_to_u64(ts[0]);
+
+        let mut columns = Vec::with_capacity(column_names.len());
+        for (name, arr) in column_names.into_iter().zip(values_per_column.iter()) {
+            let values_slice = arr.as_slice()?;
+            if values_slice.len() != ts.len() {
+                return Err(PyValueError::new_err(format!(
+                    "Column '{}' has {} values, expected {}",
+                    name,
+                    values_slice.len(),
+                    ts.len()
+                )));
+            }
+            columns.push(model_input_swap::InMemoryColumn {
+                name,
+                values: values_slice.to_vec(),
+            });
+        }
+
+        model_input_swap::set_input(&mut slf.inner, alias, start_timestamp, step_size, columns)
+            .map_err(|err_msg| error::new_kalix_key_error(py, err_msg))?;
+        slf.has_run = false;
+        Ok(slf)
+    }
+}
+
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_read_pixie_raw, m)?)?;
     m.add_function(wrap_pyfunction!(_write_pixie_raw, m)?)?;
     m.add_function(wrap_pyfunction!(_simulate_from_file, m)?)?;
     m.add_function(wrap_pyfunction!(_optimise_from_file, m)?)?;
+    m.add_class::<PyModel>()?;
+    m.add_class::<PatchMode>()?;
+    error::register(m)?;
     Ok(())
 }

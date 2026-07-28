@@ -11,9 +11,8 @@ fn test_ini_with_constant_function() {
     // The INI file specifies: evap = data.rex_mpot_csv.by_name.value
     // This gets parsed as a function expression and optimised to DirectReference
 
-    let ini_reader = IniModelIO::new();
     let ini_path = "./src/tests/example_models/4/linked_model.ini";
-    let model = ini_reader.read_model_file(ini_path);
+    let model = IniModelIO::read_model_file(ini_path);
 
     // Model should load successfully
     assert!(model.is_ok(), "Model should load successfully: {:?}", model.err());
