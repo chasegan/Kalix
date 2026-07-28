@@ -137,6 +137,85 @@ action  = debit(3)
 }
 
 #[test]
+fn test_ras_roll_cap() {
+    // Rolling 2-WY cap of 20: the user (demand 10/d, ample flow) takes 20
+    // before 2020-07-01 and exhausts the cap. The 2020 roll banks those
+    // debits (nothing expires yet), so WY2020 stays dry all year. The 2021
+    // roll expires them, crediting 20 back: the user takes 10/d again.
+    let ini = r#"
+[kalix]
+start = 2020-06-28
+end = 2021-07-02
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 20, 20,
+
+[ras.roll]
+targets = acc.g1
+trigger = start_water_year(7)
+action  = roll_cap(2)
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = u1
+
+[node.u1]
+type = unregulated_user
+loc = 0, 10
+demand = 10
+accounts = a1
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 20
+
+[outputs]
+node.u1.diversion
+"#;
+    let mut model = run(ini);
+    let div = series(&mut model, "node.u1.diversion");
+    assert_eq!(&div[..3], &[10.0, 10.0, 0.0], "cap of 20 exhausts before the WY boundary");
+    assert!(div[3..368].iter().all(|&x| x == 0.0), "banked debits keep WY2020 dry");
+    assert_eq!(&div[368..370], &[10.0, 10.0], "2021 roll expires the debits; take resumes");
+    assert_eq!(balance(&model, "a1"), 0.0, "20 credited back and re-used");
+}
+
+#[test]
+fn test_ras_credit_fraction() {
+    // credit_fraction credits each account by a fraction of its own size
+    // (clamped at size); negative fractions debit.
+    //   a1 (size 100, initial 90): +25 -> 100 (clamped), -5 -> 95, twice -> 95
+    //   a2 (size 40, initial 0):   +10 - 2 = 8 per day, twice -> 16
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 100, 90,
+           a2, 40, 0,
+
+[ras.up]
+targets = acc.g1
+trigger = every_step
+action  = credit_fraction(0.25)
+
+[ras.down]
+targets = acc.g1
+trigger = every_step
+action  = credit_fraction(-0.05)
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "a1"), 95.0, "credit clamped at size, negative debits");
+    assert_eq!(balance(&model, "a2"), 16.0, "fraction applies per-account size");
+}
+
+#[test]
 fn test_ras_runs_before_flow_phase() {
     // Credit lands at the top of the step, so the day's take can use it:
     // credit(5) every step, demand 10 -> diversion is 5 every day.

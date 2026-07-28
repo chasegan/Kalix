@@ -739,6 +739,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "pump" {
                             n.pump_capacity = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
+                        } else if name_lower == "opportunistic_demand" {
+                            n.opportunistic_demand = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
                         } else if name_lower == "accounts" {
                             let account_idxs = resolve_account_references(v, &model.account_manager)
                                 .map_err(|e| format!("Error on line {}: {}", ini_property.line_number, e))?;
@@ -1209,6 +1212,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 ini_doc.set_property(section_name.as_str(), "type", "regulated_user");
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "order", &n.order_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pump", &n.pump_capacity.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "opportunistic_demand", &n.opportunistic_demand.to_string());
                 if !n.account_idxs.is_empty() {
                     let names: Vec<&str> = n.account_idxs.iter()
                         .filter_map(|&idx| model.account_manager.get_account(idx).map(|a| a.name.as_str()))
@@ -1504,7 +1508,7 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hy
         (Some(p), true) => (trimmed[..p].trim(), trimmed[p + 1..trimmed.len() - 1].trim()),
         _ => {
             return Err(format!("Error on line {}: Invalid RAS action '{}'. Expected one of: set_full, \
-                set_empty, reset_allocation, set(x), set_fraction(x), credit(x), debit(x), scale(x), \
+                set_empty, reset_allocation, set(x), set_fraction(x), credit(x), credit_fraction(x), debit(x), roll_cap(n), scale(x), \
                 reduce_to(x), allocate(pct)", line, trimmed));
         }
     };
@@ -1514,12 +1518,14 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hy
         "set" => Ok(RasAction::Set(input)),
         "set_fraction" => Ok(RasAction::SetFraction(input)),
         "credit" => Ok(RasAction::Credit(input)),
+        "credit_fraction" => Ok(RasAction::CreditFraction(input)),
         "debit" => Ok(RasAction::Debit(input)),
+        "roll_cap" => Ok(RasAction::RollCap(input)),
         "scale" => Ok(RasAction::Scale(input)),
         "reduce_to" => Ok(RasAction::ReduceTo(input)),
         "allocate" => Ok(RasAction::Allocate(input)),
         other => Err(format!("Error on line {}: Unknown RAS action '{}'. Expected one of: set_full, \
-            set_empty, reset_allocation, set(x), set_fraction(x), credit(x), debit(x), scale(x), \
+            set_empty, reset_allocation, set(x), set_fraction(x), credit(x), credit_fraction(x), debit(x), roll_cap(n), scale(x), \
             reduce_to(x), allocate(pct)", line, other)),
     }
 }

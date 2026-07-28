@@ -1,6 +1,7 @@
 use rustc_hash::FxHashMap;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account::Account;
+use crate::numerical::fifo_buffer::FifoBuffer;
 
 /// An account group ([acc.<name>] section): the unit RAS clauses target.
 /// Pure nouns — membership and per-account data columns; no behaviour
@@ -269,6 +270,11 @@ impl AccountManager {
         self.accounts[account_id].balance
     }
 
+    /// Accessor for account size
+    pub fn get_account_size(&self, account_id: usize) -> f64 {
+        self.accounts[account_id].size
+    }
+
     /// Get a reference to an account by index, if it exists.
     pub fn get_account(&self, account_id: usize) -> Option<&Account> {
         self.accounts.get(account_id)
@@ -280,6 +286,7 @@ impl AccountManager {
         self.accounts[account_id].debit_account_fast(amount);
         self.accounts[account_id].debits_today += amount;
         self.accounts[account_id].debits_since_reset += amount;
+        self.accounts[account_id].debits_this_period += amount;
     }
 
     /// Announce an allocation: raise each account's allocation to `pct` of its
@@ -304,6 +311,20 @@ impl AccountManager {
         let account = &mut self.accounts[account_id];
         account.balance = 0.0;
         account.debits_since_reset = 0.0;
+    }
+
+    /// Roll an N-period cap: bank the closing period's debits and credit back
+    /// the debits expiring out of the window (those from N periods ago).
+    /// The buffer is sized on first use; N is expected to be constant.
+    pub fn roll_cap(&mut self, account_id: usize, n: usize) {
+        let account = &mut self.accounts[account_id];
+        let slots = n.saturating_sub(1);
+        if account.aged_debits.len() != slots {
+            account.aged_debits = FifoBuffer::new(slots);
+        }
+        let expired = account.aged_debits.push(account.debits_this_period);
+        account.debits_this_period = 0.0;
+        account.add_value_safely(expired);
     }
 
     /// Allocation to date for an account.

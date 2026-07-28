@@ -45,9 +45,15 @@ pub enum RasAction {
     Set(DynamicInput),
     SetFraction(DynamicInput),
     Credit(DynamicInput),
+    /// Credit each account by a fraction of its own size (negative debits).
+    CreditFraction(DynamicInput),
     Debit(DynamicInput),
     Scale(DynamicInput),
     ReduceTo(DynamicInput),
+    /// Roll an N-period cap: bank the period's debits, credit back those from
+    /// N periods ago (a Source 'Moving Water Year' rolling cap; N = 1 is an
+    /// annual cap).
+    RollCap(DynamicInput),
 
     /// Announce an allocation percentage (0–100) for the target accounts.
     /// Distributive in effect but stencilled in form: the percentage is
@@ -148,6 +154,13 @@ impl RasSystem {
                     account_manager.add_account_value_safely(idx, value);
                 }
             }
+            RasAction::CreditFraction(input) => {
+                let fraction = input.get_value(data_cache);
+                for &idx in &self.target_account_ids {
+                    let size = account_manager.get_account_size(idx);
+                    account_manager.add_account_value_safely(idx, fraction * size);
+                }
+            }
             RasAction::Debit(input) => {
                 let value = input.get_value(data_cache);
                 for &idx in &self.target_account_ids {
@@ -168,6 +181,12 @@ impl RasSystem {
                     if balance > cap {
                         account_manager.set_account_balance_safely(idx, cap);
                     }
+                }
+            }
+            RasAction::RollCap(input) => {
+                let n = input.get_value(data_cache).round().max(1.0) as usize;
+                for &idx in &self.target_account_ids {
+                    account_manager.roll_cap(idx, n);
                 }
             }
             RasAction::Allocate(input) => {

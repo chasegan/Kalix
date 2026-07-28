@@ -71,7 +71,9 @@ expressions, evaluated once per firing:
 | `set(x)` | Balance → `x` (clamped to `[0, size]`). |
 | `set_fraction(x)` | Balance → `x` × size. |
 | `credit(x)` | Add `x`. |
+| `credit_fraction(x)` | Add `x` × the account's own size (negative `x` debits). Lets one block serve accounts of different sizes. |
 | `debit(x)` | Subtract `x`. |
+| `roll_cap(n)` | Roll an n-period cap: bank the closing period's debits, and credit back the debits expiring out of the window (those from n periods ago). Fired at a water-year trigger this is a rolling cap over n consecutive water years (Source's "Moving Water Year" usage limit); `roll_cap(1)` behaves as an annual cap. |
 | `scale(x)` | Multiply the balance by `x`. |
 | `reduce_to(x)` | Lower the balance to `x` if it is above (a carryover limit). |
 

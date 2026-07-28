@@ -1,3 +1,4 @@
+use crate::numerical::fifo_buffer::FifoBuffer;
 
 /// A single account: pure state — name, cap, balance. Accounts carry no
 /// behaviour and no calendar; everything that changes a balance is a [ras.*]
@@ -24,6 +25,13 @@ pub struct Account {
     /// not reduce an allocation, it moves between the two terms. Reset only by
     /// the `reset_allocation` action (kalix-allocation-components.md §3.4).
     pub debits_since_reset: f64,
+
+    /// Debits from node takes since the last `roll_cap` action.
+    pub debits_this_period: f64,
+    /// Completed-period debit totals not yet expired by `roll_cap` (N-1
+    /// slots). Zero-capacity (passthrough) unless roll_cap targets this
+    /// account with N > 1.
+    pub aged_debits: FifoBuffer,
 }
 
 impl Account {
@@ -38,6 +46,8 @@ impl Account {
             balance: initial_balance,
             debits_today: 0.0,
             debits_since_reset: 0.0,
+            debits_this_period: 0.0,
+            aged_debits: FifoBuffer::default(),
         }
     }
 
@@ -46,6 +56,8 @@ impl Account {
         self.balance = self.initial_balance;
         self.debits_today = 0.0;
         self.debits_since_reset = 0.0;
+        self.debits_this_period = 0.0;
+        self.aged_debits.reset();
     }
 
     /// Allocation to date: everything credited since the last reset, whether
