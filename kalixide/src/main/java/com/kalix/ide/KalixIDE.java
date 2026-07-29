@@ -46,6 +46,7 @@ import com.kalix.ide.windows.RunManager;
 import com.kalix.ide.windows.OptimisationWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 import com.kalix.ide.windows.MinimalEditorWindow;
+import com.kalix.ide.workspace.tree.TreeContextMenu;
 
 import javax.swing.*;
 import java.awt.*;
@@ -763,7 +764,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         });
         // Apply the persisted "show hidden files" choice before any folder is restored into the tree.
         projectTreePanel.setShowHidden(isShowHiddenFiles());
-        documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(documentManager, this::requestCloseDocument);
+        documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(
+                documentManager, this::requestCloseDocument, this::showTabContextMenu);
         contextViewPanel = new com.kalix.ide.workspace.ContextViewPanel(documentManager);
 
         int treeWidth = PreferenceKeys.UI_TREE_WIDTH.get();
@@ -2147,5 +2149,16 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             // Create the main application window
             new KalixIDE(filePath);
         });
+    }
+
+    /**
+     * Shows the project tree's right-click context menu for the given files, as requested by
+     * a right-click on an editor tab.
+     */
+    private void showTabContextMenu(List<File> files, Component invoker, int x, int y) {
+        if (projectTreePanel == null) {
+            return;
+        }
+        projectTreePanel.showContextMenuForFiles(files, invoker, x, y);
     }
 }

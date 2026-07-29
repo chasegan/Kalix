@@ -16,6 +16,7 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
@@ -623,5 +624,21 @@ public class ProjectTree extends JTree {
     private FileTreeNode nodeAt(int x, int y) {
         TreePath path = getPathForLocation(x, y);
         return path != null && path.getLastPathComponent() instanceof FileTreeNode node ? node : null;
+    }
+
+    /**
+     * Shows the right-click context menu for the given files (e.g. from an editor tab), as if
+     * they were right-clicked in the tree, without changing the tree's own selection. Files
+     * outside the open folder (or if no folder is open) are silently dropped.
+     */
+    public void showContextMenuForFiles(List<File> files, Component invoker, int x, int y) {
+        List<FileTreeNode> nodes = files.stream()
+                .map(this::materializeNode)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        JPopupMenu menu = contextMenu.buildFromEditorTab(nodes);
+        if (menu != null) {
+            menu.show(invoker, x, y);
+        }
     }
 }

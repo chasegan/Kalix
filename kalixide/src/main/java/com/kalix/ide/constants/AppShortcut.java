@@ -38,6 +38,7 @@ public enum AppShortcut {
     TOGGLE_COMMENT("Toggle Comment", KeyEvent.VK_SLASH),
     FIND("Find", KeyEvent.VK_F),
     FIND_AND_REPLACE("Find and Replace", KeyEvent.VK_H),
+    TERMINAL("Terminal", KeyEvent.VK_BACK_QUOTE),
     /**
      * Repeat the last search. {@code ⌘G}/{@code ⇧⌘G} is the macOS system-wide
      * convention; {@code EnhancedTextEditor} additionally binds bare F3/Shift+F3
