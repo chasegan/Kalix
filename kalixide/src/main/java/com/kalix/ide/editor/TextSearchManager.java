@@ -2,12 +2,13 @@ package com.kalix.ide.editor;
 
 import com.kalix.ide.editor.search.AsyncMatchScanner;
 import com.kalix.ide.editor.search.MatchScan;
-import com.kalix.ide.editor.search.Replacement;
-import com.kalix.ide.editor.search.ReplacementPlanner;
 import com.kalix.ide.editor.search.SearchQuery;
 
 import org.fife.ui.rsyntaxtextarea.DocumentRange;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rtextarea.SearchContext;
+import org.fife.ui.rtextarea.SearchEngine;
+import org.fife.ui.rtextarea.SearchResult;
 
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
@@ -43,11 +44,11 @@ import java.util.function.Consumer;
  * {@code MatchScanner} reproduces RSTA's matching rules exactly, so the results are the
  * ones the user would have got anyway.</p>
  *
- * <p>Replacing is built on the same foundation. {@code ReplacementPlanner} works out
- * every edit off the EDT, so the user can be told exactly how many there will be and
- * decline before anything changes; {@link ChunkedReplacer} then applies them behind a
- * modal dialog, in chunks, as one undoable step. {@code SearchEngine} is not used at
- * all — its replace paths rebuild the document on the EDT just as its find paths do.</p>
+ * <p>Replacing still goes through {@code SearchEngine} and still carries those costs.
+ * A planned, off-EDT, chunked replace was built and reverted: it was correct, but on a
+ * large file it ran at roughly fifteen edits a second, because each individual edit
+ * re-triggers the editor's per-edit document listeners — the dirty check compares the
+ * whole document. Those listeners need fixing before replacing can move off the EDT.</p>
  *
  * <h2>Feedback model</h2>
  * All feedback is inline, on a status label inside the dialog — never a modal popup. A
@@ -145,8 +146,6 @@ public class TextSearchManager {
 
     private boolean viewportListenerInstalled;
 
-    /** Non-zero while a bulk edit (a Replace All) is rewriting the document. */
-    private int bulkEditDepth;
 
     /**
      * One search dialog and the input fields that belong to it.
@@ -246,13 +245,6 @@ public class TextSearchManager {
      */
     private void onDocumentChanged() {
         documentVersion++;
-        if (bulkEditDepth > 0) {
-            return;
-        }
-        invalidateSearchState();
-    }
-
-    private void invalidateSearchState() {
         cachedScan = null;
         cachedQuery = null;
         cachedVersion = -1;
@@ -260,19 +252,6 @@ public class TextSearchManager {
         clearHighlights();
     }
 
-    /**
-     * Marks the start of an edit made of many document mutations, so the per-edit
-     * invalidation above collapses into one at the end.
-     */
-    private void beginBulkEdit() {
-        bulkEditDepth++;
-    }
-
-    private void endBulkEdit() {
-        if (--bulkEditDepth == 0) {
-            invalidateSearchState();
-        }
-    }
 
     /** Moves a visible dialog's find-as-you-type origin to {@code dot}. */
     private static void reanchor(SearchDialog sd, int dot) {
@@ -743,16 +722,6 @@ public class TextSearchManager {
         if (highlightedScan == null) {
             return;
         }
-        // Not during a bulk rewrite. Every edit a Replace All makes resizes the view,
-        // which fires the viewport listener below; each of those calls would then cost
-        // two viewToModel2D layout queries against a document that is mid-rewrite —
-        // thousands of them over a large replace, to paint highlights describing text
-        // that is being deleted as we measure it. The band is rebuilt once at the end,
-        // when endBulkEdit invalidates and the next search repaints.
-        if (bulkEditDepth > 0) {
-            return;
-        }
-
         int visibleStart = offsetAt(0, 0);
         int visibleEnd = offsetAtBottomRight();
         if (!force && visibleStart >= highlightBandStart && visibleEnd <= highlightBandEnd) {
@@ -852,13 +821,13 @@ public class TextSearchManager {
     // --------------------------------------------------------------- replace
 
     /**
-     * Replaces the next occurrence, then steps to the one after it.
+     * Replaces the next occurrence and steps to the one after it.
      *
-     * <p>Planned off the EDT like Replace All, for the same reason: {@code
-     * SearchEngine.replace} locates its match with the same whole-document copy that
-     * makes {@code find} unusable here. Every replace invalidates the scan anyway — the
-     * offsets after the edit have all moved — so re-planning per replacement is not
-     * waste, it is the only correct thing to do.</p>
+     * <p>Unlike finding, this still goes through {@code SearchEngine}. A planned,
+     * off-EDT replace was built and reverted: it was correct but unusably slow on a
+     * large file, because every individual edit re-triggers the editor's per-edit
+     * document listeners (notably the dirty check, which compares the whole document).
+     * That has to be addressed before replacing can be taken off the EDT.</p>
      */
     private void replaceNext(SearchDialog sd) {
         SearchQuery query = sd.query();
@@ -873,124 +842,28 @@ public class TextSearchManager {
             return;
         }
 
-        String template = sd.replaceField.getText();
-        countingDialog = sd;
-        countingIndicator.restart();
+        SearchContext context = createSearchContext(sd);
+        context.setReplaceWith(sd.replaceField.getText());
 
-        int requestedVersion = documentVersion;
-        int from = Math.min(textArea.getSelectionStart(), textArea.getSelectionEnd());
-
-        scanner.compute(textArea.getDocument(),
-            text -> ReplacementPlanner.plan(text, query, template, MAX_MATCHES),
-            plan -> {
-                stopCountingIndicator();
-                if (requestedVersion != documentVersion) {
-                    setStatus(sd, "Document changed — try again", true);
-                    return;
-                }
-                replaceOne(sd, plan, from);
-            },
-            failure -> {
-                stopCountingIndicator();
-                setStatus(sd, describeReplacementFailure(failure), true);
-            });
-    }
-
-    /**
-     * Applies the first planned replacement at or after {@code from}, wrapping if
-     * enabled, then advances to the following match.
-     */
-    private void replaceOne(SearchDialog sd, List<Replacement> plan, int from) {
-        if (plan.isEmpty()) {
-            setStatus(sd, "No results", true);
-            return;
-        }
-
-        int index = indexAtOrAfter(plan, from);
-        if (index < 0) {
-            if (!sd.wrapAroundCheckBox.isSelected()) {
-                setStatus(sd, "No more results", true);
-                return;
-            }
-            index = 0;
-        }
-
-        Replacement replacement = plan.get(index);
+        SearchResult result;
         programmaticCaretDepth++;
-        // One edit, but still bracketed: undo should retire the replacement as a unit
-        // rather than as a remove and an insert.
-        textArea.beginAtomicEdit();
         try {
-            textArea.getDocument().remove(replacement.start(), replacement.length());
-            textArea.getDocument().insertString(replacement.start(), replacement.text(), null);
-            textArea.setCaretPosition(replacement.start() + replacement.text().length());
-            selectNextAfterReplace(sd, plan, index);
-        } catch (javax.swing.text.BadLocationException e) {
-            setStatus(sd, "Replace failed: " + e.getMessage(), true);
+            result = SearchEngine.replace(textArea, context);
+        } catch (IndexOutOfBoundsException e) {
+            // A replacement template referencing a group the pattern doesn't have,
+            // e.g. "$9" against a one-group regex.
+            setStatus(sd, "Invalid replacement: " + e.getMessage(), true);
             return;
         } finally {
-            textArea.endAtomicEdit();
             programmaticCaretDepth--;
         }
 
-        setStatus(sd, "Replaced", false);
+        setStatus(sd, result.wasFound() ? "Replaced" : "No results", !result.wasFound());
     }
 
     /**
-     * Moves to the match after the one just replaced, without re-scanning.
-     *
-     * <p>Re-running the search here was costing a second full-document pass on every
-     * Replace — the plan already says where every other match is, and exactly one edit
-     * has happened since it was built. Matches after the edit shift by the difference in
-     * length; matches before it do not move at all. That is enough to step correctly,
-     * and it turns each Replace from two whole-document walks into one.</p>
-     */
-    private void selectNextAfterReplace(SearchDialog sd, List<Replacement> plan, int replacedIndex) {
-        if (plan.size() < 2) {
-            return; // Nothing else to step to.
-        }
-
-        Replacement replaced = plan.get(replacedIndex);
-        int next = replacedIndex + 1;
-
-        int start;
-        int end;
-        if (next < plan.size()) {
-            // Later in the document than the edit, so displaced by its change in length.
-            int delta = replaced.text().length() - replaced.length();
-            start = plan.get(next).start() + delta;
-            end = plan.get(next).end() + delta;
-        } else {
-            if (!sd.wrapAroundCheckBox.isSelected()) {
-                return;
-            }
-            // Wrapping to the top, which lies before the edit and so has not moved.
-            start = plan.get(0).start();
-            end = plan.get(0).end();
-        }
-
-        textArea.setSelectionStart(start);
-        textArea.setSelectionEnd(end);
-    }
-
-    /** Index of the first planned replacement starting at or after {@code offset}, or -1. */
-    private static int indexAtOrAfter(List<Replacement> plan, int offset) {
-        for (int i = 0; i < plan.size(); i++) {
-            if (plan.get(i).start() >= offset) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    /**
-     * Replaces all occurrences of the search term.
-     *
-     * <p>Three phases, so that the expensive one never touches the EDT: plan every edit
-     * off the EDT (cancellable, no copy of the document); tell the user exactly how many
-     * there are and let them decline; then apply them behind a modal progress dialog.
-     * Unlike finding, this one is not routed through {@code SearchEngine} either — its
-     * {@code replaceAll} rebuilds the document on the EDT.</p>
+     * Replaces all occurrences of the search term. See {@link #replaceNext} for why this
+     * still uses {@code SearchEngine}.
      */
     private void replaceAll(SearchDialog sd) {
         SearchQuery query = sd.query();
@@ -1005,90 +878,46 @@ public class TextSearchManager {
             return;
         }
 
-        String template = sd.replaceField.getText();
-        countingDialog = sd;
-        countingIndicator.restart();
+        SearchContext context = createSearchContext(sd);
+        context.setReplaceWith(sd.replaceField.getText());
 
-        int requestedVersion = documentVersion;
-        scanner.compute(textArea.getDocument(),
-            text -> ReplacementPlanner.plan(text, query, template, MAX_MATCHES),
-            plan -> {
-                stopCountingIndicator();
-                if (requestedVersion != documentVersion) {
-                    // The text moved on while we were planning; those offsets describe a
-                    // document that no longer exists, so the plan is unusable.
-                    setStatus(sd, "Document changed — try again", true);
-                    return;
-                }
-                applyPlan(sd, plan);
-            },
-            failure -> {
-                stopCountingIndicator();
-                // A malformed template ($9 against a one-group pattern, a trailing
-                // backslash) surfaces here rather than part way through the edits,
-                // because planning happens before anything is written.
-                setStatus(sd, describeReplacementFailure(failure), true);
-            });
-    }
-
-    /** Confirms a large replace, then applies the plan. */
-    private void applyPlan(SearchDialog sd, List<Replacement> plan) {
-        if (plan.isEmpty()) {
-            setStatus(sd, "No results", true);
-            return;
-        }
-
-        if (plan.size() > ChunkedReplacer.PROGRESS_THRESHOLD && !confirmLargeReplace(sd, plan.size())) {
-            setStatus(sd, "Cancelled", false);
-            return;
-        }
-
-        // The replace moves the caret and rewrites the text; neither should be mistaken
-        // for the user repositioning the search origin, and the cached scan describes a
-        // document that is about to stop existing.
+        SearchResult result;
         programmaticCaretDepth++;
-        beginBulkEdit();
         try {
-            // Synchronous from here: the modal dialog's nested event loop runs the chunks,
-            // and setVisible does not return until the run disposes it.
-            ChunkedReplacer.apply(textArea, parentComponent, plan,
-                outcome -> setStatus(sd, describeOutcome(outcome), !outcome.isComplete()));
+            result = SearchEngine.replaceAll(textArea, context);
+        } catch (IndexOutOfBoundsException e) {
+            setStatus(sd, "Invalid replacement: " + e.getMessage(), true);
+            return;
         } finally {
-            endBulkEdit();
             programmaticCaretDepth--;
         }
+
+        int count = result.getCount();
+        setStatus(sd,
+            count == 0 ? "No results"
+                       : count + (count == 1 ? " occurrence replaced" : " occurrences replaced"),
+            count == 0);
     }
 
     /**
-     * Asks before a large replace. Deliberately modal and deliberately exact: the count
-     * is already known from planning, and a long operation the user cannot decline is
-     * worse than one they chose.
+     * Creates a SearchContext for the replace operations.
      */
-    private boolean confirmLargeReplace(SearchDialog sd, int count) {
-        String message = String.format("Replace %,d occurrences of \"%s\"?",
-            count, sd.searchField.getText());
-        return JOptionPane.showConfirmDialog(sd.dialog, message, "Replace All",
-            JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE) == JOptionPane.OK_OPTION;
+    private SearchContext createSearchContext(SearchDialog sd) {
+        SearchContext context = new SearchContext();
+        context.setSearchFor(sd.searchField.getText());
+        context.setMatchCase(sd.matchCaseCheckBox.isSelected());
+        context.setRegularExpression(sd.regexCheckBox.isSelected());
+        context.setSearchForward(true);
+        context.setWholeWord(sd.wholeWordCheckBox.isSelected());
+        context.setSearchWrap(sd.wrapAroundCheckBox.isSelected());
+        // Mark-all off: RSTA's pass rescans the whole document on the EDT, and the
+        // highlights come from the scan instead.
+        context.setMarkAll(false);
+        // Note: setSearchSelectionOnly is deliberately not used — RSTA 3.5.4 throws
+        // UnsupportedOperationException from it ("Searching in selection is not
+        // currently supported").
+        return context;
     }
-
-    private static String describeOutcome(ChunkedReplacer.Outcome outcome) {
-        if (outcome.isComplete()) {
-            int applied = outcome.applied();
-            return String.format("%,d %s replaced", applied,
-                applied == 1 ? "occurrence" : "occurrences");
-        }
-        // A cancelled run is one undoable step, so this is a real offer, not a platitude.
-        return String.format("Stopped after %,d of %,d — undo to revert",
-            outcome.applied(), outcome.total());
-    }
-
-    private static String describeReplacementFailure(RuntimeException failure) {
-        if (failure instanceof IndexOutOfBoundsException || failure instanceof IllegalArgumentException) {
-            return "Invalid replacement: " + failure.getMessage();
-        }
-        return "Replace failed: " + failure;
-    }
-
 
     // ---------------------------------------------------------------- status
 

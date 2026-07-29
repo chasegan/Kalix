@@ -67,14 +67,15 @@ public final class AsyncMatchScanner {
     /**
      * Cancels any work in flight and runs {@code work} against the document off the EDT.
      *
-     * <p>The generalisation of {@link #scan}: Replace All plans its edits by walking the
-     * whole document too, and wants the same cancellable, non-copying, EDT-free
-     * treatment. {@code work} is handed a {@link DocumentCharSequence}, so it inherits
-     * both the windowed reads and the cancellation polling.</p>
+     * <p>Kept generic rather than folded into {@link #scan} because the cancellation and
+     * windowing it provides are not specific to matching — anything that must walk a
+     * large document without blocking the UI belongs here. {@code work} is handed a
+     * {@link DocumentCharSequence}, so it inherits both the windowed reads and the
+     * cancellation polling.</p>
      *
      * @param work computation over the document; must not touch Swing
      */
-    public <T> void compute(Document document, Function<CharSequence, T> work,
+    private <T> void compute(Document document, Function<CharSequence, T> work,
                             Consumer<T> onComplete, Consumer<RuntimeException> onFailure) {
         cancel();
 
