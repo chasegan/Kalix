@@ -18,33 +18,65 @@ import java.util.stream.Collectors;
 /**
  * Builds the project tree's right-click menu from the current selection.
  *
- * <p>Each item is a declarative {@link Entry}: a label, a predicate deciding whether it applies
- * to the selection, and a handler acting on the selection. Entries are organised into groups;
- * {@link #build} renders only the entries whose predicate passes and emits a separator only
- * <em>between</em> non-empty groups — so items that drop out for a multi-selection never leave a
+ * <p>
+ * Each item is a declarative {@link Entry}: a label, a predicate deciding
+ * whether it applies
+ * to the selection, and a handler acting on the selection. Entries are
+ * organised into groups;
+ * {@link #build} renders only the entries whose predicate passes and emits a
+ * separator only
+ * <em>between</em> non-empty groups — so items that drop out for a
+ * multi-selection never leave a
  * stray or doubled separator behind.
  *
- * <p>Adding a future interaction is a matter of adding one {@link Entry} with its applicability
+ * <p>
+ * Adding a future interaction is a matter of adding one {@link Entry} with its
+ * applicability
  * rule; the rendering and separator logic need no changes.
  */
-class TreeContextMenu {
+public class TreeContextMenu {
 
     private final ProjectTree tree;
     private final TreeFileOperations fileOps;
     private final TreeHost host;
 
-    /** Item groups in display order; separators are drawn between non-empty groups. */
-    private final List<List<Entry>> groups;
-
     TreeContextMenu(ProjectTree tree, TreeFileOperations fileOps, TreeHost host) {
         this.tree = tree;
         this.fileOps = fileOps;
         this.host = host;
-        this.groups = buildEntries();
     }
 
-    /** Builds the popup for the given selection (in row order), or returns null if it is empty. */
+    /**
+     * Private enum tracks build context of context menu.
+     */
+    enum BuildContext {
+        FileTree(),
+        EditorTab()
+    }
+
+    /**
+     * Builds the popup for the given selection in row order, or returns null if it is empty.
+     * Backwards compatible single-parameter version (called from file tree).
+     */
     JPopupMenu build(List<FileTreeNode> selection) {
+        return build(selection, BuildContext.FileTree);
+    }
+
+    /**
+     * Builds the popup for the given selection in row order, or returns null if it is empty.
+     * Used to build from editor tab right click context menu.
+     */
+    JPopupMenu buildFromEditorTab(List<FileTreeNode> selection) {
+        return build(selection, BuildContext.EditorTab);
+    }
+
+    /**
+     * Builds the popup for the given selection (in row order), or returns null if
+     * it is empty.
+     */
+    JPopupMenu build(List<FileTreeNode> selection, BuildContext buildContext) {
+        // Item groups in display order; separators are drawn between non-empty groups.
+        List<List<Entry>> groups = buildEntries(buildContext);
         if (selection.isEmpty()) {
             return null;
         }
@@ -52,8 +84,8 @@ class TreeContextMenu {
         boolean firstGroup = true;
         for (List<Entry> group : groups) {
             List<Entry> visible = group.stream()
-                .filter(e -> e.visible.test(selection))
-                .toList();
+                    .filter(e -> e.visible.test(selection))
+                    .toList();
             if (visible.isEmpty()) {
                 continue;
             }
@@ -82,83 +114,127 @@ class TreeContextMenu {
 
     // --- Entry definitions ---
 
-    private List<List<Entry>> buildEntries() {
-        // Groups follow the context-menu skeleton (manifestos/context-menu-style.md §1):
+    private List<List<Entry>> buildEntries(BuildContext context) {
+        // Groups follow the context-menu skeleton (manifestos/context-menu-style.md
+        // §1):
         // primary -> context-specific -> external handoff -> clipboard -> create ->
         // modify -> destructive (isolated) -> view/state. Labels are sentence case.
         return List.of(
             // Primary
             List.of(
-                item("Open", TreeContextMenu::isSingleNonZipFile,
-                    sel -> host.openFile(file(sel)))
-            ),
+                item(
+                    "Open",
+                    (sel -> isSingleNonZipFile(sel) && context == BuildContext.FileTree),
+                    sel -> host.openFile(file(sel))
+                )),
             // Context-specific
             List.of(
-                item("Compare with active editor", TreeContextMenu::isSingleNonZipFile,
-                    sel -> host.compareWithActiveEditor(file(sel))),
-                item("Compare files", TreeContextMenu::isTwoFiles,
-                    sel -> host.compareFiles(file(sel, 0), file(sel, 1))),
-                item("Unzip", TreeContextMenu::isSingleZip,
-                        sel -> fileOps.unzipFile(file(sel)))
+                item(
+                    "Compare with active editor",
+                    sel -> (isSingleNonZipFile(sel) && context == BuildContext.FileTree),
+                    sel -> host.compareWithActiveEditor(file(sel))
+                ),
+                item(
+                    "Compare files", TreeContextMenu::isTwoFiles,
+                    sel -> host.compareFiles(file(sel, 0), file(sel, 1))
+                ),
+                item(
+                    "Unzip", TreeContextMenu::isSingleZip,
+                    sel -> fileOps.unzipFile(file(sel))
+                )
             ),
             // External handoff
             List.of(
-                item(revealLabel(), TreeContextMenu::isSingle,
-                    sel -> fileOps.reveal(file(sel))),
-                item("Launch Terminal", TreeContextMenu::isSingle,
-                    sel -> fileOps.openTerminal(file(sel)))
+                // Reveal in platform file manager
+                item(
+                    revealLabel(), TreeContextMenu::isSingle,
+                    sel -> fileOps.reveal(file(sel))
+                ),
+                item(
+                    "Launch Terminal", TreeContextMenu::isSingle,
+                    sel -> fileOps.openTerminal(file(sel))
+                )
             ),
             // Clipboard
             List.of(
-                item("Copy relative path", TreeContextMenu::any,
-                    sel -> fileOps.copyRelativePaths(files(sel))),
-                item("Copy full path", TreeContextMenu::any,
-                    sel -> fileOps.copyFullPaths(files(sel))),
-                item("Copy trailhead path", TreeContextMenu::any,
-                    sel -> fileOps.copyTrailheadPaths(files(sel)))
+                item(
+                    "Copy relative path", TreeContextMenu::any,
+                    sel -> fileOps.copyRelativePaths(files(sel))
+                ),
+                item(
+                    "Copy full path", TreeContextMenu::any,
+                    sel -> fileOps.copyFullPaths(files(sel))
+                ),
+                item(
+                    "Copy trailhead path", TreeContextMenu::any,
+                    sel -> fileOps.copyTrailheadPaths(files(sel))
+                )
             ),
             // Create
             List.of(
-                item("New file…", TreeContextMenu::isSingle,
-                    sel -> fileOps.createChild(file(sel), false)),
-                item("New folder…", TreeContextMenu::isSingle,
-                    sel -> fileOps.createChild(file(sel), true))),
+                item(
+                    "New file…", (sel -> isSingle(sel) && context == BuildContext.FileTree),
+                    sel -> fileOps.createChild(file(sel), false)
+                ),
+                item(
+                    "New folder…", (sel -> isSingle(sel) & context == BuildContext.FileTree),
+                    sel -> fileOps.createChild(file(sel), true)
+                )
+            ),
             // Modify — identity-changing verbs never apply to the root the user is
             // standing in (context-menu-style §4), which empty-space clicks select.
             List.of(
-                item("Rename…", sel -> isSingle(sel) && noneIsRoot(sel),
-                    sel -> fileOps.rename(file(sel))),
-                item("Duplicate…", sel -> isSingle(sel) && noneIsRoot(sel),
-                    sel -> fileOps.duplicate(file(sel))),
+                item(
+                    "Rename…", sel -> isSingle(sel) && noneIsRoot(sel),
+                    sel -> fileOps.rename(file(sel))
+                ),
+                item(
+                    "Duplicate…", sel -> isSingle(sel) && noneIsRoot(sel),
+                    sel -> fileOps.duplicate(file(sel))
+                ),
                 // Derives a new archive from the selection, like Duplicate derives a copy —
                 // and keeps it from surfacing as a folder's first (= primary-looking) item.
-                item("Zip", TreeContextMenu::isNotSingleZip,
-                    sel -> fileOps.zipFiles(files(sel), tree.getRootFile()))
+                item(
+                    "Zip", sel -> isNotSingleZip(sel) && context == BuildContext.FileTree,
+                    sel -> fileOps.zipFiles(files(sel), tree.getRootFile())
+                )
             ),
             // Destructive (isolated) — never the root (context-menu-style §4).
             List.of(
-                item("Delete", sel -> any(sel) && noneIsRoot(sel),
-                    sel -> fileOps.delete(files(sel)), MenuIcons::delete)
-            ),
+                item(
+                    "Delete", sel -> any(sel) && noneIsRoot(sel),
+                    sel -> fileOps.delete(files(sel)), MenuIcons::delete
+                )),
             // View
             List.of(
-                item("Expand children", TreeContextMenu::hasDirectory,
-                    sel -> directories(sel).forEach(tree::expandSubtree)),
-                item("Collapse children", TreeContextMenu::hasDirectory,
-                    sel -> directories(sel).forEach(tree::collapseSubtree)),
-                item("Collapse tree", TreeContextMenu::any,
-                    sel -> tree.collapseAll()),
-                checkbox("Show hidden files", TreeContextMenu::any,
+                item(
+                    "Expand children", (sel -> hasDirectory(sel) && context == BuildContext.FileTree),
+                    sel -> directories(sel).forEach(tree::expandSubtree)
+                ),
+                item(
+                    "Collapse children", (sel -> hasDirectory(sel) && context == BuildContext.FileTree),
+                    sel -> directories(sel).forEach(tree::collapseSubtree)
+                ),
+                item(
+                    "Collapse tree", (sel -> any(sel) && context == BuildContext.FileTree),
+                    sel -> tree.collapseAll()
+                ),
+                checkbox(
+                    "Show hidden files", (sel -> any(sel) && context == BuildContext.FileTree),
                     sel -> host.isShowHiddenFiles(),
-                    sel -> host.setShowHiddenFiles(!host.isShowHiddenFiles())),
-                item("Refresh", TreeContextMenu::any,
-                    sel -> sel.forEach(tree::refresh))
+                    sel -> host.setShowHiddenFiles(!host.isShowHiddenFiles())
+                ),
+                item(
+                    "Refresh", (sel -> any(sel) && context == BuildContext.FileTree),
+                    sel -> sel.forEach(tree::refresh)
+                )
             )
         );
     }
 
     /**
-     * The "reveal this file in the OS file manager" label, in each platform's own idiom
+     * The "reveal this file in the OS file manager" label, in each platform's own
+     * idiom
      * (manifesto §2.6): native feel outranks cross-platform verb parallelism here.
      */
     private static String revealLabel() {
@@ -202,7 +278,7 @@ class TreeContextMenu {
     }
 
     private static boolean isNotSingleZip(List<FileTreeNode> sel) {
-        return any(sel) && isNotZip(sel);
+        return !sel.isEmpty() && any(sel) && isNotZip(sel);
     }
 
     /**
@@ -231,32 +307,40 @@ class TreeContextMenu {
     }
 
     private static Entry item(String label, Predicate<List<FileTreeNode>> visible,
-                              Consumer<List<FileTreeNode>> action) {
+            Consumer<List<FileTreeNode>> action) {
         return new Entry(sel -> label, visible, null, action, null);
     }
 
-    /** A plain item carrying a sparse landmark icon (manifesto §3); {@code icon} is lazy so it
-     * picks up the current theme each time the menu is built. */
+    /**
+     * A plain item carrying a sparse landmark icon (manifesto §3); {@code icon} is
+     * lazy so it
+     * picks up the current theme each time the menu is built.
+     */
     private static Entry item(String label, Predicate<List<FileTreeNode>> visible,
-                              Consumer<List<FileTreeNode>> action, Supplier<Icon> icon) {
+            Consumer<List<FileTreeNode>> action, Supplier<Icon> icon) {
         return new Entry(sel -> label, visible, null, action, icon);
     }
 
-    /** A checkbox menu item: {@code checked} supplies its tick state when the menu is built. */
+    /**
+     * A checkbox menu item: {@code checked} supplies its tick state when the menu
+     * is built.
+     */
     private static Entry checkbox(String label, Predicate<List<FileTreeNode>> visible,
-                                  Predicate<List<FileTreeNode>> checked,
-                                  Consumer<List<FileTreeNode>> action) {
+            Predicate<List<FileTreeNode>> checked,
+            Consumer<List<FileTreeNode>> action) {
         return new Entry(sel -> label, visible, checked, action, null);
     }
 
     /**
-     * A single menu item: its label (selection-dependent), applicability, optional checkbox state
-     * ({@code checked}, null for a plain item), handler, and optional landmark icon supplier.
+     * A single menu item: its label (selection-dependent), applicability, optional
+     * checkbox state
+     * ({@code checked}, null for a plain item), handler, and optional landmark icon
+     * supplier.
      */
     private record Entry(Function<List<FileTreeNode>, String> label,
-                         Predicate<List<FileTreeNode>> visible,
-                         Predicate<List<FileTreeNode>> checked,
-                         Consumer<List<FileTreeNode>> action,
-                         Supplier<Icon> icon) {
+            Predicate<List<FileTreeNode>> visible,
+            Predicate<List<FileTreeNode>> checked,
+            Consumer<List<FileTreeNode>> action,
+            Supplier<Icon> icon) {
     }
 }
