@@ -785,6 +785,29 @@ public class EnhancedTextEditor extends JPanel {
             }
         });
 
+        // Repeat the last search, with no dialog needed. Bound twice on purpose:
+        // AppShortcut supplies the ⌘G/⇧⌘G form (the macOS system convention), and the
+        // bare F3/Shift+F3 form below is the Windows/Linux one — which AppShortcut
+        // cannot express, since its strokes always carry the menu modifier.
+        bind(inputMap, AppShortcut.FIND_NEXT, "findNext");
+        bind(inputMap, AppShortcut.FIND_PREVIOUS, "findPrevious");
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F3, 0), "findNext");
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_F3, InputEvent.SHIFT_DOWN_MASK), "findPrevious");
+
+        actionMap.put("findNext", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                searchManager.findAgain(true);
+            }
+        });
+
+        actionMap.put("findPrevious", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                searchManager.findAgain(false);
+            }
+        });
+
         // Toggle Comment
         bind(inputMap, AppShortcut.TOGGLE_COMMENT, "toggleComment");
 
@@ -1402,6 +1425,10 @@ public class EnhancedTextEditor extends JPanel {
         if (propertyHoverTooltipManager != null) {
             propertyHoverTooltipManager.dispose();
             propertyHoverTooltipManager = null;
+        }
+        if (searchManager != null) {
+            searchManager.dispose();
+            searchManager = null;
         }
     }
 

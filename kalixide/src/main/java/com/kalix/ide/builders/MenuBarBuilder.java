@@ -64,6 +64,8 @@ public class MenuBarBuilder {
         void runModelFromMemory();
         void searchModel();
         void showFindReplaceDialog();
+        void findNext();
+        void findPrevious();
         void findNodeOnMap();
 
         // Run Manager window
@@ -271,6 +273,8 @@ public class MenuBarBuilder {
         editMenu.addSeparator();
         editMenu.add(createMenuItem("Find...", AppShortcut.FIND, e -> callbacks.searchModel()));
         editMenu.add(createMenuItem("Find and Replace...", AppShortcut.FIND_AND_REPLACE, e -> callbacks.showFindReplaceDialog()));
+        editMenu.add(createMenuItem("Find Next", AppShortcut.FIND_NEXT, e -> callbacks.findNext()));
+        editMenu.add(createMenuItem("Find Previous", AppShortcut.FIND_PREVIOUS, e -> callbacks.findPrevious()));
         editMenu.add(createMenuItem("Find on Map...", e -> callbacks.findNodeOnMap()));
 
         return editMenu;

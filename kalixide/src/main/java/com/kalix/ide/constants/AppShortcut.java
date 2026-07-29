@@ -38,8 +38,20 @@ public enum AppShortcut {
     TOGGLE_COMMENT("Toggle Comment", KeyEvent.VK_SLASH),
     FIND("Find", KeyEvent.VK_F),
     FIND_AND_REPLACE("Find and Replace", KeyEvent.VK_H),
-    /** Editor-only: bound in {@code EnhancedTextEditor}; has no menu item. */
-    GO_TO_LINE("Go to Line", KeyEvent.VK_G),
+    /**
+     * Repeat the last search. {@code ⌘G}/{@code ⇧⌘G} is the macOS system-wide
+     * convention; {@code EnhancedTextEditor} additionally binds bare F3/Shift+F3
+     * for the Windows/Linux convention, which this enum cannot express because
+     * {@link #keyStroke()} always applies the menu modifier.
+     */
+    FIND_NEXT("Find Next", KeyEvent.VK_G),
+    FIND_PREVIOUS("Find Previous", KeyEvent.VK_G, InputEvent.SHIFT_DOWN_MASK),
+    /**
+     * Editor-only: bound in {@code EnhancedTextEditor}; has no menu item.
+     * On L rather than G (IntelliJ/Xcode/Eclipse convention) so that G is free
+     * for {@link #FIND_NEXT}, which has a far stronger claim to it.
+     */
+    GO_TO_LINE("Go to Line", KeyEvent.VK_L),
     TOGGLE_FILE_TREE("Toggle File Tree", KeyEvent.VK_B),
     RUN_MODEL("Run Model", KeyEvent.VK_R),
     NAVIGATE_BACK("Navigate Back", KeyEvent.VK_OPEN_BRACKET),

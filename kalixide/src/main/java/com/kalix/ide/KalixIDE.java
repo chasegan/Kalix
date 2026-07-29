@@ -1655,6 +1655,16 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
     
     @Override
+    public void findNext() {
+        textEditor.getSearchManager().findAgain(true);
+    }
+
+    @Override
+    public void findPrevious() {
+        textEditor.getSearchManager().findAgain(false);
+    }
+
+    @Override
     public void showFindReplaceDialog() {
         textEditor.getSearchManager().showFindReplaceDialog();
         updateStatus("Find and Replace dialog opened");
