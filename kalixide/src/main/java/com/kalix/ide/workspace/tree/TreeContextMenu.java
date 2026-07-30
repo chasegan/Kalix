@@ -51,7 +51,8 @@ public class TreeContextMenu {
      */
     enum BuildContext {
         FileTree(),
-        EditorTab()
+        EditorTab(),
+        Root()
     }
 
     /**
@@ -68,6 +69,15 @@ public class TreeContextMenu {
      */
     JPopupMenu buildFromEditorTab(List<FileTreeNode> selection) {
         return build(selection, BuildContext.EditorTab);
+    }
+
+    /**
+     * Builds the popup from root.
+     */
+    JPopupMenu buildFromRoot(FileTreeNode root) {
+        var l = new java.util.ArrayList<FileTreeNode>();
+        l.add(root);
+        return build(l, BuildContext.Root);
     }
 
     /**
@@ -195,7 +205,8 @@ public class TreeContextMenu {
                 // Derives a new archive from the selection, like Duplicate derives a copy —
                 // and keeps it from surfacing as a folder's first (= primary-looking) item.
                 item(
-                    "Zip", sel -> isNotSingleZip(sel) && context == BuildContext.FileTree,
+                    "Zip",
+                    (sel -> (isNotSingleZip(sel) && context == BuildContext.FileTree)),
                     sel -> fileOps.zipFiles(files(sel), tree.getRootFile())
                 )
             ),
@@ -216,16 +227,20 @@ public class TreeContextMenu {
                     sel -> directories(sel).forEach(tree::collapseSubtree)
                 ),
                 item(
-                    "Collapse tree", (sel -> any(sel) && context == BuildContext.FileTree),
+                    "Collapse tree",
+                    (sel -> any(sel) && (context == BuildContext.FileTree || context == BuildContext.Root)),
                     sel -> tree.collapseAll()
                 ),
                 checkbox(
-                    "Show hidden files", (sel -> any(sel) && context == BuildContext.FileTree),
+                    "Show hidden files",
+                    (sel -> any(sel) &&
+                        (context == BuildContext.FileTree || context == BuildContext.Root)),
                     sel -> host.isShowHiddenFiles(),
                     sel -> host.setShowHiddenFiles(!host.isShowHiddenFiles())
                 ),
                 item(
-                    "Refresh", (sel -> any(sel) && context == BuildContext.FileTree),
+                    "Refresh",
+                    (sel -> any(sel) && (context == BuildContext.FileTree || context == BuildContext.Root)),
                     sel -> sel.forEach(tree::refresh)
                 )
             )
