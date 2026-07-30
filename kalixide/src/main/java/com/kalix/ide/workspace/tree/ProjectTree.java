@@ -242,7 +242,7 @@ public class ProjectTree extends JTree {
         addMouseMotionListener(new MouseAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
-                setHoveredRow(getRowForLocation(e.getX(), e.getY()));
+                setHoveredRow(fullWidthRowAt(e.getY()));
             }
         });
         addMouseListener(new MouseAdapter() {
@@ -340,7 +340,7 @@ public class ProjectTree extends JTree {
         if (!e.isPopupTrigger()) {
             return;
         }
-        int row = getRowForLocation(e.getX(), e.getY());
+        int row = fullWidthRowAt(e.getY());
         List<FileTreeNode> subject;
         JPopupMenu menu;
         if (row < 0) {
@@ -623,9 +623,33 @@ public class ProjectTree extends JTree {
         return selectedNodes().stream().map(FileTreeNode::getFile).toList();
     }
 
+    /**
+     * The node at {@code (x, y)}, treating rows as full-width (matching the full-width
+     * hover/selection painting) rather than {@link #getPathForLocation}, which only hits the
+     * renderer's actual (label-width) bounds. {@code x} is otherwise unused, kept only so call
+     * sites reporting a mouse position read naturally.
+     */
     private FileTreeNode nodeAt(int x, int y) {
-        TreePath path = getPathForLocation(x, y);
+        int row = fullWidthRowAt(y);
+        if (row < 0) {
+            return null;
+        }
+        TreePath path = getPathForRow(row);
         return path != null && path.getLastPathComponent() instanceof FileTreeNode node ? node : null;
+    }
+
+    /**
+     * The row at {@code y}, treating rows as full-width (matching the full-width hover/selection
+     * painting) rather than {@link #getRowForLocation} which only hits the renderer's actual
+     * (label-width) bounds. Returns -1 below the last row.
+     */
+    private int fullWidthRowAt(int y) {
+        int row = getClosestRowForLocation(0, y);
+        if (row < 0) {
+            return -1;
+        }
+        Rectangle bounds = getRowBounds(row);
+        return (bounds != null && y >= bounds.y && y < bounds.y + bounds.height) ? row : -1;
     }
 
     /**
