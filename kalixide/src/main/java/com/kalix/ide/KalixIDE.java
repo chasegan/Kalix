@@ -765,7 +765,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Apply the persisted "show hidden files" choice before any folder is restored into the tree.
         projectTreePanel.setShowHidden(isShowHiddenFiles());
         documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(
-                documentManager, this::requestCloseDocument, this::showTabContextMenu);
+            documentManager,
+            this::requestCloseDocument,
+            this::showTabContextMenu,
+            projectTreePanel::getRootFile
+        );
         contextViewPanel = new com.kalix.ide.workspace.ContextViewPanel(documentManager);
 
         int treeWidth = PreferenceKeys.UI_TREE_WIDTH.get();

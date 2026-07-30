@@ -13,22 +13,28 @@ import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
+import java.util.function.Supplier;
 
 /**
- * The centre region: a tab strip with one tab per open {@link KalixDocument}, each tab's
- * content being that document's editor. This is the always-present anchor of the work area.
+ * The centre region: a tab strip with one tab per open {@link KalixDocument},
+ * each tab's content being that document's editor. This is the always-present
+ * anchor of the work area.
  *
- * <p>It is a thin view over {@link DocumentManager}: it observes opened / closed /
- * active-changed events to add, remove and select tabs, and reports user-driven tab
- * selection and close requests back. A {@code syncing} guard prevents the
+ * <p>
+ * It is a thin view over {@link DocumentManager}: it observes opened / closed /
+ * active-changed events to add, remove and select tabs, and reports user-driven
+ * tab selection and close requests back. A {@code syncing} guard prevents the
  * model→view→model feedback loop when selection changes programmatically.
  *
- * <p>Close requests are delegated to a handler (the host checks for unsaved changes before
- * actually closing) rather than removing tabs directly, so the document set stays the
- * single source of truth.
+ * <p>
+ * Close requests are delegated to a handler (the host checks for unsaved
+ * changes before actually closing) rather than removing tabs directly, so the
+ * document set stays the single source of truth.
  */
 public class DocumentTabPane extends JPanel {
 
@@ -36,9 +42,12 @@ public class DocumentTabPane extends JPanel {
     private final DocumentManager documentManager;
     private final Consumer<KalixDocument> closeRequestHandler;
     private final ContextMenuRequestHandler contextMenuRequestHandler;
+    private final Supplier<java.io.File> projectDirectorySupplier;
 
     /** Suppresses selection-change feedback while we mutate the tab strip programmatically. */
     private boolean syncing = false;
+
+    List<String> tabNames;
 
     /** Requests the tree's right-click context menu be shown for the given files. */
     @FunctionalInterface
@@ -46,19 +55,27 @@ public class DocumentTabPane extends JPanel {
         void showContextMenu(List<File> files, Component invoker, int x, int y);
     }
 
-    public DocumentTabPane(DocumentManager documentManager, Consumer<KalixDocument> closeRequestHandler,
-            ContextMenuRequestHandler contextMenuRequestHandler) {
+    public DocumentTabPane(
+        DocumentManager documentManager,
+        Consumer<KalixDocument> closeRequestHandler,
+        ContextMenuRequestHandler contextMenuRequestHandler,
+        Supplier<java.io.File> projectDirectorySupplier
+    ) {
         super(new BorderLayout());
         this.documentManager = documentManager;
         this.closeRequestHandler = closeRequestHandler;
         this.contextMenuRequestHandler = contextMenuRequestHandler;
+        this.tabNames = new ArrayList<String>();
+        this.projectDirectorySupplier = projectDirectorySupplier;
 
         tabbedPane = new JTabbedPane();
         tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
         // FlatLaf-native closable tabs.
         tabbedPane.putClientProperty("JTabbedPane.tabClosable", Boolean.TRUE);
-        tabbedPane.putClientProperty("JTabbedPane.tabCloseCallback",
-            (IntConsumer) this::onTabCloseRequested);
+        tabbedPane.putClientProperty(
+            "JTabbedPane.tabCloseCallback",
+            (IntConsumer) this::onTabCloseRequested
+        );
         add(tabbedPane, BorderLayout.CENTER);
 
         tabbedPane.addChangeListener(e -> onTabSelected());
@@ -125,7 +142,7 @@ public class DocumentTabPane extends JPanel {
                             // Show context menu
                             if (file != null) { // unsaved documents have no tree entry to show a menu for
                                 contextMenuRequestHandler.showContextMenu(
-                                        List.of(file), tabbedPane, e.getX(), e.getY());
+                                    List.of(file), tabbedPane, e.getX(), e.getY());
                             }
                         }
                     }
@@ -189,7 +206,10 @@ public class DocumentTabPane extends JPanel {
         if (index < 0) {
             return;
         }
-        tabbedPane.setTitleAt(index, tabTitle(document));
+        // A backing-file change (e.g. Untitled -> saved, or Save As) can change collisions
+        // with other open tabs, so names must be rebuilt rather than reusing the cached ones.
+        rebuildTabNames();
+        refreshTabs();
         tabbedPane.setToolTipTextAt(index, tabTooltip(document));
     }
 
@@ -198,9 +218,12 @@ public class DocumentTabPane extends JPanel {
     private void onDocumentOpened(KalixDocument document) {
         syncing = true;
         try {
+            // May add a conflict
+            this.rebuildTabNames();
             tabbedPane.addTab(tabTitle(document), document.getEditor());
             int index = indexOf(document);
             tabbedPane.setToolTipTextAt(index, tabTooltip(document));
+            this.refreshTabs();
         } finally {
             syncing = false;
         }
@@ -213,7 +236,10 @@ public class DocumentTabPane extends JPanel {
         }
         syncing = true;
         try {
+            // May remove conflict
+            this.rebuildTabNames();
             tabbedPane.removeTabAt(index);
+            this.refreshTabs();
         } finally {
             syncing = false;
         }
@@ -273,8 +299,12 @@ public class DocumentTabPane extends JPanel {
         return null;
     }
 
-    private static String tabTitle(KalixDocument document) {
-        return (document.isDirty() ? "● " : "") + document.getDisplayName();
+    private String tabTitle(KalixDocument document) {
+        int index = this.indexOf(document);
+        String tabName = (index >= 0 && index < tabNames.size())
+            ? tabNames.get(index)
+            : document.getDisplayName();
+        return (document.isDirty() ? "● " : "") + tabName;
     }
 
     private static String tabTooltip(KalixDocument document) {
@@ -283,4 +313,107 @@ public class DocumentTabPane extends JPanel {
             : document.getDisplayName();
     }
 
+    /**
+     * Full rebuild of tab names from the {@link #documentManager}.
+     * Updates {@link #tabNames} and refreshes every tab's title.
+     * <p>
+     * Documents sharing a plain display name (e.g. two {@code model.ini} files in different
+     * folders) are disambiguated by prefixing enough of their parent directory names to make
+     * them unique, without walking above the open project root.
+     */
+    private void rebuildTabNames() {
+        List<KalixDocument> documents = documentManager.getDocuments();
+        List<String> displayNames = new ArrayList<>(documents.size());
+        for (KalixDocument document : documents) {
+            displayNames.add(document.getDisplayName());
+        }
+
+        HashMap<String, List<Integer>> collisions = new HashMap<>();
+        for (int index = 0; index < displayNames.size(); index++) {
+            collisions.computeIfAbsent(displayNames.get(index), k -> new ArrayList<>())
+                      .add(index);
+        }
+
+        File root = projectDirectorySupplier.get();
+        for (List<Integer> collisionIndices : collisions.values()) {
+            if (collisionIndices.size() == 1) {
+                continue; // no collision to resolve
+            }
+            disambiguate(documents, displayNames, collisionIndices, root);
+        }
+        this.tabNames = displayNames;
+    }
+
+    private void refreshTabs() {
+        List<KalixDocument> documents = documentManager.getDocuments();
+        for (int i = 0; i < documents.size(); i++) {
+            tabbedPane.setTitleAt(i, tabTitle(documents.get(i)));
+        }
+    }
+
+    /**
+     * Resolves a single group of colliding tab names in place, by walking up each document's
+     * path (nearest ancestor first) and prefixing progressively more of it until the names in
+     * the group are unique, or the project root / an undated document stops further progress.
+     */
+    private void disambiguate(
+        List<KalixDocument> documents,
+        List<String> names,
+        List<Integer> collisionIndices,
+        File root
+    ) {
+        HashMap<Integer, List<String>> ancestors = new HashMap<>();
+        int maxDepth = 0;
+        for (int index : collisionIndices) {
+            List<String> segments = ancestorSegments(documents.get(index).getFile(), root);
+            ancestors.put(index, segments);
+            maxDepth = Math.max(maxDepth, segments.size());
+        }
+
+        int depth = 0;
+        while (true) {
+            HashMap<String, Integer> counts = new HashMap<>();
+            for (int index : collisionIndices) {
+                String candidate = disambiguatedName(documents.get(index), ancestors.get(index), depth);
+                counts.merge(candidate, 1, Integer::sum);
+            }
+            boolean allUnique = counts.values().stream().allMatch(count -> count == 1);
+            if (allUnique || depth >= maxDepth) {
+                for (int index : collisionIndices) {
+                    names.set(index, disambiguatedName(documents.get(index), ancestors.get(index), depth));
+                }
+                return;
+            }
+            depth++;
+        }
+    }
+
+    /** Ancestor directory names of {@code file}, nearest first, stopping at (excluding) {@code root}. */
+    private static List<String> ancestorSegments(File file, File root) {
+        List<String> segments = new ArrayList<>();
+        if (file == null) {
+            return segments; // Undated documents (e.g. "Untitled") cannot be disambiguated.
+        }
+        File parent = file.getParentFile();
+        while (parent != null && !parent.equals(root)) {
+            String name = parent.getName();
+            segments.add(name.isEmpty() ? parent.getPath() : name);
+            parent = parent.getParentFile();
+        }
+        return segments;
+    }
+
+    /** The tab name for {@code document}, prefixed with up to {@code depth} ancestor segments. */
+    private static String disambiguatedName(KalixDocument document, List<String> segments, int depth) {
+        String base = document.getDisplayName();
+        int use = Math.min(depth, segments.size());
+        if (use == 0) {
+            return base;
+        }
+        StringBuilder name = new StringBuilder();
+        for (int i = use - 1; i >= 0; i--) {
+            name.append(segments.get(i)).append('/');
+        }
+        return name.append(base).toString();
+    }
 }

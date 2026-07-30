@@ -218,10 +218,17 @@ public class KalixDocument {
     }
 
     /**
+     * @return whether the document has a backing file
+     */
+    public boolean hasFile() {
+        return file != null;
+    }
+
+    /**
      * @return a short display name for tabs and titles: the file name, or "Untitled"
      */
     public String getDisplayName() {
-        return file != null ? file.getName() : "Untitled";
+        return this.hasFile() ? file.getName() : "Untitled";
     }
 
     public HydrologicalModel getModel() {
