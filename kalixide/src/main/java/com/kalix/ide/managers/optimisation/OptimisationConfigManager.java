@@ -1,8 +1,8 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.components.KalixIniTextArea;
-import com.kalix.ide.document.ModelSource;
-import com.kalix.ide.document.ModelSourceRegistry;
+import com.kalix.ide.document.OpenModel;
+import com.kalix.ide.document.WorkspaceView;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -42,9 +42,9 @@ public class OptimisationConfigManager {
     /**
      * Creates a new OptimisationConfigManager.
      *
-     * @param modelSourceRegistry the open models an optimisation may target
+     * @param workspace the open models an optimisation may target
      */
-    public OptimisationConfigManager(ModelSourceRegistry modelSourceRegistry) {
+    public OptimisationConfigManager(WorkspaceView workspace) {
         // Initialize text editor first
         this.configEditor = new KalixIniTextArea(
             OptimisationUIConstants.CONFIG_TEXT_AREA_ROWS,
@@ -58,7 +58,7 @@ public class OptimisationConfigManager {
                 configEditor.setText(configText);
                 isUpdatingEditor = false;
             },
-            modelSourceRegistry
+            workspace
         );
 
         // Continue with initialization
@@ -494,7 +494,7 @@ public class OptimisationConfigManager {
         // Read the *selected* model's outputs. Sourcing these from the active tab was
         // the same ambient-read bug as the model target itself: pick model B and the
         // objective builder would still offer model A's series.
-        ModelSource selected = guiBuilder.getSelectedModel();
+        OpenModel selected = guiBuilder.getSelectedModel();
         if (selected == null) {
             guiBuilder.updateSimulatedSeriesOptions(java.util.List.of());
             return;

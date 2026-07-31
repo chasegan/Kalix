@@ -8,7 +8,7 @@ import java.io.File;
  * show for it.
  *
  * <p>This is the narrow read-only face of a {@link KalixDocument}. Auxiliary windows
- * take {@code ModelSource} rather than {@code KalixDocument} so they cannot reach the
+ * take {@code OpenModel} rather than {@code KalixDocument} so they cannot reach the
  * editor, map panel or dirty state — a window that only needs to <em>read</em> a model
  * should not be able to mutate the document graph.</p>
  *
@@ -19,13 +19,13 @@ import java.io.File;
  * {@link DocumentLabels#labelFor} may render the very same source differently as
  * other models open and close around it.</p>
  */
-public interface ModelSource {
+public interface OpenModel {
 
     /**
      * The bare name for this model — a file's basename, or "Untitled".
      *
      * <p>Not unique: two open models can share a basename. Use
-     * {@link DocumentLabels#labelFor(ModelSource, java.util.List)} for anything a
+     * {@link DocumentLabels#labelFor(OpenModel, java.util.List)} for anything a
      * user reads.</p>
      */
     String getDisplayName();

@@ -1,7 +1,7 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.document.DocumentLabels;
-import com.kalix.ide.document.ModelSource;
+import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.document.ModelWriteBack;
 
 import org.slf4j.Logger;
@@ -68,7 +68,7 @@ public class OptimisationModelManager {
             return;
         }
 
-        ModelSource target = optInfo.getTargetModel();
+        OpenModel target = optInfo.getTargetModel();
         String targetLabel = DocumentLabels.labelForClosed(optInfo.getTargetFile());
         if (target == null) {
             JOptionPane.showMessageDialog(parent,

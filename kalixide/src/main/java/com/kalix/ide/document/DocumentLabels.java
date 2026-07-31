@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The single resolver that projects a {@link ModelSource} to the string shown for it.
+ * The single resolver that projects a {@link OpenModel} to the string shown for it.
  *
  * <p>Per {@code manifestos/identity-and-labels.md} §2.3, display strings come only from
  * here — never hand-built at a call site. Every surface that names an open model (the
@@ -38,12 +38,12 @@ public final class DocumentLabels {
      * @param projectRoot the open project folder, above which paths are not walked;
      *                    {@code null} to walk as far as needed
      */
-    public static List<String> labelsFor(List<? extends ModelSource> all, File projectRoot) {
+    public static List<String> labelsFor(List<? extends OpenModel> all, File projectRoot) {
         if (all == null || all.isEmpty()) {
             return List.of();
         }
         List<String> labels = new ArrayList<>(all.size());
-        for (ModelSource source : all) {
+        for (OpenModel source : all) {
             labels.add(source.getDisplayName());
         }
 
@@ -72,12 +72,12 @@ public final class DocumentLabels {
      * @param projectRoot the open project folder, or {@code null}
      * @return the display label, never null
      */
-    public static String labelFor(ModelSource source, List<? extends ModelSource> all,
+    public static String labelFor(OpenModel source, List<? extends OpenModel> all,
                                   File projectRoot) {
         if (source == null) {
             return "";
         }
-        List<ModelSource> combined = new ArrayList<>();
+        List<OpenModel> combined = new ArrayList<>();
         if (all != null) {
             combined.addAll(all);
         }
@@ -105,7 +105,7 @@ public final class DocumentLabels {
      * the group is unique — or until the project root (or an unsaved model, which has no
      * path to walk) stops further progress.
      */
-    private static void disambiguate(List<? extends ModelSource> sources, List<String> labels,
+    private static void disambiguate(List<? extends OpenModel> sources, List<String> labels,
                                      List<Integer> group, File projectRoot) {
         Map<Integer, List<String>> ancestors = new HashMap<>();
         int maxDepth = 0;
@@ -149,7 +149,7 @@ public final class DocumentLabels {
     }
 
     /** The name prefixed with up to {@code depth} ancestor segments, outermost first. */
-    private static String qualified(ModelSource source, List<String> segments, int depth) {
+    private static String qualified(OpenModel source, List<String> segments, int depth) {
         String base = source.getDisplayName();
         int use = Math.min(depth, segments.size());
         if (use == 0) {
@@ -163,8 +163,8 @@ public final class DocumentLabels {
     }
 
     /** Position of {@code source} by identity — never by equality, which a value-like
-     * {@code ModelSource} could satisfy for a genuinely different model. */
-    private static int indexOfIdentity(List<? extends ModelSource> sources, ModelSource source) {
+     * {@code OpenModel} could satisfy for a genuinely different model. */
+    private static int indexOfIdentity(List<? extends OpenModel> sources, OpenModel source) {
         for (int i = 0; i < sources.size(); i++) {
             if (sources.get(i) == source) {
                 return i;

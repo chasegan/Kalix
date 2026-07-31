@@ -2,7 +2,7 @@ package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.OptimisationProgram;
-import com.kalix.ide.document.ModelSource;
+import com.kalix.ide.document.OpenModel;
 
 import java.io.File;
 
@@ -28,7 +28,7 @@ public class OptimisationInfo {
      * <p>May refer to a document the user has since closed; {@link #getTargetModelLabel()}
      * still reports it correctly because the label is captured at binding time.</p>
      */
-    private ModelSource targetModel;
+    private OpenModel targetModel;
 
     /**
      * The target's backing file, captured at binding time.
@@ -55,12 +55,12 @@ public class OptimisationInfo {
      * The model this optimisation was created against, or {@code null} if unknown
      * (an optimisation created before the binding was recorded).
      */
-    public ModelSource getTargetModel() {
+    public OpenModel getTargetModel() {
         return targetModel;
     }
 
     /** Binds this optimisation to a model, capturing its file alongside the reference. */
-    public void setTargetModel(ModelSource targetModel) {
+    public void setTargetModel(OpenModel targetModel) {
         this.targetModel = targetModel;
         this.targetFile = targetModel != null ? targetModel.getFile() : null;
     }

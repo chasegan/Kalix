@@ -35,7 +35,7 @@ import java.util.function.Supplier;
  * registration, linter/autocomplete service wiring) are intentionally <em>not</em>
  * owned here — they observe or attach to the active document from {@code KalixIDE}.
  */
-public class KalixDocument implements ModelSource {
+public class KalixDocument implements OpenModel {
 
     private static final Logger logger = LoggerFactory.getLogger(KalixDocument.class);
 

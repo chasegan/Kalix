@@ -6,14 +6,14 @@ import java.util.List;
 import java.util.function.Supplier;
 
 /**
- * The {@link ModelSourceRegistry} backed by the open documents.
+ * The {@link WorkspaceView} backed by the open documents.
  *
- * <p>A thin adapter: {@link KalixDocument} already <em>is</em> a {@link ModelSource},
+ * <p>A thin adapter: {@link KalixDocument} already <em>is</em> a {@link OpenModel},
  * so this only forwards the document set and folds the three
  * {@link DocumentManager} events (opened / closed / active-changed) into the single
  * "something changed" signal auxiliary windows care about.</p>
  */
-public class DocumentModelSources implements ModelSourceRegistry {
+public class DocumentWorkspaceView implements WorkspaceView {
 
     private final DocumentManager documentManager;
     private final Supplier<File> projectRootSupplier;
@@ -23,7 +23,7 @@ public class DocumentModelSources implements ModelSourceRegistry {
      * @param projectRootSupplier the open project folder, read on demand (the project
      *                            tree it comes from is built after this registry)
      */
-    public DocumentModelSources(DocumentManager documentManager,
+    public DocumentWorkspaceView(DocumentManager documentManager,
                                 Supplier<File> projectRootSupplier) {
         this.documentManager = documentManager;
         this.projectRootSupplier = projectRootSupplier;
@@ -33,12 +33,12 @@ public class DocumentModelSources implements ModelSourceRegistry {
     }
 
     @Override
-    public List<? extends ModelSource> available() {
+    public List<? extends OpenModel> openModels() {
         return documentManager.getDocuments();
     }
 
     @Override
-    public ModelSource active() {
+    public OpenModel activeModel() {
         return documentManager.getActiveDocument();
     }
 

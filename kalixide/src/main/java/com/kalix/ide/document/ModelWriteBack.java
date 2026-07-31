@@ -4,7 +4,7 @@ package com.kalix.ide.document;
  * Writes model text back into an open model — the return path for the Optimiser's
  * "copy optimised model to main editor".
  *
- * <p>Separate from {@link ModelSource} on purpose: a source is read-only, so a window
+ * <p>Separate from {@link OpenModel} on purpose: a source is read-only, so a window
  * that merely reads models cannot mutate one by accident. Writing back is an explicit
  * capability the host grants.</p>
  */
@@ -22,5 +22,5 @@ public interface ModelWriteBack {
      * @param text   the replacement text
      * @return {@code true} if written; {@code false} if the target is no longer open
      */
-    boolean writeTo(ModelSource target, String text);
+    boolean writeTo(OpenModel target, String text);
 }

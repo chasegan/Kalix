@@ -107,6 +107,28 @@ public class DocumentManager {
     }
 
     /**
+     * The open document behind an {@link OpenModel} handle, or {@code null} if it is no
+     * longer open.
+     *
+     * <p>Matches on identity first, then falls back to the backing file: a document that
+     * was closed and reopened is a <em>new</em> object, so identity alone would never
+     * recognise it even though the user is looking at the same file. Callers holding a
+     * handle across time (an optimisation remembering what it ran against) need the
+     * fallback; the identity check keeps the common case exact.</p>
+     */
+    public KalixDocument resolve(OpenModel model) {
+        if (model == null) {
+            return null;
+        }
+        for (KalixDocument document : documents) {
+            if (document == model) {
+                return document;
+            }
+        }
+        return findByFile(model.getFile());
+    }
+
+    /**
      * Moves a document from one position to another in the document list.
      * This affects the tab order but does not change the active document.
      *

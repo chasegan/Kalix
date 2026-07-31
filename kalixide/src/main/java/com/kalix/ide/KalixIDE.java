@@ -12,9 +12,9 @@ import com.kalix.ide.dialogs.PreferencesDialog;
 import com.kalix.ide.linter.LinterPreferencesPanel;
 import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.document.DocumentManager;
-import com.kalix.ide.document.DocumentModelSources;
+import com.kalix.ide.document.DocumentWorkspaceView;
 import com.kalix.ide.document.KalixDocument;
-import com.kalix.ide.document.ModelSource;
+import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.handlers.FileDropHandler;
 import com.kalix.ide.managers.ThemeManager;
@@ -90,7 +90,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     // Document management (owns open documents and the active-document concept)
     private DocumentManager documentManager;
     /** Enumerable view of the open models, for windows that let the user pick a target. */
-    private DocumentModelSources modelSources;
+    private DocumentWorkspaceView workspace;
 
     // Cached views of the active document, refreshed when the active document changes.
     private MapPanel mapPanel;
@@ -290,7 +290,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         // The enumerable view of the open models, for windows that must let the user
         // choose a target rather than silently assume the active tab (the Optimiser).
-        modelSources = new DocumentModelSources(documentManager, this::projectRootForLabels);
+        workspace = new DocumentWorkspaceView(documentManager, this::projectRootForLabels);
 
         statusLabel = new JLabel(AppConstants.STATUS_READY);
         statusLabel.setBorder(BorderFactory.createEmptyBorder(
@@ -1687,7 +1687,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         OptimisationWindow.showOptimisationWindow(this, stdioTaskManager, this::updateStatus,
             progressBar,
             fileOperations::getCurrentProjectDirectory,
-            modelSources,
+            workspace,
             this::writeModelTextTo);
     }
 
@@ -1710,24 +1710,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         return projectTreePanel != null ? projectTreePanel.getRootFile() : null;
     }
 
-    private boolean writeModelTextTo(ModelSource target, String text) {
-        if (target == null) {
-            return false;
-        }
-        KalixDocument document = target instanceof KalixDocument candidate
-                && documentManager.getDocuments().contains(candidate) ? candidate : null;
-        if (document == null) {
-            // The document was closed. If the same file has since been reopened it is a
-            // *new* document object, so identity alone misses it — fall back to the file.
-            document = documentManager.findByFile(target.getFile());
-        }
+    private boolean writeModelTextTo(OpenModel target, String text) {
+        KalixDocument document = documentManager.resolve(target);
         if (document == null) {
             return false;
         }
         documentManager.setActiveDocument(document);
-        document.getEditor().setText(text);
-        document.getEditor().setDirty(true);
-        toFront();
+        document.setText(text);
+        document.setDirty(true);
+        toFront();  // the only part of this that is genuinely the frame's business
         return true;
     }
 

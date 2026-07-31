@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Unit tests for {@link DocumentLabels}, the resolver that projects a
- * {@link ModelSource} to the string shown for it.
+ * {@link OpenModel} to the string shown for it.
  *
  * <p>The behaviour that matters: two open models sharing a basename must be
  * distinguishable. Without qualification the Optimiser's model list shows two
@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class DocumentLabelsTest {
 
     /** A stand-in model source; identity is the object, as for a real KalixDocument. */
-    private record FakeSource(String name, File folder) implements ModelSource {
+    private record FakeSource(String name, File folder) implements OpenModel {
         @Override
         public String getDisplayName() {
             return name;

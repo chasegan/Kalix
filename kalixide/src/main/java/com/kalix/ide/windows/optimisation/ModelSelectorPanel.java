@@ -1,8 +1,8 @@
 package com.kalix.ide.windows.optimisation;
 
 import com.kalix.ide.document.DocumentLabels;
-import com.kalix.ide.document.ModelSource;
-import com.kalix.ide.document.ModelSourceRegistry;
+import com.kalix.ide.document.OpenModel;
+import com.kalix.ide.document.WorkspaceView;
 
 import javax.swing.BorderFactory;
 import javax.swing.DefaultComboBoxModel;
@@ -27,7 +27,7 @@ import java.util.function.Consumer;
  * <p>Without this, the target is whichever tab happened to be in front when "New" was
  * clicked: implicit, invisible, and only changeable by going back to the main window.</p>
  *
- * <p><b>Identity:</b> the combo model holds {@link ModelSource} references, never
+ * <p><b>Identity:</b> the combo model holds {@link OpenModel} references, never
  * names. Labels are projected at render time by {@link DocumentLabels}, which qualifies
  * duplicate basenames with their folder — so two open {@code model.ini} files stay
  * distinguishable without the label ever becoming the identity
@@ -38,8 +38,8 @@ public class ModelSelectorPanel extends JPanel {
     /** Widest the combo may grow; long paths truncate rather than crowd out the row. */
     private static final int MAX_COMBO_WIDTH = 260;
 
-    private final ModelSourceRegistry registry;
-    private final JComboBox<ModelSource> combo;
+    private final WorkspaceView workspace;
+    private final JComboBox<OpenModel> combo;
 
     /** Labels for the current combo contents, positionally aligned with the model. */
     private List<String> labels = List.of();
@@ -48,20 +48,20 @@ public class ModelSelectorPanel extends JPanel {
     private boolean syncing = false;
 
     /** Notified when the user picks a different model; never fired for programmatic changes. */
-    private Consumer<ModelSource> selectionListener = source -> {};
+    private Consumer<OpenModel> selectionListener = source -> {};
 
     /**
      * Vetoes a selection before it takes effect. Returning false reverts the combo to
      * its previous value — used to confirm the session rebuild that a model change
      * forces on an already-created optimisation.
      */
-    private BiPredicate<ModelSource, ModelSource> selectionGuard = (from, to) -> true;
+    private BiPredicate<OpenModel, OpenModel> selectionGuard = (from, to) -> true;
 
     /** The selection before the in-flight change, so a vetoed change can be reverted. */
-    private ModelSource previousSelection;
+    private OpenModel previousSelection;
 
-    public ModelSelectorPanel(ModelSourceRegistry registry) {
-        this.registry = registry;
+    public ModelSelectorPanel(WorkspaceView workspace) {
+        this.workspace = workspace;
 
         setLayout(new FlowLayout(FlowLayout.LEFT, 5, 0));
         setBorder(BorderFactory.createEmptyBorder(4, 10, 4, 5));
@@ -76,11 +76,11 @@ public class ModelSelectorPanel extends JPanel {
 
         refresh();
         // Re-list whenever a model is opened, closed or activated in the main window.
-        registry.addChangeListener(this::refresh);
+        workspace.addChangeListener(this::refresh);
     }
 
     /** Registers the listener notified when the user picks a different model. */
-    public void setSelectionListener(Consumer<ModelSource> listener) {
+    public void setSelectionListener(Consumer<OpenModel> listener) {
         this.selectionListener = listener != null ? listener : source -> {};
     }
 
@@ -88,13 +88,13 @@ public class ModelSelectorPanel extends JPanel {
      * Registers a veto called with (previous, requested) before a user-driven change is
      * accepted. Returning false reverts the combo.
      */
-    public void setSelectionGuard(BiPredicate<ModelSource, ModelSource> guard) {
+    public void setSelectionGuard(BiPredicate<OpenModel, OpenModel> guard) {
         this.selectionGuard = guard != null ? guard : (from, to) -> true;
     }
 
     /** @return the selected model, or {@code null} if no model is open */
-    public ModelSource getSelectedModel() {
-        return (ModelSource) combo.getSelectedItem();
+    public OpenModel getSelectedModel() {
+        return (OpenModel) combo.getSelectedItem();
     }
 
     /**
@@ -102,7 +102,7 @@ public class ModelSelectorPanel extends JPanel {
      * no longer open is added as a trailing entry so a bound optimisation still shows
      * what it targets after its tab is closed.
      */
-    public void setSelectedModel(ModelSource source) {
+    public void setSelectedModel(OpenModel source) {
         syncing = true;
         try {
             if (source != null && !contains(source)) {
@@ -120,12 +120,12 @@ public class ModelSelectorPanel extends JPanel {
         combo.setEnabled(enabled);
     }
 
-    /** Rebuilds the list from the registry, preserving the current selection if still open. */
+    /** Rebuilds the list from the workspace, preserving the current selection if still open. */
     public void refresh() {
-        ModelSource selected = getSelectedModel();
+        OpenModel selected = getSelectedModel();
         syncing = true;
         try {
-            rebuild(selected != null && !registry.available().contains(selected) ? selected : null);
+            rebuild(selected != null && !workspace.openModels().contains(selected) ? selected : null);
             if (selected != null && contains(selected)) {
                 combo.setSelectedItem(selected);
             } else if (combo.getItemCount() > 0) {
@@ -160,8 +160,8 @@ public class ModelSelectorPanel extends JPanel {
     }
 
     /** The main window's active model when it is selectable, else the first entry. */
-    private ModelSource defaultSelection() {
-        ModelSource active = registry.active();
+    private OpenModel defaultSelection() {
+        OpenModel active = workspace.activeModel();
         return active != null && contains(active) ? active : combo.getItemAt(0);
     }
 
@@ -169,20 +169,20 @@ public class ModelSelectorPanel extends JPanel {
      * Repopulates the combo with the open models, optionally retaining one closed model
      * so a bound optimisation keeps showing its (now closed) target.
      */
-    private void rebuild(ModelSource retainedClosed) {
-        List<ModelSource> items = new ArrayList<>(registry.available());
+    private void rebuild(OpenModel retainedClosed) {
+        List<OpenModel> items = new ArrayList<>(workspace.openModels());
         if (retainedClosed != null && !items.contains(retainedClosed)) {
             items.add(retainedClosed);
         }
-        labels = DocumentLabels.labelsFor(items, registry.projectRoot());
-        combo.setModel(new DefaultComboBoxModel<>(items.toArray(new ModelSource[0])));
+        labels = DocumentLabels.labelsFor(items, workspace.projectRoot());
+        combo.setModel(new DefaultComboBoxModel<>(items.toArray(new OpenModel[0])));
         combo.setPreferredSize(null);
         Dimension preferred = combo.getPreferredSize();
         combo.setPreferredSize(new Dimension(
                 Math.min(preferred.width + 20, MAX_COMBO_WIDTH), preferred.height));
     }
 
-    private boolean contains(ModelSource source) {
+    private boolean contains(OpenModel source) {
         for (int i = 0; i < combo.getItemCount(); i++) {
             if (combo.getItemAt(i) == source) {
                 return true;
@@ -195,7 +195,7 @@ public class ModelSelectorPanel extends JPanel {
         if (syncing) {
             return;
         }
-        ModelSource selected = getSelectedModel();
+        OpenModel selected = getSelectedModel();
         if (selected == previousSelection) {
             return;
         }
@@ -222,7 +222,7 @@ public class ModelSelectorPanel extends JPanel {
         public Component getListCellRendererComponent(JList<?> list, Object value, int index,
                                                       boolean isSelected, boolean cellHasFocus) {
             super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-            if (!(value instanceof ModelSource source)) {
+            if (!(value instanceof OpenModel source)) {
                 setText(combo.getItemCount() == 0 ? "No model open" : "");
                 return this;
             }
@@ -231,7 +231,7 @@ public class ModelSelectorPanel extends JPanel {
             String label = position >= 0 && position < labels.size()
                     ? labels.get(position) : source.getDisplayName();
 
-            boolean closed = !registry.available().contains(source);
+            boolean closed = !workspace.openModels().contains(source);
             if (closed) {
                 setText(label + "  (closed)");
             } else if (!source.isOptimisable()) {
@@ -246,7 +246,7 @@ public class ModelSelectorPanel extends JPanel {
             return this;
         }
 
-        private int indexOf(ModelSource source) {
+        private int indexOf(OpenModel source) {
             for (int i = 0; i < combo.getItemCount(); i++) {
                 if (combo.getItemAt(i) == source) {
                     return i;

@@ -2,8 +2,8 @@ package com.kalix.ide.windows;
 
 import com.kalix.ide.KalixIDE;
 import com.kalix.ide.document.DocumentLabels;
-import com.kalix.ide.document.ModelSource;
-import com.kalix.ide.document.ModelSourceRegistry;
+import com.kalix.ide.document.OpenModel;
+import com.kalix.ide.document.WorkspaceView;
 import com.kalix.ide.document.ModelWriteBack;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.managers.optimisation.OptimisationConfigManager;
@@ -71,7 +71,7 @@ public class OptimisationWindow extends JFrame {
     private final Consumer<String> statusUpdater;
     private final StatusProgressBar progressBar;
     private final Supplier<File> projectDirectorySupplier;
-    private final ModelSourceRegistry modelSources;
+    private final WorkspaceView workspace;
     private final ModelWriteBack modelWriteBack;
 
     // Manager instances
@@ -124,13 +124,13 @@ public class OptimisationWindow extends JFrame {
                                Consumer<String> statusUpdater,
                                StatusProgressBar progressBar,
                                Supplier<File> projectDirectorySupplier,
-                               ModelSourceRegistry modelSources,
+                               WorkspaceView workspace,
                                ModelWriteBack modelWriteBack) {
         this.stdioTaskManager = stdioTaskManager;
         this.statusUpdater = statusUpdater;
         this.progressBar = progressBar;
         this.projectDirectorySupplier = projectDirectorySupplier;
-        this.modelSources = modelSources;
+        this.workspace = workspace;
         this.modelWriteBack = modelWriteBack;
 
         // Initialize managers
@@ -164,7 +164,7 @@ public class OptimisationWindow extends JFrame {
         // the model selector — so it is the source of the target working directory that
         // the other managers' file dialogs open at.
         this.treeManager = new OptimisationTreeManager(sessionBookkeeping);
-        this.configManager = new OptimisationConfigManager(modelSources);
+        this.configManager = new OptimisationConfigManager(workspace);
         this.progressManager = new OptimisationProgressManager(progressBar);
         this.resultsManager = new OptimisationResultsManager();
         this.plotManager = new OptimisationPlotManager();
@@ -313,12 +313,12 @@ public class OptimisationWindow extends JFrame {
                                               Consumer<String> statusUpdater,
                                               StatusProgressBar progressBar,
                                               Supplier<File> projectDirectorySupplier,
-                                              ModelSourceRegistry modelSources,
+                                              WorkspaceView workspace,
                                               ModelWriteBack modelWriteBack) {
         if (instance == null) {
             instance = new OptimisationWindow(parentFrame, stdioTaskManager,
                     statusUpdater, progressBar, projectDirectorySupplier,
-                    modelSources, modelWriteBack);
+                    workspace, modelWriteBack);
         }
 
         // The window is a singleton that outlives each showing, so an unbound selector
@@ -428,7 +428,7 @@ public class OptimisationWindow extends JFrame {
 
         // The target is whatever the Model selector shows — an explicit, visible choice,
         // no longer an implicit read of whichever main-window tab was in front.
-        ModelSource target = guiBuilder.getSelectedModel();
+        OpenModel target = guiBuilder.getSelectedModel();
 
         // Create optimisation through session manager with sessionKey passed to callbacks
         createOptimisation(new OptimisationSessionManager.NewOptimisation(
@@ -446,8 +446,8 @@ public class OptimisationWindow extends JFrame {
     }
 
     /** The label for a model as it reads against the currently open set. */
-    private String labelFor(ModelSource source) {
-        return DocumentLabels.labelFor(source, modelSources.available(), modelSources.projectRoot());
+    private String labelFor(OpenModel source) {
+        return DocumentLabels.labelFor(source, workspace.openModels(), workspace.projectRoot());
     }
 
     /**
@@ -533,7 +533,7 @@ public class OptimisationWindow extends JFrame {
      * carries across; only the model-specific parameter list is rebuilt, by the
      * discovery round-trip the new session performs.</p>
      */
-    private void rebindOptimisation(OptimisationInfo optInfo, ModelSource target) {
+    private void rebindOptimisation(OptimisationInfo optInfo, OpenModel target) {
         boolean iniLocked = optInfo.isIniLocked();
         String name = optInfo.getName();
         String retiredKey = optInfo.getSessionKey();

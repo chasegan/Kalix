@@ -1,7 +1,7 @@
 package com.kalix.ide.windows.optimisation;
 
-import com.kalix.ide.document.ModelSource;
-import com.kalix.ide.document.ModelSourceRegistry;
+import com.kalix.ide.document.OpenModel;
+import com.kalix.ide.document.WorkspaceView;
 import com.kalix.ide.managers.optimisation.OptimisationConfigModel;
 
 import javax.swing.*;
@@ -28,10 +28,10 @@ public class OptimisationGuiBuilder extends JPanel {
      * Creates a new OptimisationGuiBuilder.
      *
      * @param configTextConsumer Callback to receive generated config text and switch to text tab
-     * @param modelSourceRegistry The open models the optimisation may target
+     * @param workspace The open models the optimisation may target
      */
     public OptimisationGuiBuilder(Consumer<String> configTextConsumer,
-                                  ModelSourceRegistry modelSourceRegistry) {
+                                  WorkspaceView workspace) {
         this.configTextConsumer = configTextConsumer;
 
         setLayout(new BorderLayout());
@@ -43,7 +43,7 @@ public class OptimisationGuiBuilder extends JPanel {
         // Add the three configuration panels
         // The selector comes first: observed-data paths are browsed for, and stored
         // relative to, the *target* model's folder — not whichever tab is in front.
-        modelSelectorPanel = new ModelSelectorPanel(modelSourceRegistry);
+        modelSelectorPanel = new ModelSelectorPanel(workspace);
         objectivePanel = new ObjectiveConfigPanel(this::getTargetWorkingDirectory);
         algorithmPanel = new AlgorithmConfigPanel();
         parametersPanel = new ParametersConfigPanel();
@@ -100,7 +100,7 @@ public class OptimisationGuiBuilder extends JPanel {
     }
 
     /** The selected model, or {@code null} if no model is open. */
-    public ModelSource getSelectedModel() {
+    public OpenModel getSelectedModel() {
         return modelSelectorPanel.getSelectedModel();
     }
 
@@ -110,7 +110,7 @@ public class OptimisationGuiBuilder extends JPanel {
      * directory, and what file dialogs in this window open at.
      */
     public File getTargetWorkingDirectory() {
-        ModelSource selected = modelSelectorPanel.getSelectedModel();
+        OpenModel selected = modelSelectorPanel.getSelectedModel();
         return selected != null ? selected.getWorkingDirectory() : null;
     }
 

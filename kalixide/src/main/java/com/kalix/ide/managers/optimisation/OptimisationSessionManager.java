@@ -3,7 +3,7 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.ProgressParser;
-import com.kalix.ide.document.ModelSource;
+import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.StdioTaskManager;
 import org.slf4j.Logger;
@@ -112,7 +112,7 @@ public class OptimisationSessionManager {
      *                      creation callback; the hook a retarget uses to retire the
      *                      optimisation being replaced
      */
-    public record NewOptimisation(ModelSource target,
+    public record NewOptimisation(OpenModel target,
                                   String targetLabel,
                                   String preferredName,
                                   String configText,
@@ -127,7 +127,7 @@ public class OptimisationSessionManager {
      * <p>Exposed so a caller about to <em>replace</em> an existing optimisation can
      * check first and abandon the change while the original is still intact.</p>
      */
-    public String describeTargetProblem(ModelSource target, String targetLabel) {
+    public String describeTargetProblem(OpenModel target, String targetLabel) {
         if (target == null) {
             return "No model selected. Open a model and choose it in the Model list.";
         }
@@ -154,7 +154,7 @@ public class OptimisationSessionManager {
                                   java.util.function.BiConsumer<String, ProgressParser.ProgressInfo> progressCallback,
                                   java.util.function.BiConsumer<String, List<String>> parametersCallback,
                                   java.util.function.BiConsumer<String, String> resultCallback) {
-        ModelSource target = request.target();
+        OpenModel target = request.target();
         String targetLabel = request.targetLabel();
         String configText = request.configText();
         OptimisationConfigModel configModel = request.configModel();
