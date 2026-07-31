@@ -493,27 +493,12 @@ public class OptimisationWindow extends JFrame {
                 return true;
             }
 
-            StringBuilder consequences = new StringBuilder();
-            if (optInfo.isIniLocked()) {
-                consequences.append("Its INI text is kept as-is — including any parameter lines,\n")
-                            .append("which refer to the old model and will need updating by hand.\n");
-            } else {
-                consequences.append("Its detected parameters and expressions will be replaced with\n")
-                            .append("ones for the new model.\n");
-            }
-            if (!optInfo.getConfigModel().getTerms().isEmpty()) {
-                consequences.append("Observed-data paths are stored relative to the model's folder,\n")
-                            .append("so objective terms may need re-pointing.\n");
-            }
-
             int response = JOptionPane.showConfirmDialog(this,
-                "Change '" + optInfo.getName() + "' to run against '" + labelFor(requested) + "'?\n\n"
-                    + "The optimisation will be rebuilt against the new model.\n"
-                    + consequences,
-                "Change Target Model",
-                JOptionPane.OK_CANCEL_OPTION,
-                JOptionPane.WARNING_MESSAGE);
-            return response == JOptionPane.OK_OPTION;
+                "Switch target model?",
+                "Switch Target Model",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.QUESTION_MESSAGE);
+            return response == JOptionPane.YES_OPTION;
         });
 
         selector.setSelectionListener(target -> {
