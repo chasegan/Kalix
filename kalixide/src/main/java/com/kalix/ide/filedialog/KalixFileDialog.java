@@ -58,6 +58,19 @@ import java.util.Optional;
  *     .filters(FileDialogFilter.of("Kalix models (*.ini)", "ini"))
  *     .show();
  * }</pre>
+ *
+ * <p>Open dialogs can take several files at once with {@code .multiSelect()}, which is
+ * shown with {@link #showAll()} rather than {@link #show()}:
+ * <pre>{@code
+ * List<File> files = KalixFileDialog.openFile(window)
+ *     .multiSelect()
+ *     .filters(FileDialogFilter.of("Source results (*.res.csv)", "res.csv"))
+ *     .showAll();
+ * }</pre>
+ *
+ * <p>Save dialogs show no filter combo: the typed name is taken verbatim, so a caller that
+ * supports several formats reads the format back off the chosen file's extension rather
+ * than off a filter selection.
  */
 public final class KalixFileDialog implements FileViewHost {
 
@@ -71,6 +84,7 @@ public final class KalixFileDialog implements FileViewHost {
     private Path startDir;
     private final List<FileDialogFilter> filters = new ArrayList<>();
     private String suggestedName = "";
+    private boolean multiSelect;
 
     // --- UI state ---
     private JDialog dialog;
@@ -100,7 +114,8 @@ public final class KalixFileDialog implements FileViewHost {
     private Path currentDir;
     private FsEntry selectedEntry;
     private boolean columnsMode;
-    private File result;
+    /** The accepted files: empty when cancelled, one entry unless multi-select is on. */
+    private final List<File> results = new ArrayList<>();
 
     // Back/forward history of visited directories, same idiom as the editor's navigation.
     private final List<Path> visited = new ArrayList<>();
@@ -131,9 +146,13 @@ public final class KalixFileDialog implements FileViewHost {
         pathMovedListener = listener;
     }
 
-    private KalixFileDialog(Mode mode, Window owner) {
+    private KalixFileDialog(Mode mode, java.awt.Component owner) {
         this.mode = mode;
-        this.owner = owner;
+        // Call sites hold whatever they hold — a frame, a panel, a table. Resolving the
+        // window here spares every one of them the getWindowAncestor dance.
+        this.owner = owner instanceof Window window
+            ? window
+            : owner != null ? javax.swing.SwingUtilities.getWindowAncestor(owner) : null;
         this.title = switch (mode) {
             case OPEN_FILE -> "Open";
             case SAVE_FILE -> "Save";
@@ -143,15 +162,18 @@ public final class KalixFileDialog implements FileViewHost {
 
     // --- Builder API ---
 
-    public static KalixFileDialog openFile(Window owner) {
+    /** @param owner any component in the owning window (or the window itself); may be null */
+    public static KalixFileDialog openFile(java.awt.Component owner) {
         return new KalixFileDialog(Mode.OPEN_FILE, owner);
     }
 
-    public static KalixFileDialog saveFile(Window owner) {
+    /** @param owner any component in the owning window (or the window itself); may be null */
+    public static KalixFileDialog saveFile(java.awt.Component owner) {
         return new KalixFileDialog(Mode.SAVE_FILE, owner);
     }
 
-    public static KalixFileDialog chooseFolder(Window owner) {
+    /** @param owner any component in the owning window (or the window itself); may be null */
+    public static KalixFileDialog chooseFolder(java.awt.Component owner) {
         return new KalixFileDialog(Mode.CHOOSE_FOLDER, owner);
     }
 
@@ -185,11 +207,43 @@ public final class KalixFileDialog implements FileViewHost {
     }
 
     /**
+     * Lets the user pick several files at once. Open mode only — saving and folder
+     * choosing each have exactly one answer by definition. Pair with {@link #showAll()};
+     * {@link #show()} rejects a multi-select dialog rather than silently dropping picks.
+     */
+    public KalixFileDialog multiSelect() {
+        if (mode != Mode.OPEN_FILE) {
+            throw new IllegalStateException("multiSelect() applies to open dialogs only, not " + mode);
+        }
+        this.multiSelect = true;
+        return this;
+    }
+
+    /**
      * Shows the modal dialog and blocks until it closes.
      *
      * @return the chosen file/folder, or empty if cancelled
+     * @throws IllegalStateException if {@link #multiSelect()} was requested — use
+     *     {@link #showAll()}, which can express more than one answer
      */
     public Optional<File> show() {
+        if (multiSelect) {
+            throw new IllegalStateException("multiSelect() dialogs must be shown with showAll()");
+        }
+        return runDialog().stream().findFirst();
+    }
+
+    /**
+     * Shows the modal dialog and blocks until it closes. The multi-select counterpart of
+     * {@link #show()}; works in single-select open mode too, yielding at most one file.
+     *
+     * @return the chosen files in view order, or empty if cancelled
+     */
+    public List<File> showAll() {
+        return runDialog();
+    }
+
+    private List<File> runDialog() {
         buildUi();
         Path start = startDir != null ? startDir : FileDialogHistory.lastDirectory();
         if (start == null || !Files.isDirectory(start)) {
@@ -205,7 +259,7 @@ public final class KalixFileDialog implements FileViewHost {
         }
         dialog.setVisible(true); // modal; blocks until accept/cancel disposes
         lister.dispose();
-        return Optional.ofNullable(result);
+        return List.copyOf(results);
     }
 
     // --- FileViewHost ---
@@ -231,6 +285,11 @@ public final class KalixFileDialog implements FileViewHost {
     }
 
     @Override
+    public boolean allowsMultiSelect() {
+        return multiSelect;
+    }
+
+    @Override
     public void directoryShown(Path dir) {
         currentDir = dir;
         clearStatus();
@@ -248,9 +307,11 @@ public final class KalixFileDialog implements FileViewHost {
             pendingSaveName = entry.name();
         }
         // The field shows the selected entry's NAME (standard dialog behaviour); it never
-        // updates while the user is typing in it.
+        // updates while the user is typing in it. Under a multi-selection no single name
+        // is the truth, so it reports the count instead.
         if (pathField != null && !pathField.isFocusOwner() && entry != null) {
-            pathField.setText(entry.name());
+            int count = multiSelect ? selectedFiles().size() : 1;
+            pathField.setText(count > 1 ? count + " files selected" : entry.name());
         }
         updateOkEnablement();
     }
@@ -792,10 +853,21 @@ public final class KalixFileDialog implements FileViewHost {
 
     private void updateOkEnablement() {
         okButton.setEnabled(switch (mode) {
-            case OPEN_FILE -> selectedEntry != null && !selectedEntry.directory();
+            case OPEN_FILE -> multiSelect
+                ? !selectedFiles().isEmpty()
+                : selectedEntry != null && !selectedEntry.directory();
             case SAVE_FILE -> pathField != null && !pathField.getText().isBlank();
             case CHOOSE_FOLDER -> chosenFolder() != null;
         });
+    }
+
+    /**
+     * The active view's selection, narrowed to actual files. Directories can be caught up
+     * in a rubber-band or ctrl-click multi-selection; they are never an open-file answer.
+     */
+    private List<FsEntry> selectedFiles() {
+        List<FsEntry> entries = columnsMode ? columnsView.selectedEntries() : listView.selectedEntries();
+        return entries.stream().filter(entry -> !entry.directory()).toList();
     }
 
     /** Folder mode's answer: the selected directory, else the current one. */
@@ -814,6 +886,15 @@ public final class KalixFileDialog implements FileViewHost {
     private void accept() {
         switch (mode) {
             case OPEN_FILE -> {
+                if (multiSelect) {
+                    List<FsEntry> chosen = selectedFiles();
+                    if (chosen.isEmpty()) {
+                        return;
+                    }
+                    finishAll(chosen.stream().map(entry -> entry.path().toFile()).toList(),
+                        chosen.get(0).path().getParent());
+                    return;
+                }
                 if (selectedEntry == null || selectedEntry.directory()) {
                     return;
                 }
@@ -857,13 +938,18 @@ public final class KalixFileDialog implements FileViewHost {
     }
 
     private void finish(File chosen, Path rememberDir) {
-        result = chosen;
+        finishAll(List.of(chosen), rememberDir);
+    }
+
+    private void finishAll(List<File> chosen, Path rememberDir) {
+        results.clear();
+        results.addAll(chosen);
         FileDialogHistory.recordAccepted(rememberDir);
         dialog.dispose();
     }
 
     private void cancel() {
-        result = null;
+        results.clear();
         dialog.dispose();
     }
 

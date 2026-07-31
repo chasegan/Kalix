@@ -141,6 +141,17 @@ final class ColumnsFileView {
     }
 
     /**
+     * Every selected entry (one at most unless the host is multi-select). A multi-selection
+     * only ever lives in the deepest column: selecting anything truncates the trail after
+     * its own column, so that column is by construction the last one.
+     */
+    List<FsEntry> selectedEntries() {
+        return columns.isEmpty()
+            ? List.of()
+            : List.copyOf(columns.get(columns.size() - 1).list.getSelectedValuesList());
+    }
+
+    /**
      * Selects the named entry in the deepest column — now if its listing has arrived,
      * otherwise when it does — and reports the selection to the host (pasted-path flow).
      */
@@ -210,7 +221,9 @@ final class ColumnsFileView {
         BrowserColumn(Path directory) {
             this.directory = directory;
             list.setModel(model);
-            list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+            list.setSelectionMode(host.allowsMultiSelect()
+                ? ListSelectionModel.MULTIPLE_INTERVAL_SELECTION
+                : ListSelectionModel.SINGLE_SELECTION);
             list.setCellRenderer(new ColumnCellRenderer());
             list.setFixedCellHeight(22);
 
@@ -274,7 +287,11 @@ final class ColumnsFileView {
                         host.showContainerContextMenu(directory, list, e.getX(), e.getY());
                         return;
                     }
-                    list.setSelectedIndex(index); // right-click selects, as in the project tree
+                    // Right-click selects, as in the project tree — but never collapses an
+                    // existing multi-selection just to act on one of its members.
+                    if (!list.isSelectedIndex(index)) {
+                        list.setSelectedIndex(index);
+                    }
                     host.showEntryContextMenu(model.get(index), list, e.getX(), e.getY());
                 }
             });
@@ -334,7 +351,9 @@ final class ColumnsFileView {
         }
 
         void refilter() {
-            FsEntry selected = list.getSelectedValue();
+            // The whole selection is preserved, not just the lead: listings arrive in
+            // batches, so a user selecting during enumeration must not lose earlier picks.
+            List<FsEntry> selected = list.getSelectedValuesList();
             programmaticSelection = true;
             try {
                 model.clear();
@@ -357,10 +376,13 @@ final class ColumnsFileView {
                     // One-shot: consumed now, so later refilters (hidden toggle, filter
                     // change) don't yank the selection back to this entry.
                     pendingSelection = null;
-                } else if (selected != null) {
-                    int i = model.indexOf(selected);
-                    if (i >= 0) {
-                        list.setSelectedIndex(i);
+                } else {
+                    int[] indices = selected.stream()
+                        .mapToInt(model::indexOf)
+                        .filter(i -> i >= 0)
+                        .toArray();
+                    if (indices.length > 0) {
+                        list.setSelectedIndices(indices);
                     }
                 }
             } finally {
@@ -379,6 +401,15 @@ final class ColumnsFileView {
                 return;
             }
             int myIndex = indexOf(this);
+            if (host.allowsMultiSelect() && list.getSelectedIndices().length > 1) {
+                // Several picks in one column: no child column to open (there is no single
+                // folder to descend into), so just end the trail here and report the lead.
+                truncate(myIndex + 1);
+                trail.revalidate();
+                trail.repaint();
+                host.selectionChanged(entry);
+                return;
+            }
             if (entry.directory()) {
                 truncate(myIndex + 1);
                 BrowserColumn next = new BrowserColumn(entry.path());

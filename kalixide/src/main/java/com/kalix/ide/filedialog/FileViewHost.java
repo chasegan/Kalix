@@ -21,10 +21,17 @@ interface FileViewHost {
     /** Whether the dialog is choosing a folder (files render disabled and unselectable). */
     boolean directoriesOnly();
 
+    /** Whether several entries may be selected at once (open mode only). */
+    boolean allowsMultiSelect();
+
     /** The view navigated into a directory (breadcrumb + state follow the view). */
     void directoryShown(Path dir);
 
-    /** The selection changed; {@code entry} is null when nothing is selected. */
+    /**
+     * The selection changed; {@code entry} is null when nothing is selected. Under
+     * multi-select {@code entry} is the lead of the selection — the host reads the rest
+     * back from the active view.
+     */
     void selectionChanged(FsEntry entry);
 
     /** The user activated an entry (double-click / Enter on a file): accept it. */
