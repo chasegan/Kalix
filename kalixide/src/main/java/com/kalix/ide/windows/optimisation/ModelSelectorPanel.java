@@ -174,7 +174,7 @@ public class ModelSelectorPanel extends JPanel {
         if (retainedClosed != null && !items.contains(retainedClosed)) {
             items.add(retainedClosed);
         }
-        labels = DocumentLabels.labelsFor(items);
+        labels = DocumentLabels.labelsFor(items, registry.projectRoot());
         combo.setModel(new DefaultComboBoxModel<>(items.toArray(new ModelSource[0])));
         combo.setPreferredSize(null);
         Dimension preferred = combo.getPreferredSize();

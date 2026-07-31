@@ -1,5 +1,6 @@
 package com.kalix.ide.document;
 
+import java.io.File;
 import java.util.List;
 
 /**
@@ -21,6 +22,15 @@ public interface ModelSourceRegistry {
 
     /** The model in front in the main window, or {@code null} if none is open. */
     ModelSource active();
+
+    /**
+     * The open project folder, or {@code null} if none.
+     *
+     * <p>Supplied so that {@link DocumentLabels} bounds path-based disambiguation the
+     * same way here as it does for the editor tab strip — otherwise deeply nested
+     * duplicates could be named one way in the tabs and another way in a selector.</p>
+     */
+    File projectRoot();
 
     /**
      * Registers a listener fired whenever {@link #available()} or {@link #active()}

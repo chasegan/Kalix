@@ -447,7 +447,7 @@ public class OptimisationWindow extends JFrame {
 
     /** The label for a model as it reads against the currently open set. */
     private String labelFor(ModelSource source) {
-        return DocumentLabels.labelFor(source, modelSources.available());
+        return DocumentLabels.labelFor(source, modelSources.available(), modelSources.projectRoot());
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.kalix.ide.workspace;
 
 import com.kalix.ide.components.TabDragReorderer;
+import com.kalix.ide.document.DocumentLabels;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
 
@@ -14,7 +15,6 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
@@ -65,7 +65,7 @@ public class DocumentTabPane extends JPanel {
         this.documentManager = documentManager;
         this.closeRequestHandler = closeRequestHandler;
         this.contextMenuRequestHandler = contextMenuRequestHandler;
-        this.tabNames = new ArrayList<String>();
+        this.tabNames = new ArrayList<>();
         this.projectDirectorySupplier = projectDirectorySupplier;
 
         tabbedPane = new JTabbedPane();
@@ -314,34 +314,18 @@ public class DocumentTabPane extends JPanel {
     }
 
     /**
-     * Full rebuild of tab names from the {@link #documentManager}.
-     * Updates {@link #tabNames} and refreshes every tab's title.
-     * <p>
-     * Documents sharing a plain display name (e.g. two {@code model.ini} files in different
-     * folders) are disambiguated by prefixing enough of their parent directory names to make
-     * them unique, without walking above the open project root.
+     * Full rebuild of tab names from the {@link #documentManager}, then refreshes every
+     * tab's title.
+     *
+     * <p>Naming — including how documents sharing a display name are disambiguated — is
+     * delegated to {@link DocumentLabels}, the single resolver every surface that names a
+     * model goes through. Keeping the algorithm here as well would let the tab strip and
+     * the Optimiser's model selector drift into labelling the same two files differently
+     * (see {@code manifestos/identity-and-labels.md} §2.3).</p>
      */
     private void rebuildTabNames() {
-        List<KalixDocument> documents = documentManager.getDocuments();
-        List<String> displayNames = new ArrayList<>(documents.size());
-        for (KalixDocument document : documents) {
-            displayNames.add(document.getDisplayName());
-        }
-
-        HashMap<String, List<Integer>> collisions = new HashMap<>();
-        for (int index = 0; index < displayNames.size(); index++) {
-            collisions.computeIfAbsent(displayNames.get(index), k -> new ArrayList<>())
-                      .add(index);
-        }
-
-        File root = projectDirectorySupplier.get();
-        for (List<Integer> collisionIndices : collisions.values()) {
-            if (collisionIndices.size() == 1) {
-                continue; // no collision to resolve
-            }
-            disambiguate(documents, displayNames, collisionIndices, root);
-        }
-        this.tabNames = displayNames;
+        this.tabNames = DocumentLabels.labelsFor(
+            documentManager.getDocuments(), projectDirectorySupplier.get());
     }
 
     private void refreshTabs() {
@@ -349,71 +333,5 @@ public class DocumentTabPane extends JPanel {
         for (int i = 0; i < documents.size(); i++) {
             tabbedPane.setTitleAt(i, tabTitle(documents.get(i)));
         }
-    }
-
-    /**
-     * Resolves a single group of colliding tab names in place, by walking up each document's
-     * path (nearest ancestor first) and prefixing progressively more of it until the names in
-     * the group are unique, or the project root / an undated document stops further progress.
-     */
-    private void disambiguate(
-        List<KalixDocument> documents,
-        List<String> names,
-        List<Integer> collisionIndices,
-        File root
-    ) {
-        HashMap<Integer, List<String>> ancestors = new HashMap<>();
-        int maxDepth = 0;
-        for (int index : collisionIndices) {
-            List<String> segments = ancestorSegments(documents.get(index).getFile(), root);
-            ancestors.put(index, segments);
-            maxDepth = Math.max(maxDepth, segments.size());
-        }
-
-        int depth = 0;
-        while (true) {
-            HashMap<String, Integer> counts = new HashMap<>();
-            for (int index : collisionIndices) {
-                String candidate = disambiguatedName(documents.get(index), ancestors.get(index), depth);
-                counts.merge(candidate, 1, Integer::sum);
-            }
-            boolean allUnique = counts.values().stream().allMatch(count -> count == 1);
-            if (allUnique || depth >= maxDepth) {
-                for (int index : collisionIndices) {
-                    names.set(index, disambiguatedName(documents.get(index), ancestors.get(index), depth));
-                }
-                return;
-            }
-            depth++;
-        }
-    }
-
-    /** Ancestor directory names of {@code file}, nearest first, stopping at (excluding) {@code root}. */
-    private static List<String> ancestorSegments(File file, File root) {
-        List<String> segments = new ArrayList<>();
-        if (file == null) {
-            return segments; // Undated documents (e.g. "Untitled") cannot be disambiguated.
-        }
-        File parent = file.getParentFile();
-        while (parent != null && !parent.equals(root)) {
-            String name = parent.getName();
-            segments.add(name.isEmpty() ? parent.getPath() : name);
-            parent = parent.getParentFile();
-        }
-        return segments;
-    }
-
-    /** The tab name for {@code document}, prefixed with up to {@code depth} ancestor segments. */
-    private static String disambiguatedName(KalixDocument document, List<String> segments, int depth) {
-        String base = document.getDisplayName();
-        int use = Math.min(depth, segments.size());
-        if (use == 0) {
-            return base;
-        }
-        StringBuilder name = new StringBuilder();
-        for (int i = use - 1; i >= 0; i--) {
-            name.append(segments.get(i)).append('/');
-        }
-        return name.append(base).toString();
     }
 }

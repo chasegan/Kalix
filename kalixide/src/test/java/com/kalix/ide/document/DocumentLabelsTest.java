@@ -55,8 +55,8 @@ class DocumentLabelsTest {
         FakeSource a = saved("catchment.ini", "/models/upper");
         FakeSource b = saved("river.ini", "/models/lower");
 
-        assertEquals("catchment.ini", DocumentLabels.labelFor(a, List.of(a, b)));
-        assertEquals("river.ini", DocumentLabels.labelFor(b, List.of(a, b)));
+        assertEquals("catchment.ini", DocumentLabels.labelFor(a, List.of(a, b), null));
+        assertEquals("river.ini", DocumentLabels.labelFor(b, List.of(a, b), null));
     }
 
     @Test
@@ -66,9 +66,9 @@ class DocumentLabelsTest {
         FakeSource b = saved("model.ini", "/models/lower");
         List<FakeSource> all = List.of(a, b);
 
-        assertEquals("model.ini — upper", DocumentLabels.labelFor(a, all));
-        assertEquals("model.ini — lower", DocumentLabels.labelFor(b, all));
-        assertNotEquals(DocumentLabels.labelFor(a, all), DocumentLabels.labelFor(b, all));
+        assertEquals("upper/model.ini", DocumentLabels.labelFor(a, all, null));
+        assertEquals("lower/model.ini", DocumentLabels.labelFor(b, all, null));
+        assertNotEquals(DocumentLabels.labelFor(a, all, null), DocumentLabels.labelFor(b, all, null));
     }
 
     @Test
@@ -79,8 +79,8 @@ class DocumentLabelsTest {
 
         // Alone it needs no qualification; alongside its twin it does. This is exactly
         // why a label must never be stored or used as a key.
-        assertEquals("model.ini", DocumentLabels.labelFor(a, List.of(a)));
-        assertEquals("model.ini — upper", DocumentLabels.labelFor(a, List.of(a, b)));
+        assertEquals("model.ini", DocumentLabels.labelFor(a, List.of(a), null));
+        assertEquals("upper/model.ini", DocumentLabels.labelFor(a, List.of(a, b), null));
     }
 
     @Test
@@ -90,7 +90,7 @@ class DocumentLabelsTest {
         FakeSource b = unsaved("Untitled");
 
         // Genuinely indistinguishable — but both are unusable as targets anyway.
-        assertEquals("Untitled", DocumentLabels.labelFor(a, List.of(a, b)));
+        assertEquals("Untitled", DocumentLabels.labelFor(a, List.of(a, b), null));
         assertFalse(a.isOptimisable());
     }
 
@@ -101,8 +101,8 @@ class DocumentLabelsTest {
         FakeSource unsaved = unsaved("model.ini");
         List<FakeSource> all = List.of(saved, unsaved);
 
-        assertEquals("model.ini — upper", DocumentLabels.labelFor(saved, all));
-        assertEquals("model.ini", DocumentLabels.labelFor(unsaved, all));
+        assertEquals("upper/model.ini", DocumentLabels.labelFor(saved, all, null));
+        assertEquals("model.ini", DocumentLabels.labelFor(unsaved, all, null));
     }
 
     @Test
@@ -114,14 +114,14 @@ class DocumentLabelsTest {
                 saved("river.ini", "/models/lower"),
                 unsaved("Untitled"));
 
-        List<String> bulk = DocumentLabels.labelsFor(all);
+        List<String> bulk = DocumentLabels.labelsFor(all, null);
 
         assertEquals(all.size(), bulk.size());
         for (int i = 0; i < all.size(); i++) {
-            assertEquals(DocumentLabels.labelFor(all.get(i), all), bulk.get(i),
+            assertEquals(DocumentLabels.labelFor(all.get(i), all, null), bulk.get(i),
                     "bulk and individual labels disagree at index " + i);
         }
-        assertEquals(List.of("model.ini — upper", "model.ini — lower", "river.ini", "Untitled"), bulk);
+        assertEquals(List.of("upper/model.ini", "lower/model.ini", "river.ini", "Untitled"), bulk);
     }
 
     @Test
@@ -133,7 +133,55 @@ class DocumentLabelsTest {
         FakeSource closed = saved("model.ini", "/models/upper");
         FakeSource stillOpen = saved("model.ini", "/models/lower");
 
-        assertEquals("model.ini — upper", DocumentLabels.labelFor(closed, List.of(stillOpen)));
+        assertEquals("upper/model.ini", DocumentLabels.labelFor(closed, List.of(stillOpen), null));
+    }
+
+    @Test
+    @DisplayName("Qualification walks up until the colliding group is unique")
+    void testQualificationWalksUpUntilUnique() {
+        // A single folder level is not always enough — both live in a "run" folder.
+        FakeSource a = saved("model.ini", "/projects/alpha/run");
+        FakeSource b = saved("model.ini", "/projects/beta/run");
+
+        assertEquals(List.of("alpha/run/model.ini", "beta/run/model.ini"),
+                DocumentLabels.labelsFor(List.of(a, b), null));
+    }
+
+    @Test
+    @DisplayName("Walking stops at the project root")
+    void testQualificationStopsAtProjectRoot() {
+        FakeSource a = saved("model.ini", "/projects/alpha/run");
+        FakeSource b = saved("model.ini", "/projects/beta/run");
+
+        // Bounded at /projects/alpha, `a` has only "run" to offer and cannot go further,
+        // so the group settles for what it has rather than looping forever.
+        List<String> labels = DocumentLabels.labelsFor(List.of(a, b), new File("/projects/alpha"));
+        assertEquals(2, labels.size());
+        assertTrue(labels.get(0).endsWith("model.ini"));
+        assertTrue(labels.get(1).endsWith("model.ini"));
+    }
+
+    @Test
+    @DisplayName("Only the colliding group is qualified")
+    void testUnrelatedNamesStayBare() {
+        FakeSource a = saved("model.ini", "/models/upper");
+        FakeSource b = saved("model.ini", "/models/lower");
+        FakeSource other = saved("river.ini", "/models/lower");
+
+        assertEquals(List.of("upper/model.ini", "lower/model.ini", "river.ini"),
+                DocumentLabels.labelsFor(List.of(a, b, other), null));
+    }
+
+    @Test
+    @DisplayName("Three-way collisions are all disambiguated")
+    void testThreeWayCollision() {
+        FakeSource a = saved("model.ini", "/models/a");
+        FakeSource b = saved("model.ini", "/models/b");
+        FakeSource c = saved("model.ini", "/models/c");
+
+        List<String> labels = DocumentLabels.labelsFor(List.of(a, b, c), null);
+        assertEquals(List.of("a/model.ini", "b/model.ini", "c/model.ini"), labels);
+        assertEquals(3, labels.stream().distinct().count());
     }
 
     @Test
@@ -149,11 +197,11 @@ class DocumentLabelsTest {
     void testNullAndEmptyInputs() {
         FakeSource a = saved("model.ini", "/models/upper");
 
-        assertEquals("", DocumentLabels.labelFor(null, List.of(a)));
-        assertEquals("model.ini", DocumentLabels.labelFor(a, null));
-        assertEquals("model.ini", DocumentLabels.labelFor(a, List.of()));
-        assertTrue(DocumentLabels.labelsFor(null).isEmpty());
-        assertTrue(DocumentLabels.labelsFor(List.of()).isEmpty());
+        assertEquals("", DocumentLabels.labelFor(null, List.of(a), null));
+        assertEquals("model.ini", DocumentLabels.labelFor(a, null, null));
+        assertEquals("model.ini", DocumentLabels.labelFor(a, List.of(), null));
+        assertTrue(DocumentLabels.labelsFor(null, null).isEmpty());
+        assertTrue(DocumentLabels.labelsFor(List.of(), null).isEmpty());
     }
 
     @Test

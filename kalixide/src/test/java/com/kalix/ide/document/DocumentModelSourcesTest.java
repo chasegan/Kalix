@@ -21,7 +21,7 @@ class DocumentModelSourcesTest {
     @DisplayName("An empty workspace offers nothing and has no active model")
     void testEmptyWorkspace() {
         DocumentManager manager = new DocumentManager();
-        DocumentModelSources sources = new DocumentModelSources(manager);
+        DocumentModelSources sources = new DocumentModelSources(manager, () -> null);
 
         assertTrue(sources.available().isEmpty());
         assertNull(sources.active());
@@ -31,7 +31,7 @@ class DocumentModelSourcesTest {
     @DisplayName("Every open model is offered, in tab order")
     void testAvailableTracksTheDocumentSet() {
         DocumentManager manager = new DocumentManager();
-        DocumentModelSources sources = new DocumentModelSources(manager);
+        DocumentModelSources sources = new DocumentModelSources(manager, () -> null);
 
         KalixDocument first = new KalixDocument();
         KalixDocument second = new KalixDocument();
@@ -51,7 +51,7 @@ class DocumentModelSourcesTest {
     @DisplayName("The active model tracks the main window's selection")
     void testActiveFollowsTheActiveDocument() {
         DocumentManager manager = new DocumentManager();
-        DocumentModelSources sources = new DocumentModelSources(manager);
+        DocumentModelSources sources = new DocumentModelSources(manager, () -> null);
 
         KalixDocument first = new KalixDocument();
         KalixDocument second = new KalixDocument();
@@ -66,7 +66,7 @@ class DocumentModelSourcesTest {
     @DisplayName("Opening, activating and closing each notify listeners")
     void testChangeListenerFiresForEveryDocumentSetChange() {
         DocumentManager manager = new DocumentManager();
-        DocumentModelSources sources = new DocumentModelSources(manager);
+        DocumentModelSources sources = new DocumentModelSources(manager, () -> null);
 
         AtomicInteger notifications = new AtomicInteger();
         sources.addChangeListener(notifications::incrementAndGet);
@@ -107,7 +107,7 @@ class DocumentModelSourcesTest {
     @DisplayName("A null listener is ignored rather than failing on the next change")
     void testNullListenerIsIgnored() {
         DocumentManager manager = new DocumentManager();
-        DocumentModelSources sources = new DocumentModelSources(manager);
+        DocumentModelSources sources = new DocumentModelSources(manager, () -> null);
 
         sources.addChangeListener(null);
 

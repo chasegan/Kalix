@@ -290,7 +290,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         // The enumerable view of the open models, for windows that must let the user
         // choose a target rather than silently assume the active tab (the Optimiser).
-        modelSources = new DocumentModelSources(documentManager);
+        modelSources = new DocumentModelSources(documentManager, this::projectRootForLabels);
 
         statusLabel = new JLabel(AppConstants.STATUS_READY);
         statusLabel.setBorder(BorderFactory.createEmptyBorder(
@@ -1700,6 +1700,16 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      *
      * @return {@code false} if the target is no longer an open document
      */
+    /**
+     * The open project folder for label disambiguation, or {@code null} if there is none.
+     *
+     * <p>Read on demand rather than captured: the model registry is built before the
+     * project tree exists.</p>
+     */
+    private File projectRootForLabels() {
+        return projectTreePanel != null ? projectTreePanel.getRootFile() : null;
+    }
+
     private boolean writeModelTextTo(ModelSource target, String text) {
         if (target == null) {
             return false;
