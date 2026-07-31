@@ -2,6 +2,9 @@ package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.OptimisationProgram;
+import com.kalix.ide.document.ModelSource;
+
+import java.io.File;
 
 /**
  * Tracks information about a single optimisation run.
@@ -18,6 +21,26 @@ public class OptimisationInfo {
     private boolean iniLocked = false;  // True once the user has edited the INI text directly
 
     /**
+     * The model this optimisation runs against. Identity, not a name — held so the
+     * optimised model can be written back to the document it came from rather than to
+     * whichever tab happens to be active when the user clicks "copy to main".
+     *
+     * <p>May refer to a document the user has since closed; {@link #getTargetModelLabel()}
+     * still reports it correctly because the label is captured at binding time.</p>
+     */
+    private ModelSource targetModel;
+
+    /**
+     * The target's backing file, captured at binding time.
+     *
+     * <p>Identity data, not a label — per {@code manifestos/identity-and-labels.md} §1 a
+     * display string is never stored. This survives the document being closed (when the
+     * live reference goes stale) and reopened (when a new document object replaces it),
+     * so it is what both the fallback lookup and the fallback label are derived from.</p>
+     */
+    private File targetFile;
+
+    /**
      * Creates a new OptimisationInfo instance.
      *
      * @param name The display name for this optimisation
@@ -26,6 +49,29 @@ public class OptimisationInfo {
     public OptimisationInfo(String name, SessionManager.KalixSession session) {
         this.name = name;
         this.session = session;
+    }
+
+    /**
+     * The model this optimisation was created against, or {@code null} if unknown
+     * (an optimisation created before the binding was recorded).
+     */
+    public ModelSource getTargetModel() {
+        return targetModel;
+    }
+
+    /** Binds this optimisation to a model, capturing its file alongside the reference. */
+    public void setTargetModel(ModelSource targetModel) {
+        this.targetModel = targetModel;
+        this.targetFile = targetModel != null ? targetModel.getFile() : null;
+    }
+
+    /**
+     * The target's backing file, or {@code null} if it was never saved. Used to find the
+     * target again after it has been closed and reopened, and to name it when the live
+     * reference is gone.
+     */
+    public File getTargetFile() {
+        return targetFile;
     }
 
     /**

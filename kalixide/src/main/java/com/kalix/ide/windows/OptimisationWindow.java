@@ -1,6 +1,10 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.KalixIDE;
+import com.kalix.ide.document.DocumentLabels;
+import com.kalix.ide.document.ModelSource;
+import com.kalix.ide.document.ModelSourceRegistry;
+import com.kalix.ide.document.ModelWriteBack;
 import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.managers.optimisation.OptimisationConfigManager;
 import com.kalix.ide.managers.optimisation.OptimisationEventHandlers;
@@ -19,6 +23,7 @@ import com.kalix.ide.managers.optimisation.OptimisationStatus;
 import com.kalix.ide.windows.optimisation.ParametersConfigPanel;
 import com.kalix.ide.components.StatusProgressBar;
 import com.kalix.ide.components.KalixIniTextArea;
+import com.kalix.ide.windows.optimisation.ModelSelectorPanel;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import com.kalix.ide.flowviz.PlotPanel;
@@ -35,6 +40,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTree;
+import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.awt.BorderLayout;
@@ -64,10 +70,9 @@ public class OptimisationWindow extends JFrame {
     private final StdioTaskManager stdioTaskManager;
     private final Consumer<String> statusUpdater;
     private final StatusProgressBar progressBar;
-    private final Supplier<File> workingDirectorySupplier;
     private final Supplier<File> projectDirectorySupplier;
-    private final Supplier<String> modelTextSupplier;
-    private KalixIDE parentIDE;  // Reference to parent IDE window
+    private final ModelSourceRegistry modelSources;
+    private final ModelWriteBack modelWriteBack;
 
     // Manager instances
     private OptimisationTreeManager treeManager;
@@ -118,20 +123,15 @@ public class OptimisationWindow extends JFrame {
                                StdioTaskManager stdioTaskManager,
                                Consumer<String> statusUpdater,
                                StatusProgressBar progressBar,
-                               Supplier<File> workingDirectorySupplier,
                                Supplier<File> projectDirectorySupplier,
-                               Supplier<String> modelTextSupplier) {
+                               ModelSourceRegistry modelSources,
+                               ModelWriteBack modelWriteBack) {
         this.stdioTaskManager = stdioTaskManager;
         this.statusUpdater = statusUpdater;
         this.progressBar = progressBar;
-        this.workingDirectorySupplier = workingDirectorySupplier;
         this.projectDirectorySupplier = projectDirectorySupplier;
-        this.modelTextSupplier = modelTextSupplier;
-
-        // Store reference to parent IDE (cast JFrame to KalixIDE)
-        if (parentFrame instanceof KalixIDE) {
-            this.parentIDE = (KalixIDE) parentFrame;
-        }
+        this.modelSources = modelSources;
+        this.modelWriteBack = modelWriteBack;
 
         // Initialize managers
         initializeManagers();
@@ -142,6 +142,7 @@ public class OptimisationWindow extends JFrame {
         setupLayout();
         setupWindowListeners();
         setupTabChangeListener();
+        setupModelSelector();
     }
 
     /**
@@ -156,17 +157,14 @@ public class OptimisationWindow extends JFrame {
         this.sessionManager = new OptimisationSessionManager(
             stdioTaskManager,
             sessionBookkeeping,
-            workingDirectorySupplier,
-            projectDirectorySupplier,
-            modelTextSupplier
+            projectDirectorySupplier
         );
 
-        // Initialize other managers
+        // Initialize other managers. The config manager owns the GUI form, and with it
+        // the model selector — so it is the source of the target working directory that
+        // the other managers' file dialogs open at.
         this.treeManager = new OptimisationTreeManager(sessionBookkeeping);
-        this.configManager = new OptimisationConfigManager(
-            workingDirectorySupplier,
-            modelTextSupplier
-        );
+        this.configManager = new OptimisationConfigManager(modelSources);
         this.progressManager = new OptimisationProgressManager(progressBar);
         this.resultsManager = new OptimisationResultsManager();
         this.plotManager = new OptimisationPlotManager();
@@ -179,21 +177,14 @@ public class OptimisationWindow extends JFrame {
             plotManager,
             statusUpdater
         );
-        this.modelManager = new OptimisationModelManager(
-            modelText -> {
-                if (parentIDE != null) {
-                    parentIDE.setModelTextAndMarkDirty(modelText);
-                }
-            }
-        );
+        this.modelManager = new OptimisationModelManager(modelWriteBack);
         this.windowInitializer = new OptimisationWindowInitializer(
             treeManager, configManager, progressManager, resultsManager,
             plotManager, sessionManager, panelBuilder, eventHandlers
         );
 
-        // Set up basic dependencies
-        resultsManager.setWorkingDirectorySupplier(workingDirectorySupplier);
-        resultsManager.setOriginalModelSupplier(modelTextSupplier);
+        // Set up basic dependencies. File dialogs open at the *selected* model's folder.
+        resultsManager.setWorkingDirectorySupplier(configManager.getGuiBuilder()::getTargetWorkingDirectory);
         resultsManager.setStatusUpdater(statusUpdater);
 
         configManager.setStatusUpdater(statusUpdater);
@@ -239,6 +230,11 @@ public class OptimisationWindow extends JFrame {
         if (optInfo == null) {
             rightPanelLayout.show(rightPanel, OptimisationUIConstants.CARD_MESSAGE);
             currentlyDisplayedNode = null;
+            // Nothing is bound, so the next "New" should target the main window's
+            // current model rather than a selection left over from a previous binding.
+            guiBuilder.getModelSelectorPanel().resetToActive();
+            guiBuilder.getModelSelectorPanel().setSelectionEnabled(true);
+            configManager.updateSimulatedSeriesOptionsFromModel();
             return;
         }
 
@@ -253,6 +249,16 @@ public class OptimisationWindow extends JFrame {
         configEditor.setEditable(!running);
         guiBuilder.setComponentsEnabled(!running && !iniLocked);
         guiBuilder.setIniLockedBannerVisible(iniLocked);
+
+        // Show what this optimisation is bound to. The selector deliberately survives
+        // the INI lock - which model an optimisation runs against is not part of the
+        // config INI - but a running optimisation cannot be retargeted at all.
+        ModelSelectorPanel selector = guiBuilder.getModelSelectorPanel();
+        if (optInfo.getTargetModel() != null) {
+            selector.setSelectedModel(optInfo.getTargetModel());
+        }
+        selector.setSelectionEnabled(!running);
+        configManager.updateSimulatedSeriesOptionsFromModel();
 
         // Update button states
         runButton.setEnabled(!running);
@@ -306,17 +312,21 @@ public class OptimisationWindow extends JFrame {
                                               StdioTaskManager stdioTaskManager,
                                               Consumer<String> statusUpdater,
                                               StatusProgressBar progressBar,
-                                              Supplier<File> workingDirectorySupplier,
                                               Supplier<File> projectDirectorySupplier,
-                                              Supplier<String> modelTextSupplier) {
+                                              ModelSourceRegistry modelSources,
+                                              ModelWriteBack modelWriteBack) {
         if (instance == null) {
             instance = new OptimisationWindow(parentFrame, stdioTaskManager,
-                    statusUpdater, progressBar, workingDirectorySupplier, projectDirectorySupplier,
-                    modelTextSupplier);
+                    statusUpdater, progressBar, projectDirectorySupplier,
+                    modelSources, modelWriteBack);
         }
 
-        // Update simulated series options from current model
-        instance.configManager.updateSimulatedSeriesOptionsFromModel(modelTextSupplier);
+        // The window is a singleton that outlives each showing, so an unbound selector
+        // must be re-pointed at the model the user is looking at now.
+        if (instance.getDisplayedOptimisation() == null) {
+            instance.guiBuilder.getModelSelectorPanel().resetToActive();
+        }
+        instance.configManager.updateSimulatedSeriesOptionsFromModel();
 
         instance.setVisible(true);
         instance.toFront();
@@ -416,14 +426,149 @@ public class OptimisationWindow extends JFrame {
         OptimisationConfigModel configModel = guiBuilder.captureToModel();
         String configText = guiBuilder.generateConfigText(configModel);
 
+        // The target is whatever the Model selector shows — an explicit, visible choice,
+        // no longer an implicit read of whichever main-window tab was in front.
+        ModelSource target = guiBuilder.getSelectedModel();
+
         // Create optimisation through session manager with sessionKey passed to callbacks
+        createOptimisation(new OptimisationSessionManager.NewOptimisation(
+            target, labelFor(target), null, configText, configModel, false, null));
+    }
+
+    /** Submits a creation request with this window's three session callbacks attached. */
+    private void createOptimisation(OptimisationSessionManager.NewOptimisation request) {
         sessionManager.createOptimisation(
-            configText,
-            configModel,
+            request,
             (sessionKey, progressInfo) -> eventHandlers.handleOptimisationProgress(sessionKey, progressInfo),
             (sessionKey, parameters) -> handleOptimisableParameters(sessionKey, parameters),
             (sessionKey, result) -> eventHandlers.handleOptimisationResult(sessionKey, result)
         );
+    }
+
+    /** The label for a model as it reads against the currently open set. */
+    private String labelFor(ModelSource source) {
+        return DocumentLabels.labelFor(source, modelSources.available());
+    }
+
+    /**
+     * Wires the Model selector: a change retargets the displayed optimisation.
+     *
+     * <p>Because the kalixcli session is created — and given its copy of the model and
+     * its working directory — when the optimisation is created, retargeting means
+     * rebuilding that session. Nothing has been run yet at this point, so the only
+     * casualty is the detected parameter list, which is model-specific and would be
+     * wrong for the new target anyway. The user is told before it happens.</p>
+     */
+    private void setupModelSelector() {
+        ModelSelectorPanel selector = guiBuilder.getModelSelectorPanel();
+
+        selector.setSelectionGuard((previous, requested) -> {
+            OptimisationInfo optInfo = getDisplayedOptimisation();
+            if (optInfo == null || previous == null || requested == null) {
+                return true;  // nothing bound yet - the choice is free
+            }
+            if (optInfo.hasStartedRunning()) {
+                return false;  // guarded by the disabled selector too; belt and braces
+            }
+            if (requested.getWorkingDirectory() == null) {
+                JOptionPane.showMessageDialog(this,
+                    "'" + labelFor(requested) + "' has not been saved yet.\n"
+                        + "Save it first so that data paths in the optimisation config can be resolved.",
+                    "Model Not Saved",
+                    JOptionPane.WARNING_MESSAGE);
+                return false;
+            }
+            // Check the new target is usable *before* anything is torn down, so a bad
+            // choice cancels the change rather than destroying the existing optimisation.
+            String problem = sessionManager.describeTargetProblem(requested, labelFor(requested));
+            if (problem != null) {
+                JOptionPane.showMessageDialog(this, problem, "Cannot Use That Model",
+                    JOptionPane.WARNING_MESSAGE);
+                return false;
+            }
+
+            // A just-created optimisation has nothing configured to lose, and picking
+            // the model straight after "New" is the common path - don't nag for it.
+            if (!optInfo.isIniLocked() && optInfo.getConfigModel().getTerms().isEmpty()) {
+                return true;
+            }
+
+            StringBuilder consequences = new StringBuilder();
+            if (optInfo.isIniLocked()) {
+                consequences.append("Its INI text is kept as-is — including any parameter lines,\n")
+                            .append("which refer to the old model and will need updating by hand.\n");
+            } else {
+                consequences.append("Its detected parameters and expressions will be replaced with\n")
+                            .append("ones for the new model.\n");
+            }
+            if (!optInfo.getConfigModel().getTerms().isEmpty()) {
+                consequences.append("Observed-data paths are stored relative to the model's folder,\n")
+                            .append("so objective terms may need re-pointing.\n");
+            }
+
+            int response = JOptionPane.showConfirmDialog(this,
+                "Change '" + optInfo.getName() + "' to run against '" + labelFor(requested) + "'?\n\n"
+                    + "The optimisation will be rebuilt against the new model.\n"
+                    + consequences,
+                "Change Target Model",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.WARNING_MESSAGE);
+            return response == JOptionPane.OK_OPTION;
+        });
+
+        selector.setSelectionListener(target -> {
+            configManager.updateSimulatedSeriesOptionsFromModel();
+            OptimisationInfo optInfo = getDisplayedOptimisation();
+            if (optInfo != null && !optInfo.hasStartedRunning() && target != null) {
+                rebindOptimisation(optInfo, target);
+            }
+        });
+    }
+
+    /**
+     * Retargets a not-yet-run optimisation at a different model by replacing its
+     * kalixcli session with one built against that model.
+     *
+     * <p>The config the user has built (objective terms, algorithm settings, INI text)
+     * carries across; only the model-specific parameter list is rebuilt, by the
+     * discovery round-trip the new session performs.</p>
+     */
+    private void rebindOptimisation(OptimisationInfo optInfo, ModelSource target) {
+        boolean iniLocked = optInfo.isIniLocked();
+        String name = optInfo.getName();
+        String retiredKey = optInfo.getSessionKey();
+
+        // Carry the config across. A locked optimisation's INI is authoritative and the
+        // user owns it, so it survives verbatim; an unlocked one is regenerated from the
+        // form minus its parameters, which belong to the model being left behind.
+        OptimisationConfigModel configModel = guiBuilder.captureToModel();
+        String configText;
+        if (iniLocked) {
+            configText = optInfo.getConfigSnapshot() != null ? optInfo.getConfigSnapshot() : "";
+        } else {
+            configModel.setParameters(new java.util.ArrayList<>());
+            configText = guiBuilder.generateConfigText(configModel);
+        }
+
+        // The old optimisation is retired by the onCreated hook - i.e. only once the
+        // replacement's session is up. If creation fails, the original survives.
+        createOptimisation(new OptimisationSessionManager.NewOptimisation(
+            target, labelFor(target), name, configText, configModel, iniLocked,
+            () -> SwingUtilities.invokeLater(() -> {
+                // Node detach must precede the session removal: the latter performs the
+                // shared bookkeeping's single-shot remove, which clears the
+                // sessionKey -> node entry the tree manager needs to find the node.
+                treeManager.removeOptimisation(retiredKey);
+                sessionManager.removeOptimisation(retiredKey);
+                if (currentlyDisplayedNode != null
+                        && currentlyDisplayedNode.getUserObject() instanceof OptimisationInfo shown
+                        && retiredKey.equals(shown.getSessionKey())) {
+                    currentlyDisplayedNode = null;
+                }
+                if (statusUpdater != null) {
+                    statusUpdater.accept("'" + name + "' retargeted to " + labelFor(target));
+                }
+            })));
     }
 
     /**

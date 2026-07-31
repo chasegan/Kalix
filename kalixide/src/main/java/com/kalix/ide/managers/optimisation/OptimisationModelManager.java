@@ -1,5 +1,9 @@
 package com.kalix.ide.managers.optimisation;
 
+import com.kalix.ide.document.DocumentLabels;
+import com.kalix.ide.document.ModelSource;
+import com.kalix.ide.document.ModelWriteBack;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -9,22 +13,22 @@ import java.util.function.Consumer;
 
 /**
  * Manages model-related operations for optimisation.
- * Handles copying optimised models to the main editor.
+ * Handles copying optimised models back to the model they were optimised from.
  */
 public class OptimisationModelManager {
 
     private static final Logger logger = LoggerFactory.getLogger(OptimisationModelManager.class);
 
-    private final Consumer<String> modelTextSetter;
+    private final ModelWriteBack modelWriteBack;
     private Consumer<String> statusUpdater;
 
     /**
      * Creates a new OptimisationModelManager.
      *
-     * @param modelTextSetter Consumer to set the model text in the main editor
+     * @param modelWriteBack Writes the optimised text back into a specific open model
      */
-    public OptimisationModelManager(Consumer<String> modelTextSetter) {
-        this.modelTextSetter = modelTextSetter;
+    public OptimisationModelManager(ModelWriteBack modelWriteBack) {
+        this.modelWriteBack = modelWriteBack;
     }
 
     /**
@@ -37,7 +41,11 @@ public class OptimisationModelManager {
     }
 
     /**
-     * Copies the optimised model to the main editor.
+     * Writes the optimised model back into the model it was optimised from.
+     *
+     * <p>The destination is the optimisation's recorded target, not the active tab.
+     * Previously this wrote to whichever document happened to be in front, so
+     * optimising model A and then switching to model B silently overwrote B.</p>
      *
      * @param optInfo The optimisation info
      * @param parent The parent component for dialogs
@@ -60,21 +68,45 @@ public class OptimisationModelManager {
             return;
         }
 
-        // Confirm with user
+        ModelSource target = optInfo.getTargetModel();
+        String targetLabel = DocumentLabels.labelForClosed(optInfo.getTargetFile());
+        if (target == null) {
+            JOptionPane.showMessageDialog(parent,
+                "This optimisation has no recorded target model, so there is nowhere to copy it back to.\n"
+                    + "Use \"Save Results\" to write the optimised model to a file instead.",
+                "No Target Model",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        // Name the destination: the whole point is that it may not be the tab in front.
         int response = JOptionPane.showConfirmDialog(parent,
-            "This will replace the current model in the main editor.\nAre you sure you want to continue?",
-            "Replace Current Model",
+            "This will replace the contents of '" + targetLabel + "' with the optimised model.\n"
+                + "Are you sure you want to continue?",
+            "Replace " + targetLabel,
             JOptionPane.YES_NO_OPTION,
             JOptionPane.WARNING_MESSAGE);
 
-        if (response == JOptionPane.YES_OPTION) {
-            // Set the model text in the main editor
-            modelTextSetter.accept(optimisedModel);
-
-            if (statusUpdater != null) {
-                statusUpdater.accept("Optimised model copied to main editor");
-            }
-            logger.info("Copied optimised model to main editor");
+        if (response != JOptionPane.YES_OPTION) {
+            return;
         }
+
+        // The target may have been closed while the optimisation ran — an ordinary
+        // outcome, so say so plainly rather than silently retargeting another tab.
+        boolean written = modelWriteBack != null && modelWriteBack.writeTo(target, optimisedModel);
+        if (!written) {
+            JOptionPane.showMessageDialog(parent,
+                "'" + targetLabel + "' is not open, so the optimised model was not copied.\n"
+                    + "Open it and try again, or use \"Save Results\" to write it to a file.",
+                "Model Not Open",
+                JOptionPane.WARNING_MESSAGE);
+            logger.info("Copy-back skipped: target model '{}' is no longer open", targetLabel);
+            return;
+        }
+
+        if (statusUpdater != null) {
+            statusUpdater.accept("Optimised model copied to " + targetLabel);
+        }
+        logger.info("Copied optimised model into '{}'", targetLabel);
     }
 }

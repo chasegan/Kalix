@@ -36,7 +36,6 @@ public class OptimisationResultsManager {
     private final KalixIniTextArea optimisedModelEditor;
 
     private Supplier<File> workingDirectorySupplier;
-    private Supplier<String> originalModelSupplier;
     private Consumer<String> statusUpdater;
 
     /**
@@ -255,10 +254,6 @@ public class OptimisationResultsManager {
     // Setters for dependencies
     public void setWorkingDirectorySupplier(Supplier<File> supplier) {
         this.workingDirectorySupplier = supplier;
-    }
-
-    public void setOriginalModelSupplier(Supplier<String> supplier) {
-        this.originalModelSupplier = supplier;
     }
 
     public void setStatusUpdater(Consumer<String> updater) {

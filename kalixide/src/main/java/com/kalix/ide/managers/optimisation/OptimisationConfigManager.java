@@ -1,6 +1,8 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.components.KalixIniTextArea;
+import com.kalix.ide.document.ModelSource;
+import com.kalix.ide.document.ModelSourceRegistry;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -15,7 +17,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 /**
  * Manages optimisation configuration editing, validation, and persistence.
@@ -29,7 +30,6 @@ public class OptimisationConfigManager {
     private final OptimisationGuiBuilder guiBuilder;
     private final RTextScrollPane configScrollPane;
 
-    private Supplier<File> workingDirectorySupplier;
     private Consumer<String> statusUpdater;
     private Consumer<String> configStatusCallback;
     private Runnable onIniManuallyEdited;
@@ -42,13 +42,9 @@ public class OptimisationConfigManager {
     /**
      * Creates a new OptimisationConfigManager.
      *
-     * @param workingDirectorySupplier Supplier for the working directory
-     * @param modelTextSupplier Supplier for the current model text
+     * @param modelSourceRegistry the open models an optimisation may target
      */
-    public OptimisationConfigManager(Supplier<File> workingDirectorySupplier,
-                                    Supplier<String> modelTextSupplier) {
-        this.workingDirectorySupplier = workingDirectorySupplier;
-
+    public OptimisationConfigManager(ModelSourceRegistry modelSourceRegistry) {
         // Initialize text editor first
         this.configEditor = new KalixIniTextArea(
             OptimisationUIConstants.CONFIG_TEXT_AREA_ROWS,
@@ -62,7 +58,7 @@ public class OptimisationConfigManager {
                 configEditor.setText(configText);
                 isUpdatingEditor = false;
             },
-            workingDirectorySupplier
+            modelSourceRegistry
         );
 
         // Continue with initialization
@@ -234,12 +230,10 @@ public class OptimisationConfigManager {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Load Optimisation Configuration");
 
-        // Set initial directory
-        if (workingDirectorySupplier != null) {
-            File workingDir = workingDirectorySupplier.get();
-            if (workingDir != null) {
-                fileChooser.setCurrentDirectory(workingDir);
-            }
+        // Set initial directory - the target model's folder, not the active tab's
+        File workingDir = guiBuilder.getTargetWorkingDirectory();
+        if (workingDir != null) {
+            fileChooser.setCurrentDirectory(workingDir);
         }
 
         // Set file filter for INI files
@@ -296,12 +290,10 @@ public class OptimisationConfigManager {
         JFileChooser fileChooser = new JFileChooser();
         fileChooser.setDialogTitle("Save Optimisation Configuration");
 
-        // Set initial directory
-        if (workingDirectorySupplier != null) {
-            File workingDir = workingDirectorySupplier.get();
-            if (workingDir != null) {
-                fileChooser.setCurrentDirectory(workingDir);
-            }
+        // Set initial directory - the target model's folder, not the active tab's
+        File workingDir = guiBuilder.getTargetWorkingDirectory();
+        if (workingDir != null) {
+            fileChooser.setCurrentDirectory(workingDir);
         }
 
         // Set file filter for INI files
@@ -491,21 +483,29 @@ public class OptimisationConfigManager {
     }
 
     /**
-     * Updates the simulated series combo box options from the current model's [outputs] section.
-     *
-     * @param modelTextSupplier Supplier for the current model text
+     * Updates the simulated series combo box options from the selected model's
+     * {@code [outputs]} section.
      */
-    public void updateSimulatedSeriesOptionsFromModel(Supplier<String> modelTextSupplier) {
-        if (modelTextSupplier == null || guiBuilder == null) {
+    public void updateSimulatedSeriesOptionsFromModel() {
+        if (guiBuilder == null) {
             return;
         }
 
-        String modelText = modelTextSupplier.get();
+        // Read the *selected* model's outputs. Sourcing these from the active tab was
+        // the same ambient-read bug as the model target itself: pick model B and the
+        // objective builder would still offer model A's series.
+        ModelSource selected = guiBuilder.getSelectedModel();
+        if (selected == null) {
+            guiBuilder.updateSimulatedSeriesOptions(java.util.List.of());
+            return;
+        }
+
+        String modelText = selected.getText();
         if (modelText == null || modelText.isEmpty()) {
+            guiBuilder.updateSimulatedSeriesOptions(java.util.List.of());
             return;
         }
 
-        java.util.List<String> outputSeries = parseOutputsSection(modelText);
-        guiBuilder.updateSimulatedSeriesOptions(outputSeries);
+        guiBuilder.updateSimulatedSeriesOptions(parseOutputsSection(modelText));
     }
 }
