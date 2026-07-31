@@ -3,6 +3,7 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.ProgressParser;
+import com.kalix.ide.document.ModelSource;
 import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.StdioTaskManager;
 import org.slf4j.Logger;
@@ -27,9 +28,7 @@ public class OptimisationSessionManager {
 
     // Core dependencies
     private final StdioTaskManager stdioTaskManager;
-    private final Supplier<File> workingDirectorySupplier;
     private final Supplier<File> projectDirectorySupplier;
-    private final Supplier<String> modelTextSupplier;
 
     // Session tracking
     /**
@@ -66,20 +65,14 @@ public class OptimisationSessionManager {
      *
      * @param stdioTaskManager         The STDIO task manager
      * @param sessions                 Session-tree bookkeeping shared with the tree manager
-     * @param workingDirectorySupplier Supplier for the working directory
      * @param projectDirectorySupplier Supplier for the project directory
-     * @param modelTextSupplier        Supplier for the model text
      */
     public OptimisationSessionManager(StdioTaskManager stdioTaskManager,
                                       SessionTreeBookkeeping<OptimisationStatus> sessions,
-                                      Supplier<File> workingDirectorySupplier,
-                                      Supplier<File> projectDirectorySupplier,
-                                      Supplier<String> modelTextSupplier) {
+                                      Supplier<File> projectDirectorySupplier) {
         this.stdioTaskManager = stdioTaskManager;
         this.sessions = sessions;
-        this.workingDirectorySupplier = workingDirectorySupplier;
         this.projectDirectorySupplier = projectDirectorySupplier;
-        this.modelTextSupplier = modelTextSupplier;
 
         // Track session death for our optimisations. Without this, a crashed or
         // terminated kalixcli was invisible here: the tree kept rendering the frozen
@@ -105,28 +98,77 @@ public class OptimisationSessionManager {
     }
 
     /**
+     * What to create, for {@link #createOptimisation}.
+     *
+     * @param target        the model to run against — chosen explicitly by the user in
+     *                      the Config tab, never inferred from the active tab
+     * @param targetLabel   the target's label, for messages only (never stored)
+     * @param preferredName the name to keep (a retarget preserves the name the user
+     *                      gave the optimisation); blank to allocate the next "Opt N"
+     * @param configText    the configuration INI text
+     * @param configModel   the structured GUI form state
+     * @param iniLocked     whether the replacement should stay locked to its INI text
+     * @param onCreated     run once the session exists and is registered, before the
+     *                      creation callback; the hook a retarget uses to retire the
+     *                      optimisation being replaced
+     */
+    public record NewOptimisation(ModelSource target,
+                                  String targetLabel,
+                                  String preferredName,
+                                  String configText,
+                                  OptimisationConfigModel configModel,
+                                  boolean iniLocked,
+                                  Runnable onCreated) {
+    }
+
+    /**
+     * Why {@code target} cannot be optimised, or {@code null} if it can.
+     *
+     * <p>Exposed so a caller about to <em>replace</em> an existing optimisation can
+     * check first and abandon the change while the original is still intact.</p>
+     */
+    public String describeTargetProblem(ModelSource target, String targetLabel) {
+        if (target == null) {
+            return "No model selected. Open a model and choose it in the Model list.";
+        }
+        String modelText = target.getText();
+        if (modelText == null || modelText.trim().isEmpty()) {
+            return "'" + targetLabel + "' is empty. Please load a model first.";
+        }
+        if (target.getWorkingDirectory() == null) {
+            return "'" + targetLabel + "' has not been saved yet. Save it first so that "
+                + "data paths in the optimisation config can be resolved.";
+        }
+        return null;
+    }
+
+    /**
      * Creates a new optimisation session.
      *
-     * @param configText The configuration INI text
-     * @param configModel The structured GUI form state to store on the new optimisation
+     * @param request What to create — target model, config, and the optional post-create hook
      * @param progressCallback Callback for progress updates (sessionKey, progressInfo)
      * @param parametersCallback Callback for parameters (sessionKey, parameters)
      * @param resultCallback Callback for results (sessionKey, result)
      */
-    public void createOptimisation(String configText,
-                                  OptimisationConfigModel configModel,
+    public void createOptimisation(NewOptimisation request,
                                   java.util.function.BiConsumer<String, ProgressParser.ProgressInfo> progressCallback,
                                   java.util.function.BiConsumer<String, List<String>> parametersCallback,
                                   java.util.function.BiConsumer<String, String> resultCallback) {
-        String modelText = modelTextSupplier != null ? modelTextSupplier.get() : null;
-        if (modelText == null || modelText.trim().isEmpty()) {
-            handleError("No model loaded. Please load a model first.");
+        ModelSource target = request.target();
+        String targetLabel = request.targetLabel();
+        String configText = request.configText();
+        OptimisationConfigModel configModel = request.configModel();
+
+        String problem = describeTargetProblem(target, targetLabel);
+        if (problem != null) {
+            handleError(problem);
             return;
         }
 
-        // Get current working directory if available
-        File workingDir = workingDirectorySupplier != null ? workingDirectorySupplier.get() : null;
-        String currentFolder = workingDir != null ? workingDir.getAbsolutePath() : null;
+        String modelText = target.getText();
+        // The target's folder becomes the CLI process's working directory for the life
+        // of the session, so relative observed-data paths resolve against the model.
+        String currentFolder = target.getWorkingDirectory().getAbsolutePath();
 
         File projectDir = projectDirectorySupplier != null ? projectDirectorySupplier.get() : null;
         String projectFolder = projectDir != null ? projectDir.getAbsolutePath() : null;
@@ -138,19 +180,16 @@ public class OptimisationSessionManager {
             handleError("kalix not found. Please configure the path in Preferences.");
             return;
         }
+        String optName = request.preferredName() != null && !request.preferredName().isBlank()
+            ? request.preferredName()
+            : generateOptimisationName();
 
         Path cliPath = cliLocationOpt.get().getPath();
 
         try {
-            // Generate optimisation name
-            String optName = generateOptimisationName();
-
             // Configure session - use "new-session" subcommand for JSON communication
             SessionManager.SessionConfig config = new SessionManager.SessionConfig("new-session");
-
-            if (workingDir != null) {
-                config.workingDirectory(workingDir.toPath());
-            }
+            config.workingDirectory(target.getWorkingDirectory().toPath());
 
             // Start session
             stdioTaskManager.getSessionManager().startSession(cliPath, config)
@@ -178,6 +217,8 @@ public class OptimisationSessionManager {
                     OptimisationInfo optInfo = new OptimisationInfo(optName, session);
                     optInfo.setConfigSnapshot(configText);
                     optInfo.setConfigModel(configModel);
+                    optInfo.setTargetModel(target);
+                    optInfo.setIniLocked(request.iniLocked());
 
                     // Create result for tracking
                     OptimisationResult result = new OptimisationResult();
@@ -186,6 +227,14 @@ public class OptimisationSessionManager {
                     // Add to tracking maps
                     sessionToOptInfo.put(sessionKey, optInfo);
                     optimisationResults.put(sessionKey, result);
+
+                    // The replacement now exists, so a retarget can safely retire the
+                    // optimisation it replaces. Running this only here - never before
+                    // the session is up - means a failed create leaves the original
+                    // intact rather than destroying it with nothing to show for it.
+                    if (request.onCreated() != null) {
+                        request.onCreated().run();
+                    }
 
                     // Notify callback
                     if (onOptimisationCreated != null) {

@@ -213,9 +213,12 @@ public class OptimisationWindowInitializer {
         // Tree manager action callbacks
         setupTreeManagerActions(parentFrame, statusUpdater);
 
-        // Tree selection callbacks
-        treeManager.setOnNoSelectionCallback(callbacks::showMessagePanel);
-        treeManager.setOnFolderSelectedCallback(callbacks::showMessagePanel);
+        // Tree selection callbacks. Deselection routes through displayOptimisation(null)
+        // rather than only swapping the card, so the window's "currently displayed"
+        // pointer is cleared too - otherwise it keeps referencing an optimisation that
+        // may since have been removed.
+        treeManager.setOnNoSelectionCallback(() -> callbacks.displayOptimisation(null));
+        treeManager.setOnFolderSelectedCallback(() -> callbacks.displayOptimisation(null));
         treeManager.setSaveCurrentConfigCallback(callbacks::saveCurrentConfig);
         treeManager.setOnOptimisationSelectedCallback(callbacks::displayOptimisation);
     }

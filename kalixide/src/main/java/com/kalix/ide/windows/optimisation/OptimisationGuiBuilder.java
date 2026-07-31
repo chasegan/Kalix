@@ -1,5 +1,7 @@
 package com.kalix.ide.windows.optimisation;
 
+import com.kalix.ide.document.ModelSource;
+import com.kalix.ide.document.ModelSourceRegistry;
 import com.kalix.ide.managers.optimisation.OptimisationConfigModel;
 
 import javax.swing.*;
@@ -8,7 +10,6 @@ import java.io.File;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
-import java.util.function.Supplier;
 
 /**
  * Main GUI builder panel for configuring optimizations.
@@ -19,6 +20,7 @@ public class OptimisationGuiBuilder extends JPanel {
     private final ObjectiveConfigPanel objectivePanel;
     private final AlgorithmConfigPanel algorithmPanel;
     private final ParametersConfigPanel parametersPanel;
+    private final ModelSelectorPanel modelSelectorPanel;
     private final Consumer<String> configTextConsumer;
     private final JLabel iniLockedBanner;
 
@@ -26,9 +28,10 @@ public class OptimisationGuiBuilder extends JPanel {
      * Creates a new OptimisationGuiBuilder.
      *
      * @param configTextConsumer Callback to receive generated config text and switch to text tab
-     * @param workingDirectorySupplier Supplier for the current model's working directory
+     * @param modelSourceRegistry The open models the optimisation may target
      */
-    public OptimisationGuiBuilder(Consumer<String> configTextConsumer, Supplier<File> workingDirectorySupplier) {
+    public OptimisationGuiBuilder(Consumer<String> configTextConsumer,
+                                  ModelSourceRegistry modelSourceRegistry) {
         this.configTextConsumer = configTextConsumer;
 
         setLayout(new BorderLayout());
@@ -38,7 +41,10 @@ public class OptimisationGuiBuilder extends JPanel {
         contentPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
 
         // Add the three configuration panels
-        objectivePanel = new ObjectiveConfigPanel(workingDirectorySupplier);
+        // The selector comes first: observed-data paths are browsed for, and stored
+        // relative to, the *target* model's folder — not whichever tab is in front.
+        modelSelectorPanel = new ModelSelectorPanel(modelSourceRegistry);
+        objectivePanel = new ObjectiveConfigPanel(this::getTargetWorkingDirectory);
         algorithmPanel = new AlgorithmConfigPanel();
         parametersPanel = new ParametersConfigPanel();
 
@@ -48,10 +54,17 @@ public class OptimisationGuiBuilder extends JPanel {
         gbc.fill = GridBagConstraints.BOTH;
         gbc.insets = new Insets(0, 0, 10, 0); // 10px bottom margin (gap between panels)
 
-        // Algorithm panel - single unframed row at the top, never expands
+        // Top strip - one visual row: the target model, then the algorithm settings.
+        // The selector is a sibling of the algorithm panel rather than a child, so that
+        // setComponentsEnabled (which disables the config *form*) cannot grey out the
+        // model choice — which model an optimisation targets is not part of its config.
+        JPanel topStrip = new JPanel(new BorderLayout());
+        topStrip.add(modelSelectorPanel, BorderLayout.WEST);
+        topStrip.add(algorithmPanel, BorderLayout.CENTER);
+
         gbc.gridy = 0;
         gbc.weighty = 0.0;
-        contentPanel.add(algorithmPanel, gbc);
+        contentPanel.add(topStrip, gbc);
 
         // Objective panel - grows with extra vertical space (1/2 share)
         gbc.gridy = 1;
@@ -73,6 +86,32 @@ public class OptimisationGuiBuilder extends JPanel {
         iniLockedBanner.setFont(iniLockedBanner.getFont().deriveFont(Font.ITALIC));
         iniLockedBanner.setVisible(false);
         add(iniLockedBanner, BorderLayout.NORTH);
+    }
+
+    /**
+     * The target-model selector at the head of the tab.
+     *
+     * <p>Deliberately not part of {@link OptimisationConfigModel}: the model an
+     * optimisation runs against is a property of the optimisation (and of the kalixcli
+     * session it owns), not of the config INI the form generates.</p>
+     */
+    public ModelSelectorPanel getModelSelectorPanel() {
+        return modelSelectorPanel;
+    }
+
+    /** The selected model, or {@code null} if no model is open. */
+    public ModelSource getSelectedModel() {
+        return modelSelectorPanel.getSelectedModel();
+    }
+
+    /**
+     * The folder the selected model's relative paths resolve against, or {@code null}
+     * if nothing usable is selected. This is what kalixcli is given as its working
+     * directory, and what file dialogs in this window open at.
+     */
+    public File getTargetWorkingDirectory() {
+        ModelSource selected = modelSelectorPanel.getSelectedModel();
+        return selected != null ? selected.getWorkingDirectory() : null;
     }
 
     /**

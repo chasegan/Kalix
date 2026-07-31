@@ -12,7 +12,9 @@ import com.kalix.ide.dialogs.PreferencesDialog;
 import com.kalix.ide.linter.LinterPreferencesPanel;
 import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.document.DocumentManager;
+import com.kalix.ide.document.DocumentModelSources;
 import com.kalix.ide.document.KalixDocument;
+import com.kalix.ide.document.ModelSource;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.handlers.FileDropHandler;
 import com.kalix.ide.managers.ThemeManager;
@@ -87,6 +89,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     // Document management (owns open documents and the active-document concept)
     private DocumentManager documentManager;
+    /** Enumerable view of the open models, for windows that let the user pick a target. */
+    private DocumentModelSources modelSources;
 
     // Cached views of the active document, refreshed when the active document changes.
     private MapPanel mapPanel;
@@ -283,6 +287,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // so the tab strip and contextual view — built in setupLayout() — are subscribed
         // before the first document appears.
         documentManager = new DocumentManager();
+
+        // The enumerable view of the open models, for windows that must let the user
+        // choose a target rather than silently assume the active tab (the Optimiser).
+        modelSources = new DocumentModelSources(documentManager);
 
         statusLabel = new JLabel(AppConstants.STATUS_READY);
         statusLabel.setBorder(BorderFactory.createEmptyBorder(
@@ -1327,18 +1335,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Sets the model text in the main editor and marks it as dirty (unsaved).
-     * Use this when programmatically inserting content that should be saved.
-     * @param text the text to set
-     */
-    public void setModelTextAndMarkDirty(String text) {
-        if (textEditor != null) {
-            textEditor.setText(text);
-            textEditor.setDirty(true);
-        }
-    }
-
-    /**
      * Performs an undo operation in the text editor.
      * Updates the status bar with the result of the operation.
      */
@@ -1690,12 +1686,39 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void showOptimisation() {
         OptimisationWindow.showOptimisationWindow(this, stdioTaskManager, this::updateStatus,
             progressBar,
-            fileOperations::getCurrentWorkingDirectory,
             fileOperations::getCurrentProjectDirectory,
-            () -> {
-                // Model text supplier
-                return textEditor.getText();
-            });
+            modelSources,
+            this::writeModelTextTo);
+    }
+
+    /**
+     * Replaces an open document's text and brings it to the front, marking it dirty.
+     *
+     * <p>The Optimiser's "copy optimised model to main" uses this to write back into the
+     * document the optimisation was actually run against — which may not be the active
+     * tab. A target closed in the meantime is reported, not silently substituted.</p>
+     *
+     * @return {@code false} if the target is no longer an open document
+     */
+    private boolean writeModelTextTo(ModelSource target, String text) {
+        if (target == null) {
+            return false;
+        }
+        KalixDocument document = target instanceof KalixDocument candidate
+                && documentManager.getDocuments().contains(candidate) ? candidate : null;
+        if (document == null) {
+            // The document was closed. If the same file has since been reopened it is a
+            // *new* document object, so identity alone misses it — fall back to the file.
+            document = documentManager.findByFile(target.getFile());
+        }
+        if (document == null) {
+            return false;
+        }
+        documentManager.setActiveDocument(document);
+        document.getEditor().setText(text);
+        document.getEditor().setDirty(true);
+        toFront();
+        return true;
     }
 
     @Override

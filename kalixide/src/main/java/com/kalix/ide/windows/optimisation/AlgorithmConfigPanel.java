@@ -73,13 +73,15 @@ public class AlgorithmConfigPanel extends JPanel {
         gbc.gridx = 3;
         gbc.weightx = 0.0;
         gbc.insets = new Insets(0, 20, 0, 5);
-        row.add(new JLabel("Evaluations:"), gbc);
+        row.add(new JLabel("Evals:"), gbc);
 
+        // Fixed width: the field holds a 5-6 digit count, so it takes its preferred
+        // size and leaves the slack to the glue rather than stretching to fill it.
         gbc.gridx = 4;
-        gbc.weightx = 0.4;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
+        gbc.weightx = 0.0;
+        gbc.fill = GridBagConstraints.NONE;
         gbc.insets = new Insets(0, 5, 0, 5);
-        terminationEvalsField = new JTextField("60000", 8);
+        terminationEvalsField = new JTextField("60000", 6);
         row.add(terminationEvalsField, gbc);
 
         // Right-side filler so the row doesn't centre

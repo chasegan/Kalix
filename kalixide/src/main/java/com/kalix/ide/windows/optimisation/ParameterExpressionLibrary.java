@@ -23,6 +23,13 @@ public class ParameterExpressionLibrary {
         Map.entry("rf_bias", "lin_range(g(#),0.7,1.3)"),
         Map.entry("rf_d", "lin_range(g(#),0.001,0.999)"),
 
+        // Routing parameters — a routing node reports either the non-linear
+        // Muskingum pair (nlm_k, nlm_m) or piecewise-linear travel times
+        // (pwl_tt_0, pwl_tt_1, ...), depending on its scheme
+        Map.entry("nlm_k", "log_range(g(#),100,500000)"),
+        Map.entry("nlm_m", "lin_range(g(#),0.5,1)"),
+        Map.entry("pwl_tt_", "lin_range(g(#),0,5)"),
+
         // Sacramento parameters
         Map.entry("adimp", "log_range(g(#),1E-05,0.15)"),
         Map.entry("lzfpm", "log_range(g(#),1,300)"),
@@ -47,17 +54,27 @@ public class ParameterExpressionLibrary {
     );
 
     /**
+     * Parameter families whose members are numbered, so that every member shares
+     * a single expression template keyed on the prefix.
+     */
+    private static final String[] INDEXED_TYPE_PREFIXES = {"rf_d", "pwl_tt_"};
+
+    /**
      * Detects the parameter type from the parameter name.
      *
      * Rules:
      * - If name starts with "const." → type is "constant"
-     * - If type matches "rf_d" followed by digits → normalize to "rf_d"
+     * - If type is an indexed family member (e.g. "rf_d2", "pwl_tt_3") → normalize
+     *   to the family prefix ("rf_d", "pwl_tt_")
      * - Otherwise, type is the substring after the last "."
      *
      * @param paramName The full parameter name (e.g., "node.mygr4jnode.x1")
      * @return The detected parameter type (e.g., "x1") or null if unrecognized
      */
     public static String detectParameterType(String paramName) {
+        if (paramName == null) {
+            return null;
+        }
         if (paramName.startsWith("const.")) {
             return "constant";
         }
@@ -66,12 +83,12 @@ public class ParameterExpressionLibrary {
         if (lastDot >= 0 && lastDot < paramName.length() - 1) {
             String type = paramName.substring(lastDot + 1);
 
-            // Normalize rf_d0, rf_d1, rf_d2, ... to just "rf_d"
-            if (type.startsWith("rf_d") && type.length() > 4) {
-                // Check if everything after "rf_d" is digits
-                String suffix = type.substring(4);
-                if (suffix.matches("\\d+")) {
-                    return "rf_d";
+            // Collapse rf_d0/rf_d1/... and pwl_tt_0/pwl_tt_1/... onto their prefix
+            for (String prefix : INDEXED_TYPE_PREFIXES) {
+                if (type.length() > prefix.length()
+                        && type.startsWith(prefix)
+                        && type.substring(prefix.length()).matches("\\d+")) {
+                    return prefix;
                 }
             }
 
