@@ -2,13 +2,11 @@ package com.kalix.ide.editor;
 
 import org.junit.jupiter.api.Test;
 
-import java.awt.GraphicsEnvironment;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * Covers toggleComment's pure logic and the selection restore for selections
@@ -78,11 +76,10 @@ class ToggleCommentTest {
         assertTrue(shifted[0] >= 4); // clamped to its own line start
     }
 
-    // --- end-to-end through a real editor (skipped when headless) ---
+    // --- end-to-end through a real editor ---
 
     @Test
     void toggleCommentRoundTripsSelectionAcrossThreeLines() {
-        assumeFalse(GraphicsEnvironment.isHeadless(), "requires a display");
 
         EnhancedTextEditor editor = new EnhancedTextEditor();
         editor.setText("aaa\nbbb\nccc");

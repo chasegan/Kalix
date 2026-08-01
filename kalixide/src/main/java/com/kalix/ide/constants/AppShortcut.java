@@ -3,6 +3,7 @@ package com.kalix.ide.constants;
 import com.kalix.ide.managers.KeyboardShortcutManager;
 
 import javax.swing.KeyStroke;
+import java.awt.GraphicsEnvironment;
 import java.awt.Toolkit;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -77,10 +78,28 @@ public enum AppShortcut {
         return label;
     }
 
+    /**
+     * The platform menu modifier — Cmd on macOS, Ctrl elsewhere — as an
+     * {@code InputEvent} mask.
+     *
+     * <p>The one place the toolkit is asked. Callers outside this enum need it too
+     * (map key bindings, context-menu hints, the table and parameter-sheet windows),
+     * and asking separately each time both duplicated the platform rule and left every
+     * site to rediscover that the query is display-dependent.
+     *
+     * <p>Falls back to Ctrl when headless, where {@code getMenuShortcutKeyMaskEx} throws.
+     * There is no menu bar to match without a display, so any well-formed modifier will
+     * do; what matters is that a capability query cannot abort the caller's construction.
+     */
+    public static int menuMask() {
+        return GraphicsEnvironment.isHeadless()
+            ? InputEvent.CTRL_DOWN_MASK
+            : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+    }
+
     /** The platform keystroke: the menu shortcut modifier plus any declared extras. */
     public KeyStroke keyStroke() {
-        return KeyStroke.getKeyStroke(keyCode,
-            Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx() | extraModifiers);
+        return KeyStroke.getKeyStroke(keyCode, menuMask() | extraModifiers);
     }
 
     /**

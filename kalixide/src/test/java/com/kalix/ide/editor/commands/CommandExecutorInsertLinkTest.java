@@ -4,14 +4,12 @@ import com.kalix.ide.model.ModelLink;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.junit.jupiter.api.Test;
 
-import java.awt.GraphicsEnvironment;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * Auto-linking on node insertion: the ds_N text surgery (pure helpers) and the two atomic
@@ -90,7 +88,6 @@ class CommandExecutorInsertLinkTest {
 
     @Test
     void singleSelectedNodeAutoLinksToInsertedNode() {
-        assumeFalse(GraphicsEnvironment.isHeadless());
         Fixture f = fixture(MODEL);
         String templateId = NodeTemplateCatalog.templates().get(0).id();
 
@@ -109,7 +106,6 @@ class CommandExecutorInsertLinkTest {
 
     @Test
     void selectedLinkSplicesInsertedNodeIntoIt() {
-        assumeFalse(GraphicsEnvironment.isHeadless());
         Fixture f = fixture(MODEL);
         String templateId = NodeTemplateCatalog.templates().get(0).id();
 

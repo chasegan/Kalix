@@ -11,10 +11,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.JPanel;
-import java.awt.GraphicsEnvironment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * Guards against search highlights accumulating instead of replacing.
@@ -42,7 +40,6 @@ class SearchHighlightAccumulationTest {
 
     @BeforeEach
     void setUp() {
-        assumeFalse(GraphicsEnvironment.isHeadless(), "requires a display");
         textArea = new RSyntaxTextArea();
         textArea.setText(TEXT);
         searchManager = new TextSearchManager(textArea, new JPanel());

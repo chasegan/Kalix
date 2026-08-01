@@ -1,5 +1,6 @@
 package com.kalix.ide.interaction;
 
+import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
@@ -103,7 +104,7 @@ public class MapContextMenuManager {
         boolean hasNodeSelection = model.getSelectedNodeCount() > 0;
         boolean hasSelection = hasNodeSelection || model.getSelectedLinkCount() > 0;
         boolean hasClipboard = clipboardManager != null && clipboardManager.hasClipboardContent();
-        int shortcutMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        int shortcutMask = AppShortcut.menuMask();
 
         // Cut
         JMenuItem cutItem = new JMenuItem("Cut");

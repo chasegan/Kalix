@@ -1,5 +1,6 @@
 package com.kalix.ide.tableview;
 
+import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.icons.MenuIcons;
@@ -142,7 +143,7 @@ public class TableViewWindow extends JDialog {
     private void setupClipboardActions() {
         // Copy action (Ctrl+C / Cmd+C)
         KeyStroke copyKey = KeyStroke.getKeyStroke(KeyEvent.VK_C,
-            Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx());
+            AppShortcut.menuMask());
         table.getInputMap().put(copyKey, "copy");
         table.getActionMap().put("copy", new AbstractAction() {
             @Override
@@ -153,7 +154,7 @@ public class TableViewWindow extends JDialog {
 
         // Paste action (Ctrl+V / Cmd+V)
         KeyStroke pasteKey = KeyStroke.getKeyStroke(KeyEvent.VK_V,
-            Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx());
+            AppShortcut.menuMask());
         table.getInputMap().put(pasteKey, "paste");
         table.getActionMap().put("paste", new AbstractAction() {
             @Override
