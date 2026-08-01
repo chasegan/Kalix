@@ -90,7 +90,7 @@ public class FileOperationsManager {
      * Shows an open file dialog and loads the selected model file.
      */
     public void openModel() {
-        KalixFileDialog.openFile(ownerWindow())
+        KalixFileDialog.openFile(parentComponent)
             .title("Open Model")
             .startIn(getCurrentFile())
             .filters(modelFilter())
@@ -234,7 +234,7 @@ public class FileOperationsManager {
         File currentFile = document.getFile();
         // No filter for save: the suggested name carries the conventional extension, and
         // whatever name the modeller types is accepted verbatim.
-        java.util.Optional<File> chosen = KalixFileDialog.saveFile(ownerWindow())
+        java.util.Optional<File> chosen = KalixFileDialog.saveFile(parentComponent)
             .title("Save As")
             .startIn(currentFile)
             .suggestedName(currentFile != null ? currentFile.getName() : "model.ini")
@@ -317,12 +317,6 @@ public class FileOperationsManager {
     /** The model-files extension filter shared by the open and save dialogs. */
     private static FileDialogFilter modelFilter() {
         return FileDialogFilter.of(AppConstants.MODEL_FILES_DESCRIPTION, "ini");
-    }
-
-    /** The window owning our dialogs (the dialog builder wants a Window, not a Component). */
-    private java.awt.Window ownerWindow() {
-        return parentComponent instanceof java.awt.Window w
-            ? w : javax.swing.SwingUtilities.getWindowAncestor(parentComponent);
     }
     
     /**

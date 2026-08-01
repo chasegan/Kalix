@@ -1,5 +1,7 @@
 package com.kalix.ide.windows.optimisation;
 
+import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.filedialog.FileDialogFilter;
 import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -225,26 +227,16 @@ public class ObjectiveConfigPanel extends JPanel {
             return;
         }
 
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Select Observed Data File");
-
-        javax.swing.filechooser.FileNameExtensionFilter csvFilter =
-            new javax.swing.filechooser.FileNameExtensionFilter("CSV Files (*.csv)", "csv");
-        fileChooser.addChoosableFileFilter(csvFilter);
-        fileChooser.setFileFilter(csvFilter);
-
-        if (workingDirectorySupplier != null) {
-            java.io.File workingDir = workingDirectorySupplier.get();
-            if (workingDir != null && workingDir.exists()) {
-                fileChooser.setCurrentDirectory(workingDir);
-            }
-        }
-
-        int result = fileChooser.showOpenDialog(this);
-        if (result != JFileChooser.APPROVE_OPTION) {
+        java.util.Optional<java.io.File> chosen =
+            KalixFileDialog.openFile(this)
+                .title("Select Observed Data File")
+                .startIn(workingDirectorySupplier != null ? workingDirectorySupplier.get() : null)
+                .filters(FileDialogFilter.of("CSV Files (*.csv)", "csv"))
+                .show();
+        if (chosen.isEmpty()) {
             return;
         }
-        java.io.File selectedFile = fileChooser.getSelectedFile();
+        java.io.File selectedFile = chosen.get();
 
         String pathToUse = selectedFile.getAbsolutePath();
         if (workingDirectorySupplier != null) {

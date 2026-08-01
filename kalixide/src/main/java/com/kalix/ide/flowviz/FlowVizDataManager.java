@@ -5,13 +5,14 @@ import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.io.SourceResCsvImporter;
 import com.kalix.ide.io.PixieReader;
 import com.kalix.ide.io.NamedSeries;
+import com.kalix.ide.filedialog.FileDialogFilter;
+import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 
 import javax.swing.*;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
@@ -120,55 +121,25 @@ public class FlowVizDataManager {
      * delegates to the appropriate loading method for optimal user experience and progress tracking.
      */
     public void openCsvFiles() {
-        JFileChooser fileChooser = new JFileChooser();
+        List<File> selected = KalixFileDialog.openFile(parentFrame)
+            .title("Open Data Files")
+            .multiSelect()
+            .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
+            .filters(
+                FileDialogFilter.of("All Supported (*.csv, *.pxt)", "csv", "pxt"),
+                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
+                // Whole-name suffix matching, so the double extension needs no bespoke
+                // filter of its own (JFileChooser could only match after the final dot).
+                FileDialogFilter.of("Source Result CSV (*.res.csv)", "res.csv"),
+                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
+            .showAll();
 
-        // Add file filters for different formats
-        FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
-        FileNameExtensionFilter pixieFilter = new FileNameExtensionFilter("Pixie Files (*.pxt)", "pxt");
-        // A dedicated *.res.csv filter needs a custom FileFilter: Swing's FileNameExtensionFilter
-        // only matches the text after the final dot ("csv"), so it can't single out ".res.csv".
-        javax.swing.filechooser.FileFilter resCsvFilter = new javax.swing.filechooser.FileFilter() {
-            @Override
-            public boolean accept(File f) {
-                return f.isDirectory() || SourceResCsvFormat.isResCsv(f.getName());
-            }
-            @Override
-            public String getDescription() {
-                return "Source Result CSV (*.res.csv)";
-            }
-        };
-        FileNameExtensionFilter allFilter = new FileNameExtensionFilter("All Supported (*.csv, *.pxt)", "csv", "pxt");
-
-        fileChooser.addChoosableFileFilter(csvFilter);
-        fileChooser.addChoosableFileFilter(resCsvFilter);
-        fileChooser.addChoosableFileFilter(pixieFilter);
-        fileChooser.addChoosableFileFilter(allFilter);
-        fileChooser.setFileFilter(allFilter); // Default to all supported
-
-        // Set initial directory to model directory if available, otherwise use user home
-        if (baseDirectorySupplier != null) {
-            File baseDir = baseDirectorySupplier.get();
-            if (baseDir != null) {
-                fileChooser.setCurrentDirectory(baseDir);
-            } else {
-                fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
-            }
-        } else {
-            fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
-        }
-        fileChooser.setMultiSelectionEnabled(true);  // Enable multi-select
-
-        int result = fileChooser.showOpenDialog(parentFrame);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File[] selectedFiles = fileChooser.getSelectedFiles();
-
-            if (selectedFiles.length == 1) {
-                // Single file - use appropriate method based on type
-                loadFile(selectedFiles[0]);
-            } else if (selectedFiles.length > 1) {
-                // Multiple files - load them sequentially
-                loadMultipleFiles(selectedFiles);
-            }
+        if (selected.size() == 1) {
+            // Single file - use appropriate method based on type
+            loadFile(selected.get(0));
+        } else if (selected.size() > 1) {
+            // Multiple files - load them sequentially
+            loadMultipleFiles(selected.toArray(new File[0]));
         }
     }
 

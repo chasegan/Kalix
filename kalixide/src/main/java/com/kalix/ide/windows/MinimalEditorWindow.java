@@ -3,13 +3,13 @@ package com.kalix.ide.windows;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.components.KalixPlainTextArea;
 import com.kalix.ide.components.KalixTextArea;
+import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.themes.SyntaxTheme;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.JButton;
-import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -161,45 +161,28 @@ public class MinimalEditorWindow extends JFrame {
     }
 
     private void showLoadDialog() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Load File");
-
-        if (baseDirectorySupplier != null) {
-            File baseDir = baseDirectorySupplier.get();
-            if (baseDir != null) {
-                fileChooser.setCurrentDirectory(baseDir);
-            }
-        }
-
-        if (currentFile != null) {
-            fileChooser.setCurrentDirectory(currentFile.getParentFile());
-        }
-
-        int result = fileChooser.showOpenDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            loadFile(fileChooser.getSelectedFile());
-        }
+        KalixFileDialog.openFile(this)
+            .title("Load File")
+            .startIn(startDirectory())
+            .show()
+            .ifPresent(this::loadFile);
     }
 
     private void showSaveDialog() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Save File");
+        KalixFileDialog.saveFile(this)
+            .title("Save File")
+            .startIn(startDirectory())
+            .suggestedName(currentFile != null ? currentFile.getName() : "")
+            .show()
+            .ifPresent(this::saveFile);
+    }
 
-        if (baseDirectorySupplier != null) {
-            File baseDir = baseDirectorySupplier.get();
-            if (baseDir != null) {
-                fileChooser.setCurrentDirectory(baseDir);
-            }
-        }
-
+    /** The file being edited wins over the model folder — it's where the user just was. */
+    private File startDirectory() {
         if (currentFile != null) {
-            fileChooser.setSelectedFile(currentFile);
+            return currentFile.getParentFile();
         }
-
-        int result = fileChooser.showSaveDialog(this);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            saveFile(fileChooser.getSelectedFile());
-        }
+        return baseDirectorySupplier != null ? baseDirectorySupplier.get() : null;
     }
 
     private void loadFile(File file) {

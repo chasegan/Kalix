@@ -3,12 +3,12 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.diff.DiffWindow;
+import com.kalix.ide.filedialog.KalixFileDialog;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.*;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -159,35 +159,21 @@ public class OptimisationResultsManager {
             return;
         }
 
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Save Optimisation Results");
-
-        // Set initial directory
-        if (workingDirectorySupplier != null) {
-            File workingDir = workingDirectorySupplier.get();
-            if (workingDir != null) {
-                fileChooser.setCurrentDirectory(workingDir);
-            }
-        }
-
-        // Add file filters
-        fileChooser.addChoosableFileFilter(
-            new FileNameExtensionFilter("INI Files (*.ini)", "ini"));
-        fileChooser.addChoosableFileFilter(
-            new FileNameExtensionFilter("Text Files (*.txt)", "txt"));
-        fileChooser.addChoosableFileFilter(
-            new FileNameExtensionFilter("All Files (*.*)", "*"));
-
         // Suggest filename
         String timestamp = LocalDateTime.now()
             .format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         String suggestedName = String.format("optimised_%s_%s.ini",
             info.getName().replaceAll("\\s+", "_"), timestamp);
-        fileChooser.setSelectedFile(new File(suggestedName));
 
-        int result = fileChooser.showSaveDialog(parentFrame);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
+        // What gets written still follows the extension the user settles on (.ini = the
+        // optimised model, anything else = the summary), exactly as before.
+        java.util.Optional<File> chosen = KalixFileDialog.saveFile(parentFrame)
+            .title("Save Optimisation Results")
+            .startIn(workingDirectorySupplier != null ? workingDirectorySupplier.get() : null)
+            .suggestedName(suggestedName)
+            .show();
+        if (chosen.isPresent()) {
+            File selectedFile = chosen.get();
 
             // Determine what to save
             String contentToSave;

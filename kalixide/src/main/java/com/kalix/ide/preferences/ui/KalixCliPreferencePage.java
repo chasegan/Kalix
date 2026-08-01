@@ -1,10 +1,10 @@
 package com.kalix.ide.preferences.ui;
 
 import com.kalix.ide.cli.KalixCliLocator;
+import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.JButton;
-import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
@@ -134,12 +134,12 @@ public class KalixCliPreferencePage extends AbstractPreferencePage {
     }
 
     private void browseBinary(ActionEvent e) {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Add Directory to Search Path");
-        fileChooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-
-        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File selectedDir = fileChooser.getSelectedFile();
+        java.util.Optional<File> chosen =
+            KalixFileDialog.chooseFolder(this)
+                .title("Add Directory to Search Path")
+                .show();
+        if (chosen.isPresent()) {
+            File selectedDir = chosen.get();
 
             // Convert to relative path (relative to current working directory)
             java.nio.file.Path currentDir = java.nio.file.Paths.get("").toAbsolutePath();
