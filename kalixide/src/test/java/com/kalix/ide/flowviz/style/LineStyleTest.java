@@ -4,7 +4,9 @@ import org.junit.jupiter.api.Test;
 
 import java.awt.Color;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Tests for {@link LineStyle} — the immutable colour + stroke value type.
