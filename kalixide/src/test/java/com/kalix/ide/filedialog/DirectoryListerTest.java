@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -81,18 +82,51 @@ class DirectoryListerTest {
         }
     }
 
+    /**
+     * Cancelling stops delivery from that point on.
+     *
+     * <p>Note what is <em>not</em> claimed: that a handle cancelled from another thread
+     * delivers nothing at all. {@code deliver} tests the flag on the worker and again on the
+     * EDT, so a batch already past both checks still arrives — cancelling from the test
+     * thread races the worker and cannot win reliably. An earlier version of this test
+     * asserted the absolute and duly failed on a loaded CI machine roughly one run in ten.
+     *
+     * <p>So the cancel happens <em>on the EDT, inside the first batch</em>. The EDT is
+     * single-threaded, so every later delivery must run after it and must see the flag —
+     * which makes this deterministic rather than merely probable. Enough files to force
+     * several batches (BATCH_SIZE is 128) guarantee there are later deliveries to suppress.
+     */
     @Test
-    void cancelledHandleStaysSilent(@TempDir Path dir) throws Exception {
-        Files.writeString(dir.resolve("a.ini"), "x");
+    void cancellingStopsFurtherDeliveries(@TempDir Path dir) throws Exception {
+        for (int i = 0; i < 500; i++) {
+            Files.writeString(dir.resolve("model" + i + ".ini"), "x");
+        }
         DirectoryLister lister = new DirectoryLister();
         try {
-            CountDownLatch spoke = new CountDownLatch(1);
-            DirectoryLister.Handle handle = lister.list(dir,
-                batch -> spoke.countDown(), e -> spoke.countDown());
-            handle.cancel();
-            // Give the worker and EDT queue ample time to (not) deliver.
-            assertTrue(!spoke.await(500, TimeUnit.MILLISECONDS),
-                "cancelled listing must not deliver callbacks");
+            AtomicInteger batches = new AtomicInteger();
+            AtomicInteger completions = new AtomicInteger();
+            CountDownLatch firstBatch = new CountDownLatch(1);
+            AtomicReference<DirectoryLister.Handle> handle = new AtomicReference<>();
+
+            handle.set(lister.list(dir,
+                batch -> {
+                    batches.incrementAndGet();
+                    handle.get().cancel();   // on the EDT: every later delivery sees this
+                    firstBatch.countDown();
+                },
+                e -> completions.incrementAndGet()));
+
+            assertTrue(firstBatch.await(10, TimeUnit.SECONDS), "the first batch must arrive");
+            int seenAtCancel = batches.get();
+
+            // Let the worker finish and drain anything it queued behind the cancel.
+            Thread.sleep(300);
+            SwingUtilities.invokeAndWait(() -> { });
+
+            assertEquals(seenAtCancel, batches.get(),
+                "no batch may be delivered after the handle was cancelled");
+            assertEquals(0, completions.get(),
+                "completion must not fire for a cancelled listing");
         } finally {
             lister.dispose();
         }

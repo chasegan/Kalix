@@ -18,8 +18,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Unit tests for {@link DocumentWorkspaceView} — the adapter that lets an auxiliary
  * window enumerate the open models instead of sampling whichever one is active.
  *
- * <p>Uses real {@link KalixDocument}s (they construct headless) so the adapter is
- * exercised against the same object graph it sees in the running IDE.</p>
+ * <p>Uses real {@link KalixDocument}s so the adapter is exercised against the same object
+ * graph it sees in the running IDE. That means constructing each document's editor and map
+ * panel, which is only headless-safe because those skip the parts that need a display
+ * (drag-and-drop targets, custom cursors, the platform shortcut mask). Tests run with
+ * {@code java.awt.headless=true}, so a regression there fails here rather than on Linux CI.</p>
  */
 class DocumentWorkspaceViewTest {
 
