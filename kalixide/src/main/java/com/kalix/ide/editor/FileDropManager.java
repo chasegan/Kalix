@@ -5,6 +5,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.awt.Component;
+import java.awt.GraphicsEnvironment;
 import java.awt.Point;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
@@ -59,10 +60,19 @@ public class FileDropManager {
     
     /**
      * Sets up drag and drop functionality for the specified components.
-     * 
+     *
+     * <p>Skipped when headless. {@code new DropTarget(...)} throws {@link
+     * java.awt.HeadlessException} without a display, and there is nothing for a user to drag
+     * from in that case — but the throw propagated all the way out of the editor, and so out
+     * of {@code KalixDocument}, making the whole document layer unconstructible in tests. A
+     * feature that cannot apply should be absent, not fatal.
+     *
      * @param components the components to enable drag and drop on
      */
     public void setupDragAndDrop(Component... components) {
+        if (GraphicsEnvironment.isHeadless()) {
+            return;
+        }
         for (Component component : components) {
             new DropTarget(component, createDropTargetListener());
         }

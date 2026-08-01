@@ -14,6 +14,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.RenderingHints;
+import java.awt.GraphicsEnvironment;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
@@ -189,6 +190,12 @@ public class MapPanel extends JPanel {
 
         g.dispose();
 
+        // Headless has no cursors at all, and this runs in a static initialiser — an
+        // unguarded throw here makes MapPanel unloadable rather than merely un-rotatable,
+        // taking every test that touches the class down with it.
+        if (GraphicsEnvironment.isHeadless()) {
+            return Cursor.getDefaultCursor();
+        }
         Toolkit toolkit = Toolkit.getDefaultToolkit();
         return toolkit.createCustomCursor(img, new Point(cx, cy), "rotate");
     }
@@ -900,11 +907,22 @@ public class MapPanel extends JPanel {
     // Keyboard bindings
 
     /**
+     * The platform menu shortcut key (Cmd on macOS, Ctrl elsewhere). Headless has no
+     * toolkit to ask, and the bindings are unreachable there anyway — Ctrl keeps them
+     * well-formed rather than letting the query abort construction of the whole panel.
+     */
+    private static int menuShortcutMask() {
+        return GraphicsEnvironment.isHeadless()
+            ? java.awt.event.InputEvent.CTRL_DOWN_MASK
+            : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+    }
+
+    /**
      * Installs the map's keyboard shortcuts via InputMap/ActionMap using the
      * platform menu shortcut key (Ctrl on Windows/Linux, Cmd on macOS).
      */
     private void setupKeyBindings() {
-        int menuMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        int menuMask = menuShortcutMask();
         InputMap inputMap = getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
 
         // Find Node

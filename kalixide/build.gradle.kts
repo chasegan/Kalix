@@ -94,6 +94,10 @@ checkstyle {
 
 tasks.test {
     useJUnitPlatform()
+    // Run headless everywhere, matching Linux CI. Without this a component that throws
+    // HeadlessException passes on a developer's Mac and fails only after push — which is
+    // exactly how DocumentWorkspaceViewTest reached main red.
+    systemProperty("java.awt.headless", "true")
 }
 
 tasks.processResources {
