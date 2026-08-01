@@ -167,7 +167,7 @@ Systematic refactoring addressing code smells:
 - **MapRenderer extraction**: Separated rendering from interaction logic (348 lines)
 - **UIConstants class**: Centralized magic numbers with documentation
 - **SLF4J logging**: Replaced System.out with structured logging framework
-- **Import organization**: Specific imports replacing wildcards
+- **Import organization**: no wildcard imports (see below)
 - **FlowVizActionManager**: Extracted action delegation logic (219 lines)
 
 **Files Created:**
@@ -176,11 +176,31 @@ Systematic refactoring addressing code smells:
 - `FlowVizActionManager.java` - Action delegation and view management
 - `logback.xml` - Logging configuration
 
+### No Wildcard Imports (August 2026)
+**Every import is a single type or a single static member — no `pkg.*`, no
+`Facade.*`.** Enforced, not merely preferred:
+- **`.editorconfig`** (repo root) puts IntelliJ's collapse thresholds out of reach
+  (defaults are 5 classes / 3 static members). This is the half that matters — it
+  prevents rather than reports, and those defaults are how ~70 files acquired
+  wildcards without anyone deciding to.
+- **Checkstyle `AvoidStarImport`** (`config/checkstyle/checkstyle.xml`, wired into
+  `check`) fails the build on anything hand-written or from another editor.
+
+Not a style preference: `javax.swing`, `java.awt` and `java.util` all export `List`,
+so on-demand imports made the bare name ambiguous — 18 files carried a defensive
+`import java.util.List;` and two had given up and written `java.util.List` in full at
+every use site.
+
+The Checkstyle config is the build's only static analysis and deliberately holds one
+rule at error severity. Adding to it means adding build failures, so a new check has
+to earn its place; opinionated doctrine belongs in `manifestos/`, not here.
+
 ## Build Commands
 
 ```bash
-./gradlew build --no-daemon    # Build project
+./gradlew build --no-daemon    # Build project (runs tests + Checkstyle)
 ./gradlew run --no-daemon      # Run application
+./gradlew checkstyleMain --no-daemon   # Import rule only
 ```
 
 ## Development Notes
