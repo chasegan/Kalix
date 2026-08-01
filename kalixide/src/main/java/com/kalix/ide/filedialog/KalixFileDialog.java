@@ -46,9 +46,11 @@ import java.util.Optional;
  * as they are in the project tree.
  *
  * <p>Layout: sidebar (pins / places / volumes / recents) on the left; a breadcrumb bar with
- * navigation, folder-action and view toggles on top; the listing centre — either the classic
- * list view or macOS-style Miller columns, the user's choice persisting across dialogs; one
- * name-or-path text field plus buttons in the footer.
+ * navigation, folder-action and view toggles on top; the listing centre — either macOS-style
+ * Miller columns (the default) or the classic list view, the user's choice persisting across
+ * dialogs; one name-or-path text field plus buttons in the footer. The window size persists
+ * too, as every native file dialog's does — columns view in particular is worth widening
+ * once and keeping.
  *
  * <p>Usage:
  * <pre>{@code
@@ -79,6 +81,10 @@ public final class KalixFileDialog implements FileViewHost {
 
     /** What the dialog is for; drives OK-button semantics and selectability. */
     public enum Mode {OPEN_FILE, SAVE_FILE, CHOOSE_FOLDER}
+
+    /** Below this the breadcrumb, footer and a useful listing stop coexisting. */
+    private static final int MIN_WIDTH = 640;
+    private static final int MIN_HEIGHT = 400;
 
     // --- Builder state ---
     private final Mode mode;
@@ -261,8 +267,35 @@ public final class KalixFileDialog implements FileViewHost {
             pathField.select(0, dot > 0 ? dot : suggestedName.length());
         }
         dialog.setVisible(true); // modal; blocks until accept/cancel disposes
+        rememberSize();
         lister.dispose();
         return List.copyOf(results);
+    }
+
+    /**
+     * The size the dialog last closed at, clamped to something usable: never below the
+     * minimum, and never larger than the current screen's usable area — a size carried
+     * over from a bigger monitor would otherwise put the footer buttons off-screen.
+     */
+    private static Dimension rememberedSize() {
+        java.awt.Rectangle screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+            .getMaximumWindowBounds();
+        return new Dimension(
+            Math.min(Math.max(PreferenceKeys.FILE_DIALOG_WIDTH.get(), MIN_WIDTH), screen.width),
+            Math.min(Math.max(PreferenceKeys.FILE_DIALOG_HEIGHT.get(), MIN_HEIGHT), screen.height));
+    }
+
+    /**
+     * Persists the size the user left the dialog at. Read once the modal call has returned,
+     * which covers every way out — accept, cancel, and the window's own close button —
+     * rather than only the two paths that run our code.
+     */
+    private void rememberSize() {
+        Dimension size = dialog.getSize();
+        if (size.width > 0 && size.height > 0) {
+            PreferenceKeys.FILE_DIALOG_WIDTH.set(size.width);
+            PreferenceKeys.FILE_DIALOG_HEIGHT.set(size.height);
+        }
     }
 
     // --- FileViewHost ---
@@ -458,8 +491,8 @@ public final class KalixFileDialog implements FileViewHost {
             }
         });
 
-        dialog.setSize(880, 540);
-        dialog.setMinimumSize(new Dimension(640, 400));
+        dialog.setSize(rememberedSize());
+        dialog.setMinimumSize(new Dimension(MIN_WIDTH, MIN_HEIGHT));
         dialog.setLocationRelativeTo(owner);
     }
 
