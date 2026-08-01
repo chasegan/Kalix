@@ -82,9 +82,13 @@ Loaded names carry no `file.<filename>` prefix, so they collate with runs by nam
 - **Multi-select**: `.multiSelect()` on open dialogs, shown with `showAll()` (returns
   every pick) rather than `show()`. Both views select multiply and preserve the whole
   selection across the incremental listing batches.
-- **No filter combo when saving**: the typed name is taken verbatim, so a caller offering
-  several formats reads the format off the chosen file's extension — never off a filter
-  selection. See `PlotInteractionManager.saveData`, `RunContextMenuManager`.
+- **File types**: `.filters(…)` in both open and save mode, same footer slot. Opening
+  defaults to "All files" (modellers live among mixed inputs); saving lists only the
+  caller's real formats and leads with the first. **The extension is the single source of
+  truth for the format** — the save combo only ever *sets* it, so callers read the format
+  off the chosen file's name and a deliberately typed extension always wins.
+  `SaveNameExtensions` holds those rules as pure, tested functions (multi-part suffixes
+  like `.res.csv` make this more than "cut at the last dot").
 - **Migration complete (August 2026)**: no `JFileChooser` remains outside this package.
   New file/folder pickers must use `KalixFileDialog` — its entry points take any
   `Component` and resolve the owning window themselves.

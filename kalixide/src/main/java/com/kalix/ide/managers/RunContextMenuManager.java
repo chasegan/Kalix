@@ -3,6 +3,7 @@ package com.kalix.ide.managers;
 import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.diff.DiffWindow;
+import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.windows.MinimalEditorWindow;
@@ -646,13 +647,16 @@ public class RunContextMenuManager {
             .title("Save Results")
             .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
             .suggestedName(baseFilename + ".csv")
+            .filters(
+                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
+                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
             .show();
         if (chosen.isPresent()) {
             File selectedFile = chosen.get();
             String lowerName = selectedFile.getName().toLowerCase();
 
-            // The format IS the extension the user settled on — there is no filter combo
-            // to disagree with the typed name, so nothing to reconcile.
+            // The format IS the extension the user settled on. The type combo only ever
+            // sets that extension, so there is no second opinion to reconcile against.
             boolean pixie = lowerName.endsWith(".pxt");
             String format = pixie ? "pixie" : "csv";
             String ext = pixie ? ".pxt" : ".csv";

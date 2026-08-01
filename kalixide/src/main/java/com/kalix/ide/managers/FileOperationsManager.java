@@ -238,6 +238,7 @@ public class FileOperationsManager {
             .title("Save As")
             .startIn(currentFile)
             .suggestedName(currentFile != null ? currentFile.getName() : "model.ini")
+            .filters(modelFilter())
             .show();
         if (chosen.isEmpty()) {
             return;

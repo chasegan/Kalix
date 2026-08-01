@@ -5,6 +5,7 @@ import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
@@ -157,6 +158,7 @@ class StatsToolbarBuilder {
         java.util.Optional<File> chosen = KalixFileDialog.saveFile(statsTable)
             .title("Save Statistics")
             .suggestedName("statistics.csv")
+            .filters(FileDialogFilter.of("CSV Files (*.csv)", "csv"))
             .show();
         if (chosen.isPresent()) {
             File file = chosen.get();

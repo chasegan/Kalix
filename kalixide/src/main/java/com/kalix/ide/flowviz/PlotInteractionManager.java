@@ -7,6 +7,7 @@ import com.kalix.ide.io.TimeSeriesCsvExporter;
 import com.kalix.ide.io.SourceResCsvExporter;
 import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.io.PixieWriter;
+import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 
 import javax.swing.ButtonGroup;
@@ -770,14 +771,18 @@ public class PlotInteractionManager {
             .title("Save Data")
             .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
             .suggestedName("timeseries_data.csv")
+            .filters(
+                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
+                FileDialogFilter.of("Source Result CSV (*.res.csv)", "res.csv"),
+                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
             .show();
         if (chosen.isPresent()) {
             File file = chosen.get();
             String fileName = file.getName().toLowerCase();
 
-            // The format IS the extension the user settled on — there is no filter combo
-            // to disagree with the typed name. ".res.csv" is tested before ".csv", which
-            // would otherwise swallow it.
+            // The format IS the extension the user settled on. The type combo only ever
+            // sets that extension, so there is no second opinion to reconcile against.
+            // ".res.csv" is tested before ".csv", which would otherwise swallow it.
             boolean resCsv = SourceResCsvFormat.isResCsv(fileName);
             boolean pixie = !resCsv && fileName.endsWith(".pxt");
 

@@ -295,6 +295,7 @@ public class LinterPreferencesPanel extends JPanel
         java.util.Optional<File> chosen = KalixFileDialog.saveFile(this)
             .title("Export Default Linting Schema")
             .suggestedName("linting_rules.json")
+            .filters(FileDialogFilter.of("JSON files", "json"))
             .show();
         if (chosen.isPresent()) {
             File file = chosen.get();

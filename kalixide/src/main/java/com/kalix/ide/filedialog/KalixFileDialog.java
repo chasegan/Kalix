@@ -68,9 +68,11 @@ import java.util.Optional;
  *     .showAll();
  * }</pre>
  *
- * <p>Save dialogs show no filter combo: the typed name is taken verbatim, so a caller that
- * supports several formats reads the format back off the chosen file's extension rather
- * than off a filter selection.
+ * <p>Save dialogs take the same {@code .filters(…)}, shown in the same footer slot, where
+ * the combo names the format being written: switching it re-points the name's extension,
+ * and a name typed without one is completed from it. The extension stays the single source
+ * of truth — a caller supporting several formats reads the format off the chosen file's
+ * name, never off the combo, so a deliberately typed extension always wins.
  */
 public final class KalixFileDialog implements FileViewHost {
 
@@ -578,15 +580,24 @@ public final class KalixFileDialog implements FileViewHost {
 
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         right.setOpaque(false);
-        if (!filters.isEmpty() && mode == Mode.OPEN_FILE) {
+        if (!filters.isEmpty() && mode != Mode.CHOOSE_FOLDER) {
             List<FileDialogFilter> all = new ArrayList<>(filters);
-            all.add(FileDialogFilter.ALL_FILES);
+            if (mode == Mode.OPEN_FILE) {
+                // Opening: filtering starts OFF, all files visible, with the specific
+                // filters one click away. Modellers live among mixed inputs/outputs;
+                // hiding everything but .ini made the folder look emptier than it is.
+                all.add(FileDialogFilter.ALL_FILES);
+            }
             filterCombo = new JComboBox<>(all.toArray(new FileDialogFilter[0]));
-            // Filtering starts OFF: all files visible, with the specific filters one click
-            // away. Modellers live among mixed inputs/outputs; hiding everything but .ini
-            // by default made the folder look emptier than it is.
-            filterCombo.setSelectedIndex(all.size() - 1);
-            filterCombo.addActionListener(e -> refilterViews());
+            // Saving: the combo names the format being written, so "All files" would be
+            // meaningless and the caller's preferred type leads.
+            filterCombo.setSelectedIndex(mode == Mode.OPEN_FILE ? all.size() - 1 : 0);
+            filterCombo.addActionListener(e -> {
+                if (mode == Mode.SAVE_FILE) {
+                    retargetNameExtension();
+                }
+                refilterViews();
+            });
             right.add(filterCombo);
             right.add(Box.createHorizontalStrut(6));
         }
@@ -844,6 +855,18 @@ public final class KalixFileDialog implements FileViewHost {
         return slash;
     }
 
+    /** Re-points the name field at the newly chosen type (see {@link SaveNameExtensions}). */
+    private void retargetNameExtension() {
+        pendingSaveName = SaveNameExtensions.retarget(
+            pathField.getText().trim(), activeFilter().defaultExtension(), declaredExtensions());
+        pathField.setText(pendingSaveName);
+    }
+
+    /** Every extension across the declared types. */
+    private List<String> declaredExtensions() {
+        return filters.stream().flatMap(filter -> filter.extensions().stream()).toList();
+    }
+
     private FileDialogFilter activeFilter() {
         if (filterCombo != null && filterCombo.getSelectedItem() instanceof FileDialogFilter f) {
             return f;
@@ -901,13 +924,15 @@ public final class KalixFileDialog implements FileViewHost {
                 finish(selectedEntry.path().toFile(), selectedEntry.path().getParent());
             }
             case SAVE_FILE -> {
-                // The typed name is taken verbatim — any extension, or none, is accepted
-                // (the suggested name carries the conventional one; the modeller decides).
-                // A pasted path resolves too, so saving to an absolute target just works.
-                String name = pathField.getText().trim();
-                if (name.isEmpty() || currentDir == null) {
+                // A typed extension is taken verbatim — the modeller decides, and callers
+                // read the format back off it. Only a name with no extension at all gets
+                // the active type's appended. A pasted path resolves too, so saving to an
+                // absolute target just works.
+                String typed = pathField.getText().trim();
+                if (typed.isEmpty() || currentDir == null) {
                     return;
                 }
+                String name = SaveNameExtensions.complete(typed, activeFilter().defaultExtension());
                 Path target = resolveTyped(name);
                 if (target == null) {
                     showStatus("Not a valid file name: " + name);

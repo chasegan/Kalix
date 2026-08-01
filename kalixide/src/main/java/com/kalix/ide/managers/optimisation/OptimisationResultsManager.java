@@ -3,6 +3,7 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.diff.DiffWindow;
+import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
@@ -171,6 +172,9 @@ public class OptimisationResultsManager {
             .title("Save Optimisation Results")
             .startIn(workingDirectorySupplier != null ? workingDirectorySupplier.get() : null)
             .suggestedName(suggestedName)
+            .filters(
+                FileDialogFilter.of("INI Files (*.ini)", "ini"),
+                FileDialogFilter.of("Text Files (*.txt)", "txt"))
             .show();
         if (chosen.isPresent()) {
             File selectedFile = chosen.get();

@@ -287,6 +287,7 @@ public class OptimisationConfigManager {
             .title("Save Optimisation Configuration")
             .startIn(guiBuilder.getTargetWorkingDirectory())
             .suggestedName("optimisation_config.ini")
+            .filters(FileDialogFilter.of("INI Files (*.ini)", "ini"))
             .show();
         if (chosen.isPresent()) {
             File selectedFile = chosen.get();
