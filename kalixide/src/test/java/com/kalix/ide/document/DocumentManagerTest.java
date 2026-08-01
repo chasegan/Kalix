@@ -3,7 +3,6 @@ package com.kalix.ide.document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.awt.GraphicsEnvironment;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,23 +11,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * Verifies the active-document spine: open/close events, active-document tracking,
  * neighbour selection on close, and find-by-file. These are the behaviours the tab
  * strip, contextual view and host all rely on.
  *
- * <p>{@link KalixDocument} constructs its editor and map (Swing components), so these
- * tests require a graphics environment and are skipped when headless (e.g. CI without a
- * display).
+ * <p>Uses real {@link KalixDocument}s, which build their editor and map. That is
+ * headless-safe: the display-only pieces are capability-guarded at their source, so these
+ * run everywhere rather than quietly skipping on CI, as they did for their first months.
  */
 class DocumentManagerTest {
 
-    @BeforeEach
-    void requireDisplay() {
-        assumeFalse(GraphicsEnvironment.isHeadless(), "requires a display");
-    }
 
     private static KalixDocument doc() {
         return new KalixDocument();

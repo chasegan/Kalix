@@ -1,5 +1,6 @@
 package com.kalix.ide.parametersheet;
 
+import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.parsing.INIModelParser.NodeSection;
@@ -275,7 +276,7 @@ public class ParameterSheetWindow extends JDialog {
     }
 
     private void setupCopyPaste() {
-        int shortcutMask = Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
+        int shortcutMask = AppShortcut.menuMask();
         InputMap inputMap = table.getInputMap(JTable.WHEN_FOCUSED);
         ActionMap actionMap = table.getActionMap();
 

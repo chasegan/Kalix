@@ -4,12 +4,10 @@ import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import org.junit.jupiter.api.Test;
 
-import java.awt.GraphicsEnvironment;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * Verifies that node/alias rename produces range-anchored replacements (review #20):
@@ -183,7 +181,6 @@ class CommandExecutorRenameTest {
 
     @Test
     void endToEndRenameThroughTheEditorAppliesRanges() {
-        assumeFalse(GraphicsEnvironment.isHeadless(), "requires a display");
 
         String model = """
             [node.s]

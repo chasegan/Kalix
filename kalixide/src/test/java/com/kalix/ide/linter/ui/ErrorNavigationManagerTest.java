@@ -6,10 +6,8 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.awt.GraphicsEnvironment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * Verifies error navigation against a deliberately out-of-order ValidationResult
@@ -27,8 +25,6 @@ class ErrorNavigationManagerTest {
 
     @BeforeEach
     void setUp() {
-        assumeFalse(GraphicsEnvironment.isHeadless(), "requires a display");
-
         textArea = new RSyntaxTextArea();
         StringBuilder text = new StringBuilder();
         for (int i = 1; i <= 20; i++) {

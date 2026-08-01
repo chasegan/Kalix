@@ -14,7 +14,6 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.RenderingHints;
-import java.awt.GraphicsEnvironment;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
@@ -35,10 +34,26 @@ import com.kalix.ide.interaction.TextCoordinateUpdater;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.rendering.MapRenderer;
+import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.UIConstants;
 
 public class MapPanel extends JPanel {
-    private static final Cursor ROTATE_CURSOR = createRotateCursor();
+
+    /**
+     * The rotation cursor, drawn once on first use.
+     *
+     * <p>Deliberately not a {@code static final} initialiser. Building it renders an
+     * antialiased image and asks the toolkit for a custom cursor — work that ran at
+     * class-load for every user whether or not they ever rotated, and, worse, could throw
+     * during static initialisation. An {@code ExceptionInInitializerError} there does not
+     * cost a cursor; it makes {@code MapPanel} permanently unloadable for the life of the
+     * JVM, taking the whole map with it. Deferred, the same failure would cost only the
+     * cursor.
+     *
+     * <p>Unsynchronised on purpose: every read is from a mouse handler, so this is
+     * EDT-confined. Double-checked locking here would be cargo cult.
+     */
+    private static Cursor rotateCursor;
 
     private double zoomLevel = 1.0;
     // Use centralized UI constants
@@ -150,6 +165,14 @@ public class MapPanel extends JPanel {
         }
     }
 
+    /** The rotation cursor, built on first use. EDT-confined; see the field. */
+    private static Cursor rotateCursor() {
+        if (rotateCursor == null) {
+            rotateCursor = createRotateCursor();
+        }
+        return rotateCursor;
+    }
+
     /**
      * Creates a custom rotation cursor: a circular arc with an arrowhead.
      */
@@ -190,12 +213,6 @@ public class MapPanel extends JPanel {
 
         g.dispose();
 
-        // Headless has no cursors at all, and this runs in a static initialiser — an
-        // unguarded throw here makes MapPanel unloadable rather than merely un-rotatable,
-        // taking every test that touches the class down with it.
-        if (GraphicsEnvironment.isHeadless()) {
-            return Cursor.getDefaultCursor();
-        }
         Toolkit toolkit = Toolkit.getDefaultToolkit();
         return toolkit.createCustomCursor(img, new Point(cx, cy), "rotate");
     }
@@ -235,7 +252,7 @@ public class MapPanel extends JPanel {
                     if (isCtrlDown && interactionManager != null && interactionManager.canStartRotation()) {
                         // Ctrl held with multiple nodes selected — start rotation
                         interactionManager.startDrag(e.getPoint(), true);
-                        setCursor(ROTATE_CURSOR);
+                        setCursor(rotateCursor());
                     } else if (nodeAtPoint != null) {
                         // Check if clicking on an already selected node
                         boolean nodeWasSelected = model.isNodeSelected(nodeAtPoint);
@@ -342,7 +359,7 @@ public class MapPanel extends JPanel {
                 boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
                 Cursor desiredCursor = (isCtrlDown && interactionManager != null
                         && interactionManager.canStartRotation())
-                    ? ROTATE_CURSOR
+                    ? rotateCursor()
                     : Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR);
                 if (getCursor() != desiredCursor) {
                     setCursor(desiredCursor);
@@ -907,22 +924,11 @@ public class MapPanel extends JPanel {
     // Keyboard bindings
 
     /**
-     * The platform menu shortcut key (Cmd on macOS, Ctrl elsewhere). Headless has no
-     * toolkit to ask, and the bindings are unreachable there anyway — Ctrl keeps them
-     * well-formed rather than letting the query abort construction of the whole panel.
-     */
-    private static int menuShortcutMask() {
-        return GraphicsEnvironment.isHeadless()
-            ? java.awt.event.InputEvent.CTRL_DOWN_MASK
-            : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
-    }
-
-    /**
      * Installs the map's keyboard shortcuts via InputMap/ActionMap using the
      * platform menu shortcut key (Ctrl on Windows/Linux, Cmd on macOS).
      */
     private void setupKeyBindings() {
-        int menuMask = menuShortcutMask();
+        int menuMask = AppShortcut.menuMask();
         InputMap inputMap = getInputMap(WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
 
         // Find Node
@@ -985,7 +991,7 @@ public class MapPanel extends JPanel {
         Runnable previewOn = () -> {
             if (interactionManager != null && interactionManager.canStartRotation()
                     && !interactionManager.isDragging()) {
-                setCursor(ROTATE_CURSOR);
+                setCursor(rotateCursor());
             }
         };
         Runnable previewOff = () -> {

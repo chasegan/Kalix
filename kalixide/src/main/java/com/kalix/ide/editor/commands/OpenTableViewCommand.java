@@ -1,5 +1,6 @@
 package com.kalix.ide.editor.commands;
 
+import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.tableview.TablePropertyDefinition;
 import com.kalix.ide.tableview.TablePropertyRegistry;
@@ -11,9 +12,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.JFrame;
 import javax.swing.KeyStroke;
-import java.awt.GraphicsEnvironment;
-import java.awt.Toolkit;
-import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.util.function.Supplier;
 
@@ -43,18 +41,8 @@ public class OpenTableViewCommand implements EditorCommand {
             // Cmd+T on macOS, Ctrl+T on Windows/Linux. Mirrors the actual
             // keybinding in EnhancedTextEditor.setupKeyBindings; the menu
             // builder reads this back via getShortcutHint() to show a hint.
-            .keyboardShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_T, menuShortcutMask()))
+            .keyboardShortcut(KeyStroke.getKeyStroke(KeyEvent.VK_T, AppShortcut.menuMask()))
             .build();
-    }
-
-    /**
-     * Headless (CI test) environments have no toolkit; the fallback mask is
-     * never shown to a user because the real IDE always has a display.
-     */
-    private static int menuShortcutMask() {
-        return GraphicsEnvironment.isHeadless()
-                ? InputEvent.CTRL_DOWN_MASK
-                : Toolkit.getDefaultToolkit().getMenuShortcutKeyMaskEx();
     }
 
     @Override

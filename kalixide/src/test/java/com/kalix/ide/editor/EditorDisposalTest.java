@@ -27,11 +27,6 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
  */
 class EditorDisposalTest {
 
-    @BeforeEach
-    void requireDisplay() {
-        assumeFalse(GraphicsEnvironment.isHeadless(), "requires a display");
-    }
-
     private static int awtMouseListenerCount() {
         return Toolkit.getDefaultToolkit().getAWTEventListeners(AWTEvent.MOUSE_EVENT_MASK).length;
     }
@@ -78,6 +73,8 @@ class EditorDisposalTest {
 
     @Test
     void linterTooltipManagerDetachesItsMouseListeners() {
+        // Tooltip placement queries the screen devices, which headless has none of.
+        assumeFalse(GraphicsEnvironment.isHeadless(), "tooltip placement requires a display");
         RSyntaxTextArea textArea = new RSyntaxTextArea();
         int motionBefore = textArea.getMouseMotionListeners().length;
         int mouseBefore = textArea.getMouseListeners().length;
@@ -93,6 +90,8 @@ class EditorDisposalTest {
 
     @Test
     void propertyHoverTooltipManagerDetachesItsMouseListeners() {
+        // Tooltip placement queries the screen devices, which headless has none of.
+        assumeFalse(GraphicsEnvironment.isHeadless(), "tooltip placement requires a display");
         RSyntaxTextArea textArea = new RSyntaxTextArea();
         int motionBefore = textArea.getMouseMotionListeners().length;
         int mouseBefore = textArea.getMouseListeners().length;
