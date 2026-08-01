@@ -79,8 +79,15 @@ Loaded names carry no `file.<filename>` prefix, so they collate with runs by nam
 - **Views**: list (table) and macOS-style Miller columns, user-switchable, persisted.
 - **Sidebar**: pinned folders (file-based prefs — team-shareable), places, volumes
   (path-derived names only; no shell display-name calls), recents (OS prefs).
-- **Migrated so far**: `FileOperationsManager` open/save-as, `KalixIDE.openFolder`. The
-  remaining `JFileChooser` sites should migrate to `KalixFileDialog` as they're touched.
+- **Multi-select**: `.multiSelect()` on open dialogs, shown with `showAll()` (returns
+  every pick) rather than `show()`. Both views select multiply and preserve the whole
+  selection across the incremental listing batches.
+- **No filter combo when saving**: the typed name is taken verbatim, so a caller offering
+  several formats reads the format off the chosen file's extension — never off a filter
+  selection. See `PlotInteractionManager.saveData`, `RunContextMenuManager`.
+- **Migration complete (August 2026)**: no `JFileChooser` remains outside this package.
+  New file/folder pickers must use `KalixFileDialog` — its entry points take any
+  `Component` and resolve the owning window themselves.
 
 Key files: `KalixFileDialog.java`, `DirectoryLister.java`, `FileVisuals.java`
 
