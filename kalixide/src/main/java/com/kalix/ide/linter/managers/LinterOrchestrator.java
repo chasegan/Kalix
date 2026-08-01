@@ -1,11 +1,12 @@
 package com.kalix.ide.linter.managers;
 
-import com.kalix.ide.linter.*;
+import com.kalix.ide.linter.ModelLinter;
+import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.linter.model.ValidationResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
+import javax.swing.SwingUtilities;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicLong;

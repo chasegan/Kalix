@@ -4,8 +4,14 @@ import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.document.WorkspaceView;
 import com.kalix.ide.managers.optimisation.OptimisationConfigModel;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.BorderFactory;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import java.awt.BorderLayout;
+import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.io.File;
 import java.util.List;
 import java.util.Map;

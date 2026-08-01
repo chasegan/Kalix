@@ -1,6 +1,6 @@
 package com.kalix.ide.windows.optimisation;
 
-import java.awt.*;
+import java.awt.Color;
 
 /**
  * UI constants for the Optimisation window and related components.

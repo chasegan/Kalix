@@ -4,7 +4,7 @@ import com.kalix.ide.filedialog.KalixFileDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
+import javax.swing.JFrame;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;

@@ -1,6 +1,6 @@
 package com.kalix.ide.utils;
 
-import javax.swing.*;
+import javax.swing.JOptionPane;
 import java.awt.Component;
 
 /**

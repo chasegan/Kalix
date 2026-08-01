@@ -7,7 +7,11 @@ import com.kalix.ide.flowviz.style.LineStyle;
 import com.kalix.ide.flowviz.style.SeriesMarker;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 
-import java.awt.*;
+import java.awt.BasicStroke;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.geom.Path2D;
 import java.util.List;
 import java.util.Map;

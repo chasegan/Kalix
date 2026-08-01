@@ -5,8 +5,12 @@ import com.kalix.ide.renderers.OptimisationTreeCellRenderer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
-import javax.swing.tree.*;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
+import javax.swing.JTree;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreePath;
 import javax.swing.event.TreeSelectionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;

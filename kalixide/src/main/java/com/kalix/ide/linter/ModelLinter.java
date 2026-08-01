@@ -3,7 +3,17 @@ package com.kalix.ide.linter;
 import com.kalix.ide.linter.model.ValidationResult;
 import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.linter.parsing.INIModelParser;
-import com.kalix.ide.linter.validators.*;
+import com.kalix.ide.linter.validators.DuplicatePropertyValidator;
+import com.kalix.ide.linter.validators.FileValidator;
+import com.kalix.ide.linter.validators.FnSectionValidator;
+import com.kalix.ide.linter.validators.NodeOrderingValidator;
+import com.kalix.ide.linter.validators.NodeValidator;
+import com.kalix.ide.linter.validators.ReferenceValidator;
+import com.kalix.ide.linter.validators.SectionValidator;
+import com.kalix.ide.linter.validators.TableSectionValidator;
+import com.kalix.ide.linter.validators.UniqueNameValidator;
+import com.kalix.ide.linter.validators.ValidationStrategy;
+import com.kalix.ide.linter.validators.VarSectionValidator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

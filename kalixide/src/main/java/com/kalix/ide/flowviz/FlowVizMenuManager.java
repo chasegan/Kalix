@@ -2,7 +2,17 @@ package com.kalix.ide.flowviz;
 
 import com.kalix.ide.preferences.PreferenceKeys;
 
-import javax.swing.*;
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.InputMap;
+import javax.swing.JCheckBoxMenuItem;
+import javax.swing.JComponent;
+import javax.swing.JFrame;
+import javax.swing.JMenu;
+import javax.swing.JMenuBar;
+import javax.swing.JMenuItem;
+import javax.swing.JRootPane;
+import javax.swing.KeyStroke;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.function.Supplier;

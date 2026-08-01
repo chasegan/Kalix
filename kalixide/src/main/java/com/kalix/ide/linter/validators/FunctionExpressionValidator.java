@@ -8,7 +8,11 @@ import com.kalix.ide.linter.model.ValidationContext;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.utils.ValidationUtils;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Validates function expressions used in model parameters.

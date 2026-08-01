@@ -9,8 +9,16 @@ import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.utils.TimeFormatUtil;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.JComponent;
+import javax.swing.Timer;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;

@@ -14,8 +14,12 @@ import com.kalix.ide.utils.Platform;
 import com.kalix.ide.utils.PlatformUtils;
 import com.kalix.ide.themes.unified.ThemeCompatibilityAdapter;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.JDialog;
+import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
+import javax.swing.UnsupportedLookAndFeelException;
+import java.awt.Component;
+import java.awt.Window;
 
 /**
  * Manages theme switching functionality for the application.

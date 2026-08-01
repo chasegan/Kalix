@@ -7,7 +7,7 @@ import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.preferences.PreferenceKeys;
 
-import javax.swing.*;
+import javax.swing.JOptionPane;
 import java.awt.Component;
 import java.io.File;
 import java.io.IOException;

@@ -1,7 +1,5 @@
 package com.kalix.ide.constants;
 
-import java.awt.*;
-
 /**
  * Constants used throughout the Kalix IDE application.
  * Centralizes all magic numbers, strings, and configuration values.

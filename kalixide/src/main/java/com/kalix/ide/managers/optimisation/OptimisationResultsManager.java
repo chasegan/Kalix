@@ -9,7 +9,8 @@ import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;

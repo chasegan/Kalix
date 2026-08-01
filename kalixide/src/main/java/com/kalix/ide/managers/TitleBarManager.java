@@ -2,8 +2,8 @@ package com.kalix.ide.managers;
 
 import com.kalix.ide.constants.AppConstants;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.JFrame;
+import java.awt.FontMetrics;
 import java.io.File;
 
 /**
