@@ -1,6 +1,7 @@
 plugins {
     application
     java
+    checkstyle
     id("org.beryx.runtime") version "1.13.1"
 }
 
@@ -81,6 +82,14 @@ java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(23))
     }
+}
+
+// One rule, and no warnings tolerated: no wildcard imports, static or otherwise
+// (config/checkstyle/checkstyle.xml). .editorconfig stops the IDE producing them in the
+// first place; this is the backstop for anything hand-written or from another editor.
+checkstyle {
+    toolVersion = "10.21.1"
+    maxWarnings = 0
 }
 
 tasks.test {

@@ -1,0 +1,21 @@
+# Kalix editor settings.
+#
+# Deliberately narrow: this file exists to make one house rule mechanical rather than
+# to impose a whole formatting regime. See kalixide/config/checkstyle/checkstyle.xml
+# for the CI half of the same rule.
+
+root = true
+
+[*.java]
+# No wildcard imports, static or otherwise.
+#
+# IntelliJ's defaults (5 classes, 3 static members) silently collapse an import block
+# the moment you cross them — which is how 70 files acquired wildcards without anyone
+# deciding to. These thresholds are effectively unreachable, so the IDE never creates
+# one and there is nothing for a reviewer to catch.
+#
+# The rule is not stylistic. javax.swing.* and java.awt.* both export List, as does
+# java.util, so on-demand imports made the bare name ambiguous and left files writing
+# java.util.List in full at every use site.
+ij_java_class_count_to_use_import_on_demand = 999
+ij_java_names_count_to_use_static_import_on_demand = 999
