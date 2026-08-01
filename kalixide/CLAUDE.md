@@ -195,6 +195,34 @@ The Checkstyle config is the build's only static analysis and deliberately holds
 rule at error severity. Adding to it means adding build failures, so a new check has
 to earn its place; opinionated doctrine belongs in `manifestos/`, not here.
 
+### Display Capability & Headless Tests (August 2026)
+**A display is a capability, queried in one place — not a condition guarded wherever a
+test trips over it.** Production holds exactly two `GraphicsEnvironment.isHeadless()`
+checks, and should keep holding two:
+- **`AppShortcut.menuMask()`** — the only `getMenuShortcutKeyMaskEx()` call in the
+  codebase. Everything needing the platform modifier (map key bindings, context-menu
+  hints, table and parameter-sheet windows) calls it.
+- **`FileDropManager.setupDragAndDrop`** — there is nothing to drag from without a
+  display.
+
+Do not add a third at a new call site. The mask was previously queried at seven sites
+with two guarded, and the *same* guard was added independently twice
+(`ac28666a`, then again) — each time for the call site a test happened to reach. That
+is a ratchet with no terminating condition; route the new caller through `AppShortcut`
+instead.
+
+**Never do display work in a static initialiser.** A throw there is
+`ExceptionInInitializerError`, which makes the class unloadable for the life of the JVM
+— a missing cursor becomes a missing map. `MapPanel`'s rotate cursor is built on first
+use for exactly this reason.
+
+**Tests run with `java.awt.headless=true`** (`build.gradle.kts`), so a display-dependent
+regression fails on the developer's machine rather than only on Linux CI. Exactly two
+tests are gated (`EditorDisposalTest`, tooltip placement, which genuinely needs screen
+devices). If a test truly needs a display, gate the **method** and say why — never the
+class. A gate that silently skips is a coverage loss reported as a pass: 24 tests were
+skipped that way and nobody noticed until they were counted.
+
 ## Build Commands
 
 ```bash
