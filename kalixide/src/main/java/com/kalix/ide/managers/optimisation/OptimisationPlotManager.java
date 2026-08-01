@@ -12,8 +12,12 @@ import com.kalix.ide.flowviz.transform.YAxisScale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
-import java.awt.*;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
+import java.awt.Font;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;

@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+  Kalix IDE Checkstyle configuration.
+
+  Deliberately minimal: one rule, enforced as an error. This is not a style regime and
+  is not the place to accumulate opinions — anything added here has to earn the build
+  failures it will cause. Doctrine belongs in manifestos/; this file is only for rules
+  a machine can decide unambiguously.
+-->
+<module name="Checker">
+  <property name="severity" value="error"/>
+
+  <module name="TreeWalker">
+    <!--
+      No wildcard imports, static or otherwise (AvoidStarImport bans static members by
+      default). .editorconfig stops the IDE creating them; this catches anything
+      hand-written or arriving from a contributor with different editor settings.
+    -->
+    <module name="AvoidStarImport"/>
+  </module>
+</module>

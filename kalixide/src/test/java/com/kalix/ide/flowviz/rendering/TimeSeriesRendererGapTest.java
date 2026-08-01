@@ -3,7 +3,9 @@ package com.kalix.ide.flowviz.rendering;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Covers the gap-detection decisions that drive gap-aware line breaking and orphan markers

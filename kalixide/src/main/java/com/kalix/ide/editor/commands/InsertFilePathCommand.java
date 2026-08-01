@@ -1,9 +1,10 @@
 package com.kalix.ide.editor.commands;
 
+import com.kalix.ide.filedialog.KalixFileDialog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
+import javax.swing.JFrame;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -55,21 +56,16 @@ public class InsertFilePathCommand implements EditorCommand {
         }
 
         // Show file picker
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Select File");
-        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-
-        if (startDirectory != null) {
-            fileChooser.setCurrentDirectory(startDirectory);
-        }
-
-        int result = fileChooser.showOpenDialog(parentFrame);
-        if (result != JFileChooser.APPROVE_OPTION) {
+        java.util.Optional<File> chosen = KalixFileDialog.openFile(parentFrame)
+            .title("Select File")
+            .startIn(startDirectory)
+            .show();
+        if (chosen.isEmpty()) {
             // User cancelled
             return;
         }
 
-        File selectedFile = fileChooser.getSelectedFile();
+        File selectedFile = chosen.get();
 
         // Calculate relative path
         String relativePath;

@@ -4,7 +4,9 @@ import com.kalix.ide.linter.parsing.INIModelParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
 import java.util.function.Supplier;
 
 /**

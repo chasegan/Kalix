@@ -5,7 +5,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.function.ToIntFunction;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for {@link ModelSelectorPanel#elideHead}, which shortens a label to fit the

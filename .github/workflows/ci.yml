@@ -52,10 +52,12 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JDK_VERSION }}
-      - name: Java tests
+      # `check`, not `test`: Checkstyle is wired into the check lifecycle, so running
+      # `test` alone would leave the no-wildcard-imports rule unenforced on main.
+      - name: Java tests and checks
         working-directory: kalixide
         shell: bash
-        run: ./gradlew test --no-daemon
+        run: ./gradlew check --no-daemon
 
   python-test:
     name: Python ${{ matrix.python-version }} (${{ matrix.platform }})

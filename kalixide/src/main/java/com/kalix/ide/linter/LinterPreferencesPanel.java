@@ -1,18 +1,41 @@
 package com.kalix.ide.linter;
 
+import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.preferences.ui.PreferencePage;
 
-import javax.swing.*;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JCheckBox;
+import javax.swing.JComponent;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JScrollPane;
+import javax.swing.JTable;
+import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
-import java.awt.*;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.List;
 
 /**
@@ -201,21 +224,16 @@ public class LinterPreferencesPanel extends JPanel
     }
 
     private void browseSchemaFile(ActionEvent e) {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Select Linter Schema File");
-        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON files", "json"));
-
         String currentPath = schemaPathField.getText().trim();
-        if (!currentPath.isEmpty()) {
-            fileChooser.setSelectedFile(new File(currentPath));
-        }
-
-        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-            String newPath = fileChooser.getSelectedFile().getAbsolutePath();
-            schemaPathField.setText(newPath);
-            saveSchemaPath();
-        }
+        KalixFileDialog.openFile(this)
+            .title("Select Linter Schema File")
+            .startIn(currentPath.isEmpty() ? null : new File(currentPath))
+            .filters(FileDialogFilter.of("JSON files", "json"))
+            .show()
+            .ifPresent(file -> {
+                schemaPathField.setText(file.getAbsolutePath());
+                saveSchemaPath();
+            });
     }
 
     private void useDefaultSchema(ActionEvent e) {
@@ -293,19 +311,15 @@ public class LinterPreferencesPanel extends JPanel
     }
 
     private void exportDefaultSchema(ActionEvent e) {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Export Default Linting Schema");
-        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("JSON files", "json"));
-        fileChooser.setSelectedFile(new File("linting_rules.json"));
-
-        if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-            File file = fileChooser.getSelectedFile();
-            
-            // Ensure .json extension
-            if (!file.getName().toLowerCase().endsWith(".json")) {
-                file = new File(file.getAbsolutePath() + ".json");
-            }
+        // The suggested name carries the conventional extension; the dialog takes whatever
+        // the user types verbatim and confirms any overwrite itself.
+        java.util.Optional<File> chosen = KalixFileDialog.saveFile(this)
+            .title("Export Default Linting Schema")
+            .suggestedName("linting_rules.json")
+            .filters(FileDialogFilter.of("JSON files", "json"))
+            .show();
+        if (chosen.isPresent()) {
+            File file = chosen.get();
 
             try {
                 String schemaContent = LinterSchema.getDefaultSchemaContent();

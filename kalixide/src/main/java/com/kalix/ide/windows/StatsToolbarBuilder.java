@@ -5,6 +5,8 @@ import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.filedialog.FileDialogFilter;
+import com.kalix.ide.filedialog.KalixFileDialog;
 
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -12,12 +14,10 @@ import org.kordamp.ikonli.swing.FontIcon;
 import javax.swing.Box;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
-import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JTable;
 import javax.swing.JToolBar;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.Dimension;
 import java.io.File;
 
@@ -153,16 +153,15 @@ class StatsToolbarBuilder {
 
     /** Saves stats data to CSV. */
     private void saveStatsData() {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Save Statistics");
-        fileChooser.setFileFilter(new FileNameExtensionFilter("CSV Files (*.csv)", "csv"));
-
-        int result = fileChooser.showSaveDialog(statsTable);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File file = fileChooser.getSelectedFile();
-            if (!file.getName().toLowerCase().endsWith(".csv")) {
-                file = new File(file.getAbsolutePath() + ".csv");
-            }
+        // The suggested name carries the conventional extension; the dialog takes whatever
+        // the user types verbatim and confirms any overwrite itself.
+        java.util.Optional<File> chosen = KalixFileDialog.saveFile(statsTable)
+            .title("Save Statistics")
+            .suggestedName("statistics.csv")
+            .filters(FileDialogFilter.of("CSV Files (*.csv)", "csv"))
+            .show();
+        if (chosen.isPresent()) {
+            File file = chosen.get();
 
             try (java.io.FileWriter writer = new java.io.FileWriter(file)) {
                 // Write header (dynamic columns from table)

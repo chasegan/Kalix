@@ -1,10 +1,16 @@
 package com.kalix.ide.managers;
 
-import com.kalix.ide.cli.*;
+import com.kalix.ide.cli.KalixCliLocator;
+import com.kalix.ide.cli.ProcessExecutor;
+import com.kalix.ide.cli.ProgressParser;
+import com.kalix.ide.cli.RunModelProgram;
+import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.components.StatusProgressBar;
 import com.kalix.ide.windows.RunManager;
 
-import javax.swing.*;
+import javax.swing.JFrame;
+import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
 import java.io.File;
 import java.time.Duration;
 import java.time.Instant;

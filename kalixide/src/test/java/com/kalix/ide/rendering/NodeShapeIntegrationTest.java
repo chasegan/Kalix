@@ -1,7 +1,10 @@
 package com.kalix.ide.rendering;
 
 import org.junit.jupiter.api.Test;
-import java.awt.*;
+import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import com.kalix.ide.themes.NodeTheme;
 

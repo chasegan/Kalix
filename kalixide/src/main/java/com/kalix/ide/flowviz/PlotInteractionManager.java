@@ -7,11 +7,12 @@ import com.kalix.ide.io.TimeSeriesCsvExporter;
 import com.kalix.ide.io.SourceResCsvExporter;
 import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.io.PixieWriter;
+import com.kalix.ide.filedialog.FileDialogFilter;
+import com.kalix.ide.filedialog.KalixFileDialog;
 
 import javax.swing.ButtonGroup;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
-import javax.swing.JFileChooser;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
@@ -20,7 +21,6 @@ import javax.swing.JRadioButtonMenuItem;
 import javax.swing.SwingUtilities;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Cursor;
@@ -765,55 +765,26 @@ public class PlotInteractionManager {
             return;
         }
 
-        JFileChooser fileChooser = new JFileChooser();
-
-        // Add file filters for different formats
-        FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
-        FileNameExtensionFilter pixieFilter = new FileNameExtensionFilter("Pixie Files (*.pxt)", "pxt");
-        // *.res.csv needs a custom filter — FileNameExtensionFilter only matches the text
-        // after the final dot ("csv"), so it can't single out the double extension.
-        javax.swing.filechooser.FileFilter resCsvFilter = new javax.swing.filechooser.FileFilter() {
-            @Override
-            public boolean accept(java.io.File f) {
-                return f.isDirectory() || SourceResCsvFormat.isResCsv(f.getName());
-            }
-            @Override
-            public String getDescription() {
-                return "Source Result CSV (*.res.csv)";
-            }
-        };
-
-        fileChooser.addChoosableFileFilter(csvFilter);
-        fileChooser.addChoosableFileFilter(resCsvFilter);
-        fileChooser.addChoosableFileFilter(pixieFilter);
-        fileChooser.setFileFilter(csvFilter); // Default to CSV
-
-        // Suggest a base name with no extension; the extension follows the chosen filter,
-        // so there is no stale extension to collide with (avoids "foo.csv.pxt").
-        fileChooser.setSelectedFile(new File("timeseries_data"));
-
-        // Set initial directory to model directory if available
-        if (baseDirectorySupplier != null) {
-            java.io.File baseDir = baseDirectorySupplier.get();
-            if (baseDir != null) {
-                fileChooser.setCurrentDirectory(baseDir);
-            }
-        }
-
-        int result = fileChooser.showSaveDialog(parentComponent);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File file = fileChooser.getSelectedFile();
+        // The suggested name carries the default format's extension; whatever the user
+        // settles on is taken verbatim, and saveAs*Format normalises it from there.
+        java.util.Optional<File> chosen = KalixFileDialog.saveFile(parentComponent)
+            .title("Save Data")
+            .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
+            .suggestedName("timeseries_data.csv")
+            .filters(
+                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
+                FileDialogFilter.of("Source Result CSV (*.res.csv)", "res.csv"),
+                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
+            .show();
+        if (chosen.isPresent()) {
+            File file = chosen.get();
             String fileName = file.getName().toLowerCase();
 
-            // Format follows the chosen filter. A typed extension overrides it, so a user
-            // who explicitly names "foo.csv" while the Pixie filter is active still gets CSV.
-            // saveAs*Format each apply the correct extension. ".res.csv" is tested before
-            // ".csv" / ".pxt" since the typed name takes precedence over the active filter.
-            boolean resCsv = SourceResCsvFormat.isResCsv(fileName)
-                || (fileChooser.getFileFilter() == resCsvFilter
-                    && !fileName.endsWith(".csv") && !fileName.endsWith(".pxt"));
-            boolean pixie = !resCsv && (fileName.endsWith(".pxt")
-                || (fileChooser.getFileFilter() == pixieFilter && !fileName.endsWith(".csv")));
+            // The format IS the extension the user settled on. The type combo only ever
+            // sets that extension, so there is no second opinion to reconcile against.
+            // ".res.csv" is tested before ".csv", which would otherwise swallow it.
+            boolean resCsv = SourceResCsvFormat.isResCsv(fileName);
+            boolean pixie = !resCsv && fileName.endsWith(".pxt");
 
             if (resCsv) {
                 saveAsResCsvFormat(file);

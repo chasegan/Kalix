@@ -56,7 +56,9 @@ final class ListFileView {
     ListFileView(FileViewHost host) {
         this.host = host;
 
-        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.setSelectionMode(host.allowsMultiSelect()
+            ? ListSelectionModel.MULTIPLE_INTERVAL_SELECTION
+            : ListSelectionModel.SINGLE_SELECTION);
         table.setShowGrid(false);
         table.setRowHeight(22);
         table.setFillsViewportHeight(true);
@@ -142,7 +144,9 @@ final class ListFileView {
 
     /** Re-applies the hidden/extension filters to the cached listing. */
     void refilter() {
-        FsEntry selected = selectedEntry();
+        // The whole selection is preserved, not just the lead: listings arrive in batches,
+        // so a user selecting during enumeration must not lose earlier picks.
+        List<FsEntry> selected = selectedEntries();
         List<FsEntry> visible = new ArrayList<>();
         for (FsEntry entry : allEntries) {
             if (!host.showHidden() && entry.hidden()) {
@@ -168,11 +172,13 @@ final class ListFileView {
                 }
                 // One-shot: consumed even when not found (the name may not exist here).
                 pendingSelectName = null;
-            } else if (selected != null) {
-                int modelRow = visible.indexOf(selected);
-                if (modelRow >= 0) {
-                    int viewRow = table.convertRowIndexToView(modelRow);
-                    table.setRowSelectionInterval(viewRow, viewRow);
+            } else {
+                for (FsEntry entry : selected) {
+                    int modelRow = visible.indexOf(entry);
+                    if (modelRow >= 0) {
+                        int viewRow = table.convertRowIndexToView(modelRow);
+                        table.addRowSelectionInterval(viewRow, viewRow);
+                    }
                 }
             }
         } finally {
@@ -209,6 +215,18 @@ final class ListFileView {
         return modelRow < model.entries.size() ? model.entries.get(modelRow) : null;
     }
 
+    /** Every selected entry, in view order (one at most unless the host is multi-select). */
+    List<FsEntry> selectedEntries() {
+        List<FsEntry> selected = new ArrayList<>();
+        for (int viewRow : table.getSelectedRows()) {
+            int modelRow = table.convertRowIndexToModel(viewRow);
+            if (modelRow < model.entries.size()) {
+                selected.add(model.entries.get(modelRow));
+            }
+        }
+        return selected;
+    }
+
     void focusView() {
         table.requestFocusInWindow();
         if (table.getSelectedRow() < 0 && table.getRowCount() > 0) {
@@ -240,10 +258,16 @@ final class ListFileView {
             }
             return;
         }
-        table.setRowSelectionInterval(viewRow, viewRow);
-        FsEntry entry = selectedEntry();
-        if (entry != null) {
-            host.showEntryContextMenu(entry, table, e.getX(), e.getY());
+        // Right-click selects, as in the project tree — but never collapses an existing
+        // multi-selection the user built up just to act on one of its members.
+        if (!table.isRowSelected(viewRow)) {
+            table.setRowSelectionInterval(viewRow, viewRow);
+        }
+        // The subject is the row under the pointer, not the selection lead — with several
+        // rows selected those differ.
+        int modelRow = table.convertRowIndexToModel(viewRow);
+        if (modelRow < model.entries.size()) {
+            host.showEntryContextMenu(model.entries.get(modelRow), table, e.getX(), e.getY());
         }
     }
 

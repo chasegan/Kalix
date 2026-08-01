@@ -1,7 +1,10 @@
 package com.kalix.ide.editor;
 
 import javax.swing.text.Segment;
-import org.fife.ui.rsyntaxtextarea.*;
+import org.fife.ui.rsyntaxtextarea.AbstractTokenMaker;
+import org.fife.ui.rsyntaxtextarea.Token;
+import org.fife.ui.rsyntaxtextarea.TokenMap;
+import org.fife.ui.rsyntaxtextarea.TokenTypes;
 
 /**
  * TokenMaker for INI format with line continuation support.

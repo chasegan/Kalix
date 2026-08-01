@@ -3,14 +3,20 @@ package com.kalix.ide.managers;
 import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.diff.DiffWindow;
+import com.kalix.ide.filedialog.FileDialogFilter;
+import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
-import javax.swing.filechooser.FileNameExtensionFilter;
+import javax.swing.JFrame;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
+import javax.swing.JPopupMenu;
+import javax.swing.JTree;
+import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -641,35 +647,22 @@ public class RunContextMenuManager {
         String baseFilename = safeRunName + "_" + (kalixcliUid != null ? kalixcliUid : "unknown");
 
         // Show save dialog with all engine-supported formats. Matches the plot tab's
-        // "Save Data" dialog: CSV (default) and Pixie (.pxt + .pxb sibling).
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Save Results");
-        FileNameExtensionFilter csvFilter = new FileNameExtensionFilter("CSV Files (*.csv)", "csv");
-        FileNameExtensionFilter pixieFilter = new FileNameExtensionFilter("Pixie Files (*.pxt)", "pxt");
-        fileChooser.addChoosableFileFilter(csvFilter);
-        fileChooser.addChoosableFileFilter(pixieFilter);
-        fileChooser.setFileFilter(csvFilter); // Default to CSV
-        // Suggest a base name with no extension; the extension follows the chosen filter
-        // and is appended on approve, so there is no stale extension to collide with.
-        fileChooser.setSelectedFile(new File(baseFilename));
-
-        // Set initial directory to model directory if available
-        if (baseDirectorySupplier != null) {
-            File baseDir = baseDirectorySupplier.get();
-            if (baseDir != null) {
-                fileChooser.setCurrentDirectory(baseDir);
-            }
-        }
-
-        int result = fileChooser.showSaveDialog(parentFrame);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
+        // "Save Data" dialog: CSV (the suggested default) and Pixie (.pxt + .pxb sibling).
+        java.util.Optional<File> chosen = KalixFileDialog.saveFile(parentFrame)
+            .title("Save Results")
+            .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
+            .suggestedName(baseFilename + ".csv")
+            .filters(
+                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
+                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
+            .show();
+        if (chosen.isPresent()) {
+            File selectedFile = chosen.get();
             String lowerName = selectedFile.getName().toLowerCase();
 
-            // Format follows the chosen filter. A typed extension overrides it, so a user
-            // who explicitly names "foo.csv" while the Pixie filter is active still gets CSV.
-            boolean pixie = lowerName.endsWith(".pxt")
-                || (fileChooser.getFileFilter() == pixieFilter && !lowerName.endsWith(".csv"));
+            // The format IS the extension the user settled on. The type combo only ever
+            // sets that extension, so there is no second opinion to reconcile against.
+            boolean pixie = lowerName.endsWith(".pxt");
             String format = pixie ? "pixie" : "csv";
             String ext = pixie ? ".pxt" : ".csv";
 

@@ -195,7 +195,7 @@ public final class PreferenceKeys {
 
     /** File dialog view mode: "list" or "columns". */
     public static final Pref<String> FILE_DIALOG_VIEW =
-        Pref.fileString("fileDialog.view", "list");
+        Pref.fileString("fileDialog.view", "columns");
 
     /** Pinned sidebar folders (absolute paths). File-based deliberately: a team can ship
      *  shared pins (e.g. the modelling network drive) with the project's preference file. */
@@ -209,6 +209,15 @@ public final class PreferenceKeys {
     /** File-dialog sidebar width in pixels (user-adjustable via the split divider). */
     public static final Pref<Integer> FILE_DIALOG_SIDEBAR_WIDTH =
         Pref.osInt("fileDialog.sidebarWidth", 185);
+
+    /** File-dialog window size in pixels, carried over from the last time it was closed.
+     *  OS-based like the sidebar width: screen geometry is machine-specific, not something
+     *  a team shares through the project's preference file. */
+    public static final Pref<Integer> FILE_DIALOG_WIDTH =
+        Pref.osInt("fileDialog.width", 800);
+
+    public static final Pref<Integer> FILE_DIALOG_HEIGHT =
+        Pref.osInt("fileDialog.height", 500);
 
     // Private constructor to prevent instantiation
     private PreferenceKeys() {

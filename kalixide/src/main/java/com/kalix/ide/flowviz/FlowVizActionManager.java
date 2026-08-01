@@ -2,7 +2,8 @@ package com.kalix.ide.flowviz;
 
 import com.kalix.ide.preferences.PreferenceKeys;
 
-import javax.swing.*;
+import javax.swing.JOptionPane;
+import javax.swing.JSplitPane;
 import java.io.File;
 import java.util.function.Consumer;
 

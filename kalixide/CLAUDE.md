@@ -79,8 +79,20 @@ Loaded names carry no `file.<filename>` prefix, so they collate with runs by nam
 - **Views**: list (table) and macOS-style Miller columns, user-switchable, persisted.
 - **Sidebar**: pinned folders (file-based prefs — team-shareable), places, volumes
   (path-derived names only; no shell display-name calls), recents (OS prefs).
-- **Migrated so far**: `FileOperationsManager` open/save-as, `KalixIDE.openFolder`. The
-  remaining `JFileChooser` sites should migrate to `KalixFileDialog` as they're touched.
+- **Multi-select**: `.multiSelect()` on open dialogs, shown with `showAll()` (returns
+  every pick) rather than `show()`. Both views select multiply and preserve the whole
+  selection across the incremental listing batches.
+- **File types**: `.filters(…)` in both open and save mode, same footer slot. Both lists end
+  with "All files"; opening *defaults* to it (modellers live among mixed inputs), saving
+  leads with the caller's first type and offers it as an escape hatch — it declares no
+  extension, so picking it leaves the typed name exactly alone. **The extension is the
+  single source of truth for the format** — the save combo only ever *sets* it, so callers
+  read the format off the chosen file's name and a deliberately typed extension always wins.
+  `SaveNameExtensions` holds those rules as pure, tested functions (multi-part suffixes
+  like `.res.csv` make this more than "cut at the last dot").
+- **Migration complete (August 2026)**: no `JFileChooser` remains outside this package.
+  New file/folder pickers must use `KalixFileDialog` — its entry points take any
+  `Component` and resolve the owning window themselves.
 
 Key files: `KalixFileDialog.java`, `DirectoryLister.java`, `FileVisuals.java`
 
@@ -155,7 +167,7 @@ Systematic refactoring addressing code smells:
 - **MapRenderer extraction**: Separated rendering from interaction logic (348 lines)
 - **UIConstants class**: Centralized magic numbers with documentation
 - **SLF4J logging**: Replaced System.out with structured logging framework
-- **Import organization**: Specific imports replacing wildcards
+- **Import organization**: no wildcard imports (see below)
 - **FlowVizActionManager**: Extracted action delegation logic (219 lines)
 
 **Files Created:**
@@ -164,11 +176,31 @@ Systematic refactoring addressing code smells:
 - `FlowVizActionManager.java` - Action delegation and view management
 - `logback.xml` - Logging configuration
 
+### No Wildcard Imports (August 2026)
+**Every import is a single type or a single static member — no `pkg.*`, no
+`Facade.*`.** Enforced, not merely preferred:
+- **`.editorconfig`** (repo root) puts IntelliJ's collapse thresholds out of reach
+  (defaults are 5 classes / 3 static members). This is the half that matters — it
+  prevents rather than reports, and those defaults are how ~70 files acquired
+  wildcards without anyone deciding to.
+- **Checkstyle `AvoidStarImport`** (`config/checkstyle/checkstyle.xml`, wired into
+  `check`) fails the build on anything hand-written or from another editor.
+
+Not a style preference: `javax.swing`, `java.awt` and `java.util` all export `List`,
+so on-demand imports made the bare name ambiguous — 18 files carried a defensive
+`import java.util.List;` and two had given up and written `java.util.List` in full at
+every use site.
+
+The Checkstyle config is the build's only static analysis and deliberately holds one
+rule at error severity. Adding to it means adding build failures, so a new check has
+to earn its place; opinionated doctrine belongs in `manifestos/`, not here.
+
 ## Build Commands
 
 ```bash
-./gradlew build --no-daemon    # Build project
+./gradlew build --no-daemon    # Build project (runs tests + Checkstyle)
 ./gradlew run --no-daemon      # Run application
+./gradlew checkstyleMain --no-daemon   # Import rule only
 ```
 
 ## Development Notes

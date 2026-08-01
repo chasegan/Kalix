@@ -1,6 +1,9 @@
 package com.kalix.ide.components;
 
-import javax.swing.*;
+import javax.swing.AbstractAction;
+import javax.swing.JTree;
+import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import javax.swing.event.MouseInputAdapter;
 import javax.swing.event.TreeModelEvent;
 import javax.swing.event.TreeModelListener;

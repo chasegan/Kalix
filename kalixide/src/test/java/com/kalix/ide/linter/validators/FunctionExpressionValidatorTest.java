@@ -6,7 +6,8 @@ import org.junit.jupiter.api.DisplayName;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Unit tests for FunctionExpressionValidator

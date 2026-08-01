@@ -3,19 +3,22 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.document.WorkspaceView;
+import com.kalix.ide.filedialog.FileDialogFilter;
+import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
+import javax.swing.JComponent;
+import javax.swing.JOptionPane;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -227,23 +230,14 @@ public class OptimisationConfigManager {
      * @param parent The parent component for dialogs
      */
     public void loadConfigFromFile(JComponent parent) {
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Load Optimisation Configuration");
-
-        // Set initial directory - the target model's folder, not the active tab's
-        File workingDir = guiBuilder.getTargetWorkingDirectory();
-        if (workingDir != null) {
-            fileChooser.setCurrentDirectory(workingDir);
-        }
-
-        // Set file filter for INI files
-        FileNameExtensionFilter filter =
-            new FileNameExtensionFilter("INI Files (*.ini)", "ini");
-        fileChooser.setFileFilter(filter);
-
-        int result = fileChooser.showOpenDialog(parent);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
+        // Start in the target model's folder, not the active tab's
+        Optional<File> chosen = KalixFileDialog.openFile(parent)
+            .title("Load Optimisation Configuration")
+            .startIn(guiBuilder.getTargetWorkingDirectory())
+            .filters(FileDialogFilter.of("INI Files (*.ini)", "ini"))
+            .show();
+        if (chosen.isPresent()) {
+            File selectedFile = chosen.get();
             try {
                 String content = Files.readString(selectedFile.toPath());
                 setConfiguration(content);
@@ -287,43 +281,17 @@ public class OptimisationConfigManager {
             return;
         }
 
-        JFileChooser fileChooser = new JFileChooser();
-        fileChooser.setDialogTitle("Save Optimisation Configuration");
-
-        // Set initial directory - the target model's folder, not the active tab's
-        File workingDir = guiBuilder.getTargetWorkingDirectory();
-        if (workingDir != null) {
-            fileChooser.setCurrentDirectory(workingDir);
-        }
-
-        // Set file filter for INI files
-        FileNameExtensionFilter filter =
-            new FileNameExtensionFilter("INI Files (*.ini)", "ini");
-        fileChooser.setFileFilter(filter);
-
-        // Suggest a default filename
-        fileChooser.setSelectedFile(new File("optimisation_config.ini"));
-
-        int result = fileChooser.showSaveDialog(parent);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            File selectedFile = fileChooser.getSelectedFile();
-
-            // Ensure .ini extension
-            if (!selectedFile.getName().toLowerCase().endsWith(".ini")) {
-                selectedFile = new File(selectedFile.getAbsolutePath() + ".ini");
-            }
-
-            // Check if file exists
-            if (selectedFile.exists()) {
-                int confirm = JOptionPane.showConfirmDialog(parent,
-                    "File already exists. Overwrite?",
-                    "Confirm Overwrite",
-                    JOptionPane.YES_NO_OPTION);
-                if (confirm != JOptionPane.YES_OPTION) {
-                    return;
-                }
-            }
-
+        // Start in the target model's folder, not the active tab's. The dialog confirms
+        // any overwrite itself, and takes the typed name verbatim — the suggestion below
+        // carries the conventional extension.
+        Optional<File> chosen = KalixFileDialog.saveFile(parent)
+            .title("Save Optimisation Configuration")
+            .startIn(guiBuilder.getTargetWorkingDirectory())
+            .suggestedName("optimisation_config.ini")
+            .filters(FileDialogFilter.of("INI Files (*.ini)", "ini"))
+            .show();
+        if (chosen.isPresent()) {
+            File selectedFile = chosen.get();
             try {
                 Files.writeString(selectedFile.toPath(), configToSave);
                 if (statusUpdater != null) {

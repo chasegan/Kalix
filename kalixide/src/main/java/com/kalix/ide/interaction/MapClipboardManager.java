@@ -13,7 +13,14 @@ import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Manages clipboard operations for map nodes including cut, copy, and paste.

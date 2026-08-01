@@ -3,7 +3,10 @@ package com.kalix.ide.flowviz.rendering;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.utils.TimeFormatUtil;
 
-import java.awt.*;
+import java.awt.BasicStroke;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics2D;
 import java.util.ArrayList;
 import java.util.List;
 

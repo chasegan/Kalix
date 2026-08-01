@@ -3,9 +3,9 @@ package com.kalix.ide.editor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.*;
+import javax.swing.JOptionPane;
 import javax.swing.text.JTextComponent;
-import java.awt.*;
+import java.awt.Component;
 
 /**
  * Manages text navigation functionality for text components.
