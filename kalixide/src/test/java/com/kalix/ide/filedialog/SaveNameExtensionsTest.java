@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -106,6 +107,39 @@ class SaveNameExtensionsTest {
                 SaveNameExtensions.complete("/tmp/out/results", "csv"));
             assertEquals("/tmp/out/results.pxt",
                 SaveNameExtensions.complete("/tmp/out/results.pxt", "csv"));
+        }
+    }
+
+    @Nested
+    @DisplayName("\"All files\": the save dialog's escape hatch")
+    class AllFiles {
+
+        /**
+         * Everything below rests on this: {@code ALL_FILES} declares no extensions, so its
+         * default is null and both operations fall through to leaving the name alone.
+         */
+        @Test
+        void hasNoDefaultExtension() {
+            assertNull(FileDialogFilter.ALL_FILES.defaultExtension());
+        }
+
+        @Test
+        @DisplayName("switching to it keeps the name it already had")
+        void retargetingToItIsANoOp() {
+            String extension = FileDialogFilter.ALL_FILES.defaultExtension();
+            assertEquals("data.csv", SaveNameExtensions.retarget("data.csv", extension, PLOT_TYPES));
+            assertEquals("data.res.csv",
+                SaveNameExtensions.retarget("data.res.csv", extension, PLOT_TYPES));
+            assertEquals("no_extension",
+                SaveNameExtensions.retarget("no_extension", extension, PLOT_TYPES));
+        }
+
+        @Test
+        @DisplayName("accepting under it appends nothing, even to a bare name")
+        void acceptingUnderItLeavesTheNameVerbatim() {
+            String extension = FileDialogFilter.ALL_FILES.defaultExtension();
+            assertEquals("results", SaveNameExtensions.complete("results", extension));
+            assertEquals("results.txt", SaveNameExtensions.complete("results.txt", extension));
         }
     }
 

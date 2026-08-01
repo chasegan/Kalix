@@ -82,11 +82,12 @@ Loaded names carry no `file.<filename>` prefix, so they collate with runs by nam
 - **Multi-select**: `.multiSelect()` on open dialogs, shown with `showAll()` (returns
   every pick) rather than `show()`. Both views select multiply and preserve the whole
   selection across the incremental listing batches.
-- **File types**: `.filters(…)` in both open and save mode, same footer slot. Opening
-  defaults to "All files" (modellers live among mixed inputs); saving lists only the
-  caller's real formats and leads with the first. **The extension is the single source of
-  truth for the format** — the save combo only ever *sets* it, so callers read the format
-  off the chosen file's name and a deliberately typed extension always wins.
+- **File types**: `.filters(…)` in both open and save mode, same footer slot. Both lists end
+  with "All files"; opening *defaults* to it (modellers live among mixed inputs), saving
+  leads with the caller's first type and offers it as an escape hatch — it declares no
+  extension, so picking it leaves the typed name exactly alone. **The extension is the
+  single source of truth for the format** — the save combo only ever *sets* it, so callers
+  read the format off the chosen file's name and a deliberately typed extension always wins.
   `SaveNameExtensions` holds those rules as pure, tested functions (multi-part suffixes
   like `.res.csv` make this more than "cut at the last dot").
 - **Migration complete (August 2026)**: no `JFileChooser` remains outside this package.

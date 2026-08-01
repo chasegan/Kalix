@@ -70,9 +70,10 @@ import java.util.Optional;
  *
  * <p>Save dialogs take the same {@code .filters(…)}, shown in the same footer slot, where
  * the combo names the format being written: switching it re-points the name's extension,
- * and a name typed without one is completed from it. The extension stays the single source
- * of truth — a caller supporting several formats reads the format off the chosen file's
- * name, never off the combo, so a deliberately typed extension always wins.
+ * and a name typed without one is completed from it. Choosing "All files" manages no
+ * extension at all, leaving the name exactly as typed. The extension stays the single
+ * source of truth — a caller supporting several formats reads the format off the chosen
+ * file's name, never off the combo, so a deliberately typed extension always wins.
  */
 public final class KalixFileDialog implements FileViewHost {
 
@@ -582,15 +583,15 @@ public final class KalixFileDialog implements FileViewHost {
         right.setOpaque(false);
         if (!filters.isEmpty() && mode != Mode.CHOOSE_FOLDER) {
             List<FileDialogFilter> all = new ArrayList<>(filters);
-            if (mode == Mode.OPEN_FILE) {
-                // Opening: filtering starts OFF, all files visible, with the specific
-                // filters one click away. Modellers live among mixed inputs/outputs;
-                // hiding everything but .ini made the folder look emptier than it is.
-                all.add(FileDialogFilter.ALL_FILES);
-            }
+            // "All files" ends both lists, but means different things and so defaults
+            // differently. Opening: filtering starts OFF, all files visible, with the
+            // specific types one click away — modellers live among mixed inputs/outputs,
+            // and hiding everything but .ini made the folder look emptier than it is.
+            // Saving: it is the escape hatch — show everything, and manage no extension
+            // (ALL_FILES has none, so the name is left exactly as typed) — with the
+            // caller's preferred type leading, since that is what is usually written.
+            all.add(FileDialogFilter.ALL_FILES);
             filterCombo = new JComboBox<>(all.toArray(new FileDialogFilter[0]));
-            // Saving: the combo names the format being written, so "All files" would be
-            // meaningless and the caller's preferred type leads.
             filterCombo.setSelectedIndex(mode == Mode.OPEN_FILE ? all.size() - 1 : 0);
             filterCombo.addActionListener(e -> {
                 if (mode == Mode.SAVE_FILE) {
