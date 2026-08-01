@@ -83,48 +83,55 @@ class DirectoryListerTest {
     }
 
     /**
-     * Cancelling stops delivery from that point on.
+     * Cancelling suppresses every later delivery, batches and completion alike.
      *
-     * <p>Note what is <em>not</em> claimed: that a handle cancelled from another thread
-     * delivers nothing at all. {@code deliver} tests the flag on the worker and again on the
-     * EDT, so a batch already past both checks still arrives — cancelling from the test
-     * thread races the worker and cannot win reliably. An earlier version of this test
-     * asserted the absolute and duly failed on a loaded CI machine roughly one run in ten.
+     * <p>Two details make this deterministic rather than merely usually true, and both are
+     * load-bearing — an earlier version of this test had neither and could not detect the
+     * loss of the check it was written to cover.
      *
-     * <p>So the cancel happens <em>on the EDT, inside the first batch</em>. The EDT is
-     * single-threaded, so every later delivery must run after it and must see the flag —
-     * which makes this deterministic rather than merely probable. Enough files to force
-     * several batches (BATCH_SIZE is 128) guarantee there are later deliveries to suppress.
+     * <p><b>The cancel happens on the EDT</b>, inside the first batch. Deliveries are
+     * dispatched with {@code invokeLater}, so the EDT processes them in order: cancelling
+     * inside the first guarantees every later one observes the flag, whatever the worker
+     * was doing meanwhile. Cancelling from the test thread instead would merely race it.
+     *
+     * <p><b>A second listing is the drain barrier</b>, in place of sleeping. The lister's
+     * executor is single-threaded and FIFO, so this listing cannot begin until the first
+     * walk has finished, and its completion is therefore queued on the EDT behind every
+     * delivery the first walk made. Awaiting it drains them exactly — no timing assumption,
+     * nothing to tune, and it cannot pass vacuously by being too slow to notice a failure.
      */
     @Test
     void cancellingStopsFurtherDeliveries(@TempDir Path dir) throws Exception {
-        for (int i = 0; i < 500; i++) {
-            Files.writeString(dir.resolve("model" + i + ".ini"), "x");
+        // Comfortably past two batches (BATCH_SIZE is 128), so deliveries certainly follow
+        // the one that cancels — otherwise there would be nothing to prove suppressed.
+        Path listing = Files.createDirectory(dir.resolve("listing"));
+        for (int i = 0; i < 300; i++) {
+            Files.writeString(listing.resolve("model" + i + ".ini"), "x");
         }
+        Path sentinelDir = Files.createDirectory(dir.resolve("sentinel"));
+
         DirectoryLister lister = new DirectoryLister();
         try {
             AtomicInteger batches = new AtomicInteger();
             AtomicInteger completions = new AtomicInteger();
-            CountDownLatch firstBatch = new CountDownLatch(1);
             AtomicReference<DirectoryLister.Handle> handle = new AtomicReference<>();
 
-            handle.set(lister.list(dir,
+            // Started on the EDT so the handle is published before any callback can read
+            // it. Assigning from the test thread races the first batch, and the resulting
+            // NPE would surface as a timeout blaming the listing instead.
+            SwingUtilities.invokeAndWait(() -> handle.set(lister.list(listing,
                 batch -> {
                     batches.incrementAndGet();
-                    handle.get().cancel();   // on the EDT: every later delivery sees this
-                    firstBatch.countDown();
+                    handle.get().cancel();
                 },
-                e -> completions.incrementAndGet()));
+                e -> completions.incrementAndGet())));
 
-            assertTrue(firstBatch.await(10, TimeUnit.SECONDS), "the first batch must arrive");
-            int seenAtCancel = batches.get();
+            CountDownLatch drained = new CountDownLatch(1);
+            lister.list(sentinelDir, batch -> { }, e -> drained.countDown());
+            assertTrue(drained.await(10, TimeUnit.SECONDS), "the sentinel listing must complete");
 
-            // Let the worker finish and drain anything it queued behind the cancel.
-            Thread.sleep(300);
-            SwingUtilities.invokeAndWait(() -> { });
-
-            assertEquals(seenAtCancel, batches.get(),
-                "no batch may be delivered after the handle was cancelled");
+            assertEquals(1, batches.get(),
+                "only the batch that cancelled may be delivered");
             assertEquals(0, completions.get(),
                 "completion must not fire for a cancelled listing");
         } finally {

@@ -143,13 +143,21 @@ final class DirectoryLister {
         return handle.cancelled ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
     }
 
-    /** Delivers a batch and/or completion on the EDT, unless the handle was cancelled. */
+    /**
+     * Delivers a batch and/or completion on the EDT, unless the handle was cancelled.
+     *
+     * <p>The cancellation check is on the EDT, and only there. A second check before
+     * {@code invokeLater} would look like defence in depth but cannot be authoritative —
+     * it can pass and have {@code cancel()} land immediately afterwards, so the EDT-side
+     * check is required regardless. All the earlier one bought was skipping the post of a
+     * Runnable that then does nothing, which the walk's own {@code TERMINATE} already
+     * bounds to a handful per cancelled listing. It cost more than it saved: with two
+     * checks, no test could distinguish which one was doing the work, and the load-bearing
+     * one could be deleted with the suite still green.
+     */
     private static void deliver(Handle handle, List<FsEntry> entries,
                                 Consumer<List<FsEntry>> onBatch,
                                 Consumer<String> onDone, String error) {
-        if (handle.cancelled) {
-            return;
-        }
         SwingUtilities.invokeLater(() -> {
             if (handle.cancelled) {
                 return;
