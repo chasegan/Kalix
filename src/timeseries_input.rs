@@ -1,4 +1,5 @@
 use crate::io::error::KalixIoError;
+use crate::io::pixie_io;
 use crate::timeseries::Timeseries;
 use crate::misc::misc_functions::sanitize_name;
 use std::path::Path;
@@ -117,56 +118,94 @@ impl TimeseriesInput {
         }
     }
 
+    /// Reads the raw series out of an input file, dispatching on extension:
+    /// `.pxt` is a Pixie source, anything else is CSV.
+    ///
+    /// The dispatch lives here rather than at the `[data]` reader because every
+    /// input path in the engine — `[data]`, and the optimiser's `observed_file`
+    /// — funnels through `load`, so one dispatch covers them all.
+    ///
+    /// A Pixie source is named by its `.pxt` half only, even though the data
+    /// lives in the `.pxb` sibling read alongside it. One accepted spelling
+    /// means one source name: were both halves accepted, the same dataset would
+    /// reference as `data.rain_pxt.*` or `data.rain_pxb.*` depending on which
+    /// file `[data]` happened to name. The `.pxt` is also the readable half, so
+    /// the model file names something a modeller can open.
+    fn read_source(file_path: &str) -> Result<Vec<Timeseries>, KalixIoError> {
+        let lower = file_path.to_ascii_lowercase();
+        // Both extensions are 4 bytes, and lowercasing preserves byte length,
+        // so the base path is the input minus its last 4 bytes either way.
+        let base_path = || &file_path[..file_path.len() - 4];
+
+        if lower.ends_with(".pxt") {
+            return pixie_io::read_all_series(base_path()).map_err(KalixIoError::from);
+        }
+
+        if lower.ends_with(".pxb") {
+            let pxt = format!("{}.pxt", base_path());
+            return Err(KalixIoError::Parse(format!(
+                "'{}' is the binary half of a Pixie pair; name '{}' instead \
+                 (its .pxb sibling is read alongside it automatically)",
+                file_path, pxt
+            )));
+        }
+
+        crate::io::csv_io::read_ts(file_path)
+    }
+
     /// Loads the timeseries data file. A successful result contains a vector
     /// of TimeseriesInput structs (not just Timeseries).
     ///
     /// # Arguments
-    /// * `file_path` - Path to the CSV file to load
+    /// * `file_path` - Path to the data file to load — a CSV, or the `.pxt` half
+    ///   of a Pixie pair
     /// * `alias` - Optional user-provided alias for this file (e.g., "climate" instead of "climate_data_2020_csv")
     pub fn load(file_path: &str, alias: Option<&str>) -> Result<Vec<TimeseriesInput>, KalixIoError> {
-        match crate::io::csv_io::read_ts(file_path) {
-            Ok(vts) => {
-                let mut vinputts: Vec<TimeseriesInput> = vec![];
+        let vts = Self::read_source(file_path)
+            .map_err(|e| e.with_context(&format!("Error reading {}: ", file_path)))?;
 
-                // Create an object for each and add it
-                for i in 0..vts.len() {
-                    let mut inputts = TimeseriesInput::new();
-                    let col_name = vts[i].name.clone();
-                    let col_index = i + 1;
-                    inputts.source_path = file_path.to_string();
-                    let path = Path::new(file_path);
+        // The source name is the sanitized file name, Pixie included: naming
+        // only the .pxt half means there is nothing to canonicalise.
+        let source_name = sanitize_name(
+            Path::new(file_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| {
+                    KalixIoError::Io(format!("Input path has no file name: {}", file_path))
+                })?,
+        );
 
-                    // Sanitize the source name (filename)
-                    let source_name_raw = path.file_name().unwrap().to_str().unwrap().to_owned();
-                    let source_name = sanitize_name(&source_name_raw);
+        let mut vinputts: Vec<TimeseriesInput> = vec![];
 
-                    // Sanitize the column name
-                    let col_name_sanitized = sanitize_name(&col_name);
+        // Create an object for each and add it
+        for i in 0..vts.len() {
+            let mut inputts = TimeseriesInput::new();
+            let col_name = vts[i].name.clone();
+            let col_index = i + 1;
+            inputts.source_path = file_path.to_string();
 
-                    inputts.source_name = source_name.clone();
-                    inputts.col_index = col_index;
-                    inputts.col_name = col_name.clone();
+            // Sanitize the column name
+            let col_name_sanitized = sanitize_name(&col_name);
 
-                    inputts.full_colname_path = format!("data.{}.by_name.{}", source_name, col_name_sanitized);
-                    inputts.full_colindex_path = format!("data.{}.by_index.{}", source_name, col_index);
+            inputts.source_name = source_name.clone();
+            inputts.col_index = col_index;
+            inputts.col_name = col_name.clone();
 
-                    if let Some(alias_str) = alias {
-                        let alias_sanitized = sanitize_name(alias_str);
-                        inputts.alias = Some(alias_sanitized.clone());
-                        inputts.alias_colname_path = Some(format!("data.{}.by_name.{}", alias_sanitized, col_name_sanitized));
-                        inputts.alias_colindex_path = Some(format!("data.{}.by_index.{}", alias_sanitized, col_index));
-                    }
+            inputts.full_colname_path = format!("data.{}.by_name.{}", source_name, col_name_sanitized);
+            inputts.full_colindex_path = format!("data.{}.by_index.{}", source_name, col_index);
 
-                    inputts.timeseries = vts[i].clone();
-                    inputts.reload_on_run = false;
-                    vinputts.push(inputts);
-                }
-                Ok(vinputts)
+            if let Some(alias_str) = alias {
+                let alias_sanitized = sanitize_name(alias_str);
+                inputts.alias = Some(alias_sanitized.clone());
+                inputts.alias_colname_path = Some(format!("data.{}.by_name.{}", alias_sanitized, col_name_sanitized));
+                inputts.alias_colindex_path = Some(format!("data.{}.by_index.{}", alias_sanitized, col_index));
             }
-            Err(e) => {
-                Err(e.with_context(&format!("Error reading {}: ", file_path)))
-            }
+
+            inputts.timeseries = vts[i].clone();
+            inputts.reload_on_run = false;
+            vinputts.push(inputts);
         }
+        Ok(vinputts)
     }
 
 

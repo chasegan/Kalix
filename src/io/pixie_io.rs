@@ -1,3 +1,4 @@
+use crate::io::error::KalixIoError;
 use crate::timeseries::Timeseries;
 use crate::tid::utils::{u64_to_date_string_for_step_size, u64_to_auto_datetime_string, wrap_to_u64, wrap_to_i64};
 use crate::io::compression::gorilla::{GorillaCompressor, TimeValueDouble, TimeValueFloat};
@@ -14,6 +15,11 @@ pub enum PixieError {
     CompressionError(String),
     ParseError(String),
     SeriesNotFound(String),
+    /// One half of the `.pxt`/`.pxb` pair is on disk and the other isn't.
+    /// Distinct from a plain `IoError` because naming either sibling names the
+    /// whole dataset, so a bare "no such file" about a path the user never
+    /// wrote is the wrong thing to report.
+    MissingCompanion { missing: String },
 }
 
 impl std::fmt::Display for PixieError {
@@ -23,6 +29,11 @@ impl std::fmt::Display for PixieError {
             PixieError::CompressionError(msg) => write!(f, "Compression error: {}", msg),
             PixieError::ParseError(msg) => write!(f, "Parse error: {}", msg),
             PixieError::SeriesNotFound(name) => write!(f, "Series not found: {}", name),
+            PixieError::MissingCompanion { missing } => write!(
+                f,
+                "Pixie source is missing its companion file: {}",
+                missing
+            ),
         }
     }
 }
@@ -49,8 +60,60 @@ impl From<PixieError> for String {
             PixieError::CompressionError(msg) => format!("Compression error: {}", msg),
             PixieError::ParseError(msg) => format!("Parse error: {}", msg),
             PixieError::SeriesNotFound(name) => format!("Series not found: {}", name),
+            PixieError::MissingCompanion { missing } => {
+                format!("Pixie source is missing its companion file: {}", missing)
+            }
         }
     }
+}
+
+/// Maps a Pixie failure onto the model-load error taxonomy, so a Pixie source
+/// in `[data]` reports like any other input: a filesystem problem stays `Io`
+/// (an `OSError` at the PyO3 boundary), anything about the *content* of the
+/// files becomes `Parse`.
+impl From<PixieError> for KalixIoError {
+    fn from(error: PixieError) -> Self {
+        match error {
+            PixieError::IoError(_) | PixieError::MissingCompanion { .. } => {
+                KalixIoError::Io(error.to_string())
+            }
+            PixieError::CompressionError(_)
+            | PixieError::ParseError(_)
+            | PixieError::SeriesNotFound(_) => KalixIoError::Parse(error.to_string()),
+        }
+    }
+}
+
+/// Split a Pixie path into the base path shared by its two files, accepting
+/// either sibling: `<base>.pxt` (metadata) and `<base>.pxb` (binary) are one
+/// dataset, so naming either names the whole thing. Returns `None` for a path
+/// that isn't a Pixie path at all.
+///
+/// This is the permissive, file-handling reading of the pair, used by the
+/// Python bindings where the caller has a file and wants its contents. Model
+/// *inputs* are deliberately stricter — `[data]` accepts only the `.pxt` half,
+/// so that one dataset has one source name (see `TimeseriesInput::read_source`).
+pub fn strip_pixie_extension(path: &str) -> Option<&str> {
+    let lower = path.to_ascii_lowercase();
+    if lower.ends_with(".pxt") || lower.ends_with(".pxb") {
+        Some(&path[..path.len() - 4])
+    } else {
+        None
+    }
+}
+
+/// Verify both halves of the pair are present before reading either.
+///
+/// Called by the readers that need both files, so the "you named one, the other
+/// is missing" case is reported once, in the readers' own terms, rather than as
+/// a bare `File::open` failure partway through.
+fn check_pair(base_path: &str) -> Result<(), PixieError> {
+    for path in [format!("{}.pxt", base_path), format!("{}.pxb", base_path)] {
+        if !std::path::Path::new(&path).is_file() {
+            return Err(PixieError::MissingCompanion { missing: path });
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -96,6 +159,7 @@ struct SeriesMetadata {
 /// # Errors
 /// * `PixieError` - If files cannot be read or data is invalid
 pub fn read_all_series(base_path: &str) -> Result<Vec<Timeseries>, PixieError> {
+    check_pair(base_path)?;
     let metadata_path = format!("{}.pxt", base_path);
     let binary_path = format!("{}.pxb", base_path);
 
@@ -127,6 +191,7 @@ pub fn read_all_series(base_path: &str) -> Result<Vec<Timeseries>, PixieError> {
 /// * `PixieError::SeriesNotFound` - If the named series doesn't exist
 /// * `PixieError` - If files cannot be read or data is invalid
 pub fn read_series(base_path: &str, series_name: &str) -> Result<Timeseries, PixieError> {
+    check_pair(base_path)?;
     let metadata_path = format!("{}.pxt", base_path);
     let binary_path = format!("{}.pxb", base_path);
 

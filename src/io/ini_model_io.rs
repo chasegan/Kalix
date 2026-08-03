@@ -220,4 +220,142 @@ mod tests {
     fn read_model_string_valid_model_loads() {
         assert!(IniModelIO::read_model_string(model_ini()).is_ok());
     }
+
+    /// Write a two-day Pixie pair to a unique temp dir; returns the base path.
+    fn write_pixie_fixture(test_name: &str) -> std::path::PathBuf {
+        use crate::io::pixie_io;
+        use crate::timeseries::Timeseries;
+
+        let dir = std::env::temp_dir()
+            .join("kalix_tests")
+            .join(format!("{}_{}", test_name, uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let mut ts = Timeseries::new_daily();
+        ts.name = "value".to_string();
+        ts.start_timestamp =
+            crate::tid::utils::date_string_to_u64_flexible("2000-01-01").unwrap().0;
+        ts.values = vec![1.0, 2.0, 3.0];
+
+        let base_path = dir.join("climate");
+        pixie_io::write_series_with_precision(base_path.to_str().unwrap(), &[&ts], true)
+            .expect("write pixie fixture");
+        base_path
+    }
+
+    /// A `[data]` entry names the `.pxt` half of a Pixie pair; the `.pxb` is
+    /// read alongside it and never appears in the model file.
+    #[test]
+    fn read_model_string_accepts_pixie_input() {
+        let base_path = write_pixie_fixture("ini_pixie_input");
+
+        let ini = format!(
+            "[kalix]\n\
+             start = 2000-01-01\n\
+             end = 2000-01-03\n\
+             \n\
+             [data]\n\
+             {}.pxt\n\
+             \n\
+             [node.a]\n\
+             loc = 0, 0\n\
+             type = inflow\n\
+             inflow = data.climate_pxt.by_name.value\n\
+             ds_1 = sink\n\
+             \n\
+             [node.sink]\n\
+             loc = 1, 1\n\
+             type = blackhole\n\
+             \n\
+             [outputs]\n\
+             node.a.dsflow\n",
+            base_path.display()
+        );
+
+        let mut model = IniModelIO::read_model_string(&ini)
+            .unwrap_or_else(|e| panic!("model with Pixie input failed to load: {}", e));
+        model.configure().expect("configure");
+        model.run().expect("run");
+
+        let idx = model
+            .data_cache
+            .get_series_idx("node.a.dsflow", false)
+            .expect("output series");
+        assert_eq!(model.data_cache.series[idx].sum(), 6.0);
+
+        let _ = std::fs::remove_dir_all(base_path.parent().unwrap());
+    }
+
+    /// Naming the `.pxb` half in `[data]` is refused, and the message names the
+    /// `.pxt` to use instead. It is a `Parse` error, not `Io`: the file is there
+    /// and readable, it is the model file that names the wrong half of the pair.
+    #[test]
+    fn read_model_string_pixie_pxb_is_parse_error() {
+        let base_path = write_pixie_fixture("ini_pixie_pxb");
+
+        let ini = format!(
+            "[kalix]\n\
+             start = 2000-01-01\n\
+             end = 2000-01-03\n\
+             \n\
+             [data]\n\
+             {}.pxb\n\
+             \n\
+             [node.bh]\n\
+             type = blackhole\n\
+             loc = 1, 2\n",
+            base_path.display()
+        );
+
+        match IniModelIO::read_model_string(&ini) {
+            Ok(_) => panic!("expected an error, got Ok"),
+            Err(KalixIoError::Parse(msg)) => {
+                assert!(
+                    msg.contains("climate.pxt"),
+                    "error should name the .pxt to use instead, got: {}",
+                    msg
+                );
+            }
+            Err(other) => panic!("expected KalixIoError::Parse, got {:?}", other),
+        }
+
+        let _ = std::fs::remove_dir_all(base_path.parent().unwrap());
+    }
+
+    /// A Pixie source missing its companion is a filesystem problem, so it must
+    /// stay `Io` (an `OSError` at the PyO3 boundary) rather than being mistaken
+    /// for unreadable content, and must name the file that's actually absent.
+    #[test]
+    fn read_model_string_pixie_missing_companion_is_io_error() {
+        let base_path = write_pixie_fixture("ini_pixie_missing_companion");
+        std::fs::remove_file(format!("{}.pxb", base_path.display())).unwrap();
+
+        let ini = format!(
+            "[kalix]\n\
+             start = 2000-01-01\n\
+             end = 2000-01-03\n\
+             \n\
+             [data]\n\
+             {}.pxt\n\
+             \n\
+             [node.bh]\n\
+             type = blackhole\n\
+             loc = 1, 2\n",
+            base_path.display()
+        );
+
+        match IniModelIO::read_model_string(&ini) {
+            Ok(_) => panic!("expected an error, got Ok"),
+            Err(KalixIoError::Io(msg)) => {
+                assert!(
+                    msg.contains("companion") && msg.contains(".pxb"),
+                    "error should name the missing companion, got: {}",
+                    msg
+                );
+            }
+            Err(other) => panic!("expected KalixIoError::Io, got {:?}", other),
+        }
+
+        let _ = std::fs::remove_dir_all(base_path.parent().unwrap());
+    }
 }
