@@ -55,11 +55,25 @@ naming question is settled by citation, not conversation.
 7. **Reserved names span tiers, and nothing user-named may shadow any
    tier.** The language's names come in three tiers — builtin functions,
    stateful functions (resolved at lowering, not the builtin enum), and
-   grammar keywords (`assert`, `this`). Locals, `[fn]` names, and
+   grammar keywords (`assert`, `this`, `self`). Locals, `[fn]` names, and
    parameters are checked against *all* tiers through one registry, so a
    tier added later extends every guard automatically (decided 2026-07,
    closing a drift where stateful names were reserved for `[fn]` but
    shadowable as locals).
+8. **`this` names the enclosing definition; `self` names the element being
+   operated on. Neither may take the other's role.** `this` is a static,
+   lexical alias — expandable to the full reference of the definition it
+   appears in (`this.dsflow` on a node is `node.<name>.dsflow`; `this[-1, 0]`
+   in a var is that var's own series) — and it keeps full series semantics,
+   offsets included. `self` is a per-element, live-state binding: inside a
+   `[ras.*]` action argument it ranges over the target accounts at
+   evaluation time, has no longhand expansion, reads live mid-sequence
+   state, and therefore takes no offsets. The spelling tells the reader
+   which evaluation model they are in; merging the two would make one word
+   flip meaning by context. Corollary: in a `[ras.*]` section, `this` is
+   reserved for the section itself (`this.fired`-style self-reference, if
+   ever wanted) — never for the current target account. (Decided 2026-08,
+   when RAS per-target arguments were added.)
 
 ## 3. Rationale — the worked examples
 
@@ -80,6 +94,16 @@ beautifully and were rejected anyway, per §2.5: a model that named a table
 `clamp` would break the day `clamp` becomes a builtin. The namespace makes
 the collision structurally impossible and tells the reader what kind of
 thing they are looking at.
+
+**`self`, not `this`, for RAS per-target arguments (2026-08).** When action
+arguments gained per-account evaluation, reusing `this` was considered and
+rejected, per §2.8. A stencilled action is an implicit "for each target
+account" loop, and `self` is that loop's parameter — a different account per
+evaluation, live state, no history — while `this` everywhere else is a
+static alias with series semantics. One spelling for both would have made
+`this.balance` in a RAS behave nothing like `this.dsflow` on a node while
+looking identical; and the natural reading of `this` inside a `[ras.*]`
+section — the section itself — stays available.
 
 ## 4. Enforcement
 

@@ -15,7 +15,7 @@
 /// - [`STATEFUL_FUNCTIONS`] — the temporal builtins (`moving_*`, `*_since`),
 ///   which are not enum variants because they resolve at lowering, where their
 ///   arena state is allocated (`lower_stateful_call` in dynamic_input.rs);
-/// - [`RESERVED_WORDS`] — grammar keywords (`assert`, `this`).
+/// - [`RESERVED_WORDS`] — grammar keywords (`assert`, `this`, `self`).
 ///
 /// [`reserved_name_kind`] answers "is this name the language's?" for every
 /// consumer: the program parser's local-assignment guard, `[fn]` name/param
@@ -51,8 +51,11 @@ pub const STATEFUL_FUNCTIONS: [&str; 9] = [
 ];
 
 /// Grammar keywords: names with statement-level meaning that are neither
-/// builtins nor stateful functions.
-pub const RESERVED_WORDS: [&str; 2] = ["assert", "this"];
+/// builtins nor stateful functions. `this` is the enclosing definition;
+/// `self` is the per-target binding of [ras.*] action arguments
+/// (expression-naming §2.8) — reserved everywhere so a local or [fn] name
+/// can never shadow either.
+pub const RESERVED_WORDS: [&str; 3] = ["assert", "this", "self"];
 
 /// Is `lower` (a lowercased bare name) reserved by the language? Returns the
 /// tier for error messages ("builtin function", "stateful function",

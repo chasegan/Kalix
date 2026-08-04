@@ -901,56 +901,61 @@ acc.g1.allocation
 }
 
 // ============================================================================
-// Carryover pairing (co_acc column) + carryover(x) action
+// Account pairing (pair column) + the carryover recipe
 // ============================================================================
 
-/// Two entitlement accounts paired to their pools via the co_acc column (the
-/// pool group deliberately declared AFTER its carriers — pairings resolve in a
-/// post-pass). carryover(0.9) at the water-year start sets each pool from its
-/// own carrier's balance and never touches the carrier.
+/// The carryover recipe: target the pool group and write each pool from its
+/// own pair's balance — set() clamps to the pool's [0, size], so the pool
+/// size is the carryover cap. The pairing is declared on the entitlement rows
+/// but read from the pool side (symmetric), and the pool group is declared
+/// AFTER its pairs (pairings resolve in a post-pass). The reset that empties
+/// the entitlements is its own composable section, firing after the grant in
+/// file order.
 #[test]
-fn test_carryover_sets_pool_from_own_balance() {
+fn test_carryover_recipe_grants_then_resets() {
     let ini = format!(r#"
 [kalix]
 start = 2020-06-28
 end = 2020-07-03
 
 [acc.ent]
-accounts = name, size, initial, co_acc,
+accounts = name, size, initial, pair,
            e1, 100, 60, p1,
            e2, 200, 10, p2,
 
 [acc.pools]
 accounts = name, size, initial,
            p1, 1000, 0,
-           p2, 1000, 3,
+           p2, 25, 3,
 
-[ras.co]
+[ras.co_grant]
+targets = acc.pools
+trigger = start_water_year(7)
+action  = set(0.9 * self.pair.balance)
+
+[ras.ent_reset]
 targets = acc.ent
 trigger = start_water_year(7)
-action  = carryover(0.9)
+action  = reset_allocation
 {TAIL}"#);
     let model = run(&ini);
-    assert_eq!(balance(&model, "p1"), 54.0, "pool = 0.9 x own carrier's balance");
-    assert_eq!(balance(&model, "p2"), 9.0, "each target contributes its own balance");
-    assert_eq!(balance(&model, "e1"), 60.0, "carryover never touches the source balance");
+    assert_eq!(balance(&model, "p1"), 54.0, "pool = 0.9 x its pair's balance");
+    assert_eq!(balance(&model, "p2"), 9.0, "each pool reads its own pair");
+    assert_eq!(balance(&model, "e1"), 0.0, "reset fires after the grant, in file order");
 }
 
-/// carryover(0) is a denial year: the pool is SET to zero (a write-off), not
-/// left alone; and the pool clamps at its own size (the carryover cap).
+/// A zero grant is a denial year: the pool is SET to zero (a write-off), not
+/// left alone; and set() clamps the grant at the pool's own size.
 #[test]
-fn test_carryover_denial_and_cap_clamp() {
+fn test_carryover_recipe_denial_and_cap_clamp() {
     let ini = format!(r#"
 [kalix]
 start = 2020-06-28
 end = 2020-07-03
 
-[acc.denied]
-accounts = name, size, initial, co_acc,
+[acc.ent]
+accounts = name, size, initial, pair,
            d1, 100, 80, dp1,
-
-[acc.capped]
-accounts = name, size, initial, co_acc,
            c1, 100, 80, cp1,
 
 [acc.pools]
@@ -959,22 +964,19 @@ accounts = name, size, initial,
            cp1, 25, 0,
 
 [ras.co_denied]
-targets = acc.denied
+targets = acc.pools
 trigger = start_water_year(7)
-action  = carryover(0)
-
-[ras.co_capped]
-targets = acc.capped
-trigger = start_water_year(7)
-action  = carryover(0.9)
+action  = set(if(self.pair.balance == 80 && self.size == 25 && self.balance == 20, 0, 0.9 * self.pair.balance))
 {TAIL}"#);
+    // dp1 matches the denial condition (balance 20) -> written off to 0;
+    // cp1 takes the grant branch: 0.9 x 80 = 72, clamped to size 25.
     let model = run(&ini);
-    assert_eq!(balance(&model, "dp1"), 0.0, "denial (x = 0) writes the pool off");
-    assert_eq!(balance(&model, "cp1"), 25.0, "0.9 x 80 = 72 clamps at the pool size");
+    assert_eq!(balance(&model, "dp1"), 0.0, "denial writes the pool off");
+    assert_eq!(balance(&model, "cp1"), 25.0, "grant clamps at the pool size");
 }
 
 #[test]
-fn test_co_acc_validation_errors() {
+fn test_pair_validation_errors() {
     let base = |acc: &str, ras: &str| format!(r#"
 [kalix]
 start = 2020-01-01
@@ -984,27 +986,33 @@ end = 2020-01-02
 {TAIL}"#);
 
     // Pair must exist
-    let err = load_err(&base("[acc.g1]\naccounts = name, size, co_acc,\n  a1, 100, nope,\n", ""));
-    assert!(err.contains("Unknown co_acc account 'nope'"), "unexpected: {}", err);
+    let err = load_err(&base("[acc.g1]\naccounts = name, size, pair,\n  a1, 100, nope,\n", ""));
+    assert!(err.contains("Unknown pair account 'nope'"), "unexpected: {}", err);
 
     // Pair must be an account, not a group
-    let err = load_err(&base("[acc.g1]\naccounts = name, size, co_acc,\n  a1, 100, g1,\n", ""));
+    let err = load_err(&base("[acc.g1]\naccounts = name, size, pair,\n  a1, 100, g1,\n", ""));
     assert!(err.contains("is an account group"), "unexpected: {}", err);
 
     // No self-pairing
-    let err = load_err(&base("[acc.g1]\naccounts = name, size, co_acc,\n  a1, 100, a1,\n", ""));
-    assert!(err.contains("cannot carry over into itself"), "unexpected: {}", err);
+    let err = load_err(&base("[acc.g1]\naccounts = name, size, pair,\n  a1, 100, a1,\n", ""));
+    assert!(err.contains("cannot be paired with itself"), "unexpected: {}", err);
 
-    // A pool can be carried into only once
+    // An account can be in at most one pair...
     let err = load_err(&base(
-        "[acc.g1]\naccounts = name, size, co_acc,\n  a1, 100, p1,\n  a2, 100, p1,\n[acc.p]\naccounts = name, size,\n  p1, 50,\n", ""));
-    assert!(err.contains("carried into only once"), "unexpected: {}", err);
+        "[acc.g1]\naccounts = name, size, pair,\n  a1, 100, p1,\n  a2, 100, p1,\n[acc.p]\naccounts = name, size,\n  p1, 50,\n", ""));
+    assert!(err.contains("at most one pair"), "unexpected: {}", err);
 
-    // carryover() requires every target to declare a pairing
+    // ...and the pairing is symmetric, so declaring it from both ends is a
+    // double declaration, not agreement.
+    let err = load_err(&base(
+        "[acc.g1]\naccounts = name, size, pair,\n  a1, 100, p1,\n[acc.p]\naccounts = name, size, pair,\n  p1, 50, a1,\n", ""));
+    assert!(err.contains("at most one pair"), "unexpected: {}", err);
+
+    // carryover was briefly an action (2026-08); the diagnostic teaches the recipe
     let err = load_err(&base(
         "[acc.g1]\naccounts = name, size,\n  a1, 100,\n",
         "[ras.co]\ntargets = acc.g1\ntrigger = every_step\naction = carryover(0.9)\n"));
-    assert!(err.contains("declares no co_acc column"), "unexpected: {}", err);
+    assert!(err.contains("set(x * self.pair.balance)"), "unexpected: {}", err);
 }
 
 // ============================================================================
@@ -1117,17 +1125,18 @@ node.user.diversion
     assert_eq!(balance(&model, "a1"), 40.0, "allocation = balance + use since reset");
 }
 
-/// self.co_acc.* reads the target's paired account — here each entitlement is
-/// credited back its own pool's balance (a return-of-carryover rule).
+/// self.pair.* reads the target's paired account from the DECLARING side —
+/// here each entitlement is credited back its own pool's balance (a
+/// reclaim rule). The pool-side read is covered by the carryover recipe test.
 #[test]
-fn test_self_co_acc_fields() {
+fn test_self_pair_fields() {
     let ini = format!(r#"
 [kalix]
 start = 2020-01-01
 end = 2020-01-01
 
 [acc.ent]
-accounts = name, size, initial, co_acc,
+accounts = name, size, initial, pair,
            e1, 100, 0, p1,
            e2, 100, 0, p2,
 
@@ -1139,7 +1148,7 @@ accounts = name, size, initial,
 [ras.reclaim]
 targets = acc.ent
 trigger = every_step
-action  = credit(self.co_acc.balance)
+action  = credit(self.pair.balance)
 {TAIL}"#);
     let model = run(&ini);
     assert_eq!(balance(&model, "e1"), 30.0, "e1 credited its own pool's balance");
@@ -1220,26 +1229,27 @@ loc = 0, 20
     let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = allocate(100 * self.balance / self.size)\n"));
     assert!(err.contains("does not take self"), "unexpected: {}", err);
 
-    // self.co_acc.* obliges every target to be paired
-    let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = credit(self.co_acc.balance)\n"));
-    assert!(err.contains("declares no co_acc column"), "unexpected: {}", err);
+    // self.pair.* obliges every target to be paired
+    let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = credit(self.pair.balance)\n"));
+    assert!(err.contains("is not paired"), "unexpected: {}", err);
 
     // self cannot hide inside an [fn] body — the action text is the boundary
     let err = load_err(&base("[fn]\nhalf() = self.balance * 0.5\n\n[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = set(fn.half())\n"));
     assert!(err.contains("not inside [fn] definitions"), "unexpected: {}", err);
 }
 
-/// The co_acc column survives the canonical render: save, re-load, and the
-/// pairing still drives the action.
+/// The pair column survives the canonical render — emitted only on the side
+/// that declared it, so the saved file re-loads without double-declaring —
+/// and the pairing still drives the action after the round-trip.
 #[test]
-fn test_co_acc_round_trip() {
+fn test_pair_round_trip() {
     let ini = format!(r#"
 [kalix]
 start = 2020-06-28
 end = 2020-07-03
 
 [acc.ent]
-accounts = name, size, initial, co_acc,
+accounts = name, size, initial, pair,
            e1, 100, 60, p1,
 
 [acc.pools]
@@ -1247,13 +1257,15 @@ accounts = name, size, initial,
            p1, 25, 0,
 
 [ras.co]
-targets = acc.ent
+targets = acc.pools
 trigger = start_water_year(7)
-action  = carryover(0.9)
+action  = set(0.9 * self.pair.balance)
 {TAIL}"#);
     let model = load(&ini);
     let rendered = IniModelIO::model_to_string(&model);
-    assert!(rendered.contains("co_acc"), "co_acc column re-emitted:\n{}", rendered);
+    assert!(rendered.contains("pair"), "pair column re-emitted:\n{}", rendered);
+    assert_eq!(rendered.matches(", pair,").count(), 1,
+        "pair column only on the declaring side:\n{}", rendered);
     let mut model2 = IniModelIO::read_model_string(&rendered)
         .unwrap_or_else(|e| panic!("canonical render should re-load, got: {}\n---\n{}", e, rendered));
     model2.configure().expect("model should configure");

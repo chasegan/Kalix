@@ -39,7 +39,7 @@ are the *verbs*. See [Allocation systems](allocation-systems.md) for the why.
 | `name` | yes, first | Account name — a bare lowercase identifier, unique across every group. |
 | `size` | yes | Account size [ML] — the entitlement volume that percentages are taken of. May be an expression. |
 | `initial` | no (defaults to 0) | Opening balance [ML] at the start of the run, within `[0, size]`. |
-| `co_acc` | no | <a name="co_acc"></a>Paired carryover account — the account the [`carryover(x)` action](ras.md#actions) writes into. A reference to an account declared elsewhere, not a declaration. Each pool can be carried into by only one account, and the pairing is one declared relationship: nothing else about the pool is special — it is drawn on via a user's `accounts` list like any account, and its `size` is the carryover cap. |
+| `pair` | no | <a name="pair"></a><a name="co_acc"></a>Paired account — a reference to an account declared elsewhere, not a declaration. The pairing is **symmetric**: declare it on either account's row, and `[ras.*]` action arguments read the other end as [`self.pair.<field>`](ras.md#self) from both sides. An account can be in at most one pair. Nothing else about a paired account is special — it is drawn on via a user's `accounts` list like any account. |
 
 Columns are addressed by the header, not by position, so `name, size, initial`
 and `name, initial, size` are equivalent. An **unknown column name is a load
@@ -49,11 +49,12 @@ contain; anything that *does* something belongs in a [`[ras.*]`](ras.md)
 section.
 
 A carryover pairing in full — the pool is an ordinary account, first in the
-user's order of use:
+user's order of use, and the grant is an authored rule targeting the pool
+(see the [carryover recipe](ras.md#self)):
 
 ```ini
 [acc.entitlements]
-accounts = name,  size, initial, co_acc,
+accounts = name,  size, initial, pair,
            smith, 1000, 0,       smith_co,
 
 [acc.pools]
@@ -61,9 +62,9 @@ accounts = name,     size,
            smith_co, 250,       ; size = the carryover cap
 
 [ras.carryover]
-targets = acc.entitlements
+targets = acc.pools
 trigger = start_water_year(7)
-action  = carryover(0.9)       ; pool = 0.9 x smith's remaining balance
+action  = set(0.9 * self.pair.balance)   ; pool = 0.9 x smith's remaining balance
 ```
 
 ## Referencing accounts from nodes

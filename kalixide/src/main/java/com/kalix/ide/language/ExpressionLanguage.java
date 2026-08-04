@@ -159,8 +159,10 @@ public final class ExpressionLanguage {
     /**
      * Grammar keywords: names with statement-level meaning that are neither
      * builtins nor stateful functions. Mirrors the engine's {@code RESERVED_WORDS}.
+     * {@code this} is the enclosing definition; {@code self} is the per-target
+     * binding of [ras.*] action arguments (expression-naming §2.8).
      */
-    public static final Set<String> RESERVED_WORDS = Set.of("assert", "this");
+    public static final Set<String> RESERVED_WORDS = Set.of("assert", "this", "self");
 
     /**
      * The strict rule for bare definition names — {@code [fn]} function names

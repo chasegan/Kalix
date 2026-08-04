@@ -313,42 +313,35 @@ impl AccountManager {
         account.debits_since_reset = 0.0;
     }
 
-    /// Declare `pair_name` as the carryover account of `account_id` (the
-    /// `co_acc` table column), resolving and validating the pairing: the pair
-    /// must be an existing account (not a group), not the account itself, and
-    /// not already carried into by another account.
-    pub fn set_co_acc(&mut self, account_id: usize, pair_name: &str) -> Result<(), String> {
-        let carrier = &self.accounts[account_id];
+    /// Declare `pair_name` as the pair of `account_id` (the `pair` table
+    /// column). The pairing is symmetric — it is written onto both accounts,
+    /// so `self.pair.<field>` resolves from either end — with the declaring
+    /// side marked for round-trip re-emission. Validation: the pair must be
+    /// an existing account (not a group), not the account itself, and
+    /// neither account may already be in a pair.
+    pub fn set_pair(&mut self, account_id: usize, pair_name: &str) -> Result<(), String> {
+        let declarer = &self.accounts[account_id];
         let pair_idx = self.account_lookup.get(pair_name).copied().ok_or_else(|| {
             if self.group_lookup.contains_key(pair_name) {
-                format!("'{}' is an account group; co_acc takes an account name", pair_name)
+                format!("'{}' is an account group; 'pair' takes an account name", pair_name)
             } else {
-                format!("Unknown co_acc account '{}' for account '{}'. Accounts are declared in [acc.*] sections.",
-                    pair_name, carrier.name)
+                format!("Unknown pair account '{}' for account '{}'. Accounts are declared in [acc.*] sections.",
+                    pair_name, declarer.name)
             }
         })?;
         if pair_idx == account_id {
-            return Err(format!("Account '{}' cannot carry over into itself", carrier.name));
+            return Err(format!("Account '{}' cannot be paired with itself", declarer.name));
         }
-        if let Some(other) = self.accounts.iter().find(|a| a.co_acc == Some(pair_idx)) {
-            return Err(format!("Account '{}' is already the co_acc of '{}'; an account can be carried into only once",
-                pair_name, other.name));
+        for &idx in &[account_id, pair_idx] {
+            if let Some(existing) = self.accounts[idx].pair {
+                return Err(format!("Account '{}' is already paired with '{}'; an account can be in at most one pair",
+                    self.accounts[idx].name, self.accounts[existing].name));
+            }
         }
-        self.accounts[account_id].co_acc = Some(pair_idx);
+        self.accounts[account_id].pair = Some(pair_idx);
+        self.accounts[account_id].pair_declared = true;
+        self.accounts[pair_idx].pair = Some(account_id);
         Ok(())
-    }
-
-    /// The `carryover(x)` action for one account: set its paired account's
-    /// balance to x × this account's balance, clamped to the pair's [0, size].
-    /// A zero x is a write-off (the pool is set to zero, not left alone), and
-    /// the source balance is never touched — resetting it stays a separate,
-    /// composable action. Callers guarantee the pairing exists (validated at
-    /// load for every carryover target).
-    pub fn carryover(&mut self, account_id: usize, x: f64) {
-        if let Some(pair_idx) = self.accounts[account_id].co_acc {
-            let amount = x * self.accounts[account_id].balance;
-            self.accounts[pair_idx].set_balance_safely(amount);
-        }
     }
 
     /// Roll an N-period cap: bank the closing period's debits and credit back

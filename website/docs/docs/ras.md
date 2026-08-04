@@ -76,9 +76,13 @@ expressions, evaluated once per firing:
 | `roll_cap(n)` | Roll an n-period cap: bank the closing period's debits, and credit back the debits expiring out of the window (those from n periods ago). Fired at a water-year trigger this is a rolling cap over n consecutive water years (Source's "Moving Water Year" usage limit); `roll_cap(1)` behaves as an annual cap. |
 | `scale(x)` | Multiply the balance by `x`. |
 | `reduce_to(x)` | Lower the balance to `x` if it is above (a carryover limit). |
-| `carryover(x)` | Set each target's paired carryover account (its [`co_acc`](accounts.md#co_acc) column) to `x` × the target's own balance, clamped to the pool's `[0, size]` — the pool size *is* the carryover cap. `x = 0` is a denial year: the pool is written off (set to zero), not left alone. The target's own balance is never touched; resetting it stays a separate, composable action. Every target account must declare a `co_acc` (a load error otherwise). |
 
-### Per-account arguments — `self`
+Every action writes only to its **targets** — "what can touch this account?"
+is answered by the sections that name it. Rules that move value between
+paired accounts are authored with [`self.pair`](#self), always writing the
+target side.
+
+### Per-account arguments — `self` {#self}
 
 Inside an action argument — and only there — the expression may read the
 target account's own live state through `self`. The argument is then
@@ -102,7 +106,7 @@ action  = credit(clamp(80, 0, self.size - self.balance))   ; per-account headroo
 | `self.balance` | The account's live balance at this point in the RAS sequence. |
 | `self.size` | The account's size. |
 | `self.allocation` | The account's [allocation](accounts.md) (balance + use since the last reset). |
-| `self.co_acc.balance` / `.size` / `.allocation` | The same three fields of the account's [`co_acc`](accounts.md#co_acc) pair. Requires every target account to declare one. |
+| `self.pair.balance` / `.size` / `.allocation` | The same three fields of the account's [`pair`](accounts.md#pair), from either end of the pairing. Requires every target account to be paired. |
 
 Several verbs are `self` sugar — `set_full` is `set(self.size)`,
 `credit_fraction(x)` is `credit(x * self.size)`, `reduce_to(x)` is
@@ -115,6 +119,30 @@ definitions, `[fn]` bodies — write it directly in the action text); it has no
 history, so offsets (`self.balance[-1, 0]`) are errors; and `allocate` never
 takes it — an announcement is one percentage for the whole group. Without any
 `self` reference, arguments keep their evaluate-once-per-firing semantics.
+
+**The carryover recipe.** End-of-water-year carryover is three composable
+sections in file order — grant the pools from their paired entitlements,
+write off on the conditions the plan names, reset the entitlements:
+
+```ini
+[ras.co_grant]
+targets = acc.pools                       ; pool size = the carryover cap
+trigger = start_water_year(7)
+action  = set(fn.grant() * 0.9 * self.pair.balance)   ; fn.grant(): 0 in a denial year
+
+[ras.co_writeoff_spill]
+targets = acc.pools
+trigger = node.dam1.level[-1, 0] >= const.fsl
+action  = set_empty
+
+[ras.ent_reset]
+targets = acc.entitlements
+trigger = start_water_year(7)
+action  = reset_allocation                ; after the grant, in file order
+```
+
+A zero grant *sets* the pool to zero — a write-off, not a skip — and `set()`
+clamps at the pool's size, so the cap needs no extra clause.
 
 **Announcement actions** implement announced allocation:
 

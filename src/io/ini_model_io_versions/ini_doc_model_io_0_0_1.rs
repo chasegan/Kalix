@@ -122,9 +122,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // (accounts = references) and [ras.*] sections can target accounts and groups
     // regardless of file order. IndexMap iteration preserves file order, so account
     // indices follow declaration order (fill_in_order relies on row order per group).
-    // co_acc pairings are collected as names during the pre-pass and resolved
-    // once every account exists — a pair may live in a later [acc.*] section.
-    let mut pending_co_accs: Vec<(usize, String, usize)> = Vec::new(); // (account_idx, pair_name, line)
+    // Pairings are collected as names during the pre-pass and resolved once
+    // every account exists — a pair may live in a later [acc.*] section.
+    let mut pending_pairs: Vec<(usize, String, usize)> = Vec::new(); // (account_idx, pair_name, line)
     for (section_name, ini_section) in &ini_doc.sections {
         if let Some(group_name) = section_name.strip_prefix("acc.") {
             if !is_valid_bare_name(group_name) {
@@ -159,8 +159,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 );
                 let account_idx = model.account_manager.add_account(account)
                     .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", accounts_prop.line_number, e)))?;
-                if let Some(co_accs) = &table.co_accs {
-                    pending_co_accs.push((account_idx, co_accs[row].clone(), accounts_prop.line_number));
+                if let Some(pairs) = &table.pairs {
+                    pending_pairs.push((account_idx, pairs[row].clone(), accounts_prop.line_number));
                 }
                 member_ids.push(account_idx);
             }
@@ -172,11 +172,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         }
     }
 
-    // Resolve co_acc pairings now that every account exists. set_co_acc
-    // validates: the pair must exist (and be an account, not a group), differ
-    // from its carrier, and be carried into at most once.
-    for (account_idx, pair_name, line) in pending_co_accs {
-        model.account_manager.set_co_acc(account_idx, &pair_name)
+    // Resolve pairings now that every account exists. set_pair validates —
+    // the pair must exist (and be an account, not a group), differ from its
+    // declarer, and neither account may already be paired — and writes both
+    // ends, so self.pair.* reads from either side of the pairing.
+    for (account_idx, pair_name, line) in pending_pairs {
+        model.account_manager.set_pair(account_idx, &pair_name)
             .map_err(|e| KalixIoError::Validate(format!("Error on line {}: {}", line, e)))?;
     }
 
@@ -938,20 +939,16 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             .map_err(KalixIoError::Parse)?;
         let parsed_action = parse_ras_action(&action_str, &mut model, line)
             .map_err(KalixIoError::Parse)?;
-        // carryover(x) writes through each target's co_acc pairing, and a
-        // self.co_acc.* read goes through the same pairing — so a target
-        // without one is a configuration hole either way. Refuse it loudly
-        // at load rather than silently skipping (or NaN-ing) the account at
-        // every firing.
-        if matches!(parsed_action.action, crate::hydrology::allocation_systems::ras::RasAction::Carryover(_))
-            || parsed_action.uses_co_acc
-        {
+        // A self.pair.* read goes through the target's pairing, so an
+        // unpaired target is a configuration hole. Refuse it loudly at load
+        // rather than handing the expression NaN at every firing.
+        if parsed_action.uses_pair {
             for &idx in &target_account_ids {
                 let account = model.account_manager.get_account(idx).unwrap();
-                if account.co_acc.is_none() {
+                if account.pair.is_none() {
                     return Err(KalixIoError::Validate(format!(
-                        "Error on line {}: RAS '{}' reads or writes its targets' carryover pairings, \
-                        but target account '{}' declares no co_acc column",
+                        "Error on line {}: RAS '{}' reads self.pair.* but target account '{}' is not paired \
+                        (no 'pair' column names it or is declared on it)",
                         line, ras_name, account.name)));
                 }
             }
@@ -972,11 +969,13 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     }
 
     // -------------------------------------------------------------------------------------
-    // Warn on carryover pools no user draws on
+    // Warn on paired accounts no user draws on
     // -------------------------------------------------------------------------------------
-    // A co_acc pool in no user node's accounts list would be credited and
-    // never used — almost certainly a missing list entry. A warning rather
-    // than an error: a deliberately idle pool is legal.
+    // A paired account (typically a carryover pool) in no user node's
+    // accounts list would be credited and never used — almost certainly a
+    // missing list entry. A warning rather than an error: a deliberately
+    // idle account is legal. Checked from the declaring side so each pairing
+    // is inspected once, in both directions.
     {
         let mut drawn_on: Vec<usize> = Vec::new();
         for node in &model.nodes {
@@ -989,11 +988,14 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         for group in model.account_manager.groups() {
             for &idx in &group.member_ids {
                 let account = model.account_manager.get_account(idx).unwrap();
-                if let Some(pair_idx) = account.co_acc {
-                    if !drawn_on.contains(&pair_idx) {
-                        let pair = model.account_manager.get_account(pair_idx).unwrap();
-                        eprintln!("Warning: carryover account '{}' (co_acc of '{}') is not in any user node's accounts list",
-                            pair.name, account.name);
+                if !account.pair_declared { continue; }
+                let pair_idx = account.pair.unwrap();
+                for (a, b) in [(idx, pair_idx), (pair_idx, idx)] {
+                    if !drawn_on.contains(&a) {
+                        let undrawn = model.account_manager.get_account(a).unwrap();
+                        let other = model.account_manager.get_account(b).unwrap();
+                        eprintln!("Warning: paired account '{}' (pair of '{}') is not in any user node's accounts list",
+                            undrawn.name, other.name);
                     }
                 }
             }
@@ -1429,16 +1431,16 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
 /// ini parser stays row-agnostic — and strictness on unrecognised columns is
 /// what catches typos ('initail') at load. The set grows only when an engine
 /// feature consumes a new column.
-const ACCOUNT_TABLE_COLUMNS: [&str; 4] = ["name", "size", "initial", "co_acc"];
+const ACCOUNT_TABLE_COLUMNS: [&str; 4] = ["name", "size", "initial", "pair"];
 
 struct AccountTableData {
     names: Vec<String>,
     sizes: Vec<f64>,
     initials: Vec<f64>,
-    /// Carryover-pair names (the `co_acc` column), present iff the column is.
+    /// Paired-account names (the `pair` column), present iff the column is.
     /// Names, not indices: pairs may be declared in a later [acc.*] section,
     /// so resolution happens in a post-pass once every account exists.
-    co_accs: Option<Vec<String>>,
+    pairs: Option<Vec<String>>,
 }
 
 /// Parse the `accounts` property of an [acc.*] section: a headed table that
@@ -1492,7 +1494,7 @@ fn parse_account_table(flat: &str) -> Result<AccountTableData, String> {
         names: Vec::new(),
         sizes: Vec::new(),
         initials: Vec::new(),
-        co_accs: if header.iter().any(|h| h == "co_acc") { Some(Vec::new()) } else { None },
+        pairs: if header.iter().any(|h| h == "pair") { Some(Vec::new()) } else { None },
     };
     for row in data.chunks(n_cols) {
         let mut size = f64::NAN;
@@ -1525,13 +1527,13 @@ fn parse_account_table(flat: &str) -> Result<AccountTableData, String> {
                         .map_err(|_| format!("Invalid initial balance '{}' for account '{}': must be a number",
                             cell, table.names.last().map(String::as_str).unwrap_or("?")))?;
                 }
-                "co_acc" => {
+                "pair" => {
                     let pair = cell.to_lowercase();
                     if !is_valid_bare_name(&pair) {
-                        return Err(format!("Invalid co_acc account name '{}' for account '{}'",
+                        return Err(format!("Invalid pair account name '{}' for account '{}'",
                             cell, table.names.last().map(String::as_str).unwrap_or("?")));
                     }
-                    table.co_accs.as_mut().expect("header contains co_acc").push(pair);
+                    table.pairs.as_mut().expect("header contains pair").push(pair);
                 }
                 _ => unreachable!("header is drawn from ACCOUNT_TABLE_COLUMNS"),
             }
@@ -1591,17 +1593,17 @@ fn parse_ras_trigger(s: &str, model: &mut Model, line: usize) -> Result<crate::h
 /// expression-valued argument. Distributive actions arrive in phase 2/3.
 /// A parsed RAS action plus the self plumbing of its argument (see
 /// `DynamicInput::from_string_ras_action`): the slot base when the argument
-/// reads self.*, and whether it reads self.co_acc.* (which obliges every
-/// target account to declare a pairing — checked by the RAS builder).
+/// reads self.*, and whether it reads self.pair.* (which obliges every
+/// target account to be paired — checked by the RAS builder).
 struct ParsedRasAction {
     action: crate::hydrology::allocation_systems::ras::RasAction,
     self_slots: Option<usize>,
-    uses_co_acc: bool,
+    uses_pair: bool,
 }
 
 fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<ParsedRasAction, String> {
     use crate::hydrology::allocation_systems::ras::RasAction;
-    let no_self = |action: RasAction| ParsedRasAction { action, self_slots: None, uses_co_acc: false };
+    let no_self = |action: RasAction| ParsedRasAction { action, self_slots: None, uses_pair: false };
     let trimmed = s.trim();
     match trimmed {
         "set_full" => return Ok(no_self(RasAction::SetFull)),
@@ -1615,7 +1617,7 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<ParsedRas
         _ => {
             return Err(format!("Error on line {}: Invalid RAS action '{}'. Expected one of: set_full, \
                 set_empty, reset_allocation, set(x), set_fraction(x), credit(x), credit_fraction(x), debit(x), roll_cap(n), scale(x), \
-                reduce_to(x), allocate(pct), carryover(x)", line, trimmed));
+                reduce_to(x), allocate(pct)", line, trimmed));
         }
     };
     let parsed_arg = DynamicInput::from_string_ras_action(arg, &mut model.data_cache)
@@ -1638,12 +1640,17 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<ParsedRas
         "scale" => RasAction::Scale(input),
         "reduce_to" => RasAction::ReduceTo(input),
         "allocate" => RasAction::Allocate(input),
-        "carryover" => RasAction::Carryover(input),
+        // carryover(x) was briefly an action here (2026-08); it is now the
+        // authored pattern `set(x * self.pair.balance)` targeting the pool
+        // group — one spelling per policy, and every action writes only to
+        // its own targets.
+        "carryover" => return Err(format!("Error on line {}: 'carryover' is not an action. Target the \
+            pool group and write it directly: action = set(x * self.pair.balance)", line)),
         other => return Err(format!("Error on line {}: Unknown RAS action '{}'. Expected one of: set_full, \
             set_empty, reset_allocation, set(x), set_fraction(x), credit(x), credit_fraction(x), debit(x), roll_cap(n), scale(x), \
-            reduce_to(x), allocate(pct), carryover(x)", line, other)),
+            reduce_to(x), allocate(pct)", line, other)),
     };
-    Ok(ParsedRasAction { action, self_slots: parsed_arg.self_slots, uses_co_acc: parsed_arg.uses_co_acc })
+    Ok(ParsedRasAction { action, self_slots: parsed_arg.self_slots, uses_pair: parsed_arg.uses_pair })
 }
 
 /// Resolve a node's `accounts` property — a comma-separated, *ordered* list of
@@ -1678,23 +1685,25 @@ fn resolve_account_references(v: &str, manager: &crate::hydrology::accounts::acc
 /// commas, 4-space continuation indent).
 fn format_account_group_table(manager: &crate::hydrology::accounts::account_manager::AccountManager, group: &AccountGroup) -> String {
     let indent = " ".repeat(4);
-    // The co_acc column is per-group all-or-nothing (the table grammar cannot
-    // express a partial column), so its presence on the first member decides
+    // Pairings are symmetric but the `pair` column is emitted only on the
+    // side that declared it (pair_declared), so a saved file re-loads without
+    // double-declaring. The column is per-group all-or-nothing (the table
+    // grammar cannot express a partial column), so the first member decides
     // the header for the whole group.
-    let has_co_acc = group.member_ids.first()
+    let has_pair = group.member_ids.first()
         .and_then(|&idx| manager.get_account(idx))
-        .is_some_and(|a| a.co_acc.is_some());
-    let mut out = String::from(if has_co_acc { "name, size, initial, co_acc, " } else { "name, size, initial, " });
+        .is_some_and(|a| a.pair_declared);
+    let mut out = String::from(if has_pair { "name, size, initial, pair, " } else { "name, size, initial, " });
     for &account_idx in &group.member_ids {
         if let Some(account) = manager.get_account(account_idx) {
             out.push('\n');
             out.push_str(&indent);
             out.push_str(&format!("{}, {}, {}, ", account.name, format_f64(account.size), format_f64(account.initial_balance)));
-            if has_co_acc {
-                let pair_name = account.co_acc
+            if has_pair {
+                let pair_name = account.pair
                     .and_then(|idx| manager.get_account(idx))
                     .map(|a| a.name.as_str())
-                    .expect("co_acc column is per-group all-or-nothing");
+                    .expect("pair column is per-group all-or-nothing");
                 out.push_str(&format!("{}, ", pair_name));
             }
         }

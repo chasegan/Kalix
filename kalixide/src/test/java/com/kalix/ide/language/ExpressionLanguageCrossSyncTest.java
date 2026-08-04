@@ -76,6 +76,7 @@ class ExpressionLanguageCrossSyncTest {
         assertEquals("stateful function", ExpressionLanguage.reservedTier("steps_since"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("assert"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("this"));
+        assertEquals("reserved word", ExpressionLanguage.reservedTier("self"));
         assertNull(ExpressionLanguage.reservedTier("headroom"));
     }
 

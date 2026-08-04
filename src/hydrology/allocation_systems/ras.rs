@@ -55,14 +55,6 @@ pub enum RasAction {
     /// annual cap).
     RollCap(DynamicInput),
 
-    /// Set each target's paired carryover account (its `co_acc` column) to
-    /// x × the target's own balance, clamped to the pair's size. Stencilled:
-    /// x is evaluated once per firing, but each target contributes its own
-    /// balance. x = 0 is a denial year — the pool is set to zero (a
-    /// write-off), not left alone. Every target must declare a co_acc
-    /// (validated at load).
-    Carryover(DynamicInput),
-
     /// Announce an allocation percentage (0–100) for the target accounts.
     /// Distributive in effect but stencilled in form: the percentage is
     /// computed once and each account's allocation is raised to that share of
@@ -196,11 +188,6 @@ impl RasSystem {
                     am.roll_cap(idx, value.round().max(1.0) as usize);
                 });
             }
-            RasAction::Carryover(input) => {
-                self.apply_valued(data_cache, account_manager, input, |am, idx, x| {
-                    am.carryover(idx, x);
-                });
-            }
             RasAction::Allocate(input) => {
                 // Announcements are one percentage for the whole group
                 // (kalix-allocation-components.md §3.4), so allocate never
@@ -253,8 +240,8 @@ impl RasSystem {
 }
 
 /// Write one target account's live state into the six self slots
-/// (RAS_SELF_FIELDS order). Unpaired accounts get NaN co_acc fields — never
-/// read in practice, because any argument using self.co_acc.* requires every
+/// (RAS_SELF_FIELDS order). Unpaired accounts get NaN pair fields — never
+/// read in practice, because any argument using self.pair.* requires every
 /// target to be paired (validated at load); if that guarantee is ever
 /// bypassed, NaN poisons the result visibly rather than reading as zero.
 fn write_self_slots(
@@ -268,7 +255,7 @@ fn write_self_slots(
     f[base] = account.balance;
     f[base + 1] = account.size;
     f[base + 2] = account.allocation();
-    match account.co_acc.and_then(|pair| account_manager.get_account(pair)) {
+    match account.pair.and_then(|pair| account_manager.get_account(pair)) {
         Some(pair) => {
             f[base + 3] = pair.balance;
             f[base + 4] = pair.size;

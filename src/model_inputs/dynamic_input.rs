@@ -971,13 +971,14 @@ impl OptimizedProgram {
 /// - `Function`: Complex expression (minimal overhead)
 ///
 /// The closed set of per-target fields a `[ras.*]` action argument may read,
-/// in arena-slot order (slot = base + position here). `self.co_acc.*` reads
-/// the target's paired carryover account and requires every target to declare
-/// a `co_acc` (checked at load). This is the whole self surface: `self` is a
-/// context, not a namespace that grows by accident.
+/// in arena-slot order (slot = base + position here). `self.pair.*` reads
+/// the target's paired account (the `pair` column, readable from either end
+/// of the pairing) and requires every target to be paired (checked at load).
+/// This is the whole self surface: `self` is a context, not a namespace that
+/// grows by accident.
 pub const RAS_SELF_FIELDS: [&str; 6] = [
     "self.balance", "self.size", "self.allocation",
-    "self.co_acc.balance", "self.co_acc.size", "self.co_acc.allocation",
+    "self.pair.balance", "self.pair.size", "self.pair.allocation",
 ];
 
 /// A parsed `[ras.*]` action argument: the value expression plus the self
@@ -987,9 +988,9 @@ pub struct RasActionArg {
     /// Arena base of the six self slots — Some iff the argument references
     /// `self.*`, which is also the signal for per-target evaluation.
     pub self_slots: Option<usize>,
-    /// Whether any `self.co_acc.*` field is read (drives the load-time
+    /// Whether any `self.pair.*` field is read (drives the load-time
     /// every-target-must-be-paired check).
-    pub uses_co_acc: bool,
+    pub uses_pair: bool,
 }
 
 /// All variants store the original expression string for round-trip serialization
@@ -1132,7 +1133,7 @@ impl DynamicInput {
 
         if self_vars.is_empty() {
             let input = Self::from_string(trimmed, data_cache, true, None)?;
-            return Ok(RasActionArg { input, self_slots: None, uses_co_acc: false });
+            return Ok(RasActionArg { input, self_slots: None, uses_pair: false });
         }
 
         for v in &self_vars {
@@ -1149,8 +1150,8 @@ impl DynamicInput {
             .map(|(i, name)| (name.to_string(), base + i))
             .collect();
         let input = Self::from_string_impl(trimmed, data_cache, true, None, Some(&self_map))?;
-        let uses_co_acc = self_vars.iter().any(|v| v.starts_with("self.co_acc."));
-        Ok(RasActionArg { input, self_slots: Some(base), uses_co_acc })
+        let uses_pair = self_vars.iter().any(|v| v.starts_with("self.pair."));
+        Ok(RasActionArg { input, self_slots: Some(base), uses_pair })
     }
 
     fn from_string_impl(
