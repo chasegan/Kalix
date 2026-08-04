@@ -78,6 +78,44 @@ expressions, evaluated once per firing:
 | `reduce_to(x)` | Lower the balance to `x` if it is above (a carryover limit). |
 | `carryover(x)` | Set each target's paired carryover account (its [`co_acc`](accounts.md#co_acc) column) to `x` × the target's own balance, clamped to the pool's `[0, size]` — the pool size *is* the carryover cap. `x = 0` is a denial year: the pool is written off (set to zero), not left alone. The target's own balance is never touched; resetting it stays a separate, composable action. Every target account must declare a `co_acc` (a load error otherwise). |
 
+### Per-account arguments — `self`
+
+Inside an action argument — and only there — the expression may read the
+target account's own live state through `self`. The argument is then
+evaluated **per target account**, so one section can apply a per-account rule
+to a whole group:
+
+```ini
+[ras.co_limit]
+targets = acc.entitlements
+trigger = start_water_year(7)
+action  = set(min(self.balance, table.co_limit(self.size)))
+
+[ras.event_topup]
+targets = acc.entitlements
+trigger = node.gauge1.dsflow[-1, 0] > 500
+action  = credit(clamp(80, 0, self.size - self.balance))   ; per-account headroom
+```
+
+| Field | Reads |
+| --- | --- |
+| `self.balance` | The account's live balance at this point in the RAS sequence. |
+| `self.size` | The account's size. |
+| `self.allocation` | The account's [allocation](accounts.md) (balance + use since the last reset). |
+| `self.co_acc.balance` / `.size` / `.allocation` | The same three fields of the account's [`co_acc`](accounts.md#co_acc) pair. Requires every target account to declare one. |
+
+Several verbs are `self` sugar — `set_full` is `set(self.size)`,
+`credit_fraction(x)` is `credit(x * self.size)`, `reduce_to(x)` is
+`set(min(self.balance, x))` — the named verbs stay because they carry the
+audit trail. The verb says *what* changes; the expression says *by how much*;
+writes never happen inside an expression.
+
+Rules: `self` is rejected everywhere else (node properties, triggers, `[var.*]`
+definitions, `[fn]` bodies — write it directly in the action text); it has no
+history, so offsets (`self.balance[-1, 0]`) are errors; and `allocate` never
+takes it — an announcement is one percentage for the whole group. Without any
+`self` reference, arguments keep their evaluate-once-per-firing semantics.
+
 **Announcement actions** implement announced allocation:
 
 | Action | Effect |

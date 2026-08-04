@@ -936,17 +936,22 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         }
         let trigger = parse_ras_trigger(&trigger_str, &mut model, line)
             .map_err(KalixIoError::Parse)?;
-        let action = parse_ras_action(&action_str, &mut model, line)
+        let parsed_action = parse_ras_action(&action_str, &mut model, line)
             .map_err(KalixIoError::Parse)?;
-        // carryover(x) writes through each target's co_acc pairing, so a
-        // target without one is a configuration hole — refuse it loudly at
-        // load rather than silently skipping the account at every firing.
-        if matches!(action, crate::hydrology::allocation_systems::ras::RasAction::Carryover(_)) {
+        // carryover(x) writes through each target's co_acc pairing, and a
+        // self.co_acc.* read goes through the same pairing — so a target
+        // without one is a configuration hole either way. Refuse it loudly
+        // at load rather than silently skipping (or NaN-ing) the account at
+        // every firing.
+        if matches!(parsed_action.action, crate::hydrology::allocation_systems::ras::RasAction::Carryover(_))
+            || parsed_action.uses_co_acc
+        {
             for &idx in &target_account_ids {
                 let account = model.account_manager.get_account(idx).unwrap();
                 if account.co_acc.is_none() {
                     return Err(KalixIoError::Validate(format!(
-                        "Error on line {}: RAS '{}' uses carryover() but target account '{}' declares no co_acc column",
+                        "Error on line {}: RAS '{}' reads or writes its targets' carryover pairings, \
+                        but target account '{}' declares no co_acc column",
                         line, ras_name, account.name)));
                 }
             }
@@ -955,7 +960,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             name: ras_name,
             target_account_ids,
             trigger,
-            action,
+            action: parsed_action.action,
+            self_slots: parsed_action.self_slots,
             targets_original: targets_str,
             trigger_original: trigger_str,
             action_original: action_str,
@@ -1583,13 +1589,24 @@ fn parse_ras_trigger(s: &str, model: &mut Model, line: usize) -> Result<crate::h
 
 /// Parse a RAS action: a stencilled action name with an optional
 /// expression-valued argument. Distributive actions arrive in phase 2/3.
-fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hydrology::allocation_systems::ras::RasAction, String> {
+/// A parsed RAS action plus the self plumbing of its argument (see
+/// `DynamicInput::from_string_ras_action`): the slot base when the argument
+/// reads self.*, and whether it reads self.co_acc.* (which obliges every
+/// target account to declare a pairing — checked by the RAS builder).
+struct ParsedRasAction {
+    action: crate::hydrology::allocation_systems::ras::RasAction,
+    self_slots: Option<usize>,
+    uses_co_acc: bool,
+}
+
+fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<ParsedRasAction, String> {
     use crate::hydrology::allocation_systems::ras::RasAction;
+    let no_self = |action: RasAction| ParsedRasAction { action, self_slots: None, uses_co_acc: false };
     let trimmed = s.trim();
     match trimmed {
-        "set_full" => return Ok(RasAction::SetFull),
-        "set_empty" => return Ok(RasAction::SetEmpty),
-        "reset_allocation" => return Ok(RasAction::ResetAllocation),
+        "set_full" => return Ok(no_self(RasAction::SetFull)),
+        "set_empty" => return Ok(no_self(RasAction::SetEmpty)),
+        "reset_allocation" => return Ok(no_self(RasAction::ResetAllocation)),
         _ => {}
     }
     let open = trimmed.find('(');
@@ -1601,23 +1618,32 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hy
                 reduce_to(x), allocate(pct), carryover(x)", line, trimmed));
         }
     };
-    let input = DynamicInput::from_string(arg, &mut model.data_cache, true, None)
+    let parsed_arg = DynamicInput::from_string_ras_action(arg, &mut model.data_cache)
         .map_err(|e| format!("Error on line {}: Invalid argument for RAS action '{}': {}", line, name, e))?;
-    match name {
-        "set" => Ok(RasAction::Set(input)),
-        "set_fraction" => Ok(RasAction::SetFraction(input)),
-        "credit" => Ok(RasAction::Credit(input)),
-        "credit_fraction" => Ok(RasAction::CreditFraction(input)),
-        "debit" => Ok(RasAction::Debit(input)),
-        "roll_cap" => Ok(RasAction::RollCap(input)),
-        "scale" => Ok(RasAction::Scale(input)),
-        "reduce_to" => Ok(RasAction::ReduceTo(input)),
-        "allocate" => Ok(RasAction::Allocate(input)),
-        "carryover" => Ok(RasAction::Carryover(input)),
-        other => Err(format!("Error on line {}: Unknown RAS action '{}'. Expected one of: set_full, \
+    // Announcements are one percentage for the whole group
+    // (kalix-allocation-components.md §3.4): per-account self reads would
+    // dissolve that meaning (and the pct recorder with it).
+    if name == "allocate" && parsed_arg.self_slots.is_some() {
+        return Err(format!("Error on line {}: allocate() does not take self.* references — an announcement \
+            is one percentage for the whole target group", line));
+    }
+    let input = parsed_arg.input;
+    let action = match name {
+        "set" => RasAction::Set(input),
+        "set_fraction" => RasAction::SetFraction(input),
+        "credit" => RasAction::Credit(input),
+        "credit_fraction" => RasAction::CreditFraction(input),
+        "debit" => RasAction::Debit(input),
+        "roll_cap" => RasAction::RollCap(input),
+        "scale" => RasAction::Scale(input),
+        "reduce_to" => RasAction::ReduceTo(input),
+        "allocate" => RasAction::Allocate(input),
+        "carryover" => RasAction::Carryover(input),
+        other => return Err(format!("Error on line {}: Unknown RAS action '{}'. Expected one of: set_full, \
             set_empty, reset_allocation, set(x), set_fraction(x), credit(x), credit_fraction(x), debit(x), roll_cap(n), scale(x), \
             reduce_to(x), allocate(pct), carryover(x)", line, other)),
-    }
+    };
+    Ok(ParsedRasAction { action, self_slots: parsed_arg.self_slots, uses_co_acc: parsed_arg.uses_co_acc })
 }
 
 /// Resolve a node's `accounts` property — a comma-separated, *ordered* list of

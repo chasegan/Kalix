@@ -1007,6 +1007,228 @@ end = 2020-01-02
     assert!(err.contains("declares no co_acc column"), "unexpected: {}", err);
 }
 
+// ============================================================================
+// Per-target self context in action arguments
+// ============================================================================
+
+/// With self.* in the argument, the action evaluates per target: each account
+/// gets a value computed from its own live state. set(min(self.balance, 20))
+/// caps every balance at 20 without a section per account.
+#[test]
+fn test_self_argument_evaluates_per_target() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 100, 60,
+           a2, 100, 10,
+
+[ras.cap]
+targets = acc.g1
+trigger = every_step
+action  = set(min(self.balance, 20))
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "a1"), 20.0, "a1 capped from its own balance");
+    assert_eq!(balance(&model, "a2"), 10.0, "a2 already under the cap");
+}
+
+/// The derivable-sugar identity behind the design: set(self.size) is
+/// set_full, and credit(clamp(x, 0, self.size - self.balance)) is a credit
+/// with per-account headroom. One-day run: every_step compounds.
+#[test]
+fn test_self_sugar_identities() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-01
+
+[acc.filled]
+accounts = name, size, initial,
+           f1, 42, 7,
+
+[acc.headroom]
+accounts = name, size, initial,
+           h1, 100, 80,
+           h2, 100, 10,
+
+[ras.fill]
+targets = acc.filled
+trigger = every_step
+action  = set(self.size)
+
+[ras.topup]
+targets = acc.headroom
+trigger = every_step
+action  = credit(clamp(50, 0, self.size - self.balance))
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "f1"), 42.0, "set(self.size) == set_full");
+    assert_eq!(balance(&model, "h1"), 100.0, "credit clamped to h1's 20 of headroom");
+    assert_eq!(balance(&model, "h2"), 60.0, "h2 takes the full 50");
+}
+
+/// self.allocation is balance + use since reset: a user's take moves water
+/// between the two terms without changing the sum. Firing set(self.allocation)
+/// on day 2 restores the original 50 (40 held + 10 used), where
+/// set(self.balance) would have been a 40 no-op.
+#[test]
+fn test_self_allocation_reads_balance_plus_use() {
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 100, 50,
+
+[ras.restore]
+targets = acc.g1
+trigger = sim.day == 2
+action  = set(self.allocation)
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = user
+
+[node.user]
+type = unregulated_user
+loc = 0, 10
+demand = 10
+accounts = a1
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 20
+
+[outputs]
+node.user.diversion
+"#;
+    let model = run(ini);
+    // Day 1: no firing; take 10 -> balance 40, use 10. Day 2: RAS sets
+    // balance to allocation = 40 + 10 = 50; take 10 -> 40.
+    assert_eq!(balance(&model, "a1"), 40.0, "allocation = balance + use since reset");
+}
+
+/// self.co_acc.* reads the target's paired account — here each entitlement is
+/// credited back its own pool's balance (a return-of-carryover rule).
+#[test]
+fn test_self_co_acc_fields() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-01
+
+[acc.ent]
+accounts = name, size, initial, co_acc,
+           e1, 100, 0, p1,
+           e2, 100, 0, p2,
+
+[acc.pools]
+accounts = name, size, initial,
+           p1, 50, 30,
+           p2, 50, 5,
+
+[ras.reclaim]
+targets = acc.ent
+trigger = every_step
+action  = credit(self.co_acc.balance)
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "e1"), 30.0, "e1 credited its own pool's balance");
+    assert_eq!(balance(&model, "e2"), 5.0, "e2 credited its own pool's balance");
+}
+
+/// A program-block argument may use self too.
+#[test]
+fn test_self_in_program_block_argument() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-01
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 100, 60,
+
+[ras.halve]
+targets = acc.g1
+trigger = every_step
+action  = set({{ b = self.balance; b * 0.5 }})
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "a1"), 30.0, "block argument reads self");
+}
+
+#[test]
+fn test_self_validation_errors() {
+    let base = |extra: &str| format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 100, 60,
+{extra}
+{TAIL}"#);
+
+    // self outside a RAS action argument: node property...
+    let err = load_err(&format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = user
+
+[node.user]
+type = unregulated_user
+loc = 0, 10
+demand = self.balance
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 20
+"#));
+    assert!(err.contains("only available inside [ras.*] action arguments"), "unexpected: {}", err);
+
+    // ...and a RAS trigger (self is an action-argument context, not a RAS-wide one)
+    let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = self.balance > 0\naction = set_full\n"));
+    assert!(err.contains("only available inside [ras.*] action arguments"), "unexpected: {}", err);
+
+    // Unknown field
+    let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = set(self.bogus)\n"));
+    assert!(err.contains("Unknown self field"), "unexpected: {}", err);
+
+    // No history to offset into
+    let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = set(self.balance[-1, 0])\n"));
+    assert!(err.contains("Offset syntax not supported for self references"), "unexpected: {}", err);
+
+    // allocate stays a group-wide announcement
+    let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = allocate(100 * self.balance / self.size)\n"));
+    assert!(err.contains("does not take self"), "unexpected: {}", err);
+
+    // self.co_acc.* obliges every target to be paired
+    let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = credit(self.co_acc.balance)\n"));
+    assert!(err.contains("declares no co_acc column"), "unexpected: {}", err);
+
+    // self cannot hide inside an [fn] body — the action text is the boundary
+    let err = load_err(&base("[fn]\nhalf() = self.balance * 0.5\n\n[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = set(fn.half())\n"));
+    assert!(err.contains("not inside [fn] definitions"), "unexpected: {}", err);
+}
+
 /// The co_acc column survives the canonical render: save, re-load, and the
 /// pairing still drives the action.
 #[test]
