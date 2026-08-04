@@ -577,7 +577,8 @@
         "loc"
       ],
       "optional_params": [
-        "harmony_fraction"
+        "harmony_fraction",
+        "regulated"
       ],
       "dsnode_params": [
         "ds_1"
@@ -594,7 +595,12 @@
         },
         "harmony_fraction": {
           "type": "function_expression",
-          "description": "Harmony fraction (data reference, constant, or expression)"
+          "description": "Fraction of orders sent up the first regulated pathway (with 'regulated' names, the first listed; legacy: the first upstream link in file order)"
+        },
+        "regulated": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_]+(\\s*,\\s*[A-Za-z0-9_]+)*$",
+          "description": "Regulated ordering pathway(s) by upstream node name; one name takes all orders, two names split by harmony_fraction (first listed gets the fraction)"
         }
       }
     },

@@ -334,9 +334,39 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "harmony_fraction" {
                             n.harmony_fraction = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "regulated" {
+                            let names = csv_to_string_vec(v);
+                            if names.is_empty() || names.len() > 2 {
+                                return Err(KalixIoError::Validate(format!(
+                                    "Error on line {}: 'regulated' for node '{}' takes one or two upstream node names, got {}",
+                                    ini_property.line_number, node_name, names.len())));
+                            }
+                            if names.len() == 2 && names[0].eq_ignore_ascii_case(&names[1]) {
+                                return Err(KalixIoError::Validate(format!(
+                                    "Error on line {}: 'regulated' for node '{}' names '{}' twice",
+                                    ini_property.line_number, node_name, names[0])));
+                            }
+                            n.regulated_upstream = names;
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'", ini_property.line_number, name, node_name)));
                         }
+                    }
+                    // The fraction only exists where there is genuinely
+                    // something to split: one named regulated pathway takes
+                    // everything, so a fraction beside it is a contradiction —
+                    // and two named pathways need the fraction stated.
+                    let harmony_set = !matches!(n.harmony_fraction, DynamicInput::None { .. });
+                    if n.regulated_upstream.len() == 1 && harmony_set {
+                        return Err(KalixIoError::Validate(format!(
+                            "Error on line {}: Node '{}' sets harmony_fraction but names only one 'regulated' pathway — \
+                            a single pathway takes all orders, so there is nothing to split",
+                            ini_section.line_number, node_name)));
+                    }
+                    if n.regulated_upstream.len() == 2 && !harmony_set {
+                        return Err(KalixIoError::Validate(format!(
+                            "Error on line {}: Node '{}' names two 'regulated' pathways but no harmony_fraction — \
+                            state the fraction of orders sent to the first",
+                            ini_section.line_number, node_name)));
                     }
                     NodeEnum::ConfluenceNode(n)
                 }
@@ -1134,6 +1164,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "confluence");
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "regulated", &n.regulated_upstream.join(", "));
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "harmony_fraction", &n.harmony_fraction.to_string());
             }
             NodeEnum::GaugeNode(n) => {
