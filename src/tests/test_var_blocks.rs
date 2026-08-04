@@ -957,3 +957,52 @@ type = blackhole
     model2.run().expect("simulation should run");
     assert_series(&series(&model2, "var.assessment.x"), &[1.0, 2.0], "counter still in the ras slot");
 }
+
+/// The ras slot interleaves assessments and [ras.*] sections in FILE ORDER:
+/// a var below a section reads that section's fired series bare, same step;
+/// a var above it cannot — what you read is what runs, within the slot too.
+#[test]
+fn ras_slot_interleaves_vars_and_sections_in_file_order() {
+    let head = "\
+[kalix]
+start = 2020-01-30
+end = 2020-01-31
+
+[acc.g1]
+accounts = name, size,
+           a1, 100,
+";
+    let tail = "\
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = outlet
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+
+[outputs]
+var.watch.saw_fire
+";
+    let section = "\
+[ras.credit]
+targets = acc.g1
+trigger = every_step
+action  = credit(5)
+";
+    let var_block = "\
+[var.watch]
+phase = ras
+saw_fire = ras.credit.fired
+";
+
+    // Section above the var: today's firing is visible bare.
+    let model = run_model(&format!("{head}\n{section}\n{var_block}\n{tail}"));
+    assert_series(&series(&model, "var.watch.saw_fire"), &[1.0, 1.0], "saw_fire");
+
+    // Var above the section: the read is of a value not yet written — loud.
+    let err = run_err(&format!("{head}\n{var_block}\n{section}\n{tail}"));
+    assert!(err.contains("no value yet"), "unexpected: {err}");
+}

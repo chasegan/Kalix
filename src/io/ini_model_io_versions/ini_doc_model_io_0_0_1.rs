@@ -227,7 +227,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // Iterate over the sections of the ini_doc and construct the model as we go.
     // seen_node_section drives the ras-phase var placement rule: assessment
     // blocks must precede the first node, so the file reads as the timestep runs.
+    // ras_slot_items collects (line, item) for everything that runs in the ras
+    // slot — assessments and [ras.*] sections — so the slot executes in file
+    // order, interleaved exactly as written.
     let mut seen_node_section = false;
+    let mut ras_slot_items: Vec<(usize, crate::model::RasSlotItem)> = Vec::new();
     for (section_name, ini_section) in ini_doc.sections {
 
         if section_name == "kalix" {
@@ -928,12 +932,15 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 });
             }
 
-            model.add_var_block(crate::model::VarBlock {
+            let vb_idx = model.add_var_block(crate::model::VarBlock {
                 name: block_name.to_string(),
                 defs,
                 phase,
                 phase_explicit,
             });
+            if phase == crate::model::VarPhase::Ras {
+                ras_slot_items.push((ini_section.line_number, crate::model::RasSlotItem::VarBlock(vb_idx)));
+            }
         } else if section_name.starts_with("table.") {
             // -------------------------------------------------------------------------------------
             // Lookup tables — already parsed in the pre-pass above
@@ -1014,6 +1021,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 }
             }
         }
+        ras_slot_items.push((line, crate::model::RasSlotItem::Ras(model.ras_systems.len())));
         model.ras_systems.push(RasSystem {
             name: ras_name,
             target_account_ids,
@@ -1028,6 +1036,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             last_pct: 0.0,
         });
     }
+
+    // The ras slot executes in file order: sort the collected assessments and
+    // sections by their section line and hand the sequence to the model.
+    ras_slot_items.sort_by_key(|&(line, _)| line);
+    model.ras_slot = ras_slot_items.into_iter().map(|(_, item)| item).collect();
 
     // -------------------------------------------------------------------------------------
     // Warn on paired accounts no user draws on
@@ -1070,6 +1083,22 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // expression reference. Each must name a real account (or group) and a real
     // field — otherwise a typo would sit there as a series nothing ever writes,
     // reading as a silent NaN instead of an error.
+    // ras.<name>.<field> references get the same strictness (only fired and
+    // pct exist; anything else would sit as a silently unwritten series).
+    for name in model.data_cache.series_name.clone() {
+        let Some(rest) = name.strip_prefix("ras.") else { continue };
+        let (target, field) = rest.rsplit_once('.').ok_or_else(|| KalixIoError::Parse(format!(
+            "Invalid RAS reference 'ras.{}': expected 'ras.<name>.<field>'", rest)))?;
+        if !model.ras_systems.iter().any(|r| r.name == target) {
+            return Err(KalixIoError::Validate(format!(
+                "Unknown RAS '{}' in reference '{}'. RAS systems are declared as [ras.*] sections.", target, name)));
+        }
+        if field != "fired" && field != "pct" {
+            return Err(KalixIoError::Validate(format!(
+                "Unknown field '{}' in reference '{}'. Available for a RAS: fired, pct", field, name)));
+        }
+    }
+
     for name in model.data_cache.series_name.clone() {
         let Some(rest) = name.strip_prefix("acc.") else { continue };
         let (target, field) = rest.rsplit_once('.').ok_or_else(|| KalixIoError::Parse(format!(

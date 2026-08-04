@@ -28,6 +28,15 @@ pub enum ExecItem {
     VarBlock(usize),
 }
 
+/// One entry in the ras slot at the top of the timestep: ras-phase var
+/// blocks and [ras.*] sections, interleaved in file order — what you read
+/// is what runs, within the slot exactly as within the flow pass.
+#[derive(Debug, Clone, Copy)]
+pub enum RasSlotItem {
+    VarBlock(usize),
+    Ras(usize),
+}
+
 /// One `key = expression` line of a `[var.*]` section.
 #[derive(Debug, Clone)]
 pub struct VarDef {
@@ -128,11 +137,14 @@ pub struct Model {
     pub exec_items: Vec<ExecItem>,
 
     /// Hot path: top of run_timestep().
-    /// Ras-phase var blocks (indices into var_blocks) in file order — the
-    /// assessment slot, evaluated before the [ras.*] loop.
+    /// The ras slot: ras-phase var blocks and [ras.*] sections interleaved
+    /// in file order (assessments read bare by anything below them; a
+    /// section above an assessment cannot see it — loud unwritten-read).
     ///
-    /// Populated: derived from `var_blocks` in `initialize_network()`.
-    pub ras_var_blocks: Vec<usize>,
+    /// Populated: built by the INI reader in file order; rebuilt as
+    /// vars-then-sections in `initialize_network()` if a programmatic
+    /// construction left it out of step with the item counts.
+    pub ras_slot: Vec<RasSlotItem>,
 
     /// Hot path: flow phase, read in run_timestep().
     /// `exec_items` minus the ras-phase var blocks — what the flow pass
@@ -298,7 +310,7 @@ impl Model {
             nodes: self.nodes.clone(),
             var_blocks: self.var_blocks.clone(),
             exec_items: self.exec_items.clone(),
-            ras_var_blocks: self.ras_var_blocks.clone(),
+            ras_slot: self.ras_slot.clone(),
             flow_exec_items: self.flow_exec_items.clone(),
             flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
@@ -326,7 +338,7 @@ impl Model {
             nodes: self.nodes.clone(),
             var_blocks: self.var_blocks.clone(),
             exec_items: self.exec_items.clone(),
-            ras_var_blocks: self.ras_var_blocks.clone(),
+            ras_slot: self.ras_slot.clone(),
             flow_exec_items: self.flow_exec_items.clone(),
             flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
@@ -865,25 +877,26 @@ impl Model {
         // assessments included. No-op unless a size series is registered.
         self.account_manager.publish_sizes(&mut self.data_cache);
 
-        // Assessment slot: ras-phase var blocks, in file order, before the
-        // policy sections — so a [ras.*] trigger or action reads today's
-        // assessment bare, no [-1, 0] gymnastics.
-        for i in 0..self.ras_var_blocks.len() {
-            let vb_idx = self.ras_var_blocks[i];
-            for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
-                let value = self.var_blocks[vb_idx].defs[def_idx]
-                    .input
-                    .get_value(&mut self.data_cache);
-                let series_idx = self.var_blocks[vb_idx].defs[def_idx].series_idx;
-                self.data_cache.add_value_at_index(series_idx, value);
+        // The ras slot: assessments (phase = ras var blocks) and policy
+        // ([ras.*] sections) interleaved in file order at the top of the
+        // step, before ordering and flow — today's orders and takes see
+        // today's announcements (kalix-allocation-components.md §3.3), and
+        // a section reads bare any assessment written above it.
+        for i in 0..self.ras_slot.len() {
+            match self.ras_slot[i] {
+                RasSlotItem::VarBlock(vb_idx) => {
+                    for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
+                        let value = self.var_blocks[vb_idx].defs[def_idx]
+                            .input
+                            .get_value(&mut self.data_cache);
+                        let series_idx = self.var_blocks[vb_idx].defs[def_idx].series_idx;
+                        self.data_cache.add_value_at_index(series_idx, value);
+                    }
+                }
+                RasSlotItem::Ras(ras_idx) => {
+                    self.ras_systems[ras_idx].run(&mut self.data_cache, &mut self.account_manager);
+                }
             }
-        }
-
-        // Accounting policy: [ras.*] systems run in file order at the top of
-        // the step, before ordering and flow — today's orders and takes see
-        // today's announcements (kalix-allocation-components.md §3.3).
-        for ras in &mut self.ras_systems {
-            ras.run(&mut self.data_cache, &mut self.account_manager);
         }
 
         // Post-policy, pre-take snapshot: publishes acc.*.opening_balance and
@@ -966,21 +979,31 @@ impl Model {
 
     pub fn initialize_network(&mut self) -> Result<(), String> {
         // Partition the var blocks by phase (performance §3.5: decided here,
-        // never per step): ras-phase blocks run in the assessment slot at the
-        // top of the step; the flow pass interleaves the rest at file
-        // position, falling back to the plain node loop when none remain.
-        self.ras_var_blocks.clear();
+        // never per step): ras-phase blocks run in the ras slot at the top of
+        // the step; the flow pass interleaves the rest at file position,
+        // falling back to the plain node loop when none remain.
         self.flow_exec_items.clear();
+        let mut ras_phase_blocks: Vec<usize> = Vec::new();
         for &item in &self.exec_items {
             match item {
                 ExecItem::VarBlock(vb_idx) if self.var_blocks[vb_idx].phase == VarPhase::Ras => {
-                    self.ras_var_blocks.push(vb_idx);
+                    ras_phase_blocks.push(vb_idx);
                 }
                 other => self.flow_exec_items.push(other),
             }
         }
         self.flow_has_var_blocks = self.flow_exec_items.iter()
             .any(|i| matches!(i, ExecItem::VarBlock(_)));
+
+        // The ras slot interleaves assessments and [ras.*] sections in file
+        // order; the INI reader builds it. A programmatic construction that
+        // bypassed the reader gets the natural default: assessments first,
+        // then the sections, each in declaration order.
+        if self.ras_slot.len() != ras_phase_blocks.len() + self.ras_systems.len() {
+            self.ras_slot.clear();
+            self.ras_slot.extend(ras_phase_blocks.iter().map(|&i| RasSlotItem::VarBlock(i)));
+            self.ras_slot.extend((0..self.ras_systems.len()).map(RasSlotItem::Ras));
+        }
 
         // Initialize the nodes and execution order
         self.initialize_nodes()?;

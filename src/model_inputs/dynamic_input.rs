@@ -1401,9 +1401,10 @@ impl DynamicInput {
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name.clone(), idx);
             } else if lower_name.starts_with("node.") || lower_name.starts_with("var.")
-                || lower_name.starts_with("acc.") {
+                || lower_name.starts_with("acc.") || lower_name.starts_with("ras.") {
                 // Resolve to data cache but NOT as critical input (node outputs,
-                // var values and account state are computed during the run, not loaded)
+                // var values, account state and RAS series are computed during
+                // the run, not loaded)
                 let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
                 data_variable_map.insert(lower_name.clone(), idx);
             } else {
@@ -1632,7 +1633,7 @@ impl DynamicInput {
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name, idx);
             } else if lower_name.starts_with("node.") || lower_name.starts_with("var.")
-                || lower_name.starts_with("acc.") {
+                || lower_name.starts_with("acc.") || lower_name.starts_with("ras.") {
                 // Computed during the run, not loaded: never critical.
                 let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
                 data_variable_map.insert(lower_name, idx);
