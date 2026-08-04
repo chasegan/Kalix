@@ -57,7 +57,10 @@ Expression triggers are **level-semantic**: the action applies on *every* step
 the condition holds, not once on the rising edge — "while the dam spills, forfeit
 5%" is a daily debit for each day of the spill. Because a RAS runs before the
 flow phase, reading a value computed later in the step (a node output, a var)
-needs the previous-step offset: `node.dam.spill[-1, 0] > 0`.
+needs the previous-step offset: `node.dam.spill[-1, 0] > 0`. The exception is
+[`phase = ras` var blocks](vars.md) — the assessment slot runs *before* the RAS
+sections, so their values read bare: assess daily in a var, credit monthly with
+`allocate(var.assessment.aa)`.
 
 ## Actions
 

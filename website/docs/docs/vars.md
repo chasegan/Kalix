@@ -75,5 +75,15 @@ written.
 - Forward offsets (`[+1, ...]`) are rejected — a computed series has no
   future values.
 - The optional `phase` key selects when the block runs. `phase = flow` (the
-  default) is supported; `phase = order` is designed but not yet implemented
+  default) runs at file position among the nodes. `phase = ras` runs in the
+  **assessment slot** at the top of the step, before the `[ras.*]` sections —
+  so policy triggers and actions read today's value bare, no `[-1, 0]`
+  needed: a daily-ratcheted allocation assessment becomes
+  `action = allocate(var.assessment.aa)`. Ras-phase blocks must appear
+  before the first node section (a load error otherwise), so the file reads
+  exactly as the timestep runs: assessments, then policy, then the network.
+  They evaluate in file order, may read each other bare (earlier blocks and
+  keys), plus `acc.<x>.size` and anything at `[-1, 0]`; reading same-step
+  flow or ordering output is the usual loud error. `phase = order` is
+  designed but not yet implemented
   and is rejected at load.

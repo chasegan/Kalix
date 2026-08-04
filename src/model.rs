@@ -40,8 +40,23 @@ pub struct VarDef {
     pub original: String,
 }
 
+/// When a var block evaluates within the timestep (the `phase` key).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VarPhase {
+    /// Top of the step, before the [ras.*] sections run — the assessment
+    /// slot, so the day's policy reads today's value bare. Ras-phase blocks
+    /// must appear before the first node section (validated at load): the
+    /// file then reads exactly as the timestep runs.
+    Ras,
+    /// At the block's file position among the nodes, in the flow pass (the
+    /// default).
+    #[default]
+    Flow,
+}
+
 /// A `[var.<name>]` section: published calculations, evaluated top to bottom
-/// at the block's file position in the flow phase, each written to its own
+/// at the block's file position in the flow phase — or, with `phase = ras`,
+/// in the assessment slot at the top of the step — each written to its own
 /// data-cache series — so vars are readable anywhere, offset-addressable,
 /// and recordable like any node output (structured_expressions_design.md §9).
 /// `phase = order` is not yet implemented and is rejected at load.
@@ -50,6 +65,7 @@ pub struct VarBlock {
     /// Section name minus the `var.` prefix.
     pub name: String,
     pub defs: Vec<VarDef>,
+    pub phase: VarPhase,
     /// The `phase` key exactly as written, if present (round-trip fidelity).
     pub phase_explicit: Option<String>,
 }
@@ -110,6 +126,28 @@ pub struct Model {
     ///
     /// Populated: alongside `nodes`/`var_blocks`, via `add_node()`/`add_var_block()`.
     pub exec_items: Vec<ExecItem>,
+
+    /// Hot path: top of run_timestep().
+    /// Ras-phase var blocks (indices into var_blocks) in file order — the
+    /// assessment slot, evaluated before the [ras.*] loop.
+    ///
+    /// Populated: derived from `var_blocks` in `initialize_network()`.
+    pub ras_var_blocks: Vec<usize>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    /// `exec_items` minus the ras-phase var blocks — what the flow pass
+    /// actually interleaves. The plain node loop is used instead when this
+    /// contains no var blocks (see `flow_has_var_blocks`).
+    ///
+    /// Populated: derived from `exec_items` in `initialize_network()`.
+    pub flow_exec_items: Vec<ExecItem>,
+
+    /// Hot path: flow phase, read in run_timestep(). True when
+    /// `flow_exec_items` interleaves at least one var block — the once-per-step
+    /// choice between the plain node loop and the interleaved loop.
+    ///
+    /// Populated: derived in `initialize_network()`.
+    pub flow_has_var_blocks: bool,
 
     /// Hot path: flow phase, read in run_timestep().
     ///
@@ -260,6 +298,9 @@ impl Model {
             nodes: self.nodes.clone(),
             var_blocks: self.var_blocks.clone(),
             exec_items: self.exec_items.clone(),
+            ras_var_blocks: self.ras_var_blocks.clone(),
+            flow_exec_items: self.flow_exec_items.clone(),
+            flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
@@ -285,6 +326,9 @@ impl Model {
             nodes: self.nodes.clone(),
             var_blocks: self.var_blocks.clone(),
             exec_items: self.exec_items.clone(),
+            ras_var_blocks: self.ras_var_blocks.clone(),
+            flow_exec_items: self.flow_exec_items.clone(),
+            flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
@@ -821,6 +865,20 @@ impl Model {
         // assessments included. No-op unless a size series is registered.
         self.account_manager.publish_sizes(&mut self.data_cache);
 
+        // Assessment slot: ras-phase var blocks, in file order, before the
+        // policy sections — so a [ras.*] trigger or action reads today's
+        // assessment bare, no [-1, 0] gymnastics.
+        for i in 0..self.ras_var_blocks.len() {
+            let vb_idx = self.ras_var_blocks[i];
+            for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
+                let value = self.var_blocks[vb_idx].defs[def_idx]
+                    .input
+                    .get_value(&mut self.data_cache);
+                let series_idx = self.var_blocks[vb_idx].defs[def_idx].series_idx;
+                self.data_cache.add_value_at_index(series_idx, value);
+            }
+        }
+
         // Accounting policy: [ras.*] systems run in file order at the top of
         // the step, before ordering and flow — today's orders and takes see
         // today's announcements (kalix-allocation-components.md §3.3).
@@ -852,7 +910,7 @@ impl Model {
         // The node body is duplicated in both branches deliberately: a shared
         // &mut self helper can't be called while iterating a borrowed field,
         // and the disjoint field borrows only work with the body inline.
-        if self.var_blocks.is_empty() {
+        if !self.flow_has_var_blocks {
             for &node_idx in &self.execution_order {
                 // Set node context for error reporting (just stores the index)
                 set_context_node(node_idx);
@@ -872,7 +930,7 @@ impl Model {
                 }
             }
         } else {
-            for &exec_item in &self.exec_items {
+            for &exec_item in &self.flow_exec_items {
                 match exec_item {
                     ExecItem::Node(node_idx) => {
                         set_context_node(node_idx);
@@ -907,6 +965,23 @@ impl Model {
     }
 
     pub fn initialize_network(&mut self) -> Result<(), String> {
+        // Partition the var blocks by phase (performance §3.5: decided here,
+        // never per step): ras-phase blocks run in the assessment slot at the
+        // top of the step; the flow pass interleaves the rest at file
+        // position, falling back to the plain node loop when none remain.
+        self.ras_var_blocks.clear();
+        self.flow_exec_items.clear();
+        for &item in &self.exec_items {
+            match item {
+                ExecItem::VarBlock(vb_idx) if self.var_blocks[vb_idx].phase == VarPhase::Ras => {
+                    self.ras_var_blocks.push(vb_idx);
+                }
+                other => self.flow_exec_items.push(other),
+            }
+        }
+        self.flow_has_var_blocks = self.flow_exec_items.iter()
+            .any(|i| matches!(i, ExecItem::VarBlock(_)));
+
         // Initialize the nodes and execution order
         self.initialize_nodes()?;
         self.check_execution_order()?;

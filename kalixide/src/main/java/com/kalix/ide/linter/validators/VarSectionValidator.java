@@ -88,7 +88,7 @@ public class VarSectionValidator implements ValidationStrategy {
                 continue;
             }
 
-            for (String err : expressionValidator.validate(prop.getValue(), context)) {
+            for (String err : expressionValidator.validateVarDefinition(prop.getValue(), context)) {
                 result.addIssue(line, "In var '" + key + "': " + err,
                         ValidationRule.Severity.ERROR, "invalid_var_expression");
             }
@@ -99,16 +99,20 @@ public class VarSectionValidator implements ValidationStrategy {
         String phase = value == null ? "" : value.trim().toLowerCase();
         switch (phase) {
             case "flow":
+            case "ras":
+                // 'ras' runs in the assessment slot at the top of the step;
+                // the engine additionally requires such blocks to precede the
+                // first node section (placement is validated at load).
                 return;
             case "order":
                 result.addIssue(line,
                         "phase = order is not yet implemented for [var.*] blocks "
-                                + "(only phase = flow is supported)",
+                                + "(only phase = ras or flow is supported)",
                         ValidationRule.Severity.ERROR, "unsupported_var_phase");
                 return;
             default:
                 result.addIssue(line,
-                        "invalid phase '" + value + "' for [" + sectionName + "] (expected 'flow' or 'order')",
+                        "invalid phase '" + value + "' for [" + sectionName + "] (expected 'ras', 'flow' or 'order')",
                         ValidationRule.Severity.ERROR, "invalid_var_phase");
         }
     }

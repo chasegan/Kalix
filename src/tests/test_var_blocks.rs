@@ -768,3 +768,192 @@ type = blackhole
         .unwrap_or_else(|e| panic!("canonical render should re-load, got: {e}\n---\n{rendered}"));
     drop(model2);
 }
+
+// ============================================================================
+// 9. phase = ras: the assessment slot (top of step, before [ras.*] sections)
+// ============================================================================
+
+/// Run a model expecting a runtime failure, returning the error text.
+fn run_err(ini: &str) -> String {
+    let mut model = IniModelIO::read_model_string(ini)
+        .unwrap_or_else(|e| panic!("model should load: {e}"));
+    model.configure().unwrap_or_else(|e| panic!("configure should succeed: {e}"));
+    match model.run() {
+        Ok(()) => panic!("expected the run to fail"),
+        Err(e) => e.to_string(),
+    }
+}
+
+/// A ras-phase var is written before the [ras.*] loop, so policy reads
+/// TODAY's value bare — trigger and action alike, no [-1, 0] gymnastics.
+/// This is the announce pattern: the ratchet is authored once, in the var,
+/// and the announcement is a bare read of it.
+#[test]
+fn ras_phase_var_feeds_same_day_policy() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-02-03
+
+[acc.g1]
+accounts = name, size,
+           a1, 100,
+
+[var.assessment]
+phase = ras
+pct = min(this[-1, 0] + 20, 100)
+
+[ras.announce]
+targets = acc.g1
+trigger = var.assessment.pct >= 40
+action  = allocate(var.assessment.pct)
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = outlet
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+
+[outputs]
+var.assessment.pct
+acc.a1.allocation
+";
+    let model = run_model(ini);
+    // pct ramps 20, 40, 60, 80, 100; the trigger first fires the day pct
+    // reaches 40, and each allocation is that DAY's assessment.
+    assert_series(&series(&model, "var.assessment.pct"), &[20.0, 40.0, 60.0, 80.0, 100.0], "pct");
+    assert_series(&series(&model, "acc.a1.allocation"), &[0.0, 40.0, 60.0, 80.0, 100.0], "allocation");
+}
+
+/// Two ras-phase blocks run in file order: the second reads the first's
+/// value bare, same step. Group sizes publish before the assessment slot,
+/// so acc.<group>.size is bare-readable here too.
+#[test]
+fn ras_phase_blocks_run_in_file_order() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-01-31
+
+[acc.g1]
+accounts = name, size,
+           a1, 100,
+           a2, 150,
+
+[var.first]
+phase = ras
+base = acc.g1.size / 10
+
+[var.second]
+phase = ras
+scaled = var.first.base * 2
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = outlet
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+
+[outputs]
+var.second.scaled
+";
+    let model = run_model(ini);
+    assert_series(&series(&model, "var.second.scaled"), &[50.0, 50.0], "scaled");
+}
+
+/// A ras-phase var runs before ordering and flow, so a bare read of a node
+/// output (or opening_balance) is the standard loud unwritten-value error.
+#[test]
+fn ras_phase_var_cannot_read_flow_outputs_bare() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-01-31
+
+[var.assessment]
+phase = ras
+x = node.headwater.ds_1
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = outlet
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+
+[outputs]
+var.assessment.x
+";
+    let err = run_err(ini);
+    assert!(err.contains("no value yet"), "unexpected: {err}");
+}
+
+/// Placement is validated: an assessment block below the first node is a
+/// load error — the file must read as the timestep runs.
+#[test]
+fn ras_phase_block_must_precede_nodes() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-01-31
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = outlet
+
+[var.assessment]
+phase = ras
+x = 1
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+";
+    let err = load_err(ini);
+    assert!(err.contains("before the nodes"), "unexpected: {err}");
+}
+
+/// phase = ras survives the canonical render.
+#[test]
+fn ras_phase_round_trips() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-01-31
+
+[var.assessment]
+phase = ras
+x = this[-1, 0] + 1
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = outlet
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+";
+    let model = IniModelIO::read_model_string(ini).expect("model should load");
+    let rendered = IniModelIO::model_to_string(&model);
+    assert!(rendered.contains("phase = ras"), "phase re-emitted:\n{rendered}");
+    let mut model2 = IniModelIO::read_model_string(&rendered)
+        .unwrap_or_else(|e| panic!("canonical render should re-load, got: {e}\n---\n{rendered}"));
+    model2.configure().expect("model should configure");
+    model2.run().expect("simulation should run");
+    assert_series(&series(&model2, "var.assessment.x"), &[1.0, 2.0], "counter still in the ras slot");
+}

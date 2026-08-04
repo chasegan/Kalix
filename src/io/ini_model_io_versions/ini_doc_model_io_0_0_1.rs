@@ -224,7 +224,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         }
     }
 
-    // Iterate over the sections of the ini_doc and construct the model as we go
+    // Iterate over the sections of the ini_doc and construct the model as we go.
+    // seen_node_section drives the ras-phase var placement rule: assessment
+    // blocks must precede the first node, so the file reads as the timestep runs.
+    let mut seen_node_section = false;
     for (section_name, ini_section) in ini_doc.sections {
 
         if section_name == "kalix" {
@@ -288,6 +291,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             // Parsing nodes
             // -------------------------------------------------------------------------------------
+            seen_node_section = true;
 
             // Get the name and type
             let node_name = &section_name[5..];
@@ -842,23 +846,40 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                    ini_section.line_number, block_name)));
             }
 
-            // Phase: 'flow' (default) runs at file position in the flow pass.
-            // 'order' is designed (order phase walks bottom-up) but its
-            // interleave with the ordering system is not yet implemented —
-            // rejected rather than approximated (owner decision, July 2026).
+            // Phase: 'flow' (default) runs at file position in the flow pass;
+            // 'ras' runs in the assessment slot at the top of the step, before
+            // the [ras.*] sections, and must precede the first node — the file
+            // then reads exactly as the timestep runs (node-definition-order §1
+            // extended to the whole step). 'order' is designed (order phase
+            // walks bottom-up) but its interleave with the ordering system is
+            // not yet implemented — rejected rather than approximated (owner
+            // decision, July 2026).
+            let mut phase = crate::model::VarPhase::Flow;
             let mut phase_explicit: Option<String> = None;
             if let Some(p) = ini_section.properties.get("phase") {
                 match p.value.trim().to_lowercase().as_str() {
                     "flow" => phase_explicit = Some(p.value.trim().to_string()),
+                    "ras" => {
+                        if seen_node_section {
+                            return Err(KalixIoError::Validate(format!(
+                                "Error on line {}: [{}] declares phase = ras but appears after the \
+                                 first node section. Assessment blocks run at the top of the step, \
+                                 before the [ras.*] sections — place them before the nodes so the \
+                                 file reads as the timestep runs.",
+                                p.line_number, section_name)));
+                        }
+                        phase = crate::model::VarPhase::Ras;
+                        phase_explicit = Some(p.value.trim().to_string());
+                    }
                     "order" => {
                         return Err(KalixIoError::Validate(format!(
                             "Error on line {}: phase = order is not yet implemented for \
-                             [var.*] blocks (only phase = flow is supported)",
+                             [var.*] blocks (only phase = ras or flow is supported)",
                             p.line_number)));
                     }
                     other => {
                         return Err(KalixIoError::Parse(format!(
-                            "Error on line {}: invalid phase '{}' for [{}] (expected 'flow' or 'order')",
+                            "Error on line {}: invalid phase '{}' for [{}] (expected 'ras', 'flow' or 'order')",
                             p.line_number, other, section_name)));
                     }
                 }
@@ -910,6 +931,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             model.add_var_block(crate::model::VarBlock {
                 name: block_name.to_string(),
                 defs,
+                phase,
                 phase_explicit,
             });
         } else if section_name.starts_with("table.") {
