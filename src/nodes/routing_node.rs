@@ -69,6 +69,12 @@ pub struct RoutingNode {
     seg_par_aa: [f64; 32],    //PWL segment parameters - aa coefficient
     seg_par_bb: [f64; 32],    //PWL segment parameters - bb coefficient
     seg_par_cc: [f64; 32],    //PWL segment parameters - cc coefficient
+    //Saturation point for reference flows above the PWL table: travel time is
+    //flat beyond the last row, so per-division storage caps at V(q_max) and
+    //the balance is released downstream. Both zero for a lag-only node (no
+    //table), where the fall-through reduces to pass-through.
+    pwl_q_max: f64,           //index flow at the top of the table
+    pwl_v_max: f64,           //per-division storage integral at pwl_q_max
 
     // Properties and internal state - ordering
     pub typical_regulated_flow: f64,
@@ -344,6 +350,15 @@ impl Node for RoutingNode {
                 self.seg_par_bb[i] = b;
                 self.seg_par_cc[i] = c;
             }
+
+            //Saturation point for out-of-table reference flows (see run_flow_phase).
+            if self.pwl_segs > 0 {
+                self.pwl_q_max = self.seg_par_q2[self.pwl_segs - 1];
+                self.pwl_v_max = self.seg_par_v2[self.pwl_segs - 1];
+            } else {
+                self.pwl_q_max = 0.0;
+                self.pwl_v_max = 0.0;
+            }
         }
 
         // Init PWL and NLM storage array
@@ -477,32 +492,47 @@ impl Node for RoutingNode {
                     let qin = qout;                   //inflow to this division
                     let vi = self.div_sto_array[i];   //initial storage volume for this division
                     let mut vf = 0.0;                 //variable to hold final storage volume
-                    if self.x_is_unity {
-                        //For x=1, reference flow "qr" equals inflow.
-                        let qr = qin;
-                        for j in 0..self.pwl_segs {
-                            if (qr >= self.seg_par_q1[j]) && (qr <= self.seg_par_q2[j]) {
-                                vf = self.seg_par_aa[j] * qr * qr + self.seg_par_bb[j] * qr + self.seg_par_cc[j];
-                                qout = vi + qin - vf;
-                                break;
+                    'segments: {
+                        if self.x_is_unity {
+                            //For x=1, reference flow "qr" equals inflow.
+                            let qr = qin;
+                            for j in 0..self.pwl_segs {
+                                if (qr >= self.seg_par_q1[j]) && (qr <= self.seg_par_q2[j]) {
+                                    vf = self.seg_par_aa[j] * qr * qr + self.seg_par_bb[j] * qr + self.seg_par_cc[j];
+                                    qout = vi + qin - vf;
+                                    break 'segments;
+                                }
                             }
-                        }
-                    } else {
-                        //For x<1, reference flow "qr" is not known a priori.
-                        let inv_one_minus_x = 1.0 / (1.0 - self.x);
-                        for j in 0..self.pwl_segs {
-                            let a = self.seg_par_aa[j];
-                            let b = self.seg_par_bb[j] + inv_one_minus_x;
-                            let c = self.seg_par_cc[j] - vi - qin * inv_one_minus_x;
-                            let qr = quadratic_plus(a, b, c);
+                        } else {
+                            //For x<1, reference flow "qr" is not known a priori.
+                            let inv_one_minus_x = 1.0 / (1.0 - self.x);
+                            for j in 0..self.pwl_segs {
+                                let a = self.seg_par_aa[j];
+                                let b = self.seg_par_bb[j] + inv_one_minus_x;
+                                let c = self.seg_par_cc[j] - vi - qin * inv_one_minus_x;
+                                let qr = quadratic_plus(a, b, c);
 
-                            //Check if qr is within the segment and if so finalise solution
-                            if (!qr.is_nan()) && (qr >= self.seg_par_q1[j] && qr <= self.seg_par_q2[j]) {
-                                qout = (qr - qin * self.x) * inv_one_minus_x;
-                                vf = vi + qin - qout;
-                                break;
+                                //Check if qr is within the segment and if so finalise solution
+                                if (!qr.is_nan()) && (qr >= self.seg_par_q1[j] && qr <= self.seg_par_q2[j]) {
+                                    qout = (qr - qin * self.x) * inv_one_minus_x;
+                                    vf = vi + qin - qout;
+                                    break 'segments;
+                                }
                             }
                         }
+
+                        //No segment matched: the reference flow is above the top of the
+                        //table (travel time is flat beyond the last row), so storage
+                        //saturates at V(q_max) and the balance goes downstream. For a
+                        //lag-only node (no table) this reduces to pass-through.
+                        debug_assert!(
+                            self.pwl_segs == 0
+                                || self.x * qin + (1.0 - self.x) * (vi + qin - self.pwl_v_max) >= self.pwl_q_max,
+                            "Node '{}': PWL segment fall-through below the top of the table (qin = {}, vi = {}).",
+                            self.name, qin, vi
+                        );
+                        vf = self.pwl_v_max;
+                        qout = vi + qin - vf;
                     }
 
                     //Do not allow water to flow upstream.
