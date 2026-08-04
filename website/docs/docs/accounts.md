@@ -39,6 +39,7 @@ are the *verbs*. See [Allocation systems](allocation-systems.md) for the why.
 | `name` | yes, first | Account name — a bare lowercase identifier, unique across every group. |
 | `size` | yes | Account size [ML] — the entitlement volume that percentages are taken of. May be an expression. |
 | `initial` | no (defaults to 0) | Opening balance [ML] at the start of the run, within `[0, size]`. |
+| `co_acc` | no | <a name="co_acc"></a>Paired carryover account — the account the [`carryover(x)` action](ras.md#actions) writes into. A reference to an account declared elsewhere, not a declaration. Each pool can be carried into by only one account, and the pairing is one declared relationship: nothing else about the pool is special — it is drawn on via a user's `accounts` list like any account, and its `size` is the carryover cap. |
 
 Columns are addressed by the header, not by position, so `name, size, initial`
 and `name, initial, size` are equivalent. An **unknown column name is a load
@@ -46,6 +47,24 @@ error** — a typo like `intial` fails loudly rather than silently leaving every
 account at zero. `accounts` is the only property an `[acc.*]` section may
 contain; anything that *does* something belongs in a [`[ras.*]`](ras.md)
 section.
+
+A carryover pairing in full — the pool is an ordinary account, first in the
+user's order of use:
+
+```ini
+[acc.entitlements]
+accounts = name,  size, initial, co_acc,
+           smith, 1000, 0,       smith_co,
+
+[acc.pools]
+accounts = name,     size,
+           smith_co, 250,       ; size = the carryover cap
+
+[ras.carryover]
+targets = acc.entitlements
+trigger = start_water_year(7)
+action  = carryover(0.9)       ; pool = 0.9 x smith's remaining balance
+```
 
 ## Referencing accounts from nodes
 

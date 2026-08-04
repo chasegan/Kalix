@@ -11,6 +11,12 @@ pub struct Account {
     pub account_type: String,
     pub size: f64,
     pub initial_balance: f64,
+    /// Paired carryover account (the `co_acc` table column), resolved to its
+    /// index at load. The one declared relationship an account may carry:
+    /// the `carryover(x)` action writes x × this account's balance into the
+    /// pair. Accounts stay pure state otherwise — debit order remains the
+    /// user node's `accounts =` list, never baked in here.
+    pub co_acc: Option<usize>,
 
     // State
     pub balance: f64,
@@ -43,6 +49,7 @@ impl Account {
             account_type,
             size,
             initial_balance,
+            co_acc: None,
             balance: initial_balance,
             debits_today: 0.0,
             debits_since_reset: 0.0,

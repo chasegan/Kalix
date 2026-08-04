@@ -55,6 +55,14 @@ pub enum RasAction {
     /// annual cap).
     RollCap(DynamicInput),
 
+    /// Set each target's paired carryover account (its `co_acc` column) to
+    /// x × the target's own balance, clamped to the pair's size. Stencilled:
+    /// x is evaluated once per firing, but each target contributes its own
+    /// balance. x = 0 is a denial year — the pool is set to zero (a
+    /// write-off), not left alone. Every target must declare a co_acc
+    /// (validated at load).
+    Carryover(DynamicInput),
+
     /// Announce an allocation percentage (0–100) for the target accounts.
     /// Distributive in effect but stencilled in form: the percentage is
     /// computed once and each account's allocation is raised to that share of
@@ -187,6 +195,12 @@ impl RasSystem {
                 let n = input.get_value(data_cache).round().max(1.0) as usize;
                 for &idx in &self.target_account_ids {
                     account_manager.roll_cap(idx, n);
+                }
+            }
+            RasAction::Carryover(input) => {
+                let x = input.get_value(data_cache);
+                for &idx in &self.target_account_ids {
+                    account_manager.carryover(idx, x);
                 }
             }
             RasAction::Allocate(input) => {

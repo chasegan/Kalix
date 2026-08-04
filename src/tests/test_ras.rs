@@ -899,3 +899,142 @@ acc.g1.allocation
     let grp = series(&mut model, "acc.g1.allocation");
     assert_eq!(grp, vec![60.0, 60.0], "group allocation aggregate");
 }
+
+// ============================================================================
+// Carryover pairing (co_acc column) + carryover(x) action
+// ============================================================================
+
+/// Two entitlement accounts paired to their pools via the co_acc column (the
+/// pool group deliberately declared AFTER its carriers — pairings resolve in a
+/// post-pass). carryover(0.9) at the water-year start sets each pool from its
+/// own carrier's balance and never touches the carrier.
+#[test]
+fn test_carryover_sets_pool_from_own_balance() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-06-28
+end = 2020-07-03
+
+[acc.ent]
+accounts = name, size, initial, co_acc,
+           e1, 100, 60, p1,
+           e2, 200, 10, p2,
+
+[acc.pools]
+accounts = name, size, initial,
+           p1, 1000, 0,
+           p2, 1000, 3,
+
+[ras.co]
+targets = acc.ent
+trigger = start_water_year(7)
+action  = carryover(0.9)
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "p1"), 54.0, "pool = 0.9 x own carrier's balance");
+    assert_eq!(balance(&model, "p2"), 9.0, "each target contributes its own balance");
+    assert_eq!(balance(&model, "e1"), 60.0, "carryover never touches the source balance");
+}
+
+/// carryover(0) is a denial year: the pool is SET to zero (a write-off), not
+/// left alone; and the pool clamps at its own size (the carryover cap).
+#[test]
+fn test_carryover_denial_and_cap_clamp() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-06-28
+end = 2020-07-03
+
+[acc.denied]
+accounts = name, size, initial, co_acc,
+           d1, 100, 80, dp1,
+
+[acc.capped]
+accounts = name, size, initial, co_acc,
+           c1, 100, 80, cp1,
+
+[acc.pools]
+accounts = name, size, initial,
+           dp1, 25, 20,
+           cp1, 25, 0,
+
+[ras.co_denied]
+targets = acc.denied
+trigger = start_water_year(7)
+action  = carryover(0)
+
+[ras.co_capped]
+targets = acc.capped
+trigger = start_water_year(7)
+action  = carryover(0.9)
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "dp1"), 0.0, "denial (x = 0) writes the pool off");
+    assert_eq!(balance(&model, "cp1"), 25.0, "0.9 x 80 = 72 clamps at the pool size");
+}
+
+#[test]
+fn test_co_acc_validation_errors() {
+    let base = |acc: &str, ras: &str| format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+{acc}
+{ras}
+{TAIL}"#);
+
+    // Pair must exist
+    let err = load_err(&base("[acc.g1]\naccounts = name, size, co_acc,\n  a1, 100, nope,\n", ""));
+    assert!(err.contains("Unknown co_acc account 'nope'"), "unexpected: {}", err);
+
+    // Pair must be an account, not a group
+    let err = load_err(&base("[acc.g1]\naccounts = name, size, co_acc,\n  a1, 100, g1,\n", ""));
+    assert!(err.contains("is an account group"), "unexpected: {}", err);
+
+    // No self-pairing
+    let err = load_err(&base("[acc.g1]\naccounts = name, size, co_acc,\n  a1, 100, a1,\n", ""));
+    assert!(err.contains("cannot carry over into itself"), "unexpected: {}", err);
+
+    // A pool can be carried into only once
+    let err = load_err(&base(
+        "[acc.g1]\naccounts = name, size, co_acc,\n  a1, 100, p1,\n  a2, 100, p1,\n[acc.p]\naccounts = name, size,\n  p1, 50,\n", ""));
+    assert!(err.contains("carried into only once"), "unexpected: {}", err);
+
+    // carryover() requires every target to declare a pairing
+    let err = load_err(&base(
+        "[acc.g1]\naccounts = name, size,\n  a1, 100,\n",
+        "[ras.co]\ntargets = acc.g1\ntrigger = every_step\naction = carryover(0.9)\n"));
+    assert!(err.contains("declares no co_acc column"), "unexpected: {}", err);
+}
+
+/// The co_acc column survives the canonical render: save, re-load, and the
+/// pairing still drives the action.
+#[test]
+fn test_co_acc_round_trip() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-06-28
+end = 2020-07-03
+
+[acc.ent]
+accounts = name, size, initial, co_acc,
+           e1, 100, 60, p1,
+
+[acc.pools]
+accounts = name, size, initial,
+           p1, 25, 0,
+
+[ras.co]
+targets = acc.ent
+trigger = start_water_year(7)
+action  = carryover(0.9)
+{TAIL}"#);
+    let model = load(&ini);
+    let rendered = IniModelIO::model_to_string(&model);
+    assert!(rendered.contains("co_acc"), "co_acc column re-emitted:\n{}", rendered);
+    let mut model2 = IniModelIO::read_model_string(&rendered)
+        .unwrap_or_else(|e| panic!("canonical render should re-load, got: {}\n---\n{}", e, rendered));
+    model2.configure().expect("model should configure");
+    model2.run().expect("simulation should run");
+    assert_eq!(balance(&model2, "p1"), 25.0, "pairing survives the round-trip (0.9 x 60 clamped to 25)");
+}

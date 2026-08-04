@@ -76,6 +76,7 @@ expressions, evaluated once per firing:
 | `roll_cap(n)` | Roll an n-period cap: bank the closing period's debits, and credit back the debits expiring out of the window (those from n periods ago). Fired at a water-year trigger this is a rolling cap over n consecutive water years (Source's "Moving Water Year" usage limit); `roll_cap(1)` behaves as an annual cap. |
 | `scale(x)` | Multiply the balance by `x`. |
 | `reduce_to(x)` | Lower the balance to `x` if it is above (a carryover limit). |
+| `carryover(x)` | Set each target's paired carryover account (its [`co_acc`](accounts.md#co_acc) column) to `x` × the target's own balance, clamped to the pool's `[0, size]` — the pool size *is* the carryover cap. `x = 0` is a denial year: the pool is written off (set to zero), not left alone. The target's own balance is never touched; resetting it stays a separate, composable action. Every target account must declare a `co_acc` (a load error otherwise). |
 
 **Announcement actions** implement announced allocation:
 

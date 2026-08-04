@@ -313,6 +313,44 @@ impl AccountManager {
         account.debits_since_reset = 0.0;
     }
 
+    /// Declare `pair_name` as the carryover account of `account_id` (the
+    /// `co_acc` table column), resolving and validating the pairing: the pair
+    /// must be an existing account (not a group), not the account itself, and
+    /// not already carried into by another account.
+    pub fn set_co_acc(&mut self, account_id: usize, pair_name: &str) -> Result<(), String> {
+        let carrier = &self.accounts[account_id];
+        let pair_idx = self.account_lookup.get(pair_name).copied().ok_or_else(|| {
+            if self.group_lookup.contains_key(pair_name) {
+                format!("'{}' is an account group; co_acc takes an account name", pair_name)
+            } else {
+                format!("Unknown co_acc account '{}' for account '{}'. Accounts are declared in [acc.*] sections.",
+                    pair_name, carrier.name)
+            }
+        })?;
+        if pair_idx == account_id {
+            return Err(format!("Account '{}' cannot carry over into itself", carrier.name));
+        }
+        if let Some(other) = self.accounts.iter().find(|a| a.co_acc == Some(pair_idx)) {
+            return Err(format!("Account '{}' is already the co_acc of '{}'; an account can be carried into only once",
+                pair_name, other.name));
+        }
+        self.accounts[account_id].co_acc = Some(pair_idx);
+        Ok(())
+    }
+
+    /// The `carryover(x)` action for one account: set its paired account's
+    /// balance to x × this account's balance, clamped to the pair's [0, size].
+    /// A zero x is a write-off (the pool is set to zero, not left alone), and
+    /// the source balance is never touched — resetting it stays a separate,
+    /// composable action. Callers guarantee the pairing exists (validated at
+    /// load for every carryover target).
+    pub fn carryover(&mut self, account_id: usize, x: f64) {
+        if let Some(pair_idx) = self.accounts[account_id].co_acc {
+            let amount = x * self.accounts[account_id].balance;
+            self.accounts[pair_idx].set_balance_safely(amount);
+        }
+    }
+
     /// Roll an N-period cap: bank the closing period's debits and credit back
     /// the debits expiring out of the window (those from N periods ago).
     /// The buffer is sized on first use; N is expected to be constant.
