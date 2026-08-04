@@ -70,6 +70,16 @@ fn expand_this(expression: &str, self_context: &str) -> String {
     result
 }
 
+/// The two calendar-at-offset lookups (CALENDAR_FUNCTIONS in functions.rs):
+/// what the calendar looks like `n` days from the current simulation date.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CalendarAtKind {
+    /// `month_at(n)`: month (1-12) at current date + n days
+    Month,
+    /// `days_in_month_at(n)`: leap-aware length of that month
+    DaysInMonth,
+}
+
 /// Simulation context field types for the `sim.*` namespace
 ///
 /// These fields provide access to simulation date/time information within expressions.
@@ -95,6 +105,12 @@ pub enum SimField {
     /// Calendar-year boundary: 1.0 when this step's year differs from the
     /// previous step's, and at step 0
     NewYear,
+    /// Days in the current month (28-31, leap-aware)
+    DaysInMonth,
+    /// Days in the current year (365 or 366)
+    DaysInYear,
+    /// 1.0 in a leap year, else 0.0
+    IsLeap,
 }
 
 /// Parse a `sim.*` variable name into a SimField
@@ -108,6 +124,9 @@ fn parse_sim_field(name: &str) -> Option<SimField> {
         "sim.new_day" => Some(SimField::NewDay),
         "sim.new_month" => Some(SimField::NewMonth),
         "sim.new_year" => Some(SimField::NewYear),
+        "sim.days_in_month" => Some(SimField::DaysInMonth),
+        "sim.days_in_year" => Some(SimField::DaysInYear),
+        "sim.is_leap" => Some(SimField::IsLeap),
         _ => None,
     }
 }
@@ -188,6 +207,17 @@ pub enum OptimizedExpressionNode {
     /// Provides access to date/time information during evaluation
     SimContext {
         field: SimField,
+    },
+
+    /// Calendar lookup at a day offset from the current simulation date:
+    /// `month_at(n)` / `days_in_month_at(n)`. The offset (usually a
+    /// constant) is rounded to whole days; evaluation is one O(1) civil-date
+    /// conversion of the offset timestamp — the engine owns the calendar, so
+    /// models stop hand-rolling leap logic that is only valid for one
+    /// month-boundary crossing.
+    CalendarAt {
+        kind: CalendarAtKind,
+        arg: Box<OptimizedExpressionNode>,
     },
 
     /// A program-local variable, resolved at lowering to an absolute slot in
@@ -375,7 +405,27 @@ impl OptimizedExpressionNode {
                 SimField::NewDay => if data_cache.is_new_day() { 1.0 } else { 0.0 },
                 SimField::NewMonth => if data_cache.is_new_month() { 1.0 } else { 0.0 },
                 SimField::NewYear => if data_cache.is_new_year() { 1.0 } else { 0.0 },
+                SimField::DaysInMonth => crate::tid::utils::days_in_month(
+                    data_cache.get_timestamp_year() as i64, data_cache.get_timestamp_month()) as f64,
+                SimField::DaysInYear =>
+                    if crate::tid::utils::is_leap_year(data_cache.get_timestamp_year() as i64) { 366.0 } else { 365.0 },
+                SimField::IsLeap =>
+                    if crate::tid::utils::is_leap_year(data_cache.get_timestamp_year() as i64) { 1.0 } else { 0.0 },
             },
+
+            OptimizedExpressionNode::CalendarAt { kind, arg } => {
+                // Whole-day offset from the current timestamp. Timestamps are
+                // offset-encoded u64 seconds (tid::utils::wrap_to_i64), and
+                // wrapping_add of a two's-complement delta is exact under
+                // that encoding, so negative offsets look back correctly.
+                let n = arg.evaluate(data_cache).round() as i64;
+                let ts = data_cache.current_timestamp.wrapping_add((n * 86400) as u64);
+                let (y, m, _d, _s) = crate::tid::utils::u64_to_year_month_day_and_seconds(ts);
+                match kind {
+                    CalendarAtKind::Month => m as f64,
+                    CalendarAtKind::DaysInMonth => crate::tid::utils::days_in_month(y as i64, m) as f64,
+                }
+            }
 
             OptimizedExpressionNode::Local { slot } => data_cache.expr_state.f[*slot],
 
@@ -460,6 +510,7 @@ impl OptimizedExpressionNode {
                 col_key.validate_reads(data_cache);
                 row_key.validate_reads(data_cache);
             }
+            OptimizedExpressionNode::CalendarAt { arg, .. } => arg.validate_reads(data_cache),
             // Stateful inputs are read unconditionally every step by
             // advance_state, so they are validated like any other read.
             OptimizedExpressionNode::MovingWindow { arg, .. } => arg.validate_reads(data_cache),
@@ -517,6 +568,7 @@ impl OptimizedExpressionNode {
                 col_key.advance_state(data_cache);
                 row_key.advance_state(data_cache);
             }
+            OptimizedExpressionNode::CalendarAt { arg, .. } => arg.advance_state(data_cache),
 
             OptimizedExpressionNode::MovingWindow { op, slots, arg } => {
                 arg.advance_state(data_cache);
@@ -1886,6 +1938,7 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
                 || uses_calendar_flags(else_branch)
         }
         OptimizedExpressionNode::Fold { args, .. } => args.iter().any(uses_calendar_flags),
+        OptimizedExpressionNode::CalendarAt { arg, .. } => uses_calendar_flags(arg),
         OptimizedExpressionNode::MovingWindow { arg, .. } => uses_calendar_flags(arg),
         OptimizedExpressionNode::Since { arg, reset, .. } => {
             arg.as_deref().map(uses_calendar_flags).unwrap_or(false) || uses_calendar_flags(reset)
@@ -1952,6 +2005,9 @@ fn lower_function_call(
             if let Some(bare_name) = name.strip_prefix("table.") {
                 return lower_table_call(bare_name, args, tables);
             }
+            if let Some(node) = lower_calendar_call(name, &mut args)? {
+                return Ok(node);
+            }
             if let Some(node) = lower_stateful_call(name, args, arena)? {
                 return Ok(node);
             }
@@ -1988,6 +2044,7 @@ fn lower_function_call(
         B::Floor => Some(f64::floor),
         B::Round => Some(f64::round),
         B::Sign => Some(crate::functions::functions::sign),
+        B::IsLeapYear => Some(crate::functions::functions::is_leap_year_f),
         _ => None,
     };
     if let Some(f) = f1 {
@@ -2078,6 +2135,28 @@ fn constant_arg(args: &[OptimizedExpressionNode], idx: usize, func: &str, what: 
 ///   when the last pre-filled element would leave the window);
 /// - *_since accumulators start as if reset fired just before the run
 ///   (sum/count 0, steps -1, min/max NaN which f64::min/max suppress).
+/// Lower a calendar-at-offset call (`month_at`/`days_in_month_at` — the
+/// CALENDAR_FUNCTIONS tier): context functions resolved here, like the
+/// stateful family, because they read the simulation clock at evaluation.
+/// Returns Ok(None) for names that are not calendar functions.
+fn lower_calendar_call(
+    name: &str,
+    args: &mut Vec<OptimizedExpressionNode>,
+) -> Result<Option<OptimizedExpressionNode>, String> {
+    let kind = match name {
+        "month_at" => CalendarAtKind::Month,
+        "days_in_month_at" => CalendarAtKind::DaysInMonth,
+        _ => return Ok(None),
+    };
+    if args.len() != 1 {
+        return Err(format!(
+            "Function '{}' expects 1 argument (a day offset from the current date), got {}",
+            name, args.len()
+        ));
+    }
+    Ok(Some(OptimizedExpressionNode::CalendarAt { kind, arg: Box::new(args.remove(0)) }))
+}
+
 fn lower_stateful_call(
     name: &str,
     mut args: Vec<OptimizedExpressionNode>,

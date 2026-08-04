@@ -23,14 +23,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ExpressionLanguageCrossSyncTest {
 
-    /** Engine-drift pin: the 24 pure builtins + 9 stateful builtins. */
+    /** Engine-drift pin: 25 pure builtins + 9 stateful builtins + 2 calendar functions. */
     private static final Set<String> EXPECTED_FUNCTION_NAMES = Set.of(
             "if", "min", "max", "sum", "mean",
             "abs", "sqrt", "sin", "cos", "tan", "asin", "acos", "atan",
             "exp", "ln", "log10", "log2", "ceil", "floor", "round", "sign",
+            "is_leap_year",
             "pow", "atan2", "clamp",
             "moving_sum", "moving_mean", "moving_min", "moving_max",
-            "sum_since", "min_since", "max_since", "count_since", "steps_since");
+            "sum_since", "min_since", "max_since", "count_since", "steps_since",
+            "month_at", "days_in_month_at");
 
     private static final Set<String> EXPECTED_STATEFUL_NAMES = Set.of(
             "moving_sum", "moving_mean", "moving_min", "moving_max",
@@ -38,7 +40,8 @@ class ExpressionLanguageCrossSyncTest {
 
     private static final Set<String> EXPECTED_SIM_VARIABLES = Set.of(
             "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step",
-            "sim.new_day", "sim.new_month", "sim.new_year");
+            "sim.new_day", "sim.new_month", "sim.new_year",
+            "sim.days_in_month", "sim.days_in_year", "sim.is_leap");
 
     @Test
     @DisplayName("The function and sim-variable sets match the engine pin exactly")
@@ -46,8 +49,8 @@ class ExpressionLanguageCrossSyncTest {
         assertEquals(EXPECTED_FUNCTION_NAMES, ExpressionLanguage.functionNames());
         assertEquals(EXPECTED_FUNCTION_NAMES, ExpressionLanguage.functionArities().keySet());
         assertEquals(EXPECTED_SIM_VARIABLES, ExpressionLanguage.simVariableNames());
-        assertEquals(33, ExpressionLanguage.BUILTINS.size());
-        assertEquals(8, ExpressionLanguage.SIM_VARIABLES.size());
+        assertEquals(36, ExpressionLanguage.BUILTINS.size());
+        assertEquals(11, ExpressionLanguage.SIM_VARIABLES.size());
     }
 
     @Test
@@ -77,6 +80,9 @@ class ExpressionLanguageCrossSyncTest {
         assertEquals("reserved word", ExpressionLanguage.reservedTier("assert"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("this"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("self"));
+        assertEquals("builtin function", ExpressionLanguage.reservedTier("is_leap_year"));
+        assertEquals("calendar function", ExpressionLanguage.reservedTier("month_at"));
+        assertEquals("calendar function", ExpressionLanguage.reservedTier("days_in_month_at"));
         assertNull(ExpressionLanguage.reservedTier("headroom"));
     }
 

@@ -57,6 +57,14 @@ pub const STATEFUL_FUNCTIONS: [&str; 9] = [
 /// can never shadow either.
 pub const RESERVED_WORDS: [&str; 3] = ["assert", "this", "self"];
 
+/// Calendar functions that read the current simulation date: like the
+/// stateful builtins they are not [`BuiltinFunction`] variants because they
+/// need context — they resolve at lowering (`lower_calendar_call` in
+/// dynamic_input.rs) into nodes that read the DataCache clock. `month_at(n)`
+/// and `days_in_month_at(n)` answer for the date n days from today, which is
+/// what order-ahead pattern lookups need.
+pub const CALENDAR_FUNCTIONS: [&str; 2] = ["month_at", "days_in_month_at"];
+
 /// Is `lower` (a lowercased bare name) reserved by the language? Returns the
 /// tier for error messages ("builtin function", "stateful function",
 /// "reserved word"), or None when the name is free for the modeller.
@@ -69,6 +77,9 @@ pub fn reserved_name_kind(lower: &str) -> Option<&'static str> {
     }
     if RESERVED_WORDS.contains(&lower) {
         return Some("reserved word");
+    }
+    if CALENDAR_FUNCTIONS.contains(&lower) {
+        return Some("calendar function");
     }
     None
 }
@@ -84,7 +95,7 @@ pub enum BuiltinFunction {
     // Single argument
     Abs, Sqrt, Sin, Cos, Tan, Asin, Acos, Atan,
     Exp, Ln, Log10, Log2,
-    Ceil, Floor, Round, Sign,
+    Ceil, Floor, Round, Sign, IsLeapYear,
 
     // Two argument
     Pow, Atan2,
@@ -121,6 +132,7 @@ impl BuiltinFunction {
             "floor"  => BuiltinFunction::Floor,
             "round"  => BuiltinFunction::Round,
             "sign"   => BuiltinFunction::Sign,
+            "is_leap_year" => BuiltinFunction::IsLeapYear,
             "pow"    => BuiltinFunction::Pow,
             "atan2"  => BuiltinFunction::Atan2,
             "min"    => BuiltinFunction::Min,
@@ -152,6 +164,7 @@ impl BuiltinFunction {
             BuiltinFunction::Floor => "floor",
             BuiltinFunction::Round => "round",
             BuiltinFunction::Sign => "sign",
+            BuiltinFunction::IsLeapYear => "is_leap_year",
             BuiltinFunction::Pow => "pow",
             BuiltinFunction::Atan2 => "atan2",
             BuiltinFunction::Min => "min",
@@ -187,6 +200,7 @@ impl BuiltinFunction {
             BuiltinFunction::Floor  => Self::single(self.name(), args, |x| x.floor()),
             BuiltinFunction::Round  => Self::single(self.name(), args, |x| x.round()),
             BuiltinFunction::Sign   => Self::single(self.name(), args, sign),
+            BuiltinFunction::IsLeapYear => Self::single(self.name(), args, is_leap_year_f),
 
             // Two argument
             BuiltinFunction::Pow => {
@@ -266,6 +280,13 @@ pub fn sign(x: f64) -> f64 {
     } else {
         x // 0.0, -0.0, or NaN: all map to themselves
     }
+}
+
+/// `is_leap_year(yyyy)` as an f64 builtin: 1 for Gregorian leap years, else 0.
+/// The year is rounded to the nearest integer (it usually arrives as
+/// `sim.year`, already exact).
+pub fn is_leap_year_f(year: f64) -> f64 {
+    if crate::tid::utils::is_leap_year(year.round() as i64) { 1.0 } else { 0.0 }
 }
 
 /// Back-compat shim for callers that still dispatch by name (e.g. context-function

@@ -120,6 +120,9 @@ Available functions:
 | `round` | 1 | Round to nearest |
 | `sign` | 1 | Sign (-1, 0, or 1) |
 | `clamp` | 3 | Constrain to a range: clamp(x, lo, hi) |
+| `is_leap_year` | 1 | 1 in a Gregorian leap year, else 0: is\_leap\_year(sim.year) |
+| `month_at` | 1 | Month (1-12) at the current date + n days — the pattern month an order placed today arrives in |
+| `days_in_month_at` | 1 | Leap-aware days in the month at the current date + n days |
 | `moving_sum` | 3 | Sum over the last n steps: moving\_sum(x, n, default) |
 | `moving_mean` | 3 | Mean over the last n steps |
 | `moving_min` | 3 | Minimum over the last n steps |
@@ -134,6 +137,18 @@ Two names are deliberately absent. There is no `log`: write the explicit `ln`
 or `log10`. And there is no `avg` or `average`: the function is `mean`, named
 for the specific statistic ("average" is the family that also contains the
 median and mode).
+
+The calendar pair (`month_at`, `days_in_month_at`) exists for order-ahead
+pattern lookups — orders are placed `lag` days before delivery, so the demand
+pattern belongs to the *arrival* month:
+
+```ini
+order = annual * table.pattern(month_at(3)) / days_in_month_at(3)
+```
+
+Negative offsets look back. The engine owns the calendar: the offset date is
+computed exactly, so year boundaries and leap-February need no hand-rolled
+logic and any offset length works.
 
 ### Lookup Tables
 

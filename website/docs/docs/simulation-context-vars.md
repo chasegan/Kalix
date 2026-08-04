@@ -18,6 +18,9 @@ The `sim.*` namespace provides access to the current simulation date and timeste
 | `sim.new_day` | 1 on the first step of a calendar day, else 0 | `1` |
 | `sim.new_month` | 1 on the first step of a calendar month, else 0 | `0` |
 | `sim.new_year` | 1 on the first step of a calendar year, else 0 | `0` |
+| `sim.days_in_month` | Days in the current month (leap-aware) | `29` |
+| `sim.days_in_year` | Days in the current year | `366` |
+| `sim.is_leap` | 1 in a leap year, else 0 | `1` |
 
 ### Examples
 
