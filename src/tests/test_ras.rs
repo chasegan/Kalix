@@ -590,9 +590,110 @@ node.src.dsflow
     let err = load_err(&base("acc.a1.oppening_balance"));
     assert!(err.contains("Unknown field 'oppening_balance'"), "unexpected: {}", err);
 
-    // `size` is an account field but not a group aggregate
-    let err = load_err(&base("acc.g1.size"));
-    assert!(err.contains("Unknown field 'size'"), "unexpected: {}", err);
+    // The field set is closed for groups too (size and use ARE aggregates now)
+    let err = load_err(&base("acc.g1.sizes"));
+    assert!(err.contains("Unknown field 'sizes'"), "unexpected: {}", err);
+}
+
+/// acc.<x>.size (account and group-sum) is published at the very top of the
+/// step, so it is bare-readable everywhere — in a RAS action argument
+/// (announce-time assessment), in node expressions, and on step 0.
+#[test]
+fn test_acc_size_bare_readable_everywhere() {
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size,
+           a1, 100,
+           a2, 250,
+
+[ras.assess]
+targets = acc.g1
+trigger = every_step
+action  = set_fraction(acc.g1.size / 1000)
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = acc.a2.size / 10
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 10
+
+[outputs]
+node.src.dsflow
+acc.g1.size
+"#;
+    let mut model = run(ini);
+    assert_eq!(series(&mut model, "acc.g1.size"), vec![350.0, 350.0], "group size = sum of members");
+    assert_eq!(series(&mut model, "node.src.dsflow"), vec![25.0, 25.0], "bare read in a node expression");
+    assert_eq!(balance(&model, "a1"), 35.0, "bare read in a RAS action at the top of the step");
+}
+
+/// acc.<x>.use is water taken since the last reset_allocation: fed only by
+/// node takes (policy debits are excluded by construction), reset by the
+/// reset_allocation action, and aggregated over groups.
+#[test]
+fn test_acc_use_series() {
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-04
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 100, 100,
+           a2, 100, 100,
+
+[ras.policy_debit]
+targets = acc.g1
+trigger = every_step
+action  = debit(5)
+
+[ras.new_period]
+targets = acc.g1
+trigger = sim.day == 3
+action  = reset_allocation
+
+[ras.announce]
+targets = acc.g1
+trigger = sim.day == 3
+action  = allocate(100)
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = user
+
+[node.user]
+type = unregulated_user
+loc = 0, 10
+demand = 10
+accounts = a1
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 20
+
+[outputs]
+acc.a1.use
+acc.a2.use
+acc.g1.use
+"#;
+    let mut model = run(ini);
+    // a1: takes 10/day; reset_allocation + a fresh announcement fire at the
+    // top of day 3, so use re-accumulates from that day's take. The daily
+    // debit(5) policy action never appears in `use`.
+    assert_eq!(series(&mut model, "acc.a1.use"), vec![10.0, 20.0, 10.0, 20.0]);
+    assert_eq!(series(&mut model, "acc.a2.use"), vec![0.0, 0.0, 0.0, 0.0], "no takes, no use");
+    assert_eq!(series(&mut model, "acc.g1.use"), vec![10.0, 20.0, 10.0, 20.0], "group use = sum");
 }
 
 #[test]

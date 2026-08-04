@@ -41,23 +41,33 @@ pub struct AccountManager {
     //                     unwritten-value error and want a [-1, 0] offset).
     has_recorders: bool,
     has_opening_recorders: bool,
+    /// Size series (account and group-sum) are written at the very top of the
+    /// step, before the [ras.*] loop — sizes are static, so publishing first
+    /// makes them bare-readable everywhere, announce-time resource
+    /// assessments included.
+    has_size_recorders: bool,
     recorder_acc_opening: Vec<(usize, usize)>,
     recorder_acc_closing: Vec<(usize, usize)>,
     recorder_acc_debits: Vec<(usize, usize)>,
     recorder_acc_allocation: Vec<(usize, usize)>,
+    recorder_acc_use: Vec<(usize, usize)>,
     recorder_acc_size: Vec<(usize, usize)>,
     recorder_grp_opening: Vec<(usize, usize)>,
     recorder_grp_closing: Vec<(usize, usize)>,
     recorder_grp_debits: Vec<(usize, usize)>,
     recorder_grp_allocation: Vec<(usize, usize)>,
+    recorder_grp_use: Vec<(usize, usize)>,
+    recorder_grp_size: Vec<(usize, usize)>,
 }
 
 /// Series suffixes an `acc.<name>.<field>` reference may use. Closed set:
 /// anything else is a load error rather than a silently unwritten series.
-pub const ACCOUNT_SERIES_FIELDS: [&str; 5] = ["opening_balance", "closing_balance", "debits", "allocation", "size"];
+/// `use` is water taken since the last reset_allocation — the use term of
+/// the allocation (balance + use), fed only by node takes.
+pub const ACCOUNT_SERIES_FIELDS: [&str; 6] = ["opening_balance", "closing_balance", "debits", "allocation", "use", "size"];
 
 /// Of those, the fields a *group* aggregate publishes (summed over members).
-pub const GROUP_SERIES_FIELDS: [&str; 4] = ["opening_balance", "closing_balance", "debits", "allocation"];
+pub const GROUP_SERIES_FIELDS: [&str; 6] = ["opening_balance", "closing_balance", "debits", "allocation", "use", "size"];
 
 impl AccountManager {
 
@@ -71,15 +81,19 @@ impl AccountManager {
             group_lookup: FxHashMap::default(),
             has_recorders: false,
             has_opening_recorders: false,
+            has_size_recorders: false,
             recorder_acc_opening: Vec::new(),
             recorder_acc_closing: Vec::new(),
             recorder_acc_debits: Vec::new(),
             recorder_acc_allocation: Vec::new(),
+            recorder_acc_use: Vec::new(),
             recorder_acc_size: Vec::new(),
             recorder_grp_opening: Vec::new(),
             recorder_grp_closing: Vec::new(),
             recorder_grp_debits: Vec::new(),
             recorder_grp_allocation: Vec::new(),
+            recorder_grp_use: Vec::new(),
+            recorder_grp_size: Vec::new(),
         }
     }
 
@@ -161,11 +175,14 @@ impl AccountManager {
         self.recorder_acc_closing.clear();
         self.recorder_acc_debits.clear();
         self.recorder_acc_allocation.clear();
+        self.recorder_acc_use.clear();
         self.recorder_acc_size.clear();
         self.recorder_grp_opening.clear();
         self.recorder_grp_closing.clear();
         self.recorder_grp_debits.clear();
         self.recorder_grp_allocation.clear();
+        self.recorder_grp_use.clear();
+        self.recorder_grp_size.clear();
 
         for account_idx in 0..self.accounts.len() {
             let name = self.accounts[account_idx].name.clone();
@@ -182,6 +199,7 @@ impl AccountManager {
             register("closing_balance", &mut self.recorder_acc_closing, &mut any);
             register("debits", &mut self.recorder_acc_debits, &mut any);
             register("allocation", &mut self.recorder_acc_allocation, &mut any);
+            register("use", &mut self.recorder_acc_use, &mut any);
             register("size", &mut self.recorder_acc_size, &mut any);
             self.has_recorders |= any;
         }
@@ -202,11 +220,31 @@ impl AccountManager {
             register("closing_balance", &mut self.recorder_grp_closing, &mut any);
             register("debits", &mut self.recorder_grp_debits, &mut any);
             register("allocation", &mut self.recorder_grp_allocation, &mut any);
+            register("use", &mut self.recorder_grp_use, &mut any);
+            register("size", &mut self.recorder_grp_size, &mut any);
             self.has_recorders |= any;
         }
 
         self.has_opening_recorders =
             !self.recorder_acc_opening.is_empty() || !self.recorder_grp_opening.is_empty();
+        self.has_size_recorders =
+            !self.recorder_acc_size.is_empty() || !self.recorder_grp_size.is_empty();
+    }
+
+    /// Publish the size series (account and group-sum) for this step. Called
+    /// at the very top of run_timestep, before the [ras.*] loop: sizes are
+    /// static, so writing them first makes `acc.<x>.size` bare-readable at
+    /// any point in the step — including announce-time resource assessments
+    /// like `allocate(table.curve(... / acc.hp.size))`.
+    pub fn publish_sizes(&self, data_cache: &mut DataCache) {
+        if !self.has_size_recorders { return; }
+        for &(account_idx, series_idx) in &self.recorder_acc_size {
+            data_cache.add_value_at_index(series_idx, self.accounts[account_idx].size);
+        }
+        for &(group_idx, series_idx) in &self.recorder_grp_size {
+            let total = self.group_sum(group_idx, |a| a.size);
+            data_cache.add_value_at_index(series_idx, total);
+        }
     }
 
     /// Start-of-step accounting, called after the [ras.*] loop and before the
@@ -247,8 +285,8 @@ impl AccountManager {
         for &(account_idx, series_idx) in &self.recorder_acc_allocation {
             data_cache.add_value_at_index(series_idx, self.accounts[account_idx].allocation());
         }
-        for &(account_idx, series_idx) in &self.recorder_acc_size {
-            data_cache.add_value_at_index(series_idx, self.accounts[account_idx].size);
+        for &(account_idx, series_idx) in &self.recorder_acc_use {
+            data_cache.add_value_at_index(series_idx, self.accounts[account_idx].debits_since_reset);
         }
 
         for &(group_idx, series_idx) in &self.recorder_grp_closing {
@@ -261,6 +299,10 @@ impl AccountManager {
         }
         for &(group_idx, series_idx) in &self.recorder_grp_allocation {
             let total = self.group_sum(group_idx, |a| a.allocation());
+            data_cache.add_value_at_index(series_idx, total);
+        }
+        for &(group_idx, series_idx) in &self.recorder_grp_use {
+            let total = self.group_sum(group_idx, |a| a.debits_since_reset);
             data_cache.add_value_at_index(series_idx, total);
         }
     }

@@ -816,6 +816,11 @@ impl Model {
     }
 
     pub fn run_timestep(&mut self, _t: u64) {
+        // Sizes first — static, so publishing before the [ras.*] loop makes
+        // acc.<x>.size bare-readable everywhere in the step, announce-time
+        // assessments included. No-op unless a size series is registered.
+        self.account_manager.publish_sizes(&mut self.data_cache);
+
         // Accounting policy: [ras.*] systems run in file order at the top of
         // the step, before ordering and flow — today's orders and takes see
         // today's announcements (kalix-allocation-components.md §3.3).

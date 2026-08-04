@@ -330,13 +330,15 @@ public class FunctionExpressionValidator {
         OPERATOR, LPAREN, RPAREN, LBRACE, RBRACE, SEMICOLON, COMMA, EOF
     }
 
-    /** Fields published per account (`acc.<account>.<field>`). */
+    /** Fields published per account (`acc.<account>.<field>`). Mirrors the
+     *  engine's ACCOUNT_SERIES_FIELDS (src/hydrology/accounts/account_manager.rs). */
     private static final java.util.Set<String> ACCOUNT_FIELDS =
-        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "size");
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "use", "size");
 
-    /** Fields published per account group — the same, less the static ones. */
-    private static final java.util.Set<String> ACCOUNT_GROUP_FIELDS =
-        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation");
+    /** Fields published per account group: every account field is aggregated
+     *  (summed) over the members, `size` and `use` included. Mirrors the
+     *  engine's GROUP_SERIES_FIELDS. */
+    private static final java.util.Set<String> ACCOUNT_GROUP_FIELDS = ACCOUNT_FIELDS;
 
     /** Fields published per resource allocation system (`ras.<name>.<field>`). */
     private static final java.util.Set<String> RAS_FIELDS = java.util.Set.of("fired", "pct");

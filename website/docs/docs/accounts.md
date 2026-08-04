@@ -96,15 +96,23 @@ Account state is published as ordinary series — readable in any
 | `acc.<name>.closing_balance` | Balance at the end of the step. |
 | `acc.<name>.debits` | Water taken by users this step (not policy changes). |
 | `acc.<name>.allocation` | Allocation to date: balance plus use since the last reset (see [Allocation systems](allocation-systems.md)). |
+| `acc.<name>.use` | Water taken since the last `reset_allocation` — the use term of the allocation. Fed only by user takes, like `debits`. |
 | `acc.<name>.size` | Account size. |
 
-<a id="groups"></a>Every field except `size` is also published for the **group
-aggregate**, summed over its members: `acc.<group>.closing_balance`,
-`acc.<group>.allocation`, and so on.
+<a id="groups"></a>Every field is also published for the **group aggregate**,
+summed over its members: `acc.<group>.size`, `acc.<group>.use`,
+`acc.<group>.closing_balance`, and so on — so a resource assessment can write
+`/ acc.gs.size` instead of a magic total that silently goes stale when an
+entitlement changes.
 
-`opening_balance` is written before ordering and flow, so it reads cleanly
-mid-step. The others are written at end of step; reading them earlier in the
-same step needs the previous-step offset, e.g. `acc.smith.closing_balance[-1, 0]`.
+`size` is written at the very top of the step — before even the `[ras.*]`
+sections — so it reads cleanly *everywhere*, announce-time assessments
+included. `opening_balance` is written before ordering and flow, so it reads
+cleanly mid-step. The others are written at end of step; reading them earlier
+in the same step needs the previous-step offset, e.g.
+`acc.smith.closing_balance[-1, 0]` — including `use`, whose `[-1, 0]` read on
+a reset morning is still the *old* period's total (the reset fires later that
+same step).
 
 ## Rules
 

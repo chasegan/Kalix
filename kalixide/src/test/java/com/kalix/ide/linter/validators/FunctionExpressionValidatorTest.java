@@ -694,12 +694,17 @@ class FunctionExpressionValidatorTest {
                 """;
         com.kalix.ide.linter.model.ValidationContext context = contextFor(ini);
 
-        // gs_annual names a group: aggregates are fine, 'size' is not
+        // gs_annual names a group: every account field aggregates, size and
+        // use included (mirrors the engine's GROUP_SERIES_FIELDS)
         assertTrue(validator.validate("acc.gs_annual.opening_balance", context).isEmpty(),
                 "group opening_balance should be valid");
-        assertTrue(validator.validate("acc.gs_annual.size", context).stream()
+        assertTrue(validator.validate("acc.gs_annual.size", context).isEmpty(),
+                "group size aggregate should be valid");
+        assertTrue(validator.validate("acc.gs_annual.use", context).isEmpty(),
+                "group use aggregate should be valid");
+        assertTrue(validator.validate("acc.gs_annual.sizes", context).stream()
                         .anyMatch(e -> e.contains("Unknown field for account group")),
-                "group has no size aggregate");
+                "the group field set stays closed");
 
         // smith is not a section, so it reads as an account: 'size' is fine
         assertTrue(validator.validate("acc.smith.size", context).isEmpty(),
