@@ -641,3 +641,130 @@ var.multi.c
     assert_series(&series(&model, "var.multi.b"), &[30.0, 60.0, 90.0, 120.0, 150.0], "b");
     assert_series(&series(&model, "var.multi.c"), &[42.0, 42.0, 42.0, 42.0, 42.0], "c");
 }
+
+// ============================================================================
+// 8. `this` self-reference (expression-naming §2.8: the enclosing definition)
+// ============================================================================
+
+/// `this[-1, 0]` is the var's own series: the counter/hold idiom without
+/// spelling the full name, so a rename no longer edits the definition twice.
+/// Two keys in one block each resolve `this` to their OWN series.
+#[test]
+fn var_this_resolves_to_own_series() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-02-03
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = (sim.step + 1) * 10
+ds_1 = outlet
+
+[var.state]
+count = this[-1, 0] + 1
+banked = this[-1, 100] + 1
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+
+[outputs]
+var.state.count
+var.state.banked
+";
+    let model = run_model(ini);
+    assert_series(&series(&model, "var.state.count"), &[1.0, 2.0, 3.0, 4.0, 5.0], "count");
+    assert_series(&series(&model, "var.state.banked"), &[101.0, 102.0, 103.0, 104.0, 105.0], "banked");
+}
+
+/// The expansion is textual over the definition's own text, so `this` works
+/// inside a program-block value too (a held assessment).
+#[test]
+fn var_this_in_program_block() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-02-03
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = (sim.step + 1) * 10
+ds_1 = outlet
+
+[var.state]
+held = { prev = this[-1, 0]; if(sim.step == 1, 42, prev) }
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+
+[outputs]
+var.state.held
+";
+    let model = run_model(ini);
+    assert_series(&series(&model, "var.state.held"), &[0.0, 42.0, 42.0, 42.0, 42.0], "held");
+}
+
+/// `this` in a var takes no field, and always needs an offset — its current
+/// value is not written yet. Both are load errors with teaching messages.
+#[test]
+fn var_this_validation_errors() {
+    let base = |def: &str| format!("\
+[kalix]
+start = 2020-01-30
+end = 2020-02-03
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = outlet
+
+[var.state]
+x = {def}
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+");
+
+    let err = load_err(&base("this.balance + 1"));
+    assert!(err.contains("takes no field"), "unexpected: {err}");
+
+    let err = load_err(&base("this + 1"));
+    assert!(err.contains("needs an offset"), "unexpected: {err}");
+}
+
+/// The definition is re-emitted as written: `this` survives the canonical
+/// render, it is not expanded into the saved file.
+#[test]
+fn var_this_round_trips_as_written() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-02-03
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = outlet
+
+[var.state]
+count = this[-1, 0] + 1
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+";
+    let model = IniModelIO::read_model_string(ini).expect("model should load");
+    let rendered = IniModelIO::model_to_string(&model);
+    assert!(rendered.contains("count = this[-1, 0] + 1"),
+        "definition re-emitted as written:\n{rendered}");
+    let model2 = IniModelIO::read_model_string(&rendered)
+        .unwrap_or_else(|e| panic!("canonical render should re-load, got: {e}\n---\n{rendered}"));
+    drop(model2);
+}

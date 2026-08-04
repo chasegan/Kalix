@@ -49,6 +49,24 @@ Keys evaluate top to bottom within the block, so later keys can use this
 step's earlier keys. Each value is a full expression — blocks, `assert`,
 temporal functions, and `fn.*` calls all work.
 
+## Self-reference — `this`
+
+Inside a definition, `this` is the var's own series — the counter, ratchet,
+and held-assessment idioms without spelling the full name, so a rename never
+has to edit the definition's internal references:
+
+```ini
+[var.state]
+wy_count = this[-1, 0] + fn.is_startwy()               ; a counter
+assessment = if(sim.new_month, fn.assess(), this[-1, 0]) ; a monthly hold
+```
+
+`this` always needs an offset (`this[-1, default]`) — a var can never read
+its own not-yet-written value — and takes no field (`this.x` is an error).
+It refers to the *enclosing definition* only: `this` inside an `[fn]` body
+names the function, never the var that calls it. Saved files keep `this` as
+written.
+
 ## Rules
 
 - Block names and keys are bare lowercase names (no dots).

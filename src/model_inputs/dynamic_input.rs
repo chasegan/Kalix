@@ -70,6 +70,47 @@ fn expand_this(expression: &str, self_context: &str) -> String {
     result
 }
 
+/// Expand bare `this` in a [var.*] definition to the var's own series name:
+/// `this[-1, 0]` becomes `var.<block>.<key>[-1, 0]`. Per expression-naming
+/// §2.8, `this` names the enclosing definition — for a var that is the
+/// series itself, so it takes no field (`this.x` is an error) and, because
+/// a var can never read its own not-yet-written value, it must carry an
+/// offset. Purely textual, on the definition's own text only: `this`
+/// inside an [fn] body names the fn, never the calling var, so fn bodies
+/// are deliberately not expanded with the var's context.
+pub fn expand_var_this(expression: &str, series_name: &str) -> Result<String, String> {
+    let pattern = b"this";
+    let bytes = expression.as_bytes();
+    let mut result = String::with_capacity(expression.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if i + pattern.len() <= bytes.len() && &bytes[i..i + pattern.len()] == pattern {
+            let before_ok = i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            let after = bytes.get(i + pattern.len()).copied();
+            let after_ok = !matches!(after, Some(c) if c.is_ascii_alphanumeric() || c == b'_');
+            if before_ok && after_ok {
+                if after == Some(b'.') {
+                    return Err("'this' in a var definition is the var's own series and takes no \
+                        field — write this[-1, 0]".to_string());
+                }
+                // Skip whitespace to check for the offset bracket.
+                let mut j = i + pattern.len();
+                while j < bytes.len() && bytes[j].is_ascii_whitespace() { j += 1; }
+                if bytes.get(j) != Some(&b'[') {
+                    return Err("a var's self-reference reads its own history and needs an \
+                        offset, e.g. this[-1, 0] (its current value is not written yet)".to_string());
+                }
+                result.push_str(series_name);
+                i += pattern.len();
+                continue;
+            }
+        }
+        result.push(bytes[i] as char);
+        i += 1;
+    }
+    Ok(result)
+}
+
 /// The two calendar-at-offset lookups (CALENDAR_FUNCTIONS in functions.rs):
 /// what the calendar looks like `n` days from the current simulation date.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

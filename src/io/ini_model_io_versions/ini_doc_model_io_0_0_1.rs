@@ -885,8 +885,17 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 // offset resolves to the same series.
                 let series_idx = model.data_cache.get_or_add_new_series(&series_name, false);
 
+                // `this[-1, 0]` is the var's own series (expression-naming
+                // §2.8): expanded textually in the definition's own text, so
+                // the state idiom survives a rename without editing its
+                // internal self-references.
+                let expanded = crate::model_inputs::dynamic_input::expand_var_this(
+                    &ini_property.value, &series_name)
+                    .map_err(|e| KalixIoError::Parse(format!("Error on line {}: in '{}': {}",
+                                         ini_property.line_number, key, e)))?;
+
                 let input = DynamicInput::from_string(
-                    &ini_property.value, &mut model.data_cache, true, None)
+                    &expanded, &mut model.data_cache, true, None)
                     .map_err(|e| KalixIoError::Parse(format!("Error on line {}: in '{}': {}",
                                          ini_property.line_number, key, e)))?;
 
