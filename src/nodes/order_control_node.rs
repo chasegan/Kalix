@@ -120,7 +120,8 @@ impl Node for OrderControlNode {
                 order = order.min(self.max_order_value);
             }
         }
-        self.usorders = order;
+        // Defend against setting negative orders
+        self.usorders = order.max(0f64);
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
