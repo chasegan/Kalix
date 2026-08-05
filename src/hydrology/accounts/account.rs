@@ -11,6 +11,18 @@ pub struct Account {
     pub account_type: String,
     pub size: f64,
     pub initial_balance: f64,
+    /// Paired account (the `pair` table column), resolved to its index at
+    /// load. The pairing is symmetric — declared on either account's row,
+    /// readable from both ends as `self.pair.<field>` in [ras.*] action
+    /// arguments — and an account may be in at most one pair. The one
+    /// declared relationship an account carries: accounts stay pure state
+    /// otherwise — debit order remains the user node's `accounts =` list,
+    /// never baked in here.
+    pub pair: Option<usize>,
+    /// Whether this row is the one that declared the pairing — round-trip
+    /// only, so the canonical render emits the `pair` column on the side
+    /// that wrote it and not both.
+    pub pair_declared: bool,
 
     // State
     pub balance: f64,
@@ -43,6 +55,8 @@ impl Account {
             account_type,
             size,
             initial_balance,
+            pair: None,
+            pair_declared: false,
             balance: initial_balance,
             debits_today: 0.0,
             debits_since_reset: 0.0,

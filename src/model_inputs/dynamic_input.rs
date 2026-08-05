@@ -70,6 +70,57 @@ fn expand_this(expression: &str, self_context: &str) -> String {
     result
 }
 
+/// Expand bare `this` in a [var.*] definition to the var's own series name:
+/// `this[-1, 0]` becomes `var.<block>.<key>[-1, 0]`. Per expression-naming
+/// §2.8, `this` names the enclosing definition — for a var that is the
+/// series itself, so it takes no field (`this.x` is an error) and, because
+/// a var can never read its own not-yet-written value, it must carry an
+/// offset. Purely textual, on the definition's own text only: `this`
+/// inside an [fn] body names the fn, never the calling var, so fn bodies
+/// are deliberately not expanded with the var's context.
+pub fn expand_var_this(expression: &str, series_name: &str) -> Result<String, String> {
+    let pattern = b"this";
+    let bytes = expression.as_bytes();
+    let mut result = String::with_capacity(expression.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if i + pattern.len() <= bytes.len() && &bytes[i..i + pattern.len()] == pattern {
+            let before_ok = i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            let after = bytes.get(i + pattern.len()).copied();
+            let after_ok = !matches!(after, Some(c) if c.is_ascii_alphanumeric() || c == b'_');
+            if before_ok && after_ok {
+                if after == Some(b'.') {
+                    return Err("'this' in a var definition is the var's own series and takes no \
+                        field — write this[-1, 0]".to_string());
+                }
+                // Skip whitespace to check for the offset bracket.
+                let mut j = i + pattern.len();
+                while j < bytes.len() && bytes[j].is_ascii_whitespace() { j += 1; }
+                if bytes.get(j) != Some(&b'[') {
+                    return Err("a var's self-reference reads its own history and needs an \
+                        offset, e.g. this[-1, 0] (its current value is not written yet)".to_string());
+                }
+                result.push_str(series_name);
+                i += pattern.len();
+                continue;
+            }
+        }
+        result.push(bytes[i] as char);
+        i += 1;
+    }
+    Ok(result)
+}
+
+/// The two calendar-at-offset lookups (CALENDAR_FUNCTIONS in functions.rs):
+/// what the calendar looks like `n` days from the current simulation date.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CalendarAtKind {
+    /// `month_at(n)`: month (1-12) at current date + n days
+    Month,
+    /// `days_in_month_at(n)`: leap-aware length of that month
+    DaysInMonth,
+}
+
 /// Simulation context field types for the `sim.*` namespace
 ///
 /// These fields provide access to simulation date/time information within expressions.
@@ -95,6 +146,12 @@ pub enum SimField {
     /// Calendar-year boundary: 1.0 when this step's year differs from the
     /// previous step's, and at step 0
     NewYear,
+    /// Days in the current month (28-31, leap-aware)
+    DaysInMonth,
+    /// Days in the current year (365 or 366)
+    DaysInYear,
+    /// 1.0 in a leap year, else 0.0
+    IsLeap,
 }
 
 /// Parse a `sim.*` variable name into a SimField
@@ -108,6 +165,9 @@ fn parse_sim_field(name: &str) -> Option<SimField> {
         "sim.new_day" => Some(SimField::NewDay),
         "sim.new_month" => Some(SimField::NewMonth),
         "sim.new_year" => Some(SimField::NewYear),
+        "sim.days_in_month" => Some(SimField::DaysInMonth),
+        "sim.days_in_year" => Some(SimField::DaysInYear),
+        "sim.is_leap" => Some(SimField::IsLeap),
         _ => None,
     }
 }
@@ -188,6 +248,17 @@ pub enum OptimizedExpressionNode {
     /// Provides access to date/time information during evaluation
     SimContext {
         field: SimField,
+    },
+
+    /// Calendar lookup at a day offset from the current simulation date:
+    /// `month_at(n)` / `days_in_month_at(n)`. The offset (usually a
+    /// constant) is rounded to whole days; evaluation is one O(1) civil-date
+    /// conversion of the offset timestamp — the engine owns the calendar, so
+    /// models stop hand-rolling leap logic that is only valid for one
+    /// month-boundary crossing.
+    CalendarAt {
+        kind: CalendarAtKind,
+        arg: Box<OptimizedExpressionNode>,
     },
 
     /// A program-local variable, resolved at lowering to an absolute slot in
@@ -375,7 +446,27 @@ impl OptimizedExpressionNode {
                 SimField::NewDay => if data_cache.is_new_day() { 1.0 } else { 0.0 },
                 SimField::NewMonth => if data_cache.is_new_month() { 1.0 } else { 0.0 },
                 SimField::NewYear => if data_cache.is_new_year() { 1.0 } else { 0.0 },
+                SimField::DaysInMonth => crate::tid::utils::days_in_month(
+                    data_cache.get_timestamp_year() as i64, data_cache.get_timestamp_month()) as f64,
+                SimField::DaysInYear =>
+                    if crate::tid::utils::is_leap_year(data_cache.get_timestamp_year() as i64) { 366.0 } else { 365.0 },
+                SimField::IsLeap =>
+                    if crate::tid::utils::is_leap_year(data_cache.get_timestamp_year() as i64) { 1.0 } else { 0.0 },
             },
+
+            OptimizedExpressionNode::CalendarAt { kind, arg } => {
+                // Whole-day offset from the current timestamp. Timestamps are
+                // offset-encoded u64 seconds (tid::utils::wrap_to_i64), and
+                // wrapping_add of a two's-complement delta is exact under
+                // that encoding, so negative offsets look back correctly.
+                let n = arg.evaluate(data_cache).round() as i64;
+                let ts = data_cache.current_timestamp.wrapping_add((n * 86400) as u64);
+                let (y, m, _d, _s) = crate::tid::utils::u64_to_year_month_day_and_seconds(ts);
+                match kind {
+                    CalendarAtKind::Month => m as f64,
+                    CalendarAtKind::DaysInMonth => crate::tid::utils::days_in_month(y as i64, m) as f64,
+                }
+            }
 
             OptimizedExpressionNode::Local { slot } => data_cache.expr_state.f[*slot],
 
@@ -460,6 +551,7 @@ impl OptimizedExpressionNode {
                 col_key.validate_reads(data_cache);
                 row_key.validate_reads(data_cache);
             }
+            OptimizedExpressionNode::CalendarAt { arg, .. } => arg.validate_reads(data_cache),
             // Stateful inputs are read unconditionally every step by
             // advance_state, so they are validated like any other read.
             OptimizedExpressionNode::MovingWindow { arg, .. } => arg.validate_reads(data_cache),
@@ -517,6 +609,7 @@ impl OptimizedExpressionNode {
                 col_key.advance_state(data_cache);
                 row_key.advance_state(data_cache);
             }
+            OptimizedExpressionNode::CalendarAt { arg, .. } => arg.advance_state(data_cache),
 
             OptimizedExpressionNode::MovingWindow { op, slots, arg } => {
                 arg.advance_state(data_cache);
@@ -613,6 +706,12 @@ impl OptimizedExpressionNode {
                 if let Some(&idx) = data_variable_map.get(&lower_name) {
                     return Ok(OptimizedExpressionNode::DataCacheReference { cache_index: idx });
                 }
+                // self.* resolves through `locals` when lowering a [ras.*]
+                // action argument; reaching here means we are anywhere else.
+                if lower_name.starts_with("self.") {
+                    return Err("self.* references are only available inside [ras.*] action arguments, \
+                        and must appear directly in the action text (not inside [fn] definitions)".to_string());
+                }
                 Err(format!("Variable '{}' not found in variable maps", name))
             }
             ExpressionNode::VariableWithOffset { name, offset, default_value } => {
@@ -627,6 +726,11 @@ impl OptimizedExpressionNode {
                 // Simulation context variables don't support offset
                 if lower_name.starts_with("sim.") {
                     return Err(format!("Offset syntax not supported for simulation context: {}", name));
+                }
+
+                // self reads the account's live state — no history to offset into
+                if lower_name.starts_with("self.") {
+                    return Err(format!("Offset syntax not supported for self references: {}", name));
                 }
 
                 // Node outputs and var values cannot look forward - future values
@@ -959,6 +1063,29 @@ impl OptimizedProgram {
 /// - `LinearCombination`: Linear combination of data references with optimizable weights
 /// - `Function`: Complex expression (minimal overhead)
 ///
+/// The closed set of per-target fields a `[ras.*]` action argument may read,
+/// in arena-slot order (slot = base + position here). `self.pair.*` reads
+/// the target's paired account (the `pair` column, readable from either end
+/// of the pairing) and requires every target to be paired (checked at load).
+/// This is the whole self surface: `self` is a context, not a namespace that
+/// grows by accident.
+pub const RAS_SELF_FIELDS: [&str; 6] = [
+    "self.balance", "self.size", "self.allocation",
+    "self.pair.balance", "self.pair.size", "self.pair.allocation",
+];
+
+/// A parsed `[ras.*]` action argument: the value expression plus the self
+/// plumbing the RAS needs at run time (see `from_string_ras_action`).
+pub struct RasActionArg {
+    pub input: DynamicInput,
+    /// Arena base of the six self slots — Some iff the argument references
+    /// `self.*`, which is also the signal for per-target evaluation.
+    pub self_slots: Option<usize>,
+    /// Whether any `self.pair.*` field is read (drives the load-time
+    /// every-target-must-be-paired check).
+    pub uses_pair: bool,
+}
+
 /// All variants store the original expression string for round-trip serialization
 #[derive(Clone, Debug)]
 pub enum DynamicInput {
@@ -1065,6 +1192,68 @@ impl DynamicInput {
     ///
     /// A DynamicInput that needs initialization, or an error if parsing fails
     pub fn from_string(expression: &str, data_cache: &mut DataCache, flag_as_critical: bool, self_context: Option<&str>) -> Result<Self, String> {
+        Self::from_string_impl(expression, data_cache, flag_as_critical, self_context, None)
+    }
+
+    /// Parse a `[ras.*]` action argument. Exactly `from_string`, plus the one
+    /// context nowhere else has: `self.*` fields (RAS_SELF_FIELDS), read
+    /// per target account at each firing. When the argument references self,
+    /// six arena slots are allocated and every `self.<field>` lowers to a
+    /// Local read of its slot; the RAS writes the slots for each target
+    /// before evaluating. Arguments without self keep the evaluate-once
+    /// semantics (and cost) they have today.
+    pub fn from_string_ras_action(expression: &str, data_cache: &mut DataCache) -> Result<RasActionArg, String> {
+        let trimmed = expression.trim();
+
+        // Peek at the argument's own variables to decide whether to allocate
+        // the self frame. [fn] bodies cannot contribute self references —
+        // they are rejected at lowering — so this pre-inline scan is
+        // complete. A parse error here is ignored: the main path below
+        // reports it with its usual context.
+        let vars: Vec<String> = if trimmed.starts_with('{') {
+            crate::functions::parse_program(trimmed)
+                .map(|p| p.program().get_external_variables().iter().cloned().collect())
+                .unwrap_or_default()
+        } else {
+            parse_function(trimmed)
+                .map(|p| p.get_variables().iter().cloned().collect())
+                .unwrap_or_default()
+        };
+        let self_vars: Vec<String> = vars.iter()
+            .map(|v| v.to_lowercase())
+            .filter(|v| v.starts_with("self."))
+            .collect();
+
+        if self_vars.is_empty() {
+            let input = Self::from_string(trimmed, data_cache, true, None)?;
+            return Ok(RasActionArg { input, self_slots: None, uses_pair: false });
+        }
+
+        for v in &self_vars {
+            if !RAS_SELF_FIELDS.contains(&v.as_str()) {
+                return Err(format!("Unknown self field '{}'. Available: {}", v, RAS_SELF_FIELDS.join(", ")));
+            }
+        }
+
+        // NaN-initialised so an unwritten slot poisons visibly rather than
+        // reading as a plausible zero. The RAS overwrites all six before
+        // every per-target evaluation.
+        let base = data_cache.expr_state.alloc_f(&[f64::NAN; 6]);
+        let self_map: HashMap<String, usize> = RAS_SELF_FIELDS.iter().enumerate()
+            .map(|(i, name)| (name.to_string(), base + i))
+            .collect();
+        let input = Self::from_string_impl(trimmed, data_cache, true, None, Some(&self_map))?;
+        let uses_pair = self_vars.iter().any(|v| v.starts_with("self.pair."));
+        Ok(RasActionArg { input, self_slots: Some(base), uses_pair })
+    }
+
+    fn from_string_impl(
+        expression: &str,
+        data_cache: &mut DataCache,
+        flag_as_critical: bool,
+        self_context: Option<&str>,
+        self_map: Option<&HashMap<String, usize>>,
+    ) -> Result<Self, String> {
         let trimmed = expression.trim();
 
         if trimmed.is_empty() {
@@ -1083,7 +1272,7 @@ impl DynamicInput {
         // (structured_expressions_design.md §3.2). Blocks are only legal as
         // the entire value, so this one character decides the parse.
         if working_copy.trim_start().starts_with('{') {
-            return Self::program_from_string(trimmed, &working_copy, data_cache, flag_as_critical, self_context);
+            return Self::program_from_string(trimmed, &working_copy, data_cache, flag_as_critical, self_context, self_map);
         }
 
         // Parse the expression (using the expanded form)
@@ -1121,11 +1310,31 @@ impl DynamicInput {
             };
             let inlined = crate::functions::inline::inline_fn_calls(program, &data_cache.fns, self_context)
                 .map_err(|e| format!("in '{}': {}", trimmed, e))?;
-            return Self::lower_program(trimmed, &inlined, data_cache, flag_as_critical, true);
+            return Self::lower_program(trimmed, &inlined, data_cache, flag_as_critical, true, self_map);
+        }
+
+        // self.* references resolve through self_map (RAS action arguments
+        // only) and are validated before anything else can misread them: the
+        // linear-combination detector and the series-registration loop below
+        // would otherwise capture 'self.balance' as a phantom data series.
+        let has_self_vars = parsed.get_variables().iter()
+            .any(|v| v.to_lowercase().starts_with("self."));
+        if has_self_vars {
+            let Some(map) = self_map else {
+                return Err("self.* references are only available inside [ras.*] action arguments, \
+                    and must appear directly in the action text (not inside [fn] definitions)".to_string());
+            };
+            for var_name in parsed.get_variables() {
+                let lower_name = var_name.to_lowercase();
+                if lower_name.starts_with("self.") && !map.contains_key(&lower_name) {
+                    return Err(format!("Unknown self field '{}'. Available: {}",
+                        var_name, RAS_SELF_FIELDS.join(", ")));
+                }
+            }
         }
 
         // Check if it's a linear combination pattern first
-        if let Some(linear_info) = detect_linear_combination(parsed.get_ast()) {
+        if let Some(linear_info) = (!has_self_vars).then(|| detect_linear_combination(parsed.get_ast())).flatten() {
             // It's a linear combination! Create the LinearCombination variant
             let mut data_indices = Vec::new();
 
@@ -1183,14 +1392,19 @@ impl DynamicInput {
                 // Simulation context variables - no cache lookup needed
                 // They are resolved directly in from_expression_node via parse_sim_field
                 continue;
+            } else if lower_name.starts_with("self.") {
+                // Validated above; resolves to an arena slot at lowering,
+                // never to a series.
+                continue;
             } else if lower_name.starts_with("const.") {
                 // Resolve to constants cache
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name.clone(), idx);
             } else if lower_name.starts_with("node.") || lower_name.starts_with("var.")
-                || lower_name.starts_with("acc.") {
+                || lower_name.starts_with("acc.") || lower_name.starts_with("ras.") {
                 // Resolve to data cache but NOT as critical input (node outputs,
-                // var values and account state are computed during the run, not loaded)
+                // var values, account state and RAS series are computed during
+                // the run, not loaded)
                 let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
                 data_variable_map.insert(lower_name.clone(), idx);
             } else {
@@ -1232,6 +1446,11 @@ impl DynamicInput {
                 return Err(format!("Offset syntax not supported for simulation context: {}", var_name));
             }
 
+            // self reads the account's live state — there is no history to offset into
+            if lower_var.starts_with("self.") {
+                return Err(format!("Offset syntax not supported for self references: {}", var_name));
+            }
+
             // Node outputs and var values cannot look forward
             if (lower_var.starts_with("node.") || lower_var.starts_with("var.")) && offset > 0 {
                 return Err(format!("Forward lookup not supported for computed series: {}", var_name));
@@ -1260,9 +1479,9 @@ impl DynamicInput {
             // Check if it's a constant or data reference
             let lower_var = var_name.to_lowercase();
 
-            // sim.* variables need to go through the Function path
-            if lower_var.starts_with("sim.") {
-                Self::function_from_parsed(trimmed, &parsed, &data_variable_map, &constant_variable_map, data_cache)
+            // sim.* and self.* variables need to go through the Function path
+            if lower_var.starts_with("sim.") || lower_var.starts_with("self.") {
+                Self::function_from_parsed(trimmed, &parsed, &data_variable_map, &constant_variable_map, data_cache, self_map)
             } else if let Some(&idx) = constant_variable_map.get(&lower_var) {
                 Ok(DynamicInput::DirectConstantReference {
                     idx,
@@ -1278,7 +1497,7 @@ impl DynamicInput {
             }
         } else {
             // Multiple variables or complex expression -> function expression
-            Self::function_from_parsed(trimmed, &parsed, &data_variable_map, &constant_variable_map, data_cache)
+            Self::function_from_parsed(trimmed, &parsed, &data_variable_map, &constant_variable_map, data_cache, self_map)
         }
     }
 
@@ -1293,11 +1512,12 @@ impl DynamicInput {
         data_variable_map: &HashMap<String, usize>,
         constant_variable_map: &HashMap<String, usize>,
         data_cache: &mut DataCache,
+        self_map: Option<&HashMap<String, usize>>,
     ) -> Result<Self, String> {
         let DataCache { expr_state, tables, needs_calendar_flags, .. } = data_cache;
         let f_mark = expr_state.f.len();
         let u_mark = expr_state.u.len();
-        let optimised_ast = transform_to_optimised_ast(parsed, data_variable_map, constant_variable_map, expr_state, tables)?;
+        let optimised_ast = transform_to_optimised_ast(parsed, data_variable_map, constant_variable_map, expr_state, tables, self_map)?;
         if !*needs_calendar_flags && uses_calendar_flags(&optimised_ast) {
             *needs_calendar_flags = true;
         }
@@ -1330,6 +1550,7 @@ impl DynamicInput {
         data_cache: &mut DataCache,
         flag_as_critical: bool,
         self_context: Option<&str>,
+        self_map: Option<&HashMap<String, usize>>,
     ) -> Result<Self, String> {
         let parsed = crate::functions::parse_program(working_copy)
             .map_err(|e| format!("Failed to parse program '{}': {}", original, e))?;
@@ -1344,7 +1565,7 @@ impl DynamicInput {
 
         // Block-syntax values always lower to the Program variant, even with
         // zero statements — `{ data.x }` is a Program by declaration.
-        Self::lower_program(original, &program, data_cache, flag_as_critical, false)
+        Self::lower_program(original, &program, data_cache, flag_as_critical, false, self_map)
     }
 
     /// Lower an inlined, self-contained Program. `unwrap_empty` lets the
@@ -1358,6 +1579,7 @@ impl DynamicInput {
         data_cache: &mut DataCache,
         flag_as_critical: bool,
         unwrap_empty: bool,
+        self_map: Option<&HashMap<String, usize>>,
     ) -> Result<Self, String> {
         use crate::functions::ast::Stmt;
 
@@ -1367,6 +1589,20 @@ impl DynamicInput {
         let mut constant_variable_map = HashMap::new();
         for var_name in program.get_external_variables() {
             let lower_name = var_name.to_lowercase();
+
+            if lower_name.starts_with("self.") {
+                // Resolves to an arena slot at lowering (RAS action
+                // arguments only), never to a series.
+                let Some(map) = self_map else {
+                    return Err("self.* references are only available inside [ras.*] action arguments, \
+                        and must appear directly in the action text (not inside [fn] definitions)".to_string());
+                };
+                if !map.contains_key(&lower_name) {
+                    return Err(format!("Unknown self field '{}'. Available: {}",
+                        var_name, RAS_SELF_FIELDS.join(", ")));
+                }
+                continue;
+            }
 
             if lower_name.starts_with("table.") {
                 return Err(format!(
@@ -1397,7 +1633,7 @@ impl DynamicInput {
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name, idx);
             } else if lower_name.starts_with("node.") || lower_name.starts_with("var.")
-                || lower_name.starts_with("acc.") {
+                || lower_name.starts_with("acc.") || lower_name.starts_with("ras.") {
                 // Computed during the run, not loaded: never critical.
                 let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
                 data_variable_map.insert(lower_name, idx);
@@ -1506,7 +1742,10 @@ impl DynamicInput {
         let mut ctx = LowerCtx {
             data_variable_map: &data_variable_map,
             constant_variable_map: &constant_variable_map,
-            locals: HashMap::new(),
+            // Seed the self slots (dotted keys, so no collision with bare
+            // program locals is possible) — self.* then resolves through the
+            // ordinary locals-first lookup.
+            locals: self_map.cloned().unwrap_or_default(),
             next_slot: frame_offset,
             assert_meta: Vec::new(),
         };
@@ -1741,6 +1980,7 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
                 || uses_calendar_flags(else_branch)
         }
         OptimizedExpressionNode::Fold { args, .. } => args.iter().any(uses_calendar_flags),
+        OptimizedExpressionNode::CalendarAt { arg, .. } => uses_calendar_flags(arg),
         OptimizedExpressionNode::MovingWindow { arg, .. } => uses_calendar_flags(arg),
         OptimizedExpressionNode::Since { arg, reset, .. } => {
             arg.as_deref().map(uses_calendar_flags).unwrap_or(false) || uses_calendar_flags(reset)
@@ -1770,11 +2010,16 @@ fn transform_to_optimised_ast(
     data_variable_map: &HashMap<String, usize>,
     constant_variable_map: &HashMap<String, usize>,
     arena: &mut crate::data_management::data_cache::ExprStateArena,
-    tables: &TableRegistry
+    tables: &TableRegistry,
+    self_map: Option<&HashMap<String, usize>>,
 ) -> Result<OptimizedExpressionNode, String> {
-    // Plain expressions have no locals frame.
-    let no_locals = HashMap::new();
-    OptimizedExpressionNode::from_expression_node(parsed.get_ast(), data_variable_map, constant_variable_map, &no_locals, arena, tables)
+    // Plain expressions have no locals frame — only the (dotted, so
+    // collision-free) self slots of a RAS action argument, when present.
+    let locals = match self_map {
+        Some(map) => map.clone(),
+        None => HashMap::new(),
+    };
+    OptimizedExpressionNode::from_expression_node(parsed.get_ast(), data_variable_map, constant_variable_map, &locals, arena, tables)
 }
 
 /// Lower a parsed function call into its specialised hot-path form, validating
@@ -1801,6 +2046,9 @@ fn lower_function_call(
         FunctionRef::Named(name) => {
             if let Some(bare_name) = name.strip_prefix("table.") {
                 return lower_table_call(bare_name, args, tables);
+            }
+            if let Some(node) = lower_calendar_call(name, &mut args)? {
+                return Ok(node);
             }
             if let Some(node) = lower_stateful_call(name, args, arena)? {
                 return Ok(node);
@@ -1838,6 +2086,7 @@ fn lower_function_call(
         B::Floor => Some(f64::floor),
         B::Round => Some(f64::round),
         B::Sign => Some(crate::functions::functions::sign),
+        B::IsLeapYear => Some(crate::functions::functions::is_leap_year_f),
         _ => None,
     };
     if let Some(f) = f1 {
@@ -1928,6 +2177,28 @@ fn constant_arg(args: &[OptimizedExpressionNode], idx: usize, func: &str, what: 
 ///   when the last pre-filled element would leave the window);
 /// - *_since accumulators start as if reset fired just before the run
 ///   (sum/count 0, steps -1, min/max NaN which f64::min/max suppress).
+/// Lower a calendar-at-offset call (`month_at`/`days_in_month_at` — the
+/// CALENDAR_FUNCTIONS tier): context functions resolved here, like the
+/// stateful family, because they read the simulation clock at evaluation.
+/// Returns Ok(None) for names that are not calendar functions.
+fn lower_calendar_call(
+    name: &str,
+    args: &mut Vec<OptimizedExpressionNode>,
+) -> Result<Option<OptimizedExpressionNode>, String> {
+    let kind = match name {
+        "month_at" => CalendarAtKind::Month,
+        "days_in_month_at" => CalendarAtKind::DaysInMonth,
+        _ => return Ok(None),
+    };
+    if args.len() != 1 {
+        return Err(format!(
+            "Function '{}' expects 1 argument (a day offset from the current date), got {}",
+            name, args.len()
+        ));
+    }
+    Ok(Some(OptimizedExpressionNode::CalendarAt { kind, arg: Box::new(args.remove(0)) }))
+}
+
 fn lower_stateful_call(
     name: &str,
     mut args: Vec<OptimizedExpressionNode>,

@@ -18,7 +18,8 @@ they are for, and how to write one. Read it before adding to this folder.
 - **[Expression naming](expression-naming.md)** — the DynamicExpression
   vocabulary: name the precise concept in the modeller's language (`mean`, not
   `avg`), one spelling per builtin with no aliases (`ln`/`log10`, never `log`),
-  and namespaces for everything user-defined.
+  namespaces for everything user-defined, and `this` (the enclosing
+  definition) vs `self` (the element being operated on).
 - **[Identity and labels](identity-and-labels.md)** — identity is a stable, typed
   token; the label is a projection of it, never stored, keyed on, or parsed.
   Applies to runs, nodes, datasets, files, series.

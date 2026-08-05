@@ -47,7 +47,12 @@ below are not a licence to mangle cold code (§5).
    single line looks hot.
 4. **Lay data out for the cache.** Sequential access over contiguous arrays beats
    chasing pointers through maps, linked structures, and boxed objects. The cache
-   miss, not the instruction count, is usually what costs you.
+   miss, not the instruction count, is usually what costs you. Cold configuration
+   goes at the tail of hot structs: inserting fields above per-step state has
+   twice been a measured ~3% simulation regression (DataCache registries,
+   July 2026; ConfluenceNode `regulated` config, August 2026) — both times with
+   no hot-path code change at all, the cost being purely the shifted field
+   offsets.
 5. **Do each piece of work at the coldest place it can live.** Resolution,
    validation, allocation, and branch decisions belong at setup / `initialise` time,
    not inside the loop. Work done once is work the loop never pays for again.

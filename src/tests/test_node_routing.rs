@@ -154,3 +154,122 @@ fn test_initialise_rejects_negative_travel_time() {
     let mut ok = pwl_node();
     ok.initialise(&mut data_cache, &mut account_manager).unwrap();
 }
+
+// ============================================================================
+// Out-of-table reference flows (PWL saturation)
+// ============================================================================
+
+fn run(ini: &str) -> Model {
+    let mut model = crate::io::ini_model_io::IniModelIO::read_model_string(ini)
+        .expect("model should load");
+    model.configure().expect("model should configure");
+    model.run().expect("simulation should run");
+    model
+}
+
+fn series(model: &mut Model, name: &str) -> Vec<f64> {
+    let idx = model.data_cache.get_series_idx(name, false)
+        .unwrap_or_else(|| panic!("no series '{}'", name));
+    model.data_cache.series[idx].values.clone()
+}
+
+/// A model whose routing table tops out at q = 100 (V(q) = 2q, so V_max = 200
+/// for one division) fed a flood of 1000 on day 3. The table for building the
+/// day-by-day expectation: tt is a flat 2 days, so in-range storage is exactly
+/// 2 x the reference flow.
+fn out_of_table_ini(x: f64, n_divs: usize) -> String {
+    format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-05
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = if(sim.day == 3, 1000, 50)
+ds_1 = reach
+
+[node.reach]
+type = routing
+loc = 0, 10
+x = {x}
+n_divs = {n_divs}
+pwl = 0, 2,
+      100, 2,
+ds_1 = sink
+
+[node.sink]
+type = gauge
+loc = 0, 20
+
+[outputs]
+node.reach.usflow
+node.reach.dsflow
+node.reach.volume
+"#)
+}
+
+/// x = 1 path: a reference flow above the table top must saturate the
+/// division at V(q_max) and release the balance downstream — previously this
+/// fall-through zeroed the division's storage without releasing it (a genuine
+/// mass loss). Hand-computed expectation, all values exact in f64.
+#[test]
+fn test_pwl_flow_above_table_releases_storage_x_unity() {
+    let mut model = run(&out_of_table_ini(1.0, 1));
+    // Days 1-2 fill toward steady state (qout clamps at 0 while V(50) = 100
+    // exceeds what is in the reach); day 3 crosses the table top: storage
+    // saturates at V_max = 200 and qout = 100 + 1000 - 200 = 900.
+    assert_eq!(series(&mut model, "node.reach.dsflow"), vec![0.0, 0.0, 900.0, 150.0, 50.0]);
+    assert_eq!(series(&mut model, "node.reach.volume"), vec![50.0, 100.0, 200.0, 100.0, 100.0]);
+}
+
+/// General-x path (quadratic per-segment solve) has the same fall-through:
+/// verify saturation on the crossing day and that mass balances over the run.
+#[test]
+fn test_pwl_flow_above_table_releases_storage_general_x() {
+    let mut model = run(&out_of_table_ini(0.5, 2));
+    let usflow = series(&mut model, "node.reach.usflow");
+    let dsflow = series(&mut model, "node.reach.dsflow");
+    let volume = series(&mut model, "node.reach.volume");
+
+    // On the crossing day both divisions saturate: V_max = 100 each.
+    assert_eq!(volume[2], 200.0, "storage saturates at V(q_max) on the flood day");
+
+    // Mass balance: inflow - outflow = storage still in the reach. The old
+    // fall-through failed this by the pre-flood storage volume.
+    let stored: f64 = usflow.iter().sum::<f64>() - dsflow.iter().sum::<f64>();
+    assert!((stored - volume[4]).abs() < 1e-9,
+            "mass leak: inflow - outflow = {stored} but reach holds {}", volume[4]);
+}
+
+/// A lag-only node (no PWL table) takes the same fall-through path by design;
+/// it must remain pure pass-through with a step of lag.
+#[test]
+fn test_lag_only_routing_is_pass_through() {
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-03
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = reach
+
+[node.reach]
+type = routing
+loc = 0, 10
+lag = 1
+ds_1 = sink
+
+[node.sink]
+type = gauge
+loc = 0, 20
+
+[outputs]
+node.reach.dsflow
+"#;
+    let mut model = run(ini);
+    assert_eq!(series(&mut model, "node.reach.dsflow"), vec![0.0, 50.0, 50.0]);
+}

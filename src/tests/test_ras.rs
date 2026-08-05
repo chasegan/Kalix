@@ -590,9 +590,110 @@ node.src.dsflow
     let err = load_err(&base("acc.a1.oppening_balance"));
     assert!(err.contains("Unknown field 'oppening_balance'"), "unexpected: {}", err);
 
-    // `size` is an account field but not a group aggregate
-    let err = load_err(&base("acc.g1.size"));
-    assert!(err.contains("Unknown field 'size'"), "unexpected: {}", err);
+    // The field set is closed for groups too (size and use ARE aggregates now)
+    let err = load_err(&base("acc.g1.sizes"));
+    assert!(err.contains("Unknown field 'sizes'"), "unexpected: {}", err);
+}
+
+/// acc.<x>.size (account and group-sum) is published at the very top of the
+/// step, so it is bare-readable everywhere — in a RAS action argument
+/// (announce-time assessment), in node expressions, and on step 0.
+#[test]
+fn test_acc_size_bare_readable_everywhere() {
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size,
+           a1, 100,
+           a2, 250,
+
+[ras.assess]
+targets = acc.g1
+trigger = every_step
+action  = set_fraction(acc.g1.size / 1000)
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = acc.a2.size / 10
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 10
+
+[outputs]
+node.src.dsflow
+acc.g1.size
+"#;
+    let mut model = run(ini);
+    assert_eq!(series(&mut model, "acc.g1.size"), vec![350.0, 350.0], "group size = sum of members");
+    assert_eq!(series(&mut model, "node.src.dsflow"), vec![25.0, 25.0], "bare read in a node expression");
+    assert_eq!(balance(&model, "a1"), 35.0, "bare read in a RAS action at the top of the step");
+}
+
+/// acc.<x>.use is water taken since the last reset_allocation: fed only by
+/// node takes (policy debits are excluded by construction), reset by the
+/// reset_allocation action, and aggregated over groups.
+#[test]
+fn test_acc_use_series() {
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-04
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 100, 100,
+           a2, 100, 100,
+
+[ras.policy_debit]
+targets = acc.g1
+trigger = every_step
+action  = debit(5)
+
+[ras.new_period]
+targets = acc.g1
+trigger = sim.day == 3
+action  = reset_allocation
+
+[ras.announce]
+targets = acc.g1
+trigger = sim.day == 3
+action  = allocate(100)
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = user
+
+[node.user]
+type = unregulated_user
+loc = 0, 10
+demand = 10
+accounts = a1
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 20
+
+[outputs]
+acc.a1.use
+acc.a2.use
+acc.g1.use
+"#;
+    let mut model = run(ini);
+    // a1: takes 10/day; reset_allocation + a fresh announcement fire at the
+    // top of day 3, so use re-accumulates from that day's take. The daily
+    // debit(5) policy action never appears in `use`.
+    assert_eq!(series(&mut model, "acc.a1.use"), vec![10.0, 20.0, 10.0, 20.0]);
+    assert_eq!(series(&mut model, "acc.a2.use"), vec![0.0, 0.0, 0.0, 0.0], "no takes, no use");
+    assert_eq!(series(&mut model, "acc.g1.use"), vec![10.0, 20.0, 10.0, 20.0], "group use = sum");
 }
 
 #[test]
@@ -898,4 +999,377 @@ acc.g1.allocation
     assert_eq!(pct, vec![60.0, 60.0], "announced percentage recorded");
     let grp = series(&mut model, "acc.g1.allocation");
     assert_eq!(grp, vec![60.0, 60.0], "group allocation aggregate");
+}
+
+// ============================================================================
+// Account pairing (pair column) + the carryover recipe
+// ============================================================================
+
+/// The carryover recipe: target the pool group and write each pool from its
+/// own pair's balance — set() clamps to the pool's [0, size], so the pool
+/// size is the carryover cap. The pairing is declared on the entitlement rows
+/// but read from the pool side (symmetric), and the pool group is declared
+/// AFTER its pairs (pairings resolve in a post-pass). The reset that empties
+/// the entitlements is its own composable section, firing after the grant in
+/// file order.
+#[test]
+fn test_carryover_recipe_grants_then_resets() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-06-28
+end = 2020-07-03
+
+[acc.ent]
+accounts = name, size, initial, pair,
+           e1, 100, 60, p1,
+           e2, 200, 10, p2,
+
+[acc.pools]
+accounts = name, size, initial,
+           p1, 1000, 0,
+           p2, 25, 3,
+
+[ras.co_grant]
+targets = acc.pools
+trigger = start_water_year(7)
+action  = set(0.9 * self.pair.balance)
+
+[ras.ent_reset]
+targets = acc.ent
+trigger = start_water_year(7)
+action  = reset_allocation
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "p1"), 54.0, "pool = 0.9 x its pair's balance");
+    assert_eq!(balance(&model, "p2"), 9.0, "each pool reads its own pair");
+    assert_eq!(balance(&model, "e1"), 0.0, "reset fires after the grant, in file order");
+}
+
+/// A zero grant is a denial year: the pool is SET to zero (a write-off), not
+/// left alone; and set() clamps the grant at the pool's own size.
+#[test]
+fn test_carryover_recipe_denial_and_cap_clamp() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-06-28
+end = 2020-07-03
+
+[acc.ent]
+accounts = name, size, initial, pair,
+           d1, 100, 80, dp1,
+           c1, 100, 80, cp1,
+
+[acc.pools]
+accounts = name, size, initial,
+           dp1, 25, 20,
+           cp1, 25, 0,
+
+[ras.co_denied]
+targets = acc.pools
+trigger = start_water_year(7)
+action  = set(if(self.pair.balance == 80 && self.size == 25 && self.balance == 20, 0, 0.9 * self.pair.balance))
+{TAIL}"#);
+    // dp1 matches the denial condition (balance 20) -> written off to 0;
+    // cp1 takes the grant branch: 0.9 x 80 = 72, clamped to size 25.
+    let model = run(&ini);
+    assert_eq!(balance(&model, "dp1"), 0.0, "denial writes the pool off");
+    assert_eq!(balance(&model, "cp1"), 25.0, "grant clamps at the pool size");
+}
+
+#[test]
+fn test_pair_validation_errors() {
+    let base = |acc: &str, ras: &str| format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+{acc}
+{ras}
+{TAIL}"#);
+
+    // Pair must exist
+    let err = load_err(&base("[acc.g1]\naccounts = name, size, pair,\n  a1, 100, nope,\n", ""));
+    assert!(err.contains("Unknown pair account 'nope'"), "unexpected: {}", err);
+
+    // Pair must be an account, not a group
+    let err = load_err(&base("[acc.g1]\naccounts = name, size, pair,\n  a1, 100, g1,\n", ""));
+    assert!(err.contains("is an account group"), "unexpected: {}", err);
+
+    // No self-pairing
+    let err = load_err(&base("[acc.g1]\naccounts = name, size, pair,\n  a1, 100, a1,\n", ""));
+    assert!(err.contains("cannot be paired with itself"), "unexpected: {}", err);
+
+    // An account can be in at most one pair...
+    let err = load_err(&base(
+        "[acc.g1]\naccounts = name, size, pair,\n  a1, 100, p1,\n  a2, 100, p1,\n[acc.p]\naccounts = name, size,\n  p1, 50,\n", ""));
+    assert!(err.contains("at most one pair"), "unexpected: {}", err);
+
+    // ...and the pairing is symmetric, so declaring it from both ends is a
+    // double declaration, not agreement.
+    let err = load_err(&base(
+        "[acc.g1]\naccounts = name, size, pair,\n  a1, 100, p1,\n[acc.p]\naccounts = name, size, pair,\n  p1, 50, a1,\n", ""));
+    assert!(err.contains("at most one pair"), "unexpected: {}", err);
+
+    // carryover was briefly an action (2026-08); the diagnostic teaches the recipe
+    let err = load_err(&base(
+        "[acc.g1]\naccounts = name, size,\n  a1, 100,\n",
+        "[ras.co]\ntargets = acc.g1\ntrigger = every_step\naction = carryover(0.9)\n"));
+    assert!(err.contains("set(x * self.pair.balance)"), "unexpected: {}", err);
+}
+
+// ============================================================================
+// Per-target self context in action arguments
+// ============================================================================
+
+/// With self.* in the argument, the action evaluates per target: each account
+/// gets a value computed from its own live state. set(min(self.balance, 20))
+/// caps every balance at 20 without a section per account.
+#[test]
+fn test_self_argument_evaluates_per_target() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 100, 60,
+           a2, 100, 10,
+
+[ras.cap]
+targets = acc.g1
+trigger = every_step
+action  = set(min(self.balance, 20))
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "a1"), 20.0, "a1 capped from its own balance");
+    assert_eq!(balance(&model, "a2"), 10.0, "a2 already under the cap");
+}
+
+/// The derivable-sugar identity behind the design: set(self.size) is
+/// set_full, and credit(clamp(x, 0, self.size - self.balance)) is a credit
+/// with per-account headroom. One-day run: every_step compounds.
+#[test]
+fn test_self_sugar_identities() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-01
+
+[acc.filled]
+accounts = name, size, initial,
+           f1, 42, 7,
+
+[acc.headroom]
+accounts = name, size, initial,
+           h1, 100, 80,
+           h2, 100, 10,
+
+[ras.fill]
+targets = acc.filled
+trigger = every_step
+action  = set(self.size)
+
+[ras.topup]
+targets = acc.headroom
+trigger = every_step
+action  = credit(clamp(50, 0, self.size - self.balance))
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "f1"), 42.0, "set(self.size) == set_full");
+    assert_eq!(balance(&model, "h1"), 100.0, "credit clamped to h1's 20 of headroom");
+    assert_eq!(balance(&model, "h2"), 60.0, "h2 takes the full 50");
+}
+
+/// self.allocation is balance + use since reset: a user's take moves water
+/// between the two terms without changing the sum. Firing set(self.allocation)
+/// on day 2 restores the original 50 (40 held + 10 used), where
+/// set(self.balance) would have been a 40 no-op.
+#[test]
+fn test_self_allocation_reads_balance_plus_use() {
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 100, 50,
+
+[ras.restore]
+targets = acc.g1
+trigger = sim.day == 2
+action  = set(self.allocation)
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = user
+
+[node.user]
+type = unregulated_user
+loc = 0, 10
+demand = 10
+accounts = a1
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 20
+
+[outputs]
+node.user.diversion
+"#;
+    let model = run(ini);
+    // Day 1: no firing; take 10 -> balance 40, use 10. Day 2: RAS sets
+    // balance to allocation = 40 + 10 = 50; take 10 -> 40.
+    assert_eq!(balance(&model, "a1"), 40.0, "allocation = balance + use since reset");
+}
+
+/// self.pair.* reads the target's paired account from the DECLARING side —
+/// here each entitlement is credited back its own pool's balance (a
+/// reclaim rule). The pool-side read is covered by the carryover recipe test.
+#[test]
+fn test_self_pair_fields() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-01
+
+[acc.ent]
+accounts = name, size, initial, pair,
+           e1, 100, 0, p1,
+           e2, 100, 0, p2,
+
+[acc.pools]
+accounts = name, size, initial,
+           p1, 50, 30,
+           p2, 50, 5,
+
+[ras.reclaim]
+targets = acc.ent
+trigger = every_step
+action  = credit(self.pair.balance)
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "e1"), 30.0, "e1 credited its own pool's balance");
+    assert_eq!(balance(&model, "e2"), 5.0, "e2 credited its own pool's balance");
+}
+
+/// A program-block argument may use self too.
+#[test]
+fn test_self_in_program_block_argument() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-01
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 100, 60,
+
+[ras.halve]
+targets = acc.g1
+trigger = every_step
+action  = set({{ b = self.balance; b * 0.5 }})
+{TAIL}"#);
+    let model = run(&ini);
+    assert_eq!(balance(&model, "a1"), 30.0, "block argument reads self");
+}
+
+#[test]
+fn test_self_validation_errors() {
+    let base = |extra: &str| format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 100, 60,
+{extra}
+{TAIL}"#);
+
+    // self outside a RAS action argument: node property...
+    let err = load_err(&format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = user
+
+[node.user]
+type = unregulated_user
+loc = 0, 10
+demand = self.balance
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 20
+"#));
+    assert!(err.contains("only available inside [ras.*] action arguments"), "unexpected: {}", err);
+
+    // ...and a RAS trigger (self is an action-argument context, not a RAS-wide one)
+    let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = self.balance > 0\naction = set_full\n"));
+    assert!(err.contains("only available inside [ras.*] action arguments"), "unexpected: {}", err);
+
+    // Unknown field
+    let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = set(self.bogus)\n"));
+    assert!(err.contains("Unknown self field"), "unexpected: {}", err);
+
+    // No history to offset into
+    let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = set(self.balance[-1, 0])\n"));
+    assert!(err.contains("Offset syntax not supported for self references"), "unexpected: {}", err);
+
+    // allocate stays a group-wide announcement
+    let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = allocate(100 * self.balance / self.size)\n"));
+    assert!(err.contains("does not take self"), "unexpected: {}", err);
+
+    // self.pair.* obliges every target to be paired
+    let err = load_err(&base("[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = credit(self.pair.balance)\n"));
+    assert!(err.contains("is not paired"), "unexpected: {}", err);
+
+    // self cannot hide inside an [fn] body — the action text is the boundary
+    let err = load_err(&base("[fn]\nhalf() = self.balance * 0.5\n\n[ras.r1]\ntargets = acc.g1\ntrigger = every_step\naction = set(fn.half())\n"));
+    assert!(err.contains("not inside [fn] definitions"), "unexpected: {}", err);
+}
+
+/// The pair column survives the canonical render — emitted only on the side
+/// that declared it, so the saved file re-loads without double-declaring —
+/// and the pairing still drives the action after the round-trip.
+#[test]
+fn test_pair_round_trip() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-06-28
+end = 2020-07-03
+
+[acc.ent]
+accounts = name, size, initial, pair,
+           e1, 100, 60, p1,
+
+[acc.pools]
+accounts = name, size, initial,
+           p1, 25, 0,
+
+[ras.co]
+targets = acc.pools
+trigger = start_water_year(7)
+action  = set(0.9 * self.pair.balance)
+{TAIL}"#);
+    let model = load(&ini);
+    let rendered = IniModelIO::model_to_string(&model);
+    assert!(rendered.contains("pair"), "pair column re-emitted:\n{}", rendered);
+    assert_eq!(rendered.matches(", pair,").count(), 1,
+        "pair column only on the declaring side:\n{}", rendered);
+    let mut model2 = IniModelIO::read_model_string(&rendered)
+        .unwrap_or_else(|e| panic!("canonical render should re-load, got: {}\n---\n{}", e, rendered));
+    model2.configure().expect("model should configure");
+    model2.run().expect("simulation should run");
+    assert_eq!(balance(&model2, "p1"), 25.0, "pairing survives the round-trip (0.9 x 60 clamped to 25)");
 }

@@ -39,6 +39,7 @@ are the *verbs*. See [Allocation systems](allocation-systems.md) for the why.
 | `name` | yes, first | Account name — a bare lowercase identifier, unique across every group. |
 | `size` | yes | Account size [ML] — the entitlement volume that percentages are taken of. May be an expression. |
 | `initial` | no (defaults to 0) | Opening balance [ML] at the start of the run, within `[0, size]`. |
+| `pair` | no | <a name="pair"></a><a name="co_acc"></a>Paired account — a reference to an account declared elsewhere, not a declaration. The pairing is **symmetric**: declare it on either account's row, and `[ras.*]` action arguments read the other end as [`self.pair.<field>`](ras.md#self) from both sides. An account can be in at most one pair. Nothing else about a paired account is special — it is drawn on via a user's `accounts` list like any account. |
 
 Columns are addressed by the header, not by position, so `name, size, initial`
 and `name, initial, size` are equivalent. An **unknown column name is a load
@@ -46,6 +47,25 @@ error** — a typo like `intial` fails loudly rather than silently leaving every
 account at zero. `accounts` is the only property an `[acc.*]` section may
 contain; anything that *does* something belongs in a [`[ras.*]`](ras.md)
 section.
+
+A carryover pairing in full — the pool is an ordinary account, first in the
+user's order of use, and the grant is an authored rule targeting the pool
+(see the [carryover recipe](ras.md#self)):
+
+```ini
+[acc.entitlements]
+accounts = name,  size, initial, pair,
+           smith, 1000, 0,       smith_co,
+
+[acc.pools]
+accounts = name,     size,
+           smith_co, 250,       ; size = the carryover cap
+
+[ras.carryover]
+targets = acc.pools
+trigger = start_water_year(7)
+action  = set(0.9 * self.pair.balance)   ; pool = 0.9 x smith's remaining balance
+```
 
 ## Referencing accounts from nodes
 
@@ -76,15 +96,23 @@ Account state is published as ordinary series — readable in any
 | `acc.<name>.closing_balance` | Balance at the end of the step. |
 | `acc.<name>.debits` | Water taken by users this step (not policy changes). |
 | `acc.<name>.allocation` | Allocation to date: balance plus use since the last reset (see [Allocation systems](allocation-systems.md)). |
+| `acc.<name>.use` | Water taken since the last `reset_allocation` — the use term of the allocation. Fed only by user takes, like `debits`. |
 | `acc.<name>.size` | Account size. |
 
-<a id="groups"></a>Every field except `size` is also published for the **group
-aggregate**, summed over its members: `acc.<group>.closing_balance`,
-`acc.<group>.allocation`, and so on.
+<a id="groups"></a>Every field is also published for the **group aggregate**,
+summed over its members: `acc.<group>.size`, `acc.<group>.use`,
+`acc.<group>.closing_balance`, and so on — so a resource assessment can write
+`/ acc.gs.size` instead of a magic total that silently goes stale when an
+entitlement changes.
 
-`opening_balance` is written before ordering and flow, so it reads cleanly
-mid-step. The others are written at end of step; reading them earlier in the
-same step needs the previous-step offset, e.g. `acc.smith.closing_balance[-1, 0]`.
+`size` is written at the very top of the step — before even the `[ras.*]`
+sections — so it reads cleanly *everywhere*, announce-time assessments
+included. `opening_balance` is written before ordering and flow, so it reads
+cleanly mid-step. The others are written at end of step; reading them earlier
+in the same step needs the previous-step offset, e.g.
+`acc.smith.closing_balance[-1, 0]` — including `use`, whose `[-1, 0]` read on
+a reset morning is still the *old* period's total (the reset fires later that
+same step).
 
 ## Rules
 

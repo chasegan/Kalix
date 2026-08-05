@@ -174,11 +174,15 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     (if m <= 2 { y + 1 } else { y }, m, d)
 }
 
-fn is_leap_year(y: i64) -> bool {
+/// True for Gregorian leap years. The single home of the leap rule — date
+/// parsing, the `is_leap_year` builtin, and the `sim.is_leap` /
+/// `sim.days_in_*` / calendar-at expression fields all resolve through here.
+pub fn is_leap_year(y: i64) -> bool {
     (y % 4 == 0 && y % 100 != 0) || y % 400 == 0
 }
 
-fn days_in_month(y: i64, m: u32) -> u32 {
+/// Days in a calendar month (1-12), leap-aware. 0 for an invalid month.
+pub fn days_in_month(y: i64, m: u32) -> u32 {
     match m {
         1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
         4 | 6 | 9 | 11 => 30,

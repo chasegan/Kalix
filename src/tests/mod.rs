@@ -133,6 +133,13 @@ mod test_account_groups;
 #[cfg(test)]
 mod test_ras;
 
+// Calendar built-ins: is_leap_year / month_at / days_in_month_at and the
+// sim.days_in_* / sim.is_leap fields
+mod test_calendar_builtins;
+
 #[cfg(test)]
 mod test_opportunistic_demand;
+
+// Confluence order routing (regulated = <upstream node(s)>)
+mod test_confluence_order_routing;
 mod test_output_casing;

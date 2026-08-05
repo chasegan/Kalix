@@ -8,6 +8,22 @@ use crate::numerical::fifo_buffer::FifoBuffer;
 const MAX_US_LINKS: usize = 2; //TODO: not sure how to police this
 const MAX_DS_LINKS: usize = 1;
 
+/// How downstream orders split across the two upstream branches, resolved at
+/// ordering initialise (the `regulated =` property):
+/// - `Harmony`: `harmony_fraction` × orders up us_1, the rest up us_2 —
+///   the legacy mode (unnamed branches, first regulated link = us_1) and the
+///   two-name mode (first named = us_1, so the fraction's direction is
+///   unambiguous).
+/// - `AllToUs1`: one `regulated` pathway named — every order goes up it,
+///   immediately (no lag-differential buffering: there is no second pathway
+///   to synchronise with).
+#[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OrderSplit {
+    #[default]
+    Harmony,
+    AllToUs1,
+}
+
 #[derive(Default, Clone)]
 pub struct ConfluenceNode {
     pub name: String,
@@ -41,6 +57,21 @@ pub struct ConfluenceNode {
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
     recorder_idx_harmony_fraction: Option<usize>,
+
+    // --- Cold configuration, deliberately at the tail: inserting fields
+    // above shifts the hot flow/order state and was a measured ~3%
+    // simulation regression on Proserpine (2026-08; same lesson as the
+    // DataCache field-order note).
+    /// Named regulated ordering pathway(s) — the `regulated =` property, as
+    /// written (upstream node names, order preserved). Resolved to links and
+    /// an OrderSplit by the ordering system's initialise; empty = legacy
+    /// harmony behaviour.
+    pub regulated_upstream: Vec<String>,
+    /// Resolved split mode (see OrderSplit). Set by ordering initialise.
+    pub order_split: OrderSplit,
+    /// Pinned by `regulated =` (second name listed); None in legacy mode,
+    /// where any non-us_1 regulated link is us_2 by elimination.
+    pub us_2_link_idx: Option<usize>,
 }
 
 impl ConfluenceNode {
@@ -65,8 +96,11 @@ impl Node for ConfluenceNode {
         self.harmony_fraction_value = 1.0; //100% for link 1. This will be overwritten anyway.
         self.remaining_order = 0.0;
 
-        // State
+        // State. The ordering system's initialise runs after node initialise
+        // and re-resolves `regulated =` into these fields.
+        self.order_split = OrderSplit::Harmony;
         self.us_1_link_idx = None;
+        self.us_2_link_idx = None;
         self.us_1_lag = 0;
         self.us_2_lag = 0;
         self.us_1_order_buffer = FifoBuffer::default();

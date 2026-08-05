@@ -12,8 +12,15 @@ The confluence node can be used to merge flow pathways. The node is otherwise pa
 [node.walker_confluence]
 type = confluence
 loc = 20, 30
-harmony_fraction = if(node.little_dam.level > 24.0, 1, 0)
+regulated = river_arm            ; orders go up the river arm, by name
 ds_1 = my_other_node
+
+[node.two_dam_junction]
+type = confluence
+loc = 40, 30
+regulated = north_arm, south_arm ; split: 70% of orders up the north arm
+harmony_fraction = 0.7
+ds_1 = another_node
 ```
 
 ## Node properties
@@ -23,7 +30,8 @@ ds_1 = my_other_node
 | [node.?] (compulsory) | Start of node declaration. This says we are creating a node, and also defines the name of the node. Node naming conventions are discussed at . Example: `[node.walker_confluence]` |
 | type (compulsory) | The node type, which is “confluence” in this case. `type = confluence` |
 | loc (compulsory) | The location of the node in cartesian coordinates.  Example: `loc = 20, 30` |
-| harmony\_fraction (optional) | A dynamic expression that determines the fraction of orders directed up the first upstream link (that is, the first link to this node defined in the model file). Example: `harmony_fraction = if(sim.month > 6, 1, 0)` |
+| regulated (optional) | The regulated ordering pathway(s), by upstream node name — the preferred, direction-unambiguous idiom. One name: that branch is the only regulated pathway and all orders propagate up it immediately. Two names: `harmony_fraction` is the fraction of orders sent to the *first listed*. Example: `regulated = north_arm, south_arm` |
+| harmony\_fraction (optional) | A dynamic expression giving the fraction of orders directed up the first `regulated` pathway. Required with two `regulated` names; an error beside a single name (one pathway takes everything, so there is nothing to split). Without `regulated` it keeps its legacy meaning — the fraction to the first upstream link defined in the model file — which depends on link order and is better stated with `regulated`. Example: `harmony_fraction = if(sim.month > 6, 1, 0)` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
 ## Results associated with this node
@@ -41,9 +49,10 @@ ds_1 = my_other_node
 - All inflows are passed to the downstream node.
 
 - Propagation of orders is as follows:
-  - The harmony\_fraction is evaluated to determine the proportion of orders to be directed to the first upstream link (that is, the first link to this node defined in the model file).
-  - The complementary proportion will be directed to the second upstream link.
-  - If either upstream branch has a shorter lag time than the other, then the orders designated for the short branch will be delayed by the n timesteps (n = long\_branch\_lag - short\_branch\_lag) such that the water would be delivered on the correct timestep to meet downstream orders.
+  - With one `regulated` name, every order propagates up the named branch immediately — there is no second pathway to synchronise with, so no lag buffering applies.
+  - With two `regulated` names (or none — the legacy link-order convention), the harmony\_fraction is evaluated to determine the proportion of orders directed up the first pathway, with the complement up the second.
+  - When splitting, if either upstream branch has a shorter lag time than the other, the orders designated for the short branch are delayed by n timesteps (n = long\_branch\_lag - short\_branch\_lag) so the water from both branches arrives on the correct timestep to meet downstream orders.
+  - Each `regulated` name must be one of the confluence's upstream nodes (a load-time error otherwise).
   - This node should not have more than 2 upstream links.
 
 ## References

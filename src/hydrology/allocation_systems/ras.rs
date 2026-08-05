@@ -80,6 +80,13 @@ pub struct RasSystem {
     pub trigger: RasTrigger,
     pub action: RasAction,
 
+    /// Arena base of the six `self.*` slots (RAS_SELF_FIELDS order) — Some
+    /// iff the action argument references self, which switches the argument
+    /// from evaluate-once-per-firing to evaluate-per-target against that
+    /// account's freshly written slots. None costs nothing: the existing
+    /// once-per-firing path runs unchanged.
+    pub self_slots: Option<usize>,
+
     // Originals as written, for round-trip re-emission.
     pub targets_original: String,
     pub trigger_original: String,
@@ -137,59 +144,55 @@ impl RasSystem {
                 }
             }
             RasAction::Set(input) => {
-                let value = input.get_value(data_cache);
-                for &idx in &self.target_account_ids {
-                    account_manager.set_account_balance_safely(idx, value);
-                }
+                self.apply_valued(data_cache, account_manager, input, |am, idx, value| {
+                    am.set_account_balance_safely(idx, value);
+                });
             }
             RasAction::SetFraction(input) => {
-                let fraction = input.get_value(data_cache).clamp(0.0, 1.0);
-                for &idx in &self.target_account_ids {
-                    account_manager.set_account_balance_fraction(idx, fraction);
-                }
+                self.apply_valued(data_cache, account_manager, input, |am, idx, value| {
+                    am.set_account_balance_fraction(idx, value.clamp(0.0, 1.0));
+                });
             }
             RasAction::Credit(input) => {
-                let value = input.get_value(data_cache);
-                for &idx in &self.target_account_ids {
-                    account_manager.add_account_value_safely(idx, value);
-                }
+                self.apply_valued(data_cache, account_manager, input, |am, idx, value| {
+                    am.add_account_value_safely(idx, value);
+                });
             }
             RasAction::CreditFraction(input) => {
-                let fraction = input.get_value(data_cache);
-                for &idx in &self.target_account_ids {
-                    let size = account_manager.get_account_size(idx);
-                    account_manager.add_account_value_safely(idx, fraction * size);
-                }
+                self.apply_valued(data_cache, account_manager, input, |am, idx, value| {
+                    let size = am.get_account_size(idx);
+                    am.add_account_value_safely(idx, value * size);
+                });
             }
             RasAction::Debit(input) => {
-                let value = input.get_value(data_cache);
-                for &idx in &self.target_account_ids {
-                    account_manager.add_account_value_safely(idx, -value);
-                }
+                self.apply_valued(data_cache, account_manager, input, |am, idx, value| {
+                    am.add_account_value_safely(idx, -value);
+                });
             }
             RasAction::Scale(input) => {
-                let factor = input.get_value(data_cache).max(0.0);
-                for &idx in &self.target_account_ids {
-                    let balance = account_manager.get_account_balance(idx);
-                    account_manager.set_account_balance_safely(idx, balance * factor);
-                }
+                self.apply_valued(data_cache, account_manager, input, |am, idx, value| {
+                    let balance = am.get_account_balance(idx);
+                    am.set_account_balance_safely(idx, balance * value.max(0.0));
+                });
             }
             RasAction::ReduceTo(input) => {
-                let cap = input.get_value(data_cache);
-                for &idx in &self.target_account_ids {
-                    let balance = account_manager.get_account_balance(idx);
+                self.apply_valued(data_cache, account_manager, input, |am, idx, cap| {
+                    let balance = am.get_account_balance(idx);
                     if balance > cap {
-                        account_manager.set_account_balance_safely(idx, cap);
+                        am.set_account_balance_safely(idx, cap);
                     }
-                }
+                });
             }
             RasAction::RollCap(input) => {
-                let n = input.get_value(data_cache).round().max(1.0) as usize;
-                for &idx in &self.target_account_ids {
-                    account_manager.roll_cap(idx, n);
-                }
+                self.apply_valued(data_cache, account_manager, input, |am, idx, value| {
+                    am.roll_cap(idx, value.round().max(1.0) as usize);
+                });
             }
             RasAction::Allocate(input) => {
+                // Announcements are one percentage for the whole group
+                // (kalix-allocation-components.md §3.4), so allocate never
+                // takes self references (rejected at load) and stays on the
+                // evaluate-once path that also feeds the pct recorder.
                 let pct = input.get_value(data_cache);
                 self.last_pct = pct;
                 for &idx in &self.target_account_ids {
@@ -203,5 +206,65 @@ impl RasSystem {
             }
         }
         true
+    }
+
+    /// Evaluate the action argument and apply the verb to every target.
+    /// Without self references the argument is evaluated once per firing —
+    /// the stencilled convention, and byte-for-byte the previous behaviour.
+    /// With them, each target's live state is written into the self slots and
+    /// the argument re-evaluated, so per-account policy reads per-account
+    /// facts. Either way this runs only at firings — never on the hot path.
+    fn apply_valued(
+        &self,
+        data_cache: &mut DataCache,
+        account_manager: &mut AccountManager,
+        input: &DynamicInput,
+        apply: impl Fn(&mut AccountManager, usize, f64),
+    ) {
+        match self.self_slots {
+            None => {
+                let value = input.get_value(data_cache);
+                for &idx in &self.target_account_ids {
+                    apply(account_manager, idx, value);
+                }
+            }
+            Some(base) => {
+                for &idx in &self.target_account_ids {
+                    write_self_slots(data_cache, account_manager, base, idx);
+                    let value = input.get_value(data_cache);
+                    apply(account_manager, idx, value);
+                }
+            }
+        }
+    }
+}
+
+/// Write one target account's live state into the six self slots
+/// (RAS_SELF_FIELDS order). Unpaired accounts get NaN pair fields — never
+/// read in practice, because any argument using self.pair.* requires every
+/// target to be paired (validated at load); if that guarantee is ever
+/// bypassed, NaN poisons the result visibly rather than reading as zero.
+fn write_self_slots(
+    data_cache: &mut DataCache,
+    account_manager: &AccountManager,
+    base: usize,
+    account_id: usize,
+) {
+    let account = account_manager.get_account(account_id).expect("RAS targets resolve at load");
+    let f = &mut data_cache.expr_state.f;
+    f[base] = account.balance;
+    f[base + 1] = account.size;
+    f[base + 2] = account.allocation();
+    match account.pair.and_then(|pair| account_manager.get_account(pair)) {
+        Some(pair) => {
+            f[base + 3] = pair.balance;
+            f[base + 4] = pair.size;
+            f[base + 5] = pair.allocation();
+        }
+        None => {
+            f[base + 3] = f64::NAN;
+            f[base + 4] = f64::NAN;
+            f[base + 5] = f64::NAN;
+        }
     }
 }

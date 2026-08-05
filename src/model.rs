@@ -28,6 +28,15 @@ pub enum ExecItem {
     VarBlock(usize),
 }
 
+/// One entry in the ras slot at the top of the timestep: ras-phase var
+/// blocks and [ras.*] sections, interleaved in file order — what you read
+/// is what runs, within the slot exactly as within the flow pass.
+#[derive(Debug, Clone, Copy)]
+pub enum RasSlotItem {
+    VarBlock(usize),
+    Ras(usize),
+}
+
 /// One `key = expression` line of a `[var.*]` section.
 #[derive(Debug, Clone)]
 pub struct VarDef {
@@ -40,8 +49,23 @@ pub struct VarDef {
     pub original: String,
 }
 
+/// When a var block evaluates within the timestep (the `phase` key).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum VarPhase {
+    /// Top of the step, before the [ras.*] sections run — the assessment
+    /// slot, so the day's policy reads today's value bare. Ras-phase blocks
+    /// must appear before the first node section (validated at load): the
+    /// file then reads exactly as the timestep runs.
+    Ras,
+    /// At the block's file position among the nodes, in the flow pass (the
+    /// default).
+    #[default]
+    Flow,
+}
+
 /// A `[var.<name>]` section: published calculations, evaluated top to bottom
-/// at the block's file position in the flow phase, each written to its own
+/// at the block's file position in the flow phase — or, with `phase = ras`,
+/// in the assessment slot at the top of the step — each written to its own
 /// data-cache series — so vars are readable anywhere, offset-addressable,
 /// and recordable like any node output (structured_expressions_design.md §9).
 /// `phase = order` is not yet implemented and is rejected at load.
@@ -50,6 +74,7 @@ pub struct VarBlock {
     /// Section name minus the `var.` prefix.
     pub name: String,
     pub defs: Vec<VarDef>,
+    pub phase: VarPhase,
     /// The `phase` key exactly as written, if present (round-trip fidelity).
     pub phase_explicit: Option<String>,
 }
@@ -110,6 +135,31 @@ pub struct Model {
     ///
     /// Populated: alongside `nodes`/`var_blocks`, via `add_node()`/`add_var_block()`.
     pub exec_items: Vec<ExecItem>,
+
+    /// Hot path: top of run_timestep().
+    /// The ras slot: ras-phase var blocks and [ras.*] sections interleaved
+    /// in file order (assessments read bare by anything below them; a
+    /// section above an assessment cannot see it — loud unwritten-read).
+    ///
+    /// Populated: built by the INI reader in file order; rebuilt as
+    /// vars-then-sections in `initialize_network()` if a programmatic
+    /// construction left it out of step with the item counts.
+    pub ras_slot: Vec<RasSlotItem>,
+
+    /// Hot path: flow phase, read in run_timestep().
+    /// `exec_items` minus the ras-phase var blocks — what the flow pass
+    /// actually interleaves. The plain node loop is used instead when this
+    /// contains no var blocks (see `flow_has_var_blocks`).
+    ///
+    /// Populated: derived from `exec_items` in `initialize_network()`.
+    pub flow_exec_items: Vec<ExecItem>,
+
+    /// Hot path: flow phase, read in run_timestep(). True when
+    /// `flow_exec_items` interleaves at least one var block — the once-per-step
+    /// choice between the plain node loop and the interleaved loop.
+    ///
+    /// Populated: derived in `initialize_network()`.
+    pub flow_has_var_blocks: bool,
 
     /// Hot path: flow phase, read in run_timestep().
     ///
@@ -260,6 +310,9 @@ impl Model {
             nodes: self.nodes.clone(),
             var_blocks: self.var_blocks.clone(),
             exec_items: self.exec_items.clone(),
+            ras_slot: self.ras_slot.clone(),
+            flow_exec_items: self.flow_exec_items.clone(),
+            flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
@@ -285,6 +338,9 @@ impl Model {
             nodes: self.nodes.clone(),
             var_blocks: self.var_blocks.clone(),
             exec_items: self.exec_items.clone(),
+            ras_slot: self.ras_slot.clone(),
+            flow_exec_items: self.flow_exec_items.clone(),
+            flow_has_var_blocks: self.flow_has_var_blocks,
             links: self.links.clone(),
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
@@ -816,11 +872,31 @@ impl Model {
     }
 
     pub fn run_timestep(&mut self, _t: u64) {
-        // Accounting policy: [ras.*] systems run in file order at the top of
-        // the step, before ordering and flow — today's orders and takes see
-        // today's announcements (kalix-allocation-components.md §3.3).
-        for ras in &mut self.ras_systems {
-            ras.run(&mut self.data_cache, &mut self.account_manager);
+        // Sizes first — static, so publishing before the [ras.*] loop makes
+        // acc.<x>.size bare-readable everywhere in the step, announce-time
+        // assessments included. No-op unless a size series is registered.
+        self.account_manager.publish_sizes(&mut self.data_cache);
+
+        // The ras slot: assessments (phase = ras var blocks) and policy
+        // ([ras.*] sections) interleaved in file order at the top of the
+        // step, before ordering and flow — today's orders and takes see
+        // today's announcements (kalix-allocation-components.md §3.3), and
+        // a section reads bare any assessment written above it.
+        for i in 0..self.ras_slot.len() {
+            match self.ras_slot[i] {
+                RasSlotItem::VarBlock(vb_idx) => {
+                    for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
+                        let value = self.var_blocks[vb_idx].defs[def_idx]
+                            .input
+                            .get_value(&mut self.data_cache);
+                        let series_idx = self.var_blocks[vb_idx].defs[def_idx].series_idx;
+                        self.data_cache.add_value_at_index(series_idx, value);
+                    }
+                }
+                RasSlotItem::Ras(ras_idx) => {
+                    self.ras_systems[ras_idx].run(&mut self.data_cache, &mut self.account_manager);
+                }
+            }
         }
 
         // Post-policy, pre-take snapshot: publishes acc.*.opening_balance and
@@ -847,7 +923,7 @@ impl Model {
         // The node body is duplicated in both branches deliberately: a shared
         // &mut self helper can't be called while iterating a borrowed field,
         // and the disjoint field borrows only work with the body inline.
-        if self.var_blocks.is_empty() {
+        if !self.flow_has_var_blocks {
             for &node_idx in &self.execution_order {
                 // Set node context for error reporting (just stores the index)
                 set_context_node(node_idx);
@@ -867,7 +943,7 @@ impl Model {
                 }
             }
         } else {
-            for &exec_item in &self.exec_items {
+            for &exec_item in &self.flow_exec_items {
                 match exec_item {
                     ExecItem::Node(node_idx) => {
                         set_context_node(node_idx);
@@ -902,6 +978,33 @@ impl Model {
     }
 
     pub fn initialize_network(&mut self) -> Result<(), String> {
+        // Partition the var blocks by phase (performance §3.5: decided here,
+        // never per step): ras-phase blocks run in the ras slot at the top of
+        // the step; the flow pass interleaves the rest at file position,
+        // falling back to the plain node loop when none remain.
+        self.flow_exec_items.clear();
+        let mut ras_phase_blocks: Vec<usize> = Vec::new();
+        for &item in &self.exec_items {
+            match item {
+                ExecItem::VarBlock(vb_idx) if self.var_blocks[vb_idx].phase == VarPhase::Ras => {
+                    ras_phase_blocks.push(vb_idx);
+                }
+                other => self.flow_exec_items.push(other),
+            }
+        }
+        self.flow_has_var_blocks = self.flow_exec_items.iter()
+            .any(|i| matches!(i, ExecItem::VarBlock(_)));
+
+        // The ras slot interleaves assessments and [ras.*] sections in file
+        // order; the INI reader builds it. A programmatic construction that
+        // bypassed the reader gets the natural default: assessments first,
+        // then the sections, each in declaration order.
+        if self.ras_slot.len() != ras_phase_blocks.len() + self.ras_systems.len() {
+            self.ras_slot.clear();
+            self.ras_slot.extend(ras_phase_blocks.iter().map(|&i| RasSlotItem::VarBlock(i)));
+            self.ras_slot.extend((0..self.ras_systems.len()).map(RasSlotItem::Ras));
+        }
+
         // Initialize the nodes and execution order
         self.initialize_nodes()?;
         self.check_execution_order()?;
@@ -910,7 +1013,7 @@ impl Model {
         // Initialise the ordering system
         // TODO: I am doing this in "initialize_network" because it relies on execution order being resolved (which we do above).
         self.simple_ordering_system
-            .initialize(&mut self.nodes, &self.links, &self.incoming_links);
+            .initialize(&mut self.nodes, &self.links, &self.incoming_links)?;
 
         // Return
         Ok(())

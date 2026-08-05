@@ -122,6 +122,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // (accounts = references) and [ras.*] sections can target accounts and groups
     // regardless of file order. IndexMap iteration preserves file order, so account
     // indices follow declaration order (fill_in_order relies on row order per group).
+    // Pairings are collected as names during the pre-pass and resolved once
+    // every account exists — a pair may live in a later [acc.*] section.
+    let mut pending_pairs: Vec<(usize, String, usize)> = Vec::new(); // (account_idx, pair_name, line)
     for (section_name, ini_section) in &ini_doc.sections {
         if let Some(group_name) = section_name.strip_prefix("acc.") {
             if !is_valid_bare_name(group_name) {
@@ -156,6 +159,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 );
                 let account_idx = model.account_manager.add_account(account)
                     .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", accounts_prop.line_number, e)))?;
+                if let Some(pairs) = &table.pairs {
+                    pending_pairs.push((account_idx, pairs[row].clone(), accounts_prop.line_number));
+                }
                 member_ids.push(account_idx);
             }
             model.account_manager.add_group(AccountGroup {
@@ -164,6 +170,15 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 columns: Vec::new(), // engine-known columns only for now; data columns arrive with the actions that read them
             }).map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_section.line_number, e)))?;
         }
+    }
+
+    // Resolve pairings now that every account exists. set_pair validates —
+    // the pair must exist (and be an account, not a group), differ from its
+    // declarer, and neither account may already be paired — and writes both
+    // ends, so self.pair.* reads from either side of the pairing.
+    for (account_idx, pair_name, line) in pending_pairs {
+        model.account_manager.set_pair(account_idx, &pair_name)
+            .map_err(|e| KalixIoError::Validate(format!("Error on line {}: {}", line, e)))?;
     }
 
     // -------------------------------------------------------------------------------------
@@ -209,7 +224,14 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         }
     }
 
-    // Iterate over the sections of the ini_doc and construct the model as we go
+    // Iterate over the sections of the ini_doc and construct the model as we go.
+    // seen_node_section drives the ras-phase var placement rule: assessment
+    // blocks must precede the first node, so the file reads as the timestep runs.
+    // ras_slot_items collects (line, item) for everything that runs in the ras
+    // slot — assessments and [ras.*] sections — so the slot executes in file
+    // order, interleaved exactly as written.
+    let mut seen_node_section = false;
+    let mut ras_slot_items: Vec<(usize, crate::model::RasSlotItem)> = Vec::new();
     for (section_name, ini_section) in ini_doc.sections {
 
         if section_name == "kalix" {
@@ -273,6 +295,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             // Parsing nodes
             // -------------------------------------------------------------------------------------
+            seen_node_section = true;
 
             // Get the name and type
             let node_name = &section_name[5..];
@@ -319,9 +342,39 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "harmony_fraction" {
                             n.harmony_fraction = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "regulated" {
+                            let names = csv_to_string_vec(v);
+                            if names.is_empty() || names.len() > 2 {
+                                return Err(KalixIoError::Validate(format!(
+                                    "Error on line {}: 'regulated' for node '{}' takes one or two upstream node names, got {}",
+                                    ini_property.line_number, node_name, names.len())));
+                            }
+                            if names.len() == 2 && names[0].eq_ignore_ascii_case(&names[1]) {
+                                return Err(KalixIoError::Validate(format!(
+                                    "Error on line {}: 'regulated' for node '{}' names '{}' twice",
+                                    ini_property.line_number, node_name, names[0])));
+                            }
+                            n.regulated_upstream = names;
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'", ini_property.line_number, name, node_name)));
                         }
+                    }
+                    // The fraction only exists where there is genuinely
+                    // something to split: one named regulated pathway takes
+                    // everything, so a fraction beside it is a contradiction —
+                    // and two named pathways need the fraction stated.
+                    let harmony_set = !matches!(n.harmony_fraction, DynamicInput::None { .. });
+                    if n.regulated_upstream.len() == 1 && harmony_set {
+                        return Err(KalixIoError::Validate(format!(
+                            "Error on line {}: Node '{}' sets harmony_fraction but names only one 'regulated' pathway — \
+                            a single pathway takes all orders, so there is nothing to split",
+                            ini_section.line_number, node_name)));
+                    }
+                    if n.regulated_upstream.len() == 2 && !harmony_set {
+                        return Err(KalixIoError::Validate(format!(
+                            "Error on line {}: Node '{}' names two 'regulated' pathways but no harmony_fraction — \
+                            state the fraction of orders sent to the first",
+                            ini_section.line_number, node_name)));
                     }
                     NodeEnum::ConfluenceNode(n)
                 }
@@ -797,23 +850,40 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                    ini_section.line_number, block_name)));
             }
 
-            // Phase: 'flow' (default) runs at file position in the flow pass.
-            // 'order' is designed (order phase walks bottom-up) but its
-            // interleave with the ordering system is not yet implemented —
-            // rejected rather than approximated (owner decision, July 2026).
+            // Phase: 'flow' (default) runs at file position in the flow pass;
+            // 'ras' runs in the assessment slot at the top of the step, before
+            // the [ras.*] sections, and must precede the first node — the file
+            // then reads exactly as the timestep runs (node-definition-order §1
+            // extended to the whole step). 'order' is designed (order phase
+            // walks bottom-up) but its interleave with the ordering system is
+            // not yet implemented — rejected rather than approximated (owner
+            // decision, July 2026).
+            let mut phase = crate::model::VarPhase::Flow;
             let mut phase_explicit: Option<String> = None;
             if let Some(p) = ini_section.properties.get("phase") {
                 match p.value.trim().to_lowercase().as_str() {
                     "flow" => phase_explicit = Some(p.value.trim().to_string()),
+                    "ras" => {
+                        if seen_node_section {
+                            return Err(KalixIoError::Validate(format!(
+                                "Error on line {}: [{}] declares phase = ras but appears after the \
+                                 first node section. Assessment blocks run at the top of the step, \
+                                 before the [ras.*] sections — place them before the nodes so the \
+                                 file reads as the timestep runs.",
+                                p.line_number, section_name)));
+                        }
+                        phase = crate::model::VarPhase::Ras;
+                        phase_explicit = Some(p.value.trim().to_string());
+                    }
                     "order" => {
                         return Err(KalixIoError::Validate(format!(
                             "Error on line {}: phase = order is not yet implemented for \
-                             [var.*] blocks (only phase = flow is supported)",
+                             [var.*] blocks (only phase = ras or flow is supported)",
                             p.line_number)));
                     }
                     other => {
                         return Err(KalixIoError::Parse(format!(
-                            "Error on line {}: invalid phase '{}' for [{}] (expected 'flow' or 'order')",
+                            "Error on line {}: invalid phase '{}' for [{}] (expected 'ras', 'flow' or 'order')",
                             p.line_number, other, section_name)));
                     }
                 }
@@ -840,8 +910,17 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 // offset resolves to the same series.
                 let series_idx = model.data_cache.get_or_add_new_series(&series_name, false);
 
+                // `this[-1, 0]` is the var's own series (expression-naming
+                // §2.8): expanded textually in the definition's own text, so
+                // the state idiom survives a rename without editing its
+                // internal self-references.
+                let expanded = crate::model_inputs::dynamic_input::expand_var_this(
+                    &ini_property.value, &series_name)
+                    .map_err(|e| KalixIoError::Parse(format!("Error on line {}: in '{}': {}",
+                                         ini_property.line_number, key, e)))?;
+
                 let input = DynamicInput::from_string(
-                    &ini_property.value, &mut model.data_cache, true, None)
+                    &expanded, &mut model.data_cache, true, None)
                     .map_err(|e| KalixIoError::Parse(format!("Error on line {}: in '{}': {}",
                                          ini_property.line_number, key, e)))?;
 
@@ -853,11 +932,15 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 });
             }
 
-            model.add_var_block(crate::model::VarBlock {
+            let vb_idx = model.add_var_block(crate::model::VarBlock {
                 name: block_name.to_string(),
                 defs,
+                phase,
                 phase_explicit,
             });
+            if phase == crate::model::VarPhase::Ras {
+                ras_slot_items.push((ini_section.line_number, crate::model::RasSlotItem::VarBlock(vb_idx)));
+            }
         } else if section_name.starts_with("table.") {
             // -------------------------------------------------------------------------------------
             // Lookup tables — already parsed in the pre-pass above
@@ -922,13 +1005,29 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         }
         let trigger = parse_ras_trigger(&trigger_str, &mut model, line)
             .map_err(KalixIoError::Parse)?;
-        let action = parse_ras_action(&action_str, &mut model, line)
+        let parsed_action = parse_ras_action(&action_str, &mut model, line)
             .map_err(KalixIoError::Parse)?;
+        // A self.pair.* read goes through the target's pairing, so an
+        // unpaired target is a configuration hole. Refuse it loudly at load
+        // rather than handing the expression NaN at every firing.
+        if parsed_action.uses_pair {
+            for &idx in &target_account_ids {
+                let account = model.account_manager.get_account(idx).unwrap();
+                if account.pair.is_none() {
+                    return Err(KalixIoError::Validate(format!(
+                        "Error on line {}: RAS '{}' reads self.pair.* but target account '{}' is not paired \
+                        (no 'pair' column names it or is declared on it)",
+                        line, ras_name, account.name)));
+                }
+            }
+        }
+        ras_slot_items.push((line, crate::model::RasSlotItem::Ras(model.ras_systems.len())));
         model.ras_systems.push(RasSystem {
             name: ras_name,
             target_account_ids,
             trigger,
-            action,
+            action: parsed_action.action,
+            self_slots: parsed_action.self_slots,
             targets_original: targets_str,
             trigger_original: trigger_str,
             action_original: action_str,
@@ -938,6 +1037,45 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         });
     }
 
+    // The ras slot executes in file order: sort the collected assessments and
+    // sections by their section line and hand the sequence to the model.
+    ras_slot_items.sort_by_key(|&(line, _)| line);
+    model.ras_slot = ras_slot_items.into_iter().map(|(_, item)| item).collect();
+
+    // -------------------------------------------------------------------------------------
+    // Warn on paired accounts no user draws on
+    // -------------------------------------------------------------------------------------
+    // A paired account (typically a carryover pool) in no user node's
+    // accounts list would be credited and never used — almost certainly a
+    // missing list entry. A warning rather than an error: a deliberately
+    // idle account is legal. Checked from the declaring side so each pairing
+    // is inspected once, in both directions.
+    {
+        let mut drawn_on: Vec<usize> = Vec::new();
+        for node in &model.nodes {
+            match node {
+                NodeEnum::UnregulatedUserNode(n) => drawn_on.extend(&n.account_idxs),
+                NodeEnum::RegulatedUserNode(n) => drawn_on.extend(&n.account_idxs),
+                _ => {}
+            }
+        }
+        for group in model.account_manager.groups() {
+            for &idx in &group.member_ids {
+                let account = model.account_manager.get_account(idx).unwrap();
+                if !account.pair_declared { continue; }
+                let pair_idx = account.pair.unwrap();
+                for (a, b) in [(idx, pair_idx), (pair_idx, idx)] {
+                    if !drawn_on.contains(&a) {
+                        let undrawn = model.account_manager.get_account(a).unwrap();
+                        let other = model.account_manager.get_account(b).unwrap();
+                        eprintln!("Warning: paired account '{}' (pair of '{}') is not in any user node's accounts list",
+                            undrawn.name, other.name);
+                    }
+                }
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------------------
     // Validate acc.* series references
     // -------------------------------------------------------------------------------------
@@ -945,6 +1083,22 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // expression reference. Each must name a real account (or group) and a real
     // field — otherwise a typo would sit there as a series nothing ever writes,
     // reading as a silent NaN instead of an error.
+    // ras.<name>.<field> references get the same strictness (only fired and
+    // pct exist; anything else would sit as a silently unwritten series).
+    for name in model.data_cache.series_name.clone() {
+        let Some(rest) = name.strip_prefix("ras.") else { continue };
+        let (target, field) = rest.rsplit_once('.').ok_or_else(|| KalixIoError::Parse(format!(
+            "Invalid RAS reference 'ras.{}': expected 'ras.<name>.<field>'", rest)))?;
+        if !model.ras_systems.iter().any(|r| r.name == target) {
+            return Err(KalixIoError::Validate(format!(
+                "Unknown RAS '{}' in reference '{}'. RAS systems are declared as [ras.*] sections.", target, name)));
+        }
+        if field != "fired" && field != "pct" {
+            return Err(KalixIoError::Validate(format!(
+                "Unknown field '{}' in reference '{}'. Available for a RAS: fired, pct", field, name)));
+        }
+    }
+
     for name in model.data_cache.series_name.clone() {
         let Some(rest) = name.strip_prefix("acc.") else { continue };
         let (target, field) = rest.rsplit_once('.').ok_or_else(|| KalixIoError::Parse(format!(
@@ -1070,6 +1224,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "confluence");
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "regulated", &n.regulated_upstream.join(", "));
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "harmony_fraction", &n.harmony_fraction.to_string());
             }
             NodeEnum::GaugeNode(n) => {
@@ -1367,12 +1522,16 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
 /// ini parser stays row-agnostic — and strictness on unrecognised columns is
 /// what catches typos ('initail') at load. The set grows only when an engine
 /// feature consumes a new column.
-const ACCOUNT_TABLE_COLUMNS: [&str; 3] = ["name", "size", "initial"];
+const ACCOUNT_TABLE_COLUMNS: [&str; 4] = ["name", "size", "initial", "pair"];
 
 struct AccountTableData {
     names: Vec<String>,
     sizes: Vec<f64>,
     initials: Vec<f64>,
+    /// Paired-account names (the `pair` column), present iff the column is.
+    /// Names, not indices: pairs may be declared in a later [acc.*] section,
+    /// so resolution happens in a post-pass once every account exists.
+    pairs: Option<Vec<String>>,
 }
 
 /// Parse the `accounts` property of an [acc.*] section: a headed table that
@@ -1422,7 +1581,12 @@ fn parse_account_table(flat: &str) -> Result<AccountTableData, String> {
             data.len(), n_cols, ACCOUNT_TABLE_COLUMNS.join(", ")));
     }
 
-    let mut table = AccountTableData { names: Vec::new(), sizes: Vec::new(), initials: Vec::new() };
+    let mut table = AccountTableData {
+        names: Vec::new(),
+        sizes: Vec::new(),
+        initials: Vec::new(),
+        pairs: if header.iter().any(|h| h == "pair") { Some(Vec::new()) } else { None },
+    };
     for row in data.chunks(n_cols) {
         let mut size = f64::NAN;
         let mut initial = 0.0;
@@ -1453,6 +1617,14 @@ fn parse_account_table(flat: &str) -> Result<AccountTableData, String> {
                     initial = cell.parse::<f64>()
                         .map_err(|_| format!("Invalid initial balance '{}' for account '{}': must be a number",
                             cell, table.names.last().map(String::as_str).unwrap_or("?")))?;
+                }
+                "pair" => {
+                    let pair = cell.to_lowercase();
+                    if !is_valid_bare_name(&pair) {
+                        return Err(format!("Invalid pair account name '{}' for account '{}'",
+                            cell, table.names.last().map(String::as_str).unwrap_or("?")));
+                    }
+                    table.pairs.as_mut().expect("header contains pair").push(pair);
                 }
                 _ => unreachable!("header is drawn from ACCOUNT_TABLE_COLUMNS"),
             }
@@ -1510,13 +1682,24 @@ fn parse_ras_trigger(s: &str, model: &mut Model, line: usize) -> Result<crate::h
 
 /// Parse a RAS action: a stencilled action name with an optional
 /// expression-valued argument. Distributive actions arrive in phase 2/3.
-fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hydrology::allocation_systems::ras::RasAction, String> {
+/// A parsed RAS action plus the self plumbing of its argument (see
+/// `DynamicInput::from_string_ras_action`): the slot base when the argument
+/// reads self.*, and whether it reads self.pair.* (which obliges every
+/// target account to be paired — checked by the RAS builder).
+struct ParsedRasAction {
+    action: crate::hydrology::allocation_systems::ras::RasAction,
+    self_slots: Option<usize>,
+    uses_pair: bool,
+}
+
+fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<ParsedRasAction, String> {
     use crate::hydrology::allocation_systems::ras::RasAction;
+    let no_self = |action: RasAction| ParsedRasAction { action, self_slots: None, uses_pair: false };
     let trimmed = s.trim();
     match trimmed {
-        "set_full" => return Ok(RasAction::SetFull),
-        "set_empty" => return Ok(RasAction::SetEmpty),
-        "reset_allocation" => return Ok(RasAction::ResetAllocation),
+        "set_full" => return Ok(no_self(RasAction::SetFull)),
+        "set_empty" => return Ok(no_self(RasAction::SetEmpty)),
+        "reset_allocation" => return Ok(no_self(RasAction::ResetAllocation)),
         _ => {}
     }
     let open = trimmed.find('(');
@@ -1528,22 +1711,37 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<crate::hy
                 reduce_to(x), allocate(pct)", line, trimmed));
         }
     };
-    let input = DynamicInput::from_string(arg, &mut model.data_cache, true, None)
+    let parsed_arg = DynamicInput::from_string_ras_action(arg, &mut model.data_cache)
         .map_err(|e| format!("Error on line {}: Invalid argument for RAS action '{}': {}", line, name, e))?;
-    match name {
-        "set" => Ok(RasAction::Set(input)),
-        "set_fraction" => Ok(RasAction::SetFraction(input)),
-        "credit" => Ok(RasAction::Credit(input)),
-        "credit_fraction" => Ok(RasAction::CreditFraction(input)),
-        "debit" => Ok(RasAction::Debit(input)),
-        "roll_cap" => Ok(RasAction::RollCap(input)),
-        "scale" => Ok(RasAction::Scale(input)),
-        "reduce_to" => Ok(RasAction::ReduceTo(input)),
-        "allocate" => Ok(RasAction::Allocate(input)),
-        other => Err(format!("Error on line {}: Unknown RAS action '{}'. Expected one of: set_full, \
+    // Announcements are one percentage for the whole group
+    // (kalix-allocation-components.md §3.4): per-account self reads would
+    // dissolve that meaning (and the pct recorder with it).
+    if name == "allocate" && parsed_arg.self_slots.is_some() {
+        return Err(format!("Error on line {}: allocate() does not take self.* references — an announcement \
+            is one percentage for the whole target group", line));
+    }
+    let input = parsed_arg.input;
+    let action = match name {
+        "set" => RasAction::Set(input),
+        "set_fraction" => RasAction::SetFraction(input),
+        "credit" => RasAction::Credit(input),
+        "credit_fraction" => RasAction::CreditFraction(input),
+        "debit" => RasAction::Debit(input),
+        "roll_cap" => RasAction::RollCap(input),
+        "scale" => RasAction::Scale(input),
+        "reduce_to" => RasAction::ReduceTo(input),
+        "allocate" => RasAction::Allocate(input),
+        // carryover(x) was briefly an action here (2026-08); it is now the
+        // authored pattern `set(x * self.pair.balance)` targeting the pool
+        // group — one spelling per policy, and every action writes only to
+        // its own targets.
+        "carryover" => return Err(format!("Error on line {}: 'carryover' is not an action. Target the \
+            pool group and write it directly: action = set(x * self.pair.balance)", line)),
+        other => return Err(format!("Error on line {}: Unknown RAS action '{}'. Expected one of: set_full, \
             set_empty, reset_allocation, set(x), set_fraction(x), credit(x), credit_fraction(x), debit(x), roll_cap(n), scale(x), \
             reduce_to(x), allocate(pct)", line, other)),
-    }
+    };
+    Ok(ParsedRasAction { action, self_slots: parsed_arg.self_slots, uses_pair: parsed_arg.uses_pair })
 }
 
 /// Resolve a node's `accounts` property — a comma-separated, *ordered* list of
@@ -1578,12 +1776,27 @@ fn resolve_account_references(v: &str, manager: &crate::hydrology::accounts::acc
 /// commas, 4-space continuation indent).
 fn format_account_group_table(manager: &crate::hydrology::accounts::account_manager::AccountManager, group: &AccountGroup) -> String {
     let indent = " ".repeat(4);
-    let mut out = String::from("name, size, initial, ");
+    // Pairings are symmetric but the `pair` column is emitted only on the
+    // side that declared it (pair_declared), so a saved file re-loads without
+    // double-declaring. The column is per-group all-or-nothing (the table
+    // grammar cannot express a partial column), so the first member decides
+    // the header for the whole group.
+    let has_pair = group.member_ids.first()
+        .and_then(|&idx| manager.get_account(idx))
+        .is_some_and(|a| a.pair_declared);
+    let mut out = String::from(if has_pair { "name, size, initial, pair, " } else { "name, size, initial, " });
     for &account_idx in &group.member_ids {
         if let Some(account) = manager.get_account(account_idx) {
             out.push('\n');
             out.push_str(&indent);
             out.push_str(&format!("{}, {}, {}, ", account.name, format_f64(account.size), format_f64(account.initial_balance)));
+            if has_pair {
+                let pair_name = account.pair
+                    .and_then(|idx| manager.get_account(idx))
+                    .map(|a| a.name.as_str())
+                    .expect("pair column is per-group all-or-nothing");
+                out.push_str(&format!("{}, ", pair_name));
+            }
         }
     }
     out

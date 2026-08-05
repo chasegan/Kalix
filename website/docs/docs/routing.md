@@ -60,6 +60,8 @@ and mass balance requires that
 
 `Vi=Vi−1+qin,i−qout,i`
 
+**Flows above the table** - when the reference flow exceeds the last row of the `pwl` table, the travel time is treated as flat beyond the table (flat extrapolation): the section's storage saturates at the storage integral evaluated at the last index flow, and the balance is released downstream, so mass always balances. Tables therefore do not need a synthetic huge-flow guard row.
+
 ## References
 
 None.

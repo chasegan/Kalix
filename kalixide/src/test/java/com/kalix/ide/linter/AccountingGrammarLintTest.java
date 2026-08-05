@@ -108,11 +108,16 @@ class AccountingGrammarLintTest {
     }
 
     @Test
-    void groupAggregateRejectsPerAccountOnlyField() {
-        String bad = MODEL.replace("acc.avl.closing_balance", "acc.avl.size");
+    void groupAggregateFieldSetIsClosed() {
+        // size and use ARE group aggregates now (engine GROUP_SERIES_FIELDS);
+        // the set stays closed against anything else.
+        String good = MODEL.replace("acc.avl.closing_balance", "acc.avl.size");
+        assertTrue(lint(good).stream().noneMatch(i -> i.getMessage().contains("Unknown field for account group")),
+                "group size aggregate should lint clean");
+        String bad = MODEL.replace("acc.avl.closing_balance", "acc.avl.sizes");
         List<ValidationIssue> issues = lint(bad);
         assertTrue(issues.stream().anyMatch(i -> i.getMessage().contains("Unknown field for account group")),
-                "size is not a group aggregate, got:\n" + describe(issues));
+                "unknown group field should be reported, got:\n" + describe(issues));
     }
 
     @Test

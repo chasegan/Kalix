@@ -73,9 +73,21 @@ dependencies {
 
 application {
     mainClass.set("com.kalix.ide.KalixIDE")
-    // Grant native access for the Foreign Function & Memory API (Windows "Reveal in File Manager"
-    // calls the Shell API directly), so the JVM doesn't print a restricted-method warning.
+    // Grant native access for JNA (taskbar AppUserModelID, directory watcher) and the
+    // Foreign Function & Memory API (Windows "Reveal in File Manager" calls the Shell API
+    // directly). JDK 24+ (JEP 472) warns on restricted native access by default and will
+    // eventually block it; this covers `gradlew run`, the installDist start scripts, and
+    // runtime-plugin images. Launchers that bypass the application plugin (an IDE
+    // "Application" run configuration, bare `java -cp`) must pass the same flag in their
+    // own VM options; `java -jar` is covered by the manifest attribute below.
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
+}
+
+tasks.jar {
+    manifest {
+        // The `java -jar` counterpart of applicationDefaultJvmArgs (JEP 472).
+        attributes["Enable-Native-Access"] = "ALL-UNNAMED"
+    }
 }
 
 java {

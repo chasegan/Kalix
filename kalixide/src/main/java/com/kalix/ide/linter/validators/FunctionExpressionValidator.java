@@ -181,6 +181,43 @@ public class FunctionExpressionValidator {
     }
 
     /**
+     * Validate a [var.*] definition value: exactly {@link #validate(String,
+     * ValidationContext)} plus the one reference only a var definition has —
+     * bare {@code this[offset]}, the var's own series (expression-naming
+     * §2.8). Offset-less {@code this} and dotted {@code this.x} get targeted
+     * errors mirroring the engine's.
+     */
+    public List<String> validateVarDefinition(String value, ValidationContext context) {
+        List<String> errors = new ArrayList<>();
+        if (value == null || value.trim().isEmpty()) {
+            errors.add("Expression is empty");
+            return errors;
+        }
+        if (context == null) {
+            context = ValidationContext.empty();
+        }
+        String trimmed = value.trim();
+        try {
+            Tokenizer tokenizer = new Tokenizer(trimmed);
+            Parser parser = new Parser(tokenizer, context);
+            parser.allowBareThis = true;
+            if (trimmed.startsWith("{")) {
+                parser.parseProgram(errors);
+            } else {
+                parser.parseExpression(errors);
+            }
+            if (errors.isEmpty() && parser.current.type != TokenType.EOF) {
+                errors.add("Unexpected tokens after expression: '" + parser.current.value + "'");
+            }
+        } catch (ParseException e) {
+            errors.add(e.getMessage());
+        } catch (Exception e) {
+            errors.add("Failed to parse expression: " + e.getMessage());
+        }
+        return errors;
+    }
+
+    /**
      * Validate a [fn] definition body: an expression or a { } block whose
      * bare names resolve against the function's parameters (plus any locals
      * it assigns). 'this.' is late-bound to the calling node, so it cannot
@@ -330,13 +367,15 @@ public class FunctionExpressionValidator {
         OPERATOR, LPAREN, RPAREN, LBRACE, RBRACE, SEMICOLON, COMMA, EOF
     }
 
-    /** Fields published per account (`acc.<account>.<field>`). */
+    /** Fields published per account (`acc.<account>.<field>`). Mirrors the
+     *  engine's ACCOUNT_SERIES_FIELDS (src/hydrology/accounts/account_manager.rs). */
     private static final java.util.Set<String> ACCOUNT_FIELDS =
-        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "size");
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "use", "size");
 
-    /** Fields published per account group — the same, less the static ones. */
-    private static final java.util.Set<String> ACCOUNT_GROUP_FIELDS =
-        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation");
+    /** Fields published per account group: every account field is aggregated
+     *  (summed) over the members, `size` and `use` included. Mirrors the
+     *  engine's GROUP_SERIES_FIELDS. */
+    private static final java.util.Set<String> ACCOUNT_GROUP_FIELDS = ACCOUNT_FIELDS;
 
     /** Fields published per resource allocation system (`ras.<name>.<field>`). */
     private static final java.util.Set<String> RAS_FIELDS = java.util.Set.of("fired", "pct");
@@ -525,6 +564,14 @@ public class FunctionExpressionValidator {
                 return readThisReference(start);
             }
 
+            // Bare 'this' — a var definition's self-reference (its own series,
+            // with an optional offset bracket). Validity is context-checked in
+            // validateThisRef; tokenizing it here keeps the error targeted
+            // instead of falling through to "unknown identifier".
+            if (firstSegment.equals("this")) {
+                return readBareThisReference(start);
+            }
+
             // Regular identifier (function name or variable)
             return new Token(TokenType.IDENT, firstSegment, start);
         }
@@ -594,6 +641,22 @@ public class FunctionExpressionValidator {
         }
 
         // Read a 'this' reference (this.dsflow, this.volume, etc.)
+        private Token readBareThisReference(int start) {
+            StringBuilder sb = new StringBuilder("this");
+            if (pos < input.length() && input.charAt(pos) == '[') {
+                int bracketStart = pos;
+                pos++;
+                while (pos < input.length() && input.charAt(pos) != ']') {
+                    pos++;
+                }
+                if (pos < input.length() && input.charAt(pos) == ']') {
+                    pos++;
+                    sb.append(input, bracketStart, pos);
+                }
+            }
+            return new Token(TokenType.THIS_REF, sb.toString(), start);
+        }
+
         private Token readThisReference(int start) {
             StringBuilder sb = new StringBuilder("this");
 
@@ -670,6 +733,9 @@ public class FunctionExpressionValidator {
         /** True when validating a [fn] body: 'this.' is late-bound to the
          *  calling node, so context checks are suppressed. */
         boolean allowLateThis;
+        /** Set for [var.*] definition values: bare `this[offset]` is the
+         *  var's own series (dotted this.x is then rejected). */
+        boolean allowBareThis;
 
         Parser(Tokenizer tokenizer, ValidationContext context) throws ParseException {
             this.tokenizer = tokenizer;
@@ -1449,9 +1515,30 @@ public class FunctionExpressionValidator {
             // Strip optional square brackets for validation
             String refWithoutBrackets = thisRef.replaceFirst("\\[.*?\\]$", "");
 
-            // Check for malformed this references
-            if (refWithoutBrackets.equals("this") || refWithoutBrackets.equals("this.")) {
+            // Bare 'this' — the var-definition self-reference (expression-naming
+            // §2.8: the enclosing definition). Valid only in a var definition,
+            // and only with an offset: the var's current value is unwritten.
+            if (refWithoutBrackets.equals("this")) {
+                if (allowBareThis) {
+                    if (thisRef.equals("this")) {
+                        errors.add("a var's self-reference reads its own history and needs an offset, "
+                                + "e.g. this[-1, 0] (its current value is not written yet)");
+                    }
+                    return;
+                }
                 errors.add("Incomplete this reference: '" + thisRef + "'");
+                return;
+            }
+            if (refWithoutBrackets.equals("this.")) {
+                errors.add("Incomplete this reference: '" + thisRef + "'");
+                return;
+            }
+
+            // Dotted 'this.x' inside a var definition: a var's 'this' is its
+            // own series and takes no field.
+            if (allowBareThis) {
+                errors.add("'this' in a var definition is the var's own series and takes no field"
+                        + " - write this[-1, 0]");
                 return;
             }
 

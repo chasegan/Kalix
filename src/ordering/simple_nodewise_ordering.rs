@@ -59,7 +59,7 @@ impl SimpleNodewiseOrderingSystem {
     pub fn initialize(&mut self,
                       nodes: &mut Vec<NodeEnum>,
                       links: &Vec<Link>,
-                      incoming_links: &Vec<Vec<usize>>) -> () {
+                      incoming_links: &Vec<Vec<usize>>) -> Result<(), String> {
         // 'nodes' is a borrowed vector of all nodes (as NodeEnums) in definition order
         // 'links' is a borrowed vector of all links, where a link has from_node, from_outlet,
         //         to_node, to_inlet.
@@ -70,6 +70,12 @@ impl SimpleNodewiseOrderingSystem {
         // Start clean
         self.links_simple_ordering.clear();
         self.regulated_zone_counter = 0;
+
+        // Phase 0: resolve confluence `regulated =` declarations. Each named
+        // node must be an upstream neighbour; the first name becomes us_1
+        // (so a two-name harmony_fraction is direction-unambiguous), a
+        // single name routes every order up that branch.
+        self.resolve_confluence_regulated_pathways(nodes, links, incoming_links)?;
 
         // Phase 1: Build the links_simple_ordering vector and initialize nodes.
         // This is identical to SimpleOrderingSystem::initialize().
@@ -163,7 +169,29 @@ impl SimpleNodewiseOrderingSystem {
                     }
                     NodeEnum::ConfluenceNode(node) => {
                         let int_lag = new_link_item.lag.round() as usize;
-                        if node.us_1_link_idx.is_none() {
+                        if !node.regulated_upstream.is_empty() {
+                            // Named pathways (resolved in Phase 0): record the
+                            // lag against its pinned slot. With one name there
+                            // is nothing to synchronise, so buffers stay
+                            // zero-length (orders propagate immediately); with
+                            // two, rebuild the lag-differential buffers as each
+                            // lag lands (idempotent — the last rebuild, with
+                            // both lags known, stands).
+                            if node.us_1_link_idx == Some(new_link_item.link_idx) {
+                                node.us_1_lag = int_lag;
+                            } else if node.us_2_link_idx == Some(new_link_item.link_idx) {
+                                node.us_2_lag = int_lag;
+                            }
+                            if node.us_2_link_idx.is_some() {
+                                if node.us_1_lag < node.us_2_lag {
+                                    node.us_1_order_buffer = FifoBuffer::new(node.us_2_lag - node.us_1_lag);
+                                    node.us_2_order_buffer = FifoBuffer::new(0);
+                                } else {
+                                    node.us_2_order_buffer = FifoBuffer::new(node.us_1_lag - node.us_2_lag);
+                                    node.us_1_order_buffer = FifoBuffer::new(0);
+                                }
+                            }
+                        } else if node.us_1_link_idx.is_none() {
                             node.us_1_lag = int_lag;
                             node.us_1_link_idx = Some(new_link_item.link_idx);
                         } else {
@@ -259,6 +287,56 @@ impl SimpleNodewiseOrderingSystem {
 
         // Do we ever need to run the ordering phase?
         self.model_has_ordering = self.regulated_zone_counter > 0;
+
+        Ok(())
+    }
+
+    /// Phase 0 of initialize: resolve each confluence's `regulated =` names
+    /// to its incoming links, pinning us_1 (and us_2, when two are named) so
+    /// the Phase 1 link scan records lags against the right slots. Structural
+    /// validation lives here — every name must be an upstream neighbour of
+    /// its confluence — because this is the first point where the links are
+    /// known. Whether a named branch is actually regulated is deliberately
+    /// NOT validated: defensively naming the pathway at a confluence no
+    /// order ever crosses is good practice, not an error.
+    fn resolve_confluence_regulated_pathways(&self,
+                                             nodes: &mut Vec<NodeEnum>,
+                                             links: &Vec<Link>,
+                                             incoming_links: &Vec<Vec<usize>>) -> Result<(), String> {
+        // Collect (confluence_idx, us_1 link, optional us_2 link) immutably
+        // first; apply mutably after.
+        let mut resolved: Vec<(usize, usize, Option<usize>)> = Vec::new();
+        for (node_idx, node) in nodes.iter().enumerate() {
+            let NodeEnum::ConfluenceNode(confluence) = node else { continue };
+            if confluence.regulated_upstream.is_empty() { continue; }
+
+            let mut resolved_links: Vec<usize> = Vec::with_capacity(2);
+            for name in &confluence.regulated_upstream {
+                let named_idx = nodes.iter().position(|n| n.get_name().eq_ignore_ascii_case(name))
+                    .ok_or_else(|| format!(
+                        "Confluence '{}': 'regulated' names unknown node '{}'",
+                        confluence.name, name))?;
+                let link_idx = incoming_links[node_idx].iter().copied()
+                    .find(|&l| links[l].from_node == named_idx)
+                    .ok_or_else(|| format!(
+                        "Confluence '{}': 'regulated' names '{}', which is not one of its upstream nodes",
+                        confluence.name, name))?;
+                resolved_links.push(link_idx);
+            }
+            resolved.push((node_idx, resolved_links[0], resolved_links.get(1).copied()));
+        }
+
+        for (node_idx, us_1_link, us_2_link) in resolved {
+            let NodeEnum::ConfluenceNode(confluence) = &mut nodes[node_idx] else { unreachable!() };
+            confluence.us_1_link_idx = Some(us_1_link);
+            confluence.us_2_link_idx = us_2_link;
+            confluence.order_split = if us_2_link.is_some() {
+                crate::nodes::confluence_node::OrderSplit::Harmony
+            } else {
+                crate::nodes::confluence_node::OrderSplit::AllToUs1
+            };
+        }
+        Ok(())
     }
 
     /// This function is to be run each day, before the flow phase, and it's job is to resolve
@@ -320,9 +398,15 @@ impl SimpleNodewiseOrderingSystem {
                 NodeEnum::ConfluenceNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
 
-                    // Evaluate harmony fraction once and compute both upstream orders simultaneously
-                    let link_1_harmony = node.harmony_fraction.get_value(data_cache)
-                        .clamp(0.0, 1.0);
+                    // Evaluate the split once and compute both upstream orders
+                    // simultaneously. A single named `regulated` pathway is a
+                    // fixed 1.0 to us_1 — no fraction exists where there is
+                    // nothing to split.
+                    let link_1_harmony = match node.order_split {
+                        crate::nodes::confluence_node::OrderSplit::AllToUs1 => 1.0,
+                        crate::nodes::confluence_node::OrderSplit::Harmony =>
+                            node.harmony_fraction.get_value(data_cache).clamp(0.0, 1.0),
+                    };
                     node.harmony_fraction_value = link_1_harmony;
                     let link_1_order = link_1_harmony * node.dsorders[0];
                     let link_2_order = (1.0 - link_1_harmony) * node.dsorders[0];

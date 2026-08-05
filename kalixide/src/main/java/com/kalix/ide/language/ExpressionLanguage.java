@@ -88,9 +88,10 @@ public final class ExpressionLanguage {
     public record SimVariable(String name, String description) {}
 
     /**
-     * Every builtin recognised by the parser — the 24 pure builtins plus the 9
-     * temporal (stateful) builtins. Mirrors the engine's {@code BuiltinFunction}
-     * enum and {@code STATEFUL_FUNCTIONS} ({@code src/functions/functions.rs}).
+     * Every builtin recognised by the parser — the 25 pure builtins, the 9
+     * temporal (stateful) builtins, and the 2 calendar functions. Mirrors the
+     * engine's {@code BuiltinFunction} enum, {@code STATEFUL_FUNCTIONS}, and
+     * {@code CALENDAR_FUNCTIONS} ({@code src/functions/functions.rs}).
      */
     public static final List<Builtin> BUILTINS = List.of(
             // Conditional
@@ -119,6 +120,7 @@ public final class ExpressionLanguage {
             new Builtin("floor", 1, "floor(x)", "round down to an integer", false),
             new Builtin("round", 1, "round(x)", "round to the nearest integer", false),
             new Builtin("sign", 1, "sign(x)", "-1, 0, or 1 by the sign of x", false),
+            new Builtin("is_leap_year", 1, "is_leap_year(yyyy)", "1 in a Gregorian leap year, else 0", false),
 
             // Two-argument math
             new Builtin("pow", 2, "pow(x, y)", "x raised to the power y", false),
@@ -138,8 +140,19 @@ public final class ExpressionLanguage {
             new Builtin("min_since", 2, "min_since(x, reset)", "minimum of x since reset last fired", true),
             new Builtin("max_since", 2, "max_since(x, reset)", "maximum of x since reset last fired", true),
             new Builtin("count_since", 2, "count_since(cond, reset)", "steps on which cond held since reset last fired", true),
-            new Builtin("steps_since", 1, "steps_since(reset)", "steps since reset last fired", true)
+            new Builtin("steps_since", 1, "steps_since(reset)", "steps since reset last fired", true),
+
+            // Calendar (context: read the simulation clock, resolved at lowering)
+            new Builtin("month_at", 1, "month_at(n)", "month (1-12) at the current date + n days", false),
+            new Builtin("days_in_month_at", 1, "days_in_month_at(n)", "days in the month at the current date + n days", false)
     );
+
+    /**
+     * The calendar functions — context functions that read the simulation
+     * clock, resolved at lowering like the stateful family. Mirrors the
+     * engine's {@code CALENDAR_FUNCTIONS}; drives their reserved-tier name.
+     */
+    public static final Set<String> CALENDAR_FUNCTIONS = Set.of("month_at", "days_in_month_at");
 
     /**
      * The simulation variables. Mirrors the engine's {@code sim.*} set; names
@@ -153,14 +166,19 @@ public final class ExpressionLanguage {
             new SimVariable("sim.step", "sim.step - zero-based step index"),
             new SimVariable("sim.new_day", "sim.new_day - 1 on the first step of a new day, else 0"),
             new SimVariable("sim.new_month", "sim.new_month - 1 on the first step of a new month, else 0"),
-            new SimVariable("sim.new_year", "sim.new_year - 1 on the first step of a new year, else 0")
+            new SimVariable("sim.new_year", "sim.new_year - 1 on the first step of a new year, else 0"),
+            new SimVariable("sim.days_in_month", "sim.days_in_month - days in the current month (28-31, leap-aware)"),
+            new SimVariable("sim.days_in_year", "sim.days_in_year - days in the current year (365 or 366)"),
+            new SimVariable("sim.is_leap", "sim.is_leap - 1 in a leap year, else 0")
     );
 
     /**
      * Grammar keywords: names with statement-level meaning that are neither
      * builtins nor stateful functions. Mirrors the engine's {@code RESERVED_WORDS}.
+     * {@code this} is the enclosing definition; {@code self} is the per-target
+     * binding of [ras.*] action arguments (expression-naming §2.8).
      */
-    public static final Set<String> RESERVED_WORDS = Set.of("assert", "this");
+    public static final Set<String> RESERVED_WORDS = Set.of("assert", "this", "self");
 
     /**
      * The strict rule for bare definition names — {@code [fn]} function names
@@ -222,9 +240,13 @@ public final class ExpressionLanguage {
     /**
      * The reserved tier of a lowercase bare name, or null when the name is free
      * for the modeller. Mirrors the engine's {@code reserved_name_kind}:
-     * "builtin function", "stateful function", or "reserved word".
+     * "builtin function", "stateful function", "reserved word", or
+     * "calendar function".
      */
     public static String reservedTier(String lowerName) {
+        if (CALENDAR_FUNCTIONS.contains(lowerName)) {
+            return "calendar function";
+        }
         Builtin b = BY_NAME.get(lowerName);
         if (b != null) {
             return b.reservedTier();
