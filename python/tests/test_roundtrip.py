@@ -215,6 +215,100 @@ def test_simulate_roundtrip(tmp_path):
     assert len(df.columns) > 0
 
 
+def test_model_input_from_pixie(tmp_path):
+    """Pixie as a model *input*, closing the loop: write a pair from pandas,
+    name its `.pxt` in `[data]`, run, and read the results back."""
+    idx = pd.date_range("2020-01-01", periods=5, freq="D", tz="UTC", unit="s")
+    idx.name = "time"
+    df = pd.DataFrame({"flow": [1.0, 2.0, 3.0, 4.0, 5.0]}, index=idx)
+    kalix.write_pixie(tmp_path / "climate.pxb", df)
+
+    model_ini = tmp_path / "model.ini"
+    model_ini.write_text(
+        "[kalix]\n"
+        "start = 2020-01-01\n"
+        "end = 2020-01-05\n"
+        "\n"
+        "[data]\n"
+        "climate.pxt\n"
+        "\n"
+        "[node.a]\n"
+        "loc = 0, 0\n"
+        "type = inflow\n"
+        "inflow = data.climate_pxt.by_name.flow\n"
+        "ds_1 = sink\n"
+        "\n"
+        "[node.sink]\n"
+        "loc = 1, 1\n"
+        "type = blackhole\n"
+        "\n"
+        "[outputs]\n"
+        "node.a.dsflow\n"
+    )
+
+    out_base = tmp_path / "out"
+    kalix.simulate(model_ini, output_file=str(out_base) + ".pxb")
+
+    results = kalix.read_pixie(str(out_base) + ".pxb")
+    assert results["node.a.dsflow"].sum() == pytest.approx(15.0)
+
+
+def test_model_input_pixie_pxb_raises(tmp_path):
+    """`[data]` takes the .pxt half only. Naming the .pxb -- the file that
+    actually holds the values -- is refused with the .pxt to use instead.
+
+    Note the asymmetry with `read_pixie()` above, which accepts either half or
+    a bare base path: that is a file-reading helper, whereas `[data]` is a
+    manifest where one dataset must have one name.
+    """
+    idx = pd.date_range("2020-01-01", periods=5, freq="D", tz="UTC", unit="s")
+    idx.name = "time"
+    kalix.write_pixie(tmp_path / "climate.pxb", pd.DataFrame({"flow": [1.0] * 5}, index=idx))
+
+    model_ini = tmp_path / "model.ini"
+    model_ini.write_text(
+        "[kalix]\n"
+        "start = 2020-01-01\n"
+        "end = 2020-01-05\n"
+        "\n"
+        "[data]\n"
+        "climate.pxb\n"
+        "\n"
+        "[node.bh]\n"
+        "loc = 1, 2\n"
+        "type = blackhole\n"
+    )
+
+    with pytest.raises(kalix.ModelParseError, match=r"climate\.pxt"):
+        kalix.Model.from_file(str(model_ini))
+
+
+def test_model_input_pixie_missing_companion_raises(tmp_path):
+    """A named .pxt whose .pxb sibling is absent is a filesystem problem, so it
+    stays an OSError and names the file that is actually missing."""
+    idx = pd.date_range("2020-01-01", periods=5, freq="D", tz="UTC", unit="s")
+    idx.name = "time"
+    kalix.write_pixie(tmp_path / "climate.pxb", pd.DataFrame({"flow": [1.0] * 5}, index=idx))
+    (tmp_path / "climate.pxb").unlink()
+
+    model_ini = tmp_path / "model.ini"
+    model_ini.write_text(
+        "[kalix]\n"
+        "start = 2020-01-01\n"
+        "end = 2020-01-05\n"
+        "\n"
+        "[data]\n"
+        "climate.pxt\n"
+        "\n"
+        "[node.bh]\n"
+        "loc = 1, 2\n"
+        "type = blackhole\n"
+    )
+
+    with pytest.raises(OSError, match="companion"):
+        kalix.Model.from_file(str(model_ini))
+
+
 def test_simulate_requires_keyword_output_file(tmp_path):
     """output_file must be passed by name, not position."""
     with pytest.raises(TypeError):

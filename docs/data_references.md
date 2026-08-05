@@ -2,7 +2,7 @@
 
 ## Importing Data
 
-To import timeseries data into your Kalix model, list your CSV files in the `[data]` section of your model file:
+To import timeseries data into your Kalix model, list your data files in the `[data]` section of your model file:
 
 ```ini
 [data]
@@ -25,6 +25,36 @@ Date,Rainfall,Evaporation
 2020-01-01,12.5,4.2
 2020-01-02,0.0,5.1
 ```
+
+### Pixie sources
+
+Pixie files are accepted anywhere a CSV is, including as the target of an alias:
+
+```ini
+[data]
+./data/climate.pxt
+observed = ./data/gaugings.pxt
+```
+
+A Pixie dataset is a pair of files — `<name>.pxt` (readable metadata) and
+`<name>.pxb` (Gorilla-compressed values) — that together make one source.
+
+**Name the `.pxt`.** Its `.pxb` sibling is read alongside it automatically and
+never appears in the model file. Naming the `.pxb` instead is an error that
+tells you the `.pxt` to use; if the `.pxb` is missing, Kalix says so by name.
+One accepted spelling means one source name — otherwise the same dataset would
+reference as `data.climate_pxt.*` or `data.climate_pxb.*` depending on which
+file you happened to write.
+
+A note when choosing between the formats: **Pixie is written at 32-bit
+precision by default**, so a CSV round-tripped through Pixie comes back very
+slightly changed unless it was written with 64-bit precision. CSV remains the
+exact-fidelity format.
+
+Unlike a CSV, a single Pixie file can hold series on different timesteps. Every
+column of every source is checked against the simulation timestep at configure
+time, so a Pixie file containing an off-timestep series is rejected even if no
+node references that series.
 
 ## Referencing Data in Expressions
 
@@ -63,6 +93,7 @@ Kalix sanitises filenames and column names to ensure valid references:
 | `Climate-Data.csv` | `climate_data_csv` |
 | `Flow (ML/d)` | `flow__ml_d_` |
 | `Station_001` | `station_001` |
+| `Climate.pxt` | `climate_pxt` |
 
 This means references are **case-insensitive** - `data.climate_csv.by_name.Rainfall` and `data.climate_csv.by_name.rainfall` both work.
 

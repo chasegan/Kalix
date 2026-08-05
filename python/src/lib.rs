@@ -60,13 +60,14 @@ fn patch_err_to_py<'py>(py: Python<'py>, e: PatchError) -> PyErr {
 }
 
 /// Strip `.pxt` or `.pxb` extension from a path, returning the base.
+///
+/// Defers to the engine's pair convention (`pixie_io::strip_pixie_extension`)
+/// so the bindings and the `[data]` reader can't drift apart on what names a
+/// Pixie dataset. A path with neither extension is passed through unchanged --
+/// the Python API additionally accepts a bare base path, which `[data]` does
+/// not (there an extensionless key is an alias declaration).
 fn strip_ext(path: &str) -> &str {
-    let lower = path.to_ascii_lowercase();
-    if lower.ends_with(".pxt") || lower.ends_with(".pxb") {
-        &path[..path.len() - 4]
-    } else {
-        path
-    }
+    pixie_io::strip_pixie_extension(path).unwrap_or(path)
 }
 
 /// Read a Pixie .pxt/.pxb pair into (timestamps_unix_seconds, {series_name: values_array}).

@@ -247,9 +247,15 @@ do not survive. (Merge preserves the comments of untouched properties.)
 ## 6. In-memory inputs
 
 For fully disk-free workflows, datasets can be supplied directly instead of
-being read from CSV paths. An in-memory input stands in for a *file*: one
-alias names one potentially-multi-column dataset, exactly as a `[data]`
-entry does in the old world.
+being read from disk. An in-memory input stands in for a *file*: one alias
+names one potentially-multi-column dataset, exactly as a `[data]` entry does
+in the old world.
+
+(A file-backed `[data]` entry may name a CSV or the `.pxt` half of a Pixie
+pair; `set_input()` substitutes for either kind. `read_pixie()` is deliberately
+more permissive than `[data]` — it takes either half or a bare base path,
+because it is a file-reading helper, whereas `[data]` is a manifest in which
+one dataset must have exactly one name.)
 
 ```python
 m.set_input("climate_data", df)     # pd.DataFrame; returns self
