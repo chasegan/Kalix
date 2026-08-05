@@ -49,6 +49,13 @@ Custom binary format using Gorilla compression:
   (see `PixieWriter.convertToGorilla*`, `PixieReader.convertToTimeSeriesData`).
 - **FlowViz integration**: Drag-and-drop support, format auto-detection
 - **Critical fix**: Fixed decompression bugs with proper data point counting
+- **As a model input, `[data]` names the `.pxt` half only** — the engine reads the
+  `.pxb` alongside it and rejects it when named directly, so one dataset has one
+  source name (`data.climate_pxt.*`, from the plain `EngineNames.sanitize` of the
+  file name — no special case). `InputFileScanner` therefore offers `.pxt` and
+  never `.pxb`, and `FileValidator` flags both a named `.pxb` and a `.pxt` whose
+  `.pxb` sibling is absent. Contrast `read_pixie()` in the Python API, which
+  accepts either half: it's a file-reading helper, not a manifest.
 
 Key files: `PixieWriter.java`, `PixieReader.java`, `GorillaCompressor.java`
 

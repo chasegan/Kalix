@@ -13,8 +13,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 
 /**
- * Maintains a cached listing of the CSV files under the model's base directory,
+ * Maintains a cached listing of the data files under the model's base directory,
  * for the {@code [data]} autocomplete popup.
+ *
+ * <p>Lists what {@code [data]} actually accepts: CSVs and the {@code .pxt} half
+ * of Pixie pairs. The {@code .pxb} half is deliberately left out — the engine
+ * reads it alongside its {@code .pxt} and rejects it if named directly, so
+ * offering it would only be offering a mistake.</p>
  *
  * <p>The recursive directory walk used to run synchronously on the EDT every time
  * the popup opened. This class follows the {@link InputDataRegistry} pattern next
@@ -49,7 +54,7 @@ public class InputFileScanner {
     }
 
     /**
-     * Returns the last scanned CSV listing immediately (never touches the
+     * Returns the last scanned data-file listing immediately (never touches the
      * filesystem) and queues a background rescan so the next request sees
      * current contents.
      *
@@ -78,13 +83,13 @@ public class InputFileScanner {
                 return;
             }
 
-            List<File> csvFiles = new ArrayList<>();
-            collectCsvFiles(baseDir, 0, csvFiles);
+            List<File> dataFiles = new ArrayList<>();
+            collectDataFiles(baseDir, 0, dataFiles);
 
-            List<String> paths = new ArrayList<>(csvFiles.size());
-            for (File csvFile : csvFiles) {
+            List<String> paths = new ArrayList<>(dataFiles.size());
+            for (File dataFile : dataFiles) {
                 // Forward slashes for consistency across platforms
-                paths.add(baseDir.toPath().relativize(csvFile.toPath())
+                paths.add(baseDir.toPath().relativize(dataFile.toPath())
                         .toString().replace('\\', '/'));
             }
             relativePaths = List.copyOf(paths);
@@ -93,7 +98,7 @@ public class InputFileScanner {
         }
     }
 
-    private static void collectCsvFiles(File directory, int depth, List<File> results) {
+    private static void collectDataFiles(File directory, int depth, List<File> results) {
         if (depth > UIConstants.AutoComplete.MAX_INPUT_FILE_SCAN_DEPTH
                 || results.size() >= UIConstants.AutoComplete.MAX_INPUT_FILE_COUNT) {
             return;
@@ -108,11 +113,19 @@ public class InputFileScanner {
             if (results.size() >= UIConstants.AutoComplete.MAX_INPUT_FILE_COUNT) {
                 return;
             }
-            if (file.isFile() && file.getName().toLowerCase().endsWith(".csv")) {
+            // A .pxb is intentionally not offerable: [data] takes the .pxt half
+            // of the pair, and the .pxb rides along with it.
+            if (file.isFile() && isOfferable(file.getName())) {
                 results.add(file);
             } else if (file.isDirectory() && !file.getName().startsWith(".")) {
-                collectCsvFiles(file, depth + 1, results);
+                collectDataFiles(file, depth + 1, results);
             }
         }
+    }
+
+    /** Whether a file name is one {@code [data]} will accept. */
+    private static boolean isOfferable(String fileName) {
+        String lower = fileName.toLowerCase();
+        return lower.endsWith(".csv") || lower.endsWith(".pxt");
     }
 }

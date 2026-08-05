@@ -16,6 +16,12 @@ import java.util.Map;
 
 /**
  * Validates file existence for input files referenced in the model.
+ *
+ * <p>Pixie sources get two extra checks, mirroring what the engine enforces at
+ * load time (see {@code TimeseriesInput::read_source}): {@code [data]} names the
+ * {@code .pxt} half only, and the {@code .pxb} sibling it implies must be
+ * present. Catching both here means the modeller sees them in the editor rather
+ * than as a failed run.</p>
  */
 public class FileValidator implements ValidationStrategy {
 
@@ -29,13 +35,47 @@ public class FileValidator implements ValidationStrategy {
 
         List<String> inputFiles = model.getInputFiles();
         for (String filePath : inputFiles) {
+            if (isPixieBinary(filePath)) {
+                // Reported instead of "does not exist": the .pxb is usually
+                // sitting right there, and pointing at the wrong half of the
+                // pair is the mistake worth naming.
+                result.addIssue(findFilePathLineNumber(model, filePath),
+                              "Name the .pxt half of a Pixie pair here, not the .pxb: "
+                                      + pixieSibling(filePath, ".pxt"),
+                              rule.getSeverity(), "pixie_binary_named");
+                continue;
+            }
+
             if (!fileExists(filePath, baseDirectory)) {
                 int lineNumber = findFilePathLineNumber(model, filePath);
                 result.addIssue(lineNumber,
                               "Input file does not exist: " + filePath,
                               rule.getSeverity(), "file_not_found");
+                continue;
+            }
+
+            if (isPixieMetadata(filePath)) {
+                String companion = pixieSibling(filePath, ".pxb");
+                if (!fileExists(companion, baseDirectory)) {
+                    result.addIssue(findFilePathLineNumber(model, filePath),
+                                  "Pixie source is missing its companion file: " + companion,
+                                  rule.getSeverity(), "pixie_companion_missing");
+                }
             }
         }
+    }
+
+    private static boolean isPixieMetadata(String filePath) {
+        return filePath.toLowerCase().endsWith(".pxt");
+    }
+
+    private static boolean isPixieBinary(String filePath) {
+        return filePath.toLowerCase().endsWith(".pxb");
+    }
+
+    /** Swaps a Pixie path's extension for the other half of the pair. */
+    private static String pixieSibling(String filePath, String extension) {
+        return filePath.substring(0, filePath.length() - 4) + extension;
     }
 
     @Override

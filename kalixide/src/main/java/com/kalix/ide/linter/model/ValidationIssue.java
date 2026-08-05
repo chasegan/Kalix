@@ -28,6 +28,14 @@ public class ValidationIssue {
         return severity;
     }
 
+    /**
+     * The identity of the check that raised this issue — stable across message
+     * rewording, unlike {@link #getMessage()}.
+     */
+    public String getRuleName() {
+        return ruleName;
+    }
+
     @Override
     public String toString() {
         return String.format("Line %d: %s [%s]", lineNumber, message, severity);
