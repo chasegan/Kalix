@@ -153,6 +153,18 @@ The Pixie binary format stores one or more timeseries efficiently using a compre
 
 - `.pxb` — binary file. Contains the actual compressed timeseries data. Each series is written as a single block. Binary offsets recorded in the `.pxt` file allow individual series to be read without decompressing the whole file.
 
+**In `[data]`, name the `.pxt`.** Its `.pxb` sibling is read alongside it automatically and never appears in the model file:
+
+```ini
+[data]
+./data/climate.pxt
+observed = ./data/gaugings.pxt
+```
+
+Naming the `.pxb` is an error that tells you the `.pxt` to use instead, and if the `.pxb` is missing Kalix names the file it couldn't find. One accepted spelling means one source name — otherwise the same dataset would be referenced as `data.climate_pxt.*` or `data.climate_pxb.*` depending on which file you happened to write. (Series are referenced by the sanitised file name, so `climate.pxt` gives `data.climate_pxt.by_name.<series>` — see [Referencing Input Data](referencing-input-data.md).)
+
+Note this differs from the **output** flag shown below, where `-o results.pxt` and `-o results.pxb` both write the same pair.
+
 **Advantages**
 
 - **Smaller files.** Pixie files are typically 5–10× smaller than the CSV equivalent. The savings are bigger when timeseries are longer and more regular.
