@@ -63,7 +63,7 @@ RAS sections, interleaved in file order, so an assessment written *above* a
 section reads bare: assess daily in a var, credit monthly with
 `allocate(var.assessment.aa)`.
 
-## Actions
+## Actions <a name="actions"></a>
 
 **Stencilled actions** apply to each target account independently. Arguments are
 expressions, evaluated once per firing:
@@ -86,7 +86,7 @@ is answered by the sections that name it. Rules that move value between
 paired accounts are authored with [`self.pair`](#self), always writing the
 target side.
 
-### Per-account arguments — `self` {#self}
+### Per-account arguments — `self` <a name="self"></a>
 
 Inside an action argument — and only there — the expression may read the
 target account's own live state through `self`. The argument is then
