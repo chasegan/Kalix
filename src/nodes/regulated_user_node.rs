@@ -130,7 +130,9 @@ impl Node for RegulatedUserNode {
         // Cap the order by what the user owns: don't order water you can't take
         // (§3.6 — enforced where orders originate, not inside the storage)
         if !self.account_idxs.is_empty() {
-            self.order_value = self.order_value.min(self.total_account_balance(_account_manager));
+            self.order_value = self.order_value.clamp(0f64, self.total_account_balance(_account_manager));
+        } else {
+            self.order_value = self.order_value.max(0f64);
         }
 
         // TODO: is this where things are supposed to happen?

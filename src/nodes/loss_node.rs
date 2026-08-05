@@ -153,7 +153,9 @@ impl Node for LossNode {
             data_cache.add_value_at_index(idx, self.dsorders[0]);
         }
 
-        // Calculate usorders
+        // Calculate usorders 
+        // Note: order_translation_table is well-formed and non-negative by
+        // construction, see `initialise()`, so cannot return negative orders
         self.usorders = self.order_translation_table.interpolate_or_extrapolate(self.dsorders[0]);
     }
 
