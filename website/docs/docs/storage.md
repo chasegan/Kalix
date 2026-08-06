@@ -86,6 +86,8 @@ Mass balance over the timestep is:
 
 `Vi=Vi−1−si−ei+ri+qin,i−qout,i`
 
+**Orders near the spill level.** The ds\_1 pathway carries both the uncontrolled spill and controlled releases, so the outflow used by the solver is `max(spill(V), order)`. That function has a kink at the volume where the interpolated spill curve crosses the order. The solver detects when the equilibrium falls on a dimension-table segment containing this crossing and solves the correct branch exactly: below the crossing the release equals the order (spill passes within it); above it the spill governs and exceeds the order. This keeps the end-of-timestep volume exactly consistent with the released flow — naive interpolation across the kink would otherwise destroy water on days when a storage sits just above full supply level with orders comparable to the spill.
+
 ### Storages ordering upstream
 
 The default behaviour of storages is to NOT propagate any orders upstream. However, storages can be configured to order upstream in either of two ways: (1) using the `target_level`, or (2) using the `order_through` property.

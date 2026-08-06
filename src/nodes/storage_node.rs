@@ -479,9 +479,53 @@ impl StorageNode {
         if denom >= 0.0 {
             return (self.dimensions.get_value(istop, VOLU), row, true);
         }
-        let x = error_prev / denom;
         let v_lo = self.dimensions.get_value(row, VOLU);
         let v_hi = self.dimensions.get_value(istop, VOLU);
+
+        // The outflow term max(spill(v), ds1_required_flow) kinks at the volume
+        // where the interpolated spill crosses the required flow. If that
+        // crossing lies on this segment, the error is piecewise linear and
+        // interpolating straight across finds a volume inconsistent with the
+        // outflow actually released — the gap leaks out of the mass balance
+        // (order-limited days just above FSL at Proserpine's Peter Faust Dam,
+        // ~45 ML/d). Solve each linear branch exactly and keep the
+        // self-consistent one; both are exact because area and spill are linear
+        // on the segment (and on its extrapolation beyond the top row).
+        let spill_lo = self.dimensions.get_value(row, SPIL).max(0.0);
+        let spill_hi = self.dimensions.get_value(istop, SPIL).max(0.0);
+        if ds1_required_flow > spill_lo && spill_hi > spill_lo {
+            let area_lo = self.dimensions.get_value(row, AREA);
+            let area_hi = self.dimensions.get_value(istop, AREA);
+            let spill_at = |v: f64| spill_lo + (spill_hi - spill_lo) * (v - v_lo) / (v_hi - v_lo);
+            // Solve v = v_working + net_rain*area(v) - outflow(v) - ds234 with
+            // outflow linear between the given endpoint values. None when the
+            // branch has no downhill crossing (mirrors the guards above).
+            let solve_branch = |outflow_lo: f64, outflow_hi: f64| -> Option<f64> {
+                let e_lo = v_lo - (v_working + net_rain_mm * area_lo - outflow_lo - ds234_orders);
+                let e_hi = v_hi - (v_working + net_rain_mm * area_hi - outflow_hi - ds234_orders);
+                let d = e_lo - e_hi;
+                if e_lo >= 0.0 || d >= 0.0 {
+                    return None;
+                }
+                Some(v_lo + (v_hi - v_lo) * (e_lo / d))
+            };
+            // Below the crossing the required flow governs: outflow is constant.
+            if let Some(v) = solve_branch(ds1_required_flow, ds1_required_flow) {
+                if spill_at(v) <= ds1_required_flow {
+                    return (v, row, false);
+                }
+            }
+            // Above the crossing the spill governs: outflow follows the spill line.
+            if let Some(v) = solve_branch(spill_lo, spill_hi) {
+                if spill_at(v) >= ds1_required_flow {
+                    return (v, row, false);
+                }
+            }
+            // Neither branch self-consistent (degenerate segment): fall through
+            // to the straight interpolation rather than inventing a solution.
+        }
+
+        let x = error_prev / denom;
 
         (v_lo + (v_hi - v_lo) * x, row, false)
     }

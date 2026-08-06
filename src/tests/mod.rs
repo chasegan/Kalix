@@ -25,6 +25,7 @@ mod test_node_storage;
 #[cfg(test)]
 mod test_storage_exists;
 mod test_storage_floor_blowup;
+mod test_storage_spill_order_kink;
 
 #[cfg(test)]
 mod test_model;
