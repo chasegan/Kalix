@@ -1,5 +1,5 @@
 Backend: CLI (C:\Chas\Kalix\Kalix\target\release\kalix.exe)
-Searching for model files in: C:\Chas\Kalix\Kalix\regression_tests\simulations
+Searching for model files in: c:\Chas\Kalix\Kalix\regression_tests\simulations
 ================================================================================
 Found 32 model file(s)
 
@@ -166,7 +166,7 @@ Verifying: 9_hundred_sacr\kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-08-05T17:17:17.255648
+Timestamp: 2026-08-06T12:27:51.566047
 Total: 96
 Passed: 96
 Failed: 0
