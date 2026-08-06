@@ -27,6 +27,7 @@ ds_1 = my_other_node
 | pump (optional) | Use this to limit the amount of water the user can extract each timestep. Example: `pump = 86.4` |
 | opportunistic\_demand (optional) | Demand for water above the arriving order, evaluated at flow time — for access that is announced on conditions rather than ordered ahead, such as off-allocation. The opportunistic take is supplied from whatever availability the regulated delivery leaves behind, shares the pump limit, and is debited to the same accounts. Example: `opportunistic_demand = if(fn.oa_open(), 309.5, 0)` |
 | accounts (optional) | Names of the [accounts](accounts.md) this user draws on, comma-separated in order of use. Orders are capped by the accounts' combined balance and deliveries are debited from them, so an [allocation system](allocation-systems.md) can constrain the user. Example: `accounts = smith_carryover, smith_annual` |
+| order\_accounts (optional) | Names of order-authorisation accounts (debit-on-order), comma-separated in order of use. They extend the order cap beyond the regular `accounts` balance, and the excess portion of each approved order is debited from them immediately at order time. They are invisible to the flow phase. See "Order accounts" below. Example: `order_accounts = wy_bridge` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
 ## Results associated with this node
@@ -88,6 +89,35 @@ account balance, and each delivery is debited from the accounts in the order
 listed (the first is drawn down before the second). This is how an
 [allocation system](allocation-systems.md) limits the user: a low announced
 allocation means a low balance, which caps ordering. See [`[acc.*]`](accounts.md).
+
+#### Order accounts
+
+`order_accounts` lists additional accounts that authorise ordering without
+supplying water — debit-on-order semantics. The contract:
+
+- The order cap becomes `min(order, Σaccounts + Σorder_accounts)`.
+- Only the **excess** of the approved order over the regular `accounts`
+  balance is debited from the `order_accounts`, walked in list order, at
+  order time. Orders within the regular balance never touch them.
+- They are **invisible to the flow phase**: they never extend the delivery
+  cap, are never debited by takes, and are not refunded when an
+  authorised order goes undelivered.
+
+Two intended uses. First, an *order bridge*: at an accounting boundary
+(e.g. the last days of a water year) orders for delivery after the reset
+are otherwise capped by the dying period's drained balance. Crediting a
+small shared bridge account just before the boundary — and `set_empty`-ing
+it at the reset, before deliveries arrive — lets users keep ordering
+against the balance they are about to receive, without ever taking water
+against it. The bridge is self-limiting: it cannot authorise more total
+ordering than its size. Note a shared pool is drawn in node execution
+order (order phase runs downstream-to-upstream), so size it for the sum of
+its users' needs.
+
+Second, a *pure order-debit scheme*: with `accounts` empty and only
+`order_accounts` listed, the user is debited when it orders and never at
+take — the "you ordered it, you own it" accounting some supply schemes
+use.
 
 ## References
 

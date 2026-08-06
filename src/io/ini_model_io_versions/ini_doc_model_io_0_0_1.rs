@@ -813,6 +813,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             let account_idxs = resolve_account_references(v, &model.account_manager)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                             n.register_accounts(account_idxs);
+                        } else if name_lower == "order_accounts" {
+                            let account_idxs = resolve_account_references(v, &model.account_manager)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                            n.register_order_accounts(account_idxs);
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                                ini_property.line_number, name, node_name)));
@@ -1389,6 +1393,12 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                         .filter_map(|&idx| model.account_manager.get_account(idx).map(|a| a.name.as_str()))
                         .collect();
                     ini_doc.set_property(section_name.as_str(), "accounts", names.join(", ").as_str());
+                }
+                if !n.order_account_idxs.is_empty() {
+                    let names: Vec<&str> = n.order_account_idxs.iter()
+                        .filter_map(|&idx| model.account_manager.get_account(idx).map(|a| a.name.as_str()))
+                        .collect();
+                    ini_doc.set_property(section_name.as_str(), "order_accounts", names.join(", ").as_str());
                 }
             }
         }

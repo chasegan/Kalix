@@ -30,6 +30,12 @@ pub struct RegulatedUserNode {
     /// the summed balance at order time, deliveries are capped and debited at
     /// flow time — debit-on-use semantics (kalix-allocation-components.md §3.6).
     pub account_idxs: Vec<usize>,
+    /// Order-authorisation accounts (debit-on-order). They extend the order
+    /// cap, and the portion of the approved order beyond the regular balance
+    /// is debited from them immediately at order time, walked in list order.
+    /// They are invisible to the flow phase: never part of the delivery cap,
+    /// never debited by takes, never refunded for undelivered orders.
+    pub order_account_idxs: Vec<usize>,
 
     // Internal state only
     pub dsorders: [f64; MAX_DS_LINKS],
@@ -74,8 +80,19 @@ impl RegulatedUserNode {
         self.account_idxs = account_idxs;
     }
 
+    /// Register the ordered list of order-authorisation accounts.
+    pub fn register_order_accounts(&mut self, account_idxs: Vec<usize>) {
+        self.order_account_idxs = account_idxs;
+    }
+
     fn total_account_balance(&self, account_manager: &AccountManager) -> f64 {
         self.account_idxs.iter()
+            .map(|&idx| account_manager.get_account_balance(idx).max(0.0))
+            .sum()
+    }
+
+    fn total_order_account_balance(&self, account_manager: &AccountManager) -> f64 {
+        self.order_account_idxs.iter()
             .map(|&idx| account_manager.get_account_balance(idx).max(0.0))
             .sum()
     }
@@ -128,9 +145,24 @@ impl Node for RegulatedUserNode {
         self.order_value = self.order_input.get_value(data_cache);
 
         // Cap the order by what the user owns: don't order water you can't take
-        // (§3.6 — enforced where orders originate, not inside the storage)
-        if !self.account_idxs.is_empty() {
-            self.order_value = self.order_value.min(self.total_account_balance(_account_manager));
+        // (§3.6 — enforced where orders originate, not inside the storage).
+        // order_accounts extend the cap, and the portion of the approved order
+        // beyond the regular balance is debited from them NOW (debit-on-order,
+        // excess-only, walked in list order). Regular accounts keep
+        // debit-on-use at flow time; the two never pay for the same water.
+        if !self.account_idxs.is_empty() || !self.order_account_idxs.is_empty() {
+            let regular_balance = self.total_account_balance(_account_manager);
+            let order_balance = self.total_order_account_balance(_account_manager);
+            self.order_value = self.order_value.min(regular_balance + order_balance);
+            let mut excess = (self.order_value - regular_balance).max(0.0);
+            for &account_idx in &self.order_account_idxs {
+                if excess <= 0.0 { break; }
+                let debit = excess.min(_account_manager.get_account_balance(account_idx).max(0.0));
+                if debit > 0.0 {
+                    _account_manager.debit_account(account_idx, debit);
+                    excess -= debit;
+                }
+            }
         }
 
         // TODO: is this where things are supposed to happen?

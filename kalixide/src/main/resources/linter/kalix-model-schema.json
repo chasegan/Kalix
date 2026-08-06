@@ -311,7 +311,8 @@
         "order",
         "pump",
         "opportunistic_demand",
-        "accounts"
+        "accounts",
+        "order_accounts"
       ],
       "dsnode_params": [
         "ds_1"
@@ -342,6 +343,11 @@
           "type": "string",
           "pattern": "^[a-z][a-z0-9_]*(\\s*,\\s*[a-z][a-z0-9_]*)*$",
           "description": "Ordered list of account names declared in [acc.*] sections; order is order-of-use"
+        },
+        "order_accounts": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\s*,\\s*[a-z][a-z0-9_]*)*$",
+          "description": "Order-authorisation accounts (debit-on-order): extend the order cap; the excess of each approved order over the regular accounts balance is debited from them at order time; invisible to the flow phase"
         }
       }
     },
