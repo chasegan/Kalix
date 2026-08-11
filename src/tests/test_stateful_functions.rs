@@ -11,7 +11,8 @@
 ///
 /// Sections mirror the test plan:
 ///   A. moving_* semantics (hand-computed, warm-up + steady state).
-///   B. *_since semantics (reset-then-accumulate, implicit run-start reset).
+///   B. *_since semantics (reset-then-accumulate, implicit run-start reset),
+///      then latch (sample-and-hold).
 ///   C. Machinery invariants (guard, untaken-branch advance, variant
 ///      selection, load errors, independence, program-local interleave).
 ///   D. End-to-end via a full model (mirrors test_programs.rs).
@@ -263,6 +264,106 @@ fn test_min_max_since_bootstrap_and_rebootstrap() {
     // max(5), max(5,3)=5, max(5,8)=8, reset->2, max(2,9)=9, max(9,1)=9
     assert_series(&got_max, &[5.0, 5.0, 8.0, 2.0, 9.0, 9.0], "max_since");
     assert_eq!(got_max[0], 5.0, "max_since bootstraps to the first value, not NaN");
+}
+
+// ============================================================================
+// B'. latch (sample-and-hold)
+// ============================================================================
+
+/// B10a. latch(x, condition): samples x on every truthy step and holds it
+/// otherwise. Sample-then-read, as *_since is reset-then-accumulate — the
+/// sampling step reads the NEW value, not the held one.
+#[test]
+fn test_latch_samples_and_holds() {
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0, 2.0, 9.0, 1.0]);
+    let input = DynamicInput::from_string(
+        "latch(data.x, sim.step == 1 || sim.step == 4)", &mut dc, true, None)
+        .expect("latch should parse");
+    assert!(matches!(input, DynamicInput::StatefulFunction { .. }),
+        "latch(...) should be a StatefulFunction, got {:?}", input);
+    let got = run_steps(&input, &mut dc, 6);
+    // step0: never fired -> 0; step1: samples 3 (read on the sampling step);
+    // steps 2-3 hold 3; step4: samples 9; step5 holds 9.
+    assert_series(&got, &[0.0, 3.0, 3.0, 3.0, 9.0, 9.0], "latch");
+    assert_eq!(got[1], 3.0, "the sampling step reads the new value");
+    assert_eq!(got[2], 3.0, "the held value survives a non-sampling step");
+}
+
+/// B10b. Before the condition has ever fired the latch reads its 0.0 init —
+/// the run-start assumption the modeller owns, as with the *_since implicit
+/// reset. A condition that never fires holds 0.0 for the whole run.
+#[test]
+fn test_latch_init_before_first_fire() {
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0, 2.0]);
+    let input = DynamicInput::from_string("latch(data.x, sim.step == 2)", &mut dc, true, None)
+        .unwrap();
+    let got = run_steps(&input, &mut dc, 4);
+    assert_series(&got, &[0.0, 0.0, 8.0, 8.0], "latch init");
+
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0, 2.0]);
+    let never = DynamicInput::from_string("latch(data.x, 0)", &mut dc, true, None).unwrap();
+    let got = run_steps(&never, &mut dc, 4);
+    assert_series(&got, &[0.0, 0.0, 0.0, 0.0], "latch never fired");
+}
+
+/// B10c. Truthiness is the language's everywhere: any non-zero condition
+/// samples, including a negative value and NaN (NaN != 0.0, as in if()/&&/||).
+#[test]
+fn test_latch_condition_truthiness() {
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0]);
+    let neg = DynamicInput::from_string("latch(data.x, -1)", &mut dc, true, None).unwrap();
+    assert_series(&run_steps(&neg, &mut dc, 3), &[5.0, 3.0, 8.0], "latch negative cond");
+
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0]);
+    let nan = DynamicInput::from_string("latch(data.x, 0.0 / 0.0)", &mut dc, true, None).unwrap();
+    assert_series(&run_steps(&nan, &mut dc, 3), &[5.0, 3.0, 8.0], "latch NaN cond");
+}
+
+/// B10d. latch sampling is unconditional (design §5): a latch in an untaken
+/// `if` branch still samples, so what it holds never depends on which branches
+/// past evaluations took. Here the branch is untaken for steps 0-2, yet at
+/// step 3 the latch reads the sample taken at step 1 — not 0.0, and not x(3).
+#[test]
+fn test_latch_advances_in_untaken_branch() {
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0, 2.0, 9.0]);
+    let input = DynamicInput::from_string(
+        "if(sim.step >= 3, latch(data.x, sim.step == 1), -1)", &mut dc, true, None)
+        .expect("if(...) with a latch branch should parse");
+    let got = run_steps(&input, &mut dc, 5);
+    assert_series(&got, &[-1.0, -1.0, -1.0, 3.0, 3.0], "latch untaken-branch advance");
+    assert_eq!(got[3], 3.0,
+        "the latch must hold the step-1 sample taken while its branch was untaken");
+}
+
+/// B10e. The `if(condition, x, this[-1,0])` equivalence the docs state, checked
+/// against the spelled-out form over the same series. Holds because the latch
+/// is the whole value (see the docs' caveat) and the condition is branch-free.
+#[test]
+fn test_latch_matches_if_previous_value_idiom() {
+    let values = [5.0, 3.0, 8.0, 2.0, 9.0, 1.0];
+    let cond = "sim.step == 1 || sim.step == 4";
+
+    let mut dc = cache_with_x(&values);
+    let latched = DynamicInput::from_string(
+        &format!("latch(data.x, {})", cond), &mut dc, true, None).unwrap();
+    let got = run_steps(&latched, &mut dc, values.len());
+
+    // The spelled-out form needs a real series to read [-1, 0] from, so drive
+    // it by hand: y(t) = if(cond, x(t), y(t-1)), y(-1) = 0.
+    let mut expected = Vec::new();
+    let mut prev = 0.0;
+    for (k, &x) in values.iter().enumerate() {
+        prev = if k == 1 || k == 4 { x } else { prev };
+        expected.push(prev);
+    }
+    assert_series(&got, &expected, "latch vs if(cond, x, this[-1,0])");
+}
+
+/// B10f. latch arity is fixed at 2, checked at load.
+#[test]
+fn test_latch_arity_load_error() {
+    expect_load_err("latch(data.x)", "expects 2 arguments");
+    expect_load_err("latch(data.x, data.y, 0)", "expects 2 arguments");
 }
 
 // ============================================================================
