@@ -309,6 +309,14 @@ pub enum OptimizedExpressionNode {
         reset: Box<OptimizedExpressionNode>,
     },
 
+    /// Sample-and-hold: samples `arg` on every step `condition` is truthy and
+    /// holds it otherwise. Single f64 of state, 0.0 until the first sample.
+    Latch {
+        f_off: usize,
+        arg: Box<OptimizedExpressionNode>,
+        condition: Box<OptimizedExpressionNode>,
+    },
+
     /// Named 1D lookup table (`table.<name>(x)`): clamped linear interpolation.
     /// The concrete table is resolved and embedded at lowering, so evaluation
     /// is a deref + binary search with no name or dimensionality dispatch.
@@ -486,6 +494,8 @@ impl OptimizedExpressionNode {
 
             OptimizedExpressionNode::Since { f_off, .. } => data_cache.expr_state.f[*f_off],
 
+            OptimizedExpressionNode::Latch { f_off, .. } => data_cache.expr_state.f[*f_off],
+
             OptimizedExpressionNode::Lookup1D { table, arg } => {
                 table.lookup(arg.evaluate(data_cache))
             }
@@ -560,6 +570,10 @@ impl OptimizedExpressionNode {
                     a.validate_reads(data_cache);
                 }
                 reset.validate_reads(data_cache);
+            }
+            OptimizedExpressionNode::Latch { f_off: _, arg, condition } => {
+                arg.validate_reads(data_cache);
+                condition.validate_reads(data_cache);
             }
         }
     }
@@ -660,6 +674,14 @@ impl OptimizedExpressionNode {
                         if reset_fired { 0.0 } else { acc + 1.0 }
                     }
                 };
+            }
+
+            OptimizedExpressionNode::Latch { f_off, arg, condition } => {
+                arg.advance_state(data_cache);
+                condition.advance_state(data_cache);
+                if condition.evaluate(data_cache) != 0.0 {
+                    data_cache.expr_state.f[*f_off] = arg.evaluate(data_cache);
+                }
             }
         }
     }
@@ -1989,6 +2011,9 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
         OptimizedExpressionNode::Lookup2D { col_key, row_key, .. } => {
             uses_calendar_flags(col_key) || uses_calendar_flags(row_key)
         }
+        OptimizedExpressionNode::Latch { f_off: _, arg, condition } => {
+            uses_calendar_flags(arg) || uses_calendar_flags(condition)
+        }
     }
 }
 
@@ -2260,24 +2285,42 @@ fn lower_stateful_call(
     }
 
     // Event-window family: last argument is always the reset condition.
-    let (since_op, arity, acc_init) = match name {
-        "sum_since" => (SinceOp::Sum, 2, 0.0),
-        "min_since" => (SinceOp::Min, 2, f64::NAN),
-        "max_since" => (SinceOp::Max, 2, f64::NAN),
-        "count_since" => (SinceOp::Count, 2, 0.0),
-        "steps_since" => (SinceOp::Steps, 1, -1.0),
-        _ => return Ok(None),
+    let since_family = match name {
+        "sum_since" => Some((SinceOp::Sum, 2, 0.0)),
+        "min_since" => Some((SinceOp::Min, 2, f64::NAN)),
+        "max_since" => Some((SinceOp::Max, 2, f64::NAN)),
+        "count_since" => Some((SinceOp::Count, 2, 0.0)),
+        "steps_since" => Some((SinceOp::Steps, 1, -1.0)),
+        _ => None,
     };
-    if args.len() != arity {
-        return Err(format!(
-            "Function '{}' expects {} argument(s) (the last is the reset condition), got {}",
-            name, arity, args.len()
-        ));
+    if let Some((since_op, arity, acc_init)) = since_family {
+        if args.len() != arity {
+            return Err(format!(
+                "Function '{}' expects {} argument(s) (the last is the reset condition), got {}",
+                name, arity, args.len()
+            ));
+        }
+        let f_off = arena.alloc_f(&[acc_init]);
+        let reset = Box::new(args.pop().unwrap());
+        let arg = args.pop().map(Box::new);
+        return Ok(Some(OptimizedExpressionNode::Since { op: since_op, f_off, arg, reset }));
     }
-    let f_off = arena.alloc_f(&[acc_init]);
-    let reset = Box::new(args.pop().unwrap());
-    let arg = args.pop().map(Box::new);
-    Ok(Some(OptimizedExpressionNode::Since { op: since_op, f_off, arg, reset }))
+
+    // Sample-and-hold: second argument is the sampling condition.
+    if name == "latch" {
+        if args.len() != 2 {
+            return Err(format!(
+                "Function 'latch' expects 2 arguments (the value and the latch condition), got {}",
+                args.len()
+            ));
+        }
+        let f_off = arena.alloc_f(&[0.0]);
+        let condition = Box::new(args.pop().unwrap());
+        let arg = Box::new(args.pop().unwrap());
+        return Ok(Some(OptimizedExpressionNode::Latch { f_off, arg, condition }));
+    }
+    // No stateful builtin matched
+    Ok(None)
 }
 
 /// Lower a `table.<name>(...)` call by resolving the name against the model's

@@ -142,6 +142,9 @@ public final class ExpressionLanguage {
             new Builtin("count_since", 2, "count_since(cond, reset)", "steps on which cond held since reset last fired", true),
             new Builtin("steps_since", 1, "steps_since(reset)", "steps since reset last fired", true),
 
+            // Temporal (stateful): latching
+            new Builtin("latch", 2, "latch(x, condition)", "x when condition holds, else the value held from the previous step", true),
+
             // Calendar (context: read the simulation clock, resolved at lowering)
             new Builtin("month_at", 1, "month_at(n)", "month (1-12) at the current date + n days", false),
             new Builtin("days_in_month_at", 1, "days_in_month_at(n)", "days in the month at the current date + n days", false)

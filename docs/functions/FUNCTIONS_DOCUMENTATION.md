@@ -216,6 +216,33 @@ There is deliberately no water-year concept in the engine: the boundary is
 an idiom written at the point of use (or named once per model via a
 constant), because the water-year month varies from valley to valley.
 
+### Sample and hold — `latch`
+
+`latch(x, condition)`
+
+Takes and returns the value of `x` on this time step if `condition` is truthy,
+and returns the previously sampled value of `x` otherwise. The latch is
+initialised with value 0.0, and holds this value until `condition` first fires.
+
+```ini
+# Recompute the seasonal allocation at the start of the water year, then
+# hold it for the rest of the year.
+allocation = latch(fn.calculate_allocation(), var.ras.is_startwy)
+```
+
+This is equivalent in output to:
+
+```ini
+allocation = if(var.ras.is_startwy, fn.calculate_allocation(), this[-1,0])
+```
+
+Two caveats on that equivalence. It holds only where the latch is the entire
+value, as in this example — `this[-1,0]` is the previous value of the whole
+definition, so `allocation = 2 * latch(...)` and `allocation = 2 * if(...)`
+part ways. And the two differ inside an untaken `if` branch: `latch` samples
+regardless, per the unconditional-advance rule above, where the spelled-out
+`if` short-circuits and does not.
+
 ### Calendar boundary flags
 
 `sim.new_day`, `sim.new_month`, `sim.new_year` — 1.0 on the first step of
@@ -313,6 +340,7 @@ net_flow = min(
 | `max_since` | 2 | Maximum of x since reset |
 | `count_since` | 2 | Steps on which cond held since reset: count_since(cond, reset) |
 | `steps_since` | 1 | Steps elapsed since reset (0 on a reset step) |
+| `latch` | 2 | Sample x when condition holds, else hold the last sample: latch(x, condition) |
 
 Two names are deliberately absent. There is no `log`: write the explicit
 `ln` or `log10`. And there is no `avg` or `average`: the function is `mean`,
