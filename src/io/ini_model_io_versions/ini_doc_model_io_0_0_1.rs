@@ -508,7 +508,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.inflow_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "expected_inflow" {
-                            n.expected_inflow_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                            n.expected_inflow_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
