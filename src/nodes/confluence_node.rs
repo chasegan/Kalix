@@ -49,7 +49,9 @@ pub struct ConfluenceNode {
     dsflow_primary: f64,
 
     // Orders
+    pub expected_inflow_input: DynamicInput,
     pub dsorders: [f64; MAX_DS_LINKS],
+    pub total_outgoing_order: f64, // Memoise for simple_nodewise_ordering.rs
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -57,6 +59,7 @@ pub struct ConfluenceNode {
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
     recorder_idx_harmony_fraction: Option<usize>,
+    recorder_idx_expected_inflow: Option<usize>,
 
     // --- Cold configuration, deliberately at the tail: inserting fields
     // above shifts the hot flow/order state and was a measured ~3%
@@ -105,6 +108,7 @@ impl Node for ConfluenceNode {
         self.us_2_lag = 0;
         self.us_1_order_buffer = FifoBuffer::default();
         self.us_2_order_buffer = FifoBuffer::default();
+        self.total_outgoing_order = 0.0;
 
         // Initialize result recorders
         self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
@@ -112,6 +116,7 @@ impl Node for ConfluenceNode {
         self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
         self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
         self.recorder_idx_harmony_fraction = recorder(data_cache, &self.name, "harmony_fraction");
+        self.recorder_idx_expected_inflow = recorder(data_cache, &self.name, "expected_inflow");
 
         // Return
         Ok(())
@@ -120,6 +125,11 @@ impl Node for ConfluenceNode {
     fn get_name(&self) -> &str { &self.name }
 
     fn run_order_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
+        // Evaluate expected inflow
+        let expected_inflow_value_on_delivery_timestep = self.expected_inflow_input.get_value(data_cache);
+        if let Some(idx) = self.recorder_idx_expected_inflow {
+            data_cache.add_value_at_index(idx, expected_inflow_value_on_delivery_timestep);
+        }
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
@@ -128,6 +138,13 @@ impl Node for ConfluenceNode {
         if let Some(idx) = self.recorder_idx_harmony_fraction {
             data_cache.add_value_at_index(idx, self.harmony_fraction_value);
         }
+
+        self.total_outgoing_order = (
+            self.dsorders.iter().sum::<f64>()
+            - expected_inflow_value_on_delivery_timestep
+        ).max(0f64);
+
+        // Refer to simple_nodewise_ordering.rs for order propagation logic. 
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {

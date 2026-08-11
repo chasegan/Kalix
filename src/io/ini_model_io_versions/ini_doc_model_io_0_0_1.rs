@@ -355,6 +355,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                     ini_property.line_number, node_name, names[0])));
                             }
                             n.regulated_upstream = names;
+                        } else if name_lower == "expected_inflow" {
+                            n.expected_inflow_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'", ini_property.line_number, name, node_name)));
                         }
@@ -1230,6 +1233,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 ini_doc.set_property(section_name.as_str(), "type", "confluence");
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "regulated", &n.regulated_upstream.join(", "));
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "harmony_fraction", &n.harmony_fraction.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "expected_inflow", &n.expected_inflow_input.to_string());
             }
             NodeEnum::GaugeNode(n) => {
                 let section_name = format!("node.{}", n.name);
