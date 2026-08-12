@@ -101,6 +101,9 @@ pub struct DataCache {
     /// Constants cache
     pub constants: ConstantsCache,
 
+    /// Static properties cache - internal index for expression resolution
+    pub static_properties: ConstantsCache,
+
     // --- Cold from here down: touched at load/initialise, not per step ---
 
     pub series_name: Vec<String>,

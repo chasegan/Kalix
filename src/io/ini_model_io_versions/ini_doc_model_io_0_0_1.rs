@@ -146,7 +146,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             let accounts_prop = accounts_prop.ok_or_else(|| KalixIoError::Validate(format!(
                 "Error on line {}: Section '[{}]' is missing its 'accounts' table", ini_section.line_number, section_name)))?;
 
-            let table = parse_account_table(&accounts_prop.value)
+            let table = parse_account_table(&accounts_prop.value, &mut model)
                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", accounts_prop.line_number, e)))?;
 
             let mut member_ids = Vec::with_capacity(table.names.len());
@@ -460,6 +460,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.area_km2 = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
+                            model.data_cache.static_properties.set_value(
+                                &format!("node.{}.area", node_name.to_lowercase()), 
+                                n.area_km2);
                         } else if name_lower == "variant" {
                             // Model formulation. Absent/"gr4j" => classic daily; "gr4h" => sub-daily.
                             // Set the field directly; gr4j_model.initialize() (called during model
@@ -560,9 +563,13 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
                                                      ini_property.line_number, name, node_name)))?);
                         } else if name_lower == "x" {
-                            n.set_x(v.parse::<f64>()
+                            let parsed_x = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
-                                                     ini_property.line_number, name, node_name)))?);
+                                                     ini_property.line_number, name, node_name)))?;
+                            n.set_x(parsed_x);
+                            model.data_cache.static_properties.set_value(
+                                format!("node.{}.x", node_name.to_lowercase()).as_str(), 
+                                parsed_x);
                         } else if name_lower == "nlm" {
                             let all_values = csv_string_to_f64_vec(v)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
@@ -592,6 +599,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.typical_regulated_flow = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
+                            model.data_cache.static_properties.set_value(
+                                format!("node.{}.typical_regulated_flow", node_name.to_lowercase()).as_str(), 
+                                n.typical_regulated_flow);
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                               ini_property.line_number, name, node_name)));
@@ -622,6 +632,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.area_km2 = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
+                            model.data_cache.static_properties.set_value(
+                                format!("node.{}.area", node_name.to_lowercase()).as_str(),
+                                n.area_km2);
                         } else if name_lower == "params" {
                             let params = csv_string_to_f64_vec(v)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
@@ -728,6 +741,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.vol_initial = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
+                            model.data_cache.static_properties.set_value(
+                                format!("node.{}.initial_volume", node_name.to_lowercase()).as_str(),
+                                n.vol_initial);
                         } else if name_lower == "order_through" {
                             (n.order_through, _) = parse_csv_to_bool_option_u8(v)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
@@ -1548,7 +1564,7 @@ struct AccountTableData {
 /// reaches us as one comma-flattened cell stream (multi-line values are joined
 /// by the ini parser). Header length = leading run of allowed column names;
 /// everything after wraps into rows of that width.
-fn parse_account_table(flat: &str) -> Result<AccountTableData, String> {
+fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData, String> {
     let trimmed = flat.trim_end_matches(|c: char| c == ',' || c.is_whitespace());
     if trimmed.is_empty() {
         return Err("Empty 'accounts' table".to_string());
@@ -1572,6 +1588,7 @@ fn parse_account_table(flat: &str) -> Result<AccountTableData, String> {
         return Err(format!("Accounts table must start with a header row of column names (allowed: {})",
             ACCOUNT_TABLE_COLUMNS.join(", ")));
     }
+    // Assert that the first column is 'name' - this fact is assumed in parsing logic below.
     if header[0] != "name" {
         return Err("First column of the accounts table must be 'name'".to_string());
     }
@@ -1598,51 +1615,58 @@ fn parse_account_table(flat: &str) -> Result<AccountTableData, String> {
         pairs: if header.iter().any(|h| h == "pair") { Some(Vec::new()) } else { None },
     };
     for row in data.chunks(n_cols) {
+        let mut table_name = String::new();
         let mut size = f64::NAN;
         let mut initial = 0.0;
         for (col_name, cell) in header.iter().zip(row.iter()) {
             match col_name.as_str() {
                 "name" => {
-                    let name = cell.to_lowercase();
-                    if !is_valid_bare_name(&name) {
+                    // NOTE: This is the first property parsed, owing to
+                    // guarantee that iter() preserves order and the assertion
+                    // earlier in this function.
+                    table_name = cell.to_lowercase();
+                    if !is_valid_bare_name(&table_name) {
                         return Err(format!("Invalid account name '{}'", cell));
                     }
                     // A keyword-named account would be swallowed by header
                     // detection when the saved file is re-read.
-                    if ACCOUNT_TABLE_COLUMNS.contains(&name.as_str()) {
+                    if ACCOUNT_TABLE_COLUMNS.contains(&table_name.as_str()) {
                         return Err(format!("Account name '{}' clashes with an accounts-table column name", cell));
                     }
-                    table.names.push(name);
                 }
                 "size" => {
                     size = cell.parse::<f64>()
                         .map_err(|_| format!("Invalid size '{}' for account '{}': must be a number",
-                            cell, table.names.last().map(String::as_str).unwrap_or("?")))?;
-                    if !(size >= 0.0) {
+                            cell, table_name))?;
+                    if size < 0.0 {
                         return Err(format!("Account '{}' has negative size {}",
-                            table.names.last().map(String::as_str).unwrap_or("?"), size));
+                            table_name, size));
                     }
                 }
                 "initial" => {
                     initial = cell.parse::<f64>()
                         .map_err(|_| format!("Invalid initial balance '{}' for account '{}': must be a number",
-                            cell, table.names.last().map(String::as_str).unwrap_or("?")))?;
+                            cell, table_name))?;
                 }
                 "pair" => {
                     let pair = cell.to_lowercase();
                     if !is_valid_bare_name(&pair) {
                         return Err(format!("Invalid pair account name '{}' for account '{}'",
-                            cell, table.names.last().map(String::as_str).unwrap_or("?")));
+                            cell, table_name));
                     }
                     table.pairs.as_mut().expect("header contains pair").push(pair);
                 }
                 _ => unreachable!("header is drawn from ACCOUNT_TABLE_COLUMNS"),
             }
         }
+        model.data_cache.static_properties.set_value(
+            &format!("acc.{}.size", &table_name.as_str()), 
+            size);
         if initial < 0.0 || initial > size {
             return Err(format!("Account '{}' has initial balance {} outside [0, size={}]",
-                table.names.last().map(String::as_str).unwrap_or("?"), initial, size));
+                table_name, initial, size));
         }
+        table.names.push(table_name);
         table.sizes.push(size);
         table.initials.push(initial);
     }
