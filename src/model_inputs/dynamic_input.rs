@@ -199,6 +199,11 @@ pub enum OptimizedExpressionNode {
         cache_index: usize
     },
 
+    /// Direct reference to a static property cache value by index
+    StaticPropertyReference {
+        cache_index: usize
+    },
+
     /// Binary operation
     BinaryOp {
         left: Box<OptimizedExpressionNode>,
@@ -389,6 +394,10 @@ impl OptimizedExpressionNode {
             OptimizedExpressionNode::ConstantReference { cache_index } => {
                 data_cache.constants.get_value(*cache_index)
             }
+            
+            OptimizedExpressionNode::StaticPropertyReference { cache_index } => {
+                data_cache.static_properties.get_value(*cache_index)
+            }
 
             OptimizedExpressionNode::BinaryOp { left, op, right } => match op {
                 // && and || short-circuit: the right operand is only evaluated
@@ -514,6 +523,7 @@ impl OptimizedExpressionNode {
         match self {
             OptimizedExpressionNode::Constant { .. }
             | OptimizedExpressionNode::ConstantReference { .. }
+            | OptimizedExpressionNode::StaticPropertyReference { .. }
             | OptimizedExpressionNode::SimContext { .. }
             | OptimizedExpressionNode::Local { .. }
             | OptimizedExpressionNode::DataCacheReferenceWithOffset { .. } => {}
@@ -579,6 +589,7 @@ impl OptimizedExpressionNode {
         match self {
             OptimizedExpressionNode::Constant { .. }
             | OptimizedExpressionNode::ConstantReference { .. }
+            | OptimizedExpressionNode::StaticPropertyReference { .. }
             | OptimizedExpressionNode::SimContext { .. }
             | OptimizedExpressionNode::Local { .. }
             | OptimizedExpressionNode::DataCacheReference { .. }
@@ -675,6 +686,7 @@ impl OptimizedExpressionNode {
         node: &ExpressionNode,
         data_variable_map: &HashMap<String, usize>,
         constant_variable_map: &HashMap<String, usize>,
+        static_variable_map: &HashMap<String, usize>,
         locals: &HashMap<String, usize>,
         arena: &mut crate::data_management::data_cache::ExprStateArena,
         tables: &TableRegistry
@@ -702,6 +714,12 @@ impl OptimizedExpressionNode {
                 if let Some(&idx) = constant_variable_map.get(&lower_name) {
                     return Ok(OptimizedExpressionNode::ConstantReference { cache_index: idx });
                 }
+
+                // Try static properties 
+                if let Some(&idx) = static_variable_map.get(&lower_name) {
+                    return Ok(OptimizedExpressionNode::StaticPropertyReference { cache_index: idx });
+                }
+
                 // Try data cache (data.* and node.* variables)
                 if let Some(&idx) = data_variable_map.get(&lower_name) {
                     return Ok(OptimizedExpressionNode::DataCacheReference { cache_index: idx });
@@ -755,8 +773,8 @@ impl OptimizedExpressionNode {
                 Err(format!("Variable '{}' not found in variable maps", name))
             }
             ExpressionNode::BinaryOp { left, op, right } => {
-                let left_opt = Self::from_expression_node(left, data_variable_map, constant_variable_map, locals, arena, tables)?;
-                let right_opt = Self::from_expression_node(right, data_variable_map, constant_variable_map, locals, arena, tables)?;
+                let left_opt  = Self::from_expression_node(left,  data_variable_map, constant_variable_map, static_variable_map, locals, arena, tables)?;
+                let right_opt = Self::from_expression_node(right, data_variable_map, constant_variable_map, static_variable_map, locals, arena, tables)?;
 
                 Ok(OptimizedExpressionNode::BinaryOp {
                     left: Box::new(left_opt),
@@ -765,7 +783,7 @@ impl OptimizedExpressionNode {
                 })
             }
             ExpressionNode::UnaryOp { op, operand } => {
-                let operand_opt = Self::from_expression_node(operand, data_variable_map, constant_variable_map, locals, arena, tables)?;
+                let operand_opt = Self::from_expression_node(operand, data_variable_map, constant_variable_map, static_variable_map, locals, arena, tables)?;
 
                 Ok(OptimizedExpressionNode::UnaryOp {
                     op: *op,
@@ -775,7 +793,7 @@ impl OptimizedExpressionNode {
             ExpressionNode::FunctionCall { func, args } => {
                 let args_opt: Result<Vec<_>, String> = args
                     .iter()
-                    .map(|arg| Self::from_expression_node(arg, data_variable_map, constant_variable_map, locals, arena, tables))
+                    .map(|arg| Self::from_expression_node(arg, data_variable_map, constant_variable_map, static_variable_map, locals, arena, tables))
                     .collect();
 
                 lower_function_call(func, args_opt?, arena, tables)
@@ -1116,6 +1134,17 @@ pub enum DynamicInput {
         original: String
     },
 
+    /// Direct reference to a static property cache value 
+    /// 
+    /// At the moment, this holds only fields from acc.*, node.* namespaces as
+    /// determined in the io reader by the data_cache's static_property cache -
+    /// if this changes in future, this will need to be addressed in
+    /// `from_string_impl` and `lower_program`.
+    DirectStaticPropertyReference {
+        idx: usize,
+        original: String
+    },
+
     /// Constant value (evaluated once at initialization)
     Constant {
         value: f64,
@@ -1384,6 +1413,7 @@ impl DynamicInput {
         // and avoid duplicate entries for the same variable with different cases
         let mut data_variable_map = HashMap::new();
         let mut constant_variable_map = HashMap::new();
+        let mut static_variable_map = HashMap::new();
 
         for var_name in variables.iter() {
             let lower_name = var_name.to_lowercase();
@@ -1402,11 +1432,15 @@ impl DynamicInput {
                 constant_variable_map.insert(lower_name.clone(), idx);
             } else if lower_name.starts_with("node.") || lower_name.starts_with("var.")
                 || lower_name.starts_with("acc.") || lower_name.starts_with("ras.") {
-                // Resolve to data cache but NOT as critical input (node outputs,
-                // var values, account state and RAS series are computed during
-                // the run, not loaded)
-                let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
-                data_variable_map.insert(lower_name.clone(), idx);
+                if let Some(idx) = data_cache.static_properties.get_idx(&lower_name) {
+                    static_variable_map.insert(lower_name.clone(), idx);
+                } else {
+                    // Resolve to data cache but NOT as critical input (node outputs,
+                    // var values, account state and RAS series are computed during
+                    // the run, not loaded)
+                    let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
+                    data_variable_map.insert(lower_name, idx);
+                }
             } else {
                 // Resolve to data cache (data.* references - use flag_as_critical from caller)
                 let idx = data_cache.get_or_add_new_series(lower_name.as_str(), flag_as_critical);
@@ -1481,9 +1515,16 @@ impl DynamicInput {
 
             // sim.* and self.* variables need to go through the Function path
             if lower_var.starts_with("sim.") || lower_var.starts_with("self.") {
-                Self::function_from_parsed(trimmed, &parsed, &data_variable_map, &constant_variable_map, data_cache, self_map)
+                Self::function_from_parsed(trimmed, &parsed, 
+                    &data_variable_map, &constant_variable_map, &static_variable_map, 
+                    data_cache, self_map)
             } else if let Some(&idx) = constant_variable_map.get(&lower_var) {
                 Ok(DynamicInput::DirectConstantReference {
+                    idx,
+                    original: trimmed.to_string()
+                })
+            } else if let Some(&idx) = static_variable_map.get(&lower_var) {
+                Ok(DynamicInput::DirectStaticPropertyReference {
                     idx,
                     original: trimmed.to_string()
                 })
@@ -1497,7 +1538,7 @@ impl DynamicInput {
             }
         } else {
             // Multiple variables or complex expression -> function expression
-            Self::function_from_parsed(trimmed, &parsed, &data_variable_map, &constant_variable_map, data_cache, self_map)
+            Self::function_from_parsed(trimmed, &parsed, &data_variable_map, &constant_variable_map, &static_variable_map, data_cache, self_map)
         }
     }
 
@@ -1511,13 +1552,16 @@ impl DynamicInput {
         parsed: &crate::functions::parser::ParsedFunction,
         data_variable_map: &HashMap<String, usize>,
         constant_variable_map: &HashMap<String, usize>,
+        static_variable_map: &HashMap<String, usize>,
         data_cache: &mut DataCache,
         self_map: Option<&HashMap<String, usize>>,
     ) -> Result<Self, String> {
         let DataCache { expr_state, tables, needs_calendar_flags, .. } = data_cache;
         let f_mark = expr_state.f.len();
         let u_mark = expr_state.u.len();
-        let optimised_ast = transform_to_optimised_ast(parsed, data_variable_map, constant_variable_map, expr_state, tables, self_map)?;
+        let optimised_ast = transform_to_optimised_ast(
+            parsed, data_variable_map, constant_variable_map, static_variable_map, 
+            expr_state, tables, self_map)?;
         if !*needs_calendar_flags && uses_calendar_flags(&optimised_ast) {
             *needs_calendar_flags = true;
         }
@@ -1587,6 +1631,7 @@ impl DynamicInput {
         // the plain-expression path does.
         let mut data_variable_map = HashMap::new();
         let mut constant_variable_map = HashMap::new();
+        let mut static_variable_map = HashMap::new();
         for var_name in program.get_external_variables() {
             let lower_name = var_name.to_lowercase();
 
@@ -1634,9 +1679,13 @@ impl DynamicInput {
                 constant_variable_map.insert(lower_name, idx);
             } else if lower_name.starts_with("node.") || lower_name.starts_with("var.")
                 || lower_name.starts_with("acc.") || lower_name.starts_with("ras.") {
-                // Computed during the run, not loaded: never critical.
-                let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
-                data_variable_map.insert(lower_name, idx);
+                if let Some(idx) = data_cache.static_properties.get_idx(&lower_name) {
+                    static_variable_map.insert(lower_name.clone(), idx);
+                } else {
+                    // Computed during the run, not loaded: never critical.
+                    let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
+                    data_variable_map.insert(lower_name, idx);
+                }
             } else {
                 let idx = data_cache.get_or_add_new_series(lower_name.as_str(), flag_as_critical);
                 data_variable_map.insert(lower_name, idx);
@@ -1683,6 +1732,7 @@ impl DynamicInput {
         struct LowerCtx<'c> {
             data_variable_map: &'c HashMap<String, usize>,
             constant_variable_map: &'c HashMap<String, usize>,
+            static_variable_map: &'c HashMap<String, usize>,
             locals: HashMap<String, usize>,
             next_slot: usize,
             assert_meta: Vec<String>,
@@ -1698,7 +1748,8 @@ impl DynamicInput {
                 match stmt {
                     Stmt::Assign { name, expr } => {
                         let lowered = OptimizedExpressionNode::from_expression_node(
-                            expr, ctx.data_variable_map, ctx.constant_variable_map, &ctx.locals, expr_state, tables)?;
+                            expr, ctx.data_variable_map, ctx.constant_variable_map, ctx.static_variable_map, 
+                            &ctx.locals, expr_state, tables)?;
                         let next = &mut ctx.next_slot;
                         let slot = *ctx.locals.entry(name.to_lowercase()).or_insert_with(|| {
                             let s = *next;
@@ -1709,14 +1760,16 @@ impl DynamicInput {
                     }
                     Stmt::Assert { expr, source_text } => {
                         let lowered = OptimizedExpressionNode::from_expression_node(
-                            expr, ctx.data_variable_map, ctx.constant_variable_map, &ctx.locals, expr_state, tables)?;
+                            expr, ctx.data_variable_map, ctx.constant_variable_map, ctx.static_variable_map, 
+                            &ctx.locals, expr_state, tables)?;
                         let meta = ctx.assert_meta.len() as u32;
                         ctx.assert_meta.push(source_text.clone());
                         out.push(OptStmt::Assert { expr: lowered, meta });
                     }
                     Stmt::Cond { cond, then_stmts, else_stmts } => {
                         let cond = OptimizedExpressionNode::from_expression_node(
-                            cond, ctx.data_variable_map, ctx.constant_variable_map, &ctx.locals, expr_state, tables)?;
+                            cond, ctx.data_variable_map, ctx.constant_variable_map, ctx.static_variable_map, 
+                            &ctx.locals, expr_state, tables)?;
                         // Arena growth while lowering a side tells us whether
                         // that side carries stateful nodes — the same
                         // detection the Function/StatefulFunction split uses.
@@ -1742,6 +1795,7 @@ impl DynamicInput {
         let mut ctx = LowerCtx {
             data_variable_map: &data_variable_map,
             constant_variable_map: &constant_variable_map,
+            static_variable_map: &static_variable_map,
             // Seed the self slots (dotted keys, so no collision with bare
             // program locals is possible) — self.* then resolves through the
             // ordinary locals-first lookup.
@@ -1754,7 +1808,7 @@ impl DynamicInput {
         let assert_meta = ctx.assert_meta;
 
         let result = OptimizedExpressionNode::from_expression_node(
-            &program.result, &data_variable_map, &constant_variable_map, &locals, expr_state, tables)?;
+            &program.result, &data_variable_map, &constant_variable_map, &static_variable_map, &locals, expr_state, tables)?;
 
         let grew = expr_state.f.len() > f_mark || expr_state.u.len() > u_mark;
 
@@ -1839,6 +1893,9 @@ impl DynamicInput {
             DynamicInput::DirectConstantReference { idx, .. } => {
                 data_cache.constants.get_value(*idx)
             }
+            DynamicInput::DirectStaticPropertyReference { idx, .. } => {
+                data_cache.static_properties.get_value(*idx)
+            }
             DynamicInput::Constant { value, .. } => *value,
             DynamicInput::LinearCombination { data_indices, coefficients, .. } => {
                 // High-performance dot product of weights and data values
@@ -1909,6 +1966,7 @@ impl DynamicInput {
             DynamicInput::DirectReference { original, .. } => original.clone(),
             DynamicInput::DirectReferenceWithOffset { original, .. } => original.clone(),
             DynamicInput::DirectConstantReference { original, .. } => original.clone(),
+            DynamicInput::DirectStaticPropertyReference { original, .. } => original.clone(),
             DynamicInput::Constant { original, .. } => original.clone(),
             DynamicInput::LinearCombination { variable_names, coefficients, .. } => {
                 // Reconstruct the expression with current optimized weights
@@ -1943,6 +2001,7 @@ impl DynamicInput {
             DynamicInput::DirectReference { original, .. } => original.as_str(),
             DynamicInput::DirectReferenceWithOffset { original, .. } => original.as_str(),
             DynamicInput::DirectConstantReference { original, .. } => original.as_str(),
+            DynamicInput::DirectStaticPropertyReference { original, .. } => original.as_str(),
             DynamicInput::Constant { original, .. } => original.as_str(),
             DynamicInput::LinearCombination { original, .. } => original.as_str(),
             DynamicInput::Function { expression, .. } => expression.as_str(),
@@ -1965,6 +2024,7 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
         | OptimizedExpressionNode::DataCacheReference { .. }
         | OptimizedExpressionNode::DataCacheReferenceWithOffset { .. }
         | OptimizedExpressionNode::ConstantReference { .. }
+        | OptimizedExpressionNode::StaticPropertyReference { .. }
         | OptimizedExpressionNode::Local { .. } => false,
         OptimizedExpressionNode::BinaryOp { left, right, .. } => {
             uses_calendar_flags(left) || uses_calendar_flags(right)
@@ -2009,6 +2069,7 @@ fn transform_to_optimised_ast(
     parsed: &crate::functions::parser::ParsedFunction,
     data_variable_map: &HashMap<String, usize>,
     constant_variable_map: &HashMap<String, usize>,
+    static_variable_map: &HashMap<String, usize>,
     arena: &mut crate::data_management::data_cache::ExprStateArena,
     tables: &TableRegistry,
     self_map: Option<&HashMap<String, usize>>,
@@ -2019,7 +2080,7 @@ fn transform_to_optimised_ast(
         Some(map) => map.clone(),
         None => HashMap::new(),
     };
-    OptimizedExpressionNode::from_expression_node(parsed.get_ast(), data_variable_map, constant_variable_map, &locals, arena, tables)
+    OptimizedExpressionNode::from_expression_node(parsed.get_ast(), data_variable_map, constant_variable_map, static_variable_map, &locals, arena, tables)
 }
 
 /// Lower a parsed function call into its specialised hot-path form, validating

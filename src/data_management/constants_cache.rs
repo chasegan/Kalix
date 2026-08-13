@@ -46,6 +46,11 @@ impl ConstantsCache {
         }
     }
 
+    /// Returns the index of a constant if it exists
+    pub fn get_idx(&self, name: &str) -> Option<usize> {
+        self.name_idx_map.get(name).copied()
+    }
+
     /// This provides fast access to the f64 values given an idx. Consumers can use this to say
     ///    "Here is an idx I have been provided. Give me the value."
     ///
