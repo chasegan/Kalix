@@ -61,6 +61,35 @@ var.calc.initial
         "node.mystore.initial_volume should resolve to the value declared under [node.MyStore], every step");
 }
 
+/// A static property can be listed directly in [outputs], with no [var.*]
+/// detour, and comes back filled for the whole simulation horizon.
+#[test]
+fn static_property_listed_directly_in_outputs_is_filled() {
+    let ini = format!("{HEADER}
+[node.MyStore]
+type = storage
+loc = 0, 0
+initial_volume = 500
+dimensions = Level [m], Volume [ML], Area [km2], Spill [ML],
+             0.0      , 0.0        , 0.0       , 0.0,
+             1.0      , 1000.0     , 0.1       , 0.0,
+             2.0      , 2000.0     , 0.1       , 1.0e9,
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 10
+
+[outputs]
+node.mystore.initial_volume
+");
+    let model = run_model(&ini);
+    let vals = series(&model, "node.mystore.initial_volume");
+    // 2020-01-30 .. 2020-02-01 inclusive, daily: Jan30, Jan31, Feb1 = 3 steps.
+    assert_eq!(vals.len(), 3, "static-property output should span the whole simulation horizon");
+    assert_eq!(vals, vec![500.0; 3]);
+}
+
 /// A routing node's static properties (`x`, `typical_regulated_flow`) resolve
 /// the same way, under a mixed-case section name.
 #[test]
