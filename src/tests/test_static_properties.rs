@@ -208,3 +208,31 @@ var.calc.a1_size
     let vals = series(&model, "var.calc.a1_size");
     assert_eq!(vals, vec![100.0; vals.len()]);
 }
+
+/// A group's `size` is the sum of its members' declared sizes, also a static
+/// property, also directly output-able with no [var.*] detour.
+#[test]
+fn group_size_is_the_static_sum_of_member_sizes() {
+    let ini = format!("{HEADER}
+[acc.g1]
+accounts = name, size,
+           a1,   100,
+           a2,   50,
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 0
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 10
+
+[outputs]
+acc.g1.size
+");
+    let model = run_model(&ini);
+    let vals = series(&model, "acc.g1.size");
+    assert_eq!(vals, vec![150.0; vals.len()]);
+}
