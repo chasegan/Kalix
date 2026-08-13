@@ -1666,6 +1666,9 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
             return Err(format!("Account '{}' has initial balance {} outside [0, size={}]",
                 table_name, initial, size));
         }
+        model.data_cache.static_properties.set_value(
+            &format!("acc.{}.initial", &table_name.as_str()),
+            initial);
         table.names.push(table_name);
         table.sizes.push(size);
         table.initials.push(initial);
