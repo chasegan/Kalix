@@ -461,7 +461,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
                             model.data_cache.static_properties.set_value(
-                                &format!("node.{}.area", node_name.to_lowercase()), 
+                                &format!("node.{}.area", node_name),
                                 n.area_km2);
                         } else if name_lower == "variant" {
                             // Model formulation. Absent/"gr4j" => classic daily; "gr4h" => sub-daily.
@@ -568,7 +568,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                                      ini_property.line_number, name, node_name)))?;
                             n.set_x(parsed_x);
                             model.data_cache.static_properties.set_value(
-                                format!("node.{}.x", node_name.to_lowercase()).as_str(), 
+                                format!("node.{}.x", node_name).as_str(),
                                 parsed_x);
                         } else if name_lower == "nlm" {
                             let all_values = csv_string_to_f64_vec(v)
@@ -600,7 +600,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
                             model.data_cache.static_properties.set_value(
-                                format!("node.{}.typical_regulated_flow", node_name.to_lowercase()).as_str(), 
+                                format!("node.{}.typical_regulated_flow", node_name).as_str(),
                                 n.typical_regulated_flow);
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
@@ -633,7 +633,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
                             model.data_cache.static_properties.set_value(
-                                format!("node.{}.area", node_name.to_lowercase()).as_str(),
+                                format!("node.{}.area", node_name).as_str(),
                                 n.area_km2);
                         } else if name_lower == "params" {
                             let params = csv_string_to_f64_vec(v)
@@ -742,7 +742,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
                             model.data_cache.static_properties.set_value(
-                                format!("node.{}.initial_volume", node_name.to_lowercase()).as_str(),
+                                format!("node.{}.initial_volume", node_name).as_str(),
                                 n.vol_initial);
                         } else if name_lower == "order_through" {
                             (n.order_through, _) = parse_csv_to_bool_option_u8(v)
@@ -1696,7 +1696,7 @@ fn parse_ras_trigger(s: &str, model: &mut Model, line: usize) -> Result<crate::h
         let month_value = if let Ok(m) = arg.parse::<f64>() {
             m
         } else if arg.starts_with("const.") {
-            model.data_cache.constants.get_value_by_name(&arg.to_lowercase())
+            model.data_cache.constants.get_value_by_name(arg)
                 .map_err(|e| format!("Error on line {}: {}", line, e))?
         } else {
             return Err(format!("Error on line {}: Invalid start_water_year month '{}': \
