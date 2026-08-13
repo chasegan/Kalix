@@ -1638,7 +1638,9 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
                     size = cell.parse::<f64>()
                         .map_err(|_| format!("Invalid size '{}' for account '{}': must be a number",
                             cell, table_name))?;
-                    if size < 0.0 {
+                    // Written as !(size >= 0.0), not size < 0.0, so NaN (which parses fine as f64
+                    // but fails every comparison) is caught here too instead of slipping through.
+                    if !(size >= 0.0) {
                         return Err(format!("Account '{}' has negative size {}",
                             table_name, size));
                     }
