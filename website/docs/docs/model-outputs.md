@@ -17,6 +17,12 @@ node.dam.volume
 var.accounting.headroom
 ```
 
+A handful of node/account properties are fixed for the whole run rather than
+computed each step — see [Static Node Properties](referencing-model-results.md#static-node-properties)
+and [`[acc.*]`](accounts.md#recordable-series). These are recordable the same
+way too; the resulting series simply repeats the declared value at every
+timestep.
+
 ### Output file format
 
 The CSV format has a single header row, and a single timestamp column.

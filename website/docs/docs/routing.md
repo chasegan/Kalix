@@ -32,6 +32,7 @@ ds_1 = my_other_node
 | nlm (optional) | Nonlinear Muskingum parameters: k, m. Using these parameters will activate nonlinear Muskingum routing algorithm. Cannot be used in conjunction with piecewise linear on the same reach. Units for k are [meters^(3(1-m)) · s^m]. Following the convention of other platforms, if n\_divs > 1 then k applies per division. Example: `nlm = 183000, 0.75` |
 | n\_divs (optional) | The number of divisions used in the pwl storage routing solver. Default value is 1. Example: `n_divs = 10` |
 | x (optional) | Inflow bias. This sets the bias of the upstream flow (as opposed to the downstream flow) in the index flow term used in the pwl storage routing solver. Default value is 0. Example: `x = 0` |
+| typical\_regulated\_flow (optional) | A representative regulated flow rate [ML], used to estimate travel time through this reach when propagating orders upstream (see [Ordering](ordering.md)). Default value is 0. Example: `typical_regulated_flow = 250` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
 The routing parameters — the `nlm` pair, or the travel times of the `pwl` table — can be calibrated with the built-in optimiser: see [Optimisable parameters](optimisable-parameters.md).
@@ -45,6 +46,8 @@ The routing parameters — the `nlm` pair, or the travel times of the `pwl` tabl
 | ds\_1 | Downstream flow on link ds\_1 [ML] |
 | ds\_1\_order | Orders on the link ds\_1 [ML] |
 | volume | Volume of water in the reach storage [ML] |
+| x | The declared `x` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
+| typical\_regulated\_flow | The declared `typical_regulated_flow` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
 
 ## How the node works
 

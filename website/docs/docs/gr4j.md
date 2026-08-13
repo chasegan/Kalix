@@ -47,6 +47,7 @@ The four model parameters — and the rainfall-weighting terms, when `rain` is a
 | runoff\_depth | Catchment runoff depth from GR4J model [mm] |
 | rain | Input rainfall [mm] |
 | evap | Input evapotranspiration [mm] |
+| area | Catchment area [km2] — the declared `area` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
 
 ## How the node works
 
