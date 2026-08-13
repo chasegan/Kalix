@@ -90,6 +90,39 @@ fn test_constants_cache_assert_all_assigned() {
 
 
 
+/*
+Test that names are case-insensitive at every entry point: registering,
+looking up, or setting a value under any casing all resolve to the same
+entry, and the name stored internally is always lowercase.
+ */
+#[test]
+fn test_constants_cache_case_insensitive() {
+    let mut cache = ConstantsCache::new();
+
+    // Register under one casing, look up under others - same idx every time.
+    let idx1 = cache.add_if_needed_and_get_idx("const.Gravity");
+    assert_eq!(cache.add_if_needed_and_get_idx("const.gravity"), idx1);
+    assert_eq!(cache.add_if_needed_and_get_idx("CONST.GRAVITY"), idx1);
+    assert_eq!(cache.get_idx("const.GrAvItY"), Some(idx1));
+    assert_eq!(cache.len(), 1);
+
+    // set_value under a different casing updates the existing entry rather
+    // than creating a second one.
+    let idx2 = cache.set_value("CONST.gravity", 9.81);
+    assert_eq!(idx2, idx1);
+    assert_eq!(cache.len(), 1);
+    assert_eq!(cache.get_value(idx1), 9.81);
+
+    // get_value_by_name resolves regardless of casing.
+    assert_eq!(cache.get_value_by_name("const.gravity").unwrap(), 9.81);
+    assert_eq!(cache.get_value_by_name("Const.Gravity").unwrap(), 9.81);
+    assert_eq!(cache.get_value_by_name("CONST.GRAVITY").unwrap(), 9.81);
+
+    // The stored name itself is normalized to lowercase regardless of how it
+    // was first registered.
+    assert_eq!(cache.list_names(), vec!["const.gravity".to_string()]);
+}
+
 #[test]
 fn test_variable_name_checker() {
     assert!(is_valid_variable_name("const.temperature"));
