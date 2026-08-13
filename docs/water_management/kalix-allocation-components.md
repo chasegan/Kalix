@@ -125,11 +125,11 @@ ledger touched only by node takes.
 
 ### 3.2 Accounts readable in expressions — the `acc.*` namespace
 
-Account state is published as ordinary data-cache series, so it resolves in
+Most account state is published as ordinary data-cache series, resolving in
 expressions by exactly the mechanism that serves `node.<name>.<output>`: a
 reference creates the series, the account manager registers the writer, and
-`[outputs]` records it. Three fields per account, plus the same three summed
-over each group (`acc.<group>.<field>`):
+`[outputs]` records it. Three such fields per account, plus the same three
+summed over each group (`acc.<group>.<field>`):
 
 | Field | Written | Readable within the step |
 |---|---|---|
@@ -139,8 +139,16 @@ over each group (`acc.<group>.<field>`):
 
 `debits` is *water used*: only node takes feed it, and it resets each step, so
 `[ras.*]` credits, resets and write-offs are excluded by construction.
-`acc.<name>.size` remains available as a recorder (it is static, so exposing
-constant properties to expressions properly is a separate piece of work).
+
+`size` and `initial` are different — they're declared, not computed, and
+never change during a run, so they're registered directly into
+`DataCache::static_properties` at load (alongside the equivalent static node
+properties — catchment area, routing's `x`, a storage's `initial_volume` —
+see `docs/node_references.md`), not published as a per-step series. That
+makes them readable *unconditionally*, from the very first line of the model,
+with none of the write-timing caveats above and no account-manager recorder
+wiring at all — a stronger guarantee than the "separate piece of work" this
+section used to defer that to.
 
 **Two views, deliberately.** `opening_balance` is the post-policy, pre-take
 snapshot: every expression reader sees the same value however the nodes happen
