@@ -51,7 +51,6 @@ pub struct AccountManager {
     recorder_acc_debits: Vec<(usize, usize)>,
     recorder_acc_allocation: Vec<(usize, usize)>,
     recorder_acc_use: Vec<(usize, usize)>,
-    recorder_acc_size: Vec<(usize, usize)>,
     recorder_grp_opening: Vec<(usize, usize)>,
     recorder_grp_closing: Vec<(usize, usize)>,
     recorder_grp_debits: Vec<(usize, usize)>,
@@ -87,7 +86,6 @@ impl AccountManager {
             recorder_acc_debits: Vec::new(),
             recorder_acc_allocation: Vec::new(),
             recorder_acc_use: Vec::new(),
-            recorder_acc_size: Vec::new(),
             recorder_grp_opening: Vec::new(),
             recorder_grp_closing: Vec::new(),
             recorder_grp_debits: Vec::new(),
@@ -176,7 +174,6 @@ impl AccountManager {
         self.recorder_acc_debits.clear();
         self.recorder_acc_allocation.clear();
         self.recorder_acc_use.clear();
-        self.recorder_acc_size.clear();
         self.recorder_grp_opening.clear();
         self.recorder_grp_closing.clear();
         self.recorder_grp_debits.clear();
@@ -200,7 +197,11 @@ impl AccountManager {
             register("debits", &mut self.recorder_acc_debits, &mut any);
             register("allocation", &mut self.recorder_acc_allocation, &mut any);
             register("use", &mut self.recorder_acc_use, &mut any);
-            register("size", &mut self.recorder_acc_size, &mut any);
+            // No per-account "size" recorder: acc.<name>.size is static, so it now
+            // lives in DataCache::static_properties (registered at INI load) and is
+            // filled directly wherever it's named in [outputs] - see
+            // Model::configure(). The group aggregate below still needs its own
+            // recorder, since group sums aren't static properties.
             self.has_recorders |= any;
         }
 
@@ -227,20 +228,18 @@ impl AccountManager {
 
         self.has_opening_recorders =
             !self.recorder_acc_opening.is_empty() || !self.recorder_grp_opening.is_empty();
-        self.has_size_recorders =
-            !self.recorder_acc_size.is_empty() || !self.recorder_grp_size.is_empty();
+        self.has_size_recorders = !self.recorder_grp_size.is_empty();
     }
 
-    /// Publish the size series (account and group-sum) for this step. Called
-    /// at the very top of run_timestep, before the [ras.*] loop: sizes are
-    /// static, so writing them first makes `acc.<x>.size` bare-readable at
-    /// any point in the step — including announce-time resource assessments
-    /// like `allocate(table.curve(... / acc.hp.size))`.
+    /// Publish the group-sum size series for this step. Called at the very
+    /// top of run_timestep, before the [ras.*] loop: sizes are static, so
+    /// writing them first makes `acc.<group>.size` bare-readable at any point
+    /// in the step — including announce-time resource assessments like
+    /// `allocate(table.curve(... / acc.hp.size))`. Individual account size
+    /// needs no such write: it's filled once, directly, from
+    /// `static_properties` (see Model::configure()).
     pub fn publish_sizes(&self, data_cache: &mut DataCache) {
         if !self.has_size_recorders { return; }
-        for &(account_idx, series_idx) in &self.recorder_acc_size {
-            data_cache.add_value_at_index(series_idx, self.accounts[account_idx].size);
-        }
         for &(group_idx, series_idx) in &self.recorder_grp_size {
             let total = self.group_sum(group_idx, |a| a.size);
             data_cache.add_value_at_index(series_idx, total);
