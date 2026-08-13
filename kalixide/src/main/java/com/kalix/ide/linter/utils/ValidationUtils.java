@@ -214,9 +214,11 @@ public class ValidationUtils {
     /** Fields published per account, per account group, and per RAS. Mirror
      *  the engine's ACCOUNT_SERIES_FIELDS / GROUP_SERIES_FIELDS
      *  (src/hydrology/accounts/account_manager.rs) — groups aggregate every
-     *  account field, `size` and `use` included. */
+     *  account field, `size` and `use` included. `size` and `initial` are
+     *  static (fixed at load, not per-step), but are still valid field names
+     *  here. */
     private static final java.util.Set<String> ACCOUNT_OUTPUT_FIELDS =
-        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "use", "size");
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "use", "size", "initial");
     private static final java.util.Set<String> ACCOUNT_GROUP_OUTPUT_FIELDS = ACCOUNT_OUTPUT_FIELDS;
     private static final java.util.Set<String> RAS_OUTPUT_FIELDS = java.util.Set.of("fired", "pct");
 
