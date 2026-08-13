@@ -1,5 +1,10 @@
 use std::collections::HashMap;
 
+/// A name-addressable cache of scalar f64 values, indexed both by name and by a
+/// stable integer idx for fast repeated access.
+///
+/// Every name-taking entry point lowercases its `name` argument by design, to
+/// ensure case-insensitivity.
 #[derive(Clone, Default)]
 pub struct ConstantsCache {
 
@@ -39,16 +44,17 @@ impl ConstantsCache {
     ///    "Hey I'm going to want to use a constant called this. Please register the name and give
     ///    me an idx that I can use for quick access later."
     pub fn add_if_needed_and_get_idx(&mut self, name: &str) -> usize {
-        if let Some(idx) = self.name_idx_map.get(name) {
+        let name = name.to_lowercase();
+        if let Some(idx) = self.name_idx_map.get(name.as_str()) {
             *idx
         } else {
-            self.push(name.to_string(), false, 0f64)
+            self.push(name, false, 0f64)
         }
     }
 
     /// Returns the index of a constant if it exists
     pub fn get_idx(&self, name: &str) -> Option<usize> {
-        self.name_idx_map.get(name).copied()
+        self.name_idx_map.get(name.to_lowercase().as_str()).copied()
     }
 
     /// This provides fast access to the f64 values given an idx. Consumers can use this to say
@@ -69,6 +75,7 @@ impl ConstantsCache {
     /// Sets the value of a constant and returns the idx. If the constant does not already exist
     /// it will be added.
     pub fn set_value(&mut self, name: &str, value: f64) -> usize {
+        // add_if_needed_and_get_idx normalizes the name.
         let idx = self.add_if_needed_and_get_idx(name);
         self.value[idx] = value;
         self.is_assigned[idx] = true;
@@ -100,7 +107,7 @@ impl ConstantsCache {
 
     /// Get the value of a constant by name
     pub fn get_value_by_name(&self, name: &str) -> Result<f64, String> {
-        match self.name_idx_map.get(name) {
+        match self.name_idx_map.get(name.to_lowercase().as_str()) {
             Some(&idx) => Ok(self.value[idx]),
             None => Err(format!("Constant '{}' does not exist", name)),
         }
