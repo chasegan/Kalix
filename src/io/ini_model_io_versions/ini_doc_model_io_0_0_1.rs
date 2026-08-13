@@ -190,6 +190,44 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     }
 
     // -------------------------------------------------------------------------------------
+    // Pre-parsing node static properties - register to data cache
+    // -------------------------------------------------------------------------------------
+    // A node's static scalar properties must be visible to every expression
+    // regardless of file order, the same guarantee the [acc.*] pre-pass above
+    // gives accounts. Without this, a [var.*] block (or any other expression)
+    // placed before the [node.*] section it references would find nothing
+    // registered yet and silently fall back to an unwritten data series
+    // instead of resolving the value - see the main per-section loop below,
+    // which is where node structs actually get built and would otherwise be
+    // the only place this got registered. The single source of truth for
+    // which (node type, property) pairs are static lives here; the main loop
+    // no longer registers them itself, so there is nothing to keep in sync.
+    //
+    // Malformed values are left alone here (silently skipped) rather than
+    // reported - the main loop's existing per-property validation reports
+    // them properly, with its usual line-numbered error, once it gets there.
+    const NODE_STATIC_F64_PROPERTIES: &[(&str, &str)] = &[
+        ("gr4j", "area"),
+        ("sacramento", "area"),
+        ("routing", "x"),
+        ("routing", "typical_regulated_flow"),
+        ("storage", "initial_volume"),
+    ];
+    for (section_name, ini_section) in &ini_doc.sections {
+        let Some(node_name) = section_name.strip_prefix("node.") else { continue };
+        let Some(node_type) = ini_section.properties.get("type").map(|p| p.value.trim().to_lowercase()) else { continue };
+        for (key, ini_property) in &ini_section.properties {
+            let key_lower = key.to_lowercase();
+            if NODE_STATIC_F64_PROPERTIES.contains(&(node_type.as_str(), key_lower.as_str())) {
+                if let Ok(value) = ini_property.value.trim().parse::<f64>() {
+                    model.data_cache.static_properties.set_value(
+                        &format!("node.{}.{}", node_name, key_lower), value);
+                }
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------------------
     // Collecting [ras.*] sections (parsed in a post-pass)
     // -------------------------------------------------------------------------------------
     // A RAS is one trigger + one action applied to the accounts of one or more
@@ -468,9 +506,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.area_km2 = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
-                            model.data_cache.static_properties.set_value(
-                                &format!("node.{}.area", node_name),
-                                n.area_km2);
                         } else if name_lower == "variant" {
                             // Model formulation. Absent/"gr4j" => classic daily; "gr4h" => sub-daily.
                             // Set the field directly; gr4j_model.initialize() (called during model
@@ -575,9 +610,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
                             n.set_x(parsed_x);
-                            model.data_cache.static_properties.set_value(
-                                format!("node.{}.x", node_name).as_str(),
-                                parsed_x);
                         } else if name_lower == "nlm" {
                             let all_values = csv_string_to_f64_vec(v)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
@@ -607,9 +639,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.typical_regulated_flow = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
-                            model.data_cache.static_properties.set_value(
-                                format!("node.{}.typical_regulated_flow", node_name).as_str(),
-                                n.typical_regulated_flow);
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                               ini_property.line_number, name, node_name)));
@@ -640,9 +669,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.area_km2 = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
-                            model.data_cache.static_properties.set_value(
-                                format!("node.{}.area", node_name).as_str(),
-                                n.area_km2);
                         } else if name_lower == "params" {
                             let params = csv_string_to_f64_vec(v)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
@@ -749,9 +775,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.vol_initial = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
-                            model.data_cache.static_properties.set_value(
-                                format!("node.{}.initial_volume", node_name).as_str(),
-                                n.vol_initial);
                         } else if name_lower == "order_through" {
                             (n.order_through, _) = parse_csv_to_bool_option_u8(v)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;

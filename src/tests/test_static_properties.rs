@@ -61,6 +61,39 @@ var.calc.initial
         "node.mystore.initial_volume should resolve to the value declared under [node.MyStore], every step");
 }
 
+/// A reference to a node's static property must resolve even when it appears
+/// *before* that node's [node.*] section in the file - static properties are
+/// registered in a pre-pass, not inline as each section is parsed, so file
+/// order can't leave a forward reference silently unresolved (reading 0
+/// instead of the declared value).
+#[test]
+fn static_property_resolves_when_referenced_before_its_node_section() {
+    let ini = format!("{HEADER}
+[var.calc]
+scaled = node.later_catchment.area * 0.1
+
+[node.later_catchment]
+type = gr4j
+loc = 0, 0
+area = 100
+rain = 0
+evap = 0
+params = 350, 0, 90, 1.7
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 10
+
+[outputs]
+var.calc.scaled
+");
+    let model = run_model(&ini);
+    let vals = series(&model, "var.calc.scaled");
+    assert_eq!(vals, vec![10.0; vals.len()],
+        "node.later_catchment.area should resolve to 100 even though [var.calc] is declared first, not silently read as 0");
+}
+
 /// A static property can be listed directly in [outputs], with no [var.*]
 /// detour, and comes back filled for the whole simulation horizon.
 #[test]
