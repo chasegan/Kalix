@@ -236,3 +236,32 @@ acc.g1.size
     let vals = series(&model, "acc.g1.size");
     assert_eq!(vals, vec![150.0; vals.len()]);
 }
+
+/// A group's `initial` is the sum of its members' declared opening balances -
+/// same static-aggregate treatment as size.
+#[test]
+fn group_initial_is_the_static_sum_of_member_initials() {
+    let ini = format!("{HEADER}
+[acc.g1]
+accounts = name, size, initial,
+           a1,   100,  10,
+           a2,   50,   5,
+           a3,   20,   0,
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 0
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 10
+
+[outputs]
+acc.g1.initial
+");
+    let model = run_model(&ini);
+    let vals = series(&model, "acc.g1.initial");
+    assert_eq!(vals, vec![15.0; vals.len()]);
+}

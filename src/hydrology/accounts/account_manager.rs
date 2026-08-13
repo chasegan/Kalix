@@ -53,14 +53,17 @@ pub struct AccountManager {
     recorder_grp_use: Vec<(usize, usize)>,
 }
 
-/// Series suffixes an `acc.<name>.<field>` reference may use. Closed set:
-/// anything else is a load error rather than a silently unwritten series.
-/// `use` is water taken since the last reset_allocation — the use term of
-/// the allocation (balance + use), fed only by node takes.
-pub const ACCOUNT_SERIES_FIELDS: [&str; 6] = ["opening_balance", "closing_balance", "debits", "allocation", "use", "size"];
+/// Fields an `acc.<name>.<field>` reference may use. Closed set: anything
+/// else is a load error rather than a silently unwritten series. `use` is
+/// water taken since the last reset_allocation — the use term of the
+/// allocation (balance + use), fed only by node takes. `size` and `initial`
+/// are static (registered into `static_properties`, not published as
+/// per-step series like the rest); everything else is a genuine per-step
+/// recorder.
+pub const ACCOUNT_SERIES_FIELDS: [&str; 7] = ["opening_balance", "closing_balance", "debits", "allocation", "use", "size", "initial"];
 
 /// Of those, the fields a *group* aggregate publishes (summed over members).
-pub const GROUP_SERIES_FIELDS: [&str; 6] = ["opening_balance", "closing_balance", "debits", "allocation", "use", "size"];
+pub const GROUP_SERIES_FIELDS: [&str; 7] = ["opening_balance", "closing_balance", "debits", "allocation", "use", "size", "initial"];
 
 impl AccountManager {
 

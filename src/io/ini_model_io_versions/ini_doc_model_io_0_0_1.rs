@@ -149,10 +149,13 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             let table = parse_account_table(&accounts_prop.value, &mut model)
                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", accounts_prop.line_number, e)))?;
 
-            // Group size is static 
+            // Group size and initial balance are both static
             let group_size: f64 = table.sizes.iter().sum();
             model.data_cache.static_properties.set_value(
                 &format!("acc.{}.size", group_name), group_size);
+            let group_initial: f64 = table.initials.iter().sum();
+            model.data_cache.static_properties.set_value(
+                &format!("acc.{}.initial", group_name), group_initial);
 
             let mut member_ids = Vec::with_capacity(table.names.len());
             for (row, name) in table.names.iter().enumerate() {
