@@ -646,6 +646,47 @@ class FunctionExpressionValidatorTest {
         assertInvalid("moving_annual_sum(data.q, 7, -1)", "positive integer");
     }
 
+    // ============ moving_monthly_*/moving_daily_* literal n rule ============
+
+    @Test
+    @DisplayName("moving_monthly_*/moving_daily_* accept a bare positive-integer n")
+    void testMovingPeriodicLiteralArgsAccepted() {
+        assertValid("moving_monthly_sum(data.x, 3)");
+        assertValid("moving_monthly_mean(data.x, 1)");
+        assertValid("moving_monthly_min(data.x, 12)");
+        assertValid("moving_monthly_max(data.x, 6)");
+        assertValid("moving_daily_sum(data.x, 3)");
+        assertValid("moving_daily_mean(data.x, 1)");
+        assertValid("moving_daily_min(data.x, 12)");
+        assertValid("moving_daily_max(data.x, 6)");
+    }
+
+    @Test
+    @DisplayName("moving_monthly_*/moving_daily_* reject a non-literal n (state is sized at model load)")
+    void testMovingPeriodicNonLiteralNRejected() {
+        assertInvalid("moving_monthly_sum(data.q, data.n)", "window length (2nd argument) must be a constant");
+        assertInvalid("moving_monthly_sum(data.q, const.n)", "window length (2nd argument) must be a constant");
+        assertInvalid("moving_daily_sum(data.q, data.n)", "window length (2nd argument) must be a constant");
+    }
+
+    @Test
+    @DisplayName("moving_monthly_*/moving_daily_* reject a non-positive-integer literal n")
+    void testMovingPeriodicNonIntegerNRejected() {
+        assertInvalid("moving_monthly_sum(data.q, 2.5)", "positive integer");
+        assertInvalid("moving_monthly_sum(data.q, 0)", "positive integer");
+        assertInvalid("moving_daily_sum(data.q, 2.5)", "positive integer");
+        assertInvalid("moving_daily_sum(data.q, 0)", "positive integer");
+    }
+
+    @Test
+    @DisplayName("moving_monthly_*/moving_daily_* take no wy_month and are a distinct family from moving_annual_*")
+    void testMovingPeriodicNotConflatedWithAnnual() {
+        // Only 2 arguments — a 3rd argument is a genuine arity error, not a
+        // wy_month/n_years pair.
+        assertInvalid("moving_monthly_sum(data.q, 6, 3)", "expects 2 argument");
+        assertInvalid("moving_daily_sum(data.q, 6, 3)", "expects 2 argument");
+    }
+
     // ============ fn arity consistency (finding #4) ============
 
     @Test

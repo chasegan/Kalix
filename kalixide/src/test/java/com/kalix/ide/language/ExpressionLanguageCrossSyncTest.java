@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ExpressionLanguageCrossSyncTest {
 
-    /** Engine-drift pin: 25 pure builtins + 13 stateful builtins + 2 calendar functions. */
+    /** Engine-drift pin: 25 pure builtins + 21 stateful builtins + 2 calendar functions. */
     private static final Set<String> EXPECTED_FUNCTION_NAMES = Set.of(
             "if", "min", "max", "sum", "mean",
             "abs", "sqrt", "sin", "cos", "tan", "asin", "acos", "atan",
@@ -32,12 +32,16 @@ class ExpressionLanguageCrossSyncTest {
             "pow", "atan2", "clamp",
             "moving_sum", "moving_mean", "moving_min", "moving_max",
             "moving_annual_sum", "moving_annual_mean", "moving_annual_min", "moving_annual_max",
+            "moving_monthly_sum", "moving_monthly_mean", "moving_monthly_min", "moving_monthly_max",
+            "moving_daily_sum", "moving_daily_mean", "moving_daily_min", "moving_daily_max",
             "sum_since", "min_since", "max_since", "count_since", "steps_since",
             "month_at", "days_in_month_at");
 
     private static final Set<String> EXPECTED_STATEFUL_NAMES = Set.of(
             "moving_sum", "moving_mean", "moving_min", "moving_max",
             "moving_annual_sum", "moving_annual_mean", "moving_annual_min", "moving_annual_max",
+            "moving_monthly_sum", "moving_monthly_mean", "moving_monthly_min", "moving_monthly_max",
+            "moving_daily_sum", "moving_daily_mean", "moving_daily_min", "moving_daily_max",
             "sum_since", "min_since", "max_since", "count_since", "steps_since");
 
     private static final Set<String> EXPECTED_SIM_VARIABLES = Set.of(
@@ -51,7 +55,7 @@ class ExpressionLanguageCrossSyncTest {
         assertEquals(EXPECTED_FUNCTION_NAMES, ExpressionLanguage.functionNames());
         assertEquals(EXPECTED_FUNCTION_NAMES, ExpressionLanguage.functionArities().keySet());
         assertEquals(EXPECTED_SIM_VARIABLES, ExpressionLanguage.simVariableNames());
-        assertEquals(40, ExpressionLanguage.BUILTINS.size());
+        assertEquals(48, ExpressionLanguage.BUILTINS.size());
         assertEquals(11, ExpressionLanguage.SIM_VARIABLES.size());
     }
 
@@ -80,6 +84,8 @@ class ExpressionLanguageCrossSyncTest {
         assertEquals("stateful function", ExpressionLanguage.reservedTier("moving_mean"));
         assertEquals("stateful function", ExpressionLanguage.reservedTier("moving_annual_sum"));
         assertEquals("stateful function", ExpressionLanguage.reservedTier("moving_annual_max"));
+        assertEquals("stateful function", ExpressionLanguage.reservedTier("moving_monthly_sum"));
+        assertEquals("stateful function", ExpressionLanguage.reservedTier("moving_daily_max"));
         assertEquals("stateful function", ExpressionLanguage.reservedTier("steps_since"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("assert"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("this"));
@@ -96,10 +102,12 @@ class ExpressionLanguageCrossSyncTest {
         FunctionExpressionValidator validator = new FunctionExpressionValidator();
         for (ExpressionLanguage.Builtin b : ExpressionLanguage.BUILTINS) {
             // Call each function with its minimum arity; every argument a data ref
-            // (moving_* window/default, and moving_annual_* wy_month/n_years,
-            // get bare literals so the literal rule is met — annual needs its
-            // own values since wy_month must be in [1,12] and n_years must be
-            // >= 1, unlike the fixed-window window/default pair).
+            // (moving_* window/default, moving_annual_* wy_month/n_years, and
+            // moving_monthly_*/moving_daily_* n get bare literals so the
+            // literal rule is met). Annual needs its own values since
+            // wy_month must be in [1,12]; monthly/daily's single n=3 arg
+            // happens to fall out of the same "i==1 -> 3" fixed-window
+            // branch below, since both are 2-arity (i only reaches 1).
             int minArity = b.arity() < 0 ? -b.arity() : b.arity();
             List<String> args = new java.util.ArrayList<>();
             for (int i = 0; i < minArity; i++) {
