@@ -337,13 +337,21 @@ pub enum FoldOp {
     Mean,
 }
 
-/// Statistic computed by a fixed-window `moving_*` call.
+/// Statistic computed by a fixed-window `moving_*` call, including annual, monthly and daily
+/// variants
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowOp {
+    // Fixed time step operations
     Sum,
     Mean,
     Min,
     Max,
+    // Annual (water year) operations
+    SumAnnual { wy_month: u32 },
+    // Monthly operations
+    // TODO
+    // Daily operations
+    // TODO
 }
 
 /// Arena addressing for one moving-window instance, boxed off the
@@ -482,6 +490,10 @@ impl OptimizedExpressionNode {
                     let len = data_cache.expr_state.u[slots.u_off + slots.n + 2];
                     if len == 0 { f64::NAN } else { data_cache.expr_state.f[slots.f_off + head] }
                 }
+                WindowOp::SumAnnual { .. } => {
+                    let sum_slot = slots.f_off + slots.n;
+                    data_cache.expr_state.f[sum_slot]
+                }
             },
 
             OptimizedExpressionNode::Since { f_off, .. } => data_cache.expr_state.f[*f_off],
@@ -615,11 +627,27 @@ impl OptimizedExpressionNode {
                 arg.advance_state(data_cache);
                 let x = arg.evaluate(data_cache);
                 match op {
+                    // Fixed window family 
                     WindowOp::Sum | WindowOp::Mean => {
                         advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
                     }
                     WindowOp::Min => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, true),
                     WindowOp::Max => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, false),
+                    // Annual (water year) family 
+                    WindowOp::SumAnnual { wy_month } => {
+                        // New water year when new month and month equals wy_month
+                        // Precondition: wy_month in [1, 12] integral - enforce at parse time
+                        // (see `lower_stateful_call()`) instead of on hot path
+                        if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
+                            advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        } else {
+                            accumulate(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        }
+                    }
+                    // Monthly family
+                    // TODO
+                    // Daily family
+                    // TODO
                 }
             }
 
@@ -784,6 +812,16 @@ impl OptimizedExpressionNode {
     }
 }
 
+/// Accumulate into a ring buffer without advancing. Maintain the running sum incrementally.
+fn accumulate(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64) {
+    let arena = &mut data_cache.expr_state;
+    let head = arena.u[u_off];
+    let total_slot = f_off + n;
+    // Add to this year and the total of all tracked years
+    // TODO: float drift?
+    arena.f[f_off + head] += x;
+    arena.f[total_slot]   += x;
+}
 
 /// Advance a moving_sum/mean ring buffer by one step: evict the oldest value,
 /// store the incoming one, and maintain the running sum incrementally (one
@@ -796,9 +834,9 @@ impl OptimizedExpressionNode {
 fn advance_ring(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64) {
     let arena = &mut data_cache.expr_state;
     let head = arena.u[u_off];
-    let evicted = arena.f[f_off + head];
-    arena.f[f_off + head] = x;
     let new_head = if head + 1 == n { 0 } else { head + 1 };
+    let evicted = arena.f[f_off + new_head];
+    arena.f[f_off + new_head] = x;
     arena.u[u_off] = new_head;
 
     let sum_slot = f_off + n;
@@ -1981,7 +2019,14 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
         }
         OptimizedExpressionNode::Fold { args, .. } => args.iter().any(uses_calendar_flags),
         OptimizedExpressionNode::CalendarAt { arg, .. } => uses_calendar_flags(arg),
-        OptimizedExpressionNode::MovingWindow { arg, .. } => uses_calendar_flags(arg),
+        // Annual-window ops read is_new_month()/get_timestamp_month() directly
+        // in advance_state (not through a SimContext node in `arg`), so they
+        // need the calendar flags live even when the sampled argument doesn't
+        // reference sim.* itself.
+        OptimizedExpressionNode::MovingWindow { op, arg, .. } => {
+            matches!(op, WindowOp::SumAnnual { .. })
+                || uses_calendar_flags(arg)
+        }
         OptimizedExpressionNode::Since { arg, reset, .. } => {
             arg.as_deref().map(uses_calendar_flags).unwrap_or(false) || uses_calendar_flags(reset)
         }
@@ -2166,17 +2211,6 @@ fn constant_arg(args: &[OptimizedExpressionNode], idx: usize, func: &str, what: 
     }
 }
 
-/// Lower a stateful builtin (moving_*/*_since) if `name` is one, allocating
-/// its arena state. Returns Ok(None) for names that are not stateful
-/// builtins, letting the caller fall through to its unknown-function error.
-///
-/// Init templates encode the warm-up semantics
-/// (structured_expressions_design.md §5-§6):
-/// - moving windows pre-fill with the element default (running sum =
-///   n * default; the min/max deque starts with one default entry expiring
-///   when the last pre-filled element would leave the window);
-/// - *_since accumulators start as if reset fired just before the run
-///   (sum/count 0, steps -1, min/max NaN which f64::min/max suppress).
 /// Lower a calendar-at-offset call (`month_at`/`days_in_month_at` — the
 /// CALENDAR_FUNCTIONS tier): context functions resolved here, like the
 /// stateful family, because they read the simulation clock at evaluation.
@@ -2199,6 +2233,17 @@ fn lower_calendar_call(
     Ok(Some(OptimizedExpressionNode::CalendarAt { kind, arg: Box::new(args.remove(0)) }))
 }
 
+/// Lower a stateful builtin (moving_*/*_since) if `name` is one, allocating
+/// its arena state. Returns Ok(None) for names that are not stateful
+/// builtins, letting the caller fall through to its unknown-function error.
+///
+/// Init templates encode the warm-up semantics
+/// (structured_expressions_design.md §5-§6):
+/// - moving windows pre-fill with the element default (running sum =
+///   n * default; the min/max deque starts with one default entry expiring
+///   when the last pre-filled element would leave the window);
+/// - *_since accumula/tors start as if reset fired just before the run
+///   (sum/count 0, steps -1, min/max NaN which f64::min/max suppress).
 fn lower_stateful_call(
     name: &str,
     mut args: Vec<OptimizedExpressionNode>,
@@ -2251,9 +2296,56 @@ fn lower_stateful_call(
                 }
                 (arena.alloc_f(&f_init), arena.alloc_u(&u_init))
             }
+            // window_op above only ever produces Sum/Mean/Min/Max; other families lowered
+            // separately 
+            WindowOp::SumAnnual { .. } => unreachable!(),
         };
         return Ok(Some(OptimizedExpressionNode::MovingWindow {
             op,
+            slots: Box::new(WindowSlots { n, f_off, u_off }),
+            arg,
+        }));
+    }
+
+    // Annual-window family: moving_annual_sum(x, wy_month, n_years)
+    let window_op = match name {
+        // Note: As these are constructed prior to parsing wy_month, the wy_month = 0 is a
+        // placeholder.
+        "moving_annual_sum" => Some(WindowOp::SumAnnual { wy_month: 0u32 }),
+        _ => None
+    };
+    if let Some(op) = window_op {
+        if args.len() != 3 {
+            return Err(format!(
+                "Function '{}' expects 3 arguments (x, wy_month, n_years), got {}",
+                name, args.len()
+            ));
+        }
+        let wy_month = constant_arg(&args, 1, name, "water year month (2nd argument)")?;
+        if wy_month.fract() != 0.0 || wy_month < 1.0 || wy_month > 12.0 {
+            return Err(format!(
+                "{}'s water year month must be a positive integer between 1 and 12, got {}",
+                name, wy_month
+            ));
+        }
+        let n_years = constant_arg(&args, 2, name, "number of years (3rd argument)")?;
+        if n_years.fract() != 0.0 || n_years < 1.0 {
+            return Err(format!(
+                "{}'s window length must be a positive integer, got {}",
+                name, n_years
+            ));
+        }
+        let n = n_years as usize;
+        let arg = Box::new(args.swap_remove(0));
+
+        // Specific allocation for sum - to be expanded.
+        // [ring; n] + [running sum]
+        let mut f_init = vec![0.0; n];
+        f_init.push(0.0);
+        let (f_off, u_off) = (arena.alloc_f(&f_init), arena.alloc_u(&[0]));
+
+        return Ok(Some(OptimizedExpressionNode::MovingWindow {
+            op: WindowOp::SumAnnual { wy_month: wy_month as u32 },
             slots: Box::new(WindowSlots { n, f_off, u_off }),
             arg,
         }));
