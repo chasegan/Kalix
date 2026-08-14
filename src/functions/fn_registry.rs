@@ -291,6 +291,7 @@ mod reserved_registry_tests {
         let mut cache = crate::data_management::data_cache::DataCache::new();
         for name in STATEFUL_FUNCTIONS {
             let expr = match name {
+                n if n.starts_with("moving_annual_") => format!("{}(data.x, 6, 3)", n),
                 n if n.starts_with("moving_") => format!("{}(data.x, 3, 0)", n),
                 "steps_since" => "steps_since(data.x > 0)".to_string(),
                 n => format!("{}(data.x, sim.new_month)", n),
@@ -311,6 +312,10 @@ mod reserved_registry_tests {
         assert_eq!(reserved_name_kind("clamp"), Some("builtin function"));
         assert_eq!(reserved_name_kind("steps_since"), Some("stateful function"));
         assert_eq!(reserved_name_kind("moving_mean"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_annual_sum"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_annual_mean"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_annual_min"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_annual_max"), Some("stateful function"));
         assert_eq!(reserved_name_kind("assert"), Some("reserved word"));
         assert_eq!(reserved_name_kind("this"), Some("reserved word"));
         assert_eq!(reserved_name_kind("headroom"), None);
