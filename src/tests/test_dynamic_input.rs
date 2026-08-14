@@ -1595,3 +1595,67 @@ fn test_clamp_nan_input_suppressed() {
 fn test_clamp_lo_greater_than_hi_yields_hi() {
     assert_eq!(eval_x("clamp(data.x, 10, 0)", 5.0), 0.0);
 }
+
+// ============ skip_nan(x) ============
+
+/// skip_nan(x) maps NaN to 0.0 (sum/mean's additive identity — the value
+/// that contributes nothing); any other value, including 0 itself and
+/// negatives, passes through unchanged.
+#[test]
+fn test_skip_nan_maps_nan_to_zero_and_passes_through_otherwise() {
+    assert_eq!(eval_x("skip_nan(data.x)", f64::NAN), 0.0);
+    assert_eq!(eval_x("skip_nan(data.x)", 5.0), 5.0);
+    assert_eq!(eval_x("skip_nan(data.x)", -3.5), -3.5);
+    assert_eq!(eval_x("skip_nan(data.x)", 0.0), 0.0);
+}
+
+/// skip_nan requires exactly one argument; wrong arity is rejected at model load.
+#[test]
+fn test_skip_nan_wrong_arity_errors_at_load() {
+    for bad in ["skip_nan()", "skip_nan(data.x, 0)"] {
+        let mut data_cache = cache_with_x(&[1.0]);
+        let result = DynamicInput::from_string(bad, &mut data_cache, true, None);
+        assert!(result.is_err(), "'{}' should fail at load time", bad);
+    }
+}
+
+/// The composition this exists for: one NaN-gated signal ("real value on the
+/// tagged step, NaN otherwise") feeds moving_annual_max directly (min/max
+/// already suppress NaN) and moving_annual_sum through skip_nan (sum would
+/// otherwise poison on the NaN steps) — both read the same tagged values.
+#[test]
+fn test_skip_nan_composes_with_annual_sum_matching_annual_max_gating() {
+    let n_days = 800; // crosses 2 Jan-1 boundaries at daily stepping from 2020-01-01
+    // Tag every 10th day with a real value; NaN everywhere else.
+    let values: Vec<f64> = (0..n_days)
+        .map(|i| if i % 10 == 0 { 1.0 + (i % 7) as f64 } else { f64::NAN })
+        .collect();
+    let mut data_cache = cache_with_x(&values);
+    let sum = DynamicInput::from_string(
+        "moving_annual_sum(skip_nan(data.x), 1, 2)", &mut data_cache, true, None).unwrap();
+    let max = DynamicInput::from_string(
+        "moving_annual_max(data.x, 1, 2)", &mut data_cache, true, None).unwrap();
+
+    // Both must stay finite throughout — sum because skip_nan neutralised the
+    // NaN steps before they ever reached the ring; max because it suppresses
+    // NaN directly. Without skip_nan, the sum side would poison at day 0.
+    for k in 0..n_days {
+        data_cache.set_current_step(k);
+        let s = sum.get_value(&mut data_cache);
+        let m = max.get_value(&mut data_cache);
+        assert!(s.is_finite(), "moving_annual_sum(skip_nan(...)) went NaN at step {}", k);
+        assert!(m.is_finite(), "moving_annual_max(...) went NaN at step {}", k);
+    }
+}
+
+/// There is no first-class NaN literal in a general expression position —
+/// the bare `nan` identifier only parses inside a `[offset, default]` pair
+/// (see parser.rs). `0.0 / 0.0` is the documented idiom for producing NaN
+/// anywhere else (FUNCTIONS_DOCUMENTATION.md's skip_nan example uses it):
+/// plain IEEE 754 division, no special-cased error path in this engine.
+#[test]
+fn test_zero_over_zero_is_the_nan_literal_idiom() {
+    assert!(eval_x("0.0 / 0.0", 1.0).is_nan());
+    assert!(eval_x("if(data.x > 0, data.x, 0.0 / 0.0)", -1.0).is_nan());
+    assert_eq!(eval_x("skip_nan(0.0 / 0.0)", 1.0), 0.0);
+}

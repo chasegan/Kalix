@@ -119,6 +119,7 @@ Available functions:
 | `ceil` | 1 | Round up |
 | `round` | 1 | Round to nearest |
 | `sign` | 1 | Sign (-1, 0, or 1) |
+| `skip_nan` | 1 | NaN becomes 0 (sum/mean's identity); other values pass through unchanged |
 | `clamp` | 3 | Constrain to a range: clamp(x, lo, hi) |
 | `is_leap_year` | 1 | 1 in a Gregorian leap year, else 0: is\_leap\_year(sim.year) |
 | `month_at` | 1 | Month (1-12) at the current date + n days — the pattern month an order placed today arrives in |
@@ -230,6 +231,23 @@ three_yr_diversion = moving_annual_sum(node.town.diversion, 7, 3)
 
 # Trailing 12-month mean
 rolling_annual_mean_flow = moving_monthly_mean(node.gauge_1.dsflow, 12)
+```
+
+`moving_annual_min`/`max` (and their monthly/daily equivalents) suppress
+NaN — a NaN input never disturbs the tracked extremum, matching plain
+`moving_min`/`max`. `moving_annual_sum`/`mean` still **poison** on NaN, like
+plain `moving_sum`/`mean`: a real gap in the data should make that year's
+total suspect, not vanish quietly. This matters if you build a value with
+`if(cond, x, 0.0 / 0.0)` to make it count only on certain steps (the usual
+way to say "only this branch counts" in a side-effect-free expression
+language, since there's no bare `nan` literal outside the `[offset,
+default]` position) — that composes straight into `moving_annual_max`, but
+needs `skip_nan(...)` to compose into `moving_annual_sum`:
+
+```ini
+daily_total = if(sim.new_day, moving_daily_sum(node.gauge_1.dsflow, 1), 0.0 / 0.0)
+peak_daily_total_wy = moving_annual_max(daily_total, 7, 5)
+sum_daily_totals_wy = moving_annual_sum(skip_nan(daily_total), 7, 5)
 ```
 
 **Event windows** — the `*_since` family accumulates since a reset condition

@@ -231,6 +231,29 @@ At a daily timestep, `moving_daily_*(x, n)` is equivalent to
 `moving_*(x, n, 0)` from the section above (every step is a new bucket); it
 earns its keep at sub-daily timesteps, bucketing several steps into one day.
 
+**NaN policy differs from `moving_sum`/`mean`.** A NaN entering
+`moving_annual_min`/`max` (and the monthly/daily equivalents) is suppressed,
+never poisoning the tracked extremum — matching plain `moving_min`/`max`.
+But `moving_annual_sum`/`mean` still **poison** on NaN, exactly like plain
+`moving_sum`/`moving_mean`: a genuine gap in a raw series should make that
+water year's total suspect, not silently vanish.
+
+This asymmetry matters for a common pattern: gating a value to only count
+once per period, via `if(cond, x, NAN)` — the *only* way to express "only
+this branch counts" in this language. Feed that straight into
+`moving_annual_max`/`min` and it works, because NaN is exactly what those
+suppress. Feed it straight into `moving_annual_sum`/`mean` and the first
+untagged step poisons the running total. Wrap it in `skip_nan(...)` for the
+sum/mean side (`skip_nan` maps NaN to 0 — sum's identity, "contributes
+nothing" — and passes every other value through unchanged) to get the same
+gated behaviour there:
+
+```ini
+daily_total = if(sim.new_day, moving_daily_sum(node.gauge_1.dsflow, 1), 0.0 / 0.0)
+peak_daily_total_wy = moving_annual_max(daily_total, const.wy_month, 5)
+sum_daily_totals_wy = moving_annual_sum(skip_nan(daily_total), const.wy_month, 5)
+```
+
 ### Event windows — since a reset condition last fired
 
 `sum_since(x, reset)`, `min_since(x, reset)`, `max_since(x, reset)`,
@@ -349,6 +372,7 @@ net_flow = min(
 | `ceil` | 1 | Round up |
 | `round` | 1 | Round to nearest |
 | `sign` | 1 | Sign (-1, 0, or 1) |
+| `skip_nan` | 1 | NaN becomes 0 (sum/mean's identity); other values pass through unchanged |
 | `moving_sum` | 3 | Sum over the last n steps: moving_sum(x, n, default) |
 | `moving_mean` | 3 | Mean over the last n steps |
 | `moving_min` | 3 | Minimum over the last n steps |

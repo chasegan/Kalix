@@ -98,7 +98,7 @@ pub enum BuiltinFunction {
     // Single argument
     Abs, Sqrt, Sin, Cos, Tan, Asin, Acos, Atan,
     Exp, Ln, Log10, Log2,
-    Ceil, Floor, Round, Sign, IsLeapYear,
+    Ceil, Floor, Round, Sign, IsLeapYear, SkipNan,
 
     // Two argument
     Pow, Atan2,
@@ -136,6 +136,7 @@ impl BuiltinFunction {
             "round"  => BuiltinFunction::Round,
             "sign"   => BuiltinFunction::Sign,
             "is_leap_year" => BuiltinFunction::IsLeapYear,
+            "skip_nan" => BuiltinFunction::SkipNan,
             "pow"    => BuiltinFunction::Pow,
             "atan2"  => BuiltinFunction::Atan2,
             "min"    => BuiltinFunction::Min,
@@ -168,6 +169,7 @@ impl BuiltinFunction {
             BuiltinFunction::Round => "round",
             BuiltinFunction::Sign => "sign",
             BuiltinFunction::IsLeapYear => "is_leap_year",
+            BuiltinFunction::SkipNan => "skip_nan",
             BuiltinFunction::Pow => "pow",
             BuiltinFunction::Atan2 => "atan2",
             BuiltinFunction::Min => "min",
@@ -204,6 +206,7 @@ impl BuiltinFunction {
             BuiltinFunction::Round  => Self::single(self.name(), args, |x| x.round()),
             BuiltinFunction::Sign   => Self::single(self.name(), args, sign),
             BuiltinFunction::IsLeapYear => Self::single(self.name(), args, is_leap_year_f),
+            BuiltinFunction::SkipNan => Self::single(self.name(), args, skip_nan),
 
             // Two argument
             BuiltinFunction::Pow => {
@@ -290,6 +293,23 @@ pub fn sign(x: f64) -> f64 {
 /// `sim.year`, already exact).
 pub fn is_leap_year_f(year: f64) -> f64 {
     if crate::tid::utils::is_leap_year(year.round() as i64) { 1.0 } else { 0.0 }
+}
+
+/// `skip_nan(x)`: NaN maps to 0.0 (sum/mean's additive identity — "this
+/// contributes nothing"), any other value passes through unchanged. The
+/// deliberate complement to the min/max builtins' own NaN handling
+/// (`f64::min`/`f64::max` already suppress NaN by returning the other
+/// operand): min/max need no such coercion because there's no numeric value
+/// that's a safe placeholder for "ignore me" regardless of x's range, but
+/// sum/mean do have one (0), so `skip_nan` makes it explicit at the call
+/// site rather than asking the modeller to remember to write a bare `0`
+/// literal in an `if(...)`'s else-branch. Composes with the annual/monthly/
+/// daily windows: `moving_annual_sum(skip_nan(if(cond, x, NAN)), ...)` lets
+/// one NaN-gated signal feed both a `moving_annual_max` (which already
+/// ignores the NaN directly) and a `moving_annual_sum` (which would
+/// otherwise poison on it) without writing two different gates.
+pub fn skip_nan(x: f64) -> f64 {
+    if x.is_nan() { 0.0 } else { x }
 }
 
 /// Back-compat shim for callers that still dispatch by name (e.g. context-function

@@ -2259,6 +2259,7 @@ fn lower_function_call(
         B::Round => Some(f64::round),
         B::Sign => Some(crate::functions::functions::sign),
         B::IsLeapYear => Some(crate::functions::functions::is_leap_year_f),
+        B::SkipNan => Some(crate::functions::functions::skip_nan),
         _ => None,
     };
     if let Some(f) = f1 {

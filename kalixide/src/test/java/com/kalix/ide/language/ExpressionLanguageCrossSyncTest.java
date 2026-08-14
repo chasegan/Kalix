@@ -23,12 +23,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ExpressionLanguageCrossSyncTest {
 
-    /** Engine-drift pin: 25 pure builtins + 21 stateful builtins + 2 calendar functions. */
+    /** Engine-drift pin: 26 pure builtins + 21 stateful builtins + 2 calendar functions. */
     private static final Set<String> EXPECTED_FUNCTION_NAMES = Set.of(
             "if", "min", "max", "sum", "mean",
             "abs", "sqrt", "sin", "cos", "tan", "asin", "acos", "atan",
             "exp", "ln", "log10", "log2", "ceil", "floor", "round", "sign",
-            "is_leap_year",
+            "is_leap_year", "skip_nan",
             "pow", "atan2", "clamp",
             "moving_sum", "moving_mean", "moving_min", "moving_max",
             "moving_annual_sum", "moving_annual_mean", "moving_annual_min", "moving_annual_max",
@@ -55,7 +55,7 @@ class ExpressionLanguageCrossSyncTest {
         assertEquals(EXPECTED_FUNCTION_NAMES, ExpressionLanguage.functionNames());
         assertEquals(EXPECTED_FUNCTION_NAMES, ExpressionLanguage.functionArities().keySet());
         assertEquals(EXPECTED_SIM_VARIABLES, ExpressionLanguage.simVariableNames());
-        assertEquals(48, ExpressionLanguage.BUILTINS.size());
+        assertEquals(49, ExpressionLanguage.BUILTINS.size());
         assertEquals(11, ExpressionLanguage.SIM_VARIABLES.size());
     }
 
@@ -91,6 +91,7 @@ class ExpressionLanguageCrossSyncTest {
         assertEquals("reserved word", ExpressionLanguage.reservedTier("this"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("self"));
         assertEquals("builtin function", ExpressionLanguage.reservedTier("is_leap_year"));
+        assertEquals("builtin function", ExpressionLanguage.reservedTier("skip_nan"));
         assertEquals("calendar function", ExpressionLanguage.reservedTier("month_at"));
         assertEquals("calendar function", ExpressionLanguage.reservedTier("days_in_month_at"));
         assertNull(ExpressionLanguage.reservedTier("headroom"));
