@@ -523,3 +523,229 @@ fn test_moving_default_accepts_signed_literal() {
     assert!(DynamicInput::from_string("moving_sum(data.x, -3, 0)", &mut dc, false, None).is_err(),
         "negative window must still be rejected");
 }
+
+// ============================================================================
+// E. moving_annual_* semantics
+// ============================================================================
+//
+// moving_annual_sum/mean(x, wy_month, n_years) bucket x by water year (a new
+// bucket starts on the first day whose month equals wy_month) and report the
+// sum/mean of the last n_years buckets, including the in-progress one. Only
+// sum and mean are implemented so far; min/max are deliberately unrecognised
+// (see the "not yet implemented" note in lower_stateful_call).
+
+/// Independent oracle for moving_annual_sum/mean: buckets `values` (one entry
+/// per daily step from `start_ts()`) by water year using the same boundary
+/// rule DataCache applies (is_new_month() && month == wy_month, with day 0
+/// always a boundary), then slides a last-n_years window over the buckets.
+/// Deliberately reimplemented from scratch against `crate::tid::utils` date
+/// decoding, rather than exercising the engine's own flags, so it doesn't
+/// just echo back whatever the implementation does.
+fn expected_annual(values: &[f64], wy_month: u32, n_years: usize, mean: bool) -> Vec<f64> {
+    let mut buckets: Vec<f64> = Vec::new();
+    let mut out = Vec::with_capacity(values.len());
+    let mut prev_month = 0u32;
+    for (d, &x) in values.iter().enumerate() {
+        let ts = start_ts() + 86400u64 * d as u64;
+        let (_year, month, _day, _secs) = crate::tid::utils::u64_to_year_month_day_and_seconds(ts);
+        let boundary = if d == 0 { month == wy_month } else { month != prev_month && month == wy_month };
+        if boundary || buckets.is_empty() {
+            buckets.push(x);
+        } else {
+            *buckets.last_mut().unwrap() += x;
+        }
+        prev_month = month;
+        let start = buckets.len().saturating_sub(n_years);
+        let sum: f64 = buckets[start..].iter().sum();
+        out.push(if mean { sum / n_years as f64 } else { sum });
+    }
+    out
+}
+
+/// E17. moving_annual_sum against the bucket oracle, wy_month=1 (so water
+/// years align with calendar years — 2020 is a leap year, so this exercises
+/// a 366-day then two 365-day buckets), n_years=2, spanning 3 boundaries.
+/// This is exactly the n_years>=2 scenario the advance_ring eviction-target
+/// fix (this session) targeted: a wrong fix would leak or corrupt values at
+/// the second and third boundary, not the first.
+#[test]
+fn test_moving_annual_sum_matches_bucket_oracle() {
+    let n_days = 900; // 2020-01-01 .. into 2022, crossing 3 Jan-1 boundaries
+    let values: Vec<f64> = (0..n_days).map(|i| 1.0 + (i % 5) as f64).collect();
+    let mut dc = cache_with_x(&values);
+    let input = DynamicInput::from_string("moving_annual_sum(data.x, 1, 2)", &mut dc, true, None)
+        .expect("moving_annual_sum should parse");
+    let got = run_steps(&input, &mut dc, n_days);
+    let expected = expected_annual(&values, 1, 2, false);
+    assert_series(&got, &expected, "moving_annual_sum");
+}
+
+/// E18. moving_annual_mean equals moving_annual_sum / n_years at every step,
+/// same series and boundary as E17 (mirrors test_moving_mean_matches_sum_over_n).
+#[test]
+fn test_moving_annual_mean_matches_sum_over_n_years() {
+    let n_days = 900;
+    let values: Vec<f64> = (0..n_days).map(|i| 1.0 + (i % 5) as f64).collect();
+    let mut dc = cache_with_x(&values);
+    let sum = DynamicInput::from_string("moving_annual_sum(data.x, 1, 2)", &mut dc, true, None).unwrap();
+    let mean = DynamicInput::from_string("moving_annual_mean(data.x, 1, 2)", &mut dc, true, None).unwrap();
+    for k in 0..n_days {
+        dc.set_current_step(k);
+        let s = sum.get_value(&mut dc);
+        let m = mean.get_value(&mut dc);
+        assert!((m - s / 2.0).abs() < 1e-9,
+            "step {}: mean {} should equal sum {} / 2", k, m, s);
+    }
+}
+
+/// E19. n_years=1 edge case: the ring never leaves slot 0 (head+1==n wraps
+/// straight back to 0), which is exactly why this case alone didn't catch
+/// the eviction-target bug earlier this session — it's a weak case on its
+/// own, kept here as a basic sanity check, not as the main regression test
+/// (E17/E18 above are, since they require n_years>=2).
+#[test]
+fn test_moving_annual_sum_n_years_one() {
+    let n_days = 400;
+    let values: Vec<f64> = (0..n_days).map(|i| (i % 3) as f64).collect();
+    let mut dc = cache_with_x(&values);
+    let input = DynamicInput::from_string("moving_annual_sum(data.x, 1, 1)", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, n_days);
+    let expected = expected_annual(&values, 1, 1, false);
+    assert_series(&got, &expected, "moving_annual_sum n_years=1");
+}
+
+/// E20. A NaN entering moving_annual_sum poisons the sum for as long as that
+/// water year's bucket remains in the ring (up to n_years boundaries), then
+/// clears once the poisoned year is evicted — the annual analogue of A5's
+/// n-step poisoning, scaled from steps to years.
+#[test]
+fn test_moving_annual_sum_nan_transient() {
+    let n_days = 800; // 2020-01-01 .. 2022-ish, crossing 2 Jan-1 boundaries
+    let mut values: Vec<f64> = vec![1.0; n_days];
+    values[100] = f64::NAN; // lands in the first (2020) water-year bucket
+    let mut dc = cache_with_x(&values);
+    let input = DynamicInput::from_string("moving_annual_sum(data.x, 1, 2)", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, n_days);
+
+    // Before the NaN: finite. From the NaN through the end of the window
+    // that still includes the 2020 bucket: NaN. After the 2020 bucket is
+    // evicted (n_years=2 after it stops being one of the last 2 buckets):
+    // finite again.
+    assert!(got[99].is_finite(), "day 99: before the NaN, must be finite");
+    assert!(got[100].is_nan(), "day 100: the NaN's own day must be NaN");
+    assert!(got[400].is_nan(), "well within the 2-year window: still NaN");
+    assert!(got[n_days - 1].is_finite(),
+        "by the end of the run the poisoned 2020 bucket must have been evicted");
+}
+
+/// Independent oracle for moving_annual_min/max: same water-year bucketing
+/// as expected_annual, but each bucket holds the running min/max of its
+/// values, and the window statistic is the min/max over the last n_years
+/// buckets. Reimplemented from scratch (not sharing code with the ring
+/// helpers under test).
+fn expected_annual_extreme(values: &[f64], wy_month: u32, n_years: usize, is_min: bool) -> Vec<f64> {
+    let mut buckets: Vec<f64> = Vec::new();
+    let mut out = Vec::with_capacity(values.len());
+    let mut prev_month = 0u32;
+    for (d, &x) in values.iter().enumerate() {
+        let ts = start_ts() + 86400u64 * d as u64;
+        let (_year, month, _day, _secs) = crate::tid::utils::u64_to_year_month_day_and_seconds(ts);
+        let boundary = if d == 0 { month == wy_month } else { month != prev_month && month == wy_month };
+        if boundary || buckets.is_empty() {
+            buckets.push(x);
+        } else {
+            let last = buckets.last_mut().unwrap();
+            *last = if is_min { last.min(x) } else { last.max(x) };
+        }
+        prev_month = month;
+        let start = buckets.len().saturating_sub(n_years);
+        let mut s = f64::NAN;
+        for &b in &buckets[start..] {
+            s = if is_min { s.min(b) } else { s.max(b) };
+        }
+        out.push(s);
+    }
+    out
+}
+
+/// E21. moving_annual_min/max against the bucket-extreme oracle, same
+/// wy_month=1/n_years=2/3-boundary shape as E17, with non-monotonic input.
+#[test]
+fn test_moving_annual_min_max_matches_bucket_oracle() {
+    let n_days = 900;
+    let values: Vec<f64> = (0..n_days).map(|i| ((i * 37 + 5) % 23) as f64 - 11.0).collect();
+
+    let mut dc = cache_with_x(&values);
+    let min = DynamicInput::from_string("moving_annual_min(data.x, 1, 2)", &mut dc, true, None)
+        .expect("moving_annual_min should parse");
+    let got_min = run_steps(&min, &mut dc, n_days);
+    assert_series(&got_min, &expected_annual_extreme(&values, 1, 2, true), "moving_annual_min");
+
+    let mut dc = cache_with_x(&values);
+    let max = DynamicInput::from_string("moving_annual_max(data.x, 1, 2)", &mut dc, true, None)
+        .expect("moving_annual_max should parse");
+    let got_max = run_steps(&max, &mut dc, n_days);
+    assert_series(&got_max, &expected_annual_extreme(&values, 1, 2, false), "moving_annual_max");
+}
+
+/// E22. A year's extremum must leave the window exactly n_years boundaries
+/// after it entered, exercising advance_ring_extreme's O(n) rescan-on-evict
+/// (min/max has no incremental inverse for eviction the way sum does).
+/// wy_month=1, n_years=2: an outlier in the 2020 (leap-year) bucket must
+/// still be the window minimum through day 730 (2020's bucket is still one
+/// of the last 2), and must be gone from day 731 (2022's boundary, which
+/// evicts 2020's bucket).
+#[test]
+fn test_moving_annual_min_evicts_after_n_years() {
+    let n_days = 900;
+    let mut values = vec![10.0; n_days];
+    values[10] = -1000.0; // sits in the 2020 water-year bucket
+    let mut dc = cache_with_x(&values);
+    let input = DynamicInput::from_string("moving_annual_min(data.x, 1, 2)", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, n_days);
+    assert_eq!(got[10], -1000.0, "day 10: the outlier's own day");
+    assert_eq!(got[365], -1000.0, "day 365: still within the 2-year window");
+    assert_eq!(got[730], -1000.0, "day 730: last day before the 2020 bucket is evicted");
+    assert_eq!(got[731], 10.0, "day 731: 2020's bucket evicted, outlier gone");
+}
+
+/// E23. NaN suppression for annual min/max: unlike moving_annual_sum (which
+/// poisons until the poisoned year is evicted), a NaN step must never affect
+/// the running min/max at all — matching moving_min/moving_max's NaN
+/// suppression (f64::min/f64::max return the non-NaN operand).
+#[test]
+fn test_moving_annual_min_nan_suppressed() {
+    let n_days = 400;
+    let mut values = vec![5.0; n_days];
+    values[3] = 1.0;          // the real minimum
+    values[4] = f64::NAN;     // must not disturb it
+    let mut dc = cache_with_x(&values);
+    let input = DynamicInput::from_string("moving_annual_min(data.x, 1, 2)", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, n_days);
+    assert!(got[4].is_finite(), "day 4 (the NaN step itself) must not read NaN");
+    assert_eq!(got[4], 1.0, "day 4: minimum unaffected by the NaN");
+    assert_eq!(got[n_days - 1], 1.0, "minimum still holds at the end of the run");
+}
+
+/// E24. Load errors for the annual family: wy_month must be a constant
+/// integer in [1, 12]; n_years must be a constant positive integer; arity is
+/// fixed at 3. Mirrors C14's fixed-window load-error coverage.
+#[test]
+fn test_moving_annual_load_errors() {
+    for name in ["moving_annual_sum", "moving_annual_mean", "moving_annual_min", "moving_annual_max"] {
+        expect_load_err(&format!("{}(data.x, data.y, 2)", name), "must be a constant");
+        expect_load_err(&format!("{}(data.x, 0, 2)", name), "between 1 and 12");
+        expect_load_err(&format!("{}(data.x, 13, 2)", name), "between 1 and 12");
+        expect_load_err(&format!("{}(data.x, 6.5, 2)", name), "between 1 and 12");
+        expect_load_err(&format!("{}(data.x, 6, data.y)", name), "must be a constant");
+        expect_load_err(&format!("{}(data.x, 6, 0)", name), "positive integer");
+        expect_load_err(&format!("{}(data.x, 6, 2.5)", name), "positive integer");
+        expect_load_err(&format!("{}(data.x, 6, 2, 1)", name), "expects 3 arguments");
+        expect_load_err(&format!("{}(data.x, 6)", name), "expects 3 arguments");
+    }
+    // Sanity: a well-formed call is NOT an error.
+    let mut dc = base_cache();
+    add_series(&mut dc, "data.x", &[1.0], true);
+    assert!(DynamicInput::from_string("moving_annual_sum(data.x, 6, 2)", &mut dc, true, None).is_ok(),
+        "a well-formed moving_annual_sum call should parse");
+}

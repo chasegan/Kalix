@@ -487,6 +487,7 @@ fn test_local_cannot_shadow_stateful_or_reserved() {
     for (value, needle) in [
         ("{ steps_since = 1; steps_since }", "stateful function"),
         ("{ moving_mean = 1; moving_mean }", "stateful function"),
+        ("{ moving_annual_sum = 1; moving_annual_sum }", "stateful function"),
         ("{ min = 1; min }", "builtin function"),
         ("{ this = 1; 1 }", "reserved word"),
     ] {
