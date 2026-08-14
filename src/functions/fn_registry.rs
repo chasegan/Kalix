@@ -291,7 +291,13 @@ mod reserved_registry_tests {
         let mut cache = crate::data_management::data_cache::DataCache::new();
         for name in STATEFUL_FUNCTIONS {
             let expr = match name {
+                // Annual/monthly/daily families first: all start_with
+                // "moving_" too, but take a different arity/shape than the
+                // generic fixed-window case below (annual: x, wy_month,
+                // n_years; monthly/daily: x, n — no default).
                 n if n.starts_with("moving_annual_") => format!("{}(data.x, 6, 3)", n),
+                n if n.starts_with("moving_monthly_") || n.starts_with("moving_daily_") =>
+                    format!("{}(data.x, 3)", n),
                 n if n.starts_with("moving_") => format!("{}(data.x, 3, 0)", n),
                 "steps_since" => "steps_since(data.x > 0)".to_string(),
                 n => format!("{}(data.x, sim.new_month)", n),
@@ -316,6 +322,10 @@ mod reserved_registry_tests {
         assert_eq!(reserved_name_kind("moving_annual_mean"), Some("stateful function"));
         assert_eq!(reserved_name_kind("moving_annual_min"), Some("stateful function"));
         assert_eq!(reserved_name_kind("moving_annual_max"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_monthly_sum"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_monthly_max"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_daily_sum"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_daily_max"), Some("stateful function"));
         assert_eq!(reserved_name_kind("assert"), Some("reserved word"));
         assert_eq!(reserved_name_kind("this"), Some("reserved word"));
         assert_eq!(reserved_name_kind("headroom"), None);
