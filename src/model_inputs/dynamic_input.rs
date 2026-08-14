@@ -349,6 +349,8 @@ pub enum WindowOp {
     // Annual (water year) operations
     SumAnnual  { wy_month: u32 },
     MeanAnnual { wy_month: u32 },
+    MinAnnual  { wy_month: u32 },
+    MaxAnnual  { wy_month: u32 },
     // Monthly operations
     // TODO
     // Daily operations
@@ -499,6 +501,10 @@ impl OptimizedExpressionNode {
                     let sum_slot = slots.f_off + slots.n;
                     data_cache.expr_state.f[sum_slot] / slots.n as f64
                 }
+                WindowOp::MinAnnual { .. } | WindowOp::MaxAnnual { .. } => {
+                    let stat_slot = slots.f_off + slots.n;
+                    data_cache.expr_state.f[stat_slot]
+                }
             },
 
             OptimizedExpressionNode::Since { f_off, .. } => data_cache.expr_state.f[*f_off],
@@ -647,6 +653,20 @@ impl OptimizedExpressionNode {
                             advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
                         } else {
                             accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        }
+                    }
+                    WindowOp::MinAnnual { wy_month } => {
+                        if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
+                            advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        } else {
+                            accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        }
+                    }
+                    WindowOp::MaxAnnual { wy_month } => {
+                        if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
+                            advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        } else {
+                            accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
                         }
                     }
                     // Monthly family
@@ -828,6 +848,52 @@ fn accumulate_ring(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: us
     arena.f[total_slot]   += x;
 }
 
+/// Accumulate into the current year's slot of an annual min/max ring without
+/// advancing (the ring-of-extrema counterpart to `accumulate_ring`). Tightens
+/// both the current year's running extremum and the overall extremum in O(1):
+/// valid because `x` can only make either more extreme, and the overall
+/// extremum already correctly reflects every other (untouched) ring slot as
+/// of the last boundary (see `advance_ring_extreme`). NaN inputs are
+/// suppressed automatically — f64::min/f64::max return the non-NaN operand —
+/// matching how moving_min/moving_max suppress NaN.
+fn accumulate_extreme(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64, is_min: bool) {
+    let arena = &mut data_cache.expr_state;
+    let head = arena.u[u_off];
+    let slot = f_off + head;
+    let stat_slot = f_off + n;
+    if is_min {
+        arena.f[slot] = arena.f[slot].min(x);
+        arena.f[stat_slot] = arena.f[stat_slot].min(x);
+    } else {
+        arena.f[slot] = arena.f[slot].max(x);
+        arena.f[stat_slot] = arena.f[stat_slot].max(x);
+    }
+}
+
+/// Advance an annual min/max ring at a water-year boundary (the ring-of-
+/// extrema counterpart to `advance_ring`): evict the oldest year's extremum,
+/// start the new year's slot at x, and recompute the overall extremum by
+/// rescanning the ring. Unlike sum, min/max has no inverse to correct an
+/// eviction incrementally (knowing what left tells you nothing about what's
+/// left), so the O(n) rescan runs on every boundary — cheap, since boundaries
+/// fire once per water year, not once per step. NaN ring entries (years not
+/// yet reached, or fully NaN-poisoned years) are ignored automatically by
+/// f64::min/f64::max's NaN-suppression.
+fn advance_ring_extreme(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64, is_min: bool) {
+    let arena = &mut data_cache.expr_state;
+    let head = arena.u[u_off];
+    let new_head = if head + 1 == n { 0 } else { head + 1 };
+    arena.f[f_off + new_head] = x;
+    arena.u[u_off] = new_head;
+
+    let stat_slot = f_off + n;
+    let mut s = f64::NAN;
+    for i in 0..n {
+        s = if is_min { s.min(arena.f[f_off + i]) } else { s.max(arena.f[f_off + i]) };
+    }
+    arena.f[stat_slot] = s;
+}
+
 /// Advance a moving_sum/mean ring buffer by one step: evict the oldest value,
 /// store the incoming one, and maintain the running sum incrementally (one
 /// subtract + one add). The sum is recomputed from the ring in two cold
@@ -859,12 +925,14 @@ fn advance_ring(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize
 /// Advance a moving_min/max monotonic deque by one step. Amortised O(1):
 /// every element is pushed and popped at most once.
 ///
-/// Layout: values in f[f_off..f_off+n+1]; expiry steps in u[u_off..u_off+n+1];
-/// head index at u[u_off+n+1]; length at u[u_off+n+2]. Entries are stored
-/// circularly; an element sampled at step s expires after step s + n - 1.
-/// NaN inputs are skipped entirely: the window min/max suppress NaN exactly
-/// as the min/max builtins do, and an empty deque (all real values NaN)
-/// reads as NaN at evaluation.
+/// Layout: 
+/// - values in f[f_off..f_off+n+1]; 
+/// - expiry steps in u[u_off..u_off+n+1];
+/// - head index at u[u_off+n+1]; 
+/// - length at u[u_off+n+2]. 
+/// Entries are stored circularly; an element sampled at step s expires after step s + n - 1. NaN
+/// inputs are skipped entirely: the window min/max suppress NaN exactly as the min/max builtins do,
+/// and an empty deque (all real values NaN) reads as NaN at evaluation.
 fn advance_deque(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64, is_min: bool) {
     let step = data_cache.current_step;
     let arena = &mut data_cache.expr_state;
@@ -2029,7 +2097,9 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
         // need the calendar flags live even when the sampled argument doesn't
         // reference sim.* itself.
         OptimizedExpressionNode::MovingWindow { op, arg, .. } => {
-            matches!(op, WindowOp::SumAnnual { .. })
+            matches!(op,
+                WindowOp::SumAnnual { .. } | WindowOp::MeanAnnual { .. }
+                | WindowOp::MinAnnual { .. } | WindowOp::MaxAnnual { .. })
                 || uses_calendar_flags(arg)
         }
         OptimizedExpressionNode::Since { arg, reset, .. } => {
@@ -2303,7 +2373,8 @@ fn lower_stateful_call(
             }
             // window_op above only ever produces Sum/Mean/Min/Max; other families lowered
             // separately 
-            WindowOp::SumAnnual { .. } | WindowOp::MeanAnnual { .. }  => unreachable!(),
+            WindowOp::SumAnnual { .. } | WindowOp::MeanAnnual { .. }
+            | WindowOp::MinAnnual { .. } | WindowOp::MaxAnnual { .. } => unreachable!(),
         };
         return Ok(Some(OptimizedExpressionNode::MovingWindow {
             op,
@@ -2312,8 +2383,9 @@ fn lower_stateful_call(
         }));
     }
 
-    // Annual-window family
-    if matches!(name, "moving_annual_sum" | "moving_annual_mean") {
+    // Annual-window family: moving_annual_sum/mean/min/max(x, wy_month, n_years).
+    if matches!(name, "moving_annual_sum" | "moving_annual_mean"
+                     | "moving_annual_min" | "moving_annual_max") {
         if args.len() != 3 {
             return Err(format!(
                 "Function '{}' expects 3 arguments (x, wy_month, n_years), got {}",
@@ -2338,16 +2410,38 @@ fn lower_stateful_call(
         let n = n_years as usize;
         let arg = Box::new(args.swap_remove(0));
 
-        // [ring; n] + [running sum]
-        let mut f_init = vec![0.0; n];
-        f_init.push(0.0);
-        let f_off = arena.alloc_f(&f_init);
-        let u_off = arena.alloc_u(&[0]);
-        let op = match name {
-            "moving_annual_sum"  => WindowOp::SumAnnual  { wy_month }
-            "moving_annual_mean" => WindowOp::MeanAnnual { wy_month }
-            _ => unreachable!("previously matched on name")
-        }
+        let (f_off, u_off, op) = match name {
+            "moving_annual_sum" | "moving_annual_mean" => {
+                // [ring of yearly totals; n] + [running total]. Sum and mean
+                // share this state exactly; mean only differs at evaluate()
+                // (divide by n).
+                let mut f_init = vec![0.0; n];
+                f_init.push(0.0);
+                let f_off = arena.alloc_f(&f_init);
+                let u_off = arena.alloc_u(&[0]);
+                let op = if name == "moving_annual_sum" {
+                    WindowOp::SumAnnual { wy_month }
+                } else {
+                    WindowOp::MeanAnnual { wy_month }
+                };
+                (f_off, u_off, op)
+            }
+            "moving_annual_min" | "moving_annual_max" => {
+                // [ring of yearly extrema; n] + [overall extremum]. NaN-filled:
+                // there's no additive identity for min/max, and f64::min/max
+                // already treat NaN as "no data yet, use the other operand".
+                let f_init = vec![f64::NAN; n + 1];
+                let f_off = arena.alloc_f(&f_init);
+                let u_off = arena.alloc_u(&[0]);
+                let op = if name == "moving_annual_min" {
+                    WindowOp::MinAnnual { wy_month }
+                } else {
+                    WindowOp::MaxAnnual { wy_month }
+                };
+                (f_off, u_off, op)
+            }
+            _ => unreachable!("previously matched on name"),
+        };
 
         return Ok(Some(OptimizedExpressionNode::MovingWindow {
             op,
