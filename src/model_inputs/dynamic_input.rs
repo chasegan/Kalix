@@ -1,30 +1,30 @@
-/// Dynamic Input - Optimized expression evaluation for model inputs
-///
-/// This module provides a high-performance input mechanism that allows model nodes
-/// to accept constants, direct data references, or complex function expressions with
-/// zero or minimal overhead.
-///
-/// # Performance Characteristics
-///
-/// - `None`: Zero overhead (returns 0.0)
-/// - `DirectReference`: Zero overhead (single array lookup)
-/// - `DirectConstantReference`: Zero overhead (single array lookup)
-/// - `Constant`: Zero overhead (returns stored value)
-/// - `Function`: Minimal overhead — a tree walk of pure arithmetic. Evaluation is
-///   infallible and allocation-free: unknown functions and wrong argument counts are
-///   rejected when the expression is parsed (at model load), `if`/`&&`/`||`
-///   short-circuit, and variadic min/max/sum/mean fold an accumulator instead of
-///   building an argument buffer.
-///
-/// # Error Handling - IEEE 754 Standard
-///
-/// Mathematical operations follow IEEE 754 floating-point standard:
-/// - Division by zero: `x / 0.0` → `+∞` (x > 0), `-∞` (x < 0), `NaN` (x = 0)
-/// - Domain errors: `sqrt(-1)` → `NaN`, `ln(0)` → `-∞`, `asin(2)` → `NaN`
-/// - Overflow: `exp(1000)` → `+∞`
-///
-/// This allows simulations to continue running even with problematic data, while making
-/// issues clearly visible in the output. Check for NaN/∞ in results to detect problems.
+//! Dynamic Input - Optimized expression evaluation for model inputs
+//!
+//! This module provides a high-performance input mechanism that allows model nodes
+//! to accept constants, direct data references, or complex function expressions with
+//! zero or minimal overhead.
+//!
+//! # Performance Characteristics
+//!
+//! - `None`: Zero overhead (returns 0.0)
+//! - `DirectReference`: Zero overhead (single array lookup)
+//! - `DirectConstantReference`: Zero overhead (single array lookup)
+//! - `Constant`: Zero overhead (returns stored value)
+//! - `Function`: Minimal overhead — a tree walk of pure arithmetic. Evaluation is
+//!   infallible and allocation-free: unknown functions and wrong argument counts are
+//!   rejected when the expression is parsed (at model load), `if`/`&&`/`||`
+//!   short-circuit, and variadic min/max/sum/mean fold an accumulator instead of
+//!   building an argument buffer.
+//!
+//! # Error Handling - IEEE 754 Standard
+//!
+//! Mathematical operations follow IEEE 754 floating-point standard:
+//! - Division by zero: `x / 0.0` → `+∞` (x > 0), `-∞` (x < 0), `NaN` (x = 0)
+//! - Domain errors: `sqrt(-1)` → `NaN`, `ln(0)` → `-∞`, `asin(2)` → `NaN`
+//! - Overflow: `exp(1000)` → `+∞`
+//!
+//! This allows simulations to continue running even with problematic data, while making
+//! issues clearly visible in the output. Check for NaN/∞ in results to detect problems.
 
 use std::collections::HashMap;
 use std::sync::Arc;
