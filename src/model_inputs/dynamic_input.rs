@@ -646,7 +646,7 @@ impl OptimizedExpressionNode {
                         if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
                             advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
                         } else {
-                            accumulate(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                            accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
                         }
                     }
                     // Monthly family
@@ -818,7 +818,7 @@ impl OptimizedExpressionNode {
 }
 
 /// Accumulate into a ring buffer without advancing. Maintain the running sum incrementally.
-fn accumulate(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64) {
+fn accumulate_ring(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64) {
     let arena = &mut data_cache.expr_state;
     let head = arena.u[u_off];
     let total_slot = f_off + n;
