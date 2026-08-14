@@ -127,6 +127,18 @@ Available functions:
 | `moving_mean` | 3 | Mean over the last n steps |
 | `moving_min` | 3 | Minimum over the last n steps |
 | `moving_max` | 3 | Maximum over the last n steps |
+| `moving_annual_sum` | 3 | Sum over the last n\_years water years: moving\_annual\_sum(x, wy\_month, n\_years) |
+| `moving_annual_mean` | 3 | Mean over the last n\_years water years |
+| `moving_annual_min` | 3 | Minimum over the last n\_years water years |
+| `moving_annual_max` | 3 | Maximum over the last n\_years water years |
+| `moving_monthly_sum` | 2 | Sum over the last n\_months calendar months: moving\_monthly\_sum(x, n\_months) |
+| `moving_monthly_mean` | 2 | Mean over the last n\_months calendar months |
+| `moving_monthly_min` | 2 | Minimum over the last n\_months calendar months |
+| `moving_monthly_max` | 2 | Maximum over the last n\_months calendar months |
+| `moving_daily_sum` | 2 | Sum over the last n\_days calendar days: moving\_daily\_sum(x, n\_days) |
+| `moving_daily_mean` | 2 | Mean over the last n\_days calendar days |
+| `moving_daily_min` | 2 | Minimum over the last n\_days calendar days |
+| `moving_daily_max` | 2 | Maximum over the last n\_days calendar days |
 | `sum_since` | 2 | Sum of x since a reset condition last fired |
 | `min_since` | 2 | Minimum of x since reset |
 | `max_since` | 2 | Maximum of x since reset |
@@ -202,6 +214,24 @@ well-defined from the very first step.
 recent_flow = moving_mean(node.gauge_1.dsflow, 30, 0.0)
 ```
 
+**Annual, monthly, and daily windows** — `moving_annual_sum(x, wy_month,
+n_years)` and friends work differently: `x` is bucketed by calendar period
+first (one running total per water year, month, or day), and the statistic
+is reported over the last `n` *buckets*, not the last `n` steps. There's no
+`default` — a bucket not yet reached simply contributes nothing.
+`moving_annual_*` takes an anchor month, `wy_month` (1-12): a new water year
+starts the first time the month reaches it. `moving_monthly_*`/
+`moving_daily_*` need no anchor — a new bucket starts every calendar
+month/day.
+
+```ini
+# Trailing 3-year total, water year starting 1 July
+three_yr_diversion = moving_annual_sum(node.town.diversion, 7, 3)
+
+# Trailing 12-month mean
+rolling_annual_mean_flow = moving_monthly_mean(node.gauge_1.dsflow, 12)
+```
+
 **Event windows** — the `*_since` family accumulates since a reset condition
 last fired, and the **last argument is always the reset condition**. On the
 step the reset fires, the accumulator clears first and that step's
@@ -214,10 +244,13 @@ dry_spell = steps_since(node.gauge.dsflow > const.low_flow_threshold)
 spill_days = count_since(node.dam.ds_1_spill > 0, sim.new_year)
 ```
 
-There is deliberately no water-year setting in Kalix — the boundary is an
-expression written where it's used (or named once per model in a
-[user-defined function](fn.md)), because the water year varies from valley
-to valley.
+`sum_since`/`*_since` and the calendar flags deliberately carry no
+water-year setting of their own — the boundary is an expression written
+where it's used (or named once per model in a [user-defined
+function](fn.md)), because the water year varies from valley to valley.
+`moving_annual_*` above is the one deliberate exception: a trailing
+multi-year window needs more than a reset condition can express, so it
+takes `wy_month` directly.
 
 ### User-Defined Functions
 
