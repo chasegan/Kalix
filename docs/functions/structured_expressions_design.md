@@ -141,6 +141,54 @@ Rules:
   sum for `sum`/`mean`; monotonic deque for `min`/`max` (amortised O(1)).
   Per-instance state is fixed-size, allocated at load (§11).
 
+## 5a. Annual, monthly, and daily windowed functions
+
+| Function | Meaning over the last n water years/months/days |
+|---|---|
+| `moving_annual_sum(x, wy_month, n_years)` | sum |
+| `moving_annual_mean(x, wy_month, n_years)` | arithmetic mean |
+| `moving_annual_min(x, wy_month, n_years)` | minimum |
+| `moving_annual_max(x, wy_month, n_years)` | maximum |
+| `moving_monthly_sum(x, n_months)` | sum |
+| `moving_monthly_mean(x, n_months)` | arithmetic mean |
+| `moving_monthly_min(x, n_months)` | minimum |
+| `moving_monthly_max(x, n_months)` | maximum |
+| `moving_daily_sum(x, n_days)` | sum |
+| `moving_daily_mean(x, n_days)` | arithmetic mean |
+| `moving_daily_min(x, n_days)` | minimum |
+| `moving_daily_max(x, n_days)` | maximum |
+
+- **Not the same shape as §5's `moving_*`.** These bucket `x` by calendar
+  period first (one running total/extremum per water year, month, or day),
+  then report the statistic over the last `n` *buckets* — the trailing sum
+  over the last `n_years` water years, not the last `n_years` steps. There
+  is no `default` argument: a bucket that hasn't been reached yet
+  contributes nothing to sum/mean (starts at 0) and nothing to min/max
+  (starts at NaN, which `min`/`max` already suppress).
+- **`moving_annual_*` takes an explicit `wy_month`** (1-12, positive integer
+  literal, bounded cost as `n` is): a new water year starts on the first
+  step whose month equals `wy_month`. This is the one place the engine
+  *does* carry a water-year concept — see §7's water year idiom, which this
+  family exists alongside rather than replaces: `*_since` and `sim.*` still
+  carry none, because a reset-driven accumulator can express any boundary
+  as a condition, but a trailing multi-year *window* (evicting the oldest
+  year as a new one starts) genuinely needs dedicated ring state the
+  `*_since` idiom cannot express.
+- **`moving_monthly_*`/`moving_daily_*` take no anchor** — a bucket starts
+  on every calendar month/day, so there's nothing to configure beyond `n`.
+  At a daily timestep, `moving_daily_*(x, n)` degenerates to exactly
+  `moving_*(x, n, <additive/extremum identity>)` from §5, since a new
+  bucket then starts on every step; the daily family earns its keep at
+  sub-daily timesteps, where it buckets multiple steps into one day.
+- **State advances every timestep, unconditionally**, same rule as §5.
+- Implementation: a ring of `n` bucket values plus a running statistic,
+  advanced at each period boundary (evict the oldest bucket, start a new
+  one) and accumulated into on every other step. Sum/mean's eviction
+  corrects the running total incrementally (`sum += x - evicted`, as in
+  §5); min/max has no such inverse, so eviction triggers an O(n) rescan of
+  the ring — cheap, since it only happens once per boundary, not once per
+  step.
+
 ## 6. Event-windowed functions: `*_since`
 
 | Function | Meaning since the reset condition last fired |
@@ -168,7 +216,7 @@ Rules:
   occurred just before the run began; the modeller owns that assumption.
 - State advances unconditionally, as in §5. Cost is O(1) per step.
 
-## 7. Calendar boundaries — and why there is no water year
+## 7. Calendar boundaries — and the water-year idiom
 
 New `sim.*` flags, each a pure calendar fact computed once per step:
 
@@ -181,9 +229,10 @@ These are timestep-agnostic. The naive spelling
 every hourly step of 1 July, resetting an account all day long); the flags
 exist so the correct thing is also the easy thing.
 
-**The engine has no water-year concept.** Water year start varies valley to
-valley and is deliberately not a global Kalix setting. The boundary is an
-idiom, written at the point of use:
+**`sim.*` and `*_since` have no water-year concept.** Water year start
+varies valley to valley and is deliberately not a global Kalix setting. For
+a reset-driven accumulator, the boundary is an idiom, written at the point
+of use:
 
 ```ini
 used_wy = sum_since(node.town.diversion, sim.new_month && sim.month == 7)
@@ -199,6 +248,14 @@ new_wy() = sim.new_month && sim.month == 7
 
 The would-be config key becomes one visible line of the model. Build the
 dials, not the named systems.
+
+This idiom covers every reset-driven boundary, but not a *trailing window*
+of several water years (evicting the oldest year as a new one starts) —
+that needs dedicated ring state a condition alone cannot express, which is
+why `moving_annual_*` (§5a) takes `wy_month` as a genuine parameter instead
+of forcing the modeller to hand-roll a multi-year ring in `[fn]`. It is a
+narrow, deliberate exception: one family, one parameter, still no global
+water-year setting.
 
 ## 8. User-defined functions: `[fn]`
 

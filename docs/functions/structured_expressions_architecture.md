@@ -166,6 +166,47 @@ test it.
   forever — on evicting a NaN, recompute the running sum from the buffer;
   this is a cold event, gate it with `evicted.is_nan()`). Add a regression
   test for a NaN transient.
+- **Ring-of-buckets** (`moving_annual_*`/`moving_monthly_*`/`moving_daily_*`,
+  `WindowOp::{Sum,Mean,Min,Max}{Annual,Monthly,Daily}` in
+  `dynamic_input.rs`): same two-region shape as the plain ring above —
+  `f[f_off..f_off+n]` one slot per bucket (water year/month/day) +
+  `f[f_off+n]` running statistic; `u[u_off]` head index — but advanced by
+  two different functions depending on whether the current step is a period
+  boundary:
+  - **Non-boundary step** (`accumulate_ring`/`accumulate_extreme`): fold
+    into the *current* bucket (`f[f_off+head]`) and update the running
+    statistic in place — sum/mean add, min/max take `f64::min`/`f64::max`
+    (NaN-suppressing, so an untouched NaN-initialised bucket contributes
+    nothing).
+  - **Boundary step** (`advance_ring`/`advance_ring_extreme`, shared with
+    the plain ring for sum/mean): evict the oldest bucket, start a new one
+    at the incoming value, advance the head. Sum/mean correct the running
+    total incrementally (`sum += x - evicted`); min/max has no inverse for
+    an evicted extremum, so it rescans all `n` buckets on every
+    boundary — O(n), but boundaries fire once per water year/month/day, not
+    once per step, so this is cheap.
+  - **Correctness trap already hit once**: `advance_ring` must evict and
+    write against the **post-increment** head (`new_head`), not the
+    pre-increment one — otherwise the slot `advance_ring` just initialised
+    and the slot `accumulate_ring` subsequently writes into for the rest of
+    the period are different ring slots, silently stranding one step's
+    contribution forever (a mass leak, invisible at `n == 1` since the
+    wrap-around coincidentally lands on the same slot; caught at `n >= 2`).
+  - **Boundary predicate is the only thing that varies** across the three
+    families: annual is `is_new_month() && get_timestamp_month() ==
+    wy_month`; monthly is `is_new_month()` alone (no anchor); daily is
+    `is_new_day()` alone. At a daily timestep `is_new_day()` is true every
+    step, so `moving_daily_*` degenerates to exactly the plain ring/deque
+    above with no element default — this is deliberately used as a
+    regression test (`test_moving_daily_sum_mean_equal_plain_moving_at_daily_timestep`
+    in `test_stateful_functions.rs`), cross-checking the new machinery
+    against the already-trusted one on identical input.
+  - `uses_calendar_flags` must report `true` for every `*Annual`/`*Monthly`/
+    `*Daily` op directly (not by walking into `arg`), since these read
+    `is_new_month()`/`is_new_day()`/`get_timestamp_month()` in
+    `advance_state` without going through a `SimContext` node — otherwise
+    `DataCache.needs_calendar_flags` never gets set and the boundary flags
+    silently stay false past step 0.
 
 ## 5. When state advances: first evaluation per step, guarded
 

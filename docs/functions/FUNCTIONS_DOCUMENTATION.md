@@ -190,6 +190,47 @@ NaN behaviour follows each function's scalar counterpart: a NaN entering
 window (n steps); `moving_min`/`moving_max` suppress NaN exactly as
 `min`/`max` do.
 
+### Annual, monthly, and daily windows — the last n water years/months/days
+
+`moving_annual_sum(x, wy_month, n_years)`, `moving_annual_mean(...)`,
+`moving_annual_min(...)`, `moving_annual_max(...)`
+
+`moving_monthly_sum(x, n_months)`, `moving_monthly_mean(...)`,
+`moving_monthly_min(...)`, `moving_monthly_max(...)`
+
+`moving_daily_sum(x, n_days)`, `moving_daily_mean(...)`,
+`moving_daily_min(...)`, `moving_daily_max(...)`
+
+A different shape from the moving windows above: `x` is bucketed by
+calendar period first — one running total (or running min/max) per water
+year, month, or day — and the statistic is reported over the last `n`
+*buckets*, not the last `n` steps. There is no `default` argument: a bucket
+not yet reached simply contributes nothing (sum/mean start at 0, min/max
+start undefined and read NaN until real data arrives, same as an empty
+`moving_min`/`moving_max` window).
+
+`moving_annual_*` takes an explicit anchor month, `wy_month` (1-12): a new
+water year starts on the first step whose month equals it. This is the
+engine's one water-year concept — see the note under Event windows below.
+`moving_monthly_*`/`moving_daily_*` take no anchor; a new bucket starts on
+every calendar month/day.
+
+```ini
+[const]
+const.wy_month = 7
+```
+```ini
+# Trailing 3-year total, updated daily, water year starting 1 July
+three_yr_diversion = moving_annual_sum(node.town.diversion, const.wy_month, 3)
+
+# Trailing 12-month mean
+rolling_annual_mean_flow = moving_monthly_mean(node.gauge_1.dsflow, 12)
+```
+
+At a daily timestep, `moving_daily_*(x, n)` is equivalent to
+`moving_*(x, n, 0)` from the section above (every step is a new bucket); it
+earns its keep at sub-daily timesteps, bucketing several steps into one day.
+
 ### Event windows — since a reset condition last fired
 
 `sum_since(x, reset)`, `min_since(x, reset)`, `max_since(x, reset)`,
@@ -212,9 +253,13 @@ dry_spell = steps_since(node.gauge.dsflow > const.low_flow_threshold)
 spill_days = count_since(node.dam.ds_1_spill > 0, sim.new_year)
 ```
 
-There is deliberately no water-year concept in the engine: the boundary is
-an idiom written at the point of use (or named once per model via a
-constant), because the water-year month varies from valley to valley.
+`sum_since`/`*_since` and the `sim.*` flags deliberately carry no
+water-year concept of their own: the boundary is an idiom written at the
+point of use (or named once per model via a constant), because the
+water-year month varies from valley to valley. `moving_annual_*` above is
+the one deliberate exception — a trailing multi-year window needs ring
+state a reset condition alone can't express, so it takes `wy_month`
+directly rather than forcing a hand-rolled ring via `[fn]`.
 
 ### Calendar boundary flags
 
@@ -308,6 +353,18 @@ net_flow = min(
 | `moving_mean` | 3 | Mean over the last n steps |
 | `moving_min` | 3 | Minimum over the last n steps |
 | `moving_max` | 3 | Maximum over the last n steps |
+| `moving_annual_sum` | 3 | Sum over the last n_years water years: moving_annual_sum(x, wy_month, n_years) |
+| `moving_annual_mean` | 3 | Mean over the last n_years water years |
+| `moving_annual_min` | 3 | Minimum over the last n_years water years |
+| `moving_annual_max` | 3 | Maximum over the last n_years water years |
+| `moving_monthly_sum` | 2 | Sum over the last n_months calendar months: moving_monthly_sum(x, n_months) |
+| `moving_monthly_mean` | 2 | Mean over the last n_months calendar months |
+| `moving_monthly_min` | 2 | Minimum over the last n_months calendar months |
+| `moving_monthly_max` | 2 | Maximum over the last n_months calendar months |
+| `moving_daily_sum` | 2 | Sum over the last n_days calendar days: moving_daily_sum(x, n_days) |
+| `moving_daily_mean` | 2 | Mean over the last n_days calendar days |
+| `moving_daily_min` | 2 | Minimum over the last n_days calendar days |
+| `moving_daily_max` | 2 | Maximum over the last n_days calendar days |
 | `sum_since` | 2 | Sum of x since reset last fired: sum_since(x, reset) |
 | `min_since` | 2 | Minimum of x since reset |
 | `max_since` | 2 | Maximum of x since reset |
