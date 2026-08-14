@@ -749,3 +749,204 @@ fn test_moving_annual_load_errors() {
     assert!(DynamicInput::from_string("moving_annual_sum(data.x, 6, 2)", &mut dc, true, None).is_ok(),
         "a well-formed moving_annual_sum call should parse");
 }
+
+// ============================================================================
+// F. moving_monthly_* semantics
+// ============================================================================
+//
+// moving_monthly_sum/mean/min/max(x, n_months) is the annual family's shape
+// with the boundary rule relaxed to "every calendar month" — no anchor month,
+// hence no wy_month argument.
+
+/// Independent oracle for moving_monthly_sum/mean: buckets `values` by
+/// calendar month (a new bucket starts whenever the month changes, day 0
+/// always starting one), then slides a last-n_months window over the
+/// buckets. Mirrors expected_annual with the anchor check dropped.
+fn expected_monthly(values: &[f64], n_months: usize, mean: bool) -> Vec<f64> {
+    let mut buckets: Vec<f64> = Vec::new();
+    let mut out = Vec::with_capacity(values.len());
+    let mut prev_month = 0u32;
+    for (d, &x) in values.iter().enumerate() {
+        let ts = start_ts() + 86400u64 * d as u64;
+        let (_year, month, _day, _secs) = crate::tid::utils::u64_to_year_month_day_and_seconds(ts);
+        let boundary = d == 0 || month != prev_month;
+        if boundary || buckets.is_empty() {
+            buckets.push(x);
+        } else {
+            *buckets.last_mut().unwrap() += x;
+        }
+        prev_month = month;
+        let start = buckets.len().saturating_sub(n_months);
+        let sum: f64 = buckets[start..].iter().sum();
+        out.push(if mean { sum / n_months as f64 } else { sum });
+    }
+    out
+}
+
+/// Independent oracle for moving_monthly_min/max: same monthly bucketing,
+/// each bucket holds the running min/max of its values.
+fn expected_monthly_extreme(values: &[f64], n_months: usize, is_min: bool) -> Vec<f64> {
+    let mut buckets: Vec<f64> = Vec::new();
+    let mut out = Vec::with_capacity(values.len());
+    let mut prev_month = 0u32;
+    for (d, &x) in values.iter().enumerate() {
+        let ts = start_ts() + 86400u64 * d as u64;
+        let (_year, month, _day, _secs) = crate::tid::utils::u64_to_year_month_day_and_seconds(ts);
+        let boundary = d == 0 || month != prev_month;
+        if boundary || buckets.is_empty() {
+            buckets.push(x);
+        } else {
+            let last = buckets.last_mut().unwrap();
+            *last = if is_min { last.min(x) } else { last.max(x) };
+        }
+        prev_month = month;
+        let start = buckets.len().saturating_sub(n_months);
+        let mut s = f64::NAN;
+        for &b in &buckets[start..] {
+            s = if is_min { s.min(b) } else { s.max(b) };
+        }
+        out.push(s);
+    }
+    out
+}
+
+/// F25. moving_monthly_sum against the bucket oracle, n_months=3, spanning
+/// well over a year of daily steps (so several month boundaries land on
+/// different days-of-month and different-length months).
+#[test]
+fn test_moving_monthly_sum_matches_bucket_oracle() {
+    let n_days = 500;
+    let values: Vec<f64> = (0..n_days).map(|i| 1.0 + (i % 5) as f64).collect();
+    let mut dc = cache_with_x(&values);
+    let input = DynamicInput::from_string("moving_monthly_sum(data.x, 3)", &mut dc, true, None)
+        .expect("moving_monthly_sum should parse");
+    let got = run_steps(&input, &mut dc, n_days);
+    assert_series(&got, &expected_monthly(&values, 3, false), "moving_monthly_sum");
+}
+
+/// F26. moving_monthly_mean equals moving_monthly_sum / n_months at every step.
+#[test]
+fn test_moving_monthly_mean_matches_sum_over_n_months() {
+    let n_days = 500;
+    let values: Vec<f64> = (0..n_days).map(|i| 1.0 + (i % 5) as f64).collect();
+    let mut dc = cache_with_x(&values);
+    let sum = DynamicInput::from_string("moving_monthly_sum(data.x, 3)", &mut dc, true, None).unwrap();
+    let mean = DynamicInput::from_string("moving_monthly_mean(data.x, 3)", &mut dc, true, None).unwrap();
+    for k in 0..n_days {
+        dc.set_current_step(k);
+        let s = sum.get_value(&mut dc);
+        let m = mean.get_value(&mut dc);
+        assert!((m - s / 3.0).abs() < 1e-9,
+            "step {}: mean {} should equal sum {} / 3", k, m, s);
+    }
+}
+
+/// F27. moving_monthly_min/max against the bucket-extreme oracle, non-monotonic input.
+#[test]
+fn test_moving_monthly_min_max_matches_bucket_oracle() {
+    let n_days = 500;
+    let values: Vec<f64> = (0..n_days).map(|i| ((i * 37 + 5) % 23) as f64 - 11.0).collect();
+
+    let mut dc = cache_with_x(&values);
+    let min = DynamicInput::from_string("moving_monthly_min(data.x, 3)", &mut dc, true, None)
+        .expect("moving_monthly_min should parse");
+    let got_min = run_steps(&min, &mut dc, n_days);
+    assert_series(&got_min, &expected_monthly_extreme(&values, 3, true), "moving_monthly_min");
+
+    let mut dc = cache_with_x(&values);
+    let max = DynamicInput::from_string("moving_monthly_max(data.x, 3)", &mut dc, true, None)
+        .expect("moving_monthly_max should parse");
+    let got_max = run_steps(&max, &mut dc, n_days);
+    assert_series(&got_max, &expected_monthly_extreme(&values, 3, false), "moving_monthly_max");
+}
+
+/// F28. Load errors for the monthly family: n_months must be a constant
+/// positive integer; arity is fixed at 2 (no wy_month).
+#[test]
+fn test_moving_monthly_load_errors() {
+    for name in ["moving_monthly_sum", "moving_monthly_mean", "moving_monthly_min", "moving_monthly_max"] {
+        expect_load_err(&format!("{}(data.x, data.y)", name), "must be a constant");
+        expect_load_err(&format!("{}(data.x, 0)", name), "positive integer");
+        expect_load_err(&format!("{}(data.x, 2.5)", name), "positive integer");
+        expect_load_err(&format!("{}(data.x, 3, 1)", name), "expects 2 arguments");
+        expect_load_err(&format!("{}(data.x)", name), "expects 2 arguments");
+    }
+    let mut dc = base_cache();
+    add_series(&mut dc, "data.x", &[1.0], true);
+    assert!(DynamicInput::from_string("moving_monthly_sum(data.x, 3)", &mut dc, true, None).is_ok(),
+        "a well-formed moving_monthly_sum call should parse");
+}
+
+// ============================================================================
+// G. moving_daily_* semantics
+// ============================================================================
+//
+// moving_daily_sum/mean/min/max(x, n_days) buckets by calendar day. At a
+// daily timestep is_new_day() is true every step (structured_expressions_
+// design.md §7), so the daily family's boundary fires unconditionally every
+// step — making it directly comparable to the fixed-window family with a
+// zero/NaN "no warm-up" default, which is the strongest regression test
+// available: it cross-checks the new ring-of-buckets machinery against the
+// already-established advance_ring/advance_deque machinery on the same input.
+
+/// G29. At a daily timestep, moving_daily_sum/mean(x, n) is byte-identical to
+/// moving_sum/mean(x, n, 0): both are a zero-filled ring advancing every step.
+#[test]
+fn test_moving_daily_sum_mean_equal_plain_moving_at_daily_timestep() {
+    let values: Vec<f64> = (0..40).map(|i| 1.0 + (i % 7) as f64).collect();
+    for n in [1usize, 3, 5] {
+        let mut dc = cache_with_x(&values);
+        let daily_sum = DynamicInput::from_string(&format!("moving_daily_sum(data.x, {})", n), &mut dc, true, None).unwrap();
+        let plain_sum = DynamicInput::from_string(&format!("moving_sum(data.x, {}, 0)", n), &mut dc, true, None).unwrap();
+        let daily_mean = DynamicInput::from_string(&format!("moving_daily_mean(data.x, {})", n), &mut dc, true, None).unwrap();
+        let plain_mean = DynamicInput::from_string(&format!("moving_mean(data.x, {}, 0)", n), &mut dc, true, None).unwrap();
+        for k in 0..values.len() {
+            dc.set_current_step(k);
+            assert_eq!(daily_sum.get_value(&mut dc), plain_sum.get_value(&mut dc),
+                "n={} step {}: moving_daily_sum must equal moving_sum(.., 0)", n, k);
+            assert_eq!(daily_mean.get_value(&mut dc), plain_mean.get_value(&mut dc),
+                "n={} step {}: moving_daily_mean must equal moving_mean(.., 0)", n, k);
+        }
+    }
+}
+
+/// G30. At a daily timestep, moving_daily_min/max(x, n) matches a
+/// hand-computed cold-start window (no pre-filled default — every ring slot
+/// starts NaN, exactly like moving_min/max with a NaN default, i.e. no
+/// warm-up value at all), over non-monotonic data.
+#[test]
+fn test_moving_daily_min_max_hand_computed() {
+    let values = [5.0, 1.0, 4.0, 1.0, 5.0, 9.0, 2.0, 6.0];
+    let mut dc = cache_with_x(&values);
+    let min = DynamicInput::from_string("moving_daily_min(data.x, 3)", &mut dc, true, None)
+        .expect("moving_daily_min should parse");
+    let got_min = run_steps(&min, &mut dc, 8);
+    // step0 {5}=5; step1 {5,1}=1; step2 {5,1,4}=1; then full 3-windows:
+    // {1,4,1}=1,{4,1,5}=1,{1,5,9}=1,{5,9,2}=2,{9,2,6}=2
+    assert_series(&got_min, &[5.0, 1.0, 1.0, 1.0, 1.0, 1.0, 2.0, 2.0], "moving_daily_min");
+
+    let mut dc = cache_with_x(&values);
+    let max = DynamicInput::from_string("moving_daily_max(data.x, 3)", &mut dc, true, None)
+        .expect("moving_daily_max should parse");
+    let got_max = run_steps(&max, &mut dc, 8);
+    // step0 {5}=5; step1 {5,1}=5; step2 {5,1,4}=5; then full 3-windows:
+    // {1,4,1}=4,{4,1,5}=5,{1,5,9}=9,{5,9,2}=9,{9,2,6}=9
+    assert_series(&got_max, &[5.0, 5.0, 5.0, 4.0, 5.0, 9.0, 9.0, 9.0], "moving_daily_max");
+}
+
+/// G31. Load errors for the daily family: n_days must be a constant positive
+/// integer; arity is fixed at 2.
+#[test]
+fn test_moving_daily_load_errors() {
+    for name in ["moving_daily_sum", "moving_daily_mean", "moving_daily_min", "moving_daily_max"] {
+        expect_load_err(&format!("{}(data.x, data.y)", name), "must be a constant");
+        expect_load_err(&format!("{}(data.x, 0)", name), "positive integer");
+        expect_load_err(&format!("{}(data.x, 2.5)", name), "positive integer");
+        expect_load_err(&format!("{}(data.x, 3, 1)", name), "expects 2 arguments");
+        expect_load_err(&format!("{}(data.x)", name), "expects 2 arguments");
+    }
+    let mut dc = base_cache();
+    add_series(&mut dc, "data.x", &[1.0], true);
+    assert!(DynamicInput::from_string("moving_daily_sum(data.x, 3)", &mut dc, true, None).is_ok(),
+        "a well-formed moving_daily_sum call should parse");
+}
