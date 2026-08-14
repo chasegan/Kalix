@@ -88,7 +88,7 @@ public final class ExpressionLanguage {
     public record SimVariable(String name, String description) {}
 
     /**
-     * Every builtin recognised by the parser — the 25 pure builtins, the 13
+     * Every builtin recognised by the parser — the 25 pure builtins, the 21
      * temporal (stateful) builtins, and the 2 calendar functions. Mirrors the
      * engine's {@code BuiltinFunction} enum, {@code STATEFUL_FUNCTIONS}, and
      * {@code CALENDAR_FUNCTIONS} ({@code src/functions/functions.rs}).
@@ -140,6 +140,18 @@ public final class ExpressionLanguage {
             new Builtin("moving_annual_mean", 3, "moving_annual_mean(x, wy_month, n_years)", "mean over the last n_years water years", true),
             new Builtin("moving_annual_min", 3, "moving_annual_min(x, wy_month, n_years)", "minimum over the last n_years water years", true),
             new Builtin("moving_annual_max", 3, "moving_annual_max(x, wy_month, n_years)", "maximum over the last n_years water years", true),
+
+            // Temporal (stateful): monthly-window moving_monthly_*(x, n_months)
+            new Builtin("moving_monthly_sum", 2, "moving_monthly_sum(x, n_months)", "sum over the last n_months calendar months", true),
+            new Builtin("moving_monthly_mean", 2, "moving_monthly_mean(x, n_months)", "mean over the last n_months calendar months", true),
+            new Builtin("moving_monthly_min", 2, "moving_monthly_min(x, n_months)", "minimum over the last n_months calendar months", true),
+            new Builtin("moving_monthly_max", 2, "moving_monthly_max(x, n_months)", "maximum over the last n_months calendar months", true),
+
+            // Temporal (stateful): daily-window moving_daily_*(x, n_days)
+            new Builtin("moving_daily_sum", 2, "moving_daily_sum(x, n_days)", "sum over the last n_days calendar days", true),
+            new Builtin("moving_daily_mean", 2, "moving_daily_mean(x, n_days)", "mean over the last n_days calendar days", true),
+            new Builtin("moving_daily_min", 2, "moving_daily_min(x, n_days)", "minimum over the last n_days calendar days", true),
+            new Builtin("moving_daily_max", 2, "moving_daily_max(x, n_days)", "maximum over the last n_days calendar days", true),
 
             // Temporal (stateful): event-windowed *_since (last argument is the reset condition)
             new Builtin("sum_since", 2, "sum_since(x, reset)", "sum of x since reset last fired", true),
@@ -238,12 +250,15 @@ public final class ExpressionLanguage {
     }
 
     /** True if this lowercase name is a moving_* fixed-window builtin
-     *  (window length + element default) — NOT the annual-window family,
-     *  which takes (x, wy_month, n_years) and has different constraints. */
+     *  (window length + element default) — NOT the annual/monthly/daily
+     *  window families, which take no default and have their own
+     *  constraints. */
     public static boolean isMovingWindowFunction(String lowerName) {
         Builtin b = BY_NAME.get(lowerName);
         return b != null && b.stateful() && b.name().startsWith("moving_")
-                && !b.name().startsWith("moving_annual_");
+                && !b.name().startsWith("moving_annual_")
+                && !b.name().startsWith("moving_monthly_")
+                && !b.name().startsWith("moving_daily_");
     }
 
     /** True if this lowercase name is a moving_annual_* annual-window builtin
@@ -252,6 +267,16 @@ public final class ExpressionLanguage {
     public static boolean isAnnualWindowFunction(String lowerName) {
         Builtin b = BY_NAME.get(lowerName);
         return b != null && b.stateful() && b.name().startsWith("moving_annual_");
+    }
+
+    /** True if this lowercase name is a moving_monthly_* or moving_daily_*
+     *  periodic-window builtin (x, n) — same (x, n) shape and validation as
+     *  each other, just anchored to a different calendar boundary; neither
+     *  carries a wy_month like {@link #isAnnualWindowFunction}. */
+    public static boolean isPeriodicWindowFunction(String lowerName) {
+        Builtin b = BY_NAME.get(lowerName);
+        return b != null && b.stateful()
+                && (b.name().startsWith("moving_monthly_") || b.name().startsWith("moving_daily_"));
     }
 
     /**

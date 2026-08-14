@@ -1393,6 +1393,20 @@ public class FunctionExpressionValidator {
                             + " integer, but got " + trimNumber(nYears));
                 }
             }
+
+            // moving_monthly_*/moving_daily_*(x, n): n must be a load-time
+            // literal positive integer — same rule as n_years above, minus
+            // the wy_month check (no anchor for these two families).
+            if (ExpressionLanguage.isPeriodicWindowFunction(funcName) && argCount == 2) {
+                Double n = argLiterals.get(1);
+                if (n == null) {
+                    errors.add(funcName + "'s window length (2nd argument) must be a constant"
+                            + " — state is sized at model load");
+                } else if (n != Math.floor(n) || n < 1) {
+                    errors.add(funcName + "'s window length (2nd argument) must be a positive"
+                            + " integer, but got " + trimNumber(n));
+                }
+            }
         }
 
         /** Render a literal argument value without a needless trailing ".0". */
