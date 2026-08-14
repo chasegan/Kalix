@@ -88,7 +88,7 @@ public final class ExpressionLanguage {
     public record SimVariable(String name, String description) {}
 
     /**
-     * Every builtin recognised by the parser — the 25 pure builtins, the 9
+     * Every builtin recognised by the parser — the 25 pure builtins, the 13
      * temporal (stateful) builtins, and the 2 calendar functions. Mirrors the
      * engine's {@code BuiltinFunction} enum, {@code STATEFUL_FUNCTIONS}, and
      * {@code CALENDAR_FUNCTIONS} ({@code src/functions/functions.rs}).
@@ -134,6 +134,12 @@ public final class ExpressionLanguage {
             new Builtin("moving_mean", 3, "moving_mean(x, n, default)", "mean over the last n steps", true),
             new Builtin("moving_min", 3, "moving_min(x, n, default)", "minimum over the last n steps", true),
             new Builtin("moving_max", 3, "moving_max(x, n, default)", "maximum over the last n steps", true),
+
+            // Temporal (stateful): annual-window moving_annual_*(x, wy_month, n_years)
+            new Builtin("moving_annual_sum", 3, "moving_annual_sum(x, wy_month, n_years)", "sum over the last n_years water years", true),
+            new Builtin("moving_annual_mean", 3, "moving_annual_mean(x, wy_month, n_years)", "mean over the last n_years water years", true),
+            new Builtin("moving_annual_min", 3, "moving_annual_min(x, wy_month, n_years)", "minimum over the last n_years water years", true),
+            new Builtin("moving_annual_max", 3, "moving_annual_max(x, wy_month, n_years)", "maximum over the last n_years water years", true),
 
             // Temporal (stateful): event-windowed *_since (last argument is the reset condition)
             new Builtin("sum_since", 2, "sum_since(x, reset)", "sum of x since reset last fired", true),
@@ -231,10 +237,21 @@ public final class ExpressionLanguage {
         return BY_NAME.get(lowerName);
     }
 
-    /** True if this lowercase name is a moving_* fixed-window builtin. */
+    /** True if this lowercase name is a moving_* fixed-window builtin
+     *  (window length + element default) — NOT the annual-window family,
+     *  which takes (x, wy_month, n_years) and has different constraints. */
     public static boolean isMovingWindowFunction(String lowerName) {
         Builtin b = BY_NAME.get(lowerName);
-        return b != null && b.stateful() && b.name().startsWith("moving_");
+        return b != null && b.stateful() && b.name().startsWith("moving_")
+                && !b.name().startsWith("moving_annual_");
+    }
+
+    /** True if this lowercase name is a moving_annual_* annual-window builtin
+     *  (x, wy_month, n_years) — the water-year-anchored counterpart to
+     *  {@link #isMovingWindowFunction}. */
+    public static boolean isAnnualWindowFunction(String lowerName) {
+        Builtin b = BY_NAME.get(lowerName);
+        return b != null && b.stateful() && b.name().startsWith("moving_annual_");
     }
 
     /**

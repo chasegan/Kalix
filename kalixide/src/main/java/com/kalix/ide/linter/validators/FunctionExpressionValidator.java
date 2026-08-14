@@ -1370,6 +1370,29 @@ public class FunctionExpressionValidator {
                             + " — state is sized at model load");
                 }
             }
+
+            // moving_annual_*(x, wy_month, n_years): wy_month must be a
+            // load-time literal integer in [1, 12]; n_years must be a
+            // load-time literal positive integer — mirrors the engine's
+            // lower_stateful_call validation for the annual family.
+            if (ExpressionLanguage.isAnnualWindowFunction(funcName) && argCount == 3) {
+                Double wyMonth = argLiterals.get(1);
+                if (wyMonth == null) {
+                    errors.add(funcName + "'s water year month (2nd argument) must be a constant"
+                            + " — state is sized at model load");
+                } else if (wyMonth != Math.floor(wyMonth) || wyMonth < 1 || wyMonth > 12) {
+                    errors.add(funcName + "'s water year month (2nd argument) must be a positive"
+                            + " integer between 1 and 12, but got " + trimNumber(wyMonth));
+                }
+                Double nYears = argLiterals.get(2);
+                if (nYears == null) {
+                    errors.add(funcName + "'s number of years (3rd argument) must be a constant"
+                            + " — state is sized at model load");
+                } else if (nYears != Math.floor(nYears) || nYears < 1) {
+                    errors.add(funcName + "'s window length (3rd argument) must be a positive"
+                            + " integer, but got " + trimNumber(nYears));
+                }
+            }
         }
 
         /** Render a literal argument value without a needless trailing ".0". */
