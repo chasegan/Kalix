@@ -599,6 +599,53 @@ class FunctionExpressionValidatorTest {
         assertValid("steps_since(data.flag)");
     }
 
+    // ============ moving_annual_* literal wy_month/n_years rule ============
+
+    @Test
+    @DisplayName("moving_annual_* accepts a bare wy_month in [1,12] and a bare positive n_years")
+    void testMovingAnnualLiteralArgsAccepted() {
+        assertValid("moving_annual_sum(data.x, 7, 5)");
+        assertValid("moving_annual_mean(data.x, 1, 1)");
+        assertValid("moving_annual_min(data.x, 12, 3)");
+        assertValid("moving_annual_max(data.x, 6, 10)");
+    }
+
+    @Test
+    @DisplayName("moving_annual_* rejects a non-literal wy_month (state is sized at model load)")
+    void testMovingAnnualNonLiteralWyMonthRejected() {
+        assertInvalid("moving_annual_sum(data.q, data.month, 3)",
+                "water year month (2nd argument) must be a constant");
+        assertInvalid("moving_annual_sum(data.q, const.m, 3)",
+                "water year month (2nd argument) must be a constant");
+    }
+
+    @Test
+    @DisplayName("moving_annual_* rejects a wy_month outside [1,12], including non-integers")
+    void testMovingAnnualWyMonthRangeRejected() {
+        assertInvalid("moving_annual_sum(data.q, 0, 3)", "water year month (2nd argument) must be a positive integer between 1 and 12");
+        assertInvalid("moving_annual_sum(data.q, 13, 3)", "water year month (2nd argument) must be a positive integer between 1 and 12");
+        assertInvalid("moving_annual_sum(data.q, 6.5, 3)", "water year month (2nd argument) must be a positive integer between 1 and 12");
+    }
+
+    @Test
+    @DisplayName("moving_annual_* rejects a non-literal or non-positive-integer n_years")
+    void testMovingAnnualNYearsRejected() {
+        assertInvalid("moving_annual_sum(data.q, 7, data.n)",
+                "number of years (3rd argument) must be a constant");
+        assertInvalid("moving_annual_sum(data.q, 7, 0)", "window length (3rd argument) must be a positive integer");
+        assertInvalid("moving_annual_sum(data.q, 7, 2.5)", "window length (3rd argument) must be a positive integer");
+    }
+
+    @Test
+    @DisplayName("moving_annual_* is a distinct validation family from the fixed-window moving_* rule")
+    void testMovingAnnualNotConflatedWithFixedWindow() {
+        // wy_month=7 is a valid fixed-window default (any constant), and
+        // n_years is checked as a positive integer, not "any constant" —
+        // the two families must not share the fixed-window's rule.
+        assertValid("moving_annual_sum(data.q, 7, 3)");
+        assertInvalid("moving_annual_sum(data.q, 7, -1)", "positive integer");
+    }
+
     // ============ fn arity consistency (finding #4) ============
 
     @Test
