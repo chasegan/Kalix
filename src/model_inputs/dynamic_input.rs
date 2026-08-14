@@ -347,7 +347,8 @@ pub enum WindowOp {
     Min,
     Max,
     // Annual (water year) operations
-    SumAnnual { wy_month: u32 },
+    SumAnnual  { wy_month: u32 },
+    MeanAnnual { wy_month: u32 },
     // Monthly operations
     // TODO
     // Daily operations
@@ -494,6 +495,10 @@ impl OptimizedExpressionNode {
                     let sum_slot = slots.f_off + slots.n;
                     data_cache.expr_state.f[sum_slot]
                 }
+                WindowOp::MeanAnnual { .. } => {
+                    let sum_slot = slots.f_off + slots.n;
+                    data_cache.expr_state.f[sum_slot] / slots.n as f64
+                }
             },
 
             OptimizedExpressionNode::Since { f_off, .. } => data_cache.expr_state.f[*f_off],
@@ -634,10 +639,10 @@ impl OptimizedExpressionNode {
                     WindowOp::Min => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, true),
                     WindowOp::Max => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, false),
                     // Annual (water year) family 
-                    WindowOp::SumAnnual { wy_month } => {
+                    // Precondition: wy_month in [1, 12] integral - enforce at parse time
+                    // (see `lower_stateful_call()`) instead of on hot path
+                    WindowOp::SumAnnual { wy_month } | WindowOp::MeanAnnual { wy_month } => {
                         // New water year when new month and month equals wy_month
-                        // Precondition: wy_month in [1, 12] integral - enforce at parse time
-                        // (see `lower_stateful_call()`) instead of on hot path
                         if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
                             advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
                         } else {
@@ -2298,7 +2303,7 @@ fn lower_stateful_call(
             }
             // window_op above only ever produces Sum/Mean/Min/Max; other families lowered
             // separately 
-            WindowOp::SumAnnual { .. } => unreachable!(),
+            WindowOp::SumAnnual { .. } | WindowOp::MeanAnnual { .. }  => unreachable!(),
         };
         return Ok(Some(OptimizedExpressionNode::MovingWindow {
             op,
@@ -2307,14 +2312,8 @@ fn lower_stateful_call(
         }));
     }
 
-    // Annual-window family: moving_annual_sum(x, wy_month, n_years)
-    let window_op = match name {
-        // Note: As these are constructed prior to parsing wy_month, the wy_month = 0 is a
-        // placeholder.
-        "moving_annual_sum" => Some(WindowOp::SumAnnual { wy_month: 0u32 }),
-        _ => None
-    };
-    if let Some(op) = window_op {
+    // Annual-window family
+    if matches!(name, "moving_annual_sum" | "moving_annual_mean") {
         if args.len() != 3 {
             return Err(format!(
                 "Function '{}' expects 3 arguments (x, wy_month, n_years), got {}",
@@ -2328,6 +2327,7 @@ fn lower_stateful_call(
                 name, wy_month
             ));
         }
+        let wy_month = wy_month as u32;
         let n_years = constant_arg(&args, 2, name, "number of years (3rd argument)")?;
         if n_years.fract() != 0.0 || n_years < 1.0 {
             return Err(format!(
@@ -2338,14 +2338,19 @@ fn lower_stateful_call(
         let n = n_years as usize;
         let arg = Box::new(args.swap_remove(0));
 
-        // Specific allocation for sum - to be expanded.
         // [ring; n] + [running sum]
         let mut f_init = vec![0.0; n];
         f_init.push(0.0);
-        let (f_off, u_off) = (arena.alloc_f(&f_init), arena.alloc_u(&[0]));
+        let f_off = arena.alloc_f(&f_init);
+        let u_off = arena.alloc_u(&[0]);
+        let op = match name {
+            "moving_annual_sum"  => WindowOp::SumAnnual  { wy_month }
+            "moving_annual_mean" => WindowOp::MeanAnnual { wy_month }
+            _ => unreachable!("previously matched on name")
+        }
 
         return Ok(Some(OptimizedExpressionNode::MovingWindow {
-            op: WindowOp::SumAnnual { wy_month: wy_month as u32 },
+            op,
             slots: Box::new(WindowSlots { n, f_off, u_off }),
             arg,
         }));
