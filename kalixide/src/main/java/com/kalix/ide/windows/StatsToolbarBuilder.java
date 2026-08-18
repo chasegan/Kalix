@@ -209,6 +209,9 @@ class StatsToolbarBuilder {
         JButton button = new JButton(FontIcon.of(icon, PlotToolbarBuilder.BUTTON_ICON_SIZE));
         button.setToolTipText(tooltip);
         button.setFocusable(false);
+        button.setPreferredSize(PlotToolbarBuilder.BUTTON_SIZE);
+        button.setMinimumSize(PlotToolbarBuilder.BUTTON_SIZE);
+        button.setMaximumSize(PlotToolbarBuilder.BUTTON_SIZE);
         button.addActionListener(e -> action.run());
         return button;
     }
