@@ -4,8 +4,10 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeParseException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class TimeFormatUtilTest {
 
@@ -65,5 +67,32 @@ class TimeFormatUtilTest {
     @Test
     void subMinuteTickIntervalIncludesSeconds() {
         assertEquals("14:30:00", TimeFormatUtil.formatForTickInterval(MS_2024_01_15_14_30, 1000L));
+    }
+
+    // ---- parseFlexible ----
+
+    @Test
+    void parseFlexibleAcceptsDateOnly() {
+        assertEquals(MS_2024_01_15_MIDNIGHT, TimeFormatUtil.parseFlexible("2024-01-15"));
+    }
+
+    @Test
+    void parseFlexibleAcceptsIsoDatetime() {
+        assertEquals(MS_2024_01_15_14_30, TimeFormatUtil.parseFlexible("2024-01-15T14:30:00"));
+    }
+
+    @Test
+    void parseFlexibleAcceptsSpaceSeparatedDatetime() {
+        assertEquals(MS_2024_01_15_14_30, TimeFormatUtil.parseFlexible("2024-01-15 14:30:00"));
+    }
+
+    @Test
+    void parseFlexibleTrimsWhitespace() {
+        assertEquals(MS_2024_01_15_MIDNIGHT, TimeFormatUtil.parseFlexible("  2024-01-15  "));
+    }
+
+    @Test
+    void parseFlexibleRejectsUnrecognisedText() {
+        assertThrows(DateTimeParseException.class, () -> TimeFormatUtil.parseFlexible("not a date"));
     }
 }

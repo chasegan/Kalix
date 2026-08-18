@@ -1,9 +1,11 @@
 package com.kalix.ide.utils;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 /**
  * Centralised timestamp formatting for timeseries display, axis labels, and exports.
@@ -30,6 +32,7 @@ public final class TimeFormatUtil {
 
     private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter ISO_DATETIME = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+    private static final DateTimeFormatter SPACE_DATETIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter MMDD_HHMM = DateTimeFormatter.ofPattern("MM-dd HH:mm");
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter HH_MM_SS = DateTimeFormatter.ofPattern("HH:mm:ss");
@@ -81,6 +84,29 @@ public final class TimeFormatUtil {
      */
     public static String formatForTickInterval(long timestampMs, long intervalMs) {
         return formatForTickInterval(toUtc(timestampMs), intervalMs);
+    }
+
+    /**
+     * Parses user-entered text back into an epoch-millisecond timestamp (UTC), accepting
+     * whichever of the formats {@link #formatForStepSize} produces: {@code yyyy-MM-dd},
+     * {@code yyyy-MM-dd'T'HH:mm:ss}, or the same datetime with a space instead of {@code 'T'}.
+     *
+     * @throws DateTimeParseException if the text matches none of the accepted formats
+     */
+    public static long parseFlexible(String text) {
+        String trimmed = text.trim();
+        try {
+            return LocalDateTime.parse(trimmed, ISO_DATETIME).toInstant(ZoneOffset.UTC).toEpochMilli();
+        } catch (DateTimeParseException ignored) {
+            // Not full ISO datetime — try the next format.
+        }
+        try {
+            return LocalDateTime.parse(trimmed, SPACE_DATETIME).toInstant(ZoneOffset.UTC).toEpochMilli();
+        } catch (DateTimeParseException ignored) {
+            // Not space-separated datetime — try date-only. Let this last attempt's
+            // exception (if any) propagate, since there is no further format to fall back to.
+        }
+        return LocalDate.parse(trimmed, DATE_ONLY).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli();
     }
 
     private static LocalDateTime toUtc(long timestampMs) {
