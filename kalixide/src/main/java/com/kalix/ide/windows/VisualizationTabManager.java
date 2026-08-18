@@ -184,7 +184,6 @@ public class VisualizationTabManager {
         enum TabType { PLOT, STATS }
 
         final TabType type;
-        final String name;
         final JComponent component;
         final PlotPanel plotPanel; // null for stats tabs
         final StatsTableModel statsModel; // null for plot tabs
@@ -201,12 +200,26 @@ public class VisualizationTabManager {
         AggregationPeriod statsPeriod = AggregationPeriod.ORIGINAL;
         AggregationMethod statsMethod = AggregationMethod.SUM;
 
+        // Tab user-supplied identifier
+        String name;
+        // remember the label for renaming
+        JLabel nameLabel;
+
         TabInfo(TabType type, String name, JComponent component, PlotPanel plotPanel, StatsTableModel statsModel) {
             this.type = type;
             this.name = name;
             this.component = component;
             this.plotPanel = plotPanel;
             this.statsModel = statsModel;
+        }
+
+        void rename(String name) {
+            this.name = name;
+            this.nameLabel.setText(name);
+        }
+
+        void registerNameLabel(JLabel nameLabel) {
+            this.nameLabel = nameLabel;
         }
     }
 
@@ -421,8 +434,8 @@ public class VisualizationTabManager {
         tabs.add(tabInfo);
 
         int index = tabbedPane.getTabCount();
-        tabbedPane.addTab("", containerPanel);
-        setupTabIcon(index, TabInfo.TabType.PLOT);
+        tabbedPane.addTab(tabInfo.name, containerPanel);
+        setupTabIcon(index, tabInfo);
 
         // Select the new tab (only when duplicating, not for initial default tabs)
         if (settings.selectedSeries != null) {
@@ -604,8 +617,8 @@ public class VisualizationTabManager {
         containerPanel.add(scrollPane, BorderLayout.CENTER);
 
         int index = tabbedPane.getTabCount();
-        tabbedPane.addTab("", containerPanel);
-        setupTabIcon(index, TabInfo.TabType.STATS);
+        tabbedPane.addTab(tabInfo.name, containerPanel);
+        setupTabIcon(index, tabInfo);
 
         // Select the new tab (only when duplicating, not for initial default tabs)
         if (settings.selectedSeries != null) {
@@ -618,8 +631,8 @@ public class VisualizationTabManager {
     /**
      * Sets up a tab with an icon and interaction handlers.
      */
-    private void setupTabIcon(int index, TabInfo.TabType tabType) {
-        // Create tab panel with just the icon
+    private void setupTabIcon(int index, TabInfo tabInfo) {
+        TabInfo.TabType tabType = tabInfo.type;
         JPanel tabPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,
             UIConstants.TAB_PANEL_PADDING, UIConstants.TAB_PANEL_PADDING));
         tabPanel.setOpaque(false);
@@ -629,11 +642,10 @@ public class VisualizationTabManager {
         String tooltip;
         if (tabType == TabInfo.TabType.PLOT) {
             tabIcon = FontIcon.of(FontAwesomeSolid.CHART_LINE, UIConstants.TAB_ICON_SIZE);
-            tooltip = "Plot";
         } else {
             tabIcon = FontIcon.of(FontAwesomeSolid.CALCULATOR, UIConstants.TAB_ICON_SIZE);
-            tooltip = "Statistics";
         }
+        tooltip = tabInfo.name;
 
         JLabel label = new JLabel(tabIcon);
         label.setToolTipText(tooltip);
