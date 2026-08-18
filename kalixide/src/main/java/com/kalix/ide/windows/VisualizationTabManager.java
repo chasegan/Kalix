@@ -18,10 +18,12 @@ import com.formdev.flatlaf.FlatClientProperties;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
+import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
@@ -100,6 +102,18 @@ public class VisualizationTabManager {
     private static class UIConstants {
         static final int TAB_ICON_SIZE = 14;
         static final int TAB_PANEL_PADDING = 2;
+        // Gap between the tab icon and its name label — collapsed to 0 when the name is
+        // empty so an unnamed tab doesn't show a dangling space after the icon.
+        static final int TAB_NAME_LABEL_GAP = 4;
+    }
+
+    /**
+     * Pads {@code nameLabel} on its leading edge so it sits clear of the tab icon, unless
+     * the name is empty — an unnamed tab then shows just the icon, with no trailing gap.
+     */
+    private static void updateNameLabelPadding(JLabel nameLabel) {
+        boolean hasName = nameLabel.getText() != null && !nameLabel.getText().isEmpty();
+        nameLabel.setBorder(BorderFactory.createEmptyBorder(0, hasName ? UIConstants.TAB_NAME_LABEL_GAP : 0, 0, 0));
     }
 
     /**
@@ -221,6 +235,7 @@ public class VisualizationTabManager {
         void rename(String name) {
             this.name = name;
             this.nameLabel.setText(name);
+            updateNameLabelPadding(this.nameLabel);
         }
 
         void registerNameLabel(JLabel nameLabel) {
@@ -659,6 +674,7 @@ public class VisualizationTabManager {
         tooltip = tabInfo.name;
 
         JLabel nameLabel = new JLabel(tabInfo.name);
+        updateNameLabelPadding(nameLabel);
         JLabel iconLabel = new JLabel(tabIcon);
         iconLabel.setToolTipText(tooltip);
 
@@ -750,6 +766,32 @@ public class VisualizationTabManager {
             }
         });
         contextMenu.add(addStatsItem);
+
+        JPopupMenu.Separator renameSeparator = new JPopupMenu.Separator();
+        contextMenu.add(renameSeparator);
+
+        JMenuItem renameTab = new JMenuItem("Rename");
+        renameTab.addActionListener(e -> {
+            int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
+            if (tabIndex != -1 && tabIndex < tabs.size()) {
+                TabInfo sourceTab = tabs.get(tabIndex);  
+                String currentName = sourceTab.name;
+                String newName = (String) JOptionPane.showInputDialog(
+                    tabbedPane,
+                    "Enter new name for tab '" + currentName + "':",
+                    "Rename tab",
+                    JOptionPane.PLAIN_MESSAGE,
+                    null,
+                    null,
+                    currentName
+                );
+                if (newName != null && !newName.isBlank()) {
+                    sourceTab.rename(newName);
+                    tabbedPane.setTitleAt(tabIndex, newName);
+                }
+            }
+        });
+        contextMenu.add(renameTab);
 
         // "Remove" menu item - only shown if there is more than one tab. The destructive action
         // is isolated in its own block (manifesto §1); the separator is toggled with the item so
