@@ -3,15 +3,23 @@ package com.kalix.ide.flowviz.rendering;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 
 public class ViewPort {
+    /// Minimum visible time (x-axis min)
     private final long startTimeMs;
+    /// Maximum visible time (x-axis max)
     private final long endTimeMs;
+    /// Minimum visible value (y-axis min)
     private final double minValue;
+    /// Maximum visible value (y-axis max)
     private final double maxValue;
 
     // Plot area dimensions
+    /// Left edge of the plot area in screen pixels
     private final int plotX;
+    /// Top edge of the plot area in screen pixels
     private final int plotY;
+    /// Width of the plot area in screen pixels
     private final int plotWidth;
+    /// Height of the plot area in screen pixels
     private final int plotHeight;
 
     // Axis transformations
