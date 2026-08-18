@@ -666,7 +666,7 @@ public class VisualizationTabManager {
         JPopupMenu contextMenu = new JPopupMenu();
 
         // "New plot tab" menu item - always shown
-        JMenuItem addPlotItem = new JMenuItem("New plot tab");
+        JMenuItem addPlotItem = new JMenuItem("Duplicate plot");
         addPlotItem.addActionListener(e -> {
             // Find the TabInfo for this tab
             int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
@@ -693,7 +693,7 @@ public class VisualizationTabManager {
         contextMenu.add(addPlotItem);
 
         // "New stats tab" menu item - always shown
-        JMenuItem addStatsItem = new JMenuItem("New stats tab");
+        JMenuItem addStatsItem = new JMenuItem("Show stats");
         addStatsItem.addActionListener(e -> {
             // Find the TabInfo for this tab
             int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
