@@ -107,6 +107,9 @@ public class VisualizationTabManager {
      * Makes it explicit what settings are shareable and provides a clean interface for copying.
      */
     public static class TabSettings {
+        // Tab name copied from the source tab when duplicating (null = leave the new tab unnamed)
+        public String name = null;
+
         // Aggregation settings (common to both plot and stats tabs)
         public AggregationPeriod aggregationPeriod = AggregationPeriod.ORIGINAL;
         public AggregationMethod aggregationMethod = AggregationMethod.SUM;
@@ -137,6 +140,7 @@ public class VisualizationTabManager {
         public static TabSettings fromPlotTab(TabInfo tabInfo) {
             PlotPanel plotPanel = tabInfo.plotPanel;
             TabSettings settings = new TabSettings();
+            settings.name = tabInfo.name;
             settings.aggregationPeriod = plotPanel.getAggregationPeriod();
             settings.aggregationMethod = plotPanel.getAggregationMethod();
             settings.plotType = plotPanel.getPlotType();
@@ -157,6 +161,7 @@ public class VisualizationTabManager {
          */
         public static TabSettings fromStatsTab(TabInfo statsTabInfo) {
             TabSettings settings = new TabSettings();
+            settings.name = statsTabInfo.name;
             settings.aggregationPeriod = statsTabInfo.statsPeriod;
             settings.aggregationMethod = statsTabInfo.statsMethod;
             settings.selectedSeries = new LinkedHashSet<>(statsTabInfo.selectedSeries);
@@ -428,7 +433,8 @@ public class VisualizationTabManager {
         containerPanel.add(plotPanel, BorderLayout.CENTER);
 
         // Add tab with inherited series selection and source context
-        TabInfo tabInfo = new TabInfo(TabInfo.TabType.PLOT, "Plot", containerPanel, plotPanel, null);
+        TabInfo tabInfo = new TabInfo(
+            TabInfo.TabType.PLOT, settings.name != null ? settings.name : "", containerPanel, plotPanel, null);
         tabInfo.selectedSeries.addAll(inheritedSeries);
         tabInfo.checkedSources.addAll(inheritedSources(settings));
         tabs.add(tabInfo);
@@ -588,7 +594,8 @@ public class VisualizationTabManager {
         JPanel containerPanel = new JPanel(new BorderLayout());
 
         // Create tab info so we can reference it in toolbar builder
-        TabInfo tabInfo = new TabInfo(TabInfo.TabType.STATS, "Statistics", containerPanel, null, model);
+        TabInfo tabInfo = new TabInfo(
+            TabInfo.TabType.STATS, settings.name != null ? settings.name : "", containerPanel, null, model);
 
         // Apply aggregation settings from TabSettings
         tabInfo.statsPeriod = settings.aggregationPeriod;
