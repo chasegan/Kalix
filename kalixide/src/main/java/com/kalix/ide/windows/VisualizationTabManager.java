@@ -665,18 +665,15 @@ public class VisualizationTabManager {
 
         // Create icon based on tab type
         FontIcon tabIcon;
-        String tooltip;
         if (tabType == TabInfo.TabType.PLOT) {
             tabIcon = FontIcon.of(FontAwesomeSolid.CHART_LINE, UIConstants.TAB_ICON_SIZE);
         } else {
             tabIcon = FontIcon.of(FontAwesomeSolid.CALCULATOR, UIConstants.TAB_ICON_SIZE);
         }
-        tooltip = tabInfo.name;
 
         JLabel nameLabel = new JLabel(tabInfo.name);
         updateNameLabelPadding(nameLabel);
         JLabel iconLabel = new JLabel(tabIcon);
-        iconLabel.setToolTipText(tooltip);
 
         labelPanel.add(iconLabel);
         labelPanel.add(nameLabel);
