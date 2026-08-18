@@ -640,9 +640,13 @@ public class VisualizationTabManager {
      */
     private void setupTabIcon(int index, TabInfo tabInfo) {
         TabInfo.TabType tabType = tabInfo.type;
+
+        // Create tab panel with the icon and name label
         JPanel tabPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,
             UIConstants.TAB_PANEL_PADDING, UIConstants.TAB_PANEL_PADDING));
         tabPanel.setOpaque(false);
+        JPanel labelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, UIConstants.TAB_PANEL_PADDING, 0));
+        labelPanel.setOpaque(false);
 
         // Create icon based on tab type
         FontIcon tabIcon;
@@ -654,18 +658,23 @@ public class VisualizationTabManager {
         }
         tooltip = tabInfo.name;
 
-        JLabel label = new JLabel(tabIcon);
-        label.setToolTipText(tooltip);
+        JLabel nameLabel = new JLabel(tabInfo.name);
+        JLabel iconLabel = new JLabel(tabIcon);
+        iconLabel.setToolTipText(tooltip);
 
-        tabPanel.add(label);
+        labelPanel.add(iconLabel);
+        labelPanel.add(nameLabel);
+
+        tabPanel.add(labelPanel);
 
         tabbedPane.setTabComponentAt(index, tabPanel);
 
         // Add drag-and-drop support for tab reordering
-        setupTabDragAndDrop(label);
+        setupTabDragAndDrop(iconLabel, nameLabel, labelPanel);
 
         // Add context menu support
-        setupTabContextMenu(tabPanel, tabType, label);
+        setupTabContextMenu(tabPanel, tabType, iconLabel, nameLabel, labelPanel);
+        tabInfo.registerNameLabel(nameLabel);
     }
 
     /**
