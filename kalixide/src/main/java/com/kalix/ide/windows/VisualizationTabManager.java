@@ -800,11 +800,19 @@ public class VisualizationTabManager {
 
         contextMenu.add(isPlot ? addPlotItem : addStatsItem);
 
-        // "Remove" menu item - only shown if there is more than one tab. The destructive action
-        // is isolated in its own block (manifesto §1); the separator is toggled with the item so
-        // it never dangles when "Remove" is hidden.
+        // The destructive actions are isolated to their own block (manifesto §1); the
+        // separator is toggled with the item so it never dangles when "Remove" is hidden.
         JPopupMenu.Separator removeSeparator = new JPopupMenu.Separator();
         contextMenu.add(removeSeparator);
+
+        JMenuItem resetItem = new JMenuItem("Reset");
+        resetItem.addActionListener(e -> {
+            int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
+            if (tabIndex != -1) {
+                resetTabAt(tabIndex);
+            }
+        });
+        contextMenu.add(resetItem);
 
         JMenuItem removeItem = new JMenuItem("Remove");
         removeItem.addActionListener(e -> {
@@ -895,6 +903,47 @@ public class VisualizationTabManager {
 
         tabs.remove(index);
         tabbedPane.removeTabAt(index);
+    }
+
+    /**
+     * Resets the tab at {@code index} to a brand-new tab of the same type: default
+     * settings from preferences, no series selected, no checked sources — dropping all
+     * data selection and plot/stats configuration. Implemented as remove-then-recreate
+     * rather than clearing the existing tab's fields in place, so "reset" can never drift
+     * from what a genuinely new tab looks like.
+     */
+    private void resetTabAt(int index) {
+        if (index < 0 || index >= tabs.size()) {
+            return;
+        }
+        TabInfo oldTab = tabs.get(index);
+        TabInfo.TabType type = oldTab.type;
+
+        // Clean up listeners before removing (mirrors closeTab).
+        if (oldTab.type == TabInfo.TabType.PLOT && oldTab.plotPanel != null) {
+            oldTab.plotPanel.setOnHistoryChanged(null);
+            oldTab.plotPanel.getLegendManager().setOnCollapsedChanged(null);
+        }
+        tabs.remove(index);
+        tabbedPane.removeTabAt(index);
+
+        // Brand-new, unnamed tab with nothing selected and nothing inherited — always
+        // appended at the end by addPlotTabFromSettings/addStatsTabFromSettings, then
+        // moved back into the slot the old tab occupied so tab order is undisturbed.
+        TabSettings settings = TabSettings.getDefaults();
+        settings.selectedSeries = new LinkedHashSet<>();
+        settings.checkedSources = new LinkedHashSet<>();
+
+        if (type == TabInfo.TabType.PLOT) {
+            addPlotTabFromSettings(settings);
+        } else {
+            addStatsTabFromSettings(settings);
+        }
+
+        int newIndex = tabbedPane.getTabCount() - 1;
+        if (newIndex != index) {
+            reorderTab(newIndex, index);
+        }
     }
 
     /**
