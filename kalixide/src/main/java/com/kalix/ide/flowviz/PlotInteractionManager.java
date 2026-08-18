@@ -2,6 +2,8 @@ package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.rendering.ViewPort;
+import com.kalix.ide.flowviz.rendering.XAxisType;
+import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.io.TimeSeriesCsvExporter;
 import com.kalix.ide.io.SourceResCsvExporter;
@@ -9,22 +11,32 @@ import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.io.PixieWriter;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.utils.TimeFormatUtil;
 
 import javax.swing.ButtonGroup;
+import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JRadioButtonMenuItem;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import java.awt.BasicStroke;
-import java.awt.Color;
+import java.awt.BorderLayout;
 import java.awt.Cursor;
+import java.awt.Dialog;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.Graphics2D;
+import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
@@ -32,6 +44,7 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.io.File;
 import java.io.IOException;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -675,10 +688,15 @@ public class PlotInteractionManager {
 
         contextMenu.addSeparator();
 
+        JMenuItem setAxes = new JMenuItem("Set axis limits");
+        setAxes.addActionListener(e1 -> showSetAxesDialog());
+        contextMenu.add(setAxes);
+
+        contextMenu.addSeparator();
+
         // Y-axis scale submenu
         yAxisScaleMenu = new JMenu("Y-axis scale");
         ButtonGroup yAxisScaleGroup = new ButtonGroup();
-
         for (YAxisScale scale : YAxisScale.values()) {
             JRadioButtonMenuItem scaleItem = new JRadioButtonMenuItem(scale.getDisplayName());
             scaleItem.addActionListener(e -> {
@@ -753,6 +771,195 @@ public class PlotInteractionManager {
             @Override
             public void popupMenuCanceled(PopupMenuEvent e) {}
         });
+    }
+
+    /**
+     * Shows a modal dialog with the current axis limits, pre-filled and editable as text.
+     * A blank field leaves that limit unchanged (see {@link #acceptNewAxes}); X fields are
+     * parsed according to the viewport's {@link XAxisType} (dates for TIME, percentages for
+     * PERCENTILE, etc.) so the field always shows and accepts values in the axis' own units.
+     */
+    private void showSetAxesDialog() {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) {
+            return;
+        }
+        XAxisType xAxisType = currentViewport.getXAxisType();
+
+        JTextField xMinField = new JTextField(formatXValue(currentViewport.getStartTimeMs(), xAxisType), 16);
+        JTextField xMaxField = new JTextField(formatXValue(currentViewport.getEndTimeMs(), xAxisType), 16);
+        JTextField yMinField = new JTextField(formatDoubleForField(currentViewport.getMinValue()), 16);
+        JTextField yMaxField = new JTextField(formatDoubleForField(currentViewport.getMaxValue()), 16);
+
+        JPanel form = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(4, 4, 4, 4);
+        gbc.anchor = GridBagConstraints.WEST;
+        addAxisFieldRow(form, gbc, 0, "X min:", xMinField);
+        addAxisFieldRow(form, gbc, 1, "X max:", xMaxField);
+        addAxisFieldRow(form, gbc, 2, "Y min:", yMinField);
+        addAxisFieldRow(form, gbc, 3, "Y max:", yMaxField);
+
+        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(parentComponent),
+            "Set Axis Limits", Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setLayout(new BorderLayout());
+        dialog.add(form, BorderLayout.CENTER);
+
+        JButton okButton = new JButton("OK");
+        okButton.addActionListener(ev -> {
+            try {
+                Long   startTime = parseX(xMinField.getText(), xAxisType);
+                Long   endTime   = parseX(xMaxField.getText(), xAxisType);
+                Double minValue  = parseY(yMinField.getText());
+                Double maxValue  = parseY(yMaxField.getText());
+
+                if (startTime >= endTime) {
+                    throw new IllegalArgumentException("X min must be less than X max.");
+                }
+                if (minValue >= maxValue) {
+                    throw new IllegalArgumentException("Y min must be less than Y max.");
+                }
+
+                acceptNewAxes(startTime, endTime, minValue, maxValue);
+                dialog.dispose();
+            } catch (DateTimeParseException | NumberFormatException parseEx) {
+                JOptionPane.showMessageDialog(dialog, "Could not parse axis limits: " + parseEx.getMessage(),
+                    "Invalid input", JOptionPane.ERROR_MESSAGE);
+            } catch (IllegalArgumentException rangeEx) {
+                JOptionPane.showMessageDialog(dialog, rangeEx.getMessage(),
+                    "Invalid input", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        JButton cancelButton = new JButton("Cancel");
+        cancelButton.addActionListener(ev -> dialog.dispose());
+
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+        dialog.getRootPane().setDefaultButton(okButton);
+
+        dialog.pack();
+        dialog.setLocationRelativeTo(parentComponent);
+        dialog.setVisible(true);
+    }
+
+    /**
+     * Adds a label + text field pair as one row of a {@link GridBagLayout} form.
+     */
+    private void addAxisFieldRow(JPanel form, GridBagConstraints gbc, int row, String label, JTextField field) {
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
+        form.add(new JLabel(label), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        form.add(field, gbc);
+    }
+
+    /**
+     * Parses a field's text into a viewport X value (a real timestamp for TIME, or one of the
+     * fake-timestamp encodings used for the other axis types — see {@link XAxisType}).
+     */
+    private Long parseX(String text, XAxisType xAxisType) throws IllegalArgumentException {
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException("X value cannot be blank.");
+        }
+        String trimmed = text.trim();
+        switch (xAxisType) {
+            case PERCENTILE:
+                String stripped = trimmed.endsWith("%") ? trimmed.substring(0, trimmed.length() - 1).trim() : trimmed;
+                try {
+                    return Math.round(Double.parseDouble(stripped) * 1_000_000.0);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Not a valid percentile: \"" + trimmed + "\"");
+                }
+            case COUNT:
+                try {
+                    return Long.parseLong(trimmed);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Not a valid integer count: \"" + trimmed + "\"");
+                }
+            case NUMERIC:
+                try {
+                    return Math.round(Double.parseDouble(trimmed) * PlotTypeTransformer.NUMERIC_SCALE);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Not a valid number: \"" + trimmed + "\"");
+                }
+            case TIME:
+            default:
+                try {
+                    return TimeFormatUtil.parseFlexible(trimmed);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException(
+                        "Not a valid date/time: \"" + trimmed + "\" (expected yyyy-MM-dd or yyyy-MM-dd HH:mm:ss)");
+                }
+        }
+    }
+
+    /**
+     * Parses a field's text into a (double) Y value.
+     */
+    private Double parseY(String text) throws IllegalArgumentException {
+        if (text == null || text.isBlank()) {
+            throw new IllegalArgumentException("Y value cannot be blank.");
+        }
+        try {
+            return Double.parseDouble(text.trim());
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Not a valid number: \"" + text.trim() + "\"");
+        }
+    }
+
+    /**
+     * Formats a viewport X value for editing, in the units matching {@code xAxisType}
+     * (the inverse of {@link #parseX}).
+     */
+    private String formatXValue(long value, XAxisType xAxisType) {
+        return switch (xAxisType) {
+            case PERCENTILE -> formatDoubleForField(value / 1_000_000.0) + "%";
+            case COUNT -> String.valueOf(value);
+            case NUMERIC -> formatDoubleForField((double) value / PlotTypeTransformer.NUMERIC_SCALE);
+            default -> {
+                // Date-only for midnight-aligned timestamps, full ISO datetime otherwise.
+                //                          ms per day          s per day
+                long stepSeconds = (value % 86_400_000L == 0) ? 86_400L : 1L;
+                yield TimeFormatUtil.formatForStepSize(value, stepSeconds);
+            }
+        };
+    }
+
+    /**
+     * Formats a double for editing without scientific notation or spurious ".0" noise.
+     */
+    private String formatDoubleForField(double value) {
+        if (!Double.isInfinite(value) && !Double.isNaN(value) && value == Math.rint(value)
+                && Math.abs(value) < 1e15) {
+            return String.valueOf((long) value);
+        }
+        return String.valueOf(value);
+    }
+
+    /**
+     * Moves the viewport to the given axis limits, keeping plot area, Y-axis scale, and
+     * X-axis type unchanged. Limits must already be resolved (no "leave unchanged" fallback
+     * here) — see {@link #showSetAxesDialog}, which resolves blank fields against the current
+     * viewport before calling this.
+     */
+    private void acceptNewAxes(Long startTime, Long endTime, Double minValue, Double maxValue) {
+        var currentViewport = this.viewportSupplier.get();
+        if (currentViewport == null) {
+            return;
+        }
+        Rectangle plotArea = plotAreaSupplier.get();
+        ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
+                                            // vvv Window itself does not move or change scale/type vvv
+                                            plotArea.x, plotArea.y, plotArea.width, plotArea.height,
+                                            currentViewport.getYAxisScale(), currentViewport.getXAxisType());
+        viewportUpdater.accept(newViewport);
+        parentComponent.repaint();
     }
 
     /**
