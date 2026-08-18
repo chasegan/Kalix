@@ -646,23 +646,27 @@ public class VisualizationTabManager {
         setupTabDragAndDrop(label);
 
         // Add context menu support
-        setupTabContextMenu(tabPanel, label, tabType);
+        setupTabContextMenu(tabPanel, tabType, label);
     }
 
     /**
-     * Enables ghost-style drag-to-reorder for this tab. The label is the drag handle (custom tab
-     * components swallow the strip's mouse events); the shared reorderer paints the dragged-tab
-     * ghost and the theme-coloured insertion line, commits the move on drop via {@link #reorderTab},
-     * and selects the tab on a plain click.
+     * Enables ghost-style drag-to-reorder for this tab. The handles are the drag targets (custom
+     * tab components swallow the strip's mouse events); the shared reorderer paints the
+     * dragged-tab ghost and the theme-coloured insertion line, commits the move on drop via
+     * {@link #reorderTab}, and selects the tab on a plain click.
      */
-    private void setupTabDragAndDrop(Component handle) {
-        tabReorderer.attachToHandle(handle);
+    private void setupTabDragAndDrop(Component... handles) {
+        for (Component handle : handles) {
+            tabReorderer.attachToHandle(handle);
+        }
     }
 
     /**
-     * Sets up context menu for tab right-click.
+     * Sets up context menu for tab right-click. Built once and shared across every
+     * {@code labelComponents} entry (icon, name, wrapper panel) since mouse events dispatch to
+     * whichever of them is deepest under the cursor.
      */
-    private void setupTabContextMenu(JPanel tabPanel, Component labelComponent, TabInfo.TabType tabType) {
+    private void setupTabContextMenu(JPanel tabPanel, TabInfo.TabType tabType, Component... labelComponents) {
         JPopupMenu contextMenu = new JPopupMenu();
 
         // "New plot tab" menu item - always shown
@@ -763,7 +767,9 @@ public class VisualizationTabManager {
             }
         };
 
-        labelComponent.addMouseListener(popupListener);
+        for (Component labelComponent : labelComponents) {
+            labelComponent.addMouseListener(popupListener);
+        }
     }
 
     /**
