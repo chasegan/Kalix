@@ -710,34 +710,7 @@ public class VisualizationTabManager {
     private void setupTabContextMenu(JPanel tabPanel, TabInfo.TabType tabType, Component... labelComponents) {
         JPopupMenu contextMenu = new JPopupMenu();
 
-        // "New plot tab" menu item - always shown
-        JMenuItem addPlotItem = new JMenuItem("Duplicate plot");
-        addPlotItem.addActionListener(e -> {
-            // Find the TabInfo for this tab
-            int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
-            if (tabIndex != -1 && tabIndex < tabs.size()) {
-                TabInfo sourceTab = tabs.get(tabIndex);
-
-                // Extract settings from source tab
-                TabSettings settings;
-                if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
-                    settings = TabSettings.fromPlotTab(sourceTab);
-                } else if (sourceTab.type == TabInfo.TabType.STATS) {
-                    settings = TabSettings.fromStatsTab(sourceTab);
-                } else {
-                    settings = TabSettings.getDefaults();
-                }
-
-                // Create new plot tab with copied settings
-                addPlotTabFromSettings(settings);
-            } else {
-                // Fallback: create with default settings
-                addPlotTab();
-            }
-        });
-        contextMenu.add(addPlotItem);
-
-        // "New stats tab" menu item - always shown
+        // "New stats tab" menu item - context-specific to this tab, always shown
         JMenuItem addStatsItem = new JMenuItem("Show stats");
         addStatsItem.addActionListener(e -> {
             // Find the TabInfo for this tab
@@ -764,14 +737,16 @@ public class VisualizationTabManager {
         });
         contextMenu.add(addStatsItem);
 
-        JPopupMenu.Separator renameSeparator = new JPopupMenu.Separator();
-        contextMenu.add(renameSeparator);
+        // Modify block (manifesto §1/§7.1): Rename before Duplicate, isolated from the
+        // context-specific items above and the destructive item below.
+        JPopupMenu.Separator modifySeparator = new JPopupMenu.Separator();
+        contextMenu.add(modifySeparator);
 
-        JMenuItem renameTab = new JMenuItem("Rename");
+        JMenuItem renameTab = new JMenuItem("Rename…");
         renameTab.addActionListener(e -> {
             int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
             if (tabIndex != -1 && tabIndex < tabs.size()) {
-                TabInfo sourceTab = tabs.get(tabIndex);  
+                TabInfo sourceTab = tabs.get(tabIndex);
                 String currentName = sourceTab.name;
                 String newName = (String) JOptionPane.showInputDialog(
                     tabbedPane,
@@ -789,6 +764,32 @@ public class VisualizationTabManager {
             }
         });
         contextMenu.add(renameTab);
+
+        JMenuItem addPlotItem = new JMenuItem("Duplicate plot");
+        addPlotItem.addActionListener(e -> {
+            // Find the TabInfo for this tab
+            int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
+            if (tabIndex != -1 && tabIndex < tabs.size()) {
+                TabInfo sourceTab = tabs.get(tabIndex);
+
+                // Extract settings from source tab
+                TabSettings settings;
+                if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
+                    settings = TabSettings.fromPlotTab(sourceTab);
+                } else if (sourceTab.type == TabInfo.TabType.STATS) {
+                    settings = TabSettings.fromStatsTab(sourceTab);
+                } else {
+                    settings = TabSettings.getDefaults();
+                }
+
+                // Create new plot tab with copied settings
+                addPlotTabFromSettings(settings);
+            } else {
+                // Fallback: create with default settings
+                addPlotTab();
+            }
+        });
+        contextMenu.add(addPlotItem);
 
         // "Remove" menu item - only shown if there is more than one tab. The destructive action
         // is isolated in its own block (manifesto §1); the separator is toggled with the item so
