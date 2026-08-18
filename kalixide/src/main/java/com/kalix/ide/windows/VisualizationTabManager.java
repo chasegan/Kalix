@@ -655,8 +655,8 @@ public class VisualizationTabManager {
      * ghost and the theme-coloured insertion line, commits the move on drop via {@link #reorderTab},
      * and selects the tab on a plain click.
      */
-    private void setupTabDragAndDrop(JLabel label) {
-        tabReorderer.attachToHandle(label);
+    private void setupTabDragAndDrop(Component handle) {
+        tabReorderer.attachToHandle(handle);
     }
 
     /**
