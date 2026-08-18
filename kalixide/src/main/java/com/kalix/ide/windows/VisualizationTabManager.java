@@ -662,7 +662,7 @@ public class VisualizationTabManager {
     /**
      * Sets up context menu for tab right-click.
      */
-    private void setupTabContextMenu(JPanel tabPanel, JLabel label, TabInfo.TabType tabType) {
+    private void setupTabContextMenu(JPanel tabPanel, Component labelComponent, TabInfo.TabType tabType) {
         JPopupMenu contextMenu = new JPopupMenu();
 
         // "New plot tab" menu item - always shown
@@ -763,7 +763,7 @@ public class VisualizationTabManager {
             }
         };
 
-        label.addMouseListener(popupListener);
+        labelComponent.addMouseListener(popupListener);
     }
 
     /**
