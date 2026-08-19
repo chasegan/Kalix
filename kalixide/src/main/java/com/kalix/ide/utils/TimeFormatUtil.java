@@ -38,6 +38,20 @@ public final class TimeFormatUtil {
     private static final DateTimeFormatter HH_MM_SS = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     /**
+     * Format a timestamp as an ISO datetime at second resolution.
+     */
+    public static String format(LocalDateTime dateTime) {
+        return dateTime.format(ISO_DATETIME);
+    }
+
+    /**
+     * Convenience overload taking a millisecond-epoch timestamp; converts to UTC LocalDateTime.
+     */
+    public static String format(long timestampMs) {
+        return format(toUtc(timestampMs));
+    }
+
+    /**
      * Format a timestamp for resolution-aware display. Daily-or-coarser series (step_size
      * is a multiple of 86400s) format as {@code yyyy-MM-dd}; sub-daily series format as
      * full ISO datetime. A step_size of 0 (unknown) defaults to date-only.

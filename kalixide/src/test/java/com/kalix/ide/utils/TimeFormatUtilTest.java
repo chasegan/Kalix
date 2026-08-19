@@ -91,6 +91,23 @@ class TimeFormatUtilTest {
         assertEquals(MS_2024_01_15_MIDNIGHT, TimeFormatUtil.parseFlexible("  2024-01-15  "));
     }
 
+    // ---- format / parseFlexible round trip ----
+
+    @Test
+    void formatEmitsSecondResolution() {
+        assertEquals("2024-01-15T14:30:00", TimeFormatUtil.format(MS_2024_01_15_14_30));
+    }
+
+    /**
+     * The copy/paste axis round trip: pan and zoom leave viewport bounds on arbitrary
+     * millisecond values, so format() must still emit something parseFlexible accepts.
+     */
+    @Test
+    void formatOfSubSecondTimestampRoundTripsThroughParseFlexible() {
+        long withMillis = MS_2024_01_15_14_30 + 123L;
+        assertEquals(MS_2024_01_15_14_30, TimeFormatUtil.parseFlexible(TimeFormatUtil.format(withMillis)));
+    }
+
     @Test
     void parseFlexibleRejectsUnrecognisedText() {
         assertThrows(DateTimeParseException.class, () -> TimeFormatUtil.parseFlexible("not a date"));
