@@ -421,6 +421,24 @@ public class JCheckboxTree extends JTree {
                     togglePath(path);
                 }
             }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                // Double-click anywhere on a leaf row acts as a click on its checkbox.
+                // Restricted to leaves so this never fights JTree's own double-click
+                // expand/collapse behaviour on parent rows.
+                if (e.isPopupTrigger() || !SwingUtilities.isLeftMouseButton(e) || e.getClickCount() != 2) {
+                    return;
+                }
+                TreePath path = getPathForLocation(e.getX(), e.getY());
+                if (path == null || isOverCheckbox(e.getX(), path)) {
+                    return;
+                }
+                Object lastComponent = path.getLastPathComponent();
+                if (lastComponent instanceof DefaultMutableTreeNode treeNode && treeNode.isLeaf()) {
+                    togglePath(path);
+                }
+            }
         });
 
         // Keyboard equivalent: Space toggles the focused row's checkbox.
