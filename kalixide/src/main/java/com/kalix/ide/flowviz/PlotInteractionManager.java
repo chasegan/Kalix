@@ -39,6 +39,7 @@ import java.awt.Graphics2D;
 import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -692,6 +693,123 @@ public class PlotInteractionManager {
         setAxes.addActionListener(e1 -> showSetAxesDialog());
         contextMenu.add(setAxes);
 
+        // TODO copy and paste X axis scale
+        // NOTE: likely dependent on X axis TYPE e.g. exceedance %
+        // Copy should simply get the string out (format?)
+        // Paste should attempt to paste from clipboard, throw error if invalid format or unparseable etc.
+        JMenuItem copyXAxis = new JMenuItem("Copy X axis");
+        copyXAxis.addActionListener(e -> {
+            ViewPort currentViewport = viewportSupplier.get();
+            if (currentViewport == null) {
+                return;
+            }
+            XAxisType xAxisType = currentViewport.getXAxisType();
+            var startTimeMs = currentViewport.getStartTimeMs();
+            var endTimeMs   = currentViewport.getEndTimeMs();
+            var startTimeFormatted = TimeFormatUtil.format(startTimeMs);
+            var endTimeFormatted   = TimeFormatUtil.format(endTimeMs);
+            copyBoundsToClipboard(startTimeFormatted, endTimeFormatted);
+        });
+        contextMenu.add(copyXAxis);
+        JMenuItem pasteXAxis = new JMenuItem("Paste X axis");
+        pasteXAxis.addActionListener(e -> {
+            java.awt.datatransfer.Clipboard clipboard = java.awt.Toolkit.getDefaultToolkit().getSystemClipboard();
+            String clipboardString;
+            try {
+                clipboardString = (String) clipboard.getData(DataFlavor.stringFlavor);
+            } catch (java.awt.datatransfer.UnsupportedFlavorException | java.io.IOException ex) {
+                JOptionPane.showMessageDialog(parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            var parts = clipboardString.split("\\s*,\\s*");
+            var l = parts.length;
+            if (l != 2) {
+                JOptionPane.showMessageDialog(
+                    parentComponent,
+                    String.format("Expected two comma-separated dates but received \"%s\"", clipboardString),
+                    "Error", JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+
+            long startTime;
+            long endTime;
+            try {
+                // bounds-safe owing to above check
+                startTime = TimeFormatUtil.parseFlexible(parts[0].trim());
+                endTime = TimeFormatUtil.parseFlexible(parts[1].trim());
+            } catch (DateTimeParseException ex) {
+                JOptionPane.showMessageDialog(
+                    parentComponent,
+                    "Error parsing datetime: " + ex.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+            ViewPort currentViewport = viewportSupplier.get();
+            acceptNewAxes(
+                startTime, endTime,
+                currentViewport.getMinValue(), currentViewport.getMaxValue()
+            );
+        });
+        contextMenu.add(pasteXAxis);
+
+        JMenuItem copyYAxis = new JMenuItem("Copy Y axis");
+        copyYAxis.addActionListener(e -> {
+            ViewPort currentViewport = viewportSupplier.get();
+            if (currentViewport == null) {
+                return;
+            }
+            var minVal = currentViewport.getMinValue();
+            var maxVal = currentViewport.getMaxValue();
+            copyBoundsToClipboard(String.valueOf(minVal), String.valueOf(maxVal));
+        });
+        contextMenu.add(copyYAxis);
+        JMenuItem pasteYAxis = new JMenuItem("Paste Y axis");
+        pasteYAxis.addActionListener(e -> {
+            java.awt.datatransfer.Clipboard clipboard = java.awt.Toolkit.getDefaultToolkit().getSystemClipboard();
+            String clipboardString;
+            try {
+                clipboardString = (String) clipboard.getData(DataFlavor.stringFlavor);
+            } catch (java.awt.datatransfer.UnsupportedFlavorException | java.io.IOException ex) {
+                JOptionPane.showMessageDialog(parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            var parts = clipboardString.split("\\s*,\\s*");
+            var l = parts.length;
+            if (l != 2) {
+                JOptionPane.showMessageDialog(
+                    parentComponent,
+                    String.format("Expected two comma-separated numbers but received \"%s\"", clipboardString),
+                    "Error", JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+
+            double minVal;
+            double maxVal;
+            try {
+                // bounds-safe owing to above check
+                minVal = Double.parseDouble(parts[0].trim());
+                maxVal = Double.parseDouble(parts[1].trim());
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(
+                    parentComponent,
+                    "Error parsing number: " + ex.getMessage(),
+                    "Error", JOptionPane.ERROR_MESSAGE
+                );
+                return;
+            }
+            ViewPort currentViewport = viewportSupplier.get();
+            acceptNewAxes(
+                currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(),
+                minVal, maxVal
+            );
+        });
+        contextMenu.add(pasteYAxis);
+
         contextMenu.addSeparator();
 
         // Y-axis scale submenu
@@ -771,6 +889,23 @@ public class PlotInteractionManager {
             @Override
             public void popupMenuCanceled(PopupMenuEvent e) {}
         });
+    }
+
+    /**
+     * Builds a {@code String} that
+     * @param startTimeFormatted
+     * @param endTimeFormatted
+     */
+    private static void copyBoundsToClipboard(String startTimeFormatted, String endTimeFormatted) {
+        StringBuilder b = new StringBuilder();
+        b.append(startTimeFormatted);
+        b.append(", ");
+        b.append(endTimeFormatted);
+        String s = b.toString();
+        // https://stackoverflow.com/questions/3591945/copying-to-the-clipboard-in-java
+        java.awt.datatransfer.StringSelection selection = new java.awt.datatransfer.StringSelection(s);
+        java.awt.datatransfer.Clipboard clipboard = java.awt.Toolkit.getDefaultToolkit().getSystemClipboard();
+        clipboard.setContents(selection, selection);
     }
 
     /**
