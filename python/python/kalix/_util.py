@@ -26,7 +26,14 @@ def build_time_indexed_df(
     names, producing that many duplicate columns rather than silently
     collapsing them the way a dict would.
     """
-    index = pd.to_datetime(timestamps_sec, unit="s", utc=True).as_unit("s")
+    # Build the index without ever materialising nanoseconds. `pd.to_datetime(...,
+    # unit="s")` converts via ns first on pandas 2.x and raises OutOfBoundsDatetime
+    # outside 1677-2262 -- a demotion with `.as_unit("s")` afterwards is too late to
+    # help. Long runs are well outside that window (year 0 is ~-6.2e10 s, year 9999
+    # ~2.5e11 s; either times 1e9 overflows int64). Going through `datetime64[s]`
+    # keeps the full representable range available on both pandas 2.x and 3.x.
+    seconds = np.asarray(timestamps_sec, dtype=np.int64).astype("datetime64[s]")
+    index = pd.DatetimeIndex(seconds).tz_localize("UTC")
     index.name = "time"
     items = list(series.items()) if isinstance(series, dict) else list(series)
     if not items:
