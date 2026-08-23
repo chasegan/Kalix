@@ -427,6 +427,9 @@ class FunctionExpressionValidatorTest {
         assertValid("moving_mean(data.x, 30, 0)");
         assertInvalid("moving_mean(data.x, 30)", "expects 3 argument");
         assertValid("steps_since(sim.new_month)");
+        assertValid("latch(data.x, sim.new_month, 0)");
+        assertInvalid("latch(data.x, sim.new_month)", "expects 3 argument");
+        assertInvalid("latch(data.x, sim.new_month, 0, 1)", "expects 3 argument");
         assertValid("clamp(data.x, 0, 10)");
         assertInvalid("clamp(1, 2)", "expects 3 argument");
     }

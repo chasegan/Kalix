@@ -132,6 +132,7 @@ Available functions:
 | `max_since` | 2 | Maximum of x since reset |
 | `count_since` | 2 | Steps on which a condition held since reset |
 | `steps_since` | 1 | Steps elapsed since reset (0 on a reset step) |
+| `latch` | 3 | Sample x when a condition holds, else hold the last sample: latch(x, condition, init) |
 
 Two names are deliberately absent. There is no `log`: write the explicit `ln`
 or `log10`. And there is no `avg` or `average`: the function is `mean`, named

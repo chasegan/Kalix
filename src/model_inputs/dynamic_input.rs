@@ -314,6 +314,18 @@ pub enum OptimizedExpressionNode {
         reset: Box<OptimizedExpressionNode>,
     },
 
+    /// Sample-and-hold: samples `arg` on every step `condition` is truthy
+    /// and holds it otherwise. Single f64 of state, holding the caller's
+    /// `init` constant until the condition first fires. The run start is
+    /// deliberately NOT an implicit sample (contrast `*_since`, design §6):
+    /// the pre-first-fire value is the modeller's to state, exactly as a
+    /// moving window's element default is (design §6.5).
+    Latch {
+        f_off: usize,
+        arg: Box<OptimizedExpressionNode>,
+        condition: Box<OptimizedExpressionNode>,
+    },
+
     /// Named 1D lookup table (`table.<name>(x)`): clamped linear interpolation.
     /// The concrete table is resolved and embedded at lowering, so evaluation
     /// is a deref + binary search with no name or dimensionality dispatch.
@@ -495,6 +507,8 @@ impl OptimizedExpressionNode {
 
             OptimizedExpressionNode::Since { f_off, .. } => data_cache.expr_state.f[*f_off],
 
+            OptimizedExpressionNode::Latch { f_off, .. } => data_cache.expr_state.f[*f_off],
+
             OptimizedExpressionNode::Lookup1D { table, arg } => {
                 table.lookup(arg.evaluate(data_cache))
             }
@@ -570,6 +584,10 @@ impl OptimizedExpressionNode {
                     a.validate_reads(data_cache);
                 }
                 reset.validate_reads(data_cache);
+            }
+            OptimizedExpressionNode::Latch { arg, condition, .. } => {
+                arg.validate_reads(data_cache);
+                condition.validate_reads(data_cache);
             }
         }
     }
@@ -671,6 +689,22 @@ impl OptimizedExpressionNode {
                         if reset_fired { 0.0 } else { acc + 1.0 }
                     }
                 };
+            }
+
+            OptimizedExpressionNode::Latch { f_off, arg, condition } => {
+                arg.advance_state(data_cache);
+                condition.advance_state(data_cache);
+                // Unlike the Since arm above, `arg` is EVALUATED only on
+                // sampling steps. Deliberate and load-bearing: a held latch
+                // skips its whole value subtree, which is the point of
+                // latch(<expensive>, is_startwy, ...) — one evaluation a year
+                // instead of 365. Sound because evaluate() is pure and every
+                // nested stateful child has already advanced on the two lines
+                // above. Do not hoist this evaluate out of the branch to
+                // match Since's shape.
+                if condition.evaluate(data_cache) != 0.0 {
+                    data_cache.expr_state.f[*f_off] = arg.evaluate(data_cache);
+                }
             }
         }
     }
@@ -950,7 +984,7 @@ pub struct OptimizedProgram {
     /// Cold: read only when composing a failure message.
     assert_meta: Vec<String>,
     /// Arena u-slot guarding once-per-step state advance, present only when
-    /// the program contains stateful calls (moving_*/*_since). Stores
+    /// the program contains stateful calls (moving_*/*_since/latch). Stores
     /// last-advanced step + 1, so the init value 0 means "never" and the
     /// run-start arena reset re-arms it. Stateless programs pay one
     /// predictable None check.
@@ -1197,7 +1231,7 @@ pub enum DynamicInput {
         program: OptimizedProgram
     },
 
-    /// Function expression containing stateful calls (moving_*/*_since).
+    /// Function expression containing stateful calls (moving_*/*_since/latch).
     /// A separate variant so the plain Function hot path pays nothing for
     /// the feature: only trees that actually carry state check the guard.
     /// `guard` is an arena u-slot holding last-advanced step + 1 (0 = never;
@@ -2065,6 +2099,9 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
         OptimizedExpressionNode::Since { arg, reset, .. } => {
             arg.as_deref().map(uses_calendar_flags).unwrap_or(false) || uses_calendar_flags(reset)
         }
+        OptimizedExpressionNode::Latch { arg, condition, .. } => {
+            uses_calendar_flags(arg) || uses_calendar_flags(condition)
+        }
         OptimizedExpressionNode::Lookup1D { arg, .. } => uses_calendar_flags(arg),
         OptimizedExpressionNode::Lookup2D { col_key, row_key, .. } => {
             uses_calendar_flags(col_key) || uses_calendar_flags(row_key)
@@ -2234,30 +2271,19 @@ fn lower_function_call(
 }
 
 /// Extract a load-time constant from a lowered argument, or explain why not.
-/// The stateful builtins require their window length and element default to
-/// be literals: state is sized and pre-filled at load (bounded cost known at
-/// load — the language's governing rule).
+/// The stateful builtins require their window length, element default and
+/// latch init to be literals: state is sized and pre-filled at load (bounded
+/// cost known at load — the language's governing rule).
 fn constant_arg(args: &[OptimizedExpressionNode], idx: usize, func: &str, what: &str) -> Result<f64, String> {
     match &args[idx] {
         OptimizedExpressionNode::Constant { value } => Ok(*value),
         _ => Err(format!(
-            "{}'s {} must be a constant (state is sized at model load)",
+            "{}'s {} must be a constant (state is sized and initialised at model load)",
             func, what
         )),
     }
 }
 
-/// Lower a stateful builtin (moving_*/*_since) if `name` is one, allocating
-/// its arena state. Returns Ok(None) for names that are not stateful
-/// builtins, letting the caller fall through to its unknown-function error.
-///
-/// Init templates encode the warm-up semantics
-/// (structured_expressions_design.md §5-§6):
-/// - moving windows pre-fill with the element default (running sum =
-///   n * default; the min/max deque starts with one default entry expiring
-///   when the last pre-filled element would leave the window);
-/// - *_since accumulators start as if reset fired just before the run
-///   (sum/count 0, steps -1, min/max NaN which f64::min/max suppress).
 /// Lower a calendar-at-offset call (`month_at`/`days_in_month_at` — the
 /// CALENDAR_FUNCTIONS tier): context functions resolved here, like the
 /// stateful family, because they read the simulation clock at evaluation.
@@ -2280,6 +2306,19 @@ fn lower_calendar_call(
     Ok(Some(OptimizedExpressionNode::CalendarAt { kind, arg: Box::new(args.remove(0)) }))
 }
 
+/// Lower a stateful builtin (moving_*/*_since/latch) if `name` is one, allocating
+/// its arena state. Returns Ok(None) for names that are not stateful
+/// builtins, letting the caller fall through to its unknown-function error.
+///
+/// Init templates encode the warm-up semantics
+/// (structured_expressions_design.md §5-§6.5):
+/// - moving windows pre-fill with the element default (running sum =
+///   n * default; the min/max deque starts with one default entry expiring
+///   when the last pre-filled element would leave the window);
+/// - *_since accumulators start as if reset fired just before the run
+///   (sum/count 0, steps -1, min/max NaN which f64::min/max suppress).
+/// - a latch holds the caller-supplied `init` until its condition first
+///   fires (the run start is not an implicit sample — see the Latch variant).
 fn lower_stateful_call(
     name: &str,
     mut args: Vec<OptimizedExpressionNode>,
@@ -2341,24 +2380,44 @@ fn lower_stateful_call(
     }
 
     // Event-window family: last argument is always the reset condition.
-    let (since_op, arity, acc_init) = match name {
-        "sum_since" => (SinceOp::Sum, 2, 0.0),
-        "min_since" => (SinceOp::Min, 2, f64::NAN),
-        "max_since" => (SinceOp::Max, 2, f64::NAN),
-        "count_since" => (SinceOp::Count, 2, 0.0),
-        "steps_since" => (SinceOp::Steps, 1, -1.0),
-        _ => return Ok(None),
+    let since_family = match name {
+        "sum_since" => Some((SinceOp::Sum, 2, 0.0)),
+        "min_since" => Some((SinceOp::Min, 2, f64::NAN)),
+        "max_since" => Some((SinceOp::Max, 2, f64::NAN)),
+        "count_since" => Some((SinceOp::Count, 2, 0.0)),
+        "steps_since" => Some((SinceOp::Steps, 1, -1.0)),
+        _ => None,
     };
-    if args.len() != arity {
-        return Err(format!(
-            "Function '{}' expects {} argument(s) (the last is the reset condition), got {}",
-            name, arity, args.len()
-        ));
+    if let Some((since_op, arity, acc_init)) = since_family {
+        if args.len() != arity {
+            return Err(format!(
+                "Function '{}' expects {} argument(s) (the last is the reset condition), got {}",
+                name, arity, args.len()
+            ));
+        }
+        let f_off = arena.alloc_f(&[acc_init]);
+        let reset = Box::new(args.pop().unwrap());
+        let arg = args.pop().map(Box::new);
+        return Ok(Some(OptimizedExpressionNode::Since { op: since_op, f_off, arg, reset }));
     }
-    let f_off = arena.alloc_f(&[acc_init]);
-    let reset = Box::new(args.pop().unwrap());
-    let arg = args.pop().map(Box::new);
-    Ok(Some(OptimizedExpressionNode::Since { op: since_op, f_off, arg, reset }))
+
+    // Sample-and-hold: latch(x, condition, init).
+    if name == "latch" {
+        if args.len() != 3 {
+            return Err(format!(
+                "Function 'latch' expects 3 arguments (x, condition, init), got {}",
+                args.len()
+            ));
+        }
+        let init = constant_arg(&args, 2, name, "initial value (3rd argument)")?;
+        args.pop();
+        let condition = Box::new(args.pop().unwrap());
+        let arg = Box::new(args.pop().unwrap());
+        let f_off = arena.alloc_f(&[init]);
+        return Ok(Some(OptimizedExpressionNode::Latch { f_off, arg, condition }));
+    }
+    // No stateful builtin matched
+    Ok(None)
 }
 
 /// Lower a `table.<name>(...)` call by resolving the name against the model's
