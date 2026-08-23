@@ -98,10 +98,10 @@ pub enum BuiltinFunction {
     // Single argument
     Abs, Sqrt, Sin, Cos, Tan, Asin, Acos, Atan,
     Exp, Ln, Log10, Log2,
-    Ceil, Floor, Round, Sign, IsLeapYear, SkipNan,
+    Ceil, Floor, Round, Sign, IsLeapYear,
 
     // Two argument
-    Pow, Atan2,
+    Pow, Atan2, Infill,
 
     // Variadic (>= 2)
     Min, Max,
@@ -136,7 +136,7 @@ impl BuiltinFunction {
             "round"  => BuiltinFunction::Round,
             "sign"   => BuiltinFunction::Sign,
             "is_leap_year" => BuiltinFunction::IsLeapYear,
-            "skip_nan" => BuiltinFunction::SkipNan,
+            "infill" => BuiltinFunction::Infill,
             "pow"    => BuiltinFunction::Pow,
             "atan2"  => BuiltinFunction::Atan2,
             "min"    => BuiltinFunction::Min,
@@ -169,7 +169,7 @@ impl BuiltinFunction {
             BuiltinFunction::Round => "round",
             BuiltinFunction::Sign => "sign",
             BuiltinFunction::IsLeapYear => "is_leap_year",
-            BuiltinFunction::SkipNan => "skip_nan",
+            BuiltinFunction::Infill => "infill",
             BuiltinFunction::Pow => "pow",
             BuiltinFunction::Atan2 => "atan2",
             BuiltinFunction::Min => "min",
@@ -206,12 +206,15 @@ impl BuiltinFunction {
             BuiltinFunction::Round  => Self::single(self.name(), args, |x| x.round()),
             BuiltinFunction::Sign   => Self::single(self.name(), args, sign),
             BuiltinFunction::IsLeapYear => Self::single(self.name(), args, is_leap_year_f),
-            BuiltinFunction::SkipNan => Self::single(self.name(), args, skip_nan),
 
             // Two argument
             BuiltinFunction::Pow => {
                 if args.len() != 2 { return Self::arity_err(self.name(), 2, args.len()); }
                 Ok(args[0].powf(args[1]))
+            }
+            BuiltinFunction::Infill => {
+                if args.len() != 2 { return Self::arity_err(self.name(), 2, args.len()); }
+                Ok(infill(args[0], args[1]))
             }
             BuiltinFunction::Atan2 => {
                 if args.len() != 2 { return Self::arity_err(self.name(), 2, args.len()); }
@@ -295,21 +298,27 @@ pub fn is_leap_year_f(year: f64) -> f64 {
     if crate::tid::utils::is_leap_year(year.round() as i64) { 1.0 } else { 0.0 }
 }
 
-/// `skip_nan(x)`: NaN maps to 0.0 (sum/mean's additive identity — "this
-/// contributes nothing"), any other value passes through unchanged. The
-/// deliberate complement to the min/max builtins' own NaN handling
-/// (`f64::min`/`f64::max` already suppress NaN by returning the other
-/// operand): min/max need no such coercion because there's no numeric value
-/// that's a safe placeholder for "ignore me" regardless of x's range, but
-/// sum/mean do have one (0), so `skip_nan` makes it explicit at the call
-/// site rather than asking the modeller to remember to write a bare `0`
-/// literal in an `if(...)`'s else-branch. Composes with the annual/monthly/
-/// daily windows: `moving_annual_sum(skip_nan(if(cond, x, NAN)), ...)` lets
-/// one NaN-gated signal feed both a `moving_annual_max` (which already
-/// ignores the NaN directly) and a `moving_annual_sum` (which would
-/// otherwise poison on it) without writing two different gates.
-pub fn skip_nan(x: f64) -> f64 {
-    if x.is_nan() { 0.0 } else { x }
+/// `infill(x, value)`: a missing value (NaN) is infilled with `value`;
+/// anything else passes through unchanged.
+///
+/// Named for what it does, in the field's language. This *substitutes* a
+/// value — it does not exclude the element — and the name has to say so:
+/// `moving_mean(infill(x, 0), 4, 0)` over [10, NaN, 20, 30] is 15, not 20,
+/// because the infilled 0 is still one of the four elements averaged. A name
+/// promising to "skip" the gap would make that reading a trap
+/// (`expression-naming §1.1`).
+///
+/// The fill value is the modeller's to state rather than a hardcoded 0, for
+/// the same reason a moving window's `default` and a latch's `init` are:
+/// zero is right for a sum, and rarely right for anything else. A gap in a
+/// flow record might be infilled with 0, a long-term mean, or a neighbouring
+/// gauge, and only the modeller knows which.
+///
+/// Composes with the annual/monthly/daily windows, whose min/max already
+/// suppress NaN while sum/mean poison on it: `infill(x, 0)` lets one
+/// NaN-gated signal feed both without writing two different gates.
+pub fn infill(x: f64, value: f64) -> f64 {
+    if x.is_nan() { value } else { x }
 }
 
 /// Back-compat shim for callers that still dispatch by name (e.g. context-function

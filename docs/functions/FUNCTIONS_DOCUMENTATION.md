@@ -243,15 +243,17 @@ once per period, via `if(cond, x, NAN)` — the *only* way to express "only
 this branch counts" in this language. Feed that straight into
 `moving_annual_max`/`min` and it works, because NaN is exactly what those
 suppress. Feed it straight into `moving_annual_sum`/`mean` and the first
-untagged step poisons the running total. Wrap it in `skip_nan(...)` for the
-sum/mean side (`skip_nan` maps NaN to 0 — sum's identity, "contributes
-nothing" — and passes every other value through unchanged) to get the same
-gated behaviour there:
+untagged step poisons the running total. Wrap it in `infill(..., 0)` for the
+sum/mean side to get the same gated behaviour there. Note `infill`
+*substitutes* the value rather than excluding the element — zero is the right
+fill for a sum precisely because it is the additive identity, but the same
+substitution inside a plain `moving_mean` would be counted in the average, so
+state the fill deliberately:
 
 ```ini
 daily_total = if(sim.new_day, moving_daily_sum(node.gauge_1.dsflow, 1), 0.0 / 0.0)
 peak_daily_total_wy = moving_annual_max(daily_total, const.wy_month, 5)
-sum_daily_totals_wy = moving_annual_sum(skip_nan(daily_total), const.wy_month, 5)
+sum_daily_totals_wy = moving_annual_sum(infill(daily_total, 0), const.wy_month, 5)
 ```
 
 ### Event windows — since a reset condition last fired
@@ -372,7 +374,7 @@ net_flow = min(
 | `ceil` | 1 | Round up |
 | `round` | 1 | Round to nearest |
 | `sign` | 1 | Sign (-1, 0, or 1) |
-| `skip_nan` | 1 | NaN becomes 0 (sum/mean's identity); other values pass through unchanged |
+| `infill` | 2 | Infill a missing value: infill(x, value) is value when x is NaN, else x |
 | `moving_sum` | 3 | Sum over the last n steps: moving_sum(x, n, default) |
 | `moving_mean` | 3 | Mean over the last n steps |
 | `moving_min` | 3 | Minimum over the last n steps |

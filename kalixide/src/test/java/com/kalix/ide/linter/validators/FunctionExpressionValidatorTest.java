@@ -124,7 +124,9 @@ class FunctionExpressionValidatorTest {
         assertValid("log10(data.x)");
         assertValid("log2(data.x)");
         assertValid("sign(data.x)");
-        assertValid("skip_nan(data.x)");
+        assertValid("infill(data.x, 0)");
+        assertInvalid("infill(data.x)", "expects 2 argument");
+        assertInvalid("infill(data.x, 0, 1)", "expects 2 argument");
 
         // Aggregation
         assertValid("max(1, 2, 3)");

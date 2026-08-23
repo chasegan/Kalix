@@ -2259,7 +2259,6 @@ fn lower_function_call(
         B::Round => Some(f64::round),
         B::Sign => Some(crate::functions::functions::sign),
         B::IsLeapYear => Some(crate::functions::functions::is_leap_year_f),
-        B::SkipNan => Some(crate::functions::functions::skip_nan),
         _ => None,
     };
     if let Some(f) = f1 {
@@ -2270,13 +2269,17 @@ fn lower_function_call(
     }
 
     match builtin {
-        B::Pow | B::Atan2 => {
+        B::Pow | B::Atan2 | B::Infill => {
             if args.len() != 2 {
                 return arity_err("2", args.len());
             }
             let b = args.pop().unwrap();
             let a = args.pop().unwrap();
-            let f: fn(f64, f64) -> f64 = if builtin == B::Pow { f64::powf } else { f64::atan2 };
+            let f: fn(f64, f64) -> f64 = match builtin {
+                B::Pow => f64::powf,
+                B::Atan2 => f64::atan2,
+                _ => crate::functions::functions::infill,
+            };
             Ok(OptimizedExpressionNode::Func2 { f, a: Box::new(a), b: Box::new(b) })
         }
         B::If => {

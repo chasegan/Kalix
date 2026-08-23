@@ -1630,7 +1630,13 @@ public class FunctionExpressionValidator {
                 Map.entry("running_sum", "moving_sum"),
                 Map.entry("rolling_mean", "moving_mean"),
                 Map.entry("rolling_sum", "moving_sum"),
-                Map.entry("days_since", "steps_since")
+                Map.entry("days_since", "steps_since"),
+                // Infilling a missing value is 'infill'; it substitutes, so
+                // no spelling promising to skip or drop the gap is offered.
+                Map.entry("skip_nan", "infill"),
+                Map.entry("nan_to_zero", "infill"),
+                Map.entry("fillna", "infill"),
+                Map.entry("coalesce", "infill")
             );
 
             if (suggestions.containsKey(funcName)) {

@@ -28,7 +28,7 @@ class ExpressionLanguageCrossSyncTest {
             "if", "min", "max", "sum", "mean",
             "abs", "sqrt", "sin", "cos", "tan", "asin", "acos", "atan",
             "exp", "ln", "log10", "log2", "ceil", "floor", "round", "sign",
-            "is_leap_year", "skip_nan",
+            "is_leap_year", "infill",
             "pow", "atan2", "clamp",
             "moving_sum", "moving_mean", "moving_min", "moving_max",
             "moving_annual_sum", "moving_annual_mean", "moving_annual_min", "moving_annual_max",
@@ -91,7 +91,7 @@ class ExpressionLanguageCrossSyncTest {
         assertEquals("reserved word", ExpressionLanguage.reservedTier("this"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("self"));
         assertEquals("builtin function", ExpressionLanguage.reservedTier("is_leap_year"));
-        assertEquals("builtin function", ExpressionLanguage.reservedTier("skip_nan"));
+        assertEquals("builtin function", ExpressionLanguage.reservedTier("infill"));
         assertEquals("calendar function", ExpressionLanguage.reservedTier("month_at"));
         assertEquals("calendar function", ExpressionLanguage.reservedTier("days_in_month_at"));
         assertNull(ExpressionLanguage.reservedTier("headroom"));

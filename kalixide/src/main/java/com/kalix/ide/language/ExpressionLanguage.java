@@ -121,7 +121,7 @@ public final class ExpressionLanguage {
             new Builtin("round", 1, "round(x)", "round to the nearest integer", false),
             new Builtin("sign", 1, "sign(x)", "-1, 0, or 1 by the sign of x", false),
             new Builtin("is_leap_year", 1, "is_leap_year(yyyy)", "1 in a Gregorian leap year, else 0", false),
-            new Builtin("skip_nan", 1, "skip_nan(x)", "NaN becomes 0 (sum/mean's identity); other values pass through", false),
+            new Builtin("infill", 2, "infill(x, value)", "value when x is a missing value (NaN), else x unchanged", false),
 
             // Two-argument math
             new Builtin("pow", 2, "pow(x, y)", "x raised to the power y", false),
