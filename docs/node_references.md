@@ -42,6 +42,25 @@ Most nodes produce a subset of these outputs:
 | `rain` | Precipitation input (mm) |
 | `evap` | Evapotranspiration (mm) |
 
+## Static Node Properties
+
+Some node properties are fixed for the whole simulation — the value declared
+in the `[node.*]` section itself, not something computed at each timestep.
+These read the same way, as `node.<name>.<property>`:
+
+| Property | Node types | Description |
+|----------|-------------|-------------|
+| `area` | GR4J, Sacramento | Catchment area [km2] — the declared `area` value |
+| `x` | Routing | Inflow bias used by the storage routing solver |
+| `typical_regulated_flow` | Routing | Representative regulated flow [ML] used to estimate travel time for order propagation |
+| `initial_volume` | Storage | Initial storage volume [ML] |
+
+Because these never change during a run, they don't support the offset syntax
+below — there is no history to look back into, the same restriction as
+`const.*` constants. They can be listed directly in `[outputs]` like any
+other result; the recorded series simply repeats the declared value at every
+timestep.
+
 ## Using Node References
 
 Reference another node's output in any dynamic expression:

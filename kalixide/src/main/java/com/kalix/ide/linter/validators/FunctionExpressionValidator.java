@@ -368,9 +368,11 @@ public class FunctionExpressionValidator {
     }
 
     /** Fields published per account (`acc.<account>.<field>`). Mirrors the
-     *  engine's ACCOUNT_SERIES_FIELDS (src/hydrology/accounts/account_manager.rs). */
+     *  engine's ACCOUNT_SERIES_FIELDS (src/hydrology/accounts/account_manager.rs).
+     *  `size` and `initial` are static (fixed at load, not per-step), but are
+     *  still valid field names here. */
     private static final java.util.Set<String> ACCOUNT_FIELDS =
-        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "use", "size");
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "use", "size", "initial");
 
     /** Fields published per account group: every account field is aggregated
      *  (summed) over the members, `size` and `use` included. Mirrors the

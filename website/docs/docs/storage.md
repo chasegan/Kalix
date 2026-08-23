@@ -63,6 +63,7 @@ ds_1 = my_other_node
 | volume | Volume of water in the storage at the end of the timestep [ML] |
 | level | Level of water in the storage at the end of the timestep [m] |
 | area | Area of the water surface at the end of the timestep [km2] |
+| initial\_volume | The declared `initial_volume` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
 
 ## How the node works
 

@@ -93,6 +93,37 @@ node.reservoir.volume - node.reservoir.volume[-1, 0.0]
 if(node.catchment.dsflow > node.catchment.dsflow[-1, 0.0], 1, 0)
 ```
 
+### Static Node Properties
+
+A handful of node properties are fixed for the whole simulation — the value
+declared in the `[node.*]` section itself, not something computed at each
+timestep. They read the same way, as `node.<name>.<property>`:
+
+| Property | Node types | Description |
+| --- | --- | --- |
+| `area` | GR4J, Sacramento | Catchment area [km2] |
+| `x` | Routing | Inflow bias used by the storage routing solver |
+| `typical_regulated_flow` | Routing | Representative regulated flow [ML] used to estimate travel time through the reach for order propagation (see [Ordering](ordering.md)) |
+| `initial_volume` | Storage | Initial storage volume [ML] |
+
+```
+[node.my_catchment]
+type = gr4j
+area = 250
+...
+
+[node.pump]
+type = unregulated_user
+; Scale demand by catchment area elsewhere in the model
+demand = 0.05 * node.my_catchment.area
+```
+
+Because the value never changes during a run, these don't support the
+[offset syntax](#temporal-offset-for-node-outputs) above — there is no history
+to look back into, the same restriction as [`const.*`](constants.md). They can
+be listed directly in [`[outputs]`](model-outputs.md) like any other result;
+the recorded series simply repeats the declared value at every timestep.
+
 ### Name Handling
 
 Node names follow the same sanitisation rules as data references:

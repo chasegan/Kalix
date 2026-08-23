@@ -12,4 +12,4 @@ pub mod model_input_swap;
 
 #[cfg(test)]
 pub mod pixie_io_example;
-mod ini_model_io_versions;
+pub(crate) mod ini_model_io_versions;

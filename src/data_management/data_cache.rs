@@ -92,14 +92,17 @@ pub struct DataCache {
     /// them. Public so flag-machinery unit tests can opt in explicitly.
     pub needs_calendar_flags: bool,
 
-    // Expression runtime state (program locals; stateful-builtin state).
-    // Slot ranges are allocated during expression lowering. Hot for models
-    // using programs or stateful functions; the Vec headers live here, the
-    // slots on the heap.
+    /// Expression runtime state (program locals; stateful-builtin state).
+    /// Slot ranges are allocated during expression lowering. Hot for models
+    /// using programs or stateful functions; the Vec headers live here, the
+    /// slots on the heap.
     pub expr_state: ExprStateArena,
 
-    // Constants cache
+    /// Constants cache
     pub constants: ConstantsCache,
+
+    /// Static properties cache - internal index for expression resolution
+    pub static_properties: ConstantsCache,
 
     // --- Cold from here down: touched at load/initialise, not per step ---
 
@@ -112,12 +115,12 @@ pub struct DataCache {
     /// is O(1) instead of a linear scan over every series name.
     name_lookup: FxHashMap<String, usize>,
 
-    // Named lookup tables ([table.*] sections), resolved by expressions at
-    // model load. Arc-shared, so cloning the cache is cheap.
+    /// Named lookup tables ([table.*] sections), resolved by expressions at
+    /// model load. Arc-shared, so cloning the cache is cheap.
     pub tables: TableRegistry,
 
-    // User-defined functions ([fn] section), inlined into expressions at
-    // lowering. Arc-shared defs, so cloning the cache is cheap.
+    /// User-defined functions ([fn] section), inlined into expressions at
+    /// lowering. Arc-shared defs, so cloning the cache is cheap.
     pub fns: crate::functions::fn_registry::FnRegistry,
 }
 

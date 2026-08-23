@@ -72,7 +72,8 @@
         "runoff_depth",
         "dsflow",
         "ds_1",
-        "ds_1_order"
+        "ds_1_order",
+        "area"
       ],
       "required_params": [
         "type",
@@ -175,7 +176,8 @@
         "roimp",
         "flosf",
         "flobf",
-        "floin"
+        "floin",
+        "area"
       ],
       "required_params": [
         "type",
@@ -384,7 +386,8 @@
         "seep_vol",
         "evap_vol",
         "pond_demand",
-        "exists"
+        "exists",
+        "initial_volume"
       ],
       "required_params": [
         "type",
@@ -511,7 +514,9 @@
         "dsflow",
         "volume",
         "ds_1",
-        "ds_1_order"
+        "ds_1_order",
+        "x",
+        "typical_regulated_flow"
       ],
       "required_params": [
         "type",
