@@ -1593,7 +1593,11 @@ public class FunctionExpressionValidator {
                 Map.entry("running_sum", "moving_sum"),
                 Map.entry("rolling_mean", "moving_mean"),
                 Map.entry("rolling_sum", "moving_sum"),
-                Map.entry("days_since", "steps_since")
+                Map.entry("days_since", "steps_since"),
+                // Sample-and-hold is 'latch': one short verb, no aliases.
+                Map.entry("sample_hold", "latch"),
+                Map.entry("sample_and_hold", "latch"),
+                Map.entry("hold", "latch")
             );
 
             if (suggestions.containsKey(funcName)) {

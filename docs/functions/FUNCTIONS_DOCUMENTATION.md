@@ -218,16 +218,31 @@ constant), because the water-year month varies from valley to valley.
 
 ### Sample and hold — `latch`
 
-`latch(x, condition)`
+`latch(x, condition, init)`
 
 Takes and returns the value of `x` on this time step if `condition` is truthy,
-and returns the previously sampled value of `x` otherwise. The latch is
-initialised with value 0.0, and holds this value until `condition` first fires.
+and returns the previously sampled value of `x` otherwise. Until `condition`
+first fires the latch holds `init`, which must be a literal — the state is
+written at model load, exactly as a moving window's element default is.
 
 ```ini
 # Recompute the seasonal allocation at the start of the water year, then
 # hold it for the rest of the year.
-allocation = latch(fn.calculate_allocation(), var.ras.is_startwy)
+allocation = latch(fn.calculate_allocation(), var.ras.is_startwy, const.opening_allocation)
+```
+
+The run start is deliberately **not** an implicit sample — unlike the `*_since`
+family, which treats it as an implicit reset. A run that begins mid-water-year
+therefore holds `init` until the next 1 July, so `init` is worth stating
+honestly: a known opening figure where the model has one, and `0` only when
+zero is genuinely the right answer before the first sample.
+
+To seed the hold from the data instead, widen the condition so it also fires on
+the first step of the run. The step-0 sample lands before the first read, which
+makes the init unobservable:
+
+```ini
+allocation = latch(fn.calculate_allocation(), var.ras.is_startwy || sim.step == 0, 0)
 ```
 
 This is equivalent in output to:
@@ -242,6 +257,12 @@ definition, so `allocation = 2 * latch(...)` and `allocation = 2 * if(...)`
 part ways. And the two differ inside an untaken `if` branch: `latch` samples
 regardless, per the unconditional-advance rule above, where the spelled-out
 `if` short-circuits and does not.
+
+A held latch does not evaluate `x` at all, so
+`latch(fn.expensive(), is_startwy, 0)` costs one evaluation a year rather than
+365. That is an evaluation optimisation only: stateful functions nested inside
+`x` still advance on every step, so what the latch holds never depends on when
+it happened to fire.
 
 ### Calendar boundary flags
 
@@ -340,7 +361,7 @@ net_flow = min(
 | `max_since` | 2 | Maximum of x since reset |
 | `count_since` | 2 | Steps on which cond held since reset: count_since(cond, reset) |
 | `steps_since` | 1 | Steps elapsed since reset (0 on a reset step) |
-| `latch` | 2 | Sample x when condition holds, else hold the last sample: latch(x, condition) |
+| `latch` | 3 | Sample x when condition holds, else hold the last sample: latch(x, condition, init) |
 
 Two names are deliberately absent. There is no `log`: write the explicit
 `ln` or `log10`. And there is no `avg` or `average`: the function is `mean`,

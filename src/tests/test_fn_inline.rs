@@ -361,6 +361,28 @@ fn test_fn_inside_untaken_if_branch_still_advances() {
         "step 2 must reflect full history, not a window that started at step 2");
 }
 
+/// C17b. The same rule for a latch: the statement-level (`OptStmt::Cond`)
+/// untaken-side advance is gated on arena growth during lowering, not on a
+/// list of function names, so a latch inside an inlined branch is covered by
+/// construction. `if(sim.step >= 3, fn.held(data.x), -1)` with
+/// `held(a) = latch(a, sim.step == 1, -99)`: the sampling step is 1, while the
+/// branch is untaken, yet step 3 reads that sample rather than the init or
+/// x(3). Note the latch samples from the hidden argument binding, so this also
+/// pins that the untaken side's assignments really run.
+#[test]
+fn test_fn_with_latch_inside_untaken_if_branch_still_advances() {
+    let mut dc = cache_with_x(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+    dc.fns.parse_and_insert("held(a)", "latch(a, sim.step == 1, -99)").unwrap();
+    let input = DynamicInput::from_string(
+        "if(sim.step >= 3, fn.held(data.x), -1)", &mut dc, true, None)
+        .expect("fn with a latch inside an if branch should lower");
+    let got = run_steps(&input, &mut dc, 5);
+    assert_series(&got, &[-1.0, -1.0, -1.0, 2.0, 2.0], "latch fn in untaken if");
+    assert_eq!(got[3], 2.0,
+        "step 3 must read the step-1 sample taken while the branch was untaken, \
+         not the -99 init and not x(3)");
+}
+
 /// C18. A `fn` whose body asserts, called in a model: the assert fires mid-run
 /// and the run error names the function (the panic message carries the
 /// `fn.<name>:` prefix the inliner prepends to the assert's source text).
