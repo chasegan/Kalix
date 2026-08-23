@@ -33,6 +33,29 @@ const DS_4_OUTLET: u8 = 3; //ds_4 is outlet 3
 /// * `ini_doc` - The parsed INI document
 /// * `working_directory` - Optional working directory for resolving relative paths.
 ///   If None, uses the current working directory.
+/// The (node type, property) pairs whose declared value is registered into
+/// `DataCache::static_properties` at load, making them readable from any
+/// expression as `node.<name>.<property>`. Single source of truth: the load
+/// pre-pass reads this, and nothing else registers node static properties.
+///
+/// **Every entry here must name a property the optimiser cannot change.**
+/// These values are captured once, from the INI text, and never refreshed —
+/// so a property that is also an optimisable parameter would keep reporting
+/// its declared value while the run used a candidate value instead, silently.
+/// `static_properties_are_disjoint_from_optimisable_params` in
+/// `src/tests/test_static_properties.rs` holds the two lists apart.
+///
+/// Lifting that restriction means refreshing the cache when parameters change
+/// (run start, and after each optimiser candidate is applied) rather than
+/// filling it at load — see that test for the note.
+pub(crate) const NODE_STATIC_F64_PROPERTIES: &[(&str, &str)] = &[
+    ("gr4j", "area"),
+    ("sacramento", "area"),
+    ("routing", "x"),
+    ("routing", "typical_regulated_flow"),
+    ("storage", "initial_volume"),
+];
+
 pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, KalixIoError> {
 
     // Create a new model
@@ -206,13 +229,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // Malformed values are left alone here (silently skipped) rather than
     // reported - the main loop's existing per-property validation reports
     // them properly, with its usual line-numbered error, once it gets there.
-    const NODE_STATIC_F64_PROPERTIES: &[(&str, &str)] = &[
-        ("gr4j", "area"),
-        ("sacramento", "area"),
-        ("routing", "x"),
-        ("routing", "typical_regulated_flow"),
-        ("storage", "initial_volume"),
-    ];
     for (section_name, ini_section) in &ini_doc.sections {
         let Some(node_name) = section_name.strip_prefix("node.") else { continue };
         let Some(node_type) = ini_section.properties.get("type").map(|p| p.value.trim().to_lowercase()) else { continue };

@@ -751,6 +751,16 @@ impl OptimizedExpressionNode {
                     return Err(format!("Offset syntax not supported for self references: {}", name));
                 }
 
+                // Static properties are the declared value, fixed for the whole
+                // run — there is no series behind them to offset into. Checked
+                // before the forward-lookup guard below so a static property
+                // gets this message whichever direction the offset points.
+                if static_variable_map.contains_key(&lower_name) {
+                    return Err(format!(
+                        "Offset syntax not supported for static properties: {} \
+                         (the declared value is fixed for the whole run)", name));
+                }
+
                 // Node outputs and var values cannot look forward - future values
                 // have not been computed
                 if (lower_name.starts_with("node.") || lower_name.starts_with("var.")) && *offset > 0 {
@@ -1483,6 +1493,16 @@ impl DynamicInput {
             // self reads the account's live state — there is no history to offset into
             if lower_var.starts_with("self.") {
                 return Err(format!("Offset syntax not supported for self references: {}", var_name));
+            }
+
+            // Static properties are the declared value, fixed for the whole run
+            // — no series behind them to offset into. Mirrors the identical
+            // guard in from_expression_node's VariableWithOffset arm; both
+            // paths reach offsets, so both must reject statics the same way.
+            if static_variable_map.contains_key(&lower_var) {
+                return Err(format!(
+                    "Offset syntax not supported for static properties: {} \
+                     (the declared value is fixed for the whole run)", var_name));
             }
 
             // Node outputs and var values cannot look forward
