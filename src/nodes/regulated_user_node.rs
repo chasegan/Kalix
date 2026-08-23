@@ -163,6 +163,9 @@ impl Node for RegulatedUserNode {
                     excess -= debit;
                 }
             }
+        } else {
+            // Ensure non-negativity of orders
+            self.order_value = self.order_value.max(0.0);
         }
 
         // TODO: is this where things are supposed to happen?
