@@ -47,12 +47,32 @@ below are not a licence to mangle cold code (§5).
    single line looks hot.
 4. **Lay data out for the cache.** Sequential access over contiguous arrays beats
    chasing pointers through maps, linked structures, and boxed objects. The cache
-   miss, not the instruction count, is usually what costs you. Cold configuration
-   goes at the tail of hot structs: inserting fields above per-step state has
-   twice been a measured ~3% simulation regression (DataCache registries,
-   July 2026; ConfluenceNode `regulated` config, August 2026) — both times with
-   no hot-path code change at all, the cost being purely the shifted field
-   offsets.
+   miss, not the instruction count, is usually what costs you.
+
+   **Do not reason about layout from declaration order.** A `repr(Rust)`
+   struct's declaration order is not its memory order — rustc reorders fields
+   freely — so putting a field "at the tail" of a struct does not put it at the
+   tail in memory. And a struct inside an enum cannot move that enum's stride,
+   which is set by its largest variant. If you need declaration order to be
+   memory order, say `#[repr(C)]` and accept its padding; otherwise you do not
+   control it. Measure instead: `size_of`, `offset_of`, and a benchmark model
+   shaped like the workload that showed the effect (`regression_tests/speed/`).
+
+   *Retracted, 2026-08: this clause previously prescribed "cold configuration
+   goes at the tail of hot structs", citing two ~3% regressions from field
+   layout alone (DataCache registries, July 2026; ConfluenceNode `regulated`
+   config, August 2026). That explanation is not plausible. In `ConfluenceNode`,
+   `regulated_upstream` — declared last, beneath a comment asserting it was
+   deliberately at the tail — sits at offset 248 of 624; and `NodeEnum`'s stride
+   is 3880 bytes, set by a far larger variant, so growing `ConfluenceNode` from
+   472 to 624 bytes left the array the simulation loop walks byte-identical and
+   measured as no change on a 110-node, ten-confluence model. Whether the
+   original measurements were noise, a real effect with a different mechanism,
+   or a real effect since erased is unresolved, and deliberately left for a
+   future performance pass now that `5_ordering_confluences` exists to test
+   against. This clause claims only what is measured: layout matters, and the
+   mechanism is rarely the one you would guess.*
+
 5. **Do each piece of work at the coldest place it can live.** Resolution,
    validation, allocation, and branch decisions belong at setup / `initialise` time,
    not inside the loop. Work done once is work the loop never pays for again.
@@ -103,7 +123,8 @@ accept a slower option.*
 
 ---
 
-*Enforcement: `benchmarks/` for verification, plus review. The hot/cold distinction
-(§2) is the load-bearing judgement — most rules here are facts about the machine,
-not preferences. §6 is Advisory: held by review and by citing it when a trade is
+*Enforcement: `benchmarks/` and `regression_tests/speed/` for verification, plus
+review. The hot/cold distinction (§2) is the load-bearing judgement — most rules
+here are facts about the machine, not preferences. §3.4's layout guidance and §6
+are Advisory: held by review, by measurement, and by citing them when a trade is
 proposed.*

@@ -61,10 +61,13 @@ pub struct ConfluenceNode {
     recorder_idx_harmony_fraction: Option<usize>,
     recorder_idx_expected_inflow: Option<usize>,
 
-    // --- Cold configuration, deliberately at the tail: inserting fields
-    // above shifts the hot flow/order state and was a measured ~3%
-    // simulation regression on Proserpine (2026-08; same lesson as the
-    // DataCache field-order note).
+    // --- Cold configuration, grouped last for readability. Note this does
+    // NOT control memory layout: rustc reorders repr(Rust) fields, and
+    // regulated_upstream in fact lands mid-struct. A ~3% Proserpine
+    // regression was once attributed to declaration order here; that
+    // explanation did not survive re-measurement (per performance §3.4,
+    // retracted 2026-08). Group these here because they read better
+    // together, not because it buys anything at run time.
     /// Named regulated ordering pathway(s) — the `regulated =` property, as
     /// written (upstream node names, order preserved). Resolved to links and
     /// an OrderSplit by the ordering system's initialise; empty = legacy
