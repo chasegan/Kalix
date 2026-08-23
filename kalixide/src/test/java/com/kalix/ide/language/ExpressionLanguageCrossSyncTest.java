@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ExpressionLanguageCrossSyncTest {
 
-    /** Engine-drift pin: 25 pure builtins + 9 stateful builtins + 2 calendar functions. */
+    /** Engine-drift pin: 25 pure builtins + 10 stateful builtins + 2 calendar functions. */
     private static final Set<String> EXPECTED_FUNCTION_NAMES = Set.of(
             "if", "min", "max", "sum", "mean",
             "abs", "sqrt", "sin", "cos", "tan", "asin", "acos", "atan",
@@ -32,11 +32,13 @@ class ExpressionLanguageCrossSyncTest {
             "pow", "atan2", "clamp",
             "moving_sum", "moving_mean", "moving_min", "moving_max",
             "sum_since", "min_since", "max_since", "count_since", "steps_since",
+            "latch",
             "month_at", "days_in_month_at");
 
     private static final Set<String> EXPECTED_STATEFUL_NAMES = Set.of(
             "moving_sum", "moving_mean", "moving_min", "moving_max",
-            "sum_since", "min_since", "max_since", "count_since", "steps_since");
+            "sum_since", "min_since", "max_since", "count_since", "steps_since",
+            "latch");
 
     private static final Set<String> EXPECTED_SIM_VARIABLES = Set.of(
             "sim.year", "sim.month", "sim.day", "sim.day_of_year", "sim.step",
@@ -49,7 +51,7 @@ class ExpressionLanguageCrossSyncTest {
         assertEquals(EXPECTED_FUNCTION_NAMES, ExpressionLanguage.functionNames());
         assertEquals(EXPECTED_FUNCTION_NAMES, ExpressionLanguage.functionArities().keySet());
         assertEquals(EXPECTED_SIM_VARIABLES, ExpressionLanguage.simVariableNames());
-        assertEquals(36, ExpressionLanguage.BUILTINS.size());
+        assertEquals(37, ExpressionLanguage.BUILTINS.size());
         assertEquals(11, ExpressionLanguage.SIM_VARIABLES.size());
     }
 
@@ -77,6 +79,7 @@ class ExpressionLanguageCrossSyncTest {
         assertEquals("builtin function", ExpressionLanguage.reservedTier("clamp"));
         assertEquals("stateful function", ExpressionLanguage.reservedTier("moving_mean"));
         assertEquals("stateful function", ExpressionLanguage.reservedTier("steps_since"));
+        assertEquals("stateful function", ExpressionLanguage.reservedTier("latch"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("assert"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("this"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("self"));
