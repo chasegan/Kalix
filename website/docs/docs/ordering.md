@@ -293,7 +293,6 @@ The volume required to be released from the dam then takes on the following saw-
 ### TODO
 
 - Confluences
-  - Expected inflow (sum of all unregulated paths?)
   - Regulated streams (2 at most)
   - Harmony fraction
   - Lag

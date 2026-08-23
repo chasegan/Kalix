@@ -408,8 +408,8 @@ impl SimpleNodewiseOrderingSystem {
                             node.harmony_fraction.get_value(data_cache).clamp(0.0, 1.0),
                     };
                     node.harmony_fraction_value = link_1_harmony;
-                    let link_1_order = link_1_harmony * node.dsorders[0];
-                    let link_2_order = (1.0 - link_1_harmony) * node.dsorders[0];
+                    let link_1_order = link_1_harmony * node.total_outgoing_order;
+                    let link_2_order = (1.0 - link_1_harmony) * node.total_outgoing_order;
 
                     // Propagate orders upstream
                     for il in incoming {
