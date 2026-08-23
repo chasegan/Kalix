@@ -144,7 +144,7 @@ impl Node for ConfluenceNode {
             - expected_inflow_value_on_delivery_timestep
         ).max(0f64);
 
-        // Refer to simple_nodewise_ordering.rs for order propagation logic. 
+        // Refer to simple_nodewise_ordering.rs for order propagation logic.
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
