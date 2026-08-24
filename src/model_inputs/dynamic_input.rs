@@ -1042,11 +1042,12 @@ fn advance_ring(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize
 /// Advance a moving_min/max monotonic deque by one step. Amortised O(1):
 /// every element is pushed and popped at most once.
 ///
-/// Layout: 
-/// - values in f[f_off..f_off+n+1]; 
+/// Layout:
+/// - values in f[f_off..f_off+n+1];
 /// - expiry steps in u[u_off..u_off+n+1];
-/// - head index at u[u_off+n+1]; 
-/// - length at u[u_off+n+2]. 
+/// - head index at u[u_off+n+1];
+/// - length at u[u_off+n+2].
+///
 /// Entries are stored circularly; an element sampled at step s expires after step s + n - 1. NaN
 /// inputs are skipped entirely: the window min/max suppress NaN exactly as the min/max builtins do,
 /// and an empty deque (all real values NaN) reads as NaN at evaluation.
@@ -1060,6 +1061,10 @@ fn advance_deque(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usiz
 /// tick at which the pushed value is still inside the window. They differ by
 /// more than `n - 1` only for the calendar families, whose pushed value
 /// belongs to the bucket that just *closed*, not to the tick being processed.
+// 8 args by design: the split clock (now/expiry) is this variant's whole
+// reason to exist, and both call sites pass plain locals — a params struct
+// would only re-bundle what they immediately unbundle.
+#[allow(clippy::too_many_arguments)]
 fn advance_deque_at(
     data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize,
     x: f64, is_min: bool, now: usize, expiry: usize,
