@@ -1371,30 +1371,31 @@ public class FunctionExpressionValidator {
                 }
             }
 
-            // moving_annual_*(x, wy_month, n_years): wy_month must be a
-            // load-time literal integer in [1, 12]; n_years must be a
-            // load-time literal positive integer — mirrors the engine's
-            // lower_stateful_call validation for the annual family.
+            // moving_*_years(x, n, wy_month): argument order mirrors
+            // moving_*(x, n, default) — the window length is always the 2nd
+            // argument. n must be a load-time literal positive integer;
+            // wy_month a load-time literal integer in [1, 12]. Mirrors the
+            // engine's lower_stateful_call validation.
             if (ExpressionLanguage.isAnnualWindowFunction(funcName) && argCount == 3) {
-                Double wyMonth = argLiterals.get(1);
-                if (wyMonth == null) {
-                    errors.add(funcName + "'s water year month (2nd argument) must be a constant"
-                            + " — state is sized at model load");
-                } else if (wyMonth != Math.floor(wyMonth) || wyMonth < 1 || wyMonth > 12) {
-                    errors.add(funcName + "'s water year month (2nd argument) must be a positive"
-                            + " integer between 1 and 12, but got " + trimNumber(wyMonth));
-                }
-                Double nYears = argLiterals.get(2);
+                Double nYears = argLiterals.get(1);
                 if (nYears == null) {
-                    errors.add(funcName + "'s number of years (3rd argument) must be a constant"
+                    errors.add(funcName + "'s window length (2nd argument) must be a constant"
                             + " — state is sized at model load");
                 } else if (nYears != Math.floor(nYears) || nYears < 1) {
-                    errors.add(funcName + "'s window length (3rd argument) must be a positive"
+                    errors.add(funcName + "'s window length (2nd argument) must be a positive"
                             + " integer, but got " + trimNumber(nYears));
+                }
+                Double wyMonth = argLiterals.get(2);
+                if (wyMonth == null) {
+                    errors.add(funcName + "'s water year month (3rd argument) must be a constant"
+                            + " — state is sized at model load");
+                } else if (wyMonth != Math.floor(wyMonth) || wyMonth < 1 || wyMonth > 12) {
+                    errors.add(funcName + "'s water year month (3rd argument) must be an"
+                            + " integer between 1 and 12, but got " + trimNumber(wyMonth));
                 }
             }
 
-            // moving_monthly_*/moving_daily_*(x, n): n must be a load-time
+            // moving_*_months / moving_*_days (x, n): n must be a load-time
             // literal positive integer — same rule as n_years above, minus
             // the wy_month check (no anchor for these two families).
             if (ExpressionLanguage.isPeriodicWindowFunction(funcName) && argCount == 2) {

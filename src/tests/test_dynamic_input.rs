@@ -1648,22 +1648,22 @@ fn test_infill_wrong_arity_errors_at_load() {
 /// suppress NaN, sum would poison on it, so infill(x, 0) lets one NaN-gated
 /// signal feed both without writing two different gates.
 #[test]
-fn test_infill_composes_with_annual_sum_matching_annual_max_gating() {
+fn test_infill_composes_with_year_sum_matching_year_max_gating() {
     let n_days = 800;
     let values: Vec<f64> = (0..n_days)
         .map(|i| if i % 3 == 0 { (i % 7) as f64 } else { f64::NAN })
         .collect();
     let mut data_cache = cache_with_x(&values);
     let sum = crate::model_inputs::DynamicInput::from_string(
-        "moving_annual_sum(infill(data.x, 0), 1, 2)", &mut data_cache, true, None).unwrap();
+        "moving_sum_years(infill(data.x, 0), 2, 1)", &mut data_cache, true, None).unwrap();
     let max = crate::model_inputs::DynamicInput::from_string(
-        "moving_annual_max(data.x, 1, 2)", &mut data_cache, true, None).unwrap();
+        "moving_max_years(data.x, 2, 1)", &mut data_cache, true, None).unwrap();
     for k in 0..n_days {
         data_cache.set_current_step(k);
         let s = sum.get_value(&mut data_cache);
         let m = max.get_value(&mut data_cache);
-        assert!(s.is_finite(), "moving_annual_sum(infill(...)) went NaN at step {}", k);
-        assert!(m.is_finite() || k == 0, "moving_annual_max went NaN at step {}", k);
+        assert!(s.is_finite(), "moving_sum_years(infill(...)) went NaN at step {}", k);
+        assert!(m.is_finite() || k == 0, "moving_max_years went NaN at step {}", k);
     }
 }
 

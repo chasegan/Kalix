@@ -166,7 +166,7 @@ test it.
   forever — on evicting a NaN, recompute the running sum from the buffer;
   this is a cold event, gate it with `evicted.is_nan()`). Add a regression
   test for a NaN transient.
-- **Ring-of-buckets** (`moving_annual_*`/`moving_monthly_*`/`moving_daily_*`,
+- **Ring-of-buckets** (`moving_*_years`/`moving_*_months`/`moving_*_days`,
   `WindowOp::{Sum,Mean,Min,Max}{Annual,Monthly,Daily}` in
   `dynamic_input.rs`): same two-region shape as the plain ring above —
   `f[f_off..f_off+n]` one slot per bucket (water year/month/day) +
@@ -196,9 +196,9 @@ test it.
     families: annual is `is_new_month() && get_timestamp_month() ==
     wy_month`; monthly is `is_new_month()` alone (no anchor); daily is
     `is_new_day()` alone. At a daily timestep `is_new_day()` is true every
-    step, so `moving_daily_*` degenerates to exactly the plain ring/deque
+    step, so `moving_*_days` degenerates to exactly the plain ring/deque
     above with no element default — this is deliberately used as a
-    regression test (`test_moving_daily_sum_mean_equal_plain_moving_at_daily_timestep`
+    regression test (`test_moving_sum_days_mean_equal_plain_moving_at_daily_timestep`
     in `test_stateful_functions.rs`), cross-checking the new machinery
     against the already-trusted one on identical input.
   - `uses_calendar_flags` must report `true` for every `*Annual`/`*Monthly`/

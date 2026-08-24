@@ -602,92 +602,89 @@ class FunctionExpressionValidatorTest {
         assertValid("steps_since(data.flag)");
     }
 
-    // ============ moving_annual_* literal wy_month/n_years rule ============
+    // ============ moving_*_years literal n/wy_month rule ============
 
     @Test
-    @DisplayName("moving_annual_* accepts a bare wy_month in [1,12] and a bare positive n_years")
-    void testMovingAnnualLiteralArgsAccepted() {
-        assertValid("moving_annual_sum(data.x, 7, 5)");
-        assertValid("moving_annual_mean(data.x, 1, 1)");
-        assertValid("moving_annual_min(data.x, 12, 3)");
-        assertValid("moving_annual_max(data.x, 6, 10)");
+    @DisplayName("moving_*_years accepts a bare positive n and a bare wy_month in [1,12]")
+    void testMovingYearsLiteralArgsAccepted() {
+        assertValid("moving_sum_years(data.x, 5, 7)");
+        assertValid("moving_min_years(data.x, 3, 12)");
+        assertValid("moving_max_years(data.x, 10, 6)");
     }
 
     @Test
-    @DisplayName("moving_annual_* rejects a non-literal wy_month (state is sized at model load)")
-    void testMovingAnnualNonLiteralWyMonthRejected() {
-        assertInvalid("moving_annual_sum(data.q, data.month, 3)",
-                "water year month (2nd argument) must be a constant");
-        assertInvalid("moving_annual_sum(data.q, const.m, 3)",
-                "water year month (2nd argument) must be a constant");
+    @DisplayName("moving_*_years rejects a non-literal window length (state is sized at model load)")
+    void testMovingYearsNonLiteralNRejected() {
+        assertInvalid("moving_sum_years(data.q, data.n, 7)",
+                "window length (2nd argument) must be a constant");
+        assertInvalid("moving_sum_years(data.q, const.n, 7)",
+                "window length (2nd argument) must be a constant");
     }
 
     @Test
-    @DisplayName("moving_annual_* rejects a wy_month outside [1,12], including non-integers")
-    void testMovingAnnualWyMonthRangeRejected() {
-        assertInvalid("moving_annual_sum(data.q, 0, 3)", "water year month (2nd argument) must be a positive integer between 1 and 12");
-        assertInvalid("moving_annual_sum(data.q, 13, 3)", "water year month (2nd argument) must be a positive integer between 1 and 12");
-        assertInvalid("moving_annual_sum(data.q, 6.5, 3)", "water year month (2nd argument) must be a positive integer between 1 and 12");
+    @DisplayName("moving_*_years rejects a non-positive-integer window length")
+    void testMovingYearsNRejected() {
+        assertInvalid("moving_sum_years(data.q, 0, 7)", "window length (2nd argument) must be a positive integer");
+        assertInvalid("moving_sum_years(data.q, 2.5, 7)", "window length (2nd argument) must be a positive integer");
+        assertInvalid("moving_sum_years(data.q, -1, 7)", "positive integer");
     }
 
     @Test
-    @DisplayName("moving_annual_* rejects a non-literal or non-positive-integer n_years")
-    void testMovingAnnualNYearsRejected() {
-        assertInvalid("moving_annual_sum(data.q, 7, data.n)",
-                "number of years (3rd argument) must be a constant");
-        assertInvalid("moving_annual_sum(data.q, 7, 0)", "window length (3rd argument) must be a positive integer");
-        assertInvalid("moving_annual_sum(data.q, 7, 2.5)", "window length (3rd argument) must be a positive integer");
+    @DisplayName("moving_*_years rejects a wy_month that is non-literal or outside [1,12]")
+    void testMovingYearsWyMonthRejected() {
+        assertInvalid("moving_sum_years(data.q, 3, data.month)",
+                "water year month (3rd argument) must be a constant");
+        assertInvalid("moving_sum_years(data.q, 3, 0)", "water year month (3rd argument) must be an integer between 1 and 12");
+        assertInvalid("moving_sum_years(data.q, 3, 13)", "water year month (3rd argument) must be an integer between 1 and 12");
+        assertInvalid("moving_sum_years(data.q, 3, 6.5)", "water year month (3rd argument) must be an integer between 1 and 12");
     }
 
     @Test
-    @DisplayName("moving_annual_* is a distinct validation family from the fixed-window moving_* rule")
-    void testMovingAnnualNotConflatedWithFixedWindow() {
-        // wy_month=7 is a valid fixed-window default (any constant), and
-        // n_years is checked as a positive integer, not "any constant" —
-        // the two families must not share the fixed-window's rule.
-        assertValid("moving_annual_sum(data.q, 7, 3)");
-        assertInvalid("moving_annual_sum(data.q, 7, -1)", "positive integer");
+    @DisplayName("moving_*_years is a distinct validation family from the fixed-window moving_* rule")
+    void testMovingYearsNotConflatedWithFixedWindow() {
+        // The fixed-window family allows any constant in slot 3 (the element
+        // default); this family requires a month in [1,12] there.
+        assertValid("moving_sum(data.q, 3, 7)");
+        assertInvalid("moving_sum_years(data.q, 3, 99)", "between 1 and 12");
     }
 
-    // ============ moving_monthly_*/moving_daily_* literal n rule ============
+    // ============ moving_*_months / moving_*_days literal n rule ============
 
     @Test
-    @DisplayName("moving_monthly_*/moving_daily_* accept a bare positive-integer n")
+    @DisplayName("moving_*_months / moving_*_days accept a bare positive-integer n")
     void testMovingPeriodicLiteralArgsAccepted() {
-        assertValid("moving_monthly_sum(data.x, 3)");
-        assertValid("moving_monthly_mean(data.x, 1)");
-        assertValid("moving_monthly_min(data.x, 12)");
-        assertValid("moving_monthly_max(data.x, 6)");
-        assertValid("moving_daily_sum(data.x, 3)");
-        assertValid("moving_daily_mean(data.x, 1)");
-        assertValid("moving_daily_min(data.x, 12)");
-        assertValid("moving_daily_max(data.x, 6)");
+        assertValid("moving_sum_months(data.x, 3)");
+        assertValid("moving_min_months(data.x, 12)");
+        assertValid("moving_max_months(data.x, 6)");
+        assertValid("moving_sum_days(data.x, 3)");
+        assertValid("moving_min_days(data.x, 12)");
+        assertValid("moving_max_days(data.x, 6)");
     }
 
     @Test
-    @DisplayName("moving_monthly_*/moving_daily_* reject a non-literal n (state is sized at model load)")
+    @DisplayName("moving_*_months / moving_*_days reject a non-literal n (state is sized at model load)")
     void testMovingPeriodicNonLiteralNRejected() {
-        assertInvalid("moving_monthly_sum(data.q, data.n)", "window length (2nd argument) must be a constant");
-        assertInvalid("moving_monthly_sum(data.q, const.n)", "window length (2nd argument) must be a constant");
-        assertInvalid("moving_daily_sum(data.q, data.n)", "window length (2nd argument) must be a constant");
+        assertInvalid("moving_sum_months(data.q, data.n)", "window length (2nd argument) must be a constant");
+        assertInvalid("moving_sum_months(data.q, const.n)", "window length (2nd argument) must be a constant");
+        assertInvalid("moving_sum_days(data.q, data.n)", "window length (2nd argument) must be a constant");
     }
 
     @Test
-    @DisplayName("moving_monthly_*/moving_daily_* reject a non-positive-integer literal n")
+    @DisplayName("moving_*_months / moving_*_days reject a non-positive-integer literal n")
     void testMovingPeriodicNonIntegerNRejected() {
-        assertInvalid("moving_monthly_sum(data.q, 2.5)", "positive integer");
-        assertInvalid("moving_monthly_sum(data.q, 0)", "positive integer");
-        assertInvalid("moving_daily_sum(data.q, 2.5)", "positive integer");
-        assertInvalid("moving_daily_sum(data.q, 0)", "positive integer");
+        assertInvalid("moving_sum_months(data.q, 2.5)", "positive integer");
+        assertInvalid("moving_sum_months(data.q, 0)", "positive integer");
+        assertInvalid("moving_sum_days(data.q, 2.5)", "positive integer");
+        assertInvalid("moving_sum_days(data.q, 0)", "positive integer");
     }
 
     @Test
-    @DisplayName("moving_monthly_*/moving_daily_* take no wy_month and are a distinct family from moving_annual_*")
+    @DisplayName("moving_*_months / moving_*_days take no wy_month and are a distinct family from moving_*_years")
     void testMovingPeriodicNotConflatedWithAnnual() {
         // Only 2 arguments — a 3rd argument is a genuine arity error, not a
         // wy_month/n_years pair.
-        assertInvalid("moving_monthly_sum(data.q, 6, 3)", "expects 2 argument");
-        assertInvalid("moving_daily_sum(data.q, 6, 3)", "expects 2 argument");
+        assertInvalid("moving_sum_months(data.q, 6, 3)", "expects 2 argument");
+        assertInvalid("moving_sum_days(data.q, 6, 3)", "expects 2 argument");
     }
 
     // ============ fn arity consistency (finding #4) ============

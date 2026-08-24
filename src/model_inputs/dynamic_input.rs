@@ -346,21 +346,18 @@ pub enum WindowOp {
     Mean,
     Min,
     Max,
-    // Annual (water year) operations
-    SumAnnual  { wy_month: u32 },
-    MeanAnnual { wy_month: u32 },
-    MinAnnual  { wy_month: u32 },
-    MaxAnnual  { wy_month: u32 },
-    // Monthly operations
-    SumMonthly,
-    MeanMonthly,
-    MinMonthly,
-    MaxMonthly,
-    // Daily operations
-    SumDaily,
-    MeanDaily,
-    MinDaily,
-    MaxDaily,
+    // Window measured in whole water years, anchored at wy_month
+    SumYears { wy_month: u32 },
+    MinYears { wy_month: u32 },
+    MaxYears { wy_month: u32 },
+    // Window measured in whole calendar months
+    SumMonths,
+    MinMonths,
+    MaxMonths,
+    // Window measured in whole calendar days
+    SumDays,
+    MinDays,
+    MaxDays,
 }
 
 /// Arena addressing for one moving-window instance, boxed off the
@@ -499,17 +496,13 @@ impl OptimizedExpressionNode {
                     let len = data_cache.expr_state.u[slots.u_off + slots.n + 2];
                     if len == 0 { f64::NAN } else { data_cache.expr_state.f[slots.f_off + head] }
                 }
-                WindowOp::SumAnnual { .. } | WindowOp::SumMonthly | WindowOp::SumDaily => {
+                WindowOp::SumYears { .. } | WindowOp::SumMonths | WindowOp::SumDays => {
                     let sum_slot = slots.f_off + slots.n;
                     data_cache.expr_state.f[sum_slot]
                 }
-                WindowOp::MeanAnnual { .. } | WindowOp::MeanMonthly | WindowOp::MeanDaily => {
-                    let sum_slot = slots.f_off + slots.n;
-                    data_cache.expr_state.f[sum_slot] / slots.n as f64
-                }
-                WindowOp::MinAnnual { .. } | WindowOp::MaxAnnual { .. }
-                | WindowOp::MinMonthly | WindowOp::MaxMonthly
-                | WindowOp::MinDaily | WindowOp::MaxDaily => {
+                WindowOp::MinYears { .. } | WindowOp::MaxYears { .. }
+                | WindowOp::MinMonths | WindowOp::MaxMonths
+                | WindowOp::MinDays | WindowOp::MaxDays => {
                     let stat_slot = slots.f_off + slots.n;
                     data_cache.expr_state.f[stat_slot]
                 }
@@ -652,10 +645,10 @@ impl OptimizedExpressionNode {
                     }
                     WindowOp::Min => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, true),
                     WindowOp::Max => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, false),
-                    // Annual (water year) family 
+                    // Window in whole water years
                     // Precondition: wy_month in [1, 12] integral - enforce at parse time
                     // (see `lower_stateful_call()`) instead of on hot path
-                    WindowOp::SumAnnual { wy_month } | WindowOp::MeanAnnual { wy_month } => {
+                    WindowOp::SumYears { wy_month } => {
                         // New water year when new month and month equals wy_month
                         if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
                             advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
@@ -663,58 +656,58 @@ impl OptimizedExpressionNode {
                             accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
                         }
                     }
-                    WindowOp::MinAnnual { wy_month } => {
+                    WindowOp::MinYears { wy_month } => {
                         if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
                             advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
                         } else {
                             accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
                         }
                     }
-                    WindowOp::MaxAnnual { wy_month } => {
+                    WindowOp::MaxYears { wy_month } => {
                         if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
                             advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
                         } else {
                             accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
                         }
                     }
-                    // Monthly family
-                    WindowOp::SumMonthly | WindowOp::MeanMonthly => {
+                    // Window in whole calendar months
+                    WindowOp::SumMonths => {
                         if data_cache.is_new_month() {
                             advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
                         } else {
                             accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
                         }
                     }
-                    WindowOp::MinMonthly => {
+                    WindowOp::MinMonths => {
                         if data_cache.is_new_month() {
                             advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
                         } else {
                             accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
                         }
                     }
-                    WindowOp::MaxMonthly => {
+                    WindowOp::MaxMonths => {
                         if data_cache.is_new_month() {
                             advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
                         } else {
                             accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
                         }
                     }
-                    // Daily family
-                    WindowOp::SumDaily | WindowOp::MeanDaily => {
+                    // Window in whole calendar days
+                    WindowOp::SumDays => {
                         if data_cache.is_new_day() {
                             advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
                         } else {
                             accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
                         }
                     }
-                    WindowOp::MinDaily => {
+                    WindowOp::MinDays => {
                         if data_cache.is_new_day() {
                             advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
                         } else {
                             accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
                         }
                     }
-                    WindowOp::MaxDaily => {
+                    WindowOp::MaxDays => {
                         if data_cache.is_new_day() {
                             advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
                         } else {
@@ -2146,12 +2139,10 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
         // even when the sampled argument doesn't reference sim.* itself.
         OptimizedExpressionNode::MovingWindow { op, arg, .. } => {
             matches!(op,
-                WindowOp::SumAnnual { .. } | WindowOp::MeanAnnual { .. }
-                | WindowOp::MinAnnual { .. } | WindowOp::MaxAnnual { .. }
-                | WindowOp::SumMonthly | WindowOp::MeanMonthly
-                | WindowOp::MinMonthly | WindowOp::MaxMonthly
-                | WindowOp::SumDaily | WindowOp::MeanDaily
-                | WindowOp::MinDaily | WindowOp::MaxDaily)
+                WindowOp::SumYears { .. }
+                | WindowOp::MinYears { .. } | WindowOp::MaxYears { .. }
+                | WindowOp::SumMonths | WindowOp::MinMonths | WindowOp::MaxMonths
+                | WindowOp::SumDays | WindowOp::MinDays | WindowOp::MaxDays)
                 || uses_calendar_flags(arg)
         }
         OptimizedExpressionNode::Since { arg, reset, .. } => {
@@ -2450,12 +2441,9 @@ fn lower_stateful_call(
             }
             // window_op above only ever produces Sum/Mean/Min/Max; other families lowered
             // separately
-            WindowOp::SumAnnual { .. } | WindowOp::MeanAnnual { .. }
-            | WindowOp::MinAnnual { .. } | WindowOp::MaxAnnual { .. }
-            | WindowOp::SumMonthly | WindowOp::MeanMonthly
-            | WindowOp::MinMonthly | WindowOp::MaxMonthly
-            | WindowOp::SumDaily | WindowOp::MeanDaily
-            | WindowOp::MinDaily | WindowOp::MaxDaily => unreachable!(),
+            WindowOp::SumYears { .. } | WindowOp::MinYears { .. } | WindowOp::MaxYears { .. }
+            | WindowOp::SumMonths | WindowOp::MinMonths | WindowOp::MaxMonths
+            | WindowOp::SumDays | WindowOp::MinDays | WindowOp::MaxDays => unreachable!(),
         };
         return Ok(Some(OptimizedExpressionNode::MovingWindow {
             op,
@@ -2464,122 +2452,81 @@ fn lower_stateful_call(
         }));
     }
 
-    // Annual-window family: moving_annual_sum/mean/min/max(x, wy_month, n_years).
-    if matches!(name, "moving_annual_sum" | "moving_annual_mean"
-                     | "moving_annual_min" | "moving_annual_max") {
+    // Calendar-window families: the same statistic as the fixed windows
+    // above, over a window measured in whole water years / calendar months /
+    // calendar days instead of steps. Argument order mirrors
+    // moving_*(x, n, ...): the value, then the window length, then whatever
+    // that variant needs (the water-year anchor month; nothing for the
+    // others). See structured_expressions_design.md §5a.
+    let years_op = match name {
+        "moving_sum_years" => Some(0u8),
+        "moving_min_years" => Some(1),
+        "moving_max_years" => Some(2),
+        _ => None,
+    };
+    if let Some(which) = years_op {
         if args.len() != 3 {
             return Err(format!(
-                "Function '{}' expects 3 arguments (x, wy_month, n_years), got {}",
+                "Function '{}' expects 3 arguments (x, n_years, wy_month), got {}",
                 name, args.len()
             ));
         }
-        let wy_month = constant_arg(&args, 1, name, "water year month (2nd argument)")?;
-        if wy_month.fract() != 0.0 || wy_month < 1.0 || wy_month > 12.0 {
-            return Err(format!(
-                "{}'s water year month must be a positive integer between 1 and 12, got {}",
-                name, wy_month
-            ));
-        }
-        let wy_month = wy_month as u32;
-        let n_years = constant_arg(&args, 2, name, "number of years (3rd argument)")?;
+        let n_years = constant_arg(&args, 1, name, "window length (2nd argument)")?;
         if n_years.fract() != 0.0 || n_years < 1.0 {
             return Err(format!(
                 "{}'s window length must be a positive integer, got {}",
                 name, n_years
             ));
         }
-        let n = n_years as usize;
+        let wy_month = constant_arg(&args, 2, name, "water year month (3rd argument)")?;
+        if wy_month.fract() != 0.0 || !(1.0..=12.0).contains(&wy_month) {
+            return Err(format!(
+                "{}'s water year month must be an integer between 1 and 12, got {}",
+                name, wy_month
+            ));
+        }
+        let (n, wy_month) = (n_years as usize, wy_month as u32);
         let arg = Box::new(args.swap_remove(0));
-
-        let is_extreme = matches!(name, "moving_annual_min" | "moving_annual_max");
-        let (f_off, u_off) = alloc_bucket_ring(arena, n, is_extreme);
-        let op = match name {
-            "moving_annual_sum" => WindowOp::SumAnnual { wy_month },
-            "moving_annual_mean" => WindowOp::MeanAnnual { wy_month },
-            "moving_annual_min" => WindowOp::MinAnnual { wy_month },
-            "moving_annual_max" => WindowOp::MaxAnnual { wy_month },
-            _ => unreachable!("previously matched on name"),
+        let op = match which {
+            0 => WindowOp::SumYears { wy_month },
+            1 => WindowOp::MinYears { wy_month },
+            _ => WindowOp::MaxYears { wy_month },
         };
-
+        let (f_off, u_off) = alloc_bucket_ring(arena, n, which != 0);
         return Ok(Some(OptimizedExpressionNode::MovingWindow {
-            op,
-            slots: Box::new(WindowSlots { n, f_off, u_off }),
-            arg,
+            op, slots: Box::new(WindowSlots { n, f_off, u_off }), arg,
         }));
     }
 
-    // Monthly-window family: moving_monthly_sum/mean/min/max(x, n_months).
-    // Same ring-of-buckets shape as the annual family, but the boundary is
-    // every calendar month with no anchor month to carry.
-    if matches!(name, "moving_monthly_sum" | "moving_monthly_mean"
-                     | "moving_monthly_min" | "moving_monthly_max") {
+    // Months and days: same shape, no anchor to carry, so just (x, n).
+    let period_op = match name {
+        "moving_sum_months" => Some((WindowOp::SumMonths, false, "n_months")),
+        "moving_min_months" => Some((WindowOp::MinMonths, true, "n_months")),
+        "moving_max_months" => Some((WindowOp::MaxMonths, true, "n_months")),
+        "moving_sum_days" => Some((WindowOp::SumDays, false, "n_days")),
+        "moving_min_days" => Some((WindowOp::MinDays, true, "n_days")),
+        "moving_max_days" => Some((WindowOp::MaxDays, true, "n_days")),
+        _ => None,
+    };
+    if let Some((op, is_extreme, n_label)) = period_op {
         if args.len() != 2 {
             return Err(format!(
-                "Function '{}' expects 2 arguments (x, n_months), got {}",
-                name, args.len()
+                "Function '{}' expects 2 arguments (x, {}), got {}",
+                name, n_label, args.len()
             ));
         }
-        let n_months = constant_arg(&args, 1, name, "number of months (2nd argument)")?;
-        if n_months.fract() != 0.0 || n_months < 1.0 {
+        let n_val = constant_arg(&args, 1, name, "window length (2nd argument)")?;
+        if n_val.fract() != 0.0 || n_val < 1.0 {
             return Err(format!(
                 "{}'s window length must be a positive integer, got {}",
-                name, n_months
+                name, n_val
             ));
         }
-        let n = n_months as usize;
+        let n = n_val as usize;
         let arg = Box::new(args.swap_remove(0));
-
-        let is_extreme = matches!(name, "moving_monthly_min" | "moving_monthly_max");
         let (f_off, u_off) = alloc_bucket_ring(arena, n, is_extreme);
-        let op = match name {
-            "moving_monthly_sum" => WindowOp::SumMonthly,
-            "moving_monthly_mean" => WindowOp::MeanMonthly,
-            "moving_monthly_min" => WindowOp::MinMonthly,
-            "moving_monthly_max" => WindowOp::MaxMonthly,
-            _ => unreachable!("previously matched on name"),
-        };
-
         return Ok(Some(OptimizedExpressionNode::MovingWindow {
-            op,
-            slots: Box::new(WindowSlots { n, f_off, u_off }),
-            arg,
-        }));
-    }
-
-    // Daily-window family: moving_daily_sum/mean/min/max(x, n_days). Same
-    // shape again, boundary is every calendar day.
-    if matches!(name, "moving_daily_sum" | "moving_daily_mean"
-                     | "moving_daily_min" | "moving_daily_max") {
-        if args.len() != 2 {
-            return Err(format!(
-                "Function '{}' expects 2 arguments (x, n_days), got {}",
-                name, args.len()
-            ));
-        }
-        let n_days = constant_arg(&args, 1, name, "number of days (2nd argument)")?;
-        if n_days.fract() != 0.0 || n_days < 1.0 {
-            return Err(format!(
-                "{}'s window length must be a positive integer, got {}",
-                name, n_days
-            ));
-        }
-        let n = n_days as usize;
-        let arg = Box::new(args.swap_remove(0));
-
-        let is_extreme = matches!(name, "moving_daily_min" | "moving_daily_max");
-        let (f_off, u_off) = alloc_bucket_ring(arena, n, is_extreme);
-        let op = match name {
-            "moving_daily_sum" => WindowOp::SumDaily,
-            "moving_daily_mean" => WindowOp::MeanDaily,
-            "moving_daily_min" => WindowOp::MinDaily,
-            "moving_daily_max" => WindowOp::MaxDaily,
-            _ => unreachable!("previously matched on name"),
-        };
-
-        return Ok(Some(OptimizedExpressionNode::MovingWindow {
-            op,
-            slots: Box::new(WindowSlots { n, f_off, u_off }),
-            arg,
+            op, slots: Box::new(WindowSlots { n, f_off, u_off }), arg,
         }));
     }
 

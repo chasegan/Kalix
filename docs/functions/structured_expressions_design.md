@@ -145,18 +145,15 @@ Rules:
 
 | Function | Meaning over the last n water years/months/days |
 |---|---|
-| `moving_annual_sum(x, wy_month, n_years)` | sum |
-| `moving_annual_mean(x, wy_month, n_years)` | arithmetic mean |
-| `moving_annual_min(x, wy_month, n_years)` | minimum |
-| `moving_annual_max(x, wy_month, n_years)` | maximum |
-| `moving_monthly_sum(x, n_months)` | sum |
-| `moving_monthly_mean(x, n_months)` | arithmetic mean |
-| `moving_monthly_min(x, n_months)` | minimum |
-| `moving_monthly_max(x, n_months)` | maximum |
-| `moving_daily_sum(x, n_days)` | sum |
-| `moving_daily_mean(x, n_days)` | arithmetic mean |
-| `moving_daily_min(x, n_days)` | minimum |
-| `moving_daily_max(x, n_days)` | maximum |
+| `moving_sum_years(x, n_years, wy_month)` | sum |
+| `moving_min_years(x, n_years, wy_month)` | minimum |
+| `moving_max_years(x, n_years, wy_month)` | maximum |
+| `moving_sum_months(x, n_months)` | sum |
+| `moving_min_months(x, n_months)` | minimum |
+| `moving_max_months(x, n_months)` | maximum |
+| `moving_sum_days(x, n_days)` | sum |
+| `moving_min_days(x, n_days)` | minimum |
+| `moving_max_days(x, n_days)` | maximum |
 
 - **Not the same shape as §5's `moving_*`.** These bucket `x` by calendar
   period first (one running total/extremum per water year, month, or day),
@@ -165,7 +162,7 @@ Rules:
   is no `default` argument: a bucket that hasn't been reached yet
   contributes nothing to sum/mean (starts at 0) and nothing to min/max
   (starts at NaN, which `min`/`max` already suppress).
-- **`moving_annual_*` takes an explicit `wy_month`** (1-12, positive integer
+- **`moving_*_years` takes an explicit `wy_month`** (1-12, positive integer
   literal, bounded cost as `n` is): a new water year starts on the first
   step whose month equals `wy_month`. This is the one place the engine
   *does* carry a water-year concept — see §7's water year idiom, which this
@@ -174,9 +171,9 @@ Rules:
   as a condition, but a trailing multi-year *window* (evicting the oldest
   year as a new one starts) genuinely needs dedicated ring state the
   `*_since` idiom cannot express.
-- **`moving_monthly_*`/`moving_daily_*` take no anchor** — a bucket starts
+- **`moving_*_months`/`moving_*_days` take no anchor** — a bucket starts
   on every calendar month/day, so there's nothing to configure beyond `n`.
-  At a daily timestep, `moving_daily_*(x, n)` degenerates to exactly
+  At a daily timestep, `moving_*_days(x, n)` degenerates to exactly
   `moving_*(x, n, <additive/extremum identity>)` from §5, since a new
   bucket then starts on every step; the daily family earns its keep at
   sub-daily timesteps, where it buckets multiple steps into one day.
@@ -252,7 +249,7 @@ dials, not the named systems.
 This idiom covers every reset-driven boundary, but not a *trailing window*
 of several water years (evicting the oldest year as a new one starts) —
 that needs dedicated ring state a condition alone cannot express, which is
-why `moving_annual_*` (§5a) takes `wy_month` as a genuine parameter instead
+why `moving_*_years` (§5a) takes `wy_month` as a genuine parameter instead
 of forcing the modeller to hand-roll a multi-year ring in `[fn]`. It is a
 narrow, deliberate exception: one family, one parameter, still no global
 water-year setting.
