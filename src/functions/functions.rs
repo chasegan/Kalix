@@ -45,8 +45,11 @@ use crate::functions::errors::EvaluationError;
 /// [`BuiltinFunction`]. Membership here reserves the name exactly as builtin
 /// status does. `stateful_lowering_covers_registry` in the tests ties this
 /// list to `lower_stateful_call`'s match arms so they cannot drift.
-pub const STATEFUL_FUNCTIONS: [&str; 10] = [
+pub const STATEFUL_FUNCTIONS: [&str; 19] = [
     "moving_sum", "moving_mean", "moving_min", "moving_max",
+    "moving_sum_years", "moving_min_years", "moving_max_years",
+    "moving_sum_months", "moving_min_months", "moving_max_months",
+    "moving_sum_days", "moving_min_days", "moving_max_days",
     "sum_since", "min_since", "max_since", "count_since", "steps_since",
     "latch",
 ];
@@ -99,7 +102,7 @@ pub enum BuiltinFunction {
     Ceil, Floor, Round, Sign, IsLeapYear,
 
     // Two argument
-    Pow, Atan2,
+    Pow, Atan2, Infill,
 
     // Variadic (>= 2)
     Min, Max,
@@ -134,6 +137,7 @@ impl BuiltinFunction {
             "round"  => BuiltinFunction::Round,
             "sign"   => BuiltinFunction::Sign,
             "is_leap_year" => BuiltinFunction::IsLeapYear,
+            "infill" => BuiltinFunction::Infill,
             "pow"    => BuiltinFunction::Pow,
             "atan2"  => BuiltinFunction::Atan2,
             "min"    => BuiltinFunction::Min,
@@ -166,6 +170,7 @@ impl BuiltinFunction {
             BuiltinFunction::Round => "round",
             BuiltinFunction::Sign => "sign",
             BuiltinFunction::IsLeapYear => "is_leap_year",
+            BuiltinFunction::Infill => "infill",
             BuiltinFunction::Pow => "pow",
             BuiltinFunction::Atan2 => "atan2",
             BuiltinFunction::Min => "min",
@@ -207,6 +212,10 @@ impl BuiltinFunction {
             BuiltinFunction::Pow => {
                 if args.len() != 2 { return Self::arity_err(self.name(), 2, args.len()); }
                 Ok(args[0].powf(args[1]))
+            }
+            BuiltinFunction::Infill => {
+                if args.len() != 2 { return Self::arity_err(self.name(), 2, args.len()); }
+                Ok(infill(args[0], args[1]))
             }
             BuiltinFunction::Atan2 => {
                 if args.len() != 2 { return Self::arity_err(self.name(), 2, args.len()); }
@@ -288,6 +297,29 @@ pub fn sign(x: f64) -> f64 {
 /// `sim.year`, already exact).
 pub fn is_leap_year_f(year: f64) -> f64 {
     if crate::tid::utils::is_leap_year(year.round() as i64) { 1.0 } else { 0.0 }
+}
+
+/// `infill(x, value)`: a missing value (NaN) is infilled with `value`;
+/// anything else passes through unchanged.
+///
+/// Named for what it does, in the field's language. This *substitutes* a
+/// value — it does not exclude the element — and the name has to say so:
+/// `moving_mean(infill(x, 0), 4, 0)` over [10, NaN, 20, 30] is 15, not 20,
+/// because the infilled 0 is still one of the four elements averaged. A name
+/// promising to "skip" the gap would make that reading a trap
+/// (`expression-naming §1.1`).
+///
+/// The fill value is the modeller's to state rather than a hardcoded 0, for
+/// the same reason a moving window's `default` and a latch's `init` are:
+/// zero is right for a sum, and rarely right for anything else. A gap in a
+/// flow record might be infilled with 0, a long-term mean, or a neighbouring
+/// gauge, and only the modeller knows which.
+///
+/// Composes with the annual/monthly/daily windows, whose min/max already
+/// suppress NaN while sum/mean poison on it: `infill(x, 0)` lets one
+/// NaN-gated signal feed both without writing two different gates.
+pub fn infill(x: f64, value: f64) -> f64 {
+    if x.is_nan() { value } else { x }
 }
 
 /// Back-compat shim for callers that still dispatch by name (e.g. context-function

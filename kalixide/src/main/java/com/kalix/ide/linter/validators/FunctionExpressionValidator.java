@@ -1372,6 +1372,44 @@ public class FunctionExpressionValidator {
                             + " — state is sized at model load");
                 }
             }
+
+            // moving_*_years(x, n, wy_month): argument order mirrors
+            // moving_*(x, n, default) — the window length is always the 2nd
+            // argument. n must be a load-time literal positive integer;
+            // wy_month a load-time literal integer in [1, 12]. Mirrors the
+            // engine's lower_stateful_call validation.
+            if (ExpressionLanguage.isAnnualWindowFunction(funcName) && argCount == 3) {
+                Double nYears = argLiterals.get(1);
+                if (nYears == null) {
+                    errors.add(funcName + "'s window length (2nd argument) must be a constant"
+                            + " — state is sized at model load");
+                } else if (nYears != Math.floor(nYears) || nYears < 1) {
+                    errors.add(funcName + "'s window length (2nd argument) must be a positive"
+                            + " integer, but got " + trimNumber(nYears));
+                }
+                Double wyMonth = argLiterals.get(2);
+                if (wyMonth == null) {
+                    errors.add(funcName + "'s water year month (3rd argument) must be a constant"
+                            + " — state is sized at model load");
+                } else if (wyMonth != Math.floor(wyMonth) || wyMonth < 1 || wyMonth > 12) {
+                    errors.add(funcName + "'s water year month (3rd argument) must be an"
+                            + " integer between 1 and 12, but got " + trimNumber(wyMonth));
+                }
+            }
+
+            // moving_*_months / moving_*_days (x, n): n must be a load-time
+            // literal positive integer — same rule as n_years above, minus
+            // the wy_month check (no anchor for these two families).
+            if (ExpressionLanguage.isPeriodicWindowFunction(funcName) && argCount == 2) {
+                Double n = argLiterals.get(1);
+                if (n == null) {
+                    errors.add(funcName + "'s window length (2nd argument) must be a constant"
+                            + " — state is sized at model load");
+                } else if (n != Math.floor(n) || n < 1) {
+                    errors.add(funcName + "'s window length (2nd argument) must be a positive"
+                            + " integer, but got " + trimNumber(n));
+                }
+            }
         }
 
         /** Render a literal argument value without a needless trailing ".0". */
@@ -1596,6 +1634,12 @@ public class FunctionExpressionValidator {
                 Map.entry("rolling_mean", "moving_mean"),
                 Map.entry("rolling_sum", "moving_sum"),
                 Map.entry("days_since", "steps_since"),
+                // Infilling a missing value is 'infill'; it substitutes, so
+                // no spelling promising to skip or drop the gap is offered.
+                Map.entry("skip_nan", "infill"),
+                Map.entry("nan_to_zero", "infill"),
+                Map.entry("fillna", "infill"),
+                Map.entry("coalesce", "infill"),
                 // Sample-and-hold is 'latch': one short verb, no aliases.
                 Map.entry("sample_hold", "latch"),
                 Map.entry("sample_and_hold", "latch"),

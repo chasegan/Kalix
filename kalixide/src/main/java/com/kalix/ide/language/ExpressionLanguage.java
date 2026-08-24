@@ -88,7 +88,7 @@ public final class ExpressionLanguage {
     public record SimVariable(String name, String description) {}
 
     /**
-     * Every builtin recognised by the parser — the 25 pure builtins, the 9
+     * Every builtin recognised by the parser — the 26 pure builtins, the 21
      * temporal (stateful) builtins, and the 2 calendar functions. Mirrors the
      * engine's {@code BuiltinFunction} enum, {@code STATEFUL_FUNCTIONS}, and
      * {@code CALENDAR_FUNCTIONS} ({@code src/functions/functions.rs}).
@@ -121,6 +121,7 @@ public final class ExpressionLanguage {
             new Builtin("round", 1, "round(x)", "round to the nearest integer", false),
             new Builtin("sign", 1, "sign(x)", "-1, 0, or 1 by the sign of x", false),
             new Builtin("is_leap_year", 1, "is_leap_year(yyyy)", "1 in a Gregorian leap year, else 0", false),
+            new Builtin("infill", 2, "infill(x, value)", "value when x is a missing value (NaN), else x unchanged", false),
 
             // Two-argument math
             new Builtin("pow", 2, "pow(x, y)", "x raised to the power y", false),
@@ -134,6 +135,21 @@ public final class ExpressionLanguage {
             new Builtin("moving_mean", 3, "moving_mean(x, n, default)", "mean over the last n steps", true),
             new Builtin("moving_min", 3, "moving_min(x, n, default)", "minimum over the last n steps", true),
             new Builtin("moving_max", 3, "moving_max(x, n, default)", "maximum over the last n steps", true),
+
+            // Temporal (stateful): window in whole water years, moving_*_years(x, n, wy_month)
+            new Builtin("moving_sum_years", 3, "moving_sum_years(x, n, wy_month)", "sum over the last n water years", true),
+            new Builtin("moving_min_years", 3, "moving_min_years(x, n, wy_month)", "minimum over the last n water years", true),
+            new Builtin("moving_max_years", 3, "moving_max_years(x, n, wy_month)", "maximum over the last n water years", true),
+
+            // Temporal (stateful): window in whole calendar months, moving_*_months(x, n)
+            new Builtin("moving_sum_months", 2, "moving_sum_months(x, n)", "sum over the last n calendar months", true),
+            new Builtin("moving_min_months", 2, "moving_min_months(x, n)", "minimum over the last n calendar months", true),
+            new Builtin("moving_max_months", 2, "moving_max_months(x, n)", "maximum over the last n calendar months", true),
+
+            // Temporal (stateful): window in whole calendar days, moving_*_days(x, n)
+            new Builtin("moving_sum_days", 2, "moving_sum_days(x, n)", "sum over the last n calendar days", true),
+            new Builtin("moving_min_days", 2, "moving_min_days(x, n)", "minimum over the last n calendar days", true),
+            new Builtin("moving_max_days", 2, "moving_max_days(x, n)", "maximum over the last n calendar days", true),
 
             // Temporal (stateful): event-windowed *_since (last argument is the reset condition)
             new Builtin("sum_since", 2, "sum_since(x, reset)", "sum of x since reset last fired", true),
@@ -234,10 +250,34 @@ public final class ExpressionLanguage {
         return BY_NAME.get(lowerName);
     }
 
-    /** True if this lowercase name is a moving_* fixed-window builtin. */
+    /** True if this lowercase name is a moving_* fixed-window builtin
+     *  (window length + element default) — NOT the annual/monthly/daily
+     *  window families, which take no default and have their own
+     *  constraints. */
     public static boolean isMovingWindowFunction(String lowerName) {
         Builtin b = BY_NAME.get(lowerName);
-        return b != null && b.stateful() && b.name().startsWith("moving_");
+        return b != null && b.stateful() && b.name().startsWith("moving_")
+                && !b.name().endsWith("_years")
+                && !b.name().endsWith("_months")
+                && !b.name().endsWith("_days");
+    }
+
+    /** True if this lowercase name is a moving_*_years builtin
+     *  (x, n, wy_month) — the water-year-anchored counterpart to
+     *  {@link #isMovingWindowFunction}. */
+    public static boolean isAnnualWindowFunction(String lowerName) {
+        Builtin b = BY_NAME.get(lowerName);
+        return b != null && b.stateful() && b.name().endsWith("_years");
+    }
+
+    /** True if this lowercase name is a moving_*_months or moving_*_days
+     *  periodic-window builtin (x, n) — same (x, n) shape and validation as
+     *  each other, just anchored to a different calendar boundary; neither
+     *  carries a wy_month like {@link #isAnnualWindowFunction}. */
+    public static boolean isPeriodicWindowFunction(String lowerName) {
+        Builtin b = BY_NAME.get(lowerName);
+        return b != null && b.stateful()
+                && (b.name().endsWith("_months") || b.name().endsWith("_days"));
     }
 
     /**

@@ -291,6 +291,13 @@ mod reserved_registry_tests {
         let mut cache = crate::data_management::data_cache::DataCache::new();
         for name in STATEFUL_FUNCTIONS {
             let expr = match name {
+                // Calendar-window families first: they also start with
+                // "moving_" but take a different shape than the generic
+                // fixed-window case below (years: x, n, wy_month;
+                // months/days: x, n — no element default).
+                n if n.ends_with("_years") => format!("{}(data.x, 3, 6)", n),
+                n if n.ends_with("_months") || n.ends_with("_days") =>
+                    format!("{}(data.x, 3)", n),
                 n if n.starts_with("moving_") => format!("{}(data.x, 3, 0)", n),
                 "steps_since" => "steps_since(data.x > 0)".to_string(),
                 "latch" => "latch(data.x, sim.new_month, 0)".to_string(),
@@ -312,6 +319,13 @@ mod reserved_registry_tests {
         assert_eq!(reserved_name_kind("clamp"), Some("builtin function"));
         assert_eq!(reserved_name_kind("steps_since"), Some("stateful function"));
         assert_eq!(reserved_name_kind("moving_mean"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_sum_years"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_min_years"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_max_years"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_sum_months"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_max_months"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_sum_days"), Some("stateful function"));
+        assert_eq!(reserved_name_kind("moving_max_days"), Some("stateful function"));
         assert_eq!(reserved_name_kind("assert"), Some("reserved word"));
         assert_eq!(reserved_name_kind("this"), Some("reserved word"));
         assert_eq!(reserved_name_kind("headroom"), None);

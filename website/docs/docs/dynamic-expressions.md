@@ -119,6 +119,7 @@ Available functions:
 | `ceil` | 1 | Round up |
 | `round` | 1 | Round to nearest |
 | `sign` | 1 | Sign (-1, 0, or 1) |
+| `infill` | 2 | Infill a missing value: `infill(x, value)` is value when x is NaN, else x unchanged |
 | `clamp` | 3 | Constrain to a range: clamp(x, lo, hi) |
 | `is_leap_year` | 1 | 1 in a Gregorian leap year, else 0: is\_leap\_year(sim.year) |
 | `month_at` | 1 | Month (1-12) at the current date + n days — the pattern month an order placed today arrives in |
@@ -127,6 +128,15 @@ Available functions:
 | `moving_mean` | 3 | Mean over the last n steps |
 | `moving_min` | 3 | Minimum over the last n steps |
 | `moving_max` | 3 | Maximum over the last n steps |
+| `moving_sum_years` | 3 | Sum over the last n\_years water years: moving\_sum\_years(x, n\_years, wy\_month) |
+| `moving_min_years` | 3 | Minimum over the last n\_years water years |
+| `moving_max_years` | 3 | Maximum over the last n\_years water years |
+| `moving_sum_months` | 2 | Sum over the last n\_months calendar months: moving\_sum\_months(x, n\_months) |
+| `moving_min_months` | 2 | Minimum over the last n\_months calendar months |
+| `moving_max_months` | 2 | Maximum over the last n\_months calendar months |
+| `moving_sum_days` | 2 | Sum over the last n\_days calendar days: moving\_sum\_days(x, n\_days) |
+| `moving_min_days` | 2 | Minimum over the last n\_days calendar days |
+| `moving_max_days` | 2 | Maximum over the last n\_days calendar days |
 | `sum_since` | 2 | Sum of x since a reset condition last fired |
 | `min_since` | 2 | Minimum of x since reset |
 | `max_since` | 2 | Maximum of x since reset |
@@ -203,6 +213,41 @@ well-defined from the very first step.
 recent_flow = moving_mean(node.gauge_1.dsflow, 30, 0.0)
 ```
 
+**Annual, monthly, and daily windows** — `moving_sum_years(x, wy_month,
+n_years)` and friends work differently: `x` is bucketed by calendar period
+first (one running total per water year, month, or day), and the statistic
+is reported over the last `n` *buckets*, not the last `n` steps. There's no
+`default` — a bucket not yet reached simply contributes nothing.
+`moving_*_years` takes an anchor month, `wy_month` (1-12): a new water year
+starts the first time the month reaches it. `moving_*_months`/
+`moving_*_days` need no anchor — a new bucket starts every calendar
+month/day.
+
+```ini
+# Trailing 3-year total, water year starting 1 July
+three_yr_diversion = moving_sum_years(node.town.diversion, 3, 7)
+
+# Trailing 12-month mean
+rolling_12mo_total = moving_sum_months(node.gauge_1.dsflow, 12)
+```
+
+`moving_min_years`/`max` (and their monthly/daily equivalents) suppress
+NaN — a NaN input never disturbs the tracked extremum, matching plain
+`moving_min`/`max`. `moving_sum_years` (and the monthly/daily sums) still
+**poison** on NaN, like plain `moving_sum`: a real gap in the data should
+make that year's total suspect, not vanish quietly. This matters if you build a value with
+`if(cond, x, 0.0 / 0.0)` to make it count only on certain steps (the usual
+way to say "only this branch counts" in a side-effect-free expression
+language, since there's no bare `nan` literal outside the `[offset,
+default]` position) — that composes straight into `moving_max_years`, but
+needs `infill(..., 0)` to compose into `moving_sum_years`. `infill` substitutes the value rather than dropping the element, so the fill is stated at the call site:
+
+```ini
+daily_total = if(sim.new_day, moving_sum_days(node.gauge_1.dsflow, 1), 0.0 / 0.0)
+peak_daily_total_wy = moving_max_years(daily_total, 5, 7)
+sum_daily_totals_wy = moving_sum_years(infill(daily_total, 0), 5, 7)
+```
+
 **Event windows** — the `*_since` family accumulates since a reset condition
 last fired, and the **last argument is always the reset condition**. On the
 step the reset fires, the accumulator clears first and that step's
@@ -215,10 +260,13 @@ dry_spell = steps_since(node.gauge.dsflow > const.low_flow_threshold)
 spill_days = count_since(node.dam.ds_1_spill > 0, sim.new_year)
 ```
 
-There is deliberately no water-year setting in Kalix — the boundary is an
-expression written where it's used (or named once per model in a
-[user-defined function](fn.md)), because the water year varies from valley
-to valley.
+`sum_since`/`*_since` and the calendar flags deliberately carry no
+water-year setting of their own — the boundary is an expression written
+where it's used (or named once per model in a [user-defined
+function](fn.md)), because the water year varies from valley to valley.
+`moving_*_years` above is the one deliberate exception: a trailing
+multi-year window needs more than a reset condition can express, so it
+takes `wy_month` directly.
 
 ### User-Defined Functions
 

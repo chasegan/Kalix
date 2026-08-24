@@ -354,13 +354,27 @@ pub enum FoldOp {
     Mean,
 }
 
-/// Statistic computed by a fixed-window `moving_*` call.
+/// Statistic computed by a fixed-window `moving_*` call, including annual, monthly and daily
+/// variants
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowOp {
+    // Fixed time step operations
     Sum,
     Mean,
     Min,
     Max,
+    // Window measured in whole water years, anchored at wy_month
+    SumYears { wy_month: u32 },
+    MinYears { wy_month: u32 },
+    MaxYears { wy_month: u32 },
+    // Window measured in whole calendar months
+    SumMonths,
+    MinMonths,
+    MaxMonths,
+    // Window measured in whole calendar days
+    SumDays,
+    MinDays,
+    MaxDays,
 }
 
 /// Arena addressing for one moving-window instance, boxed off the
@@ -503,6 +517,17 @@ impl OptimizedExpressionNode {
                     let len = data_cache.expr_state.u[slots.u_off + slots.n + 2];
                     if len == 0 { f64::NAN } else { data_cache.expr_state.f[slots.f_off + head] }
                 }
+                WindowOp::SumYears { .. } | WindowOp::SumMonths | WindowOp::SumDays => {
+                    let sum_slot = slots.f_off + slots.n;
+                    data_cache.expr_state.f[sum_slot]
+                }
+                WindowOp::MinYears { .. } | WindowOp::MaxYears { .. }
+                | WindowOp::MinMonths | WindowOp::MaxMonths
+                | WindowOp::MinDays | WindowOp::MaxDays => {
+                    // Published by publish_bucket_extreme each step: the
+                    // deque front combined with the in-progress bucket.
+                    data_cache.expr_state.f[slots.f_off + slots.n + 2]
+                }
             },
 
             OptimizedExpressionNode::Since { f_off, .. } => data_cache.expr_state.f[*f_off],
@@ -644,11 +669,81 @@ impl OptimizedExpressionNode {
                 arg.advance_state(data_cache);
                 let x = arg.evaluate(data_cache);
                 match op {
+                    // Fixed window family 
                     WindowOp::Sum | WindowOp::Mean => {
                         advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
                     }
                     WindowOp::Min => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, true),
                     WindowOp::Max => advance_deque(data_cache, slots.n, slots.f_off, slots.u_off, x, false),
+                    // Window in whole water years
+                    // Precondition: wy_month in [1, 12] integral - enforce at parse time
+                    // (see `lower_stateful_call()`) instead of on hot path
+                    WindowOp::SumYears { wy_month } => {
+                        // New water year when new month and month equals wy_month
+                        if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
+                            advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        } else {
+                            accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        }
+                    }
+                    WindowOp::MinYears { wy_month } => {
+                        if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        } else {
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        }
+                    }
+                    WindowOp::MaxYears { wy_month } => {
+                        if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        } else {
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        }
+                    }
+                    // Window in whole calendar months
+                    WindowOp::SumMonths => {
+                        if data_cache.is_new_month() {
+                            advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        } else {
+                            accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        }
+                    }
+                    WindowOp::MinMonths => {
+                        if data_cache.is_new_month() {
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        } else {
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        }
+                    }
+                    WindowOp::MaxMonths => {
+                        if data_cache.is_new_month() {
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        } else {
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        }
+                    }
+                    // Window in whole calendar days
+                    WindowOp::SumDays => {
+                        if data_cache.is_new_day() {
+                            advance_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        } else {
+                            accumulate_ring(data_cache, slots.n, slots.f_off, slots.u_off, x);
+                        }
+                    }
+                    WindowOp::MinDays => {
+                        if data_cache.is_new_day() {
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        } else {
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                        }
+                    }
+                    WindowOp::MaxDays => {
+                        if data_cache.is_new_day() {
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        } else {
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                        }
+                    }
                 }
             }
 
@@ -846,6 +941,75 @@ impl OptimizedExpressionNode {
     }
 }
 
+/// Accumulate into a ring buffer without advancing. Maintain the running sum incrementally.
+fn accumulate_ring(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64) {
+    let arena = &mut data_cache.expr_state;
+    let head = arena.u[u_off];
+    let total_slot = f_off + n;
+    // Add to this year and the total of all tracked years
+    // TODO: float drift?
+    arena.f[f_off + head] += x;
+    arena.f[total_slot]   += x;
+}
+
+/// Arena layout for a calendar-window min/max, which keeps a monotonic deque
+/// over *closed* buckets plus the running extremum of the bucket in progress:
+///
+/// - `f[f_off .. f_off+n+1]` deque values (capacity `n + 1`)
+/// - `f[f_off+n+1]`          extremum of the bucket currently accumulating
+/// - `f[f_off+n+2]`          published result, what `evaluate` reads
+/// - `u[u_off .. u_off+n+1]` deque expiries, in *bucket* indices
+/// - `u[u_off+n+1]`          deque head, `u[u_off+n+2]` deque length
+/// - `u[u_off+n+3]`          index of the bucket currently accumulating
+///
+/// The deque is the same structure `moving_min`/`moving_max` use, with bucket
+/// index in place of step index — so eviction costs amortised O(1) instead of
+/// the O(n) ring rescan this replaced. That mattered because a boundary is
+/// not always rare: at a daily timestep every step is a boundary for
+/// `moving_min_days`, so the rescan ran per step, not per period.
+fn publish_bucket_extreme(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, is_min: bool) {
+    let cap = n + 1;
+    let arena = &mut data_cache.expr_state;
+    let len = arena.u[u_off + cap + 1];
+    // Closed buckets still in the window are summarised by the deque front;
+    // NaN when there are none, which f64::min/max then suppress.
+    let front = if len > 0 { arena.f[f_off + arena.u[u_off + cap]] } else { f64::NAN };
+    let current = arena.f[f_off + cap];
+    arena.f[f_off + cap + 1] = if is_min { front.min(current) } else { front.max(current) };
+}
+
+/// Fold `x` into the bucket currently accumulating. O(1), and NaN-suppressing
+/// because f64::min/max return the non-NaN operand — matching how
+/// moving_min/moving_max treat NaN.
+fn accumulate_bucket_extreme(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64, is_min: bool) {
+    let cur_slot = f_off + n + 1;
+    let current = data_cache.expr_state.f[cur_slot];
+    data_cache.expr_state.f[cur_slot] = if is_min { current.min(x) } else { current.max(x) };
+    publish_bucket_extreme(data_cache, n, f_off, u_off, is_min);
+}
+
+/// Close the bucket in progress at a period boundary and open a new one at
+/// `x`. The closed bucket's extremum enters the deque keyed on its own index,
+/// so it leaves the window exactly `n` buckets later.
+fn advance_bucket_extreme(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64, is_min: bool) {
+    let cap = n + 1;
+    let cur_slot = f_off + cap;
+    let bucket_slot = u_off + cap + 2;
+
+    let closed = data_cache.expr_state.f[cur_slot];
+    let bucket = data_cache.expr_state.u[bucket_slot] + 1;
+    data_cache.expr_state.u[bucket_slot] = bucket;
+
+    // n == 1 means the window is the current bucket alone, so no closed
+    // bucket is ever in range and the deque stays empty.
+    if n >= 2 {
+        // The value belongs to bucket `bucket - 1`, which stays in the window
+        // while the current bucket index is <= (bucket - 1) + n - 1.
+        advance_deque_at(data_cache, n, f_off, u_off, closed, is_min, bucket, bucket + n - 2);
+    }
+    data_cache.expr_state.f[cur_slot] = x;
+    publish_bucket_extreme(data_cache, n, f_off, u_off, is_min);
+}
 
 /// Advance a moving_sum/mean ring buffer by one step: evict the oldest value,
 /// store the incoming one, and maintain the running sum incrementally (one
@@ -858,9 +1022,9 @@ impl OptimizedExpressionNode {
 fn advance_ring(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64) {
     let arena = &mut data_cache.expr_state;
     let head = arena.u[u_off];
-    let evicted = arena.f[f_off + head];
-    arena.f[f_off + head] = x;
     let new_head = if head + 1 == n { 0 } else { head + 1 };
+    let evicted = arena.f[f_off + new_head];
+    arena.f[f_off + new_head] = x;
     arena.u[u_off] = new_head;
 
     let sum_slot = f_off + n;
@@ -878,14 +1042,28 @@ fn advance_ring(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize
 /// Advance a moving_min/max monotonic deque by one step. Amortised O(1):
 /// every element is pushed and popped at most once.
 ///
-/// Layout: values in f[f_off..f_off+n+1]; expiry steps in u[u_off..u_off+n+1];
-/// head index at u[u_off+n+1]; length at u[u_off+n+2]. Entries are stored
-/// circularly; an element sampled at step s expires after step s + n - 1.
-/// NaN inputs are skipped entirely: the window min/max suppress NaN exactly
-/// as the min/max builtins do, and an empty deque (all real values NaN)
-/// reads as NaN at evaluation.
+/// Layout: 
+/// - values in f[f_off..f_off+n+1]; 
+/// - expiry steps in u[u_off..u_off+n+1];
+/// - head index at u[u_off+n+1]; 
+/// - length at u[u_off+n+2]. 
+/// Entries are stored circularly; an element sampled at step s expires after step s + n - 1. NaN
+/// inputs are skipped entirely: the window min/max suppress NaN exactly as the min/max builtins do,
+/// and an empty deque (all real values NaN) reads as NaN at evaluation.
 fn advance_deque(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64, is_min: bool) {
     let step = data_cache.current_step;
+    advance_deque_at(data_cache, n, f_off, u_off, x, is_min, step, step + n - 1);
+}
+
+/// The deque body, with its clock supplied rather than read from the step
+/// counter. `now` is the tick used to expire the front; `expiry` is the last
+/// tick at which the pushed value is still inside the window. They differ by
+/// more than `n - 1` only for the calendar families, whose pushed value
+/// belongs to the bucket that just *closed*, not to the tick being processed.
+fn advance_deque_at(
+    data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize,
+    x: f64, is_min: bool, now: usize, expiry: usize,
+) {
     let arena = &mut data_cache.expr_state;
     let cap = n + 1;
     let head_slot = u_off + cap;
@@ -895,7 +1073,7 @@ fn advance_deque(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usiz
     let mut len = arena.u[len_slot];
 
     // 1) Expire the front while it has fallen out of the window.
-    while len > 0 && arena.u[u_off + head] < step {
+    while len > 0 && arena.u[u_off + head] < now {
         head = if head + 1 == cap { 0 } else { head + 1 };
         len -= 1;
     }
@@ -922,7 +1100,7 @@ fn advance_deque(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usiz
             tail -= cap;
         }
         arena.f[f_off + tail] = x;
-        arena.u[u_off + tail] = step + n - 1;
+        arena.u[u_off + tail] = expiry;
         len += 1;
     }
 
@@ -2095,7 +2273,18 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
         }
         OptimizedExpressionNode::Fold { args, .. } => args.iter().any(uses_calendar_flags),
         OptimizedExpressionNode::CalendarAt { arg, .. } => uses_calendar_flags(arg),
-        OptimizedExpressionNode::MovingWindow { arg, .. } => uses_calendar_flags(arg),
+        // Annual/monthly/daily-window ops read is_new_month()/is_new_day()/
+        // get_timestamp_month() directly in advance_state (not through a
+        // SimContext node in `arg`), so they need the calendar flags live
+        // even when the sampled argument doesn't reference sim.* itself.
+        OptimizedExpressionNode::MovingWindow { op, arg, .. } => {
+            matches!(op,
+                WindowOp::SumYears { .. }
+                | WindowOp::MinYears { .. } | WindowOp::MaxYears { .. }
+                | WindowOp::SumMonths | WindowOp::MinMonths | WindowOp::MaxMonths
+                | WindowOp::SumDays | WindowOp::MinDays | WindowOp::MaxDays)
+                || uses_calendar_flags(arg)
+        }
         OptimizedExpressionNode::Since { arg, reset, .. } => {
             arg.as_deref().map(uses_calendar_flags).unwrap_or(false) || uses_calendar_flags(reset)
         }
@@ -2215,13 +2404,17 @@ fn lower_function_call(
     }
 
     match builtin {
-        B::Pow | B::Atan2 => {
+        B::Pow | B::Atan2 | B::Infill => {
             if args.len() != 2 {
                 return arity_err("2", args.len());
             }
             let b = args.pop().unwrap();
             let a = args.pop().unwrap();
-            let f: fn(f64, f64) -> f64 = if builtin == B::Pow { f64::powf } else { f64::atan2 };
+            let f: fn(f64, f64) -> f64 = match builtin {
+                B::Pow => f64::powf,
+                B::Atan2 => f64::atan2,
+                _ => crate::functions::functions::infill,
+            };
             Ok(OptimizedExpressionNode::Func2 { f, a: Box::new(a), b: Box::new(b) })
         }
         B::If => {
@@ -2284,6 +2477,23 @@ fn constant_arg(args: &[OptimizedExpressionNode], idx: usize, func: &str, what: 
     }
 }
 
+/// Arena state for a calendar-window instance. Sum keeps a plain ring of
+/// bucket totals plus a running total (`[ring; n] + [total]`), zero-filled:
+/// an unreached bucket contributes nothing to a sum. Min/max instead get the
+/// monotonic-deque layout documented on `publish_bucket_extreme`, NaN-filled
+/// so unreached buckets are suppressed by f64::min/max rather than counted.
+fn alloc_bucket_state(
+    arena: &mut crate::data_management::data_cache::ExprStateArena,
+    n: usize,
+    is_extreme: bool,
+) -> (usize, usize) {
+    if is_extreme {
+        (arena.alloc_f(&vec![f64::NAN; n + 3]), arena.alloc_u(&vec![0usize; n + 4]))
+    } else {
+        (arena.alloc_f(&vec![0.0; n + 1]), arena.alloc_u(&[0]))
+    }
+}
+
 /// Lower a calendar-at-offset call (`month_at`/`days_in_month_at` — the
 /// CALENDAR_FUNCTIONS tier): context functions resolved here, like the
 /// stateful family, because they read the simulation clock at evaluation.
@@ -2306,7 +2516,8 @@ fn lower_calendar_call(
     Ok(Some(OptimizedExpressionNode::CalendarAt { kind, arg: Box::new(args.remove(0)) }))
 }
 
-/// Lower a stateful builtin (moving_*/*_since/latch) if `name` is one, allocating
+/// Lower a stateful builtin (moving_* fixed and calendar windows, *_since,
+/// latch) if `name` is one, allocating
 /// its arena state. Returns Ok(None) for names that are not stateful
 /// builtins, letting the caller fall through to its unknown-function error.
 ///
@@ -2315,6 +2526,7 @@ fn lower_calendar_call(
 /// - moving windows pre-fill with the element default (running sum =
 ///   n * default; the min/max deque starts with one default entry expiring
 ///   when the last pre-filled element would leave the window);
+/// - calendar windows have no default — see `alloc_bucket_state` above;
 /// - *_since accumulators start as if reset fired just before the run
 ///   (sum/count 0, steps -1, min/max NaN which f64::min/max suppress).
 /// - a latch holds the caller-supplied `init` until its condition first
@@ -2371,11 +2583,94 @@ fn lower_stateful_call(
                 }
                 (arena.alloc_f(&f_init), arena.alloc_u(&u_init))
             }
+            // window_op above only ever produces Sum/Mean/Min/Max; other families lowered
+            // separately
+            WindowOp::SumYears { .. } | WindowOp::MinYears { .. } | WindowOp::MaxYears { .. }
+            | WindowOp::SumMonths | WindowOp::MinMonths | WindowOp::MaxMonths
+            | WindowOp::SumDays | WindowOp::MinDays | WindowOp::MaxDays => unreachable!(),
         };
         return Ok(Some(OptimizedExpressionNode::MovingWindow {
             op,
             slots: Box::new(WindowSlots { n, f_off, u_off }),
             arg,
+        }));
+    }
+
+    // Calendar-window families: the same statistic as the fixed windows
+    // above, over a window measured in whole water years / calendar months /
+    // calendar days instead of steps. Argument order mirrors
+    // moving_*(x, n, ...): the value, then the window length, then whatever
+    // that variant needs (the water-year anchor month; nothing for the
+    // others). See structured_expressions_design.md §5a.
+    let years_op = match name {
+        "moving_sum_years" => Some(0u8),
+        "moving_min_years" => Some(1),
+        "moving_max_years" => Some(2),
+        _ => None,
+    };
+    if let Some(which) = years_op {
+        if args.len() != 3 {
+            return Err(format!(
+                "Function '{}' expects 3 arguments (x, n_years, wy_month), got {}",
+                name, args.len()
+            ));
+        }
+        let n_years = constant_arg(&args, 1, name, "window length (2nd argument)")?;
+        if n_years.fract() != 0.0 || n_years < 1.0 {
+            return Err(format!(
+                "{}'s window length must be a positive integer, got {}",
+                name, n_years
+            ));
+        }
+        let wy_month = constant_arg(&args, 2, name, "water year month (3rd argument)")?;
+        if wy_month.fract() != 0.0 || !(1.0..=12.0).contains(&wy_month) {
+            return Err(format!(
+                "{}'s water year month must be an integer between 1 and 12, got {}",
+                name, wy_month
+            ));
+        }
+        let (n, wy_month) = (n_years as usize, wy_month as u32);
+        let arg = Box::new(args.swap_remove(0));
+        let op = match which {
+            0 => WindowOp::SumYears { wy_month },
+            1 => WindowOp::MinYears { wy_month },
+            _ => WindowOp::MaxYears { wy_month },
+        };
+        let (f_off, u_off) = alloc_bucket_state(arena, n, which != 0);
+        return Ok(Some(OptimizedExpressionNode::MovingWindow {
+            op, slots: Box::new(WindowSlots { n, f_off, u_off }), arg,
+        }));
+    }
+
+    // Months and days: same shape, no anchor to carry, so just (x, n).
+    let period_op = match name {
+        "moving_sum_months" => Some((WindowOp::SumMonths, false, "n_months")),
+        "moving_min_months" => Some((WindowOp::MinMonths, true, "n_months")),
+        "moving_max_months" => Some((WindowOp::MaxMonths, true, "n_months")),
+        "moving_sum_days" => Some((WindowOp::SumDays, false, "n_days")),
+        "moving_min_days" => Some((WindowOp::MinDays, true, "n_days")),
+        "moving_max_days" => Some((WindowOp::MaxDays, true, "n_days")),
+        _ => None,
+    };
+    if let Some((op, is_extreme, n_label)) = period_op {
+        if args.len() != 2 {
+            return Err(format!(
+                "Function '{}' expects 2 arguments (x, {}), got {}",
+                name, n_label, args.len()
+            ));
+        }
+        let n_val = constant_arg(&args, 1, name, "window length (2nd argument)")?;
+        if n_val.fract() != 0.0 || n_val < 1.0 {
+            return Err(format!(
+                "{}'s window length must be a positive integer, got {}",
+                name, n_val
+            ));
+        }
+        let n = n_val as usize;
+        let arg = Box::new(args.swap_remove(0));
+        let (f_off, u_off) = alloc_bucket_state(arena, n, is_extreme);
+        return Ok(Some(OptimizedExpressionNode::MovingWindow {
+            op, slots: Box::new(WindowSlots { n, f_off, u_off }), arg,
         }));
     }
 

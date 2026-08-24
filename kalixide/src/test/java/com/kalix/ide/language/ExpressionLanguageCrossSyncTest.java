@@ -23,20 +23,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class ExpressionLanguageCrossSyncTest {
 
-    /** Engine-drift pin: 25 pure builtins + 10 stateful builtins + 2 calendar functions. */
+    /** Engine-drift pin: 26 pure builtins + 19 stateful builtins + 2 calendar functions. */
     private static final Set<String> EXPECTED_FUNCTION_NAMES = Set.of(
             "if", "min", "max", "sum", "mean",
             "abs", "sqrt", "sin", "cos", "tan", "asin", "acos", "atan",
             "exp", "ln", "log10", "log2", "ceil", "floor", "round", "sign",
-            "is_leap_year",
+            "is_leap_year", "infill",
             "pow", "atan2", "clamp",
             "moving_sum", "moving_mean", "moving_min", "moving_max",
+            "moving_sum_years", "moving_min_years", "moving_max_years",
+            "moving_sum_months", "moving_min_months", "moving_max_months",
+            "moving_sum_days", "moving_min_days", "moving_max_days",
             "sum_since", "min_since", "max_since", "count_since", "steps_since",
             "latch",
             "month_at", "days_in_month_at");
 
     private static final Set<String> EXPECTED_STATEFUL_NAMES = Set.of(
             "moving_sum", "moving_mean", "moving_min", "moving_max",
+            "moving_sum_years", "moving_min_years", "moving_max_years",
+            "moving_sum_months", "moving_min_months", "moving_max_months",
+            "moving_sum_days", "moving_min_days", "moving_max_days",
             "sum_since", "min_since", "max_since", "count_since", "steps_since",
             "latch");
 
@@ -51,7 +57,7 @@ class ExpressionLanguageCrossSyncTest {
         assertEquals(EXPECTED_FUNCTION_NAMES, ExpressionLanguage.functionNames());
         assertEquals(EXPECTED_FUNCTION_NAMES, ExpressionLanguage.functionArities().keySet());
         assertEquals(EXPECTED_SIM_VARIABLES, ExpressionLanguage.simVariableNames());
-        assertEquals(37, ExpressionLanguage.BUILTINS.size());
+        assertEquals(47, ExpressionLanguage.BUILTINS.size());
         assertEquals(11, ExpressionLanguage.SIM_VARIABLES.size());
     }
 
@@ -78,12 +84,17 @@ class ExpressionLanguageCrossSyncTest {
         assertEquals("builtin function", ExpressionLanguage.reservedTier("min"));
         assertEquals("builtin function", ExpressionLanguage.reservedTier("clamp"));
         assertEquals("stateful function", ExpressionLanguage.reservedTier("moving_mean"));
+        assertEquals("stateful function", ExpressionLanguage.reservedTier("moving_sum_years"));
+        assertEquals("stateful function", ExpressionLanguage.reservedTier("moving_max_years"));
+        assertEquals("stateful function", ExpressionLanguage.reservedTier("moving_sum_months"));
+        assertEquals("stateful function", ExpressionLanguage.reservedTier("moving_max_days"));
         assertEquals("stateful function", ExpressionLanguage.reservedTier("steps_since"));
         assertEquals("stateful function", ExpressionLanguage.reservedTier("latch"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("assert"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("this"));
         assertEquals("reserved word", ExpressionLanguage.reservedTier("self"));
         assertEquals("builtin function", ExpressionLanguage.reservedTier("is_leap_year"));
+        assertEquals("builtin function", ExpressionLanguage.reservedTier("infill"));
         assertEquals("calendar function", ExpressionLanguage.reservedTier("month_at"));
         assertEquals("calendar function", ExpressionLanguage.reservedTier("days_in_month_at"));
         assertNull(ExpressionLanguage.reservedTier("headroom"));
@@ -94,13 +105,24 @@ class ExpressionLanguageCrossSyncTest {
     void testValidatorConsumesEveryBuiltin() {
         FunctionExpressionValidator validator = new FunctionExpressionValidator();
         for (ExpressionLanguage.Builtin b : ExpressionLanguage.BUILTINS) {
-            // Call each function with its minimum arity; every argument a data ref
-            // (moving_* window/default get bare literals so the literal rule is met).
+            // Call each function with its minimum arity; every argument a data
+            // ref, except the load-time literals every moving_* family needs
+            // (window length, and the element default or water-year anchor).
+            // moving_*_years needs its own values because its 3rd argument is
+            // a month in [1,12], where the fixed-window family's 3rd is any
+            // constant: (x, 6, 3) is a 6-year window anchored at March.
+            // moving_*_months / moving_*_days are 2-arity, so their single
+            // n falls out of the shared "i==1 -> 3" branch below.
             int minArity = b.arity() < 0 ? -b.arity() : b.arity();
             List<String> args = new java.util.ArrayList<>();
             for (int i = 0; i < minArity; i++) {
-                boolean movingConst = b.name().startsWith("moving_") && i >= 1;
-                args.add(movingConst ? (i == 1 ? "3" : "0") : "data.x");
+                if (b.name().endsWith("_years") && i >= 1) {
+                    args.add(i == 1 ? "6" : "3");
+                } else if (b.name().startsWith("moving_") && i >= 1) {
+                    args.add(i == 1 ? "3" : "0");
+                } else {
+                    args.add("data.x");
+                }
             }
             String expr = b.name() + "(" + String.join(", ", args) + ")";
             List<String> errors = validator.validate(expr);

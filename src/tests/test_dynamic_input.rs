@@ -1595,3 +1595,81 @@ fn test_clamp_nan_input_suppressed() {
 fn test_clamp_lo_greater_than_hi_yields_hi() {
     assert_eq!(eval_x("clamp(data.x, 10, 0)", 5.0), 0.0);
 }
+
+// ============ infill(x, value) ============
+
+/// infill(x, value) substitutes `value` for a missing value (NaN) and passes
+/// everything else through unchanged. Note it SUBSTITUTES rather than
+/// excludes - see the moving_mean case below, which is why the name says
+/// "infill" and not "skip".
+#[test]
+fn test_infill_substitutes_for_nan_and_passes_through_otherwise() {
+    assert_eq!(eval_x("infill(data.x, 0)", f64::NAN), 0.0);
+    assert_eq!(eval_x("infill(data.x, 0)", 5.0), 5.0);
+    assert_eq!(eval_x("infill(data.x, 0)", -3.5), -3.5);
+    assert_eq!(eval_x("infill(data.x, 0)", 0.0), 0.0);
+    // The fill value is the modeller's, not a hardcoded zero.
+    assert_eq!(eval_x("infill(data.x, -1)", f64::NAN), -1.0);
+    assert_eq!(eval_x("infill(data.x, 42.5)", f64::NAN), 42.5);
+    assert_eq!(eval_x("infill(data.x, 42.5)", 7.0), 7.0);
+}
+
+/// The infilled element is still an element, and the name has to carry that:
+/// over [10, NaN, 20, 30] the mean of the non-missing values is 20, but
+/// infilling 0 gives 15, because the 0 is one of the four values averaged.
+/// Any name promising to *skip* the gap would make that a trap; `infill`
+/// names the substitution honestly (expression-naming 1.1).
+#[test]
+fn test_infill_is_substitution_not_exclusion() {
+    let values = [10.0, f64::NAN, 20.0, 30.0];
+    let mut data_cache = cache_with_x(&values);
+    let input = crate::model_inputs::DynamicInput::from_string(
+        "moving_mean(infill(data.x, 0), 4, 0)", &mut data_cache, true, None).unwrap();
+    let mut last = 0.0;
+    for step in 0..values.len() {
+        data_cache.set_current_step(step);
+        last = input.get_value(&mut data_cache);
+    }
+    assert_eq!(last, 15.0,
+        "infill substitutes into the window; it does not remove the element");
+}
+
+/// infill requires exactly two arguments; wrong arity is rejected at load.
+#[test]
+fn test_infill_wrong_arity_errors_at_load() {
+    for bad in ["infill()", "infill(data.x)", "infill(data.x, 0, 1)"] {
+        let mut data_cache = cache_with_x(&[1.0]);
+        assert!(crate::model_inputs::DynamicInput::from_string(bad, &mut data_cache, true, None).is_err(),
+            "'{}' should be rejected at load", bad);
+    }
+}
+
+/// The composition the annual/monthly/daily families need: min/max already
+/// suppress NaN, sum would poison on it, so infill(x, 0) lets one NaN-gated
+/// signal feed both without writing two different gates.
+#[test]
+fn test_infill_composes_with_year_sum_matching_year_max_gating() {
+    let n_days = 800;
+    let values: Vec<f64> = (0..n_days)
+        .map(|i| if i % 3 == 0 { (i % 7) as f64 } else { f64::NAN })
+        .collect();
+    let mut data_cache = cache_with_x(&values);
+    let sum = crate::model_inputs::DynamicInput::from_string(
+        "moving_sum_years(infill(data.x, 0), 2, 1)", &mut data_cache, true, None).unwrap();
+    let max = crate::model_inputs::DynamicInput::from_string(
+        "moving_max_years(data.x, 2, 1)", &mut data_cache, true, None).unwrap();
+    for k in 0..n_days {
+        data_cache.set_current_step(k);
+        let s = sum.get_value(&mut data_cache);
+        let m = max.get_value(&mut data_cache);
+        assert!(s.is_finite(), "moving_sum_years(infill(...)) went NaN at step {}", k);
+        assert!(m.is_finite() || k == 0, "moving_max_years went NaN at step {}", k);
+    }
+}
+
+/// A literal NaN expression infills too, not just a NaN-valued series.
+#[test]
+fn test_infill_on_literal_nan_expression() {
+    assert_eq!(eval_x("infill(0.0 / 0.0, 0)", 1.0), 0.0);
+    assert_eq!(eval_x("infill(0.0 / 0.0, 9)", 1.0), 9.0);
+}
