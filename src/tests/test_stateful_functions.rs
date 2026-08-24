@@ -915,3 +915,82 @@ fn test_moving_days_load_errors() {
     assert!(DynamicInput::from_string("moving_sum_days(data.x, 3)", &mut dc, true, None).is_ok(),
         "a well-formed moving_sum_days call should parse");
 }
+
+/// E24. The bucket-keyed monotonic deque against the independent oracle,
+/// across window lengths and series shapes chosen to stress eviction rather
+/// than the happy path. The two that matter:
+///
+/// - **Monotonic runs.** For a max, a strictly decreasing series keeps the
+///   window maximum in the *oldest* bucket, so every boundary evicts the
+///   current answer and the deque must re-derive it from the next entry.
+///   That was the worst case for the O(n) rescan this replaced, and it is
+///   the case a naive incremental update gets wrong.
+/// - **n_years = 1 and 2.** At n=1 the deque is never used (the window is the
+///   in-progress bucket alone); at n=2 it holds exactly one closed bucket, so
+///   an off-by-one in the expiry key shows up immediately rather than being
+///   masked by spare capacity.
+#[test]
+fn test_moving_years_min_max_deque_matches_oracle_across_shapes() {
+    let n_days = 1500; // >4 calendar years, so several full evictions
+    let shapes: [(&str, fn(usize) -> f64); 4] = [
+        ("decreasing", |i| 10_000.0 - i as f64),
+        ("increasing", |i| i as f64),
+        ("sawtooth", |i| ((i * 7919) % 1000) as f64),
+        ("plateau", |i| if i % 400 < 200 { 5.0 } else { 5.0 + (i % 3) as f64 }),
+    ];
+    for (shape, f) in shapes {
+        let values: Vec<f64> = (0..n_days).map(f).collect();
+        for n_years in [1usize, 2, 3, 5] {
+            for (is_min, stat) in [(true, "min"), (false, "max")] {
+                let mut dc = cache_with_x(&values);
+                let expr = format!("moving_{}_years(data.x, {}, 1)", stat, n_years);
+                let input = DynamicInput::from_string(&expr, &mut dc, true, None)
+                    .unwrap_or_else(|e| panic!("{expr} should parse: {e}"));
+                let got = run_steps(&input, &mut dc, n_days);
+                let want = expected_annual_extreme(&values, 1, n_years, is_min);
+                assert_series(&got, &want, &format!("{expr} on {shape}"));
+            }
+        }
+    }
+}
+
+/// E25. Same deque, but with NaN gaps in the input: a NaN must never enter
+/// the deque or displace a real extremum, and a bucket that is entirely NaN
+/// must contribute nothing rather than poisoning the window (the opposite of
+/// the sum family, which poisons deliberately).
+#[test]
+fn test_moving_years_min_max_deque_suppresses_nan() {
+    let n_days = 1200;
+    // Whole stretches missing, including a run long enough to blank a bucket.
+    let values: Vec<f64> = (0..n_days)
+        .map(|i| if (200..640).contains(&i) || i % 17 == 0 { f64::NAN } else { ((i * 7919) % 1000) as f64 })
+        .collect();
+    for n_years in [2usize, 3] {
+        for (is_min, stat) in [(true, "min"), (false, "max")] {
+            let mut dc = cache_with_x(&values);
+            let expr = format!("moving_{}_years(data.x, {}, 1)", stat, n_years);
+            let input = DynamicInput::from_string(&expr, &mut dc, true, None).unwrap();
+            let got = run_steps(&input, &mut dc, n_days);
+            let want = expected_annual_extreme(&values, 1, n_years, is_min);
+            assert_series(&got, &want, &format!("{expr} with NaN gaps"));
+        }
+    }
+}
+
+/// E26. The monthly family shares the deque; check it against its own oracle
+/// with a window long enough that eviction happens many times over.
+#[test]
+fn test_moving_months_min_max_deque_matches_oracle() {
+    let n_days = 1200;
+    let values: Vec<f64> = (0..n_days).map(|i| ((i * 104729) % 997) as f64).collect();
+    for n_months in [1usize, 2, 6, 18] {
+        for (is_min, stat) in [(true, "min"), (false, "max")] {
+            let mut dc = cache_with_x(&values);
+            let expr = format!("moving_{}_months(data.x, {})", stat, n_months);
+            let input = DynamicInput::from_string(&expr, &mut dc, true, None).unwrap();
+            let got = run_steps(&input, &mut dc, n_days);
+            let want = expected_monthly_extreme(&values, n_months, is_min);
+            assert_series(&got, &want, &expr);
+        }
+    }
+}

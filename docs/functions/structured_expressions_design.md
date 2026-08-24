@@ -178,13 +178,23 @@ Rules:
   bucket then starts on every step; the daily family earns its keep at
   sub-daily timesteps, where it buckets multiple steps into one day.
 - **State advances every timestep, unconditionally**, same rule as §5.
-- Implementation: a ring of `n` bucket values plus a running statistic,
+- Implementation, sum: a ring of `n` bucket totals plus a running total,
   advanced at each period boundary (evict the oldest bucket, start a new
-  one) and accumulated into on every other step. Sum/mean's eviction
-  corrects the running total incrementally (`sum += x - evicted`, as in
-  §5); min/max has no such inverse, so eviction triggers an O(n) rescan of
-  the ring — cheap, since it only happens once per boundary, not once per
-  step.
+  one) and accumulated into on every other step. Eviction corrects the
+  running total incrementally, `sum += x - evicted`, as in §5.
+- Implementation, min/max: eviction has no such inverse — knowing what left
+  tells you nothing about what remains — so these keep §5's monotonic deque
+  over *closed buckets*, keyed on bucket index rather than step index, plus
+  the running extremum of the bucket in progress. Amortised O(1), like the
+  fixed-window deque it reuses.
+
+  **Do not replace that with a rescan of the bucket ring on eviction.** The
+  tempting justification — "a boundary is rare, so O(n) there is free" — is
+  false for the family that needs it most: at a daily timestep every step is
+  a boundary for `moving_*_days`, so the rescan runs per step, not per
+  period. Measured at `n = 365` it cost 2.5× the deque for identical
+  results. `moving_*_months` with a multi-year window pays the same way,
+  just less often.
 
 ## 6. Event-windowed functions: `*_since`
 

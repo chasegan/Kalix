@@ -503,8 +503,9 @@ impl OptimizedExpressionNode {
                 WindowOp::MinYears { .. } | WindowOp::MaxYears { .. }
                 | WindowOp::MinMonths | WindowOp::MaxMonths
                 | WindowOp::MinDays | WindowOp::MaxDays => {
-                    let stat_slot = slots.f_off + slots.n;
-                    data_cache.expr_state.f[stat_slot]
+                    // Published by publish_bucket_extreme each step: the
+                    // deque front combined with the in-progress bucket.
+                    data_cache.expr_state.f[slots.f_off + slots.n + 2]
                 }
             },
 
@@ -658,16 +659,16 @@ impl OptimizedExpressionNode {
                     }
                     WindowOp::MinYears { wy_month } => {
                         if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
-                            advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
                         } else {
-                            accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
                         }
                     }
                     WindowOp::MaxYears { wy_month } => {
                         if data_cache.is_new_month() && data_cache.get_timestamp_month() == *wy_month {
-                            advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
                         } else {
-                            accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
                         }
                     }
                     // Window in whole calendar months
@@ -680,16 +681,16 @@ impl OptimizedExpressionNode {
                     }
                     WindowOp::MinMonths => {
                         if data_cache.is_new_month() {
-                            advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
                         } else {
-                            accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
                         }
                     }
                     WindowOp::MaxMonths => {
                         if data_cache.is_new_month() {
-                            advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
                         } else {
-                            accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
                         }
                     }
                     // Window in whole calendar days
@@ -702,16 +703,16 @@ impl OptimizedExpressionNode {
                     }
                     WindowOp::MinDays => {
                         if data_cache.is_new_day() {
-                            advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
                         } else {
-                            accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, true);
                         }
                     }
                     WindowOp::MaxDays => {
                         if data_cache.is_new_day() {
-                            advance_ring_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                            advance_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
                         } else {
-                            accumulate_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
+                            accumulate_bucket_extreme(data_cache, slots.n, slots.f_off, slots.u_off, x, false);
                         }
                     }
                 }
@@ -889,50 +890,63 @@ fn accumulate_ring(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: us
     arena.f[total_slot]   += x;
 }
 
-/// Accumulate into the current year's slot of an annual min/max ring without
-/// advancing (the ring-of-extrema counterpart to `accumulate_ring`). Tightens
-/// both the current year's running extremum and the overall extremum in O(1):
-/// valid because `x` can only make either more extreme, and the overall
-/// extremum already correctly reflects every other (untouched) ring slot as
-/// of the last boundary (see `advance_ring_extreme`). NaN inputs are
-/// suppressed automatically — f64::min/f64::max return the non-NaN operand —
-/// matching how moving_min/moving_max suppress NaN.
-fn accumulate_extreme(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64, is_min: bool) {
+/// Arena layout for a calendar-window min/max, which keeps a monotonic deque
+/// over *closed* buckets plus the running extremum of the bucket in progress:
+///
+/// - `f[f_off .. f_off+n+1]` deque values (capacity `n + 1`)
+/// - `f[f_off+n+1]`          extremum of the bucket currently accumulating
+/// - `f[f_off+n+2]`          published result, what `evaluate` reads
+/// - `u[u_off .. u_off+n+1]` deque expiries, in *bucket* indices
+/// - `u[u_off+n+1]`          deque head, `u[u_off+n+2]` deque length
+/// - `u[u_off+n+3]`          index of the bucket currently accumulating
+///
+/// The deque is the same structure `moving_min`/`moving_max` use, with bucket
+/// index in place of step index — so eviction costs amortised O(1) instead of
+/// the O(n) ring rescan this replaced. That mattered because a boundary is
+/// not always rare: at a daily timestep every step is a boundary for
+/// `moving_min_days`, so the rescan ran per step, not per period.
+fn publish_bucket_extreme(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, is_min: bool) {
+    let cap = n + 1;
     let arena = &mut data_cache.expr_state;
-    let head = arena.u[u_off];
-    let slot = f_off + head;
-    let stat_slot = f_off + n;
-    if is_min {
-        arena.f[slot] = arena.f[slot].min(x);
-        arena.f[stat_slot] = arena.f[stat_slot].min(x);
-    } else {
-        arena.f[slot] = arena.f[slot].max(x);
-        arena.f[stat_slot] = arena.f[stat_slot].max(x);
-    }
+    let len = arena.u[u_off + cap + 1];
+    // Closed buckets still in the window are summarised by the deque front;
+    // NaN when there are none, which f64::min/max then suppress.
+    let front = if len > 0 { arena.f[f_off + arena.u[u_off + cap]] } else { f64::NAN };
+    let current = arena.f[f_off + cap];
+    arena.f[f_off + cap + 1] = if is_min { front.min(current) } else { front.max(current) };
 }
 
-/// Advance an annual min/max ring at a water-year boundary (the ring-of-
-/// extrema counterpart to `advance_ring`): evict the oldest year's extremum,
-/// start the new year's slot at x, and recompute the overall extremum by
-/// rescanning the ring. Unlike sum, min/max has no inverse to correct an
-/// eviction incrementally (knowing what left tells you nothing about what's
-/// left), so the O(n) rescan runs on every boundary — cheap, since boundaries
-/// fire once per water year, not once per step. NaN ring entries (years not
-/// yet reached, or fully NaN-poisoned years) are ignored automatically by
-/// f64::min/f64::max's NaN-suppression.
-fn advance_ring_extreme(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64, is_min: bool) {
-    let arena = &mut data_cache.expr_state;
-    let head = arena.u[u_off];
-    let new_head = if head + 1 == n { 0 } else { head + 1 };
-    arena.f[f_off + new_head] = x;
-    arena.u[u_off] = new_head;
+/// Fold `x` into the bucket currently accumulating. O(1), and NaN-suppressing
+/// because f64::min/max return the non-NaN operand — matching how
+/// moving_min/moving_max treat NaN.
+fn accumulate_bucket_extreme(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64, is_min: bool) {
+    let cur_slot = f_off + n + 1;
+    let current = data_cache.expr_state.f[cur_slot];
+    data_cache.expr_state.f[cur_slot] = if is_min { current.min(x) } else { current.max(x) };
+    publish_bucket_extreme(data_cache, n, f_off, u_off, is_min);
+}
 
-    let stat_slot = f_off + n;
-    let mut s = f64::NAN;
-    for i in 0..n {
-        s = if is_min { s.min(arena.f[f_off + i]) } else { s.max(arena.f[f_off + i]) };
+/// Close the bucket in progress at a period boundary and open a new one at
+/// `x`. The closed bucket's extremum enters the deque keyed on its own index,
+/// so it leaves the window exactly `n` buckets later.
+fn advance_bucket_extreme(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64, is_min: bool) {
+    let cap = n + 1;
+    let cur_slot = f_off + cap;
+    let bucket_slot = u_off + cap + 2;
+
+    let closed = data_cache.expr_state.f[cur_slot];
+    let bucket = data_cache.expr_state.u[bucket_slot] + 1;
+    data_cache.expr_state.u[bucket_slot] = bucket;
+
+    // n == 1 means the window is the current bucket alone, so no closed
+    // bucket is ever in range and the deque stays empty.
+    if n >= 2 {
+        // The value belongs to bucket `bucket - 1`, which stays in the window
+        // while the current bucket index is <= (bucket - 1) + n - 1.
+        advance_deque_at(data_cache, n, f_off, u_off, closed, is_min, bucket, bucket + n - 2);
     }
-    arena.f[stat_slot] = s;
+    data_cache.expr_state.f[cur_slot] = x;
+    publish_bucket_extreme(data_cache, n, f_off, u_off, is_min);
 }
 
 /// Advance a moving_sum/mean ring buffer by one step: evict the oldest value,
@@ -976,6 +990,18 @@ fn advance_ring(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize
 /// and an empty deque (all real values NaN) reads as NaN at evaluation.
 fn advance_deque(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize, x: f64, is_min: bool) {
     let step = data_cache.current_step;
+    advance_deque_at(data_cache, n, f_off, u_off, x, is_min, step, step + n - 1);
+}
+
+/// The deque body, with its clock supplied rather than read from the step
+/// counter. `now` is the tick used to expire the front; `expiry` is the last
+/// tick at which the pushed value is still inside the window. They differ by
+/// more than `n - 1` only for the calendar families, whose pushed value
+/// belongs to the bucket that just *closed*, not to the tick being processed.
+fn advance_deque_at(
+    data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usize,
+    x: f64, is_min: bool, now: usize, expiry: usize,
+) {
     let arena = &mut data_cache.expr_state;
     let cap = n + 1;
     let head_slot = u_off + cap;
@@ -985,7 +1011,7 @@ fn advance_deque(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usiz
     let mut len = arena.u[len_slot];
 
     // 1) Expire the front while it has fallen out of the window.
-    while len > 0 && arena.u[u_off + head] < step {
+    while len > 0 && arena.u[u_off + head] < now {
         head = if head + 1 == cap { 0 } else { head + 1 };
         len -= 1;
     }
@@ -1012,7 +1038,7 @@ fn advance_deque(data_cache: &mut DataCache, n: usize, f_off: usize, u_off: usiz
             tail -= cap;
         }
         arena.f[f_off + tail] = x;
-        arena.u[u_off + tail] = step + n - 1;
+        arena.u[u_off + tail] = expiry;
         len += 1;
     }
 
@@ -2333,25 +2359,21 @@ fn constant_arg(args: &[OptimizedExpressionNode], idx: usize, func: &str, what: 
     }
 }
 
-/// Allocate the ring-of-buckets arena state shared by the annual/monthly/
-/// daily window families: `[ring; n] + [running statistic; 1]`. Sum/mean
-/// start zero-filled (the additive identity, `is_extreme = false`); min/max
-/// start NaN-filled (`is_extreme = true`) — there's no additive identity for
-/// an extremum, and f64::min/f64::max already treat NaN as "no data yet, use
-/// the other operand" (see `accumulate_extreme`/`advance_ring_extreme`).
-fn alloc_bucket_ring(
+/// Arena state for a calendar-window instance. Sum keeps a plain ring of
+/// bucket totals plus a running total (`[ring; n] + [total]`), zero-filled:
+/// an unreached bucket contributes nothing to a sum. Min/max instead get the
+/// monotonic-deque layout documented on `publish_bucket_extreme`, NaN-filled
+/// so unreached buckets are suppressed by f64::min/max rather than counted.
+fn alloc_bucket_state(
     arena: &mut crate::data_management::data_cache::ExprStateArena,
     n: usize,
     is_extreme: bool,
 ) -> (usize, usize) {
-    let f_init = if is_extreme {
-        vec![f64::NAN; n + 1]
+    if is_extreme {
+        (arena.alloc_f(&vec![f64::NAN; n + 3]), arena.alloc_u(&vec![0usize; n + 4]))
     } else {
-        let mut v = vec![0.0; n];
-        v.push(0.0);
-        v
-    };
-    (arena.alloc_f(&f_init), arena.alloc_u(&[0]))
+        (arena.alloc_f(&vec![0.0; n + 1]), arena.alloc_u(&[0]))
+    }
 }
 
 /// Lower a calendar-at-offset call (`month_at`/`days_in_month_at` — the
@@ -2492,7 +2514,7 @@ fn lower_stateful_call(
             1 => WindowOp::MinYears { wy_month },
             _ => WindowOp::MaxYears { wy_month },
         };
-        let (f_off, u_off) = alloc_bucket_ring(arena, n, which != 0);
+        let (f_off, u_off) = alloc_bucket_state(arena, n, which != 0);
         return Ok(Some(OptimizedExpressionNode::MovingWindow {
             op, slots: Box::new(WindowSlots { n, f_off, u_off }), arg,
         }));
@@ -2524,7 +2546,7 @@ fn lower_stateful_call(
         }
         let n = n_val as usize;
         let arg = Box::new(args.swap_remove(0));
-        let (f_off, u_off) = alloc_bucket_ring(arena, n, is_extreme);
+        let (f_off, u_off) = alloc_bucket_state(arena, n, is_extreme);
         return Ok(Some(OptimizedExpressionNode::MovingWindow {
             op, slots: Box::new(WindowSlots { n, f_off, u_off }), arg,
         }));
