@@ -300,6 +300,7 @@ mod reserved_registry_tests {
                     format!("{}(data.x, 3)", n),
                 n if n.starts_with("moving_") => format!("{}(data.x, 3, 0)", n),
                 "steps_since" => "steps_since(data.x > 0)".to_string(),
+                "latch" => "latch(data.x, sim.new_month, 0)".to_string(),
                 n => format!("{}(data.x, sim.new_month)", n),
             };
             let result = crate::model_inputs::DynamicInput::from_string(

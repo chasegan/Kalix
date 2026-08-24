@@ -128,13 +128,13 @@ Available functions:
 | `moving_mean` | 3 | Mean over the last n steps |
 | `moving_min` | 3 | Minimum over the last n steps |
 | `moving_max` | 3 | Maximum over the last n steps |
-| `moving_sum_years` | 3 | Sum over the last n\_years water years: moving\_annual\_sum(x, wy\_month, n\_years) |
+| `moving_sum_years` | 3 | Sum over the last n\_years water years: moving\_sum\_years(x, n\_years, wy\_month) |
 | `moving_min_years` | 3 | Minimum over the last n\_years water years |
 | `moving_max_years` | 3 | Maximum over the last n\_years water years |
-| `moving_sum_months` | 2 | Sum over the last n\_months calendar months: moving\_monthly\_sum(x, n\_months) |
+| `moving_sum_months` | 2 | Sum over the last n\_months calendar months: moving\_sum\_months(x, n\_months) |
 | `moving_min_months` | 2 | Minimum over the last n\_months calendar months |
 | `moving_max_months` | 2 | Maximum over the last n\_months calendar months |
-| `moving_sum_days` | 2 | Sum over the last n\_days calendar days: moving\_daily\_sum(x, n\_days) |
+| `moving_sum_days` | 2 | Sum over the last n\_days calendar days: moving\_sum\_days(x, n\_days) |
 | `moving_min_days` | 2 | Minimum over the last n\_days calendar days |
 | `moving_max_days` | 2 | Maximum over the last n\_days calendar days |
 | `sum_since` | 2 | Sum of x since a reset condition last fired |
@@ -142,6 +142,7 @@ Available functions:
 | `max_since` | 2 | Maximum of x since reset |
 | `count_since` | 2 | Steps on which a condition held since reset |
 | `steps_since` | 1 | Steps elapsed since reset (0 on a reset step) |
+| `latch` | 3 | Sample x when a condition holds, else hold the last sample: latch(x, condition, init) |
 
 Two names are deliberately absent. There is no `log`: write the explicit `ln`
 or `log10`. And there is no `avg` or `average`: the function is `mean`, named
@@ -232,9 +233,9 @@ rolling_12mo_total = moving_sum_months(node.gauge_1.dsflow, 12)
 
 `moving_min_years`/`max` (and their monthly/daily equivalents) suppress
 NaN — a NaN input never disturbs the tracked extremum, matching plain
-`moving_min`/`max`. `moving_sum_years`/`mean` still **poison** on NaN, like
-plain `moving_sum`/`mean`: a real gap in the data should make that year's
-total suspect, not vanish quietly. This matters if you build a value with
+`moving_min`/`max`. `moving_sum_years` (and the monthly/daily sums) still
+**poison** on NaN, like plain `moving_sum`: a real gap in the data should
+make that year's total suspect, not vanish quietly. This matters if you build a value with
 `if(cond, x, 0.0 / 0.0)` to make it count only on certain steps (the usual
 way to say "only this branch counts" in a side-effect-free expression
 language, since there's no bare `nan` literal outside the `[offset,

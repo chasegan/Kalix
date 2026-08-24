@@ -11,7 +11,8 @@
 ///
 /// Sections mirror the test plan:
 ///   A. moving_* semantics (hand-computed, warm-up + steady state).
-///   B. *_since semantics (reset-then-accumulate, implicit run-start reset).
+///   B. *_since semantics (reset-then-accumulate, implicit run-start reset),
+///      then latch (sample-and-hold).
 ///   C. Machinery invariants (guard, untaken-branch advance, variant
 ///      selection, load errors, independence, program-local interleave).
 ///   D. End-to-end via a full model (mirrors test_programs.rs).
@@ -266,6 +267,149 @@ fn test_min_max_since_bootstrap_and_rebootstrap() {
 }
 
 // ============================================================================
+// B'. latch (sample-and-hold)
+// ============================================================================
+
+/// B10a. latch(x, condition, init): samples x on every truthy step and holds
+/// it otherwise. Sample-then-read, as *_since is reset-then-accumulate — the
+/// sampling step reads the NEW value, not the held one.
+#[test]
+fn test_latch_samples_and_holds() {
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0, 2.0, 9.0, 1.0]);
+    let input = DynamicInput::from_string(
+        "latch(data.x, sim.step == 1 || sim.step == 4, 0)", &mut dc, true, None)
+        .expect("latch should parse");
+    assert!(matches!(input, DynamicInput::StatefulFunction { .. }),
+        "latch(...) should be a StatefulFunction, got {:?}", input);
+    let got = run_steps(&input, &mut dc, 6);
+    // step0: never fired -> init 0; step1: samples 3 (read on the sampling
+    // step); steps 2-3 hold 3; step4: samples 9; step5 holds 9.
+    assert_series(&got, &[0.0, 3.0, 3.0, 3.0, 9.0, 9.0], "latch");
+    assert_eq!(got[1], 3.0, "the sampling step reads the new value");
+    assert_eq!(got[2], 3.0, "the held value survives a non-sampling step");
+}
+
+/// B10b. Before the condition has ever fired the latch reads the caller's
+/// init. The run start is deliberately NOT an implicit sample (contrast the
+/// *_since family, design §6): the pre-first-fire value is the modeller's to
+/// state, as a moving window's element default is. A condition that never
+/// fires holds the init for the whole run.
+#[test]
+fn test_latch_init_before_first_fire() {
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0, 2.0]);
+    let input = DynamicInput::from_string("latch(data.x, sim.step == 2, -1)", &mut dc, true, None)
+        .unwrap();
+    let got = run_steps(&input, &mut dc, 4);
+    assert_series(&got, &[-1.0, -1.0, 8.0, 8.0], "latch init");
+
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0, 2.0]);
+    let never = DynamicInput::from_string("latch(data.x, 0, 42)", &mut dc, true, None).unwrap();
+    let got = run_steps(&never, &mut dc, 4);
+    assert_series(&got, &[42.0, 42.0, 42.0, 42.0], "latch never fired");
+}
+
+/// B10c. The documented escape hatch for "seed the hold from the data":
+/// widening the condition with `|| sim.step == 0` forces a sample on the
+/// first step of the run, making the init unobservable. This is how a model
+/// whose run starts mid-water-year avoids holding a stale opening value.
+#[test]
+fn test_latch_run_start_sample_idiom() {
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0, 2.0]);
+    let input = DynamicInput::from_string(
+        "latch(data.x, sim.step == 2 || sim.step == 0, -999)", &mut dc, true, None).unwrap();
+    let got = run_steps(&input, &mut dc, 4);
+    assert_series(&got, &[5.0, 5.0, 8.0, 8.0], "latch seeded at run start");
+    assert_ne!(got[0], -999.0,
+        "the step-0 sample must land before the first read, hiding the init");
+}
+
+/// B10d. Truthiness is the language's everywhere: any non-zero condition
+/// samples, including a negative value and NaN (NaN != 0.0, as in if()/&&/||).
+#[test]
+fn test_latch_condition_truthiness() {
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0]);
+    let neg = DynamicInput::from_string("latch(data.x, -1, 0)", &mut dc, true, None).unwrap();
+    assert_series(&run_steps(&neg, &mut dc, 3), &[5.0, 3.0, 8.0], "latch negative cond");
+
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0]);
+    let nan = DynamicInput::from_string("latch(data.x, 0.0 / 0.0, 0)", &mut dc, true, None).unwrap();
+    assert_series(&run_steps(&nan, &mut dc, 3), &[5.0, 3.0, 8.0], "latch NaN cond");
+}
+
+/// B10e. latch sampling is unconditional (design §5): a latch in an untaken
+/// `if` branch still samples, so what it holds never depends on which branches
+/// past evaluations took. Here the branch is untaken for steps 0-2, yet at
+/// step 3 the latch reads the sample taken at step 1 — not the init, and not
+/// x(3). See test_fn_inline.rs for the statement-level (OptStmt::Cond) case.
+#[test]
+fn test_latch_advances_in_untaken_branch() {
+    let mut dc = cache_with_x(&[5.0, 3.0, 8.0, 2.0, 9.0]);
+    let input = DynamicInput::from_string(
+        "if(sim.step >= 3, latch(data.x, sim.step == 1, 0), -1)", &mut dc, true, None)
+        .expect("if(...) with a latch branch should parse");
+    let got = run_steps(&input, &mut dc, 5);
+    assert_series(&got, &[-1.0, -1.0, -1.0, 3.0, 3.0], "latch untaken-branch advance");
+    assert_eq!(got[3], 3.0,
+        "the latch must hold the step-1 sample taken while its branch was untaken");
+}
+
+/// B10f. A held latch does not evaluate its value subtree, but a stateful node
+/// nested in that subtree still advances every step — laziness is an
+/// evaluation optimisation only, never a change to state (design §5). The
+/// inner window is fed x on all six steps even though the latch samples twice.
+#[test]
+fn test_latch_holds_but_inner_state_still_advances() {
+    let mut dc = cache_with_x(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    let input = DynamicInput::from_string(
+        "latch(moving_sum(data.x, 3, 0), sim.step == 1 || sim.step == 4, 0)",
+        &mut dc, true, None).expect("latch over moving_sum should lower");
+    let got = run_steps(&input, &mut dc, 6);
+    // moving_sum(x,3,0) = [1,3,6,9,12,15]. Sampled at step1 (3) and step4 (12);
+    // step4 reading 12 proves the window kept advancing while the latch held.
+    assert_series(&got, &[0.0, 3.0, 3.0, 3.0, 12.0, 12.0], "latch over moving_sum");
+    assert_eq!(got[4], 12.0,
+        "the inner window must reflect the full history, not a window frozen at step 1");
+}
+
+/// B10g. The `if(condition, x, this[-1,0])` equivalence the docs state, checked
+/// against the spelled-out form over the same series. Holds because the latch
+/// is the whole value (see the docs' caveat) and the condition is branch-free.
+#[test]
+fn test_latch_matches_if_previous_value_idiom() {
+    let values = [5.0, 3.0, 8.0, 2.0, 9.0, 1.0];
+    let cond = "sim.step == 1 || sim.step == 4";
+
+    let mut dc = cache_with_x(&values);
+    let latched = DynamicInput::from_string(
+        &format!("latch(data.x, {}, 0)", cond), &mut dc, true, None).unwrap();
+    let got = run_steps(&latched, &mut dc, values.len());
+
+    // The spelled-out form needs a real series to read [-1, 0] from, so drive
+    // it by hand: y(t) = if(cond, x(t), y(t-1)), y(-1) = 0 (the latch init).
+    let mut expected = Vec::new();
+    let mut prev = 0.0;
+    for (k, &x) in values.iter().enumerate() {
+        prev = if k == 1 || k == 4 { x } else { prev };
+        expected.push(prev);
+    }
+    assert_series(&got, &expected, "latch vs if(cond, x, this[-1,0])");
+}
+
+/// B10h. latch arity is fixed at 3, and the init must be a load-time constant
+/// (the arena init template is written at load, like a moving window's
+/// element default).
+#[test]
+fn test_latch_arity_and_init_load_errors() {
+    expect_load_err("latch(data.x, sim.new_month)", "expects 3 arguments");
+    expect_load_err("latch(data.x, sim.new_month, 0, 1)", "expects 3 arguments");
+    expect_load_err("latch(data.x, sim.new_month, data.y)", "must be a constant");
+    // A signed literal is a literal (see the moving_* case below).
+    let mut dc = cache_with_x(&[5.0]);
+    assert!(DynamicInput::from_string("latch(data.x, 0, -1.5)", &mut dc, true, None).is_ok(),
+        "a negative init literal should be accepted");
+}
+
+// ============================================================================
 // C. Machinery invariants
 // ============================================================================
 
@@ -504,6 +648,56 @@ fn test_model_run_twice_identical() {
 
     assert_eq!(first, second, "two runs must produce identical stateful outputs");
     assert_eq!(first, vec![20.0, 30.0, 20.0, 30.0], "hand-computed sanity check");
+}
+
+/// D19. latch end-to-end in a model, and identical across two runs — the
+/// caller-supplied init is written by the arena init template, so it has to be
+/// re-applied when a run restarts (latch is the only stateful builtin whose
+/// warm-up value comes straight from the model file).
+///
+/// Run spans 2020-01-30 .. 2020-02-02, latching sim.day when sim.day == 1:
+///   step0 Jan30: not 1 -> init -1;  step1 Jan31: hold -1
+///   step2 Feb01: fires -> sample 1; step3 Feb02: hold 1
+/// node.calc.dsflow = usflow(10) + latch = [9, 9, 11, 11].
+#[test]
+fn test_model_latch_init_and_rerun() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-02-02
+
+[node.up]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = calc
+
+[node.calc]
+loc = 0, 10
+type = inflow
+inflow = latch(sim.day, sim.day == 1, -1)
+ds_1 = sink
+
+[node.sink]
+loc = 0, 20
+type = blackhole
+
+[outputs]
+node.calc.dsflow
+";
+    let mut model = IniModelIO::read_model_string(ini).expect("latch model should parse");
+    model.configure().expect("configuration should succeed");
+
+    model.run().expect("first run should succeed");
+    let idx = model.data_cache.get_existing_series_idx("node.calc.dsflow").unwrap();
+    let first: Vec<f64> = model.data_cache.series[idx].values.clone();
+    assert_series(&first, &[9.0, 9.0, 11.0, 11.0], "node.calc.dsflow");
+
+    model.run().expect("second run should succeed");
+    let idx2 = model.data_cache.get_existing_series_idx("node.calc.dsflow").unwrap();
+    let second: Vec<f64> = model.data_cache.series[idx2].values.clone();
+    assert_eq!(first, second,
+        "the second run must re-apply the -1 init, not carry the held sample over");
 }
 
 /// A signed literal is a literal: unary +/- over a numeric constant folds at

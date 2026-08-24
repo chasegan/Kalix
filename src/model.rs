@@ -616,6 +616,28 @@ impl Model {
         self.data_cache
             .reserve_all(self.configuration.sim_nsteps as usize);
 
+        // Fill any declared output that names a static property (node.*.area,
+        // acc.*.size, etc.) rather than a per-step computed series. Nothing
+        // writes these during run() - the value is already known in full, so
+        // fill it in now the horizon length is known, instead of leaving the
+        // series empty (which collect_output_series/get_output_series would
+        // then silently drop as "unpopulated"). Only fills untouched series,
+        // so it can never clobber a genuine per-step recorder that happens to
+        // share a name.
+        let sim_nsteps = self.configuration.sim_nsteps as usize;
+        for output_name in &self.outputs {
+            if let Some(prop_idx) = self.data_cache.static_properties.get_idx(output_name) {
+                let value = self.data_cache.static_properties.get_value(prop_idx);
+                if let Some(series_idx) = self.data_cache.get_existing_series_idx(output_name) {
+                    if self.data_cache.series[series_idx].values.is_empty() {
+                        for _ in 0..sim_nsteps {
+                            self.data_cache.series[series_idx].push_value(value);
+                        }
+                    }
+                }
+            }
+        }
+
         //7) Nodes ask data_cache for idx for modelled series they might be responsible for populating
         //TODO: I think this was already appropriately done in step 2.
 
@@ -872,11 +894,6 @@ impl Model {
     }
 
     pub fn run_timestep(&mut self, _t: u64) {
-        // Sizes first — static, so publishing before the [ras.*] loop makes
-        // acc.<x>.size bare-readable everywhere in the step, announce-time
-        // assessments included. No-op unless a size series is registered.
-        self.account_manager.publish_sizes(&mut self.data_cache);
-
         // The ras slot: assessments (phase = ras var blocks) and policy
         // ([ras.*] sections) interleaved in file order at the top of the
         // step, before ordering and flow — today's orders and takes see

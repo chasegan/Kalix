@@ -45,12 +45,13 @@ use crate::functions::errors::EvaluationError;
 /// [`BuiltinFunction`]. Membership here reserves the name exactly as builtin
 /// status does. `stateful_lowering_covers_registry` in the tests ties this
 /// list to `lower_stateful_call`'s match arms so they cannot drift.
-pub const STATEFUL_FUNCTIONS: [&str; 18] = [
+pub const STATEFUL_FUNCTIONS: [&str; 19] = [
     "moving_sum", "moving_mean", "moving_min", "moving_max",
     "moving_sum_years", "moving_min_years", "moving_max_years",
     "moving_sum_months", "moving_min_months", "moving_max_months",
     "moving_sum_days", "moving_min_days", "moving_max_days",
     "sum_since", "min_since", "max_since", "count_since", "steps_since",
+    "latch",
 ];
 
 /// Grammar keywords: names with statement-level meaning that are neither

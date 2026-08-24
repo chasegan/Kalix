@@ -72,7 +72,8 @@
         "runoff_depth",
         "dsflow",
         "ds_1",
-        "ds_1_order"
+        "ds_1_order",
+        "area"
       ],
       "required_params": [
         "type",
@@ -175,7 +176,8 @@
         "roimp",
         "flosf",
         "flobf",
-        "floin"
+        "floin",
+        "area"
       ],
       "required_params": [
         "type",
@@ -384,7 +386,8 @@
         "seep_vol",
         "evap_vol",
         "pond_demand",
-        "exists"
+        "exists",
+        "initial_volume"
       ],
       "required_params": [
         "type",
@@ -511,7 +514,9 @@
         "dsflow",
         "volume",
         "ds_1",
-        "ds_1_order"
+        "ds_1_order",
+        "x",
+        "typical_regulated_flow"
       ],
       "required_params": [
         "type",
@@ -576,7 +581,8 @@
         "dsflow",
         "ds_1",
         "ds_1_order",
-        "harmony_fraction"
+        "harmony_fraction",
+        "expected_inflow"
       ],
       "required_params": [
         "type",
@@ -584,7 +590,8 @@
       ],
       "optional_params": [
         "harmony_fraction",
-        "regulated"
+        "regulated",
+        "expected_inflow"
       ],
       "dsnode_params": [
         "ds_1"
@@ -607,6 +614,10 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9_]+(\\s*,\\s*[A-Za-z0-9_]+)*$",
           "description": "Regulated ordering pathway(s) by upstream node name; one name takes all orders, two names split by harmony_fraction (first listed gets the fraction)"
+        },
+        "expected_inflow": {
+          "type": "function_expression",
+          "description": "Expected inflow netted against the downstream order before it is split upstream (data reference, constant, or expression)"
         }
       }
     },

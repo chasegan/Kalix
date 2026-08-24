@@ -382,9 +382,150 @@ def build_model_4():
     (folder / "bench.json").write_text('{"repeats": 7}\n')
 
 
+# ---------------------------------------------------------------------------
+# Model 5: ordering-heavy network (confluence density and node-array size)
+# ---------------------------------------------------------------------------
+
+# Shaped on the topology of a real regulated valley model: ~110 nodes, ten
+# confluences, and a long ordering chain through storages, order controls, a
+# splitter diamond and a loss. Model 4 is the closest sibling but has five
+# confluences (all in legacy bare mode) and about half the nodes, so it can
+# see neither the per-confluence ordering cost nor the cache pressure that a
+# large NodeEnum array puts on per-node struct size -- the effect behind the
+# 2026-08 ConfluenceNode field-order regression (manifestos/performance.md
+# 3.4). All three confluence ordering modes appear here: bare/legacy, a
+# single `regulated` name (all orders up one pathway), and two `regulated`
+# names split by harmony_fraction, which no other speed model exercises.
+#
+# Synthetic throughout: the topology is modelled on a real system, none of
+# its names, parameters or data are used.
+
+def build_model_5():
+    folder = HERE / "5_ordering_confluences"
+    folder.mkdir(exist_ok=True)
+
+    rng = random.Random(505)
+    dates = daily_dates(1890, 130)
+    cols = [(f"inflow_{i + 1}", synth_flow(dates, rng, scale=rng.uniform(20, 80)))
+            for i in range(10)]
+    write_csv(folder / "inflows.csv", dates, cols)
+
+    m = ModelBuilder("Speed test 5: ordering through a cascade of confluences")
+    m.inputs("inflows.csv")
+
+    def reach(prefix, n, x, y0, dest):
+        """A chain of n reporting gauges ending at dest. Real valley models
+        carry many of these; they are cheap per step but they are what makes
+        the node array big."""
+        for k in range(n):
+            nxt = dest if k == n - 1 else f"{prefix}_g{k + 1}"
+            m.node(f"{prefix}_g{k}", "gauge", x, y0 + k * 4, [f"ds_1 = {nxt}"])
+
+    # --- Eight headwater tributaries -------------------------------------
+    # The first five are storage-regulated, so orders propagate up through a
+    # dam; the rest are unregulated headwaters that only pass flow.
+    for t in range(8):
+        x = t * 25.0
+        m.node(f"t{t}_inflow", "inflow", x, 0, [
+            f"inflow = data.inflows_csv.by_index.{t + 1}",
+            f"ds_1 = t{t}_head",
+        ])
+        if t < 5:
+            m.node(f"t{t}_head", "storage", x, 10,
+                   storage_props(40_000 + t * 5_000) + [f"ds_1 = t{t}_route"])
+            m.node(f"t{t}_route", "routing", x, 20, routing_props(rng, f"t{t}_ureg"))
+        else:
+            m.node(f"t{t}_head", "gauge", x, 10, [f"ds_1 = t{t}_route"])
+            m.node(f"t{t}_route", "gauge", x, 20, [f"ds_1 = t{t}_ureg"])
+        m.node(f"t{t}_ureg", "unregulated_user", x, 30, [
+            f"demand = {rng.uniform(2, 9):.1f}",
+            f"ds_1 = t{t}_g0",
+        ])
+        reach(f"t{t}", 3, x, 40, f"c0{t // 2}")
+
+    # --- Merge cascade: 8 tributaries -> 4 -> 2 -> 1 ----------------------
+    # Each level mixes the confluence ordering modes on purpose.
+    m.node("c00", "confluence", 12, 60, ["ds_1 = c10"])                    # bare
+    m.node("c01", "confluence", 62, 60, [                                  # one name
+        "regulated = t2_g2", "ds_1 = c10"])
+    m.node("c02", "confluence", 112, 60, [                                 # two names
+        "regulated = t4_g2, t5_g2",
+        "harmony_fraction = if(sim.month >= 10 || sim.month <= 3, 0.7, 0.35)",
+        "ds_1 = c11"])
+    m.node("c03", "confluence", 162, 60, ["ds_1 = c11"])                   # bare
+
+    m.node("c10", "confluence", 37, 75, ["regulated = c00", "ds_1 = c20"])
+    m.node("c11", "confluence", 137, 75, ["harmony_fraction = 0.4", "ds_1 = c20"])
+
+    m.node("c20", "confluence", 87, 90, [
+        "regulated = c10, c11",
+        "harmony_fraction = if(sim.month >= 10 || sim.month <= 3, 0.6, 0.45)",
+        "ds_1 = trunk_oc0"])
+
+    # --- Trunk: order control, routing, regulated demand ------------------
+    m.node("trunk_oc0", "order_control", 87, 100, ["max_order = 900", "ds_1 = trunk_route"])
+    m.node("trunk_route", "routing", 87, 110, routing_props(rng, "trunk_u0"))
+    for u in range(5):
+        nxt = f"trunk_u{u + 1}" if u < 4 else "trunk_split"
+        m.node(f"trunk_u{u}", "regulated_user", 87, 120 + u * 6,
+               [seasonal_order(rng), f"ds_1 = {nxt}"])
+
+    # --- Splitter diamond, rejoining at a confluence ----------------------
+    m.node("trunk_split", "splitter", 87, 155, [
+        "table = 0, 0,",
+        "        400, 120,",
+        "        100000, 120,",
+        "ds_1 = a_g0", "ds_2 = b_g0"])
+    reach("a", 4, 67, 165, "a_loss")
+    m.node("a_loss", "loss", 67, 185, [
+        "table = 0, 0,",
+        "        60, 12,",
+        "        400, 30,",
+        "        999999, 30,",
+        "ds_1 = c30"])
+    reach("b", 4, 107, 165, "c30")
+    m.node("c30", "confluence", 87, 195, ["ds_1 = trunk_oc1"])
+
+    # --- Lower trunk, with two side tributaries joining -------------------
+    m.node("trunk_oc1", "order_control", 87, 205, ["min_order = 5", "ds_1 = trunk_g0"])
+    reach("trunk", 5, 87, 215, "c31")
+
+    m.node("s0_inflow", "inflow", 150, 205, [
+        "inflow = data.inflows_csv.by_index.9", "ds_1 = s0_ureg"])
+    m.node("s0_ureg", "unregulated_user", 150, 212,
+           [f"demand = {rng.uniform(2, 9):.1f}", "ds_1 = s0_g0"])
+    reach("s0", 3, 150, 220, "c31")
+    m.node("c31", "confluence", 118, 240, ["regulated = trunk_g4", "ds_1 = trunk_u5"])
+
+    for u in range(5, 10):
+        nxt = f"trunk_u{u + 1}" if u < 9 else "c32"
+        m.node(f"trunk_u{u}", "regulated_user", 118, 250 + (u - 5) * 6,
+               [seasonal_order(rng), f"ds_1 = {nxt}"])
+
+    m.node("s1_inflow", "inflow", 180, 250, [
+        "inflow = data.inflows_csv.by_index.10", "ds_1 = s1_ureg"])
+    m.node("s1_ureg", "unregulated_user", 180, 257,
+           [f"demand = {rng.uniform(2, 9):.1f}", "ds_1 = s1_g0"])
+    reach("s1", 3, 180, 265, "c32")
+    m.node("c32", "confluence", 148, 285, ["ds_1 = outlet_g0"])
+
+    reach("outlet", 2, 148, 295, "sink")
+    m.node("sink", "blackhole", 148, 310, [])
+
+    m.output("node.outlet_g1.ds_1")
+    m.output("node.c20.ds_1_order")
+    m.output("node.c20.harmony_fraction")
+    for t in range(5):
+        m.output(f"node.t{t}_head.volume")
+    m.write(folder / "kalix.ini")
+
+    (folder / "bench.json").write_text('{"repeats": 5}\n')
+
+
 if __name__ == "__main__":
     build_model_1()
     build_model_2()
     build_model_3()
     build_model_4()
-    print("Generated speed test models 1-4.")
+    build_model_5()
+    print("Generated speed test models 1-5.")

@@ -66,6 +66,7 @@ order = 6
 node.dama.ds_1
 node.damb.ds_1
 node.u1.usflow
+node.conf.expected_inflow
 "#)
 }
 
@@ -164,4 +165,62 @@ fn test_regulated_round_trip() {
     model2.configure().expect("model should configure");
     model2.run().expect("simulation should run");
     assert_eq!(series(&mut model2, "node.damb.ds_1")[1], 6.0, "routing survives the round-trip");
+}
+
+/// `expected_inflow` nets against the downstream order BEFORE the harmony
+/// split, same as InflowNode's `usorders = (dsorders - expected_inflow).max(0)`.
+/// Single named pathway: order 6, expected inflow 4 -> 2 goes upstream.
+#[test]
+fn test_expected_inflow_nets_against_downstream_order() {
+    let mut model = run(&rig("regulated = damb\nexpected_inflow = 4"));
+    assert_eq!(series(&mut model, "node.damb.ds_1")[1], 2.0, "order net of expected inflow");
+    assert_eq!(series(&mut model, "node.dama.ds_1")[1], 0.0, "unnamed branch still releases nothing");
+}
+
+/// Expected inflow greater than the order clamps the outgoing order at
+/// zero rather than going negative.
+#[test]
+fn test_expected_inflow_exceeding_order_clamps_to_zero() {
+    let mut model = run(&rig("regulated = damb\nexpected_inflow = 10"));
+    assert_eq!(series(&mut model, "node.damb.ds_1")[1], 0.0, "order fully covered by expected inflow");
+}
+
+/// With two named pathways, the netting happens once against the total
+/// order and the harmony fraction splits what's left — not the raw order.
+#[test]
+fn test_expected_inflow_nets_before_harmony_split() {
+    let mut model = run(&rig("regulated = dama, damb\nharmony_fraction = 0.25\nexpected_inflow = 2"));
+    // total_outgoing_order = max(6 - 2, 0) = 4, split 0.25 / 0.75.
+    assert_eq!(series(&mut model, "node.dama.ds_1")[1], 1.0, "first listed gets the fraction of the netted order");
+    assert_eq!(series(&mut model, "node.damb.ds_1")[1], 3.0);
+}
+
+/// expected_inflow is optional: omitting it behaves exactly like `= 0`
+/// (the un-netted regulated-pathway cases above already assume this).
+#[test]
+fn test_expected_inflow_defaults_to_zero_when_omitted() {
+    let mut model = run(&rig("regulated = damb"));
+    assert_eq!(series(&mut model, "node.conf.expected_inflow")[1], 0.0);
+    assert_eq!(series(&mut model, "node.damb.ds_1")[1], 6.0, "no netting applied");
+}
+
+/// The evaluated expected_inflow value is recorded each step.
+#[test]
+fn test_expected_inflow_is_recorded() {
+    let mut model = run(&rig("regulated = damb\nexpected_inflow = 4"));
+    assert_eq!(series(&mut model, "node.conf.expected_inflow")[1], 4.0);
+}
+
+/// expected_inflow survives the canonical render, same as `regulated`.
+#[test]
+fn test_expected_inflow_round_trip() {
+    let model = IniModelIO::read_model_string(&rig("regulated = damb\nexpected_inflow = 4"))
+        .expect("model should load");
+    let rendered = IniModelIO::model_to_string(&model);
+    assert!(rendered.contains("expected_inflow = 4"), "expected_inflow re-emitted:\n{}", rendered);
+    let mut model2 = IniModelIO::read_model_string(&rendered)
+        .unwrap_or_else(|e| panic!("canonical render should re-load, got: {}\n---\n{}", e, rendered));
+    model2.configure().expect("model should configure");
+    model2.run().expect("simulation should run");
+    assert_eq!(series(&mut model2, "node.damb.ds_1")[1], 2.0, "netting survives the round-trip");
 }

@@ -223,6 +223,34 @@ Rules:
   occurred just before the run began; the modeller owns that assumption.
 - State advances unconditionally, as in §5. Cost is O(1) per step.
 
+## 6.5. Sample and hold: `latch`
+
+| Function | Meaning |
+|---|---|
+| `latch(x, condition, init)` | x sampled when condition last held |
+
+- **Sample-then-read**, mirroring §6's reset-then-accumulate: when `condition`
+  is truthy at step t, the latch samples first and step t reads the new value.
+- **The run start is NOT an implicit sample.** This is the one deliberate
+  departure from §6, where run start *is* an implicit reset. A latch has no
+  defensible value to bootstrap from: `*_since` accumulators derive theirs from
+  the data by construction (min/max bootstrap to the first value), whereas the
+  right held value before the first event is a modelling fact — an opening
+  allocation, a licence entitlement, a starting trigger level — that only the
+  modeller knows. So `init` is mandatory and explicit, as a moving window's
+  element default is (§5), and must be a literal: it is written into the arena
+  init template at load.
+- **Seeding from data is an idiom, not a mode.** `latch(x, cond || sim.step == 0,
+  0)` forces a sample on the first step, which lands before the first read and
+  makes `init` unobservable. Kept as an idiom so the common case states its
+  opening value rather than silently inheriting step 0's.
+- State advances unconditionally, as in §5. The *value* expression, however, is
+  evaluated only on sampling steps — a held latch skips its whole subtree,
+  which is the point of `latch(<expensive>, is_startwy, ...)`. This is sound
+  because expressions are pure and nested stateful children advance before the
+  parent samples, so it changes cost and never results.
+- Cost is O(1) per step and one f64 of state.
+
 ## 7. Calendar boundaries — and the water-year idiom
 
 New `sim.*` flags, each a pure calendar fact computed once per step:
@@ -369,6 +397,8 @@ first step, every run, deterministically. No additional phase rules needed.
 - `moving_*`, not `running_*` — "running" conventionally means
   cumulative-since-start, which is `sum_since`'s job; ours are fixed-window.
 - `steps_since`, not `days_since` — timestep-agnostic, matches `sim.step`.
+- `latch`, not `sample_hold` or `hold` — one short verb for the electronics
+  idiom the behaviour is named after; `hold` alone loses the sampling half.
 - `phase` with noun values `order` / `flow`.
 - `clamp(x, lo, hi)` joins the pure builtins (the clearer spelling of
   `min(max(x, lo), hi)`).
@@ -388,7 +418,7 @@ first step, every run, deterministically. No additional phase rules needed.
   per stateful call instance (post-inlining), allocated at load and reset at
   run start. The hot-path signature grows a `&mut` state argument (or the
   arena rides in the DataCache alongside `current_step`).
-- **Unconditional state advance** (§5, §6): a per-step update walk over all
+- **Unconditional state advance** (§5, §6, §6.5): a per-step update walk over all
   stateful instances, independent of which branches evaluation takes —
   structurally similar to the existing `validate_reads` full-tree walk.
 - **`[fn]`**: parse signatures (same tokenizer), build call-graph, DAG

@@ -50,6 +50,7 @@ All seventeen model parameters — and the rainfall-weighting terms, when `rain`
 | floin | Internal flux component - interflow [ML] |
 | flobf | Internal flux component - baseflow [ML] |
 | roimp | Internal flux component - impervious runoff [ML] |
+| area | Catchment area [km2] — the declared `area` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
 
 ## How the node works
 

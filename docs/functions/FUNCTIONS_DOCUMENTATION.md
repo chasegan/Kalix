@@ -251,15 +251,15 @@ earns its keep at sub-daily timesteps, bucketing several steps into one day.
 **NaN policy differs from `moving_sum`.** A NaN entering
 `moving_min_years`/`max` (and the monthly/daily equivalents) is suppressed,
 never poisoning the tracked extremum — matching plain `moving_min`/`max`.
-But `moving_sum_years`/`mean` still **poison** on NaN, exactly like plain
-`moving_sum`/`moving_mean`: a genuine gap in a raw series should make that
-water year's total suspect, not silently vanish.
+But `moving_sum_years` (and the monthly/daily sums) still **poison** on
+NaN, exactly like plain `moving_sum`: a genuine gap in a raw series should
+make that water year's total suspect, not silently vanish.
 
 This asymmetry matters for a common pattern: gating a value to only count
 once per period, via `if(cond, x, NAN)` — the *only* way to express "only
 this branch counts" in this language. Feed that straight into
 `moving_max_years`/`min` and it works, because NaN is exactly what those
-suppress. Feed it straight into `moving_sum_years`/`mean` and the first
+suppress. Feed it straight into `moving_sum_years` and the first
 untagged step poisons the running total. Wrap it in `infill(..., 0)` for the
 sum/mean side to get the same gated behaviour there. Note `infill`
 *substitutes* the value rather than excluding the element — zero is the right
@@ -302,6 +302,54 @@ water-year month varies from valley to valley. `moving_*_years` above is
 the one deliberate exception — a trailing multi-year window needs ring
 state a reset condition alone can't express, so it takes `wy_month`
 directly rather than forcing a hand-rolled ring via `[fn]`.
+
+### Sample and hold — `latch`
+
+`latch(x, condition, init)`
+
+Takes and returns the value of `x` on this time step if `condition` is truthy,
+and returns the previously sampled value of `x` otherwise. Until `condition`
+first fires the latch holds `init`, which must be a literal — the state is
+written at model load, exactly as a moving window's element default is.
+
+```ini
+# Recompute the seasonal allocation at the start of the water year, then
+# hold it for the rest of the year.
+allocation = latch(fn.calculate_allocation(), var.ras.is_startwy, const.opening_allocation)
+```
+
+The run start is deliberately **not** an implicit sample — unlike the `*_since`
+family, which treats it as an implicit reset. A run that begins mid-water-year
+therefore holds `init` until the next 1 July, so `init` is worth stating
+honestly: a known opening figure where the model has one, and `0` only when
+zero is genuinely the right answer before the first sample.
+
+To seed the hold from the data instead, widen the condition so it also fires on
+the first step of the run. The step-0 sample lands before the first read, which
+makes the init unobservable:
+
+```ini
+allocation = latch(fn.calculate_allocation(), var.ras.is_startwy || sim.step == 0, 0)
+```
+
+This is equivalent in output to:
+
+```ini
+allocation = if(var.ras.is_startwy, fn.calculate_allocation(), this[-1,0])
+```
+
+Two caveats on that equivalence. It holds only where the latch is the entire
+value, as in this example — `this[-1,0]` is the previous value of the whole
+definition, so `allocation = 2 * latch(...)` and `allocation = 2 * if(...)`
+part ways. And the two differ inside an untaken `if` branch: `latch` samples
+regardless, per the unconditional-advance rule above, where the spelled-out
+`if` short-circuits and does not.
+
+A held latch does not evaluate `x` at all, so
+`latch(fn.expensive(), is_startwy, 0)` costs one evaluation a year rather than
+365. That is an evaluation optimisation only: stateful functions nested inside
+`x` still advance on every step, so what the latch holds never depends on when
+it happened to fire.
 
 ### Calendar boundary flags
 
@@ -410,6 +458,7 @@ net_flow = min(
 | `max_since` | 2 | Maximum of x since reset |
 | `count_since` | 2 | Steps on which cond held since reset: count_since(cond, reset) |
 | `steps_since` | 1 | Steps elapsed since reset (0 on a reset step) |
+| `latch` | 3 | Sample x when condition holds, else hold the last sample: latch(x, condition, init) |
 
 Two names are deliberately absent. There is no `log`: write the explicit
 `ln` or `log10`. And there is no `avg` or `average`: the function is `mean`,
