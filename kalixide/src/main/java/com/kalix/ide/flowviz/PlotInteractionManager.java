@@ -767,6 +767,8 @@ public class PlotInteractionManager {
                 XAxisType xAxisType = currentViewport.getXAxisType();
                 startTime = parseX(parts[0], xAxisType);
                 endTime = parseX(parts[1], xAxisType);
+                ViewPort.validateBounds(startTime, endTime,
+                    currentViewport.getMinValue(), currentViewport.getMaxValue());
             } catch (IllegalArgumentException ex) {
                 JOptionPane.showMessageDialog(
                     parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -807,6 +809,8 @@ public class PlotInteractionManager {
                 // bounds-safe owing to the pair check in readBoundsFromClipboard
                 minVal = parseY(parts[0]);
                 maxVal = parseY(parts[1]);
+                ViewPort.validateBounds(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(),
+                    minVal, maxVal);
             } catch (IllegalArgumentException ex) {
                 JOptionPane.showMessageDialog(
                     parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -947,7 +951,8 @@ public class PlotInteractionManager {
 
     /**
      * Shows a modal dialog with the current axis limits, pre-filled and editable as text.
-     * A blank field leaves that limit unchanged (see {@link #acceptNewAxes}); X fields are
+     * All four fields are required -- they arrive pre-filled with the current limits, so
+     * leaving one alone is how a limit is kept, and a blank field is an error. X fields are
      * parsed according to the viewport's {@link XAxisType} (dates for TIME, percentages for
      * PERCENTILE, etc.) so the field always shows and accepts values in the axis' own units.
      */
@@ -985,12 +990,7 @@ public class PlotInteractionManager {
                 Double minValue  = parseY(yMinField.getText());
                 Double maxValue  = parseY(yMaxField.getText());
 
-                if (startTime >= endTime) {
-                    throw new IllegalArgumentException("X min must be less than X max.");
-                }
-                if (minValue >= maxValue) {
-                    throw new IllegalArgumentException("Y min must be less than Y max.");
-                }
+                ViewPort.validateBounds(startTime, endTime, minValue, maxValue);
 
                 acceptNewAxes(startTime, endTime, minValue, maxValue);
                 dialog.dispose();
@@ -1116,9 +1116,9 @@ public class PlotInteractionManager {
 
     /**
      * Moves the viewport to the given axis limits, keeping plot area, Y-axis scale, and
-     * X-axis type unchanged. Limits must already be resolved (no "leave unchanged" fallback
-     * here) — see {@link #showSetAxesDialog}, which resolves blank fields against the current
-     * viewport before calling this.
+     * X-axis type unchanged. All four limits are required and are applied as given; callers
+     * are responsible for parsing and for checking them with
+     * {@link ViewPort#validateBounds} first.
      */
     private void acceptNewAxes(Long startTime, Long endTime, Double minValue, Double maxValue) {
         var currentViewport = this.viewportSupplier.get();

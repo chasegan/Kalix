@@ -40,6 +40,38 @@ public class ViewPort {
         this.xAxisType = xAxisType != null ? xAxisType : XAxisType.TIME;
     }
     
+    /**
+     * Checks that a proposed set of axis limits describes a viewport a user could actually
+     * read: X strictly increasing, Y strictly increasing, and Y finite. Throws
+     * {@link IllegalArgumentException} with a message fit to show in a dialog.
+     *
+     * <p>Deliberately a separate check rather than a constructor guard. Degenerate
+     * viewports are a legitimate <em>internal</em> state -- {@link #timeToScreenX} handles
+     * {@code endTimeMs == startTimeMs} by design, and zoom/pan arithmetic can collapse a
+     * range at extreme magnification -- so rejecting them at construction would turn an
+     * interaction into a crash. What must be policed is the boundary where a user supplies
+     * limits directly: the Set-axis-limits dialog and the axis paste commands, which can
+     * otherwise install an inverted or zero-width viewport that feeds a divide-by-zero into
+     * the axis transforms.</p>
+     *
+     * <p>The finite check matters because {@code Double.parseDouble} happily accepts
+     * {@code "NaN"} and {@code "Infinity"}, and NaN compares false against everything --
+     * so a NaN limit would slip past the ordering test unchallenged.</p>
+     *
+     * @throws IllegalArgumentException if the limits are inverted, empty, or non-finite
+     */
+    public static void validateBounds(long startTimeMs, long endTimeMs, double minValue, double maxValue) {
+        if (startTimeMs >= endTimeMs) {
+            throw new IllegalArgumentException("X min must be less than X max.");
+        }
+        if (!Double.isFinite(minValue) || !Double.isFinite(maxValue)) {
+            throw new IllegalArgumentException("Y limits must be finite numbers.");
+        }
+        if (minValue >= maxValue) {
+            throw new IllegalArgumentException("Y min must be less than Y max.");
+        }
+    }
+
     // Transform coordinates between data space and screen space
     public int timeToScreenX(long timeMs) {
         if (endTimeMs == startTimeMs) return plotX;
