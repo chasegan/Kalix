@@ -727,16 +727,16 @@ public class PlotInteractionManager {
 
         contextMenu.addSeparator();
 
-        JMenuItem setAxes = new JMenuItem("Set axis limits");
-        setAxes.addActionListener(e1 -> showSetAxesDialog());
-        contextMenu.add(setAxes);
+        // Clipboard block before the view/state items (context-menu-style 1: block 3
+        // precedes block 7). "Set axis limits..." carries an ellipsis because it opens a
+        // dialog -- per 2.4 -- where the copy/paste items act immediately and do not.
+        JMenuItem copyXAxis = new JMenuItem("Copy X axis");
 
         // Copy/paste go through formatXValue/parseX -- the same pair the Set-axis-limits
         // dialog uses -- so the clipboard always carries the axis' own units. X bounds are
         // real timestamps only on a TIME axis; on the others they are encoded values
         // (percentile x 1e6, numeric x NUMERIC_SCALE) that formatting as a date would
         // render as meaningless 1970 instants.
-        JMenuItem copyXAxis = new JMenuItem("Copy X axis");
         copyXAxis.addActionListener(e -> {
             ViewPort currentViewport = viewportSupplier.get();
             if (currentViewport == null) {
@@ -824,6 +824,10 @@ public class PlotInteractionManager {
         contextMenu.add(pasteYAxis);
 
         contextMenu.addSeparator();
+
+        JMenuItem setAxes = new JMenuItem("Set axis limits…");
+        setAxes.addActionListener(e1 -> showSetAxesDialog());
+        contextMenu.add(setAxes);
 
         // Y-axis scale submenu
         yAxisScaleMenu = new JMenu("Y-axis scale");
