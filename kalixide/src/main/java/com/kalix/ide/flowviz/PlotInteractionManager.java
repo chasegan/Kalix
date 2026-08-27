@@ -39,7 +39,11 @@ import java.awt.Graphics2D;
 import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -693,10 +697,11 @@ public class PlotInteractionManager {
         setAxes.addActionListener(e1 -> showSetAxesDialog());
         contextMenu.add(setAxes);
 
-        // TODO copy and paste X axis scale
-        // NOTE: likely dependent on X axis TYPE e.g. exceedance %
-        // Copy should simply get the string out (format?)
-        // Paste should attempt to paste from clipboard, throw error if invalid format or unparseable etc.
+        // Copy/paste go through formatXValue/parseX -- the same pair the Set-axis-limits
+        // dialog uses -- so the clipboard always carries the axis' own units. X bounds are
+        // real timestamps only on a TIME axis; on the others they are encoded values
+        // (percentile x 1e6, numeric x NUMERIC_SCALE) that formatting as a date would
+        // render as meaningless 1970 instants.
         JMenuItem copyXAxis = new JMenuItem("Copy X axis");
         copyXAxis.addActionListener(e -> {
             ViewPort currentViewport = viewportSupplier.get();
@@ -704,50 +709,35 @@ public class PlotInteractionManager {
                 return;
             }
             XAxisType xAxisType = currentViewport.getXAxisType();
-            var startTimeMs = currentViewport.getStartTimeMs();
-            var endTimeMs   = currentViewport.getEndTimeMs();
-            var startTimeFormatted = TimeFormatUtil.format(startTimeMs);
-            var endTimeFormatted   = TimeFormatUtil.format(endTimeMs);
-            copyBoundsToClipboard(startTimeFormatted, endTimeFormatted);
+            copyBoundsToClipboard(
+                formatXValue(currentViewport.getStartTimeMs(), xAxisType),
+                formatXValue(currentViewport.getEndTimeMs(), xAxisType)
+            );
         });
         contextMenu.add(copyXAxis);
         JMenuItem pasteXAxis = new JMenuItem("Paste X axis");
         pasteXAxis.addActionListener(e -> {
-            java.awt.datatransfer.Clipboard clipboard = java.awt.Toolkit.getDefaultToolkit().getSystemClipboard();
-            String clipboardString;
-            try {
-                clipboardString = (String) clipboard.getData(DataFlavor.stringFlavor);
-            } catch (java.awt.datatransfer.UnsupportedFlavorException | java.io.IOException ex) {
-                JOptionPane.showMessageDialog(parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            ViewPort currentViewport = viewportSupplier.get();
+            if (currentViewport == null) {
                 return;
             }
-
-            var parts = clipboardString.split("\\s*,\\s*");
-            var l = parts.length;
-            if (l != 2) {
-                JOptionPane.showMessageDialog(
-                    parentComponent,
-                    String.format("Expected two comma-separated dates but received \"%s\"", clipboardString),
-                    "Error", JOptionPane.ERROR_MESSAGE
-                );
+            String[] parts = readBoundsFromClipboard("values");
+            if (parts == null) {
                 return;
             }
 
             long startTime;
             long endTime;
             try {
-                // bounds-safe owing to above check
-                startTime = TimeFormatUtil.parseFlexible(parts[0].trim());
-                endTime = TimeFormatUtil.parseFlexible(parts[1].trim());
-            } catch (DateTimeParseException ex) {
+                // bounds-safe owing to the pair check in readBoundsFromClipboard
+                XAxisType xAxisType = currentViewport.getXAxisType();
+                startTime = parseX(parts[0], xAxisType);
+                endTime = parseX(parts[1], xAxisType);
+            } catch (IllegalArgumentException ex) {
                 JOptionPane.showMessageDialog(
-                    parentComponent,
-                    "Error parsing datetime: " + ex.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE
-                );
+                    parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
-            ViewPort currentViewport = viewportSupplier.get();
             acceptNewAxes(
                 startTime, endTime,
                 currentViewport.getMinValue(), currentViewport.getMaxValue()
@@ -768,41 +758,26 @@ public class PlotInteractionManager {
         contextMenu.add(copyYAxis);
         JMenuItem pasteYAxis = new JMenuItem("Paste Y axis");
         pasteYAxis.addActionListener(e -> {
-            java.awt.datatransfer.Clipboard clipboard = java.awt.Toolkit.getDefaultToolkit().getSystemClipboard();
-            String clipboardString;
-            try {
-                clipboardString = (String) clipboard.getData(DataFlavor.stringFlavor);
-            } catch (java.awt.datatransfer.UnsupportedFlavorException | java.io.IOException ex) {
-                JOptionPane.showMessageDialog(parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            ViewPort currentViewport = viewportSupplier.get();
+            if (currentViewport == null) {
                 return;
             }
-
-            var parts = clipboardString.split("\\s*,\\s*");
-            var l = parts.length;
-            if (l != 2) {
-                JOptionPane.showMessageDialog(
-                    parentComponent,
-                    String.format("Expected two comma-separated numbers but received \"%s\"", clipboardString),
-                    "Error", JOptionPane.ERROR_MESSAGE
-                );
+            String[] parts = readBoundsFromClipboard("numbers");
+            if (parts == null) {
                 return;
             }
 
             double minVal;
             double maxVal;
             try {
-                // bounds-safe owing to above check
-                minVal = Double.parseDouble(parts[0].trim());
-                maxVal = Double.parseDouble(parts[1].trim());
-            } catch (NumberFormatException ex) {
+                // bounds-safe owing to the pair check in readBoundsFromClipboard
+                minVal = parseY(parts[0]);
+                maxVal = parseY(parts[1]);
+            } catch (IllegalArgumentException ex) {
                 JOptionPane.showMessageDialog(
-                    parentComponent,
-                    "Error parsing number: " + ex.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE
-                );
+                    parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
-            ViewPort currentViewport = viewportSupplier.get();
             acceptNewAxes(
                 currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(),
                 minVal, maxVal
@@ -892,20 +867,48 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Builds a {@code String} that
-     * @param startTimeFormatted
-     * @param endTimeFormatted
+     * Puts an axis' bounds on the system clipboard as {@code "lower, upper"} -- the format
+     * {@link #readBoundsFromClipboard} reads back, and one a user can equally well type by
+     * hand or paste in from elsewhere.
+     *
+     * @param lowerFormatted the axis minimum, already formatted in the axis' own units
+     * @param upperFormatted the axis maximum, likewise
      */
-    private static void copyBoundsToClipboard(String startTimeFormatted, String endTimeFormatted) {
-        StringBuilder b = new StringBuilder();
-        b.append(startTimeFormatted);
-        b.append(", ");
-        b.append(endTimeFormatted);
-        String s = b.toString();
-        // https://stackoverflow.com/questions/3591945/copying-to-the-clipboard-in-java
-        java.awt.datatransfer.StringSelection selection = new java.awt.datatransfer.StringSelection(s);
-        java.awt.datatransfer.Clipboard clipboard = java.awt.Toolkit.getDefaultToolkit().getSystemClipboard();
+    private static void copyBoundsToClipboard(String lowerFormatted, String upperFormatted) {
+        StringSelection selection = new StringSelection(lowerFormatted + ", " + upperFormatted);
+        Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
         clipboard.setContents(selection, selection);
+    }
+
+    /**
+     * Reads a {@code "lower, upper"} pair off the clipboard, the inverse of
+     * {@link #copyBoundsToClipboard}. Returns the two trimmed halves, or {@code null} when
+     * the clipboard is unreadable or does not hold exactly two comma-separated values --
+     * having reported that to the user, so callers need only bail out.
+     *
+     * @param expected what the halves should look like, for the error message ("values",
+     *                 "numbers") -- the units differ per axis and per X-axis type
+     */
+    private String[] readBoundsFromClipboard(String expected) {
+        Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+        String clipboardString;
+        try {
+            clipboardString = (String) clipboard.getData(DataFlavor.stringFlavor);
+        } catch (UnsupportedFlavorException | IOException ex) {
+            JOptionPane.showMessageDialog(parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+            return null;
+        }
+
+        String[] parts = clipboardString.split("\\s*,\\s*");
+        if (parts.length != 2) {
+            JOptionPane.showMessageDialog(
+                parentComponent,
+                String.format("Expected two comma-separated %s but received \"%s\"", expected, clipboardString),
+                "Error", JOptionPane.ERROR_MESSAGE
+            );
+            return null;
+        }
+        return new String[]{parts[0].trim(), parts[1].trim()};
     }
 
     /**
