@@ -502,7 +502,6 @@ public class VisualizationTabManager {
         return builder.build();
     }
 
-
     /**
      * Creates a toolbar for a stats tab.
      */
@@ -687,6 +686,7 @@ public class VisualizationTabManager {
 
         // Add context menu support
         setupTabContextMenu(tabPanel, tabType, iconLabel, nameLabel, labelPanel);
+        setupTabDoubleClickRename(tabPanel, iconLabel, nameLabel, labelPanel);
         tabInfo.registerNameLabel(nameLabel);
     }
 
@@ -710,7 +710,6 @@ public class VisualizationTabManager {
     private void setupTabContextMenu(JPanel tabPanel, TabInfo.TabType tabType, Component... labelComponents) {
         JPopupMenu contextMenu = new JPopupMenu();
         boolean isPlot = tabType == TabInfo.TabType.PLOT;
-
         // "New stats tab" menu item - same-type "Duplicate" on a stats tab, cross-type
         // "Show as" on a plot tab (manifesto §2.2: one verb per concept).
         JMenuItem addStatsItem = new JMenuItem(isPlot ? "Show stats" : "Duplicate stats");
@@ -777,24 +776,7 @@ public class VisualizationTabManager {
 
         JMenuItem renameTab = new JMenuItem("Rename…");
         renameTab.addActionListener(e -> {
-            int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
-            if (tabIndex != -1 && tabIndex < tabs.size()) {
-                TabInfo sourceTab = tabs.get(tabIndex);
-                String currentName = sourceTab.name;
-                String newName = (String) JOptionPane.showInputDialog(
-                    tabbedPane,
-                    "Enter new name for tab '" + currentName + "':",
-                    "Rename tab",
-                    JOptionPane.PLAIN_MESSAGE,
-                    null,
-                    null,
-                    currentName
-                );
-                if (newName != null && !newName.isBlank()) {
-                    sourceTab.rename(newName);
-                    tabbedPane.setTitleAt(tabIndex, newName);
-                }
-            }
+            triggerTabRename(tabPanel);
         });
         contextMenu.add(renameTab);
 
@@ -854,6 +836,46 @@ public class VisualizationTabManager {
 
         for (Component labelComponent : labelComponents) {
             labelComponent.addMouseListener(popupListener);
+        }
+    }
+
+    /**
+     * Sets up double-click-to-rename on a tab. Mirrors {@link #setupTabContextMenu}: the
+     * listener is attached to every {@code labelComponents} entry (icon, name, wrapper
+     * panel) since mouse events dispatch to whichever of them is deepest under the cursor.
+     */
+    private void setupTabDoubleClickRename(JPanel tabPanel, Component... labelComponents) {
+        MouseAdapter doubleClickListener = new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    triggerTabRename(tabPanel);
+                }
+            }
+        };
+        for (Component labelComponent : labelComponents) {
+            labelComponent.addMouseListener(doubleClickListener);
+        }
+    }
+
+    private void triggerTabRename(javax.swing.JPanel tabPanel) {
+        int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
+        if (tabIndex != -1 && tabIndex < tabs.size()) {
+            com.kalix.ide.windows.VisualizationTabManager.TabInfo sourceTab = tabs.get(tabIndex);
+            String currentName = sourceTab.name;
+            String newName = (String) javax.swing.JOptionPane.showInputDialog(
+                tabbedPane,
+                "Enter new name for tab '" + currentName + "':",
+                "Rename tab",
+                javax.swing.JOptionPane.PLAIN_MESSAGE,
+                null,
+                null,
+                currentName
+            );
+            if (newName != null && !newName.isBlank()) {
+                sourceTab.rename(newName);
+                tabbedPane.setTitleAt(tabIndex, newName);
+            }
         }
     }
 
