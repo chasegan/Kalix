@@ -112,4 +112,77 @@ class TimeFormatUtilTest {
     void parseFlexibleRejectsUnrecognisedText() {
         assertThrows(DateTimeParseException.class, () -> TimeFormatUtil.parseFlexible("not a date"));
     }
+
+    // ---- parseFlexible: input formats (issue #223) ----
+
+    @Test
+    void parseFlexibleAcceptsUnpaddedYearFirst() {
+        assertEquals(MS_2024_01_15_MIDNIGHT, TimeFormatUtil.parseFlexible("2024-1-15"));
+        assertEquals(MS_2024_01_15_MIDNIGHT, TimeFormatUtil.parseFlexible("2024-01-15"));
+    }
+
+    @Test
+    void parseFlexibleAcceptsDayFirst() {
+        assertEquals(MS_2024_01_15_MIDNIGHT, TimeFormatUtil.parseFlexible("15-01-2024"));
+        assertEquals(MS_2024_01_15_MIDNIGHT, TimeFormatUtil.parseFlexible("15-1-2024"));
+    }
+
+    /** Day-first is day-month-year, never month-day-year. */
+    @Test
+    void parseFlexibleReadsDayFirstAsDayMonthYear() {
+        assertEquals(TimeFormatUtil.parseFlexible("2024-02-01"), TimeFormatUtil.parseFlexible("01-02-2024"));
+    }
+
+    @Test
+    void parseFlexibleAcceptsSlashAndDotSeparators() {
+        assertEquals(MS_2024_01_15_MIDNIGHT, TimeFormatUtil.parseFlexible("2024/01/15"));
+        assertEquals(MS_2024_01_15_MIDNIGHT, TimeFormatUtil.parseFlexible("15/1/2024"));
+        assertEquals(MS_2024_01_15_MIDNIGHT, TimeFormatUtil.parseFlexible("15.01.2024"));
+    }
+
+    @Test
+    void parseFlexibleAcceptsTimeWithoutSeconds() {
+        assertEquals(MS_2024_01_15_14_30, TimeFormatUtil.parseFlexible("2024-01-15 14:30"));
+        assertEquals(MS_2024_01_15_14_30, TimeFormatUtil.parseFlexible("15/1/2024T14:30:00"));
+    }
+
+    /**
+     * The example from the issue: a range typed with unpadded day numbers, as one half of
+     * "2024-02-1, 2025-02-1".
+     */
+    @Test
+    void parseFlexibleAcceptsIssueExample() {
+        assertEquals(TimeFormatUtil.parseFlexible("2024-02-01"), TimeFormatUtil.parseFlexible("2024-02-1"));
+    }
+
+    @Test
+    void parseFlexibleRejectsTwoDigitYear() {
+        assertThrows(DateTimeParseException.class, () -> TimeFormatUtil.parseFlexible("01/02/03"));
+        assertThrows(DateTimeParseException.class, () -> TimeFormatUtil.parseFlexible("15-01-24"));
+    }
+
+    @Test
+    void parseFlexibleRejectsImpossibleDate() {
+        assertThrows(DateTimeParseException.class, () -> TimeFormatUtil.parseFlexible("2024-02-31"));
+        assertThrows(DateTimeParseException.class, () -> TimeFormatUtil.parseFlexible("2024-13-01"));
+    }
+
+    @Test
+    void parseFlexibleRejectsImpossibleTime() {
+        assertThrows(DateTimeParseException.class, () -> TimeFormatUtil.parseFlexible("2024-01-15 25:00"));
+        assertThrows(DateTimeParseException.class, () -> TimeFormatUtil.parseFlexible("2024-01-15 14:61"));
+    }
+
+    @Test
+    void parseFlexibleRejectsPartialDate() {
+        assertThrows(DateTimeParseException.class, () -> TimeFormatUtil.parseFlexible("2024-01"));
+        assertThrows(DateTimeParseException.class, () -> TimeFormatUtil.parseFlexible("2024"));
+        assertThrows(DateTimeParseException.class, () -> TimeFormatUtil.parseFlexible(""));
+    }
+
+    @Test
+    void parseFlexibleRejectsSubSecondPrecision() {
+        assertThrows(DateTimeParseException.class,
+            () -> TimeFormatUtil.parseFlexible("2024-01-15T14:30:00.123"));
+    }
 }

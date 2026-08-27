@@ -1066,7 +1066,8 @@ public class PlotInteractionManager {
                     return TimeFormatUtil.parseFlexible(trimmed);
                 } catch (Exception e) {
                     throw new IllegalArgumentException(
-                        "Not a valid date/time: \"" + trimmed + "\" (expected yyyy-MM-dd or yyyy-MM-dd HH:mm:ss)");
+                        "Not a valid date/time: \"" + trimmed
+                            + "\" (expected 2024-02-01 or 01-02-2024, optionally with HH:mm[:ss])");
                 }
         }
     }
