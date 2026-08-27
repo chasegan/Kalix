@@ -414,9 +414,10 @@ public class RunManager extends JFrame {
         // Sync tree selection when user switches tabs
         tabManager.setOnTabChangedCallback(this::onTabChanged);
 
-        // Add default tabs (settings are applied by the tab manager)
-        tabManager.addPlotTab();
-        tabManager.addStatsTab();
+        // Add the default tab: one plot tab with "Last run" checked and nothing else.
+        // The same factory repopulates the strip when the final tab is closed, so a
+        // fresh window and a fully-cleared one look identical.
+        tabManager.addDefaultPlotTab();
     }
 
 
@@ -1103,7 +1104,7 @@ public class RunManager extends JFrame {
      * cross-contaminate; don't reintroduce one.)</p>
      */
     private void onTabChanged() {
-        // Adding the default tabs in createDetailsComponents() auto-selects the first tab,
+        // Adding the default tab in createDetailsComponents() auto-selects it,
         // firing this callback before initializeManagers() has constructed fetchCoordinator.
         // Nothing to sync during construction (the tree is empty), so bail out early.
         if (fetchCoordinator == null) return;

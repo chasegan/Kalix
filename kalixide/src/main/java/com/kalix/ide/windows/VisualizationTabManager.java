@@ -4,6 +4,7 @@ import com.kalix.ide.components.TabDragReorderer;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.data.LastSource;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
@@ -392,6 +393,28 @@ public class VisualizationTabManager {
     public PlotPanel addEmptyPlotTab() {
         TabSettings settings = TabSettings.getDefaults();
         settings.selectedSeries = new LinkedHashSet<>();
+        return addPlotTabFromSettings(settings);
+    }
+
+    /**
+     * Adds the <em>default</em> tab: a plot tab with the "Last run" source checked and
+     * nothing else — no other source, no series selected, settings straight from
+     * preferences.
+     *
+     * <p>This is what the visualization strip starts life as, and what it falls back to
+     * when the final tab is closed (see {@link #closeTab}), so the two paths can never
+     * drift apart. "Last run" is checked because it is the source a modeller almost
+     * always wants next; it is recorded as a {@link LastSource} ref rather than a tree
+     * path, so the tab picks the node up whenever it appears — including the first run
+     * of the session, which happens long after this tab is built.</p>
+     *
+     * @return The created PlotPanel
+     */
+    public PlotPanel addDefaultPlotTab() {
+        TabSettings settings = TabSettings.getDefaults();
+        settings.selectedSeries = new LinkedHashSet<>();
+        settings.checkedSources = new LinkedHashSet<>();
+        settings.checkedSources.add(new LastSource());
         return addPlotTabFromSettings(settings);
     }
 
@@ -787,10 +810,8 @@ public class VisualizationTabManager {
 
         contextMenu.add(isPlot ? addPlotItem : addStatsItem);
 
-        // The destructive actions are isolated to their own block (manifesto §1); the
-        // separator is toggled with the item so it never dangles when "Remove" is hidden.
-        JPopupMenu.Separator removeSeparator = new JPopupMenu.Separator();
-        contextMenu.add(removeSeparator);
+        // The destructive actions are isolated to their own block (manifesto §1).
+        contextMenu.add(new JPopupMenu.Separator());
 
         JMenuItem resetItem = new JMenuItem("Reset");
         resetItem.addActionListener(e -> {
@@ -810,7 +831,8 @@ public class VisualizationTabManager {
         });
         contextMenu.add(removeItem);
 
-        // Add popup listener to show menu and update "Remove" visibility
+        // Add popup listener to show the menu. "Remove" needs no guard: closing the
+        // final tab repopulates the strip with a default tab rather than emptying it.
         MouseAdapter popupListener = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -827,14 +849,6 @@ public class VisualizationTabManager {
             }
 
             private void showContextMenu(MouseEvent e) {
-                // Count total tabs
-                int totalCount = tabs.size();
-
-                // Only show remove (and its separator) if there is more than one tab
-                boolean canRemove = totalCount > 1;
-                removeSeparator.setVisible(canRemove);
-                removeItem.setVisible(canRemove);
-
                 contextMenu.show(e.getComponent(), e.getX(), e.getY());
             }
         };
@@ -916,11 +930,6 @@ public class VisualizationTabManager {
      * Closes a tab at the given index.
      */
     private void closeTab(int index) {
-        // Safety check: don't close if it's the last tab
-        if (tabbedPane.getTabCount() <= 1) {
-            return;
-        }
-
         // Clean up listeners before removing
         TabInfo tab = tabs.get(index);
         if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
@@ -930,6 +939,12 @@ public class VisualizationTabManager {
 
         tabs.remove(index);
         tabbedPane.removeTabAt(index);
+
+        // The strip is never left empty: closing the final tab lands the user back on a
+        // brand-new default tab rather than on a blank panel with no way forward.
+        if (tabs.isEmpty()) {
+            addDefaultPlotTab();
+        }
     }
 
     /**
