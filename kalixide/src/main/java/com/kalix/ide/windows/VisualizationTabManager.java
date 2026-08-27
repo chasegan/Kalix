@@ -877,25 +877,42 @@ public class VisualizationTabManager {
         }
     }
 
-    private void triggerTabRename(javax.swing.JPanel tabPanel) {
+    /**
+     * Prompts for a new name for the tab whose handle is {@code tabPanel}, from the context
+     * menu or a double-click on the handle.
+     *
+     * <p>Cancelling leaves the name alone; submitting an empty box <em>clears</em> it. Unnamed
+     * is a legitimate state — it is what every new tab starts as, and {@link #setupTabIcon}
+     * and {@link #updateNameLabelPadding} render it as an icon-only handle — so clearing has
+     * to be reachable, or a tab named once could never be un-named.</p>
+     */
+    private void triggerTabRename(JPanel tabPanel) {
         int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
-        if (tabIndex != -1 && tabIndex < tabs.size()) {
-            com.kalix.ide.windows.VisualizationTabManager.TabInfo sourceTab = tabs.get(tabIndex);
-            String currentName = sourceTab.name;
-            String newName = (String) javax.swing.JOptionPane.showInputDialog(
-                tabbedPane,
-                "Enter new name for tab '" + currentName + "':",
-                "Rename tab",
-                javax.swing.JOptionPane.PLAIN_MESSAGE,
-                null,
-                null,
-                currentName
-            );
-            if (newName != null && !newName.isBlank()) {
-                sourceTab.rename(newName);
-                tabbedPane.setTitleAt(tabIndex, newName);
-            }
+        if (tabIndex == -1 || tabIndex >= tabs.size()) {
+            return;
         }
+        TabInfo sourceTab = tabs.get(tabIndex);
+        String currentName = sourceTab.name;
+        String prompt = currentName == null || currentName.isEmpty()
+            ? "Enter a name for this tab:"
+            : "Enter new name for tab '" + currentName + "':";
+
+        String newName = (String) JOptionPane.showInputDialog(
+            tabbedPane,
+            prompt,
+            "Rename tab",
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            null,
+            currentName
+        );
+        if (newName == null) {
+            return;
+        }
+
+        String trimmed = newName.trim();
+        sourceTab.rename(trimmed);
+        tabbedPane.setTitleAt(tabIndex, trimmed);
     }
 
     /**
