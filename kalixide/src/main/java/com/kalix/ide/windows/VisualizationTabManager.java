@@ -259,6 +259,11 @@ public class VisualizationTabManager {
         this.tabbedPane.setTabPlacement(JTabbedPane.TOP);
         this.tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
         this.tabReorderer = new TabDragReorderer(tabbedPane, this::reorderTab);
+        tabbedPane.putClientProperty("JTabbedPane.tabClosable", Boolean.TRUE);
+        tabbedPane.putClientProperty(
+            "JTabbedPane.tabCloseCallback",
+            (java.util.function.IntConsumer) this::closeTab
+        );
 
         // "New plot" affordance, pinned to the trailing edge of the tab strip rather
         // than added as a real tab: `tabs` is index-aligned with the tabbedPane, and a
