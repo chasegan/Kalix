@@ -1,6 +1,7 @@
 package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
@@ -210,7 +211,7 @@ public class PlotInteractionManager {
                 // on press on macOS/Linux but on release on Windows, and macOS
                 // Ctrl+click is a popup gesture without being the right button.
                 if (e.isPopupTrigger() && plotArea.contains(e.getPoint())) {
-                    contextMenu.show(parentComponent, e.getX(), e.getY());
+                    showContextMenuIfPlotted(e);
                 } else if (SwingUtilities.isLeftMouseButton(e) && e.isShiftDown() && plotArea.contains(e.getPoint())) {
                     // Shift+click: start zoom rectangle selection
                     isZoomSelecting = true;
@@ -238,7 +239,10 @@ public class PlotInteractionManager {
             @Override
             public void mouseReleased(MouseEvent e) {
                 if (e.isPopupTrigger() && plotAreaSupplier.get().contains(e.getPoint())) {
-                    contextMenu.show(parentComponent, e.getX(), e.getY());
+                    // Return regardless of whether the menu showed: the gesture was a popup
+                    // trigger either way, and on macOS Ctrl+click it is also a left-button
+                    // release, which would otherwise fall through into the drag/zoom paths.
+                    showContextMenuIfPlotted(e);
                     return;
                 }
                 if (SwingUtilities.isLeftMouseButton(e) && isZoomSelecting) {
@@ -669,6 +673,36 @@ public class PlotInteractionManager {
         }
 
         return new double[]{minValue, maxValue};
+    }
+
+    /**
+     * Shows the context menu at the event position, but only when there is an actual plot
+     * under the cursor. Callers have already established that the gesture was a popup
+     * trigger inside the plot area.
+     */
+    private void showContextMenuIfPlotted(MouseEvent e) {
+        if (!hasPlot()) {
+            return;
+        }
+        contextMenu.show(parentComponent, e.getX(), e.getY());
+    }
+
+    /**
+     * Whether this panel is actually plotting something. Every item on the context menu --
+     * zoom to fit, axis limits, axis copy/paste, save data -- acts on plotted series, so on
+     * an empty tab the menu is a list of no-ops and error dialogs.
+     *
+     * <p>The visible-series list is the evidence, not the viewport: {@code PlotPanel}
+     * synthesises a placeholder viewport ("now +/- 1 hour") while painting an empty panel,
+     * so a non-null viewport says nothing about whether data is on screen. The viewport is
+     * still checked because the handlers dereference it.</p>
+     */
+    private boolean hasPlot() {
+        if (viewportSupplier == null || visibleSeriesSupplier == null) {
+            return false;
+        }
+        List<SeriesRef> visibleSeries = visibleSeriesSupplier.get();
+        return viewportSupplier.get() != null && visibleSeries != null && !visibleSeries.isEmpty();
     }
 
     /**
