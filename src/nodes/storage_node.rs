@@ -72,6 +72,11 @@ pub struct StorageNode {
     // 0.0 means no MOL constraint (outlet always active)
     min_operating_volume: [f64; MAX_DS_LINKS],
 
+    // True when any outlet has a MOL constraint (set during init). When
+    // false the solver skips the MOL allocation entirely — the hot path for
+    // ordinary storages is then identical to the pre-MOL-redesign solver.
+    has_mol: bool,
+
     // Recorders
     recorder_idx_usflow: Option<usize>,
     recorder_idx_volume: Option<usize>,
@@ -122,6 +127,18 @@ impl StorageNode {
     // Note that the "order" is overridden by the "force_release" if defined.
     //
     // For ds_2, ds_3, ds_4: flow = outlet flow only (no spill component)
+    //
+    // Minimum operating levels (see docs/storage_mol_semantics.md): an outlet
+    // may only be supplied from water stored above its own MOL. For every
+    // threshold t among the outlet MOLs (and 0, the storage floor), the
+    // controlled releases must satisfy
+    //     sum of c_i over {m_i >= t}  <=  max(0, W - S - t)
+    // where W is all water available this step and S the spill (drawn off the
+    // top). Contention within a band resolves by outlet priority
+    // ds_1 > ds_2 > ds_3 > ds_4. The MOL bounds which water an outlet can
+    // access; it is not a gate on the end-of-step level. Releases are
+    // therefore continuous in volumes and demands, no outlet is starved by a
+    // sibling's MOL, and mass balance closes by construction.
 
     /// Determine whether the release at the outlet should be the forced release optionally
     /// supplied by the user or the order determined by the model.
@@ -146,38 +163,95 @@ impl StorageNode {
         }
     }
 
-    /// Determines which outlets are active (able to release) at a given volume.
-    /// An outlet is active if volume >= its minimum operating volume and there is demand
-    /// (either from orders or forced releases).
-    /// Returns a bitmask: bit i is set if outlet i is active.
-    fn active_outlets_at_volume(&self, volume: f64) -> u8 {
-        let mut active = 0u8;
-        for i in 0..MAX_DS_LINKS {
-            if self.ds_release_due[i] > 0.0 && volume >= self.min_operating_volume[i] {
-                active |= 1 << i;
-            }
-        }
-        active
+    /// Controlled-release demands at a given spill: ds_1's controlled outlet
+    /// only tops the spill up to its release due (spill counts toward ds_1
+    /// orders); the other outlets demand their full release due.
+    fn demands_at_spill(&self, spill: f64) -> [f64; MAX_DS_LINKS] {
+        let mut demands = self.ds_release_due;
+        demands[0] = (demands[0] - spill).max(0.0);
+        demands
     }
 
-    /// Sums the release demands (orders or forced releases) for outlets specified by the mask.
-    /// Bit i in the mask corresponds to outlet i (ds_1=bit 0, ds_2=bit 1, etc).
-    fn sum_ds_orders_due(&self, outlet_mask: u8) -> f64 {
-        let mut total = 0.0;
+    /// Nested-cap MOL allocation. `w_net` is the water available above the
+    /// storage floor, net of spill (W - S). Grants each demanding outlet, in
+    /// priority order ds_1..ds_4, the largest controlled release consistent
+    /// with every outlet drawing only water above its own MOL. Greedy is
+    /// exact here because the access constraints are nested intervals: each
+    /// grant is checked against every band it draws from, and later grants
+    /// subtract earlier ones.
+    fn allocate_releases(&self, w_net: f64, demands: &[f64; MAX_DS_LINKS]) -> [f64; MAX_DS_LINKS] {
+        let mut granted = [0.0; MAX_DS_LINKS];
         for i in 0..MAX_DS_LINKS {
-            if outlet_mask & (1 << i) != 0 {
-                total += self.ds_release_due[i];
+            // Skips NaN demands too (a NaN forced release grants nothing).
+            if demands[i].is_nan() || demands[i] <= 0.0 {
+                continue;
+            }
+            let m_i = self.min_operating_volume[i];
+            // Tightest of the nested caps at thresholds t <= m_i. The floor
+            // (t = 0) is always a threshold: nothing releases water that
+            // isn't there.
+            let mut cap = f64::INFINITY;
+            for t_idx in 0..=MAX_DS_LINKS {
+                let t = if t_idx < MAX_DS_LINKS { self.min_operating_volume[t_idx] } else { 0.0 };
+                if t > m_i {
+                    continue;
+                }
+                let mut avail = (w_net - t).max(0.0);
+                for (m_j, g_j) in self.min_operating_volume.iter().zip(granted.iter()).take(i) {
+                    if *m_j >= t {
+                        avail -= *g_j;
+                    }
+                }
+                cap = cap.min(avail);
+            }
+            granted[i] = demands[i].min(cap).max(0.0);
+        }
+        granted
+    }
+
+    /// Equilibrium error at a candidate point (volume, area, spill): positive
+    /// means the equilibrium lies at or below this volume. The outflow folds
+    /// the MOL constraints in via `allocate_releases`, so the error is a
+    /// continuous function of volume — no active-set switching.
+    ///
+    /// When no MOL cap binds at the point, the outflow is computed with the
+    /// historical unconstrained expressions (`max(spill, ds_1 due) + ds_2..4
+    /// dues`) so that models whose storages never hit a MOL constraint stay
+    /// bit-identical with pre-redesign results; the two branches agree to FP
+    /// rounding at the boundary.
+    fn equilibrium_error(&self, v: f64, area: f64, spill: f64, v_working: f64, net_rain_mm: f64) -> f64 {
+        if self.has_mol {
+            let w = v_working + net_rain_mm * area;
+            let demands = self.demands_at_spill(spill);
+            let granted = self.allocate_releases(w - spill, &demands);
+            if (0..MAX_DS_LINKS).any(|i| granted[i] < demands[i]) {
+                let outflow = spill + granted.iter().sum::<f64>();
+                return v - (w - outflow);
             }
         }
-        total
+        let ds1_flow = spill.max(self.ds_release_due[0]);
+        let ds234_orders: f64 = self.ds_release_due[1..].iter().sum();
+        let total_outflow = ds1_flow + ds234_orders;
+        let predicted = v_working + net_rain_mm * area - total_outflow;
+        v - predicted
+    }
+
+    /// True when the MOL allocation grants every demand in full at this
+    /// point, i.e. no access cap binds.
+    fn allocation_unbound(&self, area: f64, spill: f64, v_working: f64, net_rain_mm: f64) -> bool {
+        let w = v_working + net_rain_mm * area;
+        let demands = self.demands_at_spill(spill);
+        let granted = self.allocate_releases(w - spill, &demands);
+        (0..MAX_DS_LINKS).all(|i| granted[i] >= demands[i])
     }
 
     /// Solves the backward Euler equation for equilibrium volume in flow phase.
     ///
-    /// Uses a two-pass approach for ds_1:
-    /// - Pass 1: Solve spill-limited case (ds_1_outlet = 0, spill alone may meet order)
-    /// - If spill >= ds_1_order: done, ds_1 flow = spill
-    /// - Pass 2: Solve order-limited case (ds_1_outlet = order, subject to MOL)
+    /// One monotone solve: the MOL access constraints are folded into the
+    /// outflow function, so the equilibrium error is continuous in volume and
+    /// a single bracket-and-refine pass finds the solution — no active outlet
+    /// sets, no threshold clamping. The final volume is recomputed from the
+    /// allocated flows so mass balance closes by construction.
     ///
     /// Returns (final_volume, ds_flows[4], spill, table_row, area)
     fn solve_backward_euler(
@@ -197,198 +271,91 @@ impl StorageNode {
             );
         }
 
-        // --- Pass 1: Solve spill-limited case (no controlled release on ds_1) ---
-        let (v_spill_only, spill, active_pass1, row_pass1, _unc_pass1) =
-            self.solve_spill_limited_case(v_initial, net_rain_mm, nrows, self.previous_istop);
+        let (v_solved, row, legacy) = self.solve_equilibrium(v_initial, net_rain_mm, nrows, self.previous_istop);
 
-        // Select which pass result to use
-        let (v_final, final_spill, active, row, unconstrained) = if spill >= self.ds_release_due[0] {
-            // Spill satisfies ds_1 order - no controlled release needed.
-            // Always use mass balance here (unconstrained=false): the interpolated spill
-            // can have large FP error when the volume is near a steep spill curve, whereas
-            // mass balance (v_initial - v_final) stays accurate.
-            (v_spill_only, spill, active_pass1, row_pass1, false)
-        } else {
-            // --- Pass 2: Solve order-limited case (ds_1 needs controlled release) ---
-            // Warm start from pass 1 row since solutions are nearby
-            self.solve_order_limited_case(v_initial, net_rain_mm, self.ds_release_due[0], nrows, row_pass1 + 1)
-        };
+        // Evaluate the solution point and allocate.
+        let area = self.dimensions.interpolate_row(row, VOLU, AREA, v_solved);
+        let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, v_solved).max(0.0);
 
-        // Compute area once (used by both allocation logic and caller)
-        let area = self.dimensions.interpolate_row(row, VOLU, AREA, v_final);
-
-        // Allocate outflows to each downstream link.
-        // When unconstrained, use orders directly to avoid floating point noise from mass balance.
-        // When constrained (threshold clamp or non-convergence), compute available from mass balance.
         let mut ds_flows = [0.0; MAX_DS_LINKS];
-        let mut remaining = if unconstrained {
-            f64::INFINITY
-        } else {
-            (v_initial + net_rain_mm * area - v_final).max(0.0)
-        };
-
-        // Priority: ds_1 first (includes uncontrollable spill), then ds_2, ds_3, ds_4.
-        // ds_1: spill is uncontrollable, controlled release supplements up to order
-        let ds_1_active = (active & 1) != 0;
-        let ds1_flow = if ds_1_active {
-            self.ds_release_due[0].max(final_spill).min(remaining)
-        } else {
-            final_spill.min(remaining)
-        };
-        ds_flows[0] = ds1_flow;
-        remaining -= ds1_flow;
-
-        // ds_2, ds_3, ds_4: each gets min(release_due, remaining budget)
-        for i in 1..MAX_DS_LINKS {
-            if active & (1 << i) != 0 && remaining > EPSILON {
-                let flow = self.ds_release_due[i].min(remaining);
-                ds_flows[i] = flow;
-                remaining -= flow;
-            }
-        }
-
-        (v_final, ds_flows, final_spill, row, area)
-    }
-
-    /// Solves the spill-limited case: no required ds_1 flow, spill alone determines ds_1.
-    /// Returns (equilibrium_volume, spill_at_equilibrium, active_mask, table_row, unconstrained)
-    #[inline(always)]
-    fn solve_spill_limited_case(
-        &self,
-        v_working: f64,
-        net_rain_mm: f64,
-        nrows: usize,
-        start_row: usize,
-    ) -> (f64, f64, u8, usize, bool) {
-        self.solve_with_outflows(v_working, net_rain_mm, 0.0, nrows, start_row)
-    }
-
-    /// Solves the order-limited case: ds_1 must flow at least the order amount.
-    /// Returns (equilibrium_volume, spill_at_equilibrium, active_mask, table_row, unconstrained)
-    #[inline(always)]
-    fn solve_order_limited_case(
-        &self,
-        v_initial: f64,
-        net_rain_mm: f64,
-        ds_1_release_due: f64,
-        nrows: usize,
-        start_row: usize,
-    ) -> (f64, f64, u8, usize, bool) {
-        self.solve_with_outflows(v_initial, net_rain_mm, ds_1_release_due, nrows, start_row)
-    }
-
-    /// Solves for equilibrium volume with a required minimum ds_1 flow.
-    /// The actual ds_1 contribution to mass balance is max(spill, ds1_required_flow).
-    /// Handles MOL thresholds for ds_2, ds_3, ds_4 via iteration.
-    /// Returns (equilibrium_volume, spill_at_equilibrium, active_outlet_mask, table_row, unconstrained)
-    /// `unconstrained` is true when the solver converged naturally (stable active set) — all active
-    /// outlets can release their full orders. False when the solution was clamped to a threshold
-    /// or the solver did not converge, meaning available outflow may be less than total orders.
-    fn solve_with_outflows(
-        &self,
-        v_initial: f64,
-        net_rain_mm: f64,
-        ds1_required_flow: f64,
-        nrows: usize,
-        start_row: usize,
-    ) -> (f64, f64, u8, usize, bool) {
-        // Start with outlets active based on current volume
-        let mut active = self.active_outlets_at_volume(v_initial);
-        let mut hint = start_row;
-
-        const MAX_ITERATIONS: usize = 8;
-
-        for _iter in 0..MAX_ITERATIONS {
-            // Sum orders for ds_2, ds_3, ds_4 based on active set
-            let ds234_orders_due = self.sum_ds_orders_due(active & 0b1110);
-
-            // ds_1 required flow is zero when ds_1 is below its MOL
-            let effective_ds1 = if active & 1 != 0 { ds1_required_flow } else { 0.0 };
-
-            // Find equilibrium volume
-            let (v_candidate, row, clamped) = self.find_equilibrium_volume(
-                v_initial, net_rain_mm, effective_ds1, ds234_orders_due, nrows, hint
-            );
-
-            // Check which outlets should be active at the candidate volume
-            let new_active = self.active_outlets_at_volume(v_candidate);
-
-            if new_active == active {
-                // Converged - use row from bisection for spill lookup.
-                // A clamped equilibrium (table floor/ceiling) is NOT unconstrained:
-                // the demanded outflow was unmeetable, so the caller must cap the
-                // actual releases by mass balance, not trust the orders.
-                let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, v_candidate).max(0.0);
-                return (v_candidate, spill, active, row, !clamped);
-            }
-
-            // Only check threshold clamping on reactivation (oscillation).
-            // If outlets are only being deactivated, just update and re-solve.
-            let reactivating = new_active & !active;
-            if reactivating != 0 {
-                if let Some(threshold_vol) =
-                    self.find_crossed_threshold(v_candidate, active, new_active)
-                {
-                    if let Some(thr_row) = self.dimensions.find_row_for_interpolation(VOLU, threshold_vol) {
-                        let area = self.dimensions.interpolate_row(thr_row, VOLU, AREA, threshold_vol);
-                        let spill = self.dimensions.interpolate_row(thr_row, VOLU, SPIL, threshold_vol).max(0.0);
-                        let outflow_needed = v_initial + net_rain_mm * area - threshold_vol;
-                        let ds1_flow = spill.max(effective_ds1);
-                        let total_outflow = ds1_flow + ds234_orders_due;
-
-                        if outflow_needed >= 0.0 && outflow_needed <= total_outflow + EPSILON {
-                            // Smaller active set can sustain the threshold volume
-                            return (threshold_vol, spill, active, thr_row, false);
-                        } else if outflow_needed >= 0.0 {
-                            // Smaller set can't sustain threshold - clamp anyway with
-                            // larger set. Mass balance allocation will cap actual flows.
-                            return (threshold_vol, spill, new_active, thr_row, false);
-                        }
+        let v_final;
+        if legacy {
+            // No MOL cap binds: attribute flows with the historical
+            // unconstrained expressions so these days stay bit-identical with
+            // pre-redesign results (the values equal the granted allocation
+            // to FP rounding). v_final is the solved equilibrium volume.
+            v_final = v_solved;
+            if spill >= self.ds_release_due[0] {
+                // Spill satisfies ds_1's release due: attribute from mass
+                // balance — the interpolated spill can carry large FP error
+                // when the volume sits on a steep spill curve, whereas
+                // v_initial - v_final stays accurate.
+                let mut remaining = (v_initial + net_rain_mm * area - v_final).max(0.0);
+                let ds1_flow = spill.min(remaining);
+                ds_flows[0] = ds1_flow;
+                remaining -= ds1_flow;
+                for (flow, due) in ds_flows.iter_mut().zip(self.ds_release_due.iter()).skip(1) {
+                    if *due > 0.0 && remaining > EPSILON {
+                        *flow = due.min(remaining);
+                        remaining -= *flow;
+                    }
+                }
+            } else {
+                // Order-limited: release the dues exactly (no FP noise from
+                // mass balance).
+                ds_flows[0] = self.ds_release_due[0].max(spill);
+                for (flow, due) in ds_flows.iter_mut().zip(self.ds_release_due.iter()).skip(1) {
+                    if *due > 0.0 {
+                        *flow = *due;
                     }
                 }
             }
-
-            // Warm start next iteration from current solution
-            hint = row + 1;
-            active = new_active;
-        }
-
-        // Fallback (rare path) - do one find_row for v_working
-        if let Some(fb_row) = self.dimensions.find_row_for_interpolation(VOLU, v_initial) {
-            let spill = self.dimensions.interpolate_row(fb_row, VOLU, SPIL, v_initial).max(0.0);
-            (v_initial, spill, active, fb_row, false)
         } else {
-            (v_initial, 0.0, active, 0, false)
+            // A MOL cap binds (or the solution was clamped to the table
+            // floor/ceiling): the allocation is authoritative, and v_final is
+            // defined as W - S - sum(granted) so volume + flows reconcile
+            // exactly with the recorded rain/evap/seep volumes (which use
+            // this same area) — mass balance closes by construction.
+            let w = v_initial + net_rain_mm * area;
+            let demands = self.demands_at_spill(spill);
+            let granted = self.allocate_releases(w - spill, &demands);
+            ds_flows = granted;
+            ds_flows[0] += spill;
+            v_final = (w - spill - granted.iter().sum::<f64>()).max(0.0);
         }
+
+        (v_final, ds_flows, spill, row, area)
     }
 
-    /// Finds equilibrium volume given required ds_1 flow and ds_2/3/4 orders.
-    /// Mass balance: v = v_working + net_rain*area(v) - max(spill(v), ds1_required_flow) - ds234_orders
-    /// Uses exponential expansion + bisection to find the table row,
-    /// then linear interpolation within the row.
-    fn find_equilibrium_volume(
+    /// Finds the equilibrium volume: v = W(v) - O(v), with W the available
+    /// water (v_working + net_rain*area(v)) and O the outflow (spill plus the
+    /// MOL-capped allocation of the release demands).
+    /// Uses exponential expansion + bisection to find the table row, then
+    /// refines within the segment: exactly (linear solve, including the
+    /// max(spill, order) kink on ds_1) when no MOL cap binds there, by
+    /// in-segment bisection of the continuous error otherwise.
+    /// Returns (volume, row, legacy): `row` is the lower row of the solution
+    /// segment; `legacy` is true when the volume is the historical
+    /// unconstrained solution (no MOL cap binding), telling the caller to
+    /// attribute flows with the historical expressions, and false when the
+    /// MOL allocation is authoritative (including the floor and clamped
+    /// fallbacks, whose flows must be capped by available water).
+    fn solve_equilibrium(
         &self,
         v_working: f64,
         net_rain_mm: f64,
-        ds1_required_flow: f64,
-        ds234_orders: f64,
         nrows: usize,
         start_row: usize,
     ) -> (f64, usize, bool) {
-        // Returns (volume, row, clamped): `clamped` is true when the solution was
-        // pinned to the table floor or ceiling because the demanded outflow has no
-        // equilibrium inside the table - such a result must not be treated as
-        // unconstrained by the caller.
         // Error function: positive means solution is at or below this row
         let compute_error = |row: usize| -> f64 {
-            let table_vol = self.dimensions.get_value(row, VOLU);
-            let area = self.dimensions.get_value(row, AREA);
-            let spill = self.dimensions.get_value(row, SPIL).max(0.0);
-
-            let ds1_flow = spill.max(ds1_required_flow);
-            let total_outflow = ds1_flow + ds234_orders;
-            let predicted = v_working + net_rain_mm * area - total_outflow;
-            table_vol - predicted
+            self.equilibrium_error(
+                self.dimensions.get_value(row, VOLU),
+                self.dimensions.get_value(row, AREA),
+                self.dimensions.get_value(row, SPIL).max(0.0),
+                v_working,
+                net_rain_mm,
+            )
         };
 
         // Exponential expansion from start_row hint
@@ -444,7 +411,7 @@ impl StorageNode {
 
         // Handle floor case (solution at or below row 0)
         if istop == 0 {
-            return (self.dimensions.get_value(0, VOLU), 0, true);
+            return (self.dimensions.get_value(0, VOLU), 0, false);
         }
         // Ceiling case (error_hi < 0): allow extrapolation beyond table max
         // by falling through to normal interpolation - x > 1.0 extrapolates
@@ -455,32 +422,100 @@ impl StorageNode {
         let row = istop - 1;
         let error_prev = if row == lo { error_lo } else { compute_error(row) };
 
-        // Floor case the istop check above cannot see: when the demanded outflow
-        // exceeds everything the storage holds, the error is positive at every
-        // row — there is no sign change to bracket — yet istop lands at 1, not 0,
-        // because the downward expansion stops at lo == 0 with error_lo still
-        // positive. Interpolating across such a "bracket" divides by the
-        // difference of two near-equal errors: if a row pair satisfies
-        // dVol ≈ net_rain·dArea (Talgai Weir rows 0-1 with net rain 0.1 mm made
-        // this difference exactly zero), x explodes and the volume lands at ±1e12.
-        // A non-negative error at the lower bracket row means the solution is at
-        // or below the table floor: drain to the floor and let the caller's
-        // mass-balance allocation cap the actual releases.
+        // Solution at or below the table floor. Because the allocation caps
+        // outflow at available water, error(row 0) <= 0 always: a demanded
+        // outflow exceeding everything the storage holds lands here with
+        // error_prev == 0 exactly, and drains to the floor. Kept as >= 0 as
+        // defence in depth against degenerate tables where a row pair
+        // satisfies dVol ≈ net_rain·dArea (Talgai Weir rows 0-1 with net rain
+        // 0.1 mm), which makes the interpolation below divide by a difference
+        // of two near-equal errors (see test_storage_floor_blowup).
         if error_prev >= 0.0 {
-            return (self.dimensions.get_value(0, VOLU), 0, true);
+            return (self.dimensions.get_value(0, VOLU), 0, false);
         }
 
-        // With error_prev < 0 established: a genuine bracket (error_hi >= 0) gives
-        // x in (0, 1]. In the ceiling case (error_hi < 0) x > 1 extrapolates
-        // beyond the table, which is legitimate only while the errors still
-        // converge (error_hi > error_prev). If they diverge the extrapolation is
-        // meaningless — clamp to the top row instead of running away.
-        let denom = error_prev - error_hi;
-        if denom >= 0.0 {
-            return (self.dimensions.get_value(istop, VOLU), row, true);
-        }
         let v_lo = self.dimensions.get_value(row, VOLU);
         let v_hi = self.dimensions.get_value(istop, VOLU);
+        let area_lo = self.dimensions.get_value(row, AREA);
+        let area_hi = self.dimensions.get_value(istop, AREA);
+        let spill_lo = self.dimensions.get_value(row, SPIL).max(0.0);
+        let spill_hi = self.dimensions.get_value(istop, SPIL).max(0.0);
+
+        // First attempt the historical unconstrained solve, ignoring MOL
+        // caps: outflow = max(spill, ds_1 release due) + ds_2..ds_4 release
+        // dues. Its candidate is accepted only when no cap binds at the
+        // candidate point, which keeps every day a MOL never touches
+        // bit-identical with pre-redesign results (expressions below are kept
+        // verbatim from the old solver on purpose). Checking caps at the
+        // candidate — not at the segment endpoints — matters: a row endpoint
+        // deep in a steep spill curve can look capped even though the
+        // solution point is not.
+        if let Some(v) = self.solve_segment_unconstrained(
+            v_working, net_rain_mm, v_lo, v_hi, area_lo, area_hi, spill_lo, spill_hi,
+        ) {
+            if !self.has_mol {
+                return (v, row, true);
+            }
+            let area = self.dimensions.interpolate_row(row, VOLU, AREA, v);
+            let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, v).max(0.0);
+            if self.allocation_unbound(area, spill, v_working, net_rain_mm) {
+                return (v, row, true);
+            }
+        }
+
+        // A MOL access cap binds (or the unconstrained solve is degenerate):
+        // bisect the continuous capped error inside the segment — error_prev
+        // < 0 and error_hi >= 0 guarantee a root.
+        if error_hi >= 0.0 {
+            let (mut a, mut b) = (v_lo, v_hi);
+            for _ in 0..64 {
+                let mid = 0.5 * (a + b);
+                let x = (mid - v_lo) / (v_hi - v_lo);
+                let area = area_lo + (area_hi - area_lo) * x;
+                let spill = (spill_lo + (spill_hi - spill_lo) * x).max(0.0);
+                if self.equilibrium_error(mid, area, spill, v_working, net_rain_mm) < 0.0 {
+                    a = mid;
+                } else {
+                    b = mid;
+                }
+                if b - a <= 1e-12 * (1.0 + b.abs()) {
+                    break;
+                }
+            }
+            return (0.5 * (a + b), row, false);
+        }
+
+        // Ceiling case (error_hi < 0, no bracket) with a cap binding at the
+        // extrapolated candidate — pathological (extrapolation means a water
+        // surplus). Hand the candidate, or failing that the top row, to the
+        // allocation so mass still cannot leak.
+        if let Some(v) = self.solve_segment_unconstrained(
+            v_working, net_rain_mm, v_lo, v_hi, area_lo, area_hi, spill_lo, spill_hi,
+        ) {
+            return (v, row, false);
+        }
+        (self.dimensions.get_value(istop, VOLU), row, false)
+    }
+
+    /// The historical unconstrained within-segment solve, kept expression-for-
+    /// expression compatible with the pre-MOL-redesign solver: straight linear
+    /// interpolation of the error, with exact handling of the max(spill, ds_1
+    /// release due) kink. Returns None when the segment is degenerate (errors
+    /// do not converge downhill), mirroring the old floor/ceiling guards.
+    #[allow(clippy::too_many_arguments)]
+    fn solve_segment_unconstrained(
+        &self,
+        v_working: f64,
+        net_rain_mm: f64,
+        v_lo: f64,
+        v_hi: f64,
+        area_lo: f64,
+        area_hi: f64,
+        spill_lo: f64,
+        spill_hi: f64,
+    ) -> Option<f64> {
+        let ds1_required_flow = self.ds_release_due[0];
+        let ds234_orders: f64 = self.ds_release_due[1..].iter().sum();
 
         // The outflow term max(spill(v), ds1_required_flow) kinks at the volume
         // where the interpolated spill crosses the required flow. If that
@@ -491,11 +526,7 @@ impl StorageNode {
         // ~45 ML/d). Solve each linear branch exactly and keep the
         // self-consistent one; both are exact because area and spill are linear
         // on the segment (and on its extrapolation beyond the top row).
-        let spill_lo = self.dimensions.get_value(row, SPIL).max(0.0);
-        let spill_hi = self.dimensions.get_value(istop, SPIL).max(0.0);
         if ds1_required_flow > spill_lo && spill_hi > spill_lo {
-            let area_lo = self.dimensions.get_value(row, AREA);
-            let area_hi = self.dimensions.get_value(istop, AREA);
             let spill_at = |v: f64| spill_lo + (spill_hi - spill_lo) * (v - v_lo) / (v_hi - v_lo);
             // Solve v = v_working + net_rain*area(v) - outflow(v) - ds234 with
             // outflow linear between the given endpoint values. None when the
@@ -512,50 +543,53 @@ impl StorageNode {
             // Below the crossing the required flow governs: outflow is constant.
             if let Some(v) = solve_branch(ds1_required_flow, ds1_required_flow) {
                 if spill_at(v) <= ds1_required_flow {
-                    return (v, row, false);
+                    return Some(v);
                 }
             }
-            // Above the crossing the spill governs: outflow follows the spill line.
-            if let Some(v) = solve_branch(spill_lo, spill_hi) {
-                if spill_at(v) >= ds1_required_flow {
-                    return (v, row, false);
+            // Above the crossing the spill governs: outflow follows the spill
+            // line. Computed with the historical spill-limited-pass
+            // expressions (spill + orders, straight interpolation);
+            // algebraically this equals solve_branch(spill_lo, spill_hi),
+            // differing only in FP association.
+            {
+                let total_lo = spill_lo + ds234_orders;
+                let total_hi = spill_hi + ds234_orders;
+                let e_lo = v_lo - (v_working + net_rain_mm * area_lo - total_lo);
+                let e_hi = v_hi - (v_working + net_rain_mm * area_hi - total_hi);
+                let d = e_lo - e_hi;
+                if e_lo < 0.0 && d < 0.0 {
+                    let v = v_lo + (v_hi - v_lo) * (e_lo / d);
+                    if spill_at(v) >= ds1_required_flow {
+                        return Some(v);
+                    }
                 }
             }
             // Neither branch self-consistent (degenerate segment): fall through
             // to the straight interpolation rather than inventing a solution.
         }
 
-        let x = error_prev / denom;
-
-        (v_lo + (v_hi - v_lo) * x, row, false)
-    }
-
-    /// Finds which MOL threshold was crossed between old and new active sets.
-    /// Returns the threshold volume closest to the candidate volume.
-    fn find_crossed_threshold(
-        &self,
-        v_candidate: f64,
-        old_active: u8,
-        new_active: u8,
-    ) -> Option<f64> {
-        let changed = old_active ^ new_active;
-
-        // Find the threshold closest to the candidate volume
-        let mut best: Option<f64> = None;
-        let mut best_dist = f64::MAX;
-
-        for i in 0..MAX_DS_LINKS {
-            if changed & (1 << i) != 0 {
-                let threshold = self.min_operating_volume[i];
-                let dist = (threshold - v_candidate).abs();
-                if dist < best_dist {
-                    best_dist = dist;
-                    best = Some(threshold);
-                }
-            }
+        // Straight interpolation with the historical error expression: the
+        // outflow is the same on both endpoints' side of any kink, so the
+        // error is linear across the segment.
+        let compute_error_old = |v: f64, area: f64, spill: f64| -> f64 {
+            let ds1_flow = spill.max(ds1_required_flow);
+            let total_outflow = ds1_flow + ds234_orders;
+            let predicted = v_working + net_rain_mm * area - total_outflow;
+            v - predicted
+        };
+        let error_prev = compute_error_old(v_lo, area_lo, spill_lo);
+        let error_hi = compute_error_old(v_hi, area_hi, spill_hi);
+        // A genuine bracket (error_hi >= 0) gives x in (0, 1]. In the ceiling
+        // case (error_hi < 0) x > 1 extrapolates beyond the table, which is
+        // legitimate only while the errors still converge (error_hi >
+        // error_prev). Anything else is degenerate here: the caller falls
+        // back to the capped bisection or the top row.
+        let denom = error_prev - error_hi;
+        if error_prev >= 0.0 || denom >= 0.0 {
+            return None;
         }
-
-        best
+        let x = error_prev / denom;
+        Some(v_lo + (v_hi - v_lo) * x)
     }
 
     /// Sets `self.exists_bool` for this timestep, and records the driving value.
@@ -631,6 +665,7 @@ impl Node for StorageNode {
                 }
             };
         }
+        self.has_mol = self.min_operating_volume.iter().any(|&m| m > 0.0);
 
         // Check if the storage is targeting a level
         self.has_target_level = !matches!(&self.target_level, DynamicInput::None { .. });

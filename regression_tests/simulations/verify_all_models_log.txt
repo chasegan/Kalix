@@ -1,164 +1,164 @@
-Backend: CLI (C:\Chas\Kalix\Kalix\target\release\kalix.exe)
-Searching for model files in: c:\Chas\Kalix\Kalix\regression_tests\simulations
+Backend: CLI (/Users/chas/github/Kalix/target/release/kalix)
+Searching for model files in: /Users/chas/github/Kalix/regression_tests/simulations
 ================================================================================
 Found 32 model file(s)
 
-Verifying: 10_different_data_periods\model_with_different_data_periods.ini
+Verifying: 10_different_data_periods/model_with_different_data_periods.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 11_force_flow\model_with_forced_flow.ini
+Verifying: 11_force_flow/model_with_forced_flow.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 12_storage_variations\storage_variations.ini
+Verifying: 12_storage_variations/storage_variations.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 13_reg_user_with_routing\model_with_ordering.ini
+Verifying: 13_reg_user_with_routing/model_with_ordering.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 14_reg_users_with_inflows\ordering_with_inflows.ini
+Verifying: 14_reg_users_with_inflows/ordering_with_inflows.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 15_order_controls\model.ini
+Verifying: 15_order_controls/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 16_alternating_water_source\model.ini
+Verifying: 16_alternating_water_source/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 17_storage_outlets\model.ini
+Verifying: 17_storage_outlets/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 18_filling_emptying_storage\model.ini
+Verifying: 18_filling_emptying_storage/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 19_lots_of_ordering\model.ini
+Verifying: 19_lots_of_ordering/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 1_picnic_gr4j\kalix.ini
+Verifying: 1_picnic_gr4j/kalix.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 20_loss_extrapolation\model.ini
+Verifying: 20_loss_extrapolation/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 21_ordering_through_storages\model.ini
+Verifying: 21_ordering_through_storages/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 22_storage_target_level\model.ini
+Verifying: 22_storage_target_level/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 23_order_lag\model.ini
+Verifying: 23_order_lag/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 24_nlm_routing\model.ini
+Verifying: 24_nlm_routing/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 25_picnic_gr4h\kalix.ini
+Verifying: 25_picnic_gr4h/kalix.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 26_splitters_noextrap\split_nlm_model_noextrap.ini
+Verifying: 26_splitters_noextrap/split_nlm_model_noextrap.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 27_splitters_extrap\split_nlm_model.ini
+Verifying: 27_splitters_extrap/split_nlm_model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 28_forced_release\storage_forced_release.ini
+Verifying: 28_forced_release/storage_forced_release.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 29_storage_existence\model.ini
+Verifying: 29_storage_existence/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 2_pioneer_val\model.ini
+Verifying: 2_pioneer_val/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 30_storage_existence_target_level\model.ini
+Verifying: 30_storage_existence_target_level/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 31_model_with_table\model.ini
+Verifying: 31_model_with_table/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 32_model_with_ras\model.ini
+Verifying: 32_model_with_ras/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 3_calibrate_constants\model.ini
+Verifying: 3_calibrate_constants/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 4_user_variations\user.ini
+Verifying: 4_user_variations/user.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 5_model_with_every_node\model_with_every_node_type.ini
+Verifying: 5_model_with_every_node/model_with_every_node_type.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 6_picnic_sacr\picnic_sacr.ini
+Verifying: 6_picnic_sacr/picnic_sacr.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 7_picnic_sacr_dmy\picnic_sacr.ini
+Verifying: 7_picnic_sacr_dmy/picnic_sacr.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 8_picnic_sacr_no_headder\picnic_sacr.ini
+Verifying: 8_picnic_sacr_no_headder/picnic_sacr.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
-Verifying: 9_hundred_sacr\kalix.ini
+Verifying: 9_hundred_sacr/kalix.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
@@ -166,7 +166,7 @@ Verifying: 9_hundred_sacr\kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-08-06T12:27:51.566047
+Timestamp: 2026-08-31T11:29:14.799936
 Total: 96
 Passed: 96
 Failed: 0

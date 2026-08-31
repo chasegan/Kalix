@@ -27,6 +27,7 @@ mod test_storage_exists;
 mod test_order_accounts;
 mod test_storage_floor_blowup;
 mod test_storage_spill_order_kink;
+mod test_storage_mol;
 
 #[cfg(test)]
 mod test_model;
