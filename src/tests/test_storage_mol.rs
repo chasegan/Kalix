@@ -1,7 +1,11 @@
-// Tests for storage outlet minimum operating levels (MOLs) under the
-// access-based semantics (docs/storage_mol_semantics.md): an outlet may only
-// be supplied from water stored above its own MOL, contention resolves by
-// outlet priority, and mass balance closes by construction.
+// Tests for storage outlet minimum operating levels (MOLs).
+//
+// PROTOTYPE BRANCH: these expectations follow the rating-curve semantics —
+// each outlet's capacity is a (step) function of the end-of-step level, zero
+// at/below its MOL, with the volume parking exactly on a threshold when the
+// root falls inside the step's jump. Tests whose outcomes differ from the
+// access-based semantics on feat/storage-mol-redesign say so in their doc
+// comments; the rest agree under both.
 //
 // The two-way scenario mirrors the TwoWayStorage model reported by Aaron Trim
 // (2026-08-18): a big order pinned at a high MOL must not clamp a small order
@@ -81,40 +85,45 @@ fn test_two_way_big_order_does_not_starve_small_order() {
     assert!(mbal.abs() < 1e-6, "mass balance must close, residual {mbal}");
 }
 
-/// TwoWayStorage, inflow day: ds_2 releases exactly the surplus above its
-/// MOL, ds_1 still gets its order from deeper water.
+/// TwoWayStorage, inflow day. RATING SEMANTICS: the volume parks exactly on
+/// ds_2's MOL (7,000) and ds_2 gets the residual after ds_1's release — 22,
+/// not the full 30 surplus the access semantics granted (where ds_1's 8 was
+/// booked against deeper water and the volume ended at 6,992).
 #[test]
 fn test_two_way_inflow_day_releases_surplus_above_mol() {
     let mut node = storage(TWO_WAY_DIMS, &[(0, 1.0), (1, 10.0)]);
     let (v, flows, _) = run_step(&mut node, 7000.0, 30.0, 0.0, 0.0, [8.0, 1e6, 0.0, 0.0]);
 
     assert!((flows[0] - 8.0).abs() < 1e-9, "ds_1 order met, got {}", flows[0]);
-    assert!((flows[1] - 30.0).abs() < 1e-6,
-            "ds_2 releases the surplus above its MOL, got {}", flows[1]);
-    assert!((v - 6992.0).abs() < 1e-6, "expected 6992, got {v}");
+    assert!((flows[1] - 22.0).abs() < 1e-6,
+            "ds_2 gets the residual that keeps the level on its MOL, got {}", flows[1]);
+    assert!((v - 7000.0).abs() < 1e-6, "volume parks on ds_2's MOL, got {v}");
     let mbal = 7030.0 - flows.iter().sum::<f64>() - v;
     assert!(mbal.abs() < 1e-9, "mass balance must close, residual {mbal}");
 }
 
-/// An unrestricted outlet must not be starved by a sibling's MOL clamp, and
-/// a MOL outlet starting above its MOL must not be zeroed because the end-of-
-/// step volume lands below it (both failure modes of the active-set solver).
+/// RATING SEMANTICS: outlets couple through the solved level. ds_3's big
+/// draw carries the end-of-step level below ds_2's MOL, so ds_2 releases
+/// nothing — the level trace never contradicts "no flow below the MOL".
+/// (Access semantics instead served both in full: ds_2 = 30, v = 10.)
 #[test]
 fn test_mol_outlet_and_unrestricted_outlet_both_served() {
     // ds_2: MOL at level 5 (volume 50), order 30. ds_3: no MOL, order 40.
     let mut node = storage(LINEAR_DIMS, &[(1, 5.0)]);
     let (v, flows, _) = run_step(&mut node, 80.0, 0.0, 0.0, 0.0, [0.0, 30.0, 40.0, 0.0]);
 
-    assert!((flows[1] - 30.0).abs() < 1e-9,
-            "ds_2 draws its full order from above its MOL, got {}", flows[1]);
+    assert!(flows[1].abs() < 1e-9,
+            "level ends below ds_2's MOL, so ds_2 cannot have flowed, got {}", flows[1]);
     assert!((flows[2] - 40.0).abs() < 1e-9,
-            "unrestricted ds_3 must not be starved, got {}", flows[2]);
-    assert!((v - 10.0).abs() < 1e-9, "expected 10, got {v}");
+            "unrestricted ds_3 fully served, got {}", flows[2]);
+    assert!((v - 40.0).abs() < 1e-9, "expected 40, got {v}");
 }
 
-/// Releases must be continuous in the sibling's order: sweeping ds_3's order
-/// must never flip ds_2's release (the active-set solver jumped it 30 -> 0
-/// when ds_3's order crossed 30).
+/// Releases must be continuous in the sibling's order — the crucial property
+/// the old active-set solver lacked (it flipped ds_2 from 30 to 0 as ds_3's
+/// order crossed 30). RATING SEMANTICS: while ds_3's order is below 30 the
+/// volume parks on ds_2's MOL and ds_2 tapers linearly (30 - ds_3); beyond
+/// that ds_2 is 0 and the volume falls away — continuous throughout.
 #[test]
 fn test_release_continuous_in_sibling_order() {
     let mut prev_v = f64::NAN;
@@ -123,13 +132,11 @@ fn test_release_continuous_in_sibling_order() {
         let mut node = storage(LINEAR_DIMS, &[(1, 5.0)]);
         let (v, flows, _) = run_step(&mut node, 80.0, 0.0, 0.0, 0.0, [0.0, 30.0, ds3_order, 0.0]);
 
-        // ds_2's access (80 - 50 = 30 ML above its MOL) never shrinks.
-        assert!((flows[1] - 30.0).abs() < 1e-9,
-                "ds_2 must stay at 30 for ds_3 order {ds3_order}, got {}", flows[1]);
-        // ds_3 gets its order until only ds_2-inaccessible water remains.
-        let ds3_expected = ds3_order.min(50.0);
-        assert!((flows[2] - ds3_expected).abs() < 1e-9,
-                "ds_3 expected {ds3_expected} at order {ds3_order}, got {}", flows[2]);
+        let ds2_expected = (30.0 - ds3_order).max(0.0);
+        assert!((flows[1] - ds2_expected).abs() < 1e-9,
+                "ds_2 expected {ds2_expected} at ds_3 order {ds3_order}, got {}", flows[1]);
+        assert!((flows[2] - ds3_order).abs() < 1e-9,
+                "ds_3 expected {ds3_order}, got {}", flows[2]);
         // Volume moves continuously (never jumps more than the order step).
         if prev_v.is_finite() {
             assert!((prev_v - v) <= 0.1 + 1e-9,
@@ -139,6 +146,30 @@ fn test_release_continuous_in_sibling_order() {
         let mbal = 80.0 - flows.iter().sum::<f64>() - v;
         assert!(mbal.abs() < 1e-9, "mass balance residual {mbal} at ds_3 order {ds3_order}");
     }
+}
+
+/// Outlet capacity is enforced (finally): `ds_N_outlet = MOL, capacity`
+/// caps the release even with the storage far above the MOL.
+#[test]
+fn test_outlet_capacity_enforced() {
+    let mut node = storage(LINEAR_DIMS, &[]);
+    node.outlet_definition[1] = OutletDefinition::OutletWithMOLAndCapacity(2.0, 10.0);
+    let (v, flows, _) = run_step(&mut node, 80.0, 0.0, 0.0, 0.0, [0.0, 30.0, 0.0, 0.0]);
+    assert!((flows[1] - 10.0).abs() < 1e-9,
+            "release capped at the outlet capacity, got {}", flows[1]);
+    assert!((v - 70.0).abs() < 1e-9, "expected 70, got {v}");
+}
+
+/// A capacity-limited outlet parked on its MOL still respects its capacity:
+/// with 30 ML standing above the MOL but capacity 10, only 10 is released
+/// and the volume ends above the MOL (no parking needed).
+#[test]
+fn test_capacity_limits_release_above_mol() {
+    let mut node = storage(LINEAR_DIMS, &[]);
+    node.outlet_definition[1] = OutletDefinition::OutletWithMOLAndCapacity(5.0, 10.0);
+    let (v, flows, _) = run_step(&mut node, 80.0, 0.0, 0.0, 0.0, [0.0, 60.0, 0.0, 0.0]);
+    assert!((flows[1] - 10.0).abs() < 1e-9, "got {}", flows[1]);
+    assert!((v - 70.0).abs() < 1e-9, "expected 70, got {v}");
 }
 
 /// A single MOL outlet drains exactly to its MOL, no further.

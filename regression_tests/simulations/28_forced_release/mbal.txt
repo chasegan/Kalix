@@ -11,15 +11,15 @@ INFLOW NODES
   inflow, 126.79567788251778
 
 UNREGULATED_USER NODES
-  unreg_user, -22.247240250554597
+  unreg_user, -22.81880069967624
 
 STORAGE NODES
-  storage, -0.0030285693605627117
+  storage, -0.0031176270706290495
 
 GAUGE NODES
   stream_1, 0
   stream_2, 0
 
 ----------------------------------
-TOTAL = 104.54540906260262
+TOTAL = 103.97375955577093
 ----------------------------------
