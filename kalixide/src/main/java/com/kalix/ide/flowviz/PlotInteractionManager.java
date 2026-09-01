@@ -742,11 +742,7 @@ public class PlotInteractionManager {
             if (currentViewport == null) {
                 return;
             }
-            XAxisType xAxisType = currentViewport.getXAxisType();
-            copyBoundsToClipboard(
-                formatXValue(currentViewport.getStartTimeMs(), xAxisType),
-                formatXValue(currentViewport.getEndTimeMs(), xAxisType)
-            );
+            copyStringToClipboard(getCurrentXLimits(currentViewport));
         });
         contextMenu.add(copyXAxis);
         JMenuItem pasteXAxis = new JMenuItem("Paste X axis");
@@ -787,9 +783,7 @@ public class PlotInteractionManager {
             if (currentViewport == null) {
                 return;
             }
-            var minVal = currentViewport.getMinValue();
-            var maxVal = currentViewport.getMaxValue();
-            copyBoundsToClipboard(String.valueOf(minVal), String.valueOf(maxVal));
+            copyStringToClipboard(getCurrentYLimits(currentViewport));
         });
         contextMenu.add(copyYAxis);
         JMenuItem pasteYAxis = new JMenuItem("Paste Y axis");
@@ -909,22 +903,17 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Puts an axis' bounds on the system clipboard as {@code "lower, upper"} -- the format
-     * {@link #readBoundsFromClipboard} reads back, and one a user can equally well type by
-     * hand or paste in from elsewhere.
-     *
-     * @param lowerFormatted the axis minimum, already formatted in the axis' own units
-     * @param upperFormatted the axis maximum, likewise
+     * Puts a string on the system clipboard
      */
-    private static void copyBoundsToClipboard(String lowerFormatted, String upperFormatted) {
-        StringSelection selection = new StringSelection(lowerFormatted + ", " + upperFormatted);
+    private static void copyStringToClipboard(String formatted) {
+        StringSelection selection = new StringSelection(formatted);
         Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
         clipboard.setContents(selection, selection);
     }
 
     /**
      * Reads a {@code "lower, upper"} pair off the clipboard, the inverse of
-     * {@link #copyBoundsToClipboard}. Returns the two trimmed halves, or {@code null} when
+     * {@link #copyStringToClipboard}. Returns the two trimmed halves, or {@code null} when
      * the clipboard is unreadable or does not hold exactly two comma-separated values --
      * having reported that to the user, so callers need only bail out.
      *
@@ -941,8 +930,10 @@ public class PlotInteractionManager {
             return null;
         }
 
-        String[] parts = clipboardString.split("\\s*,\\s*");
-        if (parts.length != 2) {
+        try {
+            return splitLimitString(clipboardString);
+        }
+        catch (IllegalArgumentException ex) {
             JOptionPane.showMessageDialog(
                 parentComponent,
                 String.format("Expected two comma-separated %s but received \"%s\"", expected, clipboardString),
@@ -950,7 +941,23 @@ public class PlotInteractionManager {
             );
             return null;
         }
-        return new String[]{parts[0].trim(), parts[1].trim()};
+    }
+
+    /**
+     * Splits a {@code "lower, upper"} string into its two trimmed halves.
+     *
+     * @param parseString the raw field text to split
+     * @return the two trimmed halves, {@code {lower, upper}}
+     * @throws IllegalArgumentException if {@code parseString} does not hold exactly two
+     *                                   comma-separated values
+     */
+    private String[] splitLimitString(String parseString) {
+        String[] parts = parseString.split("\\s*,\\s*");
+        if (parts.length != 2) {
+            throw new IllegalArgumentException(
+                String.format("Expected two comma-separated values but received \"%s\"", parseString));
+        }
+        return new String[]{ parts[0].trim(), parts[1].trim() };
     }
 
     /**
@@ -967,19 +974,15 @@ public class PlotInteractionManager {
         }
         XAxisType xAxisType = currentViewport.getXAxisType();
 
-        JTextField xMinField = new JTextField(formatXValue(currentViewport.getStartTimeMs(), xAxisType), 16);
-        JTextField xMaxField = new JTextField(formatXValue(currentViewport.getEndTimeMs(), xAxisType), 16);
-        JTextField yMinField = new JTextField(formatDoubleForField(currentViewport.getMinValue()), 16);
-        JTextField yMaxField = new JTextField(formatDoubleForField(currentViewport.getMaxValue()), 16);
+        JTextField xField = new JTextField(getCurrentXLimits(currentViewport), 32);
+        JTextField yField = new JTextField(getCurrentYLimits(currentViewport), 32);
 
         JPanel form = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(4, 4, 4, 4);
         gbc.anchor = GridBagConstraints.WEST;
-        addAxisFieldRow(form, gbc, 0, "X min:", xMinField);
-        addAxisFieldRow(form, gbc, 1, "X max:", xMaxField);
-        addAxisFieldRow(form, gbc, 2, "Y min:", yMinField);
-        addAxisFieldRow(form, gbc, 3, "Y max:", yMaxField);
+        addAxisFieldRow(form, gbc, 0, "X limits:", xField);
+        addAxisFieldRow(form, gbc, 1, "Y limits:", yField);
 
         JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(parentComponent),
             "Set Axis Limits", Dialog.ModalityType.APPLICATION_MODAL);
@@ -989,15 +992,27 @@ public class PlotInteractionManager {
         JButton okButton = new JButton("OK");
         okButton.addActionListener(ev -> {
             try {
-                Long   startTime = parseX(xMinField.getText(), xAxisType);
-                Long   endTime   = parseX(xMaxField.getText(), xAxisType);
-                Double minValue  = parseY(yMinField.getText());
-                Double maxValue  = parseY(yMaxField.getText());
+                String[] xLimits = splitLimitString(xField.getText());
+                String[] yLimits = splitLimitString(yField.getText());
 
-                ViewPort.validateBounds(startTime, endTime, minValue, maxValue);
-
-                acceptNewAxes(startTime, endTime, minValue, maxValue);
-                dialog.dispose();
+                long   startTime;
+                long   endTime;
+                double minVal;
+                double maxVal;
+                try {
+                    // bounds-safe owing to the pair check in readBoundsFromClipboard
+                    startTime = parseX(xLimits[0], xAxisType);
+                    endTime   = parseX(xLimits[1], xAxisType);
+                    minVal    = parseY(yLimits[0]);
+                    maxVal    = parseY(yLimits[1]);
+                } catch (IllegalArgumentException ex) {
+                    JOptionPane.showMessageDialog(
+                        parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+                ViewPort.validateBounds(startTime, endTime, minVal, maxVal);
+                acceptNewAxes(startTime, endTime, minVal, maxVal);
+                dialog.dispose(); // Intentionally here so the user can retry
             } catch (DateTimeParseException | NumberFormatException parseEx) {
                 JOptionPane.showMessageDialog(dialog, "Could not parse axis limits: " + parseEx.getMessage(),
                     "Invalid input", JOptionPane.ERROR_MESSAGE);
@@ -1117,6 +1132,48 @@ public class PlotInteractionManager {
             return String.valueOf((long) value);
         }
         return String.valueOf(value);
+    }
+
+    /**
+     * Helper for consistent formatting of limits.
+     */
+    private String formatLimits(String left, String right) {
+        return left + ", " + right;
+    }
+
+    /**
+     * Helper to consistently format x axis limits.
+     */
+    private String formatXLimits(long min, long max, XAxisType xAxisType) {
+        return formatLimits(formatXValue(min, xAxisType), formatXValue(max, xAxisType));
+    }
+
+    /**
+     * Helper to consistently format y axis limits.
+     */
+    private String formatYLimits(double min, double max) {
+        return formatLimits(formatDoubleForField(min), formatDoubleForField(max));
+    }
+
+    /**
+     * Get the current X limits as a formatted string.
+     * Precondition: {@code viewPort} is not null.
+     */
+    private String getCurrentXLimits(ViewPort viewPort) {
+        XAxisType xAxisType = viewPort.getXAxisType();
+        long min = viewPort.getStartTimeMs();
+        long max = viewPort.getEndTimeMs();
+        return formatXLimits(min, max, xAxisType);
+    }
+
+    /**
+     * Get the current Y limits as a formatted string.
+     * Precondition: {@code viewPort} is not null.
+     */
+    private String getCurrentYLimits(ViewPort viewPort) {
+        double min = viewPort.getMinValue();
+        double max = viewPort.getMaxValue();
+        return formatYLimits(min, max);
     }
 
     /**
