@@ -947,13 +947,7 @@ public class VisualizationTabManager {
      * Closes a tab at the given index.
      */
     private void closeTab(int index) {
-        // Clean up listeners before removing
-        TabInfo tab = tabs.get(index);
-        if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
-            tab.plotPanel.setOnHistoryChanged(null);
-            tab.plotPanel.getLegendManager().setOnCollapsedChanged(null);
-        }
-
+        detachTabCallbacks(tabs.get(index));
         tabs.remove(index);
         tabbedPane.removeTabAt(index);
 
@@ -961,6 +955,19 @@ public class VisualizationTabManager {
         // brand-new default tab rather than on a blank panel with no way forward.
         if (tabs.isEmpty()) {
             addDefaultPlotTab();
+        }
+    }
+
+    /**
+     * Detaches the toolbar callbacks a plot tab's toolbar installed on its panel. This
+     * is the owner's side of the contract with {@code PlotPanel.removeNotify()}, which
+     * leaves those callbacks alone so a re-parented tab keeps working; they are released
+     * here, when the tab is genuinely discarded (close, reset).
+     */
+    private void detachTabCallbacks(TabInfo tab) {
+        if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
+            tab.plotPanel.setOnHistoryChanged(null);
+            tab.plotPanel.getLegendManager().setOnCollapsedChanged(null);
         }
     }
 
@@ -978,11 +985,7 @@ public class VisualizationTabManager {
         TabInfo oldTab = tabs.get(index);
         TabInfo.TabType type = oldTab.type;
 
-        // Clean up listeners before removing (mirrors closeTab).
-        if (oldTab.type == TabInfo.TabType.PLOT && oldTab.plotPanel != null) {
-            oldTab.plotPanel.setOnHistoryChanged(null);
-            oldTab.plotPanel.getLegendManager().setOnCollapsedChanged(null);
-        }
+        detachTabCallbacks(oldTab);
         tabs.remove(index);
         tabbedPane.removeTabAt(index);
 

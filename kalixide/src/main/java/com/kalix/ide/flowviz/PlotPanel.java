@@ -216,6 +216,16 @@ public class PlotPanel extends JPanel {
         }
     }
 
+    /**
+     * Releases display-scoped resources only. This fires on every hierarchy detach,
+     * including the remove/insert cycle a tab reorder or reset performs, and everything
+     * torn down here is re-established on {@link #addNotify()} or on next use. Callbacks
+     * installed by the owning toolbar ({@code onHistoryChanged}, {@code onAutoYModeChanged})
+     * are deliberately <em>not</em> cleared: they belong to the owner, which detaches
+     * them when it closes the tab, and clearing them here would sever a re-parented
+     * panel from its own toolbar. (Stopping the coalesce timer drops one pending history
+     * push if a tab is dragged within 500 ms of a zoom — known and harmless.)
+     */
     @Override
     public void removeNotify() {
         PlotPaletteManager.getInstance().removeChangeListener(paletteChangeListener);
@@ -225,7 +235,6 @@ public class PlotPanel extends JPanel {
         }
         viewportCoalesceTimer.stop();
         coordinateDisplayManager.dispose();
-        onHistoryChanged = null;
         super.removeNotify();
     }
 
