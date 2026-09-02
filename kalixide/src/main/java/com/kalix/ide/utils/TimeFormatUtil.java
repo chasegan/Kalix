@@ -33,32 +33,20 @@ public final class TimeFormatUtil {
     private static final long MS_PER_MINUTE = 60_000L;
 
     private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+    /**
+     * Second-resolution ISO datetime. Deliberately not {@code DateTimeFormatter.ISO_DATE_TIME}:
+     * that appends a fractional-second part whenever the timestamp carries sub-second
+     * millis, and {@link #parseFlexible} -- the other half of the axis copy/paste round
+     * trip -- accepts no fraction. Viewport bounds pick up arbitrary millis from pan/zoom
+     * pixel arithmetic, so that combination broke the round trip on any plot the user had
+     * touched. Second is the finest resolution this class renders, so the truncation costs
+     * nothing visible.
+     */
     private static final DateTimeFormatter ISO_DATETIME = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final DateTimeFormatter MMDD_HHMM = DateTimeFormatter.ofPattern("MM-dd HH:mm");
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter HH_MM_SS = DateTimeFormatter.ofPattern("HH:mm:ss");
-
-    /**
-     * Format a timestamp as an ISO datetime at second resolution.
-     *
-     * <p>Deliberately {@link #ISO_DATETIME} rather than {@code DateTimeFormatter.ISO_DATE_TIME}:
-     * the latter appends a fractional-second part whenever the timestamp carries sub-second
-     * millis, and {@link #parseFlexible} -- the other half of every copy/paste round trip --
-     * accepts no fraction. Viewport bounds pick up arbitrary millis from pan/zoom pixel
-     * arithmetic, so that combination broke the round trip on any plot the user had touched.
-     * Second is the finest resolution this class renders, so the truncation costs nothing
-     * visible.</p>
-     */
-    public static String format(LocalDateTime dateTime) {
-        return dateTime.format(ISO_DATETIME);
-    }
-
-    /**
-     * Convenience overload taking a millisecond-epoch timestamp; converts to UTC LocalDateTime.
-     */
-    public static String format(long timestampMs) {
-        return format(toUtc(timestampMs));
-    }
 
     /**
      * Format a timestamp for resolution-aware display. Daily-or-coarser series (step_size

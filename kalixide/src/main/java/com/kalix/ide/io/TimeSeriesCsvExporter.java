@@ -210,7 +210,7 @@ public class TimeSeriesCsvExporter {
             // Format first column based on plot type
             if (isExceedance) {
                 // Convert fake timestamp to percentile
-                double percentile = timestamp / 1_000_000.0;
+                double percentile = (double) timestamp / com.kalix.ide.flowviz.transform.PlotTypeTransformer.PERCENTILE_SCALE;
                 row.append(String.format(java.util.Locale.ROOT, "%.2f", percentile));
             } else {
                 row.append(TimeFormatUtil.formatForStepSize(timestamp, stepSeconds));

@@ -10,6 +10,8 @@ import java.awt.Graphics2D;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.kalix.ide.flowviz.transform.PlotTypeTransformer.PERCENTILE_SCALE;
+
 /**
  * Handles rendering of grid lines, axis ticks, and axis labels for time series plots.
  * Works in conjunction with TemporalAxisCalculator to provide synchronized
@@ -89,8 +91,8 @@ public class AxisRenderer {
         List<Long> ticks = new ArrayList<>();
 
         // Convert fake timestamps back to percentiles
-        double startPercentile = viewport.getStartTimeMs() / 1_000_000.0;
-        double endPercentile = viewport.getEndTimeMs() / 1_000_000.0;
+        double startPercentile = (double) viewport.getStartTimeMs() / PERCENTILE_SCALE;
+        double endPercentile = (double) viewport.getEndTimeMs() / PERCENTILE_SCALE;
         double range = endPercentile - startPercentile;
 
         // Choose tick interval based on zoom level
@@ -112,7 +114,7 @@ public class AxisRenderer {
         while (currentPercentile <= endPercentile + tickInterval / 2) {
             if (currentPercentile >= 0 && currentPercentile <= 100) {
                 // Convert percentile to fake timestamp
-                long fakeTimestamp = (long)(currentPercentile * 1_000_000);
+                long fakeTimestamp = (long) (currentPercentile * PERCENTILE_SCALE);
                 ticks.add(fakeTimestamp);
             }
             currentPercentile += tickInterval;
@@ -404,7 +406,7 @@ public class AxisRenderer {
      * Formats a fake timestamp as a percentile label.
      */
     private String formatPercentile(long fakeTimestamp) {
-        double percentile = fakeTimestamp / 1_000_000.0;
+        double percentile = (double) fakeTimestamp / PERCENTILE_SCALE;
 
         // Format with appropriate precision
         if (percentile == Math.floor(percentile)) {

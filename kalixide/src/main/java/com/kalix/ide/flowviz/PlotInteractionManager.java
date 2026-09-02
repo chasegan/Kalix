@@ -2,9 +2,9 @@ package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
+import com.kalix.ide.flowviz.rendering.AxisLimitCodec;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
-import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.io.TimeSeriesCsvExporter;
 import com.kalix.ide.io.SourceResCsvExporter;
@@ -12,7 +12,6 @@ import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.io.PixieWriter;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
-import com.kalix.ide.utils.TimeFormatUtil;
 
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
@@ -41,7 +40,6 @@ import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.Toolkit;
-import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.UnsupportedFlavorException;
@@ -50,7 +48,6 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.io.File;
 import java.io.IOException;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -737,88 +734,58 @@ public class PlotInteractionManager {
         // dialog -- per 2.4 -- where the copy/paste items act immediately and do not.
         JMenuItem copyXAxis = new JMenuItem("Copy X axis");
 
-        // Copy/paste go through formatXValue/parseX -- the same pair the Set-axis-limits
-        // dialog uses -- so the clipboard always carries the axis' own units. X bounds are
-        // real timestamps only on a TIME axis; on the others they are encoded values
-        // (percentile x 1e6, numeric x NUMERIC_SCALE) that formatting as a date would
-        // render as meaningless 1970 instants.
+        // Copy/paste go through AxisLimitCodec -- the same codec the Set-axis-limits
+        // dialog uses -- so the clipboard always carries the axis' own units.
         copyXAxis.addActionListener(e -> {
             ViewPort currentViewport = viewportSupplier.get();
-            if (currentViewport == null) {
-                return;
+            if (currentViewport != null) {
+                copyStringToClipboard(AxisLimitCodec.formatXLimits(currentViewport));
             }
-            copyStringToClipboard(getCurrentXLimits(currentViewport));
         });
         contextMenu.add(copyXAxis);
         JMenuItem pasteXAxis = new JMenuItem("Paste X axis");
         pasteXAxis.addActionListener(e -> {
             ViewPort currentViewport = viewportSupplier.get();
-            if (currentViewport == null) {
+            String text = readClipboardText();
+            if (currentViewport == null || text == null) {
                 return;
             }
-            String[] parts = readBoundsFromClipboard("values");
-            if (parts == null) {
-                return;
-            }
-
-            long startTime;
-            long endTime;
+            long[] x;
             try {
-                // bounds-safe owing to the pair check in readBoundsFromClipboard
-                XAxisType xAxisType = currentViewport.getXAxisType();
-                startTime = parseX(parts[0], xAxisType);
-                endTime = parseX(parts[1], xAxisType);
-                ViewPort.validateBounds(startTime, endTime,
-                    currentViewport.getMinValue(), currentViewport.getMaxValue());
+                x = AxisLimitCodec.parseXLimits(text, currentViewport.getXAxisType());
+                ViewPort.validateBounds(x[0], x[1], currentViewport.getMinValue(), currentViewport.getMaxValue());
             } catch (IllegalArgumentException ex) {
-                JOptionPane.showMessageDialog(
-                    parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                showInvalidInput(parentComponent, ex.getMessage());
                 return;
             }
-            acceptNewAxes(
-                startTime, endTime,
-                currentViewport.getMinValue(), currentViewport.getMaxValue()
-            );
+            applyXLimits(x[0], x[1]);
         });
         contextMenu.add(pasteXAxis);
 
         JMenuItem copyYAxis = new JMenuItem("Copy Y axis");
         copyYAxis.addActionListener(e -> {
             ViewPort currentViewport = viewportSupplier.get();
-            if (currentViewport == null) {
-                return;
+            if (currentViewport != null) {
+                copyStringToClipboard(AxisLimitCodec.formatYLimits(currentViewport));
             }
-            copyStringToClipboard(getCurrentYLimits(currentViewport));
         });
         contextMenu.add(copyYAxis);
         JMenuItem pasteYAxis = new JMenuItem("Paste Y axis");
         pasteYAxis.addActionListener(e -> {
             ViewPort currentViewport = viewportSupplier.get();
-            if (currentViewport == null) {
+            String text = readClipboardText();
+            if (currentViewport == null || text == null) {
                 return;
             }
-            String[] parts = readBoundsFromClipboard("numbers");
-            if (parts == null) {
-                return;
-            }
-
-            double minVal;
-            double maxVal;
+            double[] y;
             try {
-                // bounds-safe owing to the pair check in readBoundsFromClipboard
-                minVal = parseY(parts[0]);
-                maxVal = parseY(parts[1]);
-                ViewPort.validateBounds(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(),
-                    minVal, maxVal);
+                y = AxisLimitCodec.parseYLimits(text);
+                ViewPort.validateBounds(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
             } catch (IllegalArgumentException ex) {
-                JOptionPane.showMessageDialog(
-                    parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                showInvalidInput(parentComponent, ex.getMessage());
                 return;
             }
-            acceptNewAxes(
-                currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(),
-                minVal, maxVal
-            );
+            applyExplicitLimits(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
         });
         contextMenu.add(pasteYAxis);
 
@@ -908,61 +875,66 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Puts a string on the system clipboard
+     * Puts a string on the system clipboard.
      */
-    private static void copyStringToClipboard(String formatted) {
+    private void copyStringToClipboard(String formatted) {
         StringSelection selection = new StringSelection(formatted);
-        Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-        clipboard.setContents(selection, selection);
-    }
-
-    /**
-     * Reads a {@code "lower, upper"} pair off the clipboard, the inverse of
-     * {@link #copyStringToClipboard}. Returns the two trimmed halves, or {@code null} when
-     * the clipboard is unreadable or does not hold exactly two comma-separated values --
-     * having reported that to the user, so callers need only bail out.
-     *
-     * @param expected what the halves should look like, for the error message ("values",
-     *                 "numbers") -- the units differ per axis and per X-axis type
-     */
-    private String[] readBoundsFromClipboard(String expected) {
-        Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
-        String clipboardString;
         try {
-            clipboardString = (String) clipboard.getData(DataFlavor.stringFlavor);
-        } catch (UnsupportedFlavorException | IOException ex) {
-            JOptionPane.showMessageDialog(parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-            return null;
-        }
-
-        try {
-            return splitLimitString(clipboardString);
-        }
-        catch (IllegalArgumentException ex) {
-            JOptionPane.showMessageDialog(
-                parentComponent,
-                String.format("Expected two comma-separated %s but received \"%s\"", expected, clipboardString),
-                "Error", JOptionPane.ERROR_MESSAGE
-            );
-            return null;
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+        } catch (IllegalStateException ex) {
+            showInvalidInput(parentComponent, "The clipboard is not available right now.");
         }
     }
 
     /**
-     * Splits a {@code "lower, upper"} string into its two trimmed halves.
-     *
-     * @param parseString the raw field text to split
-     * @return the two trimmed halves, {@code {lower, upper}}
-     * @throws IllegalArgumentException if {@code parseString} does not hold exactly two
-     *                                   comma-separated values
+     * Reads the clipboard's text, or reports why it could not and returns {@code null} so
+     * callers need only bail out. Text is unavailable when the clipboard is empty or holds
+     * something else (which paste items are disabled for, but the contents can change
+     * between the menu opening and the click), or when another application holds it.
      */
-    private String[] splitLimitString(String parseString) {
-        String[] parts = parseString.split("\\s*,\\s*");
-        if (parts.length != 2) {
-            throw new IllegalArgumentException(
-                String.format("Expected two comma-separated values but received \"%s\"", parseString));
+    private String readClipboardText() {
+        try {
+            return (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
+        } catch (UnsupportedFlavorException | IOException | IllegalStateException ex) {
+            showInvalidInput(parentComponent, "The clipboard does not contain text.");
+            return null;
         }
-        return new String[]{ parts[0].trim(), parts[1].trim() };
+    }
+
+    /** One error dialog for every rejected axis limit, whichever path it arrived by. */
+    private static void showInvalidInput(java.awt.Component parent, String message) {
+        JOptionPane.showMessageDialog(parent, message, "Invalid input", JOptionPane.ERROR_MESSAGE);
+    }
+
+    /**
+     * Applies an X-only change: obeys auto-Y exactly as wheel zoom and drag pan do, so a
+     * pasted time window shows its own data rather than the previous window's Y range.
+     */
+    private void applyXLimits(long startTime, long endTime) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) {
+            return;
+        }
+        if (isAutoYMode()) {
+            updateViewportWithFittedY(startTime, endTime);
+            parentComponent.repaint();
+        } else {
+            acceptNewAxes(startTime, endTime, currentViewport.getMinValue(), currentViewport.getMaxValue());
+        }
+    }
+
+    /**
+     * Applies limits that include an explicit Y range: the user has opted out of auto-Y,
+     * otherwise the next wheel tick or drag would silently refit Y and discard them. The
+     * viewport lands first and the mode second, because {@code setAutoYMode} pushes a
+     * history entry immediately while the viewport update is coalesced -- this order
+     * records the two together, so undo restores both in one step.
+     */
+    private void applyExplicitLimits(long startTime, long endTime, double minValue, double maxValue) {
+        acceptNewAxes(startTime, endTime, minValue, maxValue);
+        if (parentComponent instanceof PlotPanel plotPanel) {
+            plotPanel.setAutoYMode(false);
+        }
     }
 
     /**
@@ -979,8 +951,8 @@ public class PlotInteractionManager {
         }
         XAxisType xAxisType = currentViewport.getXAxisType();
 
-        JTextField xField = new JTextField(getCurrentXLimits(currentViewport), 32);
-        JTextField yField = new JTextField(getCurrentYLimits(currentViewport), 32);
+        JTextField xField = new JTextField(AxisLimitCodec.formatXLimits(currentViewport), 32);
+        JTextField yField = new JTextField(AxisLimitCodec.formatYLimits(currentViewport), 32);
 
         JPanel form = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
@@ -997,33 +969,22 @@ public class PlotInteractionManager {
         JButton okButton = new JButton("OK");
         okButton.addActionListener(ev -> {
             try {
-                String[] xLimits = splitLimitString(xField.getText());
-                String[] yLimits = splitLimitString(yField.getText());
-
-                long   startTime;
-                long   endTime;
-                double minVal;
-                double maxVal;
-                try {
-                    // bounds-safe owing to the pair check in readBoundsFromClipboard
-                    startTime = parseX(xLimits[0], xAxisType);
-                    endTime   = parseX(xLimits[1], xAxisType);
-                    minVal    = parseY(yLimits[0]);
-                    maxVal    = parseY(yLimits[1]);
-                } catch (IllegalArgumentException ex) {
-                    JOptionPane.showMessageDialog(
-                        parentComponent, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
-                    return;
+                long[] x = AxisLimitCodec.parseXLimits(xField.getText(), xAxisType);
+                double[] y = AxisLimitCodec.parseYLimits(yField.getText());
+                ViewPort.validateBounds(x[0], x[1], y[0], y[1]);
+                // An edited Y field is an explicit Y range; an untouched one (the codec's
+                // formatting round-trips exactly) means the user only wanted X, which obeys
+                // auto-Y like any other X-only change.
+                boolean yEdited = y[0] != currentViewport.getMinValue() || y[1] != currentViewport.getMaxValue();
+                if (yEdited) {
+                    applyExplicitLimits(x[0], x[1], y[0], y[1]);
+                } else {
+                    applyXLimits(x[0], x[1]);
                 }
-                ViewPort.validateBounds(startTime, endTime, minVal, maxVal);
-                acceptNewAxes(startTime, endTime, minVal, maxVal);
-                dialog.dispose(); // Intentionally here so the user can retry
-            } catch (DateTimeParseException | NumberFormatException parseEx) {
-                JOptionPane.showMessageDialog(dialog, "Could not parse axis limits: " + parseEx.getMessage(),
-                    "Invalid input", JOptionPane.ERROR_MESSAGE);
-            } catch (IllegalArgumentException rangeEx) {
-                JOptionPane.showMessageDialog(dialog, rangeEx.getMessage(),
-                    "Invalid input", JOptionPane.ERROR_MESSAGE);
+                dialog.dispose();
+            } catch (IllegalArgumentException ex) {
+                // The dialog stays open so the user can correct the field.
+                showInvalidInput(dialog, ex.getMessage());
             }
         });
         JButton cancelButton = new JButton("Cancel");
@@ -1056,138 +1017,12 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Parses a field's text into a viewport X value (a real timestamp for TIME, or one of the
-     * fake-timestamp encodings used for the other axis types — see {@link XAxisType}).
-     */
-    private Long parseX(String text, XAxisType xAxisType) throws IllegalArgumentException {
-        if (text == null || text.isBlank()) {
-            throw new IllegalArgumentException("X value cannot be blank.");
-        }
-        String trimmed = text.trim();
-        switch (xAxisType) {
-            case PERCENTILE:
-                String stripped = trimmed.endsWith("%") ? trimmed.substring(0, trimmed.length() - 1).trim() : trimmed;
-                try {
-                    return Math.round(Double.parseDouble(stripped) * 1_000_000.0);
-                } catch (Exception e) {
-                    throw new IllegalArgumentException("Not a valid percentile: \"" + trimmed + "\"");
-                }
-            case COUNT:
-                try {
-                    return Long.parseLong(trimmed);
-                } catch (Exception e) {
-                    throw new IllegalArgumentException("Not a valid integer count: \"" + trimmed + "\"");
-                }
-            case NUMERIC:
-                try {
-                    return Math.round(Double.parseDouble(trimmed) * PlotTypeTransformer.NUMERIC_SCALE);
-                } catch (Exception e) {
-                    throw new IllegalArgumentException("Not a valid number: \"" + trimmed + "\"");
-                }
-            case TIME:
-            default:
-                try {
-                    return TimeFormatUtil.parseFlexible(trimmed);
-                } catch (Exception e) {
-                    throw new IllegalArgumentException(
-                        "Not a valid date/time: \"" + trimmed
-                            + "\" (expected 2024-02-01 or 01-02-2024, optionally with HH:mm[:ss])");
-                }
-        }
-    }
-
-    /**
-     * Parses a field's text into a (double) Y value.
-     */
-    private Double parseY(String text) throws IllegalArgumentException {
-        if (text == null || text.isBlank()) {
-            throw new IllegalArgumentException("Y value cannot be blank.");
-        }
-        try {
-            return Double.parseDouble(text.trim());
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("Not a valid number: \"" + text.trim() + "\"");
-        }
-    }
-
-    /**
-     * Formats a viewport X value for editing, in the units matching {@code xAxisType}
-     * (the inverse of {@link #parseX}).
-     */
-    private String formatXValue(long value, XAxisType xAxisType) {
-        return switch (xAxisType) {
-            case PERCENTILE -> formatDoubleForField(value / 1_000_000.0) + "%";
-            case COUNT -> String.valueOf(value);
-            case NUMERIC -> formatDoubleForField((double) value / PlotTypeTransformer.NUMERIC_SCALE);
-            default -> {
-                // Date-only for midnight-aligned timestamps, full ISO datetime otherwise.
-                //                          ms per day          s per day
-                long stepSeconds = (value % 86_400_000L == 0) ? 86_400L : 1L;
-                yield TimeFormatUtil.formatForStepSize(value, stepSeconds);
-            }
-        };
-    }
-
-    /**
-     * Formats a double for editing without scientific notation or spurious ".0" noise.
-     */
-    private String formatDoubleForField(double value) {
-        if (!Double.isInfinite(value) && !Double.isNaN(value) && value == Math.rint(value)
-                && Math.abs(value) < 1e15) {
-            return String.valueOf((long) value);
-        }
-        return String.valueOf(value);
-    }
-
-    /**
-     * Helper for consistent formatting of limits.
-     */
-    private String formatLimits(String left, String right) {
-        return left + ", " + right;
-    }
-
-    /**
-     * Helper to consistently format x axis limits.
-     */
-    private String formatXLimits(long min, long max, XAxisType xAxisType) {
-        return formatLimits(formatXValue(min, xAxisType), formatXValue(max, xAxisType));
-    }
-
-    /**
-     * Helper to consistently format y axis limits.
-     */
-    private String formatYLimits(double min, double max) {
-        return formatLimits(formatDoubleForField(min), formatDoubleForField(max));
-    }
-
-    /**
-     * Get the current X limits as a formatted string.
-     * Precondition: {@code viewPort} is not null.
-     */
-    private String getCurrentXLimits(ViewPort viewPort) {
-        XAxisType xAxisType = viewPort.getXAxisType();
-        long min = viewPort.getStartTimeMs();
-        long max = viewPort.getEndTimeMs();
-        return formatXLimits(min, max, xAxisType);
-    }
-
-    /**
-     * Get the current Y limits as a formatted string.
-     * Precondition: {@code viewPort} is not null.
-     */
-    private String getCurrentYLimits(ViewPort viewPort) {
-        double min = viewPort.getMinValue();
-        double max = viewPort.getMaxValue();
-        return formatYLimits(min, max);
-    }
-
-    /**
      * Moves the viewport to the given axis limits, keeping plot area, Y-axis scale, and
      * X-axis type unchanged. All four limits are required and are applied as given; callers
      * are responsible for parsing and for checking them with
      * {@link ViewPort#validateBounds} first.
      */
-    private void acceptNewAxes(Long startTime, Long endTime, Double minValue, Double maxValue) {
+    private void acceptNewAxes(long startTime, long endTime, double minValue, double maxValue) {
         var currentViewport = this.viewportSupplier.get();
         if (currentViewport == null) {
             return;
