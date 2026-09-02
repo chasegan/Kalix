@@ -128,7 +128,7 @@ class SeriesFetchCoordinator {
 
         TreePath[] checkedPaths = timeseriesTree.getCheckedPaths();
 
-        if (checkedPaths.length == 0) {
+        if (checkedPaths.length == 0 && !treeFilterManager.isFiltering()) {
             // Clear the target tab's series when nothing is checked
             tabManager.setTargetTabSelectedSeries(new LinkedHashSet<>());
             return;
@@ -142,7 +142,7 @@ class SeriesFetchCoordinator {
         }
 
         // If no valid leaves found, clear the target tab
-        if (allLeaves.isEmpty()) {
+        if (allLeaves.isEmpty() && !treeFilterManager.isFiltering()) {
             tabManager.setTargetTabSelectedSeries(new LinkedHashSet<>());
             return;
         }
