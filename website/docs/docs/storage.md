@@ -38,7 +38,7 @@ ds_1 = my_other_node
 | target\_level (optional) | Optional target level [m] which causes this storage node to generate orders to operate the storage near the target level. This functionality is explained in detail below. This feature cannot be used in combination with `order_through`.  Example: `target_level = if(sim.month>8, 8.0, 9.5)` |
 | pond\_demand (optional) | Optional on-pond demand [ML]. Example: `pond_demand = 15.0 * data.patterns_csv.by_name.amenities` |
 | dimensions (compulsory) | A tabulated list of values: level (m), volume (ML), area (km2), spill (ML/timestep). See [Table parameters](parameter-types.md) to find out more about how table parameter types work in Kalix. Example: `dimensions = 90, 0, 0, 0, 91, 100, 1, 0, 91.1, 101, 1, 1e8, 92, 102, 1, 1e8` |
-| ds\_1\_outlet, ds\_2\_outlet, ds\_3\_outlet, ds\_4\_outlet (optional) | This allows you to specify the properties of outlets on each of the corresponding links (ds\_1, ds\_2, etc). At the moment just one outlet property is supported, being the minimum operating level (MOL) of the outlet. Notes: (1) Orders on ds\_1 may be partly or fully met by unregulated spills. (2) There are no spills on the other links. (3) If outlet properties are not defined the outlet on this link is assumed to be active and unlimited limit. Example: `ds_1_outlet = 81.1` |
+| ds\_1\_outlet, ds\_2\_outlet, ds\_3\_outlet, ds\_4\_outlet (optional) | The outlet capacity on the corresponding link (ds\_1, ds\_2, etc) as a function of level. Three forms. A minimum operating level (MOL) alone: `ds_1_outlet = 81.1` — capacity is zero at or below 81.1 m and unlimited above it. A MOL and a capacity [ML/timestep]: `ds_1_outlet = 81.1, 120` — zero at or below, 120 above. A rating table of level, capacity pairs: `ds_2_outlet = 80, 0, 81, 0, 81.5, 100, 82, 100` — capacity interpolates linearly in level between points and holds flat beyond the ends; a repeated level is a step. Levels must lie within the dimensions table's level range, and capacities must be non-decreasing. Notes: (1) Orders on ds\_1 may be partly or fully met by unregulated spills. (2) There are no spills on the other links. (3) An undefined outlet is unlimited. |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 | ds\_2, ds\_3, ds\_4 (optional) | Additional link used to represent regulated flow pathways separate to the main downstream link. `ds_2 = tws_pipline` |
 
@@ -69,25 +69,29 @@ ds_1 = my_other_node
 
 ### Solver
 
-Storages are simulated using the Backward Euler method. The defining characteristic of this method is that the rates-of-change during the timestep are functions of the end-of-timestep state. That is to say, the storage volume is determined such that the fluxes are consistent with the storage volume `vi` (and area `ai` and level `li`) at the end of the timestep:
+Storages are simulated with the Backward Euler method: every flux over the timestep is a function of the end-of-timestep state. The solver finds the volume `Vi` whose fluxes are consistent with `Vi` itself — with `ai` and `li` the area and level at that volume:
 
-- spill → `si=s(li)`
+- spill → `si = s(li)`
 
-- pond evaporation → `ei=Mlake i×ai`
+- pond evaporation → `ei = Mlake,i × ai`
 
-- pond rainfall → `ri=Pi×ai`
+- pond rainfall → `ri = Pi × ai`
 
-- seepage → `wi=Wi×ai`
+- seepage → `wi = Wi × ai`
 
-- inflow → `qin,i=previously calculated`
+- inflow → `qin,i = previously calculated`
 
-- regulated releases → `qout,i=previously calculated`
+- outlet releases → `qout,i = see below`
 
-Mass balance over the timestep is:
+Mass balance over the timestep:
 
-`Vi=Vi−1−si−ei+ri+qin,i−qout,i`
+`Vi = Vi−1 + ri − ei − wi + qin,i − si − qout,i`
 
-**Orders near the spill level.** The ds\_1 pathway carries both the uncontrolled spill and controlled releases, so the outflow used by the solver is `max(spill(V), order)`. That function has a kink at the volume where the interpolated spill curve crosses the order. The solver detects when the equilibrium falls on a dimension-table segment containing this crossing and solves the correct branch exactly: below the crossing the release equals the order (spill passes within it); above it the spill governs and exceeds the order. This keeps the end-of-timestep volume exactly consistent with the released flow — naive interpolation across the kink would otherwise destroy water on days when a storage sits just above full supply level with orders comparable to the spill.
+**Outlets are capacity curves.** Every `ds_N_outlet` form defines the same thing — the outlet's maximum release as a function of level, evaluated at the end-of-timestep level, exactly as spill is. A bare MOL is a step from zero to unlimited; a MOL with capacity, a step from zero to that capacity; a rating table, any non-decreasing piecewise-linear curve. Each outlet releases `min(order, capacity(li))`. Outlets interact only through the solved level: joint demand pulls the level down, and each outlet's release tapers or cuts as the level passes its curve.
+
+**Solution.** The mass balance is one equation in `Vi`, and it is monotone: outflow never falls as volume rises (this is why rating capacities must be non-decreasing). The solver brackets the dimension-table segment holding the solution — a binary row search, warm-started from the previous timestep — then solves in closed form: within a segment every term is piecewise linear, so each candidate branch is a linear equation, not an iteration. A step capacity makes the outflow jump; when the balance lands inside a jump, the volume parks exactly on the step's level and the stepping outlets share the residual in priority order ds\_1 → ds\_4. A demand exceeding the water available drains the storage exactly to empty. In every case the releases and the end-of-timestep volume reconcile to machine precision.
+
+**Orders near the spill level.** The ds\_1 pathway carries both the uncontrolled spill and controlled releases, so its outflow term is `max(spill(V), order)`. That function has a kink at the volume where the interpolated spill curve crosses the order. The solver detects when the equilibrium falls on a dimension-table segment containing this crossing and solves the correct branch exactly: below the crossing the release equals the order (spill passes within it); above it the spill governs and exceeds the order. This keeps the end-of-timestep volume exactly consistent with the released flow — interpolating straight across the kink would destroy water on days when a storage sits just above full supply level with orders comparable to the spill.
 
 ### Storages ordering upstream
 
