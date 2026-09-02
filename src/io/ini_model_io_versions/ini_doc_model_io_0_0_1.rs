@@ -757,7 +757,34 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 0 => n.outlet_definition[i_outlet] = OutletDefinition::None,
                                 1 => n.outlet_definition[i_outlet] = OutletWithMOL(params[0]),
                                 2 => n.outlet_definition[i_outlet] = OutletWithMOLAndCapacity(params[0], params[1]),
-                                _ => return Err(KalixIoError::Validate(format!("Error on line {}: Tabulated outlet not supported yet.", ini_property.line_number))),
+                                len if len % 2 == 0 => {
+                                    // Rating table: (level, capacity) pairs. Capacity
+                                    // interpolates linearly in level between points and
+                                    // holds flat beyond the ends; a repeated level is an
+                                    // explicit step.
+                                    let pairs: Vec<(f64, f64)> = params
+                                        .chunks_exact(2)
+                                        .map(|c| (c[0], c[1]))
+                                        .collect();
+                                    for w in pairs.windows(2) {
+                                        if w[1].0.is_nan() || w[1].0 < w[0].0 {
+                                            return Err(KalixIoError::Validate(format!(
+                                                "Error on line {}: outlet rating levels must be non-decreasing (found {} after {}).",
+                                                ini_property.line_number, w[1].0, w[0].0)));
+                                        }
+                                    }
+                                    for &(lev, cap) in &pairs {
+                                        if lev.is_nan() || cap.is_nan() || cap < 0.0 || !cap.is_finite() {
+                                            return Err(KalixIoError::Validate(format!(
+                                                "Error on line {}: outlet rating capacities must be finite and non-negative (found level {}, capacity {}).",
+                                                ini_property.line_number, lev, cap)));
+                                        }
+                                    }
+                                    n.outlet_definition[i_outlet] = OutletDefinition::OutletWithRatingTable(pairs);
+                                }
+                                _ => return Err(KalixIoError::Validate(format!(
+                                    "Error on line {}: outlet rating table must have an even number of values (level, capacity pairs).",
+                                    ini_property.line_number))),
                             }
                         } else if let Some(ds_num) = name_lower.strip_prefix("ds_")
                             .and_then(|s| s.strip_suffix("_force_release"))
@@ -1415,6 +1442,10 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                         OutletDefinition::None => String::new(),
                         OutletWithMOL(mol) => format_f64(*mol),
                         OutletWithMOLAndCapacity(mol, cap) => format!("{}, {}", format_f64(*mol), format_f64(*cap)),
+                        OutletDefinition::OutletWithRatingTable(pairs) => {
+                            let flat: Vec<f64> = pairs.iter().flat_map(|&(l, c)| [l, c]).collect();
+                            format_vec_as_multiline_table(&flat, 2, 4)
+                        }
                     };
                     set_property_if_not_empty(&mut ini_doc, section_name.as_str(), &property_name, &value);
                 }

@@ -15,11 +15,25 @@ exactly as spill already is:
   (a step function);
 - `ds_N_outlet = MOL, capacity` → `capacity` strictly above, zero at or below
   (capacity is per-timestep volume, and is **enforced** — it was parsed but
-  ignored before).
+  ignored before);
+- `ds_N_outlet = level, capacity, level, capacity, ...` (2+ pairs) → a full
+  **rating table**: capacity interpolates linearly in level between points and
+  holds flat beyond the ends. A repeated level is an explicit step. Levels
+  must be non-decreasing and inside the dimensions table's level range;
+  capacities finite and non-negative. Kalix-style implied columns:
 
-No table is required; the existing INI syntax covers both forms, and a future
-tabulated rating (capacity vs level) slots into the same solver as one more
-piecewise-linear curve.
+  ```ini
+  ds_2_outlet = 0.0, 0,
+                8.0, 0,
+                8.5, 100,
+                9.0, 100
+  ```
+
+No table is required for the simple forms; internally all three compile to
+one canonical capacity-vs-volume curve (the MOL forms are two-point steps),
+so the solver has a single mechanism. Rating-table curves also carry
+breakpoints at every dimension row their level span crosses, keeping capacity
+exactly linear in volume between consecutive curve points.
 
 Outlets couple only *implicitly through the solved level*: heavy joint demand
 pulls the level down and shuts (or caps) outlets as it passes their MOLs.
@@ -81,8 +95,12 @@ with pre-redesign results; all reproducibility baselines pass).
 |---|---|
 | old active-set (main) | 42.5 ms |
 | access #1 (feat branch) | 45.7 ms |
-| rating #3 (this branch, final) | 47.9 ms |
+| rating #3, step MOLs | 47.5 ms |
+| rating #3, continuous rating tables | 42.4 ms |
 
-Essentially parity (1.05× vs access). The naive first cut was 2.7× slower —
-64-iteration bisection per day; the closed-form piece branches recovered it.
-No-MOL models are identical in cost and results on all three.
+Essentially parity on step MOLs (the naive first cut was 2.7× slower —
+64-iteration bisection per day; the closed-form piece branches recovered it),
+and a smooth rating taper costs nothing at all: indistinguishable from
+unconstrained storages (42.7 ms), because continuous curves are the solver's
+happy path — no jumps, no parking, clean linear pieces. No-MOL models are
+identical in cost and results on all three engines.

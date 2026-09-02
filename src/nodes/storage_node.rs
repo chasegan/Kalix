@@ -13,14 +13,23 @@ const SPIL: usize = 3;
 const EPSILON: f64 = 1e-6;
 const MAX_DS_LINKS: usize = 4;
 
-/// Defines outlet configuration including minimum operating level (MOL) and capacity.
-/// MOL is specified as a level (m) and converted to volume internally.
-#[derive(Default, Clone, Copy, Debug, PartialEq)]
+/// Defines outlet configuration: minimum operating level (MOL), capacity, or
+/// a full rating table. Levels are in metres (the dimensions-table datum) and
+/// are converted to volumes internally; capacities are ML per timestep.
+///
+/// All three forms are the same thing — a capacity-vs-level rating curve:
+/// - `OutletWithMOL(l)`: 0 at/below level l, unlimited strictly above (a step);
+/// - `OutletWithMOLAndCapacity(l, c)`: 0 at/below l, `c` strictly above;
+/// - `OutletWithRatingTable(pairs)`: (level, capacity) points, capacity
+///   interpolated linearly in level between points, held flat beyond the
+///   ends. A repeated level is an explicit step.
+#[derive(Default, Clone, Debug, PartialEq)]
 pub enum OutletDefinition {
     #[default]
     None,
     OutletWithMOL(f64),                   // MOL level in metres
     OutletWithMOLAndCapacity(f64, f64),   // MOL level, capacity
+    OutletWithRatingTable(Vec<(f64, f64)>), // (level, capacity) points
 }
 
 #[derive(Default, Clone)]
@@ -76,6 +85,14 @@ pub struct StorageNode {
     // false the solver skips the MOL allocation entirely — the hot path for
     // ordinary storages is then identical to the pre-MOL-redesign solver.
     has_mol: bool,
+
+    // Canonical capacity-vs-VOLUME curve per outlet, built at init from the
+    // outlet definition (empty = unlimited). Points are sorted by volume;
+    // a repeated volume is a step (left value at/below, right value above).
+    // Rating-table curves also carry breakpoints at every dimension-table
+    // row their level span crosses, so capacity is exactly linear in volume
+    // between consecutive points.
+    cap_curves: [Vec<(f64, f64)>; MAX_DS_LINKS],
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -260,27 +277,47 @@ impl StorageNode {
     // (Filippov) solution of the step. Continuous in all inputs and mass-
     // conserving by construction.
 
-    /// Maximum controlled release for outlet i at volume v.
-    /// Infinity is safe here: it only ever enters as min(demand, capacity).
-    fn outlet_capacity_at(&self, i: usize, v: f64) -> f64 {
-        match self.outlet_definition[i] {
-            OutletDefinition::None => f64::INFINITY,
-            OutletDefinition::OutletWithMOL(_) => {
-                if v > self.min_operating_volume[i] { f64::INFINITY } else { 0.0 }
-            }
-            OutletDefinition::OutletWithMOLAndCapacity(_, capacity) => {
-                if v > self.min_operating_volume[i] { capacity } else { 0.0 }
-            }
+    /// Capacity from a canonical curve at volume v, approached from BELOW:
+    /// the value exactly on a step volume is the lower one ("0 at the MOL").
+    /// An empty curve is an unlimited outlet. Infinity is safe here: it only
+    /// ever enters arithmetic as min(demand, capacity).
+    fn cap_left(curve: &[(f64, f64)], v: f64) -> f64 {
+        if curve.is_empty() {
+            return f64::INFINITY;
         }
+        let idx = curve.partition_point(|p| p.0 < v);
+        if idx == curve.len() {
+            return curve[idx - 1].1; // beyond the last point: flat
+        }
+        let (v1, c1) = curve[idx];
+        if idx == 0 || v1 == v {
+            // Before the first point (flat), or exactly on a point: the
+            // first point at v carries the from-below value.
+            return c1;
+        }
+        let (v0, c0) = curve[idx - 1];
+        c0 + (c1 - c0) * (v - v0) / (v1 - v0)
     }
 
-    /// Capacity of outlet i on the "flowing" side of its own threshold —
-    /// the size of its contribution to the jump when the volume parks there.
-    fn outlet_capacity_above(&self, i: usize) -> f64 {
-        match self.outlet_definition[i] {
-            OutletDefinition::None | OutletDefinition::OutletWithMOL(_) => f64::INFINITY,
-            OutletDefinition::OutletWithMOLAndCapacity(_, capacity) => capacity,
+    /// Capacity from a canonical curve at volume v, approached from ABOVE —
+    /// the "flowing" side of a step, used for jump sizes, parking residuals,
+    /// and drain-to-floor releases.
+    fn cap_right(curve: &[(f64, f64)], v: f64) -> f64 {
+        if curve.is_empty() {
+            return f64::INFINITY;
         }
+        let idx = curve.partition_point(|p| p.0 <= v);
+        if idx == 0 {
+            return curve[0].1; // below the first point: flat
+        }
+        let (v0, c0) = curve[idx - 1];
+        if idx == curve.len() || v0 == v {
+            // Beyond the last point (flat), or exactly on a point: the last
+            // point at v carries the from-above value.
+            return c0;
+        }
+        let (v1, c1) = curve[idx];
+        c0 + (c1 - c0) * (v - v0) / (v1 - v0)
     }
 
     /// Controlled release demand for outlet i given the spill (ds_1's outlet
@@ -294,29 +331,33 @@ impl StorageNode {
         if d.is_nan() || d <= 0.0 { 0.0 } else { d }
     }
 
-    /// Controlled releases at a point: min(demand, capacity(v)) per outlet.
-    /// At v exactly on a threshold this is the limit from below (the strict
-    /// `>` in outlet_capacity_at), i.e. that outlet shut.
+    /// Controlled releases at a point: min(demand, capacity(v)) per outlet,
+    /// with capacities taken as the limit from below (a step's lower value
+    /// exactly on its threshold, i.e. that outlet shut).
     fn rating_releases_at(&self, v: f64, spill: f64) -> [f64; MAX_DS_LINKS] {
         let mut releases = [0.0; MAX_DS_LINKS];
         for (i, r) in releases.iter_mut().enumerate() {
             let d = self.rating_demand(i, spill);
             if d > 0.0 {
-                *r = d.min(self.outlet_capacity_at(i, v));
+                *r = d.min(Self::cap_left(&self.cap_curves[i], v));
             }
         }
         releases
     }
 
-    /// The size of the error jump at threshold volume t: what the outlets
-    /// whose MOL sits exactly at t would release just above it.
+    /// The size of the error jump at breakpoint volume t: how much more the
+    /// outlets step up to just above t than they release at/below it.
+    /// Zero at a breakpoint where every curve is continuous.
     fn rating_jump_at(&self, t: f64, spill: f64) -> f64 {
         let mut jump = 0.0;
         for i in 0..MAX_DS_LINKS {
-            if self.min_operating_volume[i] == t
-                && !matches!(self.outlet_definition[i], OutletDefinition::None)
-            {
-                jump += self.rating_demand(i, spill).min(self.outlet_capacity_above(i));
+            let curve = &self.cap_curves[i];
+            if curve.is_empty() {
+                continue;
+            }
+            let d = self.rating_demand(i, spill);
+            if d > 0.0 {
+                jump += (d.min(Self::cap_right(curve, t)) - d.min(Self::cap_left(curve, t))).max(0.0);
             }
         }
         jump
@@ -336,9 +377,10 @@ impl StorageNode {
         (v_final, flows, spill, row, area)
     }
 
-    /// The volume parks exactly on threshold t: outlets below t release in
-    /// full (per their capacities), and the outlets whose MOL is at t share
-    /// the residual in priority order — the generalized solution of the jump.
+    /// The volume parks exactly on breakpoint t: outlets take their at-t
+    /// (from-below) releases, and whoever steps up at t shares the residual
+    /// in priority order, each capped by its from-above capacity — the
+    /// generalized solution of the jump.
     fn rating_park_at(&self, t: f64, row: usize, v_working: f64, net_rain_mm: f64)
         -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64)
     {
@@ -351,14 +393,15 @@ impl StorageNode {
             if residual <= 0.0 {
                 break;
             }
-            if self.min_operating_volume[i] == t
-                && !matches!(self.outlet_definition[i], OutletDefinition::None)
-                && *flow == 0.0
-            {
-                let give = self.rating_demand(i, spill)
-                    .min(self.outlet_capacity_above(i))
-                    .min(residual);
-                *flow = give;
+            let curve = &self.cap_curves[i];
+            if curve.is_empty() {
+                continue;
+            }
+            let d = self.rating_demand(i, spill);
+            if d > 0.0 {
+                let headroom = (d.min(Self::cap_right(curve, t)) - *flow).max(0.0);
+                let give = headroom.min(residual);
+                *flow += give;
                 residual -= give;
             }
         }
@@ -368,24 +411,19 @@ impl StorageNode {
     }
 
     /// Demand exceeds everything available: drain to the table floor, and cap
-    /// releases by the water actually there, in priority order. Outlets whose
-    /// MOL is above the floor get nothing.
+    /// releases by the water actually there, in priority order. Each outlet's
+    /// capacity is taken just above the floor (it flowed while draining down).
     fn rating_floor(&self, v_working: f64, net_rain_mm: f64)
         -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64)
     {
+        let floor_vol = self.dimensions.get_value(0, VOLU);
         let area = self.dimensions.get_value(0, AREA);
         let spill = self.dimensions.get_value(0, SPIL).max(0.0);
         let w = v_working + net_rain_mm * area;
         let mut remaining = (w - spill).max(0.0);
         let mut flows = [0.0; MAX_DS_LINKS];
         for (i, f) in flows.iter_mut().enumerate() {
-            // An outlet flows while draining toward the floor only if its
-            // MOL sits at the floor itself (capacity just above volume 0).
-            let cap = if self.min_operating_volume[i] > 0.0 {
-                0.0
-            } else {
-                self.outlet_capacity_above(i)
-            };
+            let cap = Self::cap_right(&self.cap_curves[i], floor_vol);
             let give = self.rating_demand(i, spill).min(cap).min(remaining);
             *f = give;
             remaining -= give;
@@ -408,23 +446,17 @@ impl StorageNode {
         // then a handful of compares and mins — no enum matching, no array
         // building, per error evaluation.
         let mut d = [0.0f64; MAX_DS_LINKS];
-        let mut cap = [0.0f64; MAX_DS_LINKS];
-        let mut m_eff = [f64::NEG_INFINITY; MAX_DS_LINKS];
-        for i in 0..MAX_DS_LINKS {
-            let due = self.ds_release_due[i];
-            d[i] = if due.is_nan() || due <= 0.0 { 0.0 } else { due };
-            cap[i] = self.outlet_capacity_above(i);
-            if !matches!(self.outlet_definition[i], OutletDefinition::None) {
-                m_eff[i] = self.min_operating_volume[i];
-            }
+        for (di, due) in d.iter_mut().zip(self.ds_release_due.iter()) {
+            *di = if due.is_nan() || *due <= 0.0 { 0.0 } else { *due };
         }
+        let curves = &self.cap_curves;
         let outflow_at = |v: f64, spill: f64| -> f64 {
             let d1 = (d[0] - spill).max(0.0);
             let mut o = spill;
-            if v > m_eff[0] { o += d1.min(cap[0]); }
-            if v > m_eff[1] { o += d[1].min(cap[1]); }
-            if v > m_eff[2] { o += d[2].min(cap[2]); }
-            if v > m_eff[3] { o += d[3].min(cap[3]); }
+            o += d1.min(Self::cap_left(&curves[0], v));
+            o += d[1].min(Self::cap_left(&curves[1], v));
+            o += d[2].min(Self::cap_left(&curves[2], v));
+            o += d[3].min(Self::cap_left(&curves[3], v));
             o
         };
         let compute_error = |row: usize| -> f64 {
@@ -535,23 +567,17 @@ impl StorageNode {
             0.5 * (a + b)
         };
 
-        // Exact solve on one piece (caps constant): the outflow is spill(v)
-        // plus min(max(0, d1 - spill), c0) plus a constant, i.e. at most
+        // Exact solve on one piece (no curve breakpoints inside, so every
+        // capacity is linear across it). With all capacities CONSTANT on the
+        // piece — the MOL and MOL+capacity forms — the outflow has at most
         // three linear branches in v (spill covers ds_1's due / the outlet
-        // tops up to the due / the outlet is capacity-bound). Solve each
-        // branch exactly and keep the self-consistent one — this is what
-        // keeps steep spill segments (1e9 ML/ML kinks) closed-form instead
-        // of iterated. Falls back to Illinois on degenerate pieces.
+        // tops up to the due / the outlet is capacity-bound): solve each
+        // exactly and keep the self-consistent one. This is what keeps steep
+        // spill segments (1e9 ML/ML kinks) closed-form instead of iterated.
+        // With a capacity RAMP on the piece (rating tables), the outflow is
+        // still linear unless a min() switches branch inside: solve from the
+        // endpoint outflows and verify, falling back to Illinois otherwise.
         let solve_piece = |a: f64, b: f64, e_a: f64, e_b: f64| -> f64 {
-            let vm = 0.5 * (a + b);
-            let mut k = 0.0;
-            for i in 1..MAX_DS_LINKS {
-                if vm > m_eff[i] {
-                    k += d[i].min(cap[i]);
-                }
-            }
-            let c0 = if vm > m_eff[0] { cap[0] } else { 0.0 };
-            let d1 = d[0];
             let (area_a, spill_a) = lerp(a);
             let (area_b, spill_b) = lerp(b);
             let solve_lin = |o_a: f64, o_b: f64| -> Option<f64> {
@@ -563,6 +589,40 @@ impl StorageNode {
                 }
                 Some(a + (b - a) * (e1 / dd))
             };
+            // Per-outlet capacity endpoints from the interior side of the
+            // piece (from above at a, from below at b).
+            let mut cap_a = [0.0f64; MAX_DS_LINKS];
+            let mut cap_b = [0.0f64; MAX_DS_LINKS];
+            let mut caps_constant = true;
+            for i in 0..MAX_DS_LINKS {
+                cap_a[i] = Self::cap_right(&curves[i], a);
+                cap_b[i] = Self::cap_left(&curves[i], b);
+                if cap_a[i] != cap_b[i] {
+                    caps_constant = false;
+                }
+            }
+            if !caps_constant {
+                // A capacity ramps across the piece. Outflow from endpoint
+                // evaluations is exact unless a min() crosses inside; verify.
+                let o_a = spill_a
+                    + (d[0] - spill_a).max(0.0).min(cap_a[0])
+                    + d[1].min(cap_a[1]) + d[2].min(cap_a[2]) + d[3].min(cap_a[3]);
+                let o_b = spill_b
+                    + (d[0] - spill_b).max(0.0).min(cap_b[0])
+                    + d[1].min(cap_b[1]) + d[2].min(cap_b[2]) + d[3].min(cap_b[3]);
+                if let Some(v) = solve_lin(o_a, o_b) {
+                    if err_at(v).abs() <= 1e-9 * (1.0 + v.abs()) {
+                        return v;
+                    }
+                }
+                return refine(a, b, e_a, e_b);
+            }
+            let mut k = 0.0;
+            for i in 1..MAX_DS_LINKS {
+                k += d[i].min(cap_a[i]);
+            }
+            let c0 = cap_a[0];
+            let d1 = d[0];
             let spill_at_v = |v: f64| spill_a + (spill_b - spill_a) * (v - a) / (b - a);
             // Branch 1: spill covers ds_1's due (outlet closed): o = s + k.
             // With c0 == 0 the outlet contributes nothing regardless, so the
@@ -590,16 +650,20 @@ impl StorageNode {
             refine(a, b, e_a, e_b)
         };
 
-        // Demanded MOL thresholds inside [v_lo, v_hi], ascending.
-        let mut thresholds = [f64::INFINITY; MAX_DS_LINKS];
+        // Curve breakpoints inside [v_lo, v_hi], ascending: piece boundaries
+        // for the walk (steps carry jumps; ramps just kink). Capped at a
+        // fixed count as a runaway guard — a curve dense enough to overflow
+        // it inside ONE dimension segment degrades to the verify-and-refine
+        // path, which stays mass-conserving.
+        const MAX_BOUNDS: usize = 16;
+        let mut thresholds = [f64::INFINITY; MAX_BOUNDS];
         let mut n_thr = 0;
-        for i in 0..MAX_DS_LINKS {
-            let m = self.min_operating_volume[i];
-            if m >= v_lo && m <= v_hi
-                && !matches!(self.outlet_definition[i], OutletDefinition::None)
-            {
-                thresholds[n_thr] = m;
-                n_thr += 1;
+        for curve in curves.iter() {
+            for p in curve.iter() {
+                if p.0 >= v_lo && p.0 <= v_hi && n_thr < MAX_BOUNDS {
+                    thresholds[n_thr] = p.0;
+                    n_thr += 1;
+                }
             }
         }
         if n_thr > 1 {
@@ -1068,19 +1132,61 @@ impl Node for StorageNode {
             }
         }
 
-        // Convert outlet definitions (MOL levels) to volumes
+        // Build each outlet's canonical capacity-vs-volume curve from its
+        // definition (levels converted through the dimensions table). The
+        // MOL forms become two-point steps; a MOL at the table floor with
+        // unlimited capacity is no constraint at all and stays empty, so
+        // such storages keep the legacy solver path.
         for i in 0..MAX_DS_LINKS {
-            self.min_operating_volume[i] = match self.outlet_definition[i] {
-                OutletDefinition::None => 0.0,
+            let curve: Vec<(f64, f64)> = match &self.outlet_definition[i] {
+                OutletDefinition::None => Vec::new(),
                 OutletDefinition::OutletWithMOL(level) => {
-                    self.dimensions.interpolate(LEVL, VOLU, level)
+                    let m = self.dimensions.interpolate(LEVL, VOLU, *level);
+                    self.min_operating_volume[i] = m;
+                    if m > 0.0 { vec![(m, 0.0), (m, f64::INFINITY)] } else { Vec::new() }
                 }
-                OutletDefinition::OutletWithMOLAndCapacity(level, _capacity) => {
-                    self.dimensions.interpolate(LEVL, VOLU, level)
+                OutletDefinition::OutletWithMOLAndCapacity(level, capacity) => {
+                    let m = self.dimensions.interpolate(LEVL, VOLU, *level);
+                    self.min_operating_volume[i] = m;
+                    vec![(m.max(0.0), 0.0), (m.max(0.0), *capacity)]
+                }
+                OutletDefinition::OutletWithRatingTable(points) => {
+                    let nrows = self.dimensions.nrows();
+                    let lev_min = self.dimensions.get_value(0, LEVL);
+                    let lev_max = self.dimensions.get_value(nrows - 1, LEVL);
+                    let mut curve = Vec::with_capacity(points.len());
+                    for (idx, &(lev, cap)) in points.iter().enumerate() {
+                        if lev < lev_min || lev > lev_max {
+                            return Err(format!(
+                                "Error in node '{}'. ds_{}_outlet rating level {} lies outside the \
+                                 dimensions table's level range [{}, {}].",
+                                self.name, i + 1, lev, lev_min, lev_max
+                            ));
+                        }
+                        // Capacity is linear in LEVEL between rating points;
+                        // insert a breakpoint at every dimension row the
+                        // segment crosses so it is exactly linear in VOLUME
+                        // between consecutive curve points.
+                        if idx > 0 {
+                            let (lev0, cap0) = points[idx - 1];
+                            if lev > lev0 {
+                                for r in 0..nrows {
+                                    let lr = self.dimensions.get_value(r, LEVL);
+                                    if lr > lev0 && lr < lev {
+                                        let c = cap0 + (cap - cap0) * (lr - lev0) / (lev - lev0);
+                                        curve.push((self.dimensions.get_value(r, VOLU), c));
+                                    }
+                                }
+                            }
+                        }
+                        curve.push((self.dimensions.interpolate(LEVL, VOLU, lev), cap));
+                    }
+                    curve
                 }
             };
+            self.cap_curves[i] = curve;
         }
-        self.has_mol = self.min_operating_volume.iter().any(|&m| m > 0.0);
+        self.has_mol = self.cap_curves.iter().any(|c| !c.is_empty());
 
         // Check if the storage is targeting a level
         self.has_target_level = !matches!(&self.target_level, DynamicInput::None { .. });

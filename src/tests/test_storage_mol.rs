@@ -259,3 +259,147 @@ fn test_forced_release_respects_mol() {
             "forced release capped at water above the MOL, got {}", flows[1]);
     assert!((v - 50.0).abs() < 1e-9, "expected 50, got {v}");
 }
+
+// ---------------------------------------------------------------------------
+// Rating-table outlets: ds_N_outlet = level, capacity, level, capacity, ...
+// Capacity interpolates linearly in level between points and holds flat
+// beyond the ends; a repeated level is an explicit step.
+// ---------------------------------------------------------------------------
+
+// Level 0-10 m maps linearly to volume 0-1000 ML, so the rating levels
+// 0 / 8 / 8.5 / 9 sit at volumes 0 / 800 / 850 / 900.
+const RATING_DIMS: &str = "0, 0, 0, 0, \
+                           10, 1000, 0, 0,";
+
+fn rating_node() -> StorageNode {
+    let mut n = storage(RATING_DIMS, &[]);
+    n.outlet_definition[1] = OutletDefinition::OutletWithRatingTable(
+        vec![(0.0, 0.0), (8.0, 0.0), (8.5, 100.0), (9.0, 100.0)]);
+    n
+}
+
+/// In the taper band the release settles where the demand-limited draw meets
+/// the falling capacity: v = 870 - cap(v) with cap = 2*(v - 800), giving
+/// v = 2470/3 and a release of 140/3.
+#[test]
+fn test_rating_taper_partial_release() {
+    let mut node = rating_node();
+    let (v, flows, _) = run_step(&mut node, 870.0, 0.0, 0.0, 0.0, [0.0, 200.0, 0.0, 0.0]);
+    let v_expected = 2470.0 / 3.0;
+    assert!((v - v_expected).abs() < 1e-9, "expected {v_expected}, got {v}");
+    assert!((flows[1] - 140.0 / 3.0).abs() < 1e-9, "got {}", flows[1]);
+    let mbal = 870.0 - flows.iter().sum::<f64>() - v;
+    assert!(mbal.abs() < 1e-9, "mass balance residual {mbal}");
+}
+
+/// On the flat top of the curve a demand under the capacity is met exactly.
+#[test]
+fn test_rating_flat_region_meets_demand() {
+    let mut node = rating_node();
+    let (v, flows, _) = run_step(&mut node, 950.0, 0.0, 0.0, 0.0, [0.0, 50.0, 0.0, 0.0]);
+    assert!((flows[1] - 50.0).abs() < 1e-9, "got {}", flows[1]);
+    assert!((v - 900.0).abs() < 1e-9, "expected 900, got {v}");
+}
+
+/// Beyond the last rating point the capacity holds flat: a big demand from
+/// high storage is capacity-bound at 100 and the equilibrium sits on the
+/// flat stretch of the curve.
+#[test]
+fn test_rating_capacity_bound_above_curve() {
+    let mut node = rating_node();
+    let (v, flows, _) = run_step(&mut node, 980.0, 0.0, 0.0, 0.0, [0.0, 200.0, 0.0, 0.0]);
+    assert!((flows[1] - 100.0).abs() < 1e-9, "got {}", flows[1]);
+    assert!((v - 880.0).abs() < 1e-9, "expected 880, got {v}");
+}
+
+/// Deep in the taper a huge demand rides the capacity curve down:
+/// v = 830 - 2*(v - 800) gives v = 810, release 20.
+#[test]
+fn test_rating_taper_big_demand() {
+    let mut node = rating_node();
+    let (v, flows, _) = run_step(&mut node, 830.0, 0.0, 0.0, 0.0, [0.0, 500.0, 0.0, 0.0]);
+    assert!((v - 810.0).abs() < 1e-9, "expected 810, got {v}");
+    assert!((flows[1] - 20.0).abs() < 1e-9, "got {}", flows[1]);
+}
+
+/// Below the zero-capacity end of the ramp the outlet is shut.
+#[test]
+fn test_rating_below_ramp_releases_nothing() {
+    let mut node = rating_node();
+    let (v, flows, _) = run_step(&mut node, 700.0, 0.0, 0.0, 0.0, [0.0, 50.0, 0.0, 0.0]);
+    assert!(flows[1].abs() < 1e-12, "got {}", flows[1]);
+    assert!((v - 700.0).abs() < 1e-9, "volume untouched, got {v}");
+}
+
+/// A repeated level in the table is an explicit step, with the same parking
+/// behaviour as a MOL: capacity 80 above level 5, zero below.
+#[test]
+fn test_rating_explicit_step() {
+    // Comfortably above the step: capacity-bound at 80.
+    let mut node = storage(RATING_DIMS, &[]);
+    node.outlet_definition[1] = OutletDefinition::OutletWithRatingTable(
+        vec![(5.0, 0.0), (5.0, 80.0)]);
+    let (v, flows, _) = run_step(&mut node, 600.0, 0.0, 0.0, 0.0, [0.0, 200.0, 0.0, 0.0]);
+    assert!((flows[1] - 80.0).abs() < 1e-9, "got {}", flows[1]);
+    assert!((v - 520.0).abs() < 1e-9, "expected 520, got {v}");
+
+    // Just above the step: the root falls inside the jump, so the volume
+    // parks exactly on it and the outlet takes the residual.
+    let mut node = storage(RATING_DIMS, &[]);
+    node.outlet_definition[1] = OutletDefinition::OutletWithRatingTable(
+        vec![(5.0, 0.0), (5.0, 80.0)]);
+    let (v, flows, _) = run_step(&mut node, 510.0, 0.0, 0.0, 0.0, [0.0, 200.0, 0.0, 0.0]);
+    assert!((flows[1] - 10.0).abs() < 1e-9, "got {}", flows[1]);
+    assert!((v - 500.0).abs() < 1e-9, "expected to park on the step at 500, got {v}");
+}
+
+/// A rating level outside the dimensions table's level range is a
+/// configuration error, reported at initialise.
+#[test]
+fn test_rating_level_outside_dimensions_errors() {
+    let mut node = storage(RATING_DIMS, &[]);
+    node.outlet_definition[1] = OutletDefinition::OutletWithRatingTable(
+        vec![(0.0, 0.0), (20.0, 100.0)]);
+    let mut data_cache = crate::data_management::data_cache::DataCache::new();
+    let mut accounts = AccountManager::new();
+    let err = node.initialise(&mut data_cache, &mut accounts).unwrap_err();
+    assert!(err.contains("outside"), "unexpected error message: {err}");
+}
+
+/// The rating table survives INI parse -> serialise -> parse unchanged,
+/// including a repeated-level step.
+#[test]
+fn test_rating_table_ini_round_trip() {
+    use crate::io::ini_model_io::IniModelIO;
+    use crate::nodes::NodeEnum;
+
+    let ini = "[kalix]\n\
+               \n\
+               [node.dam]\n\
+               type = storage\n\
+               loc = 0, 0\n\
+               initial_volume = 100\n\
+               dimensions = 0, 0, 0, 0,\n\
+               \x2010, 1000, 1, 0,\n\
+               ds_2_outlet = 0.0, 0,\n\
+               \x208.0, 0,\n\
+               \x208.5, 100,\n\
+               \x209.0, 100,\n";
+
+    let outlet_of = |m: &crate::model::Model| -> OutletDefinition {
+        match m.get_node("dam").expect("node not found") {
+            NodeEnum::StorageNode(n) => n.outlet_definition[1].clone(),
+            _ => panic!("not a storage"),
+        }
+    };
+
+    let m1 = IniModelIO::read_model_string(ini).unwrap();
+    let expected = OutletDefinition::OutletWithRatingTable(
+        vec![(0.0, 0.0), (8.0, 0.0), (8.5, 100.0), (9.0, 100.0)]);
+    assert_eq!(outlet_of(&m1), expected, "parse must yield the rating table");
+
+    let serialised = IniModelIO::model_to_string(&m1);
+    let m2 = IniModelIO::read_model_string(&serialised).unwrap();
+    assert_eq!(outlet_of(&m2), expected,
+               "rating table must survive a round trip, serialised as:\n{serialised}");
+}
