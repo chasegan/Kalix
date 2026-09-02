@@ -967,6 +967,7 @@ public class VisualizationTabManager {
     private void detachTabCallbacks(TabInfo tab) {
         if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
             tab.plotPanel.setOnHistoryChanged(null);
+            tab.plotPanel.setOnAutoYModeChanged(null);
             tab.plotPanel.getLegendManager().setOnCollapsedChanged(null);
         }
     }

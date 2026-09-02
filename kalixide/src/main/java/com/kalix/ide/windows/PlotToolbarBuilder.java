@@ -237,11 +237,12 @@ class PlotToolbarBuilder {
             boolean enabled = autoYToggle.isSelected();
             plotPanel.setAutoYMode(enabled);
             PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(enabled);
-            if (enabled) {
-                // Fit Y-axis to visible data in current X range (don't change X zoom)
-                plotPanel.fitYAxis();
-            }
         });
+
+        // Follow changes made elsewhere (context menu, explicit axis limits). Only the
+        // toolbar records the preference: those paths change this plot, not the default.
+        plotPanel.setOnAutoYModeChanged(() -> autoYToggle.setSelected(plotPanel.isAutoYMode()));
+
         toolbar.add(autoYToggle);
         return this;
     }

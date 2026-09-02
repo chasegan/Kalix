@@ -52,6 +52,7 @@ import java.io.File;
 import java.io.IOException;
 import java.time.format.DateTimeParseException;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
@@ -79,7 +80,6 @@ public class PlotInteractionManager {
     // State management
     private Point lastMousePos;
     private boolean isDragging = false;
-    private boolean autoYMode = false;
     private JPopupMenu contextMenu;
     private JCheckBoxMenuItem autoYMenuItem;
     private JCheckBoxMenuItem connectGapsMenuItem;
@@ -101,6 +101,7 @@ public class PlotInteractionManager {
     private Supplier<java.io.File> baseDirectorySupplier;
     private Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier;
     private Supplier<com.kalix.ide.flowviz.data.LabelResolver> labelResolverSupplier;
+    private BooleanSupplier autoYModeSupplier;
 
 
     /**
@@ -284,10 +285,16 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Sets the auto-Y mode for zooming and panning operations.
+     * Supplies the panel's auto-Y mode, which decides whether X-only navigation refits
+     * Y. Read on every use rather than mirrored, so undo/redo and every other path that
+     * changes the mode on the panel are seen here without any synchronisation.
      */
-    public void setAutoYMode(boolean autoYMode) {
-        this.autoYMode = autoYMode;
+    public void setAutoYModeSupplier(BooleanSupplier autoYModeSupplier) {
+        this.autoYModeSupplier = autoYModeSupplier;
+    }
+
+    private boolean isAutoYMode() {
+        return autoYModeSupplier.getAsBoolean();
     }
 
     /**
@@ -330,7 +337,7 @@ public class PlotInteractionManager {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
 
-        if (autoYMode) {
+        if (isAutoYMode()) {
             // Auto-Y mode: only zoom X-axis, then auto-fit Y
             long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
             long timeRange = currentViewport.getTimeRangeMs();
@@ -358,7 +365,7 @@ public class PlotInteractionManager {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
 
-        if (autoYMode) {
+        if (isAutoYMode()) {
             // Auto-Y mode: only zoom X-axis, then auto-fit Y
             long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
             long timeRange = currentViewport.getTimeRangeMs();
@@ -405,7 +412,7 @@ public class PlotInteractionManager {
         // Check for modifier keys: Ctrl (Windows/Linux) or Cmd (Mac)
         boolean isYAxisOnlyZoom = e.isControlDown() || e.isMetaDown();
 
-        if (autoYMode) {
+        if (isAutoYMode()) {
             // Auto-Y mode: only zoom X-axis centered on mouse, then auto-fit Y
             long mouseTime = currentViewport.screenXToTime(e.getX());
             long currentStartTime = currentViewport.getStartTimeMs();
@@ -506,7 +513,7 @@ public class PlotInteractionManager {
         int dx = e.getX() - lastMousePos.x;
         int dy = e.getY() - lastMousePos.y;
 
-        if (autoYMode) {
+        if (isAutoYMode()) {
             // Auto-Y mode: only pan X-axis, then auto-fit Y
             long timeRange = currentViewport.getTimeRangeMs();
             long deltaTime = -dx * timeRange / currentViewport.getPlotWidth();
@@ -717,10 +724,8 @@ public class PlotInteractionManager {
 
         autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
         autoYMenuItem.addActionListener(e -> {
-            autoYMode = autoYMenuItem.isSelected();
-            // Update the parent PlotPanel's auto-Y mode if it has the method
-            if (parentComponent instanceof PlotPanel) {
-                ((PlotPanel) parentComponent).setAutoYMode(autoYMode);
+            if (parentComponent instanceof PlotPanel plotPanel) {
+                plotPanel.setAutoYMode(autoYMenuItem.isSelected());
             }
         });
         contextMenu.add(autoYMenuItem);
