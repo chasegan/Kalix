@@ -1055,9 +1055,36 @@ public class RunManager extends JFrame {
      * {@link #onSourceTreeCheckedChanged} — i.e. whenever the checked set genuinely
      * changes — and nowhere else: recording must stay tied to check <em>changes</em>,
      * never to restore paths like {@link #onTabChanged}.
+     *
+     * <p>A tree snapshot only replaces what the tree can currently express. A recorded ref
+     * with no tree path yet — the default tab's {@link LastSource} before the first run
+     * completes — is neither confirmed nor denied by the tree, so it is carried forward
+     * untouched; the tree gains a node for it later and the next snapshot takes over.
+     * Sources that have genuinely gone are scrubbed by {@link #removeSourceFromAllTabs},
+     * not here.</p>
      */
     private void snapshotSourceChecksToTargetTab() {
-        tabManager.setTargetTabCheckedSources(currentCheckedSourceRefs());
+        Set<SourceRef> recorded = tabManager.getTargetTabCheckedSources();
+        Set<SourceRef> snapshot = currentCheckedSourceRefs();
+        // Build the new set fully before recording it: the recorded set is a live view of
+        // the very set the setter replaces.
+        for (SourceRef ref : recorded) {
+            if (pathForSourceRef(ref) == null) {
+                snapshot.add(ref);
+            }
+        }
+        tabManager.setTargetTabCheckedSources(snapshot);
+    }
+
+    /** The subset of {@code refs} the source tree can currently show a node for. */
+    private Set<SourceRef> representable(Set<SourceRef> refs) {
+        Set<SourceRef> result = new LinkedHashSet<>();
+        for (SourceRef ref : refs) {
+            if (pathForSourceRef(ref) != null) {
+                result.add(ref);
+            }
+        }
+        return result;
     }
 
     /**
@@ -1115,8 +1142,10 @@ public class RunManager extends JFrame {
         fetchCoordinator.beginProgrammaticUpdate();
         try {
             // Skip the rebuild when the contexts are identical: no outputs-tree churn
-            // when flicking between tabs that look at the same sources.
-            if (!tabSources.equals(currentCheckedSourceRefs())) {
+            // when flicking between tabs that look at the same sources. Compare only what
+            // the tree can show, or a ref with no node yet (see snapshotSourceChecksToTargetTab)
+            // would make the tab look different from the tree on every switch.
+            if (!representable(tabSources).equals(currentCheckedSourceRefs())) {
                 timeseriesSourceTree.setCheckedPaths(pathsForSourceRefs(tabSources));
                 updateOutputsTree();
             }
