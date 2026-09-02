@@ -2,6 +2,7 @@ package com.kalix.ide.windows;
 
 import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.data.LastSeries;
+import com.kalix.ide.flowviz.data.LastSource;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
@@ -168,8 +169,15 @@ class LastRunTracker {
             wasLastChecked = timeseriesSourceTree.isPathChecked(oldLastPath);
         }
 
-        // If Last was checked, block all checked-state events during the entire update
-        if (wasLastChecked) {
+        // The active tab may record "Last run" as a checked source without the tree
+        // showing it checked — that is exactly the state a default tab is in before the
+        // first run of the session, when there is no Last node to check yet. Honour the
+        // tab's recorded context so Last lights up the moment it exists.
+        boolean checkLast = wasLastChecked
+            || tabManager.getTargetTabCheckedSources().contains(new LastSource());
+
+        // If Last is to be checked, block all checked-state events during the entire update
+        if (checkLast) {
             fetchCoordinator.beginProgrammaticUpdate();
         }
         try {
@@ -199,8 +207,8 @@ class LastRunTracker {
                 treeModel.nodesWereInserted(lastRunNode, new int[]{0});
             }
 
-            // If Last was previously checked, rebuild the timeseries tree to show new outputs
-            if (wasLastChecked) {
+            // If Last is checked, rebuild the timeseries tree to show its outputs
+            if (checkLast) {
                 TreePath newLastPath = new TreePath(lastRunChildNode.getPath());
 
                 // Check the new Last node so its outputs are picked up below
@@ -218,7 +226,7 @@ class LastRunTracker {
                 window.reconcileCheckedSeriesWithTree(restoredSeries, tabSeries);
             }
         } finally {
-            if (wasLastChecked) {
+            if (checkLast) {
                 fetchCoordinator.endProgrammaticUpdate();
             }
         }

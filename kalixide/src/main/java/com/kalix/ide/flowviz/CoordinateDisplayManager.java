@@ -446,7 +446,7 @@ public class CoordinateDisplayManager {
         // Check if we're in percentile mode (exceedance plots)
         if (currentViewport != null && currentViewport.getXAxisType() == XAxisType.PERCENTILE) {
             // Convert fake timestamp to percentile
-            double percentile = timestampMs / 1_000_000.0;
+            double percentile = (double) timestampMs / com.kalix.ide.flowviz.transform.PlotTypeTransformer.PERCENTILE_SCALE;
 
             // Format with appropriate precision
             if (percentile == Math.floor(percentile)) {

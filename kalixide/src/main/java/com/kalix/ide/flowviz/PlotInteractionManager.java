@@ -1,7 +1,10 @@
 package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.SeriesRef;
+import com.kalix.ide.flowviz.rendering.AxisLimitCodec;
 import com.kalix.ide.flowviz.rendering.ViewPort;
+import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.io.TimeSeriesCsvExporter;
 import com.kalix.ide.io.SourceResCsvExporter;
@@ -10,29 +13,46 @@ import com.kalix.ide.io.PixieWriter;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 
+import javax.swing.AbstractAction;
 import javax.swing.ButtonGroup;
+import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JRadioButtonMenuItem;
+import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 import java.awt.BasicStroke;
-import java.awt.Color;
+import java.awt.BorderLayout;
 import java.awt.Cursor;
+import java.awt.Dialog;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.Graphics2D;
+import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
@@ -60,9 +80,10 @@ public class PlotInteractionManager {
     // State management
     private Point lastMousePos;
     private boolean isDragging = false;
-    private boolean autoYMode = false;
     private JPopupMenu contextMenu;
     private JCheckBoxMenuItem autoYMenuItem;
+    private JMenuItem pasteXAxisItem;
+    private JMenuItem pasteYAxisItem;
     private JCheckBoxMenuItem connectGapsMenuItem;
     private JCheckBoxMenuItem orphanMarkersMenuItem;
     private JMenu yAxisScaleMenu;
@@ -82,6 +103,7 @@ public class PlotInteractionManager {
     private Supplier<java.io.File> baseDirectorySupplier;
     private Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier;
     private Supplier<com.kalix.ide.flowviz.data.LabelResolver> labelResolverSupplier;
+    private BooleanSupplier autoYModeSupplier;
 
 
     /**
@@ -192,7 +214,7 @@ public class PlotInteractionManager {
                 // on press on macOS/Linux but on release on Windows, and macOS
                 // Ctrl+click is a popup gesture without being the right button.
                 if (e.isPopupTrigger() && plotArea.contains(e.getPoint())) {
-                    contextMenu.show(parentComponent, e.getX(), e.getY());
+                    showContextMenuIfPlotted(e);
                 } else if (SwingUtilities.isLeftMouseButton(e) && e.isShiftDown() && plotArea.contains(e.getPoint())) {
                     // Shift+click: start zoom rectangle selection
                     isZoomSelecting = true;
@@ -220,7 +242,10 @@ public class PlotInteractionManager {
             @Override
             public void mouseReleased(MouseEvent e) {
                 if (e.isPopupTrigger() && plotAreaSupplier.get().contains(e.getPoint())) {
-                    contextMenu.show(parentComponent, e.getX(), e.getY());
+                    // Return regardless of whether the menu showed: the gesture was a popup
+                    // trigger either way, and on macOS Ctrl+click it is also a left-button
+                    // release, which would otherwise fall through into the drag/zoom paths.
+                    showContextMenuIfPlotted(e);
                     return;
                 }
                 if (SwingUtilities.isLeftMouseButton(e) && isZoomSelecting) {
@@ -262,10 +287,16 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Sets the auto-Y mode for zooming and panning operations.
+     * Supplies the panel's auto-Y mode, which decides whether X-only navigation refits
+     * Y. Read on every use rather than mirrored, so undo/redo and every other path that
+     * changes the mode on the panel are seen here without any synchronisation.
      */
-    public void setAutoYMode(boolean autoYMode) {
-        this.autoYMode = autoYMode;
+    public void setAutoYModeSupplier(BooleanSupplier autoYModeSupplier) {
+        this.autoYModeSupplier = autoYModeSupplier;
+    }
+
+    private boolean isAutoYMode() {
+        return autoYModeSupplier.getAsBoolean();
     }
 
     /**
@@ -308,7 +339,7 @@ public class PlotInteractionManager {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
 
-        if (autoYMode) {
+        if (isAutoYMode()) {
             // Auto-Y mode: only zoom X-axis, then auto-fit Y
             long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
             long timeRange = currentViewport.getTimeRangeMs();
@@ -336,7 +367,7 @@ public class PlotInteractionManager {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
 
-        if (autoYMode) {
+        if (isAutoYMode()) {
             // Auto-Y mode: only zoom X-axis, then auto-fit Y
             long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
             long timeRange = currentViewport.getTimeRangeMs();
@@ -383,7 +414,7 @@ public class PlotInteractionManager {
         // Check for modifier keys: Ctrl (Windows/Linux) or Cmd (Mac)
         boolean isYAxisOnlyZoom = e.isControlDown() || e.isMetaDown();
 
-        if (autoYMode) {
+        if (isAutoYMode()) {
             // Auto-Y mode: only zoom X-axis centered on mouse, then auto-fit Y
             long mouseTime = currentViewport.screenXToTime(e.getX());
             long currentStartTime = currentViewport.getStartTimeMs();
@@ -484,7 +515,7 @@ public class PlotInteractionManager {
         int dx = e.getX() - lastMousePos.x;
         int dy = e.getY() - lastMousePos.y;
 
-        if (autoYMode) {
+        if (isAutoYMode()) {
             // Auto-Y mode: only pan X-axis, then auto-fit Y
             long timeRange = currentViewport.getTimeRangeMs();
             long deltaTime = -dx * timeRange / currentViewport.getPlotWidth();
@@ -654,31 +685,157 @@ public class PlotInteractionManager {
     }
 
     /**
+     * Shows the context menu at the event position, but only when there is an actual plot
+     * under the cursor. Callers have already established that the gesture was a popup
+     * trigger inside the plot area.
+     */
+    private void showContextMenuIfPlotted(MouseEvent e) {
+        if (!hasPlot()) {
+            return;
+        }
+        contextMenu.show(parentComponent, e.getX(), e.getY());
+    }
+
+    /**
+     * Whether this panel is actually plotting something. Every item on the context menu --
+     * zoom to fit, axis limits, axis copy/paste, save data -- acts on plotted series, so on
+     * an empty tab the menu is a list of no-ops and error dialogs.
+     *
+     * <p>The evidence is data in the display set for a visible series, not the viewport
+     * and not the selection: {@code PlotPanel} synthesises a placeholder viewport
+     * ("now +/- 1 hour") while painting an empty panel, and a series is added to the
+     * visible list the moment it is ticked, before its fetch completes (or fails). The
+     * display set only holds series whose data has arrived, which is the same test
+     * {@link #saveData()} applies. The viewport is still checked because the handlers
+     * dereference it.</p>
+     */
+    private boolean hasPlot() {
+        if (viewportSupplier == null || visibleSeriesSupplier == null || dataSetSupplier == null) {
+            return false;
+        }
+        DataSet dataSet = dataSetSupplier.get();
+        List<SeriesRef> visibleSeries = visibleSeriesSupplier.get();
+        return viewportSupplier.get() != null
+            && dataSet != null && !dataSet.isEmpty()
+            && visibleSeries != null && !visibleSeries.isEmpty();
+    }
+
+    /**
+     * Whether the clipboard currently holds text the paste items could read. Per
+     * context-menu-style 4, Paste with an empty clipboard is shown disabled rather than
+     * hidden: the user should know the command exists. A clipboard held by another
+     * application counts as empty.
+     */
+    private static boolean hasClipboardText() {
+        try {
+            return Toolkit.getDefaultToolkit().getSystemClipboard().isDataFlavorAvailable(DataFlavor.stringFlavor);
+        } catch (IllegalStateException ex) {
+            return false;
+        }
+    }
+
+    /**
      * Sets up the right-click context menu.
      */
     private void setupContextMenu() {
         contextMenu = new JPopupMenu();
 
+        // Primary block (context-menu-style 1, block 1): the default action, which on a plot
+        // is what double-click does (see the mouse listener). The skeleton's table lists
+        // "Zoom to fit" under block 7 for panels where it is merely a view command; here
+        // it is the primary one, so it leads.
         JMenuItem zoomToFitItem = new JMenuItem("Zoom to fit");
         zoomToFitItem.addActionListener(e -> zoomToFit());
         contextMenu.add(zoomToFitItem);
 
+        contextMenu.addSeparator();
+
+        // Context-specific block (block 2): the plot's own handoff to a file.
+        JMenuItem saveDataItem = new JMenuItem("Save data…");
+        saveDataItem.addActionListener(e -> saveData());
+        contextMenu.add(saveDataItem);
+
+        contextMenu.addSeparator();
+
+        // Clipboard block (block 3). The copy/paste items act immediately and carry no
+        // ellipsis (2.4).
+        JMenuItem copyXAxis = new JMenuItem("Copy X axis");
+
+        // Copy/paste go through AxisLimitCodec -- the same codec the Set-axis-limits
+        // dialog uses -- so the clipboard always carries the axis' own units.
+        copyXAxis.addActionListener(e -> {
+            ViewPort currentViewport = viewportSupplier.get();
+            if (currentViewport != null) {
+                copyStringToClipboard(AxisLimitCodec.formatXLimits(currentViewport));
+            }
+        });
+        contextMenu.add(copyXAxis);
+        pasteXAxisItem = new JMenuItem("Paste X axis");
+        pasteXAxisItem.addActionListener(e -> {
+            ViewPort currentViewport = viewportSupplier.get();
+            String text = readClipboardText();
+            if (currentViewport == null || text == null) {
+                return;
+            }
+            long[] x;
+            try {
+                x = AxisLimitCodec.parseXLimits(text, currentViewport.getXAxisType());
+                ViewPort.validateBounds(x[0], x[1], currentViewport.getMinValue(), currentViewport.getMaxValue());
+            } catch (IllegalArgumentException ex) {
+                showInvalidInput(parentComponent, ex.getMessage());
+                return;
+            }
+            applyXLimits(x[0], x[1]);
+        });
+        contextMenu.add(pasteXAxisItem);
+
+        JMenuItem copyYAxis = new JMenuItem("Copy Y axis");
+        copyYAxis.addActionListener(e -> {
+            ViewPort currentViewport = viewportSupplier.get();
+            if (currentViewport != null) {
+                copyStringToClipboard(AxisLimitCodec.formatYLimits(currentViewport));
+            }
+        });
+        contextMenu.add(copyYAxis);
+        pasteYAxisItem = new JMenuItem("Paste Y axis");
+        pasteYAxisItem.addActionListener(e -> {
+            ViewPort currentViewport = viewportSupplier.get();
+            String text = readClipboardText();
+            if (currentViewport == null || text == null) {
+                return;
+            }
+            double[] y;
+            try {
+                y = AxisLimitCodec.parseYLimits(text);
+                ViewPort.validateBounds(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
+            } catch (IllegalArgumentException ex) {
+                showInvalidInput(parentComponent, ex.getMessage());
+                return;
+            }
+            applyExplicitLimits(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
+        });
+        contextMenu.add(pasteYAxisItem);
+
+        contextMenu.addSeparator();
+
+        // View/state block (block 7): everything that changes how the data is shown, never
+        // the data. "Set axis limits…" carries an ellipsis because it opens a dialog (2.4);
+        // the submenus are category nouns with value children (6).
+        JMenuItem setAxes = new JMenuItem("Set axis limits…");
+        setAxes.addActionListener(e1 -> showSetAxesDialog());
+        contextMenu.add(setAxes);
+
         autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
         autoYMenuItem.addActionListener(e -> {
-            autoYMode = autoYMenuItem.isSelected();
-            // Update the parent PlotPanel's auto-Y mode if it has the method
-            if (parentComponent instanceof PlotPanel) {
-                ((PlotPanel) parentComponent).setAutoYMode(autoYMode);
+            if (parentComponent instanceof PlotPanel plotPanel) {
+                plotPanel.setAutoYMode(autoYMenuItem.isSelected());
             }
         });
         contextMenu.add(autoYMenuItem);
 
-        contextMenu.addSeparator();
-
         // Y-axis scale submenu
         yAxisScaleMenu = new JMenu("Y-axis scale");
         ButtonGroup yAxisScaleGroup = new ButtonGroup();
-
         for (YAxisScale scale : YAxisScale.values()) {
             JRadioButtonMenuItem scaleItem = new JRadioButtonMenuItem(scale.getDisplayName());
             scaleItem.addActionListener(e -> {
@@ -690,8 +847,6 @@ public class PlotInteractionManager {
             yAxisScaleMenu.add(scaleItem);
         }
         contextMenu.add(yAxisScaleMenu);
-
-        contextMenu.addSeparator();
 
         // Missing Data submenu. "Draw across gaps" and "Mark orphan points" are mutually
         // exclusive — drawing a continuous line removes the gaps that orphan points would mark —
@@ -717,16 +872,14 @@ public class PlotInteractionManager {
 
         contextMenu.add(missingDataMenu);
 
-        contextMenu.addSeparator();
-
-        JMenuItem saveDataItem = new JMenuItem("Save data…");
-        saveDataItem.addActionListener(e -> saveData());
-        contextMenu.add(saveDataItem);
-
         // Add popup menu listener to update checkbox/radio button states when menu is shown
         contextMenu.addPopupMenuListener(new PopupMenuListener() {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+                boolean clipboardHasText = hasClipboardText();
+                pasteXAxisItem.setEnabled(clipboardHasText);
+                pasteYAxisItem.setEnabled(clipboardHasText);
+
                 // Sync the checkbox state with the current PlotPanel state
                 if (parentComponent instanceof PlotPanel plotPanel) {
                     // Get the current auto-Y state from the PlotPanel
@@ -753,6 +906,187 @@ public class PlotInteractionManager {
             @Override
             public void popupMenuCanceled(PopupMenuEvent e) {}
         });
+    }
+
+    /**
+     * Puts a string on the system clipboard.
+     */
+    private void copyStringToClipboard(String formatted) {
+        StringSelection selection = new StringSelection(formatted);
+        try {
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
+        } catch (IllegalStateException ex) {
+            showClipboardError("The clipboard is not available right now.");
+        }
+    }
+
+    /**
+     * Reads the clipboard's text, or reports why it could not and returns {@code null} so
+     * callers need only bail out. Text is unavailable when the clipboard is empty or holds
+     * something else (which paste items are disabled for, but the contents can change
+     * between the menu opening and the click), or when another application holds it.
+     */
+    private String readClipboardText() {
+        try {
+            return (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
+        } catch (UnsupportedFlavorException | IOException ex) {
+            showClipboardError("The clipboard does not contain text.");
+            return null;
+        } catch (IllegalStateException ex) {
+            showClipboardError("The clipboard is not available right now.");
+            return null;
+        }
+    }
+
+    /** A clipboard transport failure: nothing the user typed was wrong. */
+    private void showClipboardError(String message) {
+        JOptionPane.showMessageDialog(parentComponent, message, "Clipboard", JOptionPane.ERROR_MESSAGE);
+    }
+
+    /** One error dialog for every rejected axis limit, whichever path it arrived by. */
+    private static void showInvalidInput(java.awt.Component parent, String message) {
+        JOptionPane.showMessageDialog(parent, message, "Invalid input", JOptionPane.ERROR_MESSAGE);
+    }
+
+    /**
+     * Applies an X-only change: obeys auto-Y exactly as wheel zoom and drag pan do, so a
+     * pasted time window shows its own data rather than the previous window's Y range.
+     */
+    private void applyXLimits(long startTime, long endTime) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) {
+            return;
+        }
+        if (isAutoYMode()) {
+            updateViewportWithFittedY(startTime, endTime);
+            parentComponent.repaint();
+        } else {
+            acceptNewAxes(startTime, endTime, currentViewport.getMinValue(), currentViewport.getMaxValue());
+        }
+    }
+
+    /**
+     * Applies limits that include an explicit Y range: the user has opted out of auto-Y,
+     * otherwise the next wheel tick or drag would silently refit Y and discard them. The
+     * viewport lands first and the mode second, because {@code setAutoYMode} pushes a
+     * history entry immediately while the viewport update is coalesced -- this order
+     * records the two together, so undo restores both in one step.
+     */
+    private void applyExplicitLimits(long startTime, long endTime, double minValue, double maxValue) {
+        acceptNewAxes(startTime, endTime, minValue, maxValue);
+        if (parentComponent instanceof PlotPanel plotPanel) {
+            plotPanel.setAutoYMode(false);
+        }
+    }
+
+    /**
+     * Shows a modal dialog with the current axis limits, pre-filled and editable as text.
+     * All four fields are required -- they arrive pre-filled with the current limits, so
+     * leaving one alone is how a limit is kept, and a blank field is an error. X fields are
+     * parsed according to the viewport's {@link XAxisType} (dates for TIME, percentages for
+     * PERCENTILE, etc.) so the field always shows and accepts values in the axis' own units.
+     */
+    private void showSetAxesDialog() {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) {
+            return;
+        }
+        XAxisType xAxisType = currentViewport.getXAxisType();
+
+        JTextField xField = new JTextField(AxisLimitCodec.formatXLimits(currentViewport), 32);
+        JTextField yField = new JTextField(AxisLimitCodec.formatYLimits(currentViewport), 32);
+
+        JPanel form = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(4, 4, 4, 4);
+        gbc.anchor = GridBagConstraints.WEST;
+        addAxisFieldRow(form, gbc, 0, "X limits:", xField);
+        addAxisFieldRow(form, gbc, 1, "Y limits:", yField);
+
+        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(parentComponent),
+            "Set axis limits", Dialog.ModalityType.APPLICATION_MODAL);  // sentence case (2.1)
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+        dialog.setLayout(new BorderLayout());
+        dialog.add(form, BorderLayout.CENTER);
+
+        JButton okButton = new JButton("OK");
+        okButton.addActionListener(ev -> {
+            try {
+                long[] x = AxisLimitCodec.parseXLimits(xField.getText(), xAxisType);
+                double[] y = AxisLimitCodec.parseYLimits(yField.getText());
+                ViewPort.validateBounds(x[0], x[1], y[0], y[1]);
+                // An edited Y field is an explicit Y range; an untouched one (the codec's
+                // formatting round-trips exactly) means the user only wanted X, which obeys
+                // auto-Y like any other X-only change.
+                boolean yEdited = y[0] != currentViewport.getMinValue() || y[1] != currentViewport.getMaxValue();
+                if (yEdited) {
+                    applyExplicitLimits(x[0], x[1], y[0], y[1]);
+                } else {
+                    applyXLimits(x[0], x[1]);
+                }
+                dialog.dispose();
+            } catch (IllegalArgumentException ex) {
+                // The dialog stays open so the user can correct the field.
+                showInvalidInput(dialog, ex.getMessage());
+            }
+        });
+        JButton cancelButton = new JButton("Cancel");
+        cancelButton.addActionListener(ev -> dialog.dispose());
+
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+        dialog.add(buttonPanel, BorderLayout.SOUTH);
+
+        // Esc cancels; Enter accepts via the default button (the KalixFileDialog idiom).
+        dialog.getRootPane().setDefaultButton(okButton);
+        dialog.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+            .put(KeyStroke.getKeyStroke("ESCAPE"), "cancel");
+        dialog.getRootPane().getActionMap().put("cancel", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                dialog.dispose();
+            }
+        });
+
+        dialog.pack();
+        dialog.setLocationRelativeTo(parentComponent);
+        dialog.setVisible(true);
+    }
+
+    /**
+     * Adds a label + text field pair as one row of a {@link GridBagLayout} form.
+     */
+    private void addAxisFieldRow(JPanel form, GridBagConstraints gbc, int row, String label, JTextField field) {
+        gbc.gridx = 0;
+        gbc.gridy = row;
+        gbc.weightx = 0;
+        gbc.fill = GridBagConstraints.NONE;
+        form.add(new JLabel(label), gbc);
+        gbc.gridx = 1;
+        gbc.weightx = 1;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        form.add(field, gbc);
+    }
+
+    /**
+     * Moves the viewport to the given axis limits, keeping plot area, Y-axis scale, and
+     * X-axis type unchanged. All four limits are required and are applied as given; callers
+     * are responsible for parsing and for checking them with
+     * {@link ViewPort#validateBounds} first.
+     */
+    private void acceptNewAxes(long startTime, long endTime, double minValue, double maxValue) {
+        var currentViewport = this.viewportSupplier.get();
+        if (currentViewport == null) {
+            return;
+        }
+        Rectangle plotArea = plotAreaSupplier.get();
+        ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
+                                            // vvv Window itself does not move or change scale/type vvv
+                                            plotArea.x, plotArea.y, plotArea.width, plotArea.height,
+                                            currentViewport.getYAxisScale(), currentViewport.getXAxisType());
+        viewportUpdater.accept(newViewport);
+        parentComponent.repaint();
     }
 
     /**

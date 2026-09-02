@@ -137,6 +137,7 @@ public class PlotPanel extends JPanel {
     private final PlotStateHistory stateHistory = new PlotStateHistory();
     private boolean restoringState = false;  // Suppresses pushState() during restore
     private Runnable onHistoryChanged;       // Callback for toolbar button enable/disable
+    private Runnable onAutoYModeChanged;     // Callback for the toolbar auto-Y toggle
 
     // Repaints this panel whenever the active palette is edited or switched, or a
     // series is moved to a different palette slot, so a palette-backed resolver's
@@ -190,6 +191,7 @@ public class PlotPanel extends JPanel {
 
         // Setup plot type supplier for format-aware export
         plotInteractionManager.setPlotTypeSupplier(() -> plotType);
+        plotInteractionManager.setAutoYModeSupplier(() -> autoYMode);
 
         // Resolver for projecting ref-keyed series to column headers on CSV export.
         plotInteractionManager.setLabelResolverSupplier(() -> labelResolver);
@@ -216,6 +218,16 @@ public class PlotPanel extends JPanel {
         }
     }
 
+    /**
+     * Releases display-scoped resources only. This fires on every hierarchy detach,
+     * including the remove/insert cycle a tab reorder or reset performs, and everything
+     * torn down here is re-established on {@link #addNotify()} or on next use. Callbacks
+     * installed by the owning toolbar ({@code onHistoryChanged}, {@code onAutoYModeChanged})
+     * are deliberately <em>not</em> cleared: they belong to the owner, which detaches
+     * them when it closes the tab, and clearing them here would sever a re-parented
+     * panel from its own toolbar. (Stopping the coalesce timer drops one pending history
+     * push if a tab is dragged within 500 ms of a zoom — known and harmless.)
+     */
     @Override
     public void removeNotify() {
         PlotPaletteManager.getInstance().removeChangeListener(paletteChangeListener);
@@ -225,7 +237,6 @@ public class PlotPanel extends JPanel {
         }
         viewportCoalesceTimer.stop();
         coordinateDisplayManager.dispose();
-        onHistoryChanged = null;
         super.removeNotify();
     }
 
@@ -578,12 +589,32 @@ public class PlotPanel extends JPanel {
         repaint();
     }
     
+    /**
+     * Sets auto-Y mode: whether X-only navigation (wheel zoom, pan, pasted X limits)
+     * keeps the Y range fitted to the visible data. This is the single owner of the
+     * mode; the interaction manager reads it through a supplier and the toolbar follows
+     * it through {@link #setOnAutoYModeChanged}. Enabling fits Y immediately, so every
+     * entry point (toolbar, context menu) behaves the same and records one history entry.
+     */
     public void setAutoYMode(boolean autoYMode) {
+        if (this.autoYMode == autoYMode) return;
         this.autoYMode = autoYMode;
-        if (plotInteractionManager != null) {
-            plotInteractionManager.setAutoYMode(autoYMode);
+        if (autoYMode) {
+            fitYAxis();
         }
         pushState();
+        if (onAutoYModeChanged != null) {
+            onAutoYModeChanged.run();
+        }
+    }
+
+    /**
+     * Sets a callback invoked whenever {@link #setAutoYMode} changes the mode, so a
+     * toolbar toggle can follow changes made from the context menu or by explicit axis
+     * limits. Not invoked on undo/redo, which the toolbar syncs from the restored state.
+     */
+    public void setOnAutoYModeChanged(Runnable callback) {
+        this.onAutoYModeChanged = callback;
     }
 
     public void saveData() {

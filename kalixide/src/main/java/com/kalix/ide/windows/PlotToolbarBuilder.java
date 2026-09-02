@@ -31,6 +31,10 @@ class PlotToolbarBuilder {
     static final Dimension WIDE_DROPDOWN_SIZE = new Dimension(150, 25);
     static final Dimension NARROW_DROPDOWN_SIZE = new Dimension(80, 25);
     static final int HORIZONTAL_SPACING = 5;
+    // Shared square footprint for every icon/toggle button on this toolbar, so save,
+    // undo/redo, palette, mask, auto-Y, coordinates and legend all line up identically
+    // rather than each sizing itself off its own icon/border combination.
+    static final Dimension BUTTON_SIZE = new Dimension(28, 28);
 
     /**
      * Aggregation period options for time series data (shared with
@@ -233,11 +237,12 @@ class PlotToolbarBuilder {
             boolean enabled = autoYToggle.isSelected();
             plotPanel.setAutoYMode(enabled);
             PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(enabled);
-            if (enabled) {
-                // Fit Y-axis to visible data in current X range (don't change X zoom)
-                plotPanel.fitYAxis();
-            }
         });
+
+        // Follow changes made elsewhere (context menu, explicit axis limits). Only the
+        // toolbar records the preference: those paths change this plot, not the default.
+        plotPanel.setOnAutoYModeChanged(() -> autoYToggle.setSelected(plotPanel.isAutoYMode()));
+
         toolbar.add(autoYToggle);
         return this;
     }
@@ -296,6 +301,9 @@ class PlotToolbarBuilder {
         JButton button = new JButton(FontIcon.of(icon, BUTTON_ICON_SIZE));
         button.setToolTipText(tooltip);
         button.setFocusable(false);
+        button.setPreferredSize(BUTTON_SIZE);
+        button.setMinimumSize(BUTTON_SIZE);
+        button.setMaximumSize(BUTTON_SIZE);
         button.addActionListener(e -> action.run());
         return button;
     }
@@ -306,6 +314,9 @@ class PlotToolbarBuilder {
         button.setToolTipText(tooltip);
         button.setFocusable(false);
         button.setSelected(initialState);
+        button.setPreferredSize(BUTTON_SIZE);
+        button.setMinimumSize(BUTTON_SIZE);
+        button.setMaximumSize(BUTTON_SIZE);
         return button;
     }
 

@@ -32,6 +32,13 @@ public class PlotTypeTransformer {
     public static final long NUMERIC_SCALE = 1_000_000L;
 
     /**
+     * Scale factor for encoding exceedance percentiles (0-100) as fake timestamps.
+     * Six decimal places, like {@link #NUMERIC_SCALE}; the two are separate constants
+     * because they encode different quantities and need not stay equal.
+     */
+    public static final long PERCENTILE_SCALE = 1_000_000L;
+
+    /**
      * Transforms a dataset according to the specified plot type.
      *
      * @param input The aggregated dataset
@@ -261,8 +268,8 @@ public class PlotTypeTransformer {
                 // Cunnane formula: p = (rank - 0.4) / (n + 0.2)
                 double percentile = ((rank - 0.4) / (validCount + 0.2)) * 100.0;
 
-                // Store as fake timestamp (multiply by 1,000,000)
-                percentileTimestamps[rank - 1] = (long) (percentile * 1_000_000);
+                // Store as fake timestamp
+                percentileTimestamps[rank - 1] = (long) (percentile * PERCENTILE_SCALE);
                 exceedanceValues[rank - 1] = sortedValues[validCount - rank];
             }
 

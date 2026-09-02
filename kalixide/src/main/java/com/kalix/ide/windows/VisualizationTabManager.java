@@ -4,6 +4,7 @@ import com.kalix.ide.components.TabDragReorderer;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.data.LastSource;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
@@ -18,10 +19,12 @@ import com.formdev.flatlaf.FlatClientProperties;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
+import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
@@ -100,6 +103,18 @@ public class VisualizationTabManager {
     private static class UIConstants {
         static final int TAB_ICON_SIZE = 14;
         static final int TAB_PANEL_PADDING = 2;
+        // Gap between the tab icon and its name label — collapsed to 0 when the name is
+        // empty so an unnamed tab doesn't show a dangling space after the icon.
+        static final int TAB_NAME_LABEL_GAP = 4;
+    }
+
+    /**
+     * Pads {@code nameLabel} on its leading edge so it sits clear of the tab icon, unless
+     * the name is empty — an unnamed tab then shows just the icon, with no trailing gap.
+     */
+    private static void updateNameLabelPadding(JLabel nameLabel) {
+        boolean hasName = nameLabel.getText() != null && !nameLabel.getText().isEmpty();
+        nameLabel.setBorder(BorderFactory.createEmptyBorder(0, hasName ? UIConstants.TAB_NAME_LABEL_GAP : 0, 0, 0));
     }
 
     /**
@@ -107,6 +122,9 @@ public class VisualizationTabManager {
      * Makes it explicit what settings are shareable and provides a clean interface for copying.
      */
     public static class TabSettings {
+        // Tab name copied from the source tab when duplicating (null = leave the new tab unnamed)
+        public String name = null;
+
         // Aggregation settings (common to both plot and stats tabs)
         public AggregationPeriod aggregationPeriod = AggregationPeriod.ORIGINAL;
         public AggregationMethod aggregationMethod = AggregationMethod.SUM;
@@ -137,6 +155,7 @@ public class VisualizationTabManager {
         public static TabSettings fromPlotTab(TabInfo tabInfo) {
             PlotPanel plotPanel = tabInfo.plotPanel;
             TabSettings settings = new TabSettings();
+            settings.name = tabInfo.name;
             settings.aggregationPeriod = plotPanel.getAggregationPeriod();
             settings.aggregationMethod = plotPanel.getAggregationMethod();
             settings.plotType = plotPanel.getPlotType();
@@ -157,6 +176,7 @@ public class VisualizationTabManager {
          */
         public static TabSettings fromStatsTab(TabInfo statsTabInfo) {
             TabSettings settings = new TabSettings();
+            settings.name = statsTabInfo.name;
             settings.aggregationPeriod = statsTabInfo.statsPeriod;
             settings.aggregationMethod = statsTabInfo.statsMethod;
             settings.selectedSeries = new LinkedHashSet<>(statsTabInfo.selectedSeries);
@@ -184,7 +204,6 @@ public class VisualizationTabManager {
         enum TabType { PLOT, STATS }
 
         final TabType type;
-        final String name;
         final JComponent component;
         final PlotPanel plotPanel; // null for stats tabs
         final StatsTableModel statsModel; // null for plot tabs
@@ -201,12 +220,27 @@ public class VisualizationTabManager {
         AggregationPeriod statsPeriod = AggregationPeriod.ORIGINAL;
         AggregationMethod statsMethod = AggregationMethod.SUM;
 
+        // Tab user-supplied identifier
+        String name;
+        // remember the label for renaming
+        JLabel nameLabel;
+
         TabInfo(TabType type, String name, JComponent component, PlotPanel plotPanel, StatsTableModel statsModel) {
             this.type = type;
             this.name = name;
             this.component = component;
             this.plotPanel = plotPanel;
             this.statsModel = statsModel;
+        }
+
+        void rename(String name) {
+            this.name = name;
+            this.nameLabel.setText(name);
+            updateNameLabelPadding(this.nameLabel);
+        }
+
+        void registerNameLabel(JLabel nameLabel) {
+            this.nameLabel = nameLabel;
         }
     }
 
@@ -226,6 +260,11 @@ public class VisualizationTabManager {
         this.tabbedPane.setTabPlacement(JTabbedPane.TOP);
         this.tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
         this.tabReorderer = new TabDragReorderer(tabbedPane, this::reorderTab);
+        tabbedPane.putClientProperty("JTabbedPane.tabClosable", Boolean.TRUE);
+        tabbedPane.putClientProperty(
+            "JTabbedPane.tabCloseCallback",
+            (java.util.function.IntConsumer) this::closeTab
+        );
 
         // "New plot" affordance, pinned to the trailing edge of the tab strip rather
         // than added as a real tab: `tabs` is index-aligned with the tabbedPane, and a
@@ -358,6 +397,28 @@ public class VisualizationTabManager {
     }
 
     /**
+     * Adds the <em>default</em> tab: a plot tab with the "Last run" source checked and
+     * nothing else — no other source, no series selected, settings straight from
+     * preferences.
+     *
+     * <p>This is what the visualization strip starts life as, and what it falls back to
+     * when the final tab is closed (see {@link #closeTab}), so the two paths can never
+     * drift apart. "Last run" is checked because it is the source a modeller almost
+     * always wants next; it is recorded as a {@link LastSource} ref rather than a tree
+     * path, so the tab picks the node up whenever it appears — including the first run
+     * of the session, which happens long after this tab is built.</p>
+     *
+     * @return The created PlotPanel
+     */
+    public PlotPanel addDefaultPlotTab() {
+        TabSettings settings = TabSettings.getDefaults();
+        settings.selectedSeries = new LinkedHashSet<>();
+        settings.checkedSources = new LinkedHashSet<>();
+        settings.checkedSources.add(new LastSource());
+        return addPlotTabFromSettings(settings);
+    }
+
+    /**
      * Adds a new plot tab with settings copied from another tab.
      * The new plot tab will have the same settings and all series from the source tab.
      *
@@ -415,14 +476,15 @@ public class VisualizationTabManager {
         containerPanel.add(plotPanel, BorderLayout.CENTER);
 
         // Add tab with inherited series selection and source context
-        TabInfo tabInfo = new TabInfo(TabInfo.TabType.PLOT, "Plot", containerPanel, plotPanel, null);
+        TabInfo tabInfo = new TabInfo(
+            TabInfo.TabType.PLOT, settings.name != null ? settings.name : "", containerPanel, plotPanel, null);
         tabInfo.selectedSeries.addAll(inheritedSeries);
         tabInfo.checkedSources.addAll(inheritedSources(settings));
         tabs.add(tabInfo);
 
         int index = tabbedPane.getTabCount();
-        tabbedPane.addTab("", containerPanel);
-        setupTabIcon(index, TabInfo.TabType.PLOT);
+        tabbedPane.addTab(tabInfo.name, containerPanel);
+        setupTabIcon(index, tabInfo);
 
         // Select the new tab (only when duplicating, not for initial default tabs)
         if (settings.selectedSeries != null) {
@@ -467,7 +529,6 @@ public class VisualizationTabManager {
             .addLegendToggle(!plotPanel.isLegendCollapsed());
         return builder.build();
     }
-
 
     /**
      * Creates a toolbar for a stats tab.
@@ -575,7 +636,8 @@ public class VisualizationTabManager {
         JPanel containerPanel = new JPanel(new BorderLayout());
 
         // Create tab info so we can reference it in toolbar builder
-        TabInfo tabInfo = new TabInfo(TabInfo.TabType.STATS, "Statistics", containerPanel, null, model);
+        TabInfo tabInfo = new TabInfo(
+            TabInfo.TabType.STATS, settings.name != null ? settings.name : "", containerPanel, null, model);
 
         // Apply aggregation settings from TabSettings
         tabInfo.statsPeriod = settings.aggregationPeriod;
@@ -604,8 +666,8 @@ public class VisualizationTabManager {
         containerPanel.add(scrollPane, BorderLayout.CENTER);
 
         int index = tabbedPane.getTabCount();
-        tabbedPane.addTab("", containerPanel);
-        setupTabIcon(index, TabInfo.TabType.STATS);
+        tabbedPane.addTab(tabInfo.name, containerPanel);
+        setupTabIcon(index, tabInfo);
 
         // Select the new tab (only when duplicating, not for initial default tabs)
         if (settings.selectedSeries != null) {
@@ -618,113 +680,136 @@ public class VisualizationTabManager {
     /**
      * Sets up a tab with an icon and interaction handlers.
      */
-    private void setupTabIcon(int index, TabInfo.TabType tabType) {
-        // Create tab panel with just the icon
+    private void setupTabIcon(int index, TabInfo tabInfo) {
+        TabInfo.TabType tabType = tabInfo.type;
+
+        // Create tab panel with the icon and name label
         JPanel tabPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,
             UIConstants.TAB_PANEL_PADDING, UIConstants.TAB_PANEL_PADDING));
         tabPanel.setOpaque(false);
+        JPanel labelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, UIConstants.TAB_PANEL_PADDING, 0));
+        labelPanel.setOpaque(false);
 
         // Create icon based on tab type
         FontIcon tabIcon;
-        String tooltip;
         if (tabType == TabInfo.TabType.PLOT) {
             tabIcon = FontIcon.of(FontAwesomeSolid.CHART_LINE, UIConstants.TAB_ICON_SIZE);
-            tooltip = "Plot";
         } else {
             tabIcon = FontIcon.of(FontAwesomeSolid.CALCULATOR, UIConstants.TAB_ICON_SIZE);
-            tooltip = "Statistics";
         }
 
-        JLabel label = new JLabel(tabIcon);
-        label.setToolTipText(tooltip);
+        JLabel nameLabel = new JLabel(tabInfo.name);
+        updateNameLabelPadding(nameLabel);
+        JLabel iconLabel = new JLabel(tabIcon);
 
-        tabPanel.add(label);
+        labelPanel.add(iconLabel);
+        labelPanel.add(nameLabel);
+
+        tabPanel.add(labelPanel);
 
         tabbedPane.setTabComponentAt(index, tabPanel);
 
         // Add drag-and-drop support for tab reordering
-        setupTabDragAndDrop(label);
+        setupTabDragAndDrop(iconLabel, nameLabel, labelPanel);
 
         // Add context menu support
-        setupTabContextMenu(tabPanel, label, tabType);
+        setupTabContextMenu(tabPanel, tabType, iconLabel, nameLabel, labelPanel);
+        setupTabDoubleClickRename(tabPanel, iconLabel, nameLabel, labelPanel);
+        tabInfo.registerNameLabel(nameLabel);
     }
 
     /**
-     * Enables ghost-style drag-to-reorder for this tab. The label is the drag handle (custom tab
-     * components swallow the strip's mouse events); the shared reorderer paints the dragged-tab
-     * ghost and the theme-coloured insertion line, commits the move on drop via {@link #reorderTab},
-     * and selects the tab on a plain click.
+     * Enables ghost-style drag-to-reorder for this tab. The handles are the drag targets (custom
+     * tab components swallow the strip's mouse events); the shared reorderer paints the
+     * dragged-tab ghost and the theme-coloured insertion line, commits the move on drop via
+     * {@link #reorderTab}, and selects the tab on a plain click.
      */
-    private void setupTabDragAndDrop(JLabel label) {
-        tabReorderer.attachToHandle(label);
+    private void setupTabDragAndDrop(Component... handles) {
+        for (Component handle : handles) {
+            tabReorderer.attachToHandle(handle);
+        }
     }
 
     /**
-     * Sets up context menu for tab right-click.
+     * The settings of the tab behind {@code tabPanel}, for seeding a new tab from it.
+     * Falls back to the defaults if the tab can no longer be found, which is what a
+     * plain "add tab" starts from too.
      */
-    private void setupTabContextMenu(JPanel tabPanel, JLabel label, TabInfo.TabType tabType) {
+    private TabSettings settingsOfTab(JPanel tabPanel) {
+        int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
+        if (tabIndex == -1 || tabIndex >= tabs.size()) {
+            return TabSettings.getDefaults();
+        }
+        TabInfo sourceTab = tabs.get(tabIndex);
+        if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
+            return TabSettings.fromPlotTab(sourceTab);
+        }
+        if (sourceTab.type == TabInfo.TabType.STATS) {
+            return TabSettings.fromStatsTab(sourceTab);
+        }
+        return TabSettings.getDefaults();
+    }
+
+    /**
+     * Sets up context menu for tab right-click. Built once and shared across every
+     * {@code labelComponents} entry (icon, name, wrapper panel) since mouse events dispatch to
+     * whichever of them is deepest under the cursor.
+     */
+    private void setupTabContextMenu(JPanel tabPanel, TabInfo.TabType tabType, Component... labelComponents) {
         JPopupMenu contextMenu = new JPopupMenu();
+        boolean isPlot = tabType == TabInfo.TabType.PLOT;
 
-        // "New plot tab" menu item - always shown
-        JMenuItem addPlotItem = new JMenuItem("New plot tab");
-        addPlotItem.addActionListener(e -> {
-            // Find the TabInfo for this tab
-            int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
-            if (tabIndex != -1 && tabIndex < tabs.size()) {
-                TabInfo sourceTab = tabs.get(tabIndex);
+        // Primary block (context-menu-style §1 ①): the default action, which on a tab is
+        // what double-click does (setupTabDoubleClickRename). Ellipsis: opens a dialog (§2.4).
+        JMenuItem renameItem = new JMenuItem("Rename…");
+        renameItem.addActionListener(e -> triggerTabRename(tabPanel));
+        contextMenu.add(renameItem);
 
-                // Extract settings from source tab
-                TabSettings settings;
-                if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
-                    settings = TabSettings.fromPlotTab(sourceTab);
-                } else if (sourceTab.type == TabInfo.TabType.STATS) {
-                    settings = TabSettings.fromStatsTab(sourceTab);
-                } else {
-                    settings = TabSettings.getDefaults();
-                }
+        contextMenu.addSeparator();
 
-                // Create new plot tab with copied settings
-                addPlotTabFromSettings(settings);
-            } else {
-                // Fallback: create with default settings
-                addPlotTab();
-            }
-        });
-        contextMenu.add(addPlotItem);
-
-        // "New stats tab" menu item - always shown
-        JMenuItem addStatsItem = new JMenuItem("New stats tab");
-        addStatsItem.addActionListener(e -> {
-            // Find the TabInfo for this tab
-            int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
-            if (tabIndex != -1 && tabIndex < tabs.size()) {
-                TabInfo sourceTab = tabs.get(tabIndex);
-
-                // Extract settings from source tab
-                TabSettings settings;
-                if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
-                    settings = TabSettings.fromPlotTab(sourceTab);
-                } else if (sourceTab.type == TabInfo.TabType.STATS) {
-                    settings = TabSettings.fromStatsTab(sourceTab);
-                } else {
-                    settings = TabSettings.getDefaults();
-                }
-
-                // Create new stats tab with copied settings
+        // Create block (§1 ④), in the sanctioned verbless "New …" form (§2.2). The new tab
+        // is of the other type and starts from this tab's settings, as Duplicate does.
+        JMenuItem newOtherTypeItem = new JMenuItem(isPlot ? "New stats tab" : "New plot tab");
+        newOtherTypeItem.addActionListener(e -> {
+            TabSettings settings = settingsOfTab(tabPanel);
+            if (isPlot) {
                 addStatsTabFromSettings(settings);
             } else {
-                // Fallback: create with default settings
-                addStatsTab();
+                addPlotTabFromSettings(settings);
             }
         });
-        contextMenu.add(addStatsItem);
+        contextMenu.add(newOtherTypeItem);
 
-        // "Remove" menu item - only shown if there is more than one tab. The destructive action
-        // is isolated in its own block (manifesto §1); the separator is toggled with the item so
-        // it never dangles when "Remove" is hidden.
-        JPopupMenu.Separator removeSeparator = new JPopupMenu.Separator();
-        contextMenu.add(removeSeparator);
+        contextMenu.addSeparator();
 
+        // Modify block (§1 ⑤). "Duplicate" names no type: the tab is the context (§2.3).
+        // Reset changes the tab's state rather than its existence, so it is a modify
+        // action, not a destructive one, even though it is not undoable; the destructive
+        // block that §1 ⑥ and §8 isolate is Remove alone.
+        JMenuItem duplicateItem = new JMenuItem("Duplicate");
+        duplicateItem.addActionListener(e -> {
+            TabSettings settings = settingsOfTab(tabPanel);
+            if (isPlot) {
+                addPlotTabFromSettings(settings);
+            } else {
+                addStatsTabFromSettings(settings);
+            }
+        });
+        contextMenu.add(duplicateItem);
+
+        JMenuItem resetItem = new JMenuItem("Reset");
+        resetItem.addActionListener(e -> {
+            int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
+            if (tabIndex != -1) {
+                resetTabAt(tabIndex);
+            }
+        });
+        contextMenu.add(resetItem);
+
+        contextMenu.addSeparator();
+
+        // Destructive block (§1 ⑥), alone. "Remove", not "Delete": a tab is a view onto
+        // data that stays put (§2.5).
         JMenuItem removeItem = new JMenuItem("Remove");
         removeItem.addActionListener(e -> {
             int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
@@ -734,7 +819,8 @@ public class VisualizationTabManager {
         });
         contextMenu.add(removeItem);
 
-        // Add popup listener to show menu and update "Remove" visibility
+        // Add popup listener to show the menu. "Remove" needs no guard: closing the
+        // final tab repopulates the strip with a default tab rather than emptying it.
         MouseAdapter popupListener = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -751,19 +837,70 @@ public class VisualizationTabManager {
             }
 
             private void showContextMenu(MouseEvent e) {
-                // Count total tabs
-                int totalCount = tabs.size();
-
-                // Only show remove (and its separator) if there is more than one tab
-                boolean canRemove = totalCount > 1;
-                removeSeparator.setVisible(canRemove);
-                removeItem.setVisible(canRemove);
-
                 contextMenu.show(e.getComponent(), e.getX(), e.getY());
             }
         };
 
-        label.addMouseListener(popupListener);
+        for (Component labelComponent : labelComponents) {
+            labelComponent.addMouseListener(popupListener);
+        }
+    }
+
+    /**
+     * Sets up double-click-to-rename on a tab. Mirrors {@link #setupTabContextMenu}: the
+     * listener is attached to every {@code labelComponents} entry (icon, name, wrapper
+     * panel) since mouse events dispatch to whichever of them is deepest under the cursor.
+     */
+    private void setupTabDoubleClickRename(JPanel tabPanel, Component... labelComponents) {
+        MouseAdapter doubleClickListener = new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (e.getClickCount() == 2 && javax.swing.SwingUtilities.isLeftMouseButton(e)) {
+                    triggerTabRename(tabPanel);
+                }
+            }
+        };
+        for (Component labelComponent : labelComponents) {
+            labelComponent.addMouseListener(doubleClickListener);
+        }
+    }
+
+    /**
+     * Prompts for a new name for the tab whose handle is {@code tabPanel}, from the context
+     * menu or a double-click on the handle.
+     *
+     * <p>Cancelling leaves the name alone; submitting an empty box <em>clears</em> it. Unnamed
+     * is a legitimate state — it is what every new tab starts as, and {@link #setupTabIcon}
+     * and {@link #updateNameLabelPadding} render it as an icon-only handle — so clearing has
+     * to be reachable, or a tab named once could never be un-named.</p>
+     */
+    private void triggerTabRename(JPanel tabPanel) {
+        int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
+        if (tabIndex == -1 || tabIndex >= tabs.size()) {
+            return;
+        }
+        TabInfo sourceTab = tabs.get(tabIndex);
+        String currentName = sourceTab.name;
+        String prompt = currentName == null || currentName.isEmpty()
+            ? "Enter a name for this tab:"
+            : "Enter new name for tab '" + currentName + "':";
+
+        String newName = (String) JOptionPane.showInputDialog(
+            tabbedPane,
+            prompt,
+            "Rename tab",
+            JOptionPane.PLAIN_MESSAGE,
+            null,
+            null,
+            currentName
+        );
+        if (newName == null) {
+            return;
+        }
+
+        String trimmed = newName.trim();
+        sourceTab.rename(trimmed);
+        tabbedPane.setTitleAt(tabIndex, trimmed);
     }
 
     /**
@@ -798,20 +935,66 @@ public class VisualizationTabManager {
      * Closes a tab at the given index.
      */
     private void closeTab(int index) {
-        // Safety check: don't close if it's the last tab
-        if (tabbedPane.getTabCount() <= 1) {
-            return;
-        }
-
-        // Clean up listeners before removing
-        TabInfo tab = tabs.get(index);
-        if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
-            tab.plotPanel.setOnHistoryChanged(null);
-            tab.plotPanel.getLegendManager().setOnCollapsedChanged(null);
-        }
-
+        detachTabCallbacks(tabs.get(index));
         tabs.remove(index);
         tabbedPane.removeTabAt(index);
+
+        // The strip is never left empty: closing the final tab lands the user back on a
+        // brand-new default tab rather than on a blank panel with no way forward.
+        if (tabs.isEmpty()) {
+            addDefaultPlotTab();
+        }
+    }
+
+    /**
+     * Detaches the toolbar callbacks a plot tab's toolbar installed on its panel. This
+     * is the owner's side of the contract with {@code PlotPanel.removeNotify()}, which
+     * leaves those callbacks alone so a re-parented tab keeps working; they are released
+     * here, when the tab is genuinely discarded (close, reset).
+     */
+    private void detachTabCallbacks(TabInfo tab) {
+        if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
+            tab.plotPanel.setOnHistoryChanged(null);
+            tab.plotPanel.setOnAutoYModeChanged(null);
+            tab.plotPanel.getLegendManager().setOnCollapsedChanged(null);
+        }
+    }
+
+    /**
+     * Resets the tab at {@code index} to a brand-new tab of the same type: default
+     * settings from preferences, no series selected, no checked sources — dropping all
+     * data selection and plot/stats configuration. Implemented as remove-then-recreate
+     * rather than clearing the existing tab's fields in place, so "reset" can never drift
+     * from what a genuinely new tab looks like.
+     */
+    private void resetTabAt(int index) {
+        if (index < 0 || index >= tabs.size()) {
+            return;
+        }
+        TabInfo oldTab = tabs.get(index);
+        TabInfo.TabType type = oldTab.type;
+
+        detachTabCallbacks(oldTab);
+        tabs.remove(index);
+        tabbedPane.removeTabAt(index);
+
+        // Brand-new, unnamed tab with nothing selected and nothing inherited — always
+        // appended at the end by addPlotTabFromSettings/addStatsTabFromSettings, then
+        // moved back into the slot the old tab occupied so tab order is undisturbed.
+        TabSettings settings = TabSettings.getDefaults();
+        settings.selectedSeries = new LinkedHashSet<>();
+        settings.checkedSources = new LinkedHashSet<>();
+
+        if (type == TabInfo.TabType.PLOT) {
+            addPlotTabFromSettings(settings);
+        } else {
+            addStatsTabFromSettings(settings);
+        }
+
+        int newIndex = tabbedPane.getTabCount() - 1;
+        if (newIndex != index) {
+            reorderTab(newIndex, index);
+        }
     }
 
     /**
