@@ -13,6 +13,7 @@ import com.kalix.ide.io.PixieWriter;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 
+import javax.swing.AbstractAction;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBoxMenuItem;
@@ -26,6 +27,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JTextField;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
@@ -43,6 +45,7 @@ import java.awt.Toolkit;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.UnsupportedFlavorException;
+import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -79,6 +82,8 @@ public class PlotInteractionManager {
     private boolean isDragging = false;
     private JPopupMenu contextMenu;
     private JCheckBoxMenuItem autoYMenuItem;
+    private JMenuItem pasteXAxisItem;
+    private JMenuItem pasteYAxisItem;
     private JCheckBoxMenuItem connectGapsMenuItem;
     private JCheckBoxMenuItem orphanMarkersMenuItem;
     private JMenu yAxisScaleMenu;
@@ -696,17 +701,37 @@ public class PlotInteractionManager {
      * zoom to fit, axis limits, axis copy/paste, save data -- acts on plotted series, so on
      * an empty tab the menu is a list of no-ops and error dialogs.
      *
-     * <p>The visible-series list is the evidence, not the viewport: {@code PlotPanel}
-     * synthesises a placeholder viewport ("now +/- 1 hour") while painting an empty panel,
-     * so a non-null viewport says nothing about whether data is on screen. The viewport is
-     * still checked because the handlers dereference it.</p>
+     * <p>The evidence is data in the display set for a visible series, not the viewport
+     * and not the selection: {@code PlotPanel} synthesises a placeholder viewport
+     * ("now +/- 1 hour") while painting an empty panel, and a series is added to the
+     * visible list the moment it is ticked, before its fetch completes (or fails). The
+     * display set only holds series whose data has arrived, which is the same test
+     * {@link #saveData()} applies. The viewport is still checked because the handlers
+     * dereference it.</p>
      */
     private boolean hasPlot() {
-        if (viewportSupplier == null || visibleSeriesSupplier == null) {
+        if (viewportSupplier == null || visibleSeriesSupplier == null || dataSetSupplier == null) {
             return false;
         }
+        DataSet dataSet = dataSetSupplier.get();
         List<SeriesRef> visibleSeries = visibleSeriesSupplier.get();
-        return viewportSupplier.get() != null && visibleSeries != null && !visibleSeries.isEmpty();
+        return viewportSupplier.get() != null
+            && dataSet != null && !dataSet.isEmpty()
+            && visibleSeries != null && !visibleSeries.isEmpty();
+    }
+
+    /**
+     * Whether the clipboard currently holds text the paste items could read. Per
+     * context-menu-style 4, Paste with an empty clipboard is shown disabled rather than
+     * hidden: the user should know the command exists. A clipboard held by another
+     * application counts as empty.
+     */
+    private static boolean hasClipboardText() {
+        try {
+            return Toolkit.getDefaultToolkit().getSystemClipboard().isDataFlavorAvailable(DataFlavor.stringFlavor);
+        } catch (IllegalStateException ex) {
+            return false;
+        }
     }
 
     /**
@@ -743,8 +768,8 @@ public class PlotInteractionManager {
             }
         });
         contextMenu.add(copyXAxis);
-        JMenuItem pasteXAxis = new JMenuItem("Paste X axis");
-        pasteXAxis.addActionListener(e -> {
+        pasteXAxisItem = new JMenuItem("Paste X axis");
+        pasteXAxisItem.addActionListener(e -> {
             ViewPort currentViewport = viewportSupplier.get();
             String text = readClipboardText();
             if (currentViewport == null || text == null) {
@@ -760,7 +785,7 @@ public class PlotInteractionManager {
             }
             applyXLimits(x[0], x[1]);
         });
-        contextMenu.add(pasteXAxis);
+        contextMenu.add(pasteXAxisItem);
 
         JMenuItem copyYAxis = new JMenuItem("Copy Y axis");
         copyYAxis.addActionListener(e -> {
@@ -770,8 +795,8 @@ public class PlotInteractionManager {
             }
         });
         contextMenu.add(copyYAxis);
-        JMenuItem pasteYAxis = new JMenuItem("Paste Y axis");
-        pasteYAxis.addActionListener(e -> {
+        pasteYAxisItem = new JMenuItem("Paste Y axis");
+        pasteYAxisItem.addActionListener(e -> {
             ViewPort currentViewport = viewportSupplier.get();
             String text = readClipboardText();
             if (currentViewport == null || text == null) {
@@ -787,7 +812,7 @@ public class PlotInteractionManager {
             }
             applyExplicitLimits(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
         });
-        contextMenu.add(pasteYAxis);
+        contextMenu.add(pasteYAxisItem);
 
         contextMenu.addSeparator();
 
@@ -846,6 +871,10 @@ public class PlotInteractionManager {
         contextMenu.addPopupMenuListener(new PopupMenuListener() {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+                boolean clipboardHasText = hasClipboardText();
+                pasteXAxisItem.setEnabled(clipboardHasText);
+                pasteYAxisItem.setEnabled(clipboardHasText);
+
                 // Sync the checkbox state with the current PlotPanel state
                 if (parentComponent instanceof PlotPanel plotPanel) {
                     // Get the current auto-Y state from the PlotPanel
@@ -963,6 +992,7 @@ public class PlotInteractionManager {
 
         JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(parentComponent),
             "Set Axis Limits", Dialog.ModalityType.APPLICATION_MODAL);
+        dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.setLayout(new BorderLayout());
         dialog.add(form, BorderLayout.CENTER);
 
@@ -994,7 +1024,17 @@ public class PlotInteractionManager {
         buttonPanel.add(okButton);
         buttonPanel.add(cancelButton);
         dialog.add(buttonPanel, BorderLayout.SOUTH);
+
+        // Esc cancels; Enter accepts via the default button (the KalixFileDialog idiom).
         dialog.getRootPane().setDefaultButton(okButton);
+        dialog.getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+            .put(KeyStroke.getKeyStroke("ESCAPE"), "cancel");
+        dialog.getRootPane().getActionMap().put("cancel", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                dialog.dispose();
+            }
+        });
 
         dialog.pack();
         dialog.setLocationRelativeTo(parentComponent);
