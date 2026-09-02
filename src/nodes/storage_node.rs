@@ -1137,15 +1137,37 @@ impl Node for StorageNode {
         // MOL forms become two-point steps; a MOL at the table floor with
         // unlimited capacity is no constraint at all and stays empty, so
         // such storages keep the legacy solver path.
+        //
+        // Every outlet level must lie inside the dimensions table's level
+        // range: an out-of-range MOL previously interpolated to NaN and the
+        // constraint silently vanished — a loud config error is the honest
+        // behaviour.
+        let lev_range = (
+            self.dimensions.get_value(0, LEVL),
+            self.dimensions.get_value(self.dimensions.nrows() - 1, LEVL),
+        );
+        let node_name = self.name.clone();
+        let check_level = move |lev: f64, i: usize| -> Result<(), String> {
+            if lev.is_nan() || lev < lev_range.0 || lev > lev_range.1 {
+                return Err(format!(
+                    "Error in node '{}'. ds_{}_outlet level {} lies outside the \
+                     dimensions table's level range [{}, {}].",
+                    node_name, i + 1, lev, lev_range.0, lev_range.1
+                ));
+            }
+            Ok(())
+        };
         for i in 0..MAX_DS_LINKS {
             let curve: Vec<(f64, f64)> = match &self.outlet_definition[i] {
                 OutletDefinition::None => Vec::new(),
                 OutletDefinition::OutletWithMOL(level) => {
+                    check_level(*level, i)?;
                     let m = self.dimensions.interpolate(LEVL, VOLU, *level);
                     self.min_operating_volume[i] = m;
                     if m > 0.0 { vec![(m, 0.0), (m, f64::INFINITY)] } else { Vec::new() }
                 }
                 OutletDefinition::OutletWithMOLAndCapacity(level, capacity) => {
+                    check_level(*level, i)?;
                     let m = self.dimensions.interpolate(LEVL, VOLU, *level);
                     self.min_operating_volume[i] = m;
                     vec![(m.max(0.0), 0.0), (m.max(0.0), *capacity)]

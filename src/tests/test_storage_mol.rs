@@ -268,9 +268,11 @@ fn test_forced_release_respects_mol() {
 
 // Level 0-10 m maps linearly to volume 0-1000 ML, so the rating levels
 // 0 / 8 / 8.5 / 9 sit at volumes 0 / 800 / 850 / 900.
+#[allow(dead_code)] // used by #[test] fns only; silences the non-test lib pass
 const RATING_DIMS: &str = "0, 0, 0, 0, \
                            10, 1000, 0, 0,";
 
+#[allow(dead_code)] // used by #[test] fns only; silences the non-test lib pass
 fn rating_node() -> StorageNode {
     let mut n = storage(RATING_DIMS, &[]);
     n.outlet_definition[1] = OutletDefinition::OutletWithRatingTable(
@@ -402,4 +404,43 @@ fn test_rating_table_ini_round_trip() {
     let m2 = IniModelIO::read_model_string(&serialised).unwrap();
     assert_eq!(outlet_of(&m2), expected,
                "rating table must survive a round trip, serialised as:\n{serialised}");
+}
+
+/// Decreasing capacity (e.g. gate submergence) is rejected at parse: it can
+/// create multiple equilibria in the storage solve.
+#[test]
+fn test_rating_decreasing_capacity_rejected() {
+    use crate::io::ini_model_io::IniModelIO;
+    let ini = "[kalix]\n\
+               \n\
+               [node.dam]\n\
+               type = storage\n\
+               loc = 0, 0\n\
+               initial_volume = 100\n\
+               dimensions = 0, 0, 0, 0,\n\
+               \x2010, 1000, 1, 0,\n\
+               ds_2_outlet = 5.0, 100, 8.0, 50,\n";
+    let err = match IniModelIO::read_model_string(ini) {
+        Ok(_) => panic!("decreasing capacity must be rejected"),
+        Err(e) => format!("{e:?}"),
+    };
+    assert!(err.contains("non-decreasing"),
+            "expected a non-decreasing-capacity error, got: {err}");
+}
+
+/// A bare MOL (or MOL+capacity) level outside the dimensions table's level
+/// range is a loud config error at initialise, matching the rating-table
+/// form — previously it interpolated to NaN and the constraint silently
+/// vanished.
+#[test]
+fn test_mol_level_outside_dimensions_errors() {
+    for def in [OutletDefinition::OutletWithMOL(15.0),
+                OutletDefinition::OutletWithMOLAndCapacity(15.0, 100.0)] {
+        let mut node = storage(RATING_DIMS, &[]);
+        node.outlet_definition[0] = def;
+        let mut data_cache = crate::data_management::data_cache::DataCache::new();
+        let mut accounts = AccountManager::new();
+        let err = node.initialise(&mut data_cache, &mut accounts).unwrap_err();
+        assert!(err.contains("outside"), "unexpected error message: {err}");
+    }
 }

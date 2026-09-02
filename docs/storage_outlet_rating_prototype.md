@@ -20,7 +20,9 @@ exactly as spill already is:
   **rating table**: capacity interpolates linearly in level between points and
   holds flat beyond the ends. A repeated level is an explicit step. Levels
   must be non-decreasing and inside the dimensions table's level range;
-  capacities finite and non-negative. Kalix-style implied columns:
+  capacities finite, non-negative, and **non-decreasing** (decreasing
+  capacity, e.g. gate submergence, can create multiple equilibria in the
+  implicit solve and is rejected at parse). Kalix-style implied columns:
 
   ```ini
   ds_2_outlet = 0.0, 0,
@@ -28,6 +30,11 @@ exactly as spill already is:
                 8.5, 100,
                 9.0, 100
   ```
+
+Every outlet level — bare MOL and MOL+capacity included — must lie inside
+the dimensions table's level range; an out-of-range level is a config error
+at initialise (previously a bare MOL outside the table interpolated to NaN
+and the constraint silently vanished).
 
 No table is required for the simple forms; internally all three compile to
 one canonical capacity-vs-volume curve (the MOL forms are two-point steps),

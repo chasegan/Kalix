@@ -772,6 +772,14 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                                 "Error on line {}: outlet rating levels must be non-decreasing (found {} after {}).",
                                                 ini_property.line_number, w[1].0, w[0].0)));
                                         }
+                                        // Decreasing capacity (e.g. gate submergence) is not
+                                        // supported: it can create multiple equilibria in the
+                                        // storage solve.
+                                        if w[1].1 < w[0].1 {
+                                            return Err(KalixIoError::Validate(format!(
+                                                "Error on line {}: outlet rating capacities must be non-decreasing (found {} after {}).",
+                                                ini_property.line_number, w[1].1, w[0].1)));
+                                        }
                                     }
                                     for &(lev, cap) in &pairs {
                                         if lev.is_nan() || cap.is_nan() || cap < 0.0 || !cap.is_finite() {
