@@ -735,83 +735,67 @@ public class VisualizationTabManager {
      * {@code labelComponents} entry (icon, name, wrapper panel) since mouse events dispatch to
      * whichever of them is deepest under the cursor.
      */
+    /**
+     * The settings of the tab behind {@code tabPanel}, for seeding a new tab from it.
+     * Falls back to the defaults if the tab can no longer be found, which is what a
+     * plain "add tab" starts from too.
+     */
+    private TabSettings settingsOfTab(JPanel tabPanel) {
+        int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
+        if (tabIndex == -1 || tabIndex >= tabs.size()) {
+            return TabSettings.getDefaults();
+        }
+        TabInfo sourceTab = tabs.get(tabIndex);
+        if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
+            return TabSettings.fromPlotTab(sourceTab);
+        }
+        if (sourceTab.type == TabInfo.TabType.STATS) {
+            return TabSettings.fromStatsTab(sourceTab);
+        }
+        return TabSettings.getDefaults();
+    }
+
     private void setupTabContextMenu(JPanel tabPanel, TabInfo.TabType tabType, Component... labelComponents) {
         JPopupMenu contextMenu = new JPopupMenu();
         boolean isPlot = tabType == TabInfo.TabType.PLOT;
-        // "New stats tab" menu item - same-type "Duplicate" on a stats tab, cross-type
-        // "Show as" on a plot tab (manifesto §2.2: one verb per concept).
-        JMenuItem addStatsItem = new JMenuItem(isPlot ? "Show stats" : "Duplicate stats");
-        addStatsItem.addActionListener(e -> {
-            // Find the TabInfo for this tab
-            int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
-            if (tabIndex != -1 && tabIndex < tabs.size()) {
-                TabInfo sourceTab = tabs.get(tabIndex);
 
-                // Extract settings from source tab
-                TabSettings settings;
-                if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
-                    settings = TabSettings.fromPlotTab(sourceTab);
-                } else if (sourceTab.type == TabInfo.TabType.STATS) {
-                    settings = TabSettings.fromStatsTab(sourceTab);
-                } else {
-                    settings = TabSettings.getDefaults();
-                }
+        // Primary block (context-menu-style §1 ①): the default action, which on a tab is
+        // what double-click does (setupTabDoubleClickRename). Ellipsis: opens a dialog (§2.4).
+        JMenuItem renameItem = new JMenuItem("Rename…");
+        renameItem.addActionListener(e -> triggerTabRename(tabPanel));
+        contextMenu.add(renameItem);
 
-                // Create new stats tab with copied settings
+        contextMenu.addSeparator();
+
+        // Create block (§1 ④), in the sanctioned verbless "New …" form (§2.2). The new tab
+        // is of the other type and starts from this tab's settings, as Duplicate does.
+        JMenuItem newOtherTypeItem = new JMenuItem(isPlot ? "New stats tab" : "New plot tab");
+        newOtherTypeItem.addActionListener(e -> {
+            TabSettings settings = settingsOfTab(tabPanel);
+            if (isPlot) {
                 addStatsTabFromSettings(settings);
             } else {
-                // Fallback: create with default settings
-                addStatsTab();
+                addPlotTabFromSettings(settings);
             }
         });
+        contextMenu.add(newOtherTypeItem);
 
-        // "New plot tab" menu item - same-type "Duplicate" on a plot tab, cross-type
-        // "Show as" on a stats tab.
-        JMenuItem addPlotItem = new JMenuItem(isPlot ? "Duplicate plot" : "Show as plot");
-        addPlotItem.addActionListener(e -> {
-            // Find the TabInfo for this tab
-            int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
-            if (tabIndex != -1 && tabIndex < tabs.size()) {
-                TabInfo sourceTab = tabs.get(tabIndex);
+        contextMenu.addSeparator();
 
-                // Extract settings from source tab
-                TabSettings settings;
-                if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
-                    settings = TabSettings.fromPlotTab(sourceTab);
-                } else if (sourceTab.type == TabInfo.TabType.STATS) {
-                    settings = TabSettings.fromStatsTab(sourceTab);
-                } else {
-                    settings = TabSettings.getDefaults();
-                }
-
-                // Create new plot tab with copied settings
+        // Modify block (§1 ⑤). "Duplicate" names no type: the tab is the context (§2.3).
+        // Reset changes the tab's state rather than its existence, so it belongs here and
+        // not with Remove -- §1 ⑥ and §2.5 isolate Remove/Delete only -- even though a
+        // reset is not undoable.
+        JMenuItem duplicateItem = new JMenuItem("Duplicate");
+        duplicateItem.addActionListener(e -> {
+            TabSettings settings = settingsOfTab(tabPanel);
+            if (isPlot) {
                 addPlotTabFromSettings(settings);
             } else {
-                // Fallback: create with default settings
-                addPlotTab();
+                addStatsTabFromSettings(settings);
             }
         });
-
-        // Context-specific block (manifesto §1 ②): the cross-type "Show as" item — the one
-        // that does *not* match this tab's own type — goes first.
-        contextMenu.add(isPlot ? addStatsItem : addPlotItem);
-
-        // Modify block (manifesto §1/§7.1 ⑤): Rename before Duplicate, isolated from the
-        // context-specific item above and the destructive item below. "Duplicate" here is
-        // whichever item matches this tab's own type.
-        JPopupMenu.Separator modifySeparator = new JPopupMenu.Separator();
-        contextMenu.add(modifySeparator);
-
-        JMenuItem renameTab = new JMenuItem("Rename…");
-        renameTab.addActionListener(e -> {
-            triggerTabRename(tabPanel);
-        });
-        contextMenu.add(renameTab);
-
-        contextMenu.add(isPlot ? addPlotItem : addStatsItem);
-
-        // The destructive actions are isolated to their own block (manifesto §1).
-        contextMenu.add(new JPopupMenu.Separator());
+        contextMenu.add(duplicateItem);
 
         JMenuItem resetItem = new JMenuItem("Reset");
         resetItem.addActionListener(e -> {
@@ -822,6 +806,10 @@ public class VisualizationTabManager {
         });
         contextMenu.add(resetItem);
 
+        contextMenu.addSeparator();
+
+        // Destructive block (§1 ⑥), alone. "Remove", not "Delete": a tab is a view onto
+        // data that stays put (§2.5).
         JMenuItem removeItem = new JMenuItem("Remove");
         removeItem.addActionListener(e -> {
             int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);

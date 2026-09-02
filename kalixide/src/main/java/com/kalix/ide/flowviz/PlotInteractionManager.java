@@ -740,23 +740,25 @@ public class PlotInteractionManager {
     private void setupContextMenu() {
         contextMenu = new JPopupMenu();
 
+        // Primary block (context-menu-style 1, block 1): the default action, which on a plot
+        // is what double-click does (see the mouse listener). The skeleton's table lists
+        // "Zoom to fit" under block 7 for panels where it is merely a view command; here
+        // it is the primary one, so it leads.
         JMenuItem zoomToFitItem = new JMenuItem("Zoom to fit");
         zoomToFitItem.addActionListener(e -> zoomToFit());
         contextMenu.add(zoomToFitItem);
 
-        autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
-        autoYMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof PlotPanel plotPanel) {
-                plotPanel.setAutoYMode(autoYMenuItem.isSelected());
-            }
-        });
-        contextMenu.add(autoYMenuItem);
+        contextMenu.addSeparator();
+
+        // Context-specific block (block 2): the plot's own handoff to a file.
+        JMenuItem saveDataItem = new JMenuItem("Save data…");
+        saveDataItem.addActionListener(e -> saveData());
+        contextMenu.add(saveDataItem);
 
         contextMenu.addSeparator();
 
-        // Clipboard block before the view/state items (context-menu-style 1: block 3
-        // precedes block 7). "Set axis limits..." carries an ellipsis because it opens a
-        // dialog -- per 2.4 -- where the copy/paste items act immediately and do not.
+        // Clipboard block (block 3). The copy/paste items act immediately and carry no
+        // ellipsis (2.4).
         JMenuItem copyXAxis = new JMenuItem("Copy X axis");
 
         // Copy/paste go through AxisLimitCodec -- the same codec the Set-axis-limits
@@ -816,9 +818,20 @@ public class PlotInteractionManager {
 
         contextMenu.addSeparator();
 
+        // View/state block (block 7): everything that changes how the data is shown, never
+        // the data. "Set axis limits…" carries an ellipsis because it opens a dialog (2.4);
+        // the submenus are category nouns with value children (6).
         JMenuItem setAxes = new JMenuItem("Set axis limits…");
         setAxes.addActionListener(e1 -> showSetAxesDialog());
         contextMenu.add(setAxes);
+
+        autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
+        autoYMenuItem.addActionListener(e -> {
+            if (parentComponent instanceof PlotPanel plotPanel) {
+                plotPanel.setAutoYMode(autoYMenuItem.isSelected());
+            }
+        });
+        contextMenu.add(autoYMenuItem);
 
         // Y-axis scale submenu
         yAxisScaleMenu = new JMenu("Y-axis scale");
@@ -834,8 +847,6 @@ public class PlotInteractionManager {
             yAxisScaleMenu.add(scaleItem);
         }
         contextMenu.add(yAxisScaleMenu);
-
-        contextMenu.addSeparator();
 
         // Missing Data submenu. "Draw across gaps" and "Mark orphan points" are mutually
         // exclusive — drawing a continuous line removes the gaps that orphan points would mark —
@@ -860,12 +871,6 @@ public class PlotInteractionManager {
         missingDataMenu.add(orphanMarkersMenuItem);
 
         contextMenu.add(missingDataMenu);
-
-        contextMenu.addSeparator();
-
-        JMenuItem saveDataItem = new JMenuItem("Save data…");
-        saveDataItem.addActionListener(e -> saveData());
-        contextMenu.add(saveDataItem);
 
         // Add popup menu listener to update checkbox/radio button states when menu is shown
         contextMenu.addPopupMenuListener(new PopupMenuListener() {
@@ -991,7 +996,7 @@ public class PlotInteractionManager {
         addAxisFieldRow(form, gbc, 1, "Y limits:", yField);
 
         JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(parentComponent),
-            "Set Axis Limits", Dialog.ModalityType.APPLICATION_MODAL);
+            "Set axis limits", Dialog.ModalityType.APPLICATION_MODAL);  // sentence case (2.1)
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.setLayout(new BorderLayout());
         dialog.add(form, BorderLayout.CENTER);
