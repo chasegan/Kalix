@@ -27,6 +27,9 @@ mod test_storage_exists;
 mod test_order_accounts;
 mod test_storage_floor_blowup;
 mod test_storage_spill_order_kink;
+mod test_storage_mol;
+#[allow(dead_code)] // helpers are used by #[test] fns only; silences the non-test lib pass
+mod test_storage_outlet_scenarios;
 
 #[cfg(test)]
 mod test_model;

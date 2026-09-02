@@ -13,14 +13,23 @@ const SPIL: usize = 3;
 const EPSILON: f64 = 1e-6;
 const MAX_DS_LINKS: usize = 4;
 
-/// Defines outlet configuration including minimum operating level (MOL) and capacity.
-/// MOL is specified as a level (m) and converted to volume internally.
-#[derive(Default, Clone, Copy, Debug, PartialEq)]
+/// Defines outlet configuration: minimum operating level (MOL), capacity, or
+/// a full rating table. Levels are in metres (the dimensions-table datum) and
+/// are converted to volumes internally; capacities are ML per timestep.
+///
+/// All three forms are the same thing — a capacity-vs-level rating curve:
+/// - `OutletWithMOL(l)`: 0 at/below level l, unlimited strictly above (a step);
+/// - `OutletWithMOLAndCapacity(l, c)`: 0 at/below l, `c` strictly above;
+/// - `OutletWithRatingTable(pairs)`: (level, capacity) points, capacity
+///   interpolated linearly in level between points, held flat beyond the
+///   ends. A repeated level is an explicit step.
+#[derive(Default, Clone, Debug, PartialEq)]
 pub enum OutletDefinition {
     #[default]
     None,
     OutletWithMOL(f64),                   // MOL level in metres
     OutletWithMOLAndCapacity(f64, f64),   // MOL level, capacity
+    OutletWithRatingTable(Vec<(f64, f64)>), // (level, capacity) points
 }
 
 #[derive(Default, Clone)]
@@ -68,9 +77,22 @@ pub struct StorageNode {
     // Outlet definitions (MOL, capacity) - parsed from INI
     pub outlet_definition: [OutletDefinition; MAX_DS_LINKS],
 
-    // Minimum operating volume for each outlet (converted from MOL level during init)
-    // 0.0 means no MOL constraint (outlet always active)
-    min_operating_volume: [f64; MAX_DS_LINKS],
+    // True when any outlet has a capacity curve (set during init). When
+    // false the solver takes the plain unconstrained path, bit-identical
+    // with the historical solver.
+    has_mol: bool,
+
+    // Canonical capacity-vs-VOLUME curve per outlet, built at init from the
+    // outlet definition (empty = unlimited). Points are sorted by volume;
+    // a repeated volume is a step (left value at/below, right value above).
+    // Rating-table curves also carry breakpoints at every dimension-table
+    // row their level span crosses, so capacity is exactly linear in volume
+    // between consecutive points.
+    cap_curves: [Vec<(f64, f64)>; MAX_DS_LINKS],
+
+    // All curves' breakpoint volumes, merged, sorted, and deduped at init —
+    // the solver slices this per segment instead of rebuilding it per step.
+    cap_breakpoints: Vec<f64>,
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
@@ -122,6 +144,12 @@ impl StorageNode {
     // Note that the "order" is overridden by the "force_release" if defined.
     //
     // For ds_2, ds_3, ds_4: flow = outlet flow only (no spill component)
+    //
+    // Outlets are capacity-vs-level curves evaluated at the end-of-timestep
+    // level, exactly as spill is (docs/storage_outlet_semantics.md). Storages
+    // with any outlet curve solve via solve_rating below; storages without
+    // take the plain unconstrained solve, bit-identical with the historical
+    // solver.
 
     /// Determine whether the release at the outlet should be the forced release optionally
     /// supplied by the user or the order determined by the model.
@@ -146,38 +174,476 @@ impl StorageNode {
         }
     }
 
-    /// Determines which outlets are active (able to release) at a given volume.
-    /// An outlet is active if volume >= its minimum operating volume and there is demand
-    /// (either from orders or forced releases).
-    /// Returns a bitmask: bit i is set if outlet i is active.
-    fn active_outlets_at_volume(&self, volume: f64) -> u8 {
-        let mut active = 0u8;
-        for i in 0..MAX_DS_LINKS {
-            if self.ds_release_due[i] > 0.0 && volume >= self.min_operating_volume[i] {
-                active |= 1 << i;
-            }
+    /// Release dues sanitized for the solver: NaN and non-positive dues are
+    /// zero. `ds_release_due` itself stays raw so the recorded series show
+    /// what the inputs actually supplied.
+    fn sanitized_dues(&self) -> [f64; MAX_DS_LINKS] {
+        let mut dues = [0.0; MAX_DS_LINKS];
+        for (d, due) in dues.iter_mut().zip(self.ds_release_due.iter()) {
+            *d = if due.is_nan() || *due <= 0.0 { 0.0 } else { *due };
         }
-        active
+        dues
     }
 
-    /// Sums the release demands (orders or forced releases) for outlets specified by the mask.
-    /// Bit i in the mask corresponds to outlet i (ds_1=bit 0, ds_2=bit 1, etc).
-    fn sum_ds_orders_due(&self, outlet_mask: u8) -> f64 {
-        let mut total = 0.0;
-        for i in 0..MAX_DS_LINKS {
-            if outlet_mask & (1 << i) != 0 {
-                total += self.ds_release_due[i];
+    /// Equilibrium error for a storage with no outlet curves, at a candidate
+    /// point (volume, area, spill): positive means the equilibrium lies at
+    /// or below this volume. Outflow is max(spill, ds_1 due) + ds_2..4 dues.
+    fn equilibrium_error(dues: &[f64; MAX_DS_LINKS], v: f64, area: f64, spill: f64,
+                         v_working: f64, net_rain_mm: f64) -> f64 {
+        let ds1_flow = spill.max(dues[0]);
+        let ds234_orders: f64 = dues[1..].iter().sum();
+        let total_outflow = ds1_flow + ds234_orders;
+        let predicted = v_working + net_rain_mm * area - total_outflow;
+        v - predicted
+    }
+
+    // -------------------------------------------------------------------------
+    // Rating-based outlet semantics
+    // -------------------------------------------------------------------------
+    // Each outlet has a level-dependent release capacity, evaluated at the
+    // end-of-step volume like spill: no MOL => infinite; MOL only => infinite
+    // strictly above the MOL volume, zero at or below it (a step); MOL +
+    // capacity => `capacity` strictly above, zero at or below. Outlets couple
+    // only implicitly through the solved level. The equilibrium error is
+    // monotone with an upward JUMP at each MOL threshold; when the root falls
+    // inside a jump (outlet on would overshoot below its MOL, off would stay
+    // above), the volume parks exactly on the threshold and the jumping
+    // outlet(s) release the residual, in priority order — the generalized
+    // (Filippov) solution of the step. Continuous in all inputs and mass-
+    // conserving by construction.
+
+    /// Capacity from a canonical curve at volume v, approached from BELOW:
+    /// the value exactly on a step volume is the lower one ("0 at the MOL").
+    /// An empty curve is an unlimited outlet. Infinity is safe here: it only
+    /// ever enters arithmetic as min(demand, capacity).
+    fn cap_left(curve: &[(f64, f64)], v: f64) -> f64 {
+        if curve.is_empty() {
+            return f64::INFINITY;
+        }
+        let idx = curve.partition_point(|p| p.0 < v);
+        if idx == curve.len() {
+            return curve[idx - 1].1; // beyond the last point: flat
+        }
+        let (v1, c1) = curve[idx];
+        if idx == 0 || v1 == v {
+            // Before the first point (flat), or exactly on a point: the
+            // first point at v carries the from-below value.
+            return c1;
+        }
+        let (v0, c0) = curve[idx - 1];
+        c0 + (c1 - c0) * (v - v0) / (v1 - v0)
+    }
+
+    /// Capacity from a canonical curve at volume v, approached from ABOVE —
+    /// the "flowing" side of a step, used for jump sizes, parking residuals,
+    /// and drain-to-floor releases.
+    fn cap_right(curve: &[(f64, f64)], v: f64) -> f64 {
+        if curve.is_empty() {
+            return f64::INFINITY;
+        }
+        let idx = curve.partition_point(|p| p.0 <= v);
+        if idx == 0 {
+            return curve[0].1; // below the first point: flat
+        }
+        let (v0, c0) = curve[idx - 1];
+        if idx == curve.len() || v0 == v {
+            // Beyond the last point (flat), or exactly on a point: the last
+            // point at v carries the from-above value.
+            return c0;
+        }
+        let (v1, c1) = curve[idx];
+        c0 + (c1 - c0) * (v - v0) / (v1 - v0)
+    }
+
+    /// Controlled release demand for outlet i given the spill (ds_1's outlet
+    /// only tops the spill up to its release due). NaN/non-positive => 0.
+    fn rating_demand(&self, i: usize, spill: f64) -> f64 {
+        let d = if i == 0 {
+            (self.ds_release_due[0] - spill).max(0.0)
+        } else {
+            self.ds_release_due[i]
+        };
+        if d.is_nan() || d <= 0.0 { 0.0 } else { d }
+    }
+
+    /// Controlled releases at a point: min(demand, capacity(v)) per outlet,
+    /// with capacities taken as the limit from below (a step's lower value
+    /// exactly on its threshold, i.e. that outlet shut).
+    fn rating_releases_at(&self, v: f64, spill: f64) -> [f64; MAX_DS_LINKS] {
+        let mut releases = [0.0; MAX_DS_LINKS];
+        for (i, r) in releases.iter_mut().enumerate() {
+            let d = self.rating_demand(i, spill);
+            if d > 0.0 {
+                *r = d.min(Self::cap_left(&self.cap_curves[i], v));
             }
         }
-        total
+        releases
+    }
+
+    /// The size of the error jump at breakpoint volume t: how much more the
+    /// outlets step up to just above t than they release at/below it.
+    /// Zero at a breakpoint where every curve is continuous.
+    fn rating_jump_at(&self, t: f64, spill: f64) -> f64 {
+        let mut jump = 0.0;
+        for i in 0..MAX_DS_LINKS {
+            let curve = &self.cap_curves[i];
+            if curve.is_empty() {
+                continue;
+            }
+            let d = self.rating_demand(i, spill);
+            if d > 0.0 {
+                jump += (d.min(Self::cap_right(curve, t)) - d.min(Self::cap_left(curve, t))).max(0.0);
+            }
+        }
+        jump
+    }
+
+    /// Attribution at a solved volume v inside (or beyond) segment `row`:
+    /// releases from the rating at v, v_final closing the balance exactly.
+    fn rating_attribution(&self, v: f64, row: usize, v_working: f64, net_rain_mm: f64)
+        -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64)
+    {
+        let area = self.dimensions.interpolate_row(row, VOLU, AREA, v);
+        let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, v).max(0.0);
+        let w = v_working + net_rain_mm * area;
+        let mut flows = self.rating_releases_at(v, spill);
+        let v_final = (w - spill - flows.iter().sum::<f64>()).max(0.0);
+        flows[0] += spill;
+        (v_final, flows, spill, row, area)
+    }
+
+    /// The volume parks exactly on breakpoint t: outlets take their at-t
+    /// (from-below) releases, and whoever steps up at t shares the residual
+    /// in priority order, each capped by its from-above capacity — the
+    /// generalized solution of the jump.
+    fn rating_park_at(&self, t: f64, row: usize, v_working: f64, net_rain_mm: f64)
+        -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64)
+    {
+        let area = self.dimensions.interpolate_row(row, VOLU, AREA, t);
+        let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, t).max(0.0);
+        let w = v_working + net_rain_mm * area;
+        let mut flows = self.rating_releases_at(t, spill);
+        let mut residual = (w - spill - t) - flows.iter().sum::<f64>();
+        for (i, flow) in flows.iter_mut().enumerate() {
+            if residual <= 0.0 {
+                break;
+            }
+            let curve = &self.cap_curves[i];
+            if curve.is_empty() {
+                continue;
+            }
+            let d = self.rating_demand(i, spill);
+            if d > 0.0 {
+                let headroom = (d.min(Self::cap_right(curve, t)) - *flow).max(0.0);
+                let give = headroom.min(residual);
+                *flow += give;
+                residual -= give;
+            }
+        }
+        let v_final = (w - spill - flows.iter().sum::<f64>()).max(0.0);
+        flows[0] += spill;
+        (v_final, flows, spill, row, area)
+    }
+
+    /// Demand exceeds everything available: drain to the table floor, and cap
+    /// releases by the water actually there, in priority order. Each outlet's
+    /// capacity is taken just above the floor (it flowed while draining down).
+    fn rating_floor(&self, v_working: f64, net_rain_mm: f64)
+        -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64)
+    {
+        let floor_vol = self.dimensions.get_value(0, VOLU);
+        let area = self.dimensions.get_value(0, AREA);
+        let spill = self.dimensions.get_value(0, SPIL).max(0.0);
+        let w = v_working + net_rain_mm * area;
+        let mut remaining = (w - spill).max(0.0);
+        let mut flows = [0.0; MAX_DS_LINKS];
+        for (i, f) in flows.iter_mut().enumerate() {
+            let cap = Self::cap_right(&self.cap_curves[i], floor_vol);
+            let give = self.rating_demand(i, spill).min(cap).min(remaining);
+            *f = give;
+            remaining -= give;
+        }
+        let v_final = remaining.max(0.0);
+        flows[0] += spill;
+        (v_final, flows, spill, 0, area)
+    }
+
+    /// The rating-semantics equilibrium solve: bracket the table segment with
+    /// the (monotone, jumpy) rating error, then walk the segment's threshold
+    /// pieces in order — bisecting a continuous piece that crosses zero, or
+    /// parking on a threshold whose jump swallows the root.
+    fn solve_rating(&self, v_working: f64, net_rain_mm: f64, nrows: usize, start_row: usize)
+        -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64)
+    {
+        // Hot-path precompute: sanitized demands, step capacities, and
+        // effective thresholds (-inf for outlets with no MOL, so `v > m`
+        // is unconditionally true for them). The fused outflow closure is
+        // then a handful of compares and mins — no enum matching, no array
+        // building, per error evaluation.
+        let mut d = [0.0f64; MAX_DS_LINKS];
+        for (di, due) in d.iter_mut().zip(self.ds_release_due.iter()) {
+            *di = if due.is_nan() || *due <= 0.0 { 0.0 } else { *due };
+        }
+        let curves = &self.cap_curves;
+        let outflow_at = |v: f64, spill: f64| -> f64 {
+            let d1 = (d[0] - spill).max(0.0);
+            let mut o = spill;
+            if d1 > 0.0 { o += d1.min(Self::cap_left(&curves[0], v)); }
+            if d[1] > 0.0 { o += d[1].min(Self::cap_left(&curves[1], v)); }
+            if d[2] > 0.0 { o += d[2].min(Self::cap_left(&curves[2], v)); }
+            if d[3] > 0.0 { o += d[3].min(Self::cap_left(&curves[3], v)); }
+            o
+        };
+        let compute_error = |row: usize| -> f64 {
+            let v = self.dimensions.get_value(row, VOLU);
+            let area = self.dimensions.get_value(row, AREA);
+            let spill = self.dimensions.get_value(row, SPIL).max(0.0);
+            v - (v_working + net_rain_mm * area - outflow_at(v, spill))
+        };
+
+        // Exponential expansion + bisection over rows (same pattern as the
+        // main solver).
+        let start = start_row.min(nrows - 1);
+        let error_start = compute_error(start);
+        let (mut lo, mut hi, mut error_lo, mut error_hi) = if error_start < 0.0 {
+            let mut lo = start;
+            let mut error_lo = error_start;
+            let mut step = 1;
+            let mut hi = (start + step).min(nrows - 1);
+            let mut error_hi = compute_error(hi);
+            while error_hi < 0.0 && hi < nrows - 1 {
+                lo = hi;
+                error_lo = error_hi;
+                step *= 2;
+                hi = (hi + step).min(nrows - 1);
+                error_hi = compute_error(hi);
+            }
+            (lo, hi, error_lo, error_hi)
+        } else {
+            let mut hi = start;
+            let mut error_hi = error_start;
+            let mut step = 1;
+            let mut lo = start.saturating_sub(step);
+            let mut error_lo = compute_error(lo);
+            while error_lo >= 0.0 && lo > 0 {
+                hi = lo;
+                error_hi = error_lo;
+                step *= 2;
+                lo = lo.saturating_sub(step);
+                error_lo = compute_error(lo);
+            }
+            (lo, hi, error_lo, error_hi)
+        };
+        while hi - lo > 1 {
+            let mid = lo + (hi - lo) / 2;
+            let error_mid = compute_error(mid);
+            if error_mid < 0.0 {
+                lo = mid;
+                error_lo = error_mid;
+            } else {
+                hi = mid;
+                error_hi = error_mid;
+            }
+        }
+        let istop = hi;
+        if istop == 0 {
+            return self.rating_floor(v_working, net_rain_mm);
+        }
+        let row = istop - 1;
+        let error_prev = if row == lo { error_lo } else { compute_error(row) };
+        if error_prev >= 0.0 {
+            return self.rating_floor(v_working, net_rain_mm);
+        }
+
+        let v_lo = self.dimensions.get_value(row, VOLU);
+        let v_hi = self.dimensions.get_value(istop, VOLU);
+        let area_lo = self.dimensions.get_value(row, AREA);
+        let area_hi = self.dimensions.get_value(istop, AREA);
+        let spill_lo = self.dimensions.get_value(row, SPIL).max(0.0);
+        let spill_hi = self.dimensions.get_value(istop, SPIL).max(0.0);
+        let lerp = |v: f64| -> (f64, f64) {
+            let x = (v - v_lo) / (v_hi - v_lo);
+            (area_lo + (area_hi - area_lo) * x, (spill_lo + (spill_hi - spill_lo) * x).max(0.0))
+        };
+        let err_at = |v: f64| -> f64 {
+            let (area, spill) = lerp(v);
+            v - (v_working + net_rain_mm * area - outflow_at(v, spill))
+        };
+        let refine = |mut a: f64, mut b: f64, mut e_a: f64, mut e_b: f64| -> f64 {
+            // Illinois false position. Preconditions: e_a < 0 <= e_b, error
+            // continuous on (a, b). Within a piece the error is linear except
+            // for ds_1's spill-topping kinks, so this lands exactly in one
+            // step on the common path and converges superlinearly otherwise.
+            let mut side = 0i8;
+            for _ in 0..32 {
+                let denom = e_b - e_a;
+                let mut m = if denom > 0.0 { a + (b - a) * (-e_a / denom) } else { 0.5 * (a + b) };
+                if !(m > a && m < b) {
+                    m = 0.5 * (a + b);
+                }
+                let e_m = err_at(m);
+                // The first secant is exact (to FP) on a linear piece; accept
+                // any residual at rounding scale rather than creeping on it.
+                if e_m.abs() <= 1e-12 * (1.0 + b.abs()) || b - a <= 1e-12 * (1.0 + b.abs()) {
+                    return m;
+                }
+                if e_m < 0.0 {
+                    a = m;
+                    e_a = e_m;
+                    if side == -1 { e_b *= 0.5; }
+                    side = -1;
+                } else {
+                    b = m;
+                    e_b = e_m;
+                    if side == 1 { e_a *= 0.5; }
+                    side = 1;
+                }
+            }
+            0.5 * (a + b)
+        };
+
+        // Exact solve on one piece (no curve breakpoints inside, so every
+        // capacity is linear across it). With all capacities CONSTANT on the
+        // piece — the MOL and MOL+capacity forms — the outflow has at most
+        // three linear branches in v (spill covers ds_1's due / the outlet
+        // tops up to the due / the outlet is capacity-bound): solve each
+        // exactly and keep the self-consistent one. This is what keeps steep
+        // spill segments (1e9 ML/ML kinks) closed-form instead of iterated.
+        // With a capacity RAMP on the piece (rating tables), the outflow is
+        // still linear unless a min() switches branch inside: solve from the
+        // endpoint outflows and verify, falling back to Illinois otherwise.
+        let solve_piece = |a: f64, b: f64, e_a: f64, e_b: f64| -> f64 {
+            let (area_a, spill_a) = lerp(a);
+            let (area_b, spill_b) = lerp(b);
+            let solve_lin = |o_a: f64, o_b: f64| -> Option<f64> {
+                let e1 = a - (v_working + net_rain_mm * area_a - o_a);
+                let e2 = b - (v_working + net_rain_mm * area_b - o_b);
+                let dd = e1 - e2;
+                if e1 >= 0.0 || dd >= 0.0 {
+                    return None;
+                }
+                Some(a + (b - a) * (e1 / dd))
+            };
+            // Per-outlet capacity endpoints from the interior side of the
+            // piece (from above at a, from below at b).
+            let mut cap_a = [0.0f64; MAX_DS_LINKS];
+            let mut cap_b = [0.0f64; MAX_DS_LINKS];
+            let mut caps_constant = true;
+            for i in 0..MAX_DS_LINKS {
+                cap_a[i] = Self::cap_right(&curves[i], a);
+                cap_b[i] = Self::cap_left(&curves[i], b);
+                if cap_a[i] != cap_b[i] {
+                    caps_constant = false;
+                }
+            }
+            if !caps_constant {
+                // A capacity ramps across the piece. Outflow from endpoint
+                // evaluations is exact unless a min() crosses inside; verify.
+                let o_a = spill_a
+                    + (d[0] - spill_a).max(0.0).min(cap_a[0])
+                    + d[1].min(cap_a[1]) + d[2].min(cap_a[2]) + d[3].min(cap_a[3]);
+                let o_b = spill_b
+                    + (d[0] - spill_b).max(0.0).min(cap_b[0])
+                    + d[1].min(cap_b[1]) + d[2].min(cap_b[2]) + d[3].min(cap_b[3]);
+                if let Some(v) = solve_lin(o_a, o_b) {
+                    if err_at(v).abs() <= 1e-9 * (1.0 + v.abs()) {
+                        return v;
+                    }
+                }
+                return refine(a, b, e_a, e_b);
+            }
+            let mut k = 0.0;
+            for i in 1..MAX_DS_LINKS {
+                k += d[i].min(cap_a[i]);
+            }
+            let c0 = cap_a[0];
+            let d1 = d[0];
+            let spill_at_v = |v: f64| spill_a + (spill_b - spill_a) * (v - a) / (b - a);
+            // Branch 1: spill covers ds_1's due (outlet closed): o = s + k.
+            // With c0 == 0 the outlet contributes nothing regardless, so the
+            // branch condition is unconditional.
+            if let Some(v) = solve_lin(spill_a + k, spill_b + k) {
+                if c0 == 0.0 || spill_at_v(v) >= d1 {
+                    return v;
+                }
+            }
+            // Branch 2: the outlet tops spill up to the due: o = d1 + k.
+            if let Some(v) = solve_lin(d1 + k, d1 + k) {
+                let s = spill_at_v(v);
+                if s <= d1 && d1 - s <= c0 {
+                    return v;
+                }
+            }
+            // Branch 3: the outlet is capacity-bound: o = s + c0 + k.
+            if c0.is_finite() && c0 > 0.0 {
+                if let Some(v) = solve_lin(spill_a + c0 + k, spill_b + c0 + k) {
+                    if d1 - spill_at_v(v) >= c0 {
+                        return v;
+                    }
+                }
+            }
+            refine(a, b, e_a, e_b)
+        };
+
+        // Curve breakpoints inside [v_lo, v_hi], ascending: piece boundaries
+        // for the walk (steps carry jumps; ramps just kink). The merged
+        // sorted list is built once at init; here it is only sliced.
+        let bp_start = self.cap_breakpoints.partition_point(|&b| b < v_lo);
+        let bp_end = self.cap_breakpoints.partition_point(|&b| b <= v_hi);
+        let thresholds = &self.cap_breakpoints[bp_start..bp_end];
+
+        // Walk the pieces: from each position with a (right-limit) error still
+        // negative, either the next continuous piece crosses zero (bisect it),
+        // or the next threshold's jump swallows the root (park on it).
+        let mut pos = v_lo;
+        let mut e_pos = error_prev;
+        for &t in thresholds.iter() {
+            if t > pos {
+                let e_left = err_at(t);
+                if e_pos < 0.0 && e_left >= 0.0 {
+                    return self.rating_attribution(solve_piece(pos, t, e_pos, e_left), row, v_working, net_rain_mm);
+                }
+                pos = t;
+                e_pos = e_left;
+            }
+            if e_pos < 0.0 {
+                let (_, spill_t) = lerp(t);
+                let jump = self.rating_jump_at(t, spill_t);
+                if e_pos + jump >= 0.0 {
+                    return self.rating_park_at(t, row, v_working, net_rain_mm);
+                }
+                e_pos += jump;
+            }
+        }
+        if pos < v_hi && e_pos < 0.0 && error_hi >= 0.0 {
+            return self.rating_attribution(solve_piece(pos, v_hi, e_pos, error_hi), row, v_working, net_rain_mm);
+        }
+
+        // Ceiling case (error still negative at the table top): the region
+        // above is linear with all thresholds' outlets flowing — extrapolate,
+        // guarding against divergence like the main solver.
+        let v_probe = v_hi + (v_hi - v_lo).max(1.0);
+        let e_probe = err_at(v_probe);
+        let start_v = pos.max(v_hi);
+        let e_start = if pos >= v_hi { e_pos } else { error_hi };
+        if e_start < 0.0 && e_probe > e_start {
+            let x = -e_start / (e_probe - e_start);
+            let v = start_v + (v_probe - start_v) * x;
+            return self.rating_attribution(v, row, v_working, net_rain_mm);
+        }
+        self.rating_attribution(v_hi, row, v_working, net_rain_mm)
     }
 
     /// Solves the backward Euler equation for equilibrium volume in flow phase.
     ///
-    /// Uses a two-pass approach for ds_1:
-    /// - Pass 1: Solve spill-limited case (ds_1_outlet = 0, spill alone may meet order)
-    /// - If spill >= ds_1_order: done, ds_1 flow = spill
-    /// - Pass 2: Solve order-limited case (ds_1_outlet = order, subject to MOL)
+    /// One monotone solve: the MOL access constraints are folded into the
+    /// outflow function, so the equilibrium error is continuous in volume and
+    /// a single bracket-and-refine pass finds the solution — no active outlet
+    /// sets, no threshold clamping. The final volume is recomputed from the
+    /// allocated flows so mass balance closes by construction.
+    ///
+    /// PROTOTYPE: storages with MOL outlets route to the rating-semantics
+    /// solver above; storages without stay on the (bit-identical) legacy path.
     ///
     /// Returns (final_volume, ds_flows[4], spill, table_row, area)
     fn solve_backward_euler(
@@ -197,205 +663,106 @@ impl StorageNode {
             );
         }
 
-        // --- Pass 1: Solve spill-limited case (no controlled release on ds_1) ---
-        let (v_spill_only, spill, active_pass1, row_pass1, _unc_pass1) =
-            self.solve_spill_limited_case(v_initial, net_rain_mm, nrows, self.previous_istop);
-
-        // Select which pass result to use
-        let (v_final, final_spill, active, row, unconstrained) = if spill >= self.ds_release_due[0] {
-            // Spill satisfies ds_1 order - no controlled release needed.
-            // Always use mass balance here (unconstrained=false): the interpolated spill
-            // can have large FP error when the volume is near a steep spill curve, whereas
-            // mass balance (v_initial - v_final) stays accurate.
-            (v_spill_only, spill, active_pass1, row_pass1, false)
-        } else {
-            // --- Pass 2: Solve order-limited case (ds_1 needs controlled release) ---
-            // Warm start from pass 1 row since solutions are nearby
-            self.solve_order_limited_case(v_initial, net_rain_mm, self.ds_release_due[0], nrows, row_pass1 + 1)
-        };
-
-        // Compute area once (used by both allocation logic and caller)
-        let area = self.dimensions.interpolate_row(row, VOLU, AREA, v_final);
-
-        // Allocate outflows to each downstream link.
-        // When unconstrained, use orders directly to avoid floating point noise from mass balance.
-        // When constrained (threshold clamp or non-convergence), compute available from mass balance.
-        let mut ds_flows = [0.0; MAX_DS_LINKS];
-        let mut remaining = if unconstrained {
-            f64::INFINITY
-        } else {
-            (v_initial + net_rain_mm * area - v_final).max(0.0)
-        };
-
-        // Priority: ds_1 first (includes uncontrollable spill), then ds_2, ds_3, ds_4.
-        // ds_1: spill is uncontrollable, controlled release supplements up to order
-        let ds_1_active = (active & 1) != 0;
-        let ds1_flow = if ds_1_active {
-            self.ds_release_due[0].max(final_spill).min(remaining)
-        } else {
-            final_spill.min(remaining)
-        };
-        ds_flows[0] = ds1_flow;
-        remaining -= ds1_flow;
-
-        // ds_2, ds_3, ds_4: each gets min(release_due, remaining budget)
-        for i in 1..MAX_DS_LINKS {
-            if active & (1 << i) != 0 && remaining > EPSILON {
-                let flow = self.ds_release_due[i].min(remaining);
-                ds_flows[i] = flow;
-                remaining -= flow;
-            }
+        if self.has_mol {
+            return self.solve_rating(v_initial, net_rain_mm, nrows, self.previous_istop);
         }
 
-        (v_final, ds_flows, final_spill, row, area)
-    }
+        // Sanitized dues (NaN / non-positive => 0) — the raw values would
+        // poison the equilibrium error or manufacture water.
+        let dues = self.sanitized_dues();
+        let (v_solved, row, legacy) =
+            self.solve_equilibrium(&dues, v_initial, net_rain_mm, nrows, self.previous_istop);
 
-    /// Solves the spill-limited case: no required ds_1 flow, spill alone determines ds_1.
-    /// Returns (equilibrium_volume, spill_at_equilibrium, active_mask, table_row, unconstrained)
-    #[inline(always)]
-    fn solve_spill_limited_case(
-        &self,
-        v_working: f64,
-        net_rain_mm: f64,
-        nrows: usize,
-        start_row: usize,
-    ) -> (f64, f64, u8, usize, bool) {
-        self.solve_with_outflows(v_working, net_rain_mm, 0.0, nrows, start_row)
-    }
+        // Evaluate the solution point and allocate.
+        let area = self.dimensions.interpolate_row(row, VOLU, AREA, v_solved);
+        let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, v_solved).max(0.0);
 
-    /// Solves the order-limited case: ds_1 must flow at least the order amount.
-    /// Returns (equilibrium_volume, spill_at_equilibrium, active_mask, table_row, unconstrained)
-    #[inline(always)]
-    fn solve_order_limited_case(
-        &self,
-        v_initial: f64,
-        net_rain_mm: f64,
-        ds_1_release_due: f64,
-        nrows: usize,
-        start_row: usize,
-    ) -> (f64, f64, u8, usize, bool) {
-        self.solve_with_outflows(v_initial, net_rain_mm, ds_1_release_due, nrows, start_row)
-    }
-
-    /// Solves for equilibrium volume with a required minimum ds_1 flow.
-    /// The actual ds_1 contribution to mass balance is max(spill, ds1_required_flow).
-    /// Handles MOL thresholds for ds_2, ds_3, ds_4 via iteration.
-    /// Returns (equilibrium_volume, spill_at_equilibrium, active_outlet_mask, table_row, unconstrained)
-    /// `unconstrained` is true when the solver converged naturally (stable active set) — all active
-    /// outlets can release their full orders. False when the solution was clamped to a threshold
-    /// or the solver did not converge, meaning available outflow may be less than total orders.
-    fn solve_with_outflows(
-        &self,
-        v_initial: f64,
-        net_rain_mm: f64,
-        ds1_required_flow: f64,
-        nrows: usize,
-        start_row: usize,
-    ) -> (f64, f64, u8, usize, bool) {
-        // Start with outlets active based on current volume
-        let mut active = self.active_outlets_at_volume(v_initial);
-        let mut hint = start_row;
-
-        const MAX_ITERATIONS: usize = 8;
-
-        for _iter in 0..MAX_ITERATIONS {
-            // Sum orders for ds_2, ds_3, ds_4 based on active set
-            let ds234_orders_due = self.sum_ds_orders_due(active & 0b1110);
-
-            // ds_1 required flow is zero when ds_1 is below its MOL
-            let effective_ds1 = if active & 1 != 0 { ds1_required_flow } else { 0.0 };
-
-            // Find equilibrium volume
-            let (v_candidate, row, clamped) = self.find_equilibrium_volume(
-                v_initial, net_rain_mm, effective_ds1, ds234_orders_due, nrows, hint
-            );
-
-            // Check which outlets should be active at the candidate volume
-            let new_active = self.active_outlets_at_volume(v_candidate);
-
-            if new_active == active {
-                // Converged - use row from bisection for spill lookup.
-                // A clamped equilibrium (table floor/ceiling) is NOT unconstrained:
-                // the demanded outflow was unmeetable, so the caller must cap the
-                // actual releases by mass balance, not trust the orders.
-                let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, v_candidate).max(0.0);
-                return (v_candidate, spill, active, row, !clamped);
-            }
-
-            // Only check threshold clamping on reactivation (oscillation).
-            // If outlets are only being deactivated, just update and re-solve.
-            let reactivating = new_active & !active;
-            if reactivating != 0 {
-                if let Some(threshold_vol) =
-                    self.find_crossed_threshold(v_candidate, active, new_active)
-                {
-                    if let Some(thr_row) = self.dimensions.find_row_for_interpolation(VOLU, threshold_vol) {
-                        let area = self.dimensions.interpolate_row(thr_row, VOLU, AREA, threshold_vol);
-                        let spill = self.dimensions.interpolate_row(thr_row, VOLU, SPIL, threshold_vol).max(0.0);
-                        let outflow_needed = v_initial + net_rain_mm * area - threshold_vol;
-                        let ds1_flow = spill.max(effective_ds1);
-                        let total_outflow = ds1_flow + ds234_orders_due;
-
-                        if outflow_needed >= 0.0 && outflow_needed <= total_outflow + EPSILON {
-                            // Smaller active set can sustain the threshold volume
-                            return (threshold_vol, spill, active, thr_row, false);
-                        } else if outflow_needed >= 0.0 {
-                            // Smaller set can't sustain threshold - clamp anyway with
-                            // larger set. Mass balance allocation will cap actual flows.
-                            return (threshold_vol, spill, new_active, thr_row, false);
-                        }
+        let mut ds_flows = [0.0; MAX_DS_LINKS];
+        let v_final;
+        if legacy {
+            // Interior equilibrium: attribute flows with the historical
+            // expressions so results stay bit-identical with the pre-outlet
+            // solver. v_final is the solved equilibrium volume.
+            v_final = v_solved;
+            if spill >= dues[0] {
+                // Spill satisfies ds_1's release due: attribute from mass
+                // balance — the interpolated spill can carry large FP error
+                // when the volume sits on a steep spill curve, whereas
+                // v_initial - v_final stays accurate.
+                let mut remaining = (v_initial + net_rain_mm * area - v_final).max(0.0);
+                let ds1_flow = spill.min(remaining);
+                ds_flows[0] = ds1_flow;
+                remaining -= ds1_flow;
+                for (flow, due) in ds_flows.iter_mut().zip(dues.iter()).skip(1) {
+                    if *due > 0.0 && remaining > EPSILON {
+                        *flow = due.min(remaining);
+                        remaining -= *flow;
                     }
                 }
+            } else {
+                // Order-limited: release the dues exactly (no FP noise from
+                // mass balance).
+                ds_flows[0] = dues[0].max(spill);
+                ds_flows[1..].copy_from_slice(&dues[1..]);
             }
-
-            // Warm start next iteration from current solution
-            hint = row + 1;
-            active = new_active;
-        }
-
-        // Fallback (rare path) - do one find_row for v_working
-        if let Some(fb_row) = self.dimensions.find_row_for_interpolation(VOLU, v_initial) {
-            let spill = self.dimensions.interpolate_row(fb_row, VOLU, SPIL, v_initial).max(0.0);
-            (v_initial, spill, active, fb_row, false)
         } else {
-            (v_initial, 0.0, active, 0, false)
+            // The solution was clamped to the table floor or ceiling: the
+            // demanded outflow was unmeetable, so grant the dues greedily in
+            // priority order from the water actually available, and define
+            // v_final = W - spill - sum(granted) so volume and flows
+            // reconcile exactly — mass balance closes by construction.
+            let w = v_initial + net_rain_mm * area;
+            let mut remaining = (w - spill).max(0.0);
+            let d1 = (dues[0] - spill).max(0.0);
+            for (flow, due) in ds_flows.iter_mut().zip([d1, dues[1], dues[2], dues[3]].iter()) {
+                let give = due.min(remaining);
+                *flow = give;
+                remaining -= give;
+            }
+            let granted: f64 = ds_flows.iter().sum();
+            ds_flows[0] += spill;
+            v_final = (w - spill - granted).max(0.0);
         }
+
+        (v_final, ds_flows, spill, row, area)
     }
 
-    /// Finds equilibrium volume given required ds_1 flow and ds_2/3/4 orders.
-    /// Mass balance: v = v_working + net_rain*area(v) - max(spill(v), ds1_required_flow) - ds234_orders
-    /// Uses exponential expansion + bisection to find the table row,
-    /// then linear interpolation within the row.
-    fn find_equilibrium_volume(
+    /// Finds the equilibrium volume for a storage with no outlet curves:
+    /// v = W(v) - O(v), with W the available water (v_working +
+    /// net_rain*area(v)) and O the unconstrained outflow.
+    /// Uses exponential expansion + bisection to find the table row, then an
+    /// exact linear solve within the segment (including the max(spill, order)
+    /// kink on ds_1).
+    /// Returns (volume, row, interior): `row` is the lower row of the
+    /// solution segment; `interior` is true for a genuine equilibrium (the
+    /// caller attributes flows from the dues), false when the solution was
+    /// clamped to the table floor or ceiling (the caller must cap flows by
+    /// the water actually available).
+    fn solve_equilibrium(
         &self,
+        dues: &[f64; MAX_DS_LINKS],
         v_working: f64,
         net_rain_mm: f64,
-        ds1_required_flow: f64,
-        ds234_orders: f64,
         nrows: usize,
         start_row: usize,
     ) -> (f64, usize, bool) {
-        // Returns (volume, row, clamped): `clamped` is true when the solution was
-        // pinned to the table floor or ceiling because the demanded outflow has no
-        // equilibrium inside the table - such a result must not be treated as
-        // unconstrained by the caller.
         // Error function: positive means solution is at or below this row
         let compute_error = |row: usize| -> f64 {
-            let table_vol = self.dimensions.get_value(row, VOLU);
-            let area = self.dimensions.get_value(row, AREA);
-            let spill = self.dimensions.get_value(row, SPIL).max(0.0);
-
-            let ds1_flow = spill.max(ds1_required_flow);
-            let total_outflow = ds1_flow + ds234_orders;
-            let predicted = v_working + net_rain_mm * area - total_outflow;
-            table_vol - predicted
+            Self::equilibrium_error(
+                dues,
+                self.dimensions.get_value(row, VOLU),
+                self.dimensions.get_value(row, AREA),
+                self.dimensions.get_value(row, SPIL).max(0.0),
+                v_working,
+                net_rain_mm,
+            )
         };
 
         // Exponential expansion from start_row hint
         let start = start_row.min(nrows - 1);
         let error_start = compute_error(start);
 
-        let (mut lo, mut hi, mut error_lo, mut error_hi) = if error_start < 0.0 {
+        let (mut lo, mut hi, mut error_lo) = if error_start < 0.0 {
             // Solution is above start row - expand upward
             let mut lo = start;
             let mut error_lo = error_start;
@@ -409,7 +776,7 @@ impl StorageNode {
                 hi = (hi + step).min(nrows - 1);
                 error_hi = compute_error(hi);
             }
-            (lo, hi, error_lo, error_hi)
+            (lo, hi, error_lo)
         } else {
             // Solution is at or below start row - expand downward
             let mut hi = start;
@@ -424,7 +791,8 @@ impl StorageNode {
                 lo = lo.saturating_sub(step);
                 error_lo = compute_error(lo);
             }
-            (lo, hi, error_lo, error_hi)
+            let _ = error_hi;
+            (lo, hi, error_lo)
         };
 
         // Bisect to find exact bracket, caching error values
@@ -436,7 +804,6 @@ impl StorageNode {
                 error_lo = error_mid;
             } else {
                 hi = mid;
-                error_hi = error_mid;
             }
         }
 
@@ -444,7 +811,7 @@ impl StorageNode {
 
         // Handle floor case (solution at or below row 0)
         if istop == 0 {
-            return (self.dimensions.get_value(0, VOLU), 0, true);
+            return (self.dimensions.get_value(0, VOLU), 0, false);
         }
         // Ceiling case (error_hi < 0): allow extrapolation beyond table max
         // by falling through to normal interpolation - x > 1.0 extrapolates
@@ -455,32 +822,56 @@ impl StorageNode {
         let row = istop - 1;
         let error_prev = if row == lo { error_lo } else { compute_error(row) };
 
-        // Floor case the istop check above cannot see: when the demanded outflow
-        // exceeds everything the storage holds, the error is positive at every
-        // row — there is no sign change to bracket — yet istop lands at 1, not 0,
-        // because the downward expansion stops at lo == 0 with error_lo still
-        // positive. Interpolating across such a "bracket" divides by the
-        // difference of two near-equal errors: if a row pair satisfies
-        // dVol ≈ net_rain·dArea (Talgai Weir rows 0-1 with net rain 0.1 mm made
-        // this difference exactly zero), x explodes and the volume lands at ±1e12.
-        // A non-negative error at the lower bracket row means the solution is at
-        // or below the table floor: drain to the floor and let the caller's
-        // mass-balance allocation cap the actual releases.
+        // Solution at or below the table floor: a demanded outflow exceeding
+        // everything the storage holds has a non-negative error at the lower
+        // bracket row. This also guards degenerate tables where a row pair
+        // satisfies dVol ≈ net_rain·dArea (Talgai Weir rows 0-1 with net rain
+        // 0.1 mm), which makes the interpolation below divide by a difference
+        // of two near-equal errors (see test_storage_floor_blowup).
         if error_prev >= 0.0 {
-            return (self.dimensions.get_value(0, VOLU), 0, true);
+            return (self.dimensions.get_value(0, VOLU), 0, false);
         }
 
-        // With error_prev < 0 established: a genuine bracket (error_hi >= 0) gives
-        // x in (0, 1]. In the ceiling case (error_hi < 0) x > 1 extrapolates
-        // beyond the table, which is legitimate only while the errors still
-        // converge (error_hi > error_prev). If they diverge the extrapolation is
-        // meaningless — clamp to the top row instead of running away.
-        let denom = error_prev - error_hi;
-        if denom >= 0.0 {
-            return (self.dimensions.get_value(istop, VOLU), row, true);
-        }
         let v_lo = self.dimensions.get_value(row, VOLU);
         let v_hi = self.dimensions.get_value(istop, VOLU);
+        let area_lo = self.dimensions.get_value(row, AREA);
+        let area_hi = self.dimensions.get_value(istop, AREA);
+        let spill_lo = self.dimensions.get_value(row, SPIL).max(0.0);
+        let spill_hi = self.dimensions.get_value(istop, SPIL).max(0.0);
+
+        // Exact within-segment solve (including the ds_1 spill kink and, in
+        // the ceiling case, extrapolation beyond the table top). The
+        // candidate satisfies the mass balance with the full dues released,
+        // so the caller attributes flows from the dues directly.
+        if let Some(v) = Self::solve_segment_unconstrained(
+            dues, v_working, net_rain_mm, v_lo, v_hi, area_lo, area_hi, spill_lo, spill_hi,
+        ) {
+            return (v, row, true);
+        }
+        // Degenerate segment (errors do not converge downhill): clamp to the
+        // top row and let the caller cap flows by the available water.
+        (self.dimensions.get_value(istop, VOLU), row, false)
+    }
+
+    /// The historical unconstrained within-segment solve, kept expression-for-
+    /// expression compatible with the pre-MOL-redesign solver: straight linear
+    /// interpolation of the error, with exact handling of the max(spill, ds_1
+    /// release due) kink. Returns None when the segment is degenerate (errors
+    /// do not converge downhill), mirroring the old floor/ceiling guards.
+    #[allow(clippy::too_many_arguments)]
+    fn solve_segment_unconstrained(
+        dues: &[f64; MAX_DS_LINKS],
+        v_working: f64,
+        net_rain_mm: f64,
+        v_lo: f64,
+        v_hi: f64,
+        area_lo: f64,
+        area_hi: f64,
+        spill_lo: f64,
+        spill_hi: f64,
+    ) -> Option<f64> {
+        let ds1_required_flow = dues[0];
+        let ds234_orders: f64 = dues[1..].iter().sum();
 
         // The outflow term max(spill(v), ds1_required_flow) kinks at the volume
         // where the interpolated spill crosses the required flow. If that
@@ -491,11 +882,7 @@ impl StorageNode {
         // ~45 ML/d). Solve each linear branch exactly and keep the
         // self-consistent one; both are exact because area and spill are linear
         // on the segment (and on its extrapolation beyond the top row).
-        let spill_lo = self.dimensions.get_value(row, SPIL).max(0.0);
-        let spill_hi = self.dimensions.get_value(istop, SPIL).max(0.0);
         if ds1_required_flow > spill_lo && spill_hi > spill_lo {
-            let area_lo = self.dimensions.get_value(row, AREA);
-            let area_hi = self.dimensions.get_value(istop, AREA);
             let spill_at = |v: f64| spill_lo + (spill_hi - spill_lo) * (v - v_lo) / (v_hi - v_lo);
             // Solve v = v_working + net_rain*area(v) - outflow(v) - ds234 with
             // outflow linear between the given endpoint values. None when the
@@ -512,50 +899,53 @@ impl StorageNode {
             // Below the crossing the required flow governs: outflow is constant.
             if let Some(v) = solve_branch(ds1_required_flow, ds1_required_flow) {
                 if spill_at(v) <= ds1_required_flow {
-                    return (v, row, false);
+                    return Some(v);
                 }
             }
-            // Above the crossing the spill governs: outflow follows the spill line.
-            if let Some(v) = solve_branch(spill_lo, spill_hi) {
-                if spill_at(v) >= ds1_required_flow {
-                    return (v, row, false);
+            // Above the crossing the spill governs: outflow follows the spill
+            // line. Computed with the historical spill-limited-pass
+            // expressions (spill + orders, straight interpolation);
+            // algebraically this equals solve_branch(spill_lo, spill_hi),
+            // differing only in FP association.
+            {
+                let total_lo = spill_lo + ds234_orders;
+                let total_hi = spill_hi + ds234_orders;
+                let e_lo = v_lo - (v_working + net_rain_mm * area_lo - total_lo);
+                let e_hi = v_hi - (v_working + net_rain_mm * area_hi - total_hi);
+                let d = e_lo - e_hi;
+                if e_lo < 0.0 && d < 0.0 {
+                    let v = v_lo + (v_hi - v_lo) * (e_lo / d);
+                    if spill_at(v) >= ds1_required_flow {
+                        return Some(v);
+                    }
                 }
             }
             // Neither branch self-consistent (degenerate segment): fall through
             // to the straight interpolation rather than inventing a solution.
         }
 
-        let x = error_prev / denom;
-
-        (v_lo + (v_hi - v_lo) * x, row, false)
-    }
-
-    /// Finds which MOL threshold was crossed between old and new active sets.
-    /// Returns the threshold volume closest to the candidate volume.
-    fn find_crossed_threshold(
-        &self,
-        v_candidate: f64,
-        old_active: u8,
-        new_active: u8,
-    ) -> Option<f64> {
-        let changed = old_active ^ new_active;
-
-        // Find the threshold closest to the candidate volume
-        let mut best: Option<f64> = None;
-        let mut best_dist = f64::MAX;
-
-        for i in 0..MAX_DS_LINKS {
-            if changed & (1 << i) != 0 {
-                let threshold = self.min_operating_volume[i];
-                let dist = (threshold - v_candidate).abs();
-                if dist < best_dist {
-                    best_dist = dist;
-                    best = Some(threshold);
-                }
-            }
+        // Straight interpolation with the historical error expression: the
+        // outflow is the same on both endpoints' side of any kink, so the
+        // error is linear across the segment.
+        let compute_error_old = |v: f64, area: f64, spill: f64| -> f64 {
+            let ds1_flow = spill.max(ds1_required_flow);
+            let total_outflow = ds1_flow + ds234_orders;
+            let predicted = v_working + net_rain_mm * area - total_outflow;
+            v - predicted
+        };
+        let error_prev = compute_error_old(v_lo, area_lo, spill_lo);
+        let error_hi = compute_error_old(v_hi, area_hi, spill_hi);
+        // A genuine bracket (error_hi >= 0) gives x in (0, 1]. In the ceiling
+        // case (error_hi < 0) x > 1 extrapolates beyond the table, which is
+        // legitimate only while the errors still converge (error_hi >
+        // error_prev). Anything else is degenerate here: the caller falls
+        // back to the capped bisection or the top row.
+        let denom = error_prev - error_hi;
+        if error_prev >= 0.0 || denom >= 0.0 {
+            return None;
         }
-
-        best
+        let x = error_prev / denom;
+        Some(v_lo + (v_hi - v_lo) * x)
     }
 
     /// Sets `self.exists_bool` for this timestep, and records the driving value.
@@ -607,6 +997,12 @@ impl Node for StorageNode {
             let message = format!("Error in node '{}'. Storage dimension table must begin with area=0.", self.name);
             return Err(message);
         }
+        // Spill at the empty row would release water the storage doesn't
+        // hold (the solver adds spill to ds_1 uncapped by contents).
+        if self.dimensions.get_value(0, SPIL) > 0_f64 {
+            let message = format!("Error in node '{}'. Storage dimension table must begin with spill=0.", self.name);
+            return Err(message);
+        }
 
         // Validate that volumes are strictly increasing (required for solver interpolation)
         for i in 1..self.dimensions.nrows() {
@@ -619,18 +1015,114 @@ impl Node for StorageNode {
             }
         }
 
-        // Convert outlet definitions (MOL levels) to volumes
+        // Build each outlet's canonical capacity-vs-volume curve from its
+        // definition (levels converted through the dimensions table). The
+        // MOL forms become two-point steps; a MOL at the table floor with
+        // unlimited capacity is no constraint at all and stays empty, so
+        // such storages keep the legacy solver path.
+        //
+        // Every outlet level must lie inside the dimensions table's level
+        // range: an out-of-range MOL previously interpolated to NaN and the
+        // constraint silently vanished — a loud config error is the honest
+        // behaviour.
+        let lev_range = (
+            self.dimensions.get_value(0, LEVL),
+            self.dimensions.get_value(self.dimensions.nrows() - 1, LEVL),
+        );
+        let node_name = self.name.clone();
+        let check_level = move |lev: f64, i: usize| -> Result<(), String> {
+            if lev.is_nan() || lev < lev_range.0 || lev > lev_range.1 {
+                return Err(format!(
+                    "Error in node '{}'. ds_{}_outlet level {} lies outside the \
+                     dimensions table's level range [{}, {}].",
+                    node_name, i + 1, lev, lev_range.0, lev_range.1
+                ));
+            }
+            Ok(())
+        };
+        // Capacities must be finite, non-negative, and (within a rating
+        // table) non-decreasing — a negative capacity would release negative
+        // flow and create water; a decreasing one can create multiple
+        // equilibria. Validated here as well as at parse, because the Rust
+        // API constructs OutletDefinition values directly.
+        let cap_node_name = self.name.clone();
+        let check_capacity = move |cap: f64, i: usize| -> Result<(), String> {
+            if cap.is_nan() || !cap.is_finite() || cap < 0.0 {
+                return Err(format!(
+                    "Error in node '{}'. ds_{}_outlet capacity {} must be finite and non-negative.",
+                    cap_node_name, i + 1, cap
+                ));
+            }
+            Ok(())
+        };
         for i in 0..MAX_DS_LINKS {
-            self.min_operating_volume[i] = match self.outlet_definition[i] {
-                OutletDefinition::None => 0.0,
+            let curve: Vec<(f64, f64)> = match &self.outlet_definition[i] {
+                OutletDefinition::None => Vec::new(),
                 OutletDefinition::OutletWithMOL(level) => {
-                    self.dimensions.interpolate(LEVL, VOLU, level)
+                    check_level(*level, i)?;
+                    let m = self.dimensions.interpolate(LEVL, VOLU, *level);
+                    if m > 0.0 { vec![(m, 0.0), (m, f64::INFINITY)] } else { Vec::new() }
                 }
-                OutletDefinition::OutletWithMOLAndCapacity(level, _capacity) => {
-                    self.dimensions.interpolate(LEVL, VOLU, level)
+                OutletDefinition::OutletWithMOLAndCapacity(level, capacity) => {
+                    check_level(*level, i)?;
+                    check_capacity(*capacity, i)?;
+                    let m = self.dimensions.interpolate(LEVL, VOLU, *level);
+                    vec![(m.max(0.0), 0.0), (m.max(0.0), *capacity)]
+                }
+                OutletDefinition::OutletWithRatingTable(points) => {
+                    if points.len() < 2 {
+                        return Err(format!(
+                            "Error in node '{}'. ds_{}_outlet rating table needs at least 2 \
+                             (level, capacity) points.",
+                            self.name, i + 1
+                        ));
+                    }
+                    let nrows = self.dimensions.nrows();
+                    let mut curve = Vec::with_capacity(points.len());
+                    for (idx, &(lev, cap)) in points.iter().enumerate() {
+                        check_level(lev, i)?;
+                        check_capacity(cap, i)?;
+                        if idx > 0 {
+                            let (lev0, cap0) = points[idx - 1];
+                            if lev < lev0 || cap < cap0 {
+                                return Err(format!(
+                                    "Error in node '{}'. ds_{}_outlet rating levels and \
+                                     capacities must be non-decreasing.",
+                                    self.name, i + 1
+                                ));
+                            }
+                            // Capacity is linear in LEVEL between rating
+                            // points; insert a breakpoint at every dimension
+                            // row the segment crosses so it is exactly linear
+                            // in VOLUME between consecutive curve points.
+                            if lev > lev0 {
+                                for r in 0..nrows {
+                                    let lr = self.dimensions.get_value(r, LEVL);
+                                    if lr > lev0 && lr < lev {
+                                        let c = cap0 + (cap - cap0) * (lr - lev0) / (lev - lev0);
+                                        curve.push((self.dimensions.get_value(r, VOLU), c));
+                                    }
+                                }
+                            }
+                        }
+                        curve.push((self.dimensions.interpolate(LEVL, VOLU, lev), cap));
+                    }
+                    curve
                 }
             };
+            self.cap_curves[i] = curve;
         }
+        self.has_mol = self.cap_curves.iter().any(|c| !c.is_empty());
+
+        // Merge every curve's breakpoint volumes into one sorted, deduped
+        // list, built once here so the solver never rebuilds or re-sorts it
+        // per timestep — and never has to cap how many it can carry.
+        self.cap_breakpoints.clear();
+        for curve in self.cap_curves.iter() {
+            self.cap_breakpoints.extend(curve.iter().map(|p| p.0));
+        }
+        self.cap_breakpoints.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        self.cap_breakpoints.dedup();
 
         // Check if the storage is targeting a level
         self.has_target_level = !matches!(&self.target_level, DynamicInput::None { .. });
