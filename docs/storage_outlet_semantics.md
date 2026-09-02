@@ -1,9 +1,10 @@
-# PROTOTYPE: rating-curve outlet semantics
+# Storage outlet semantics: rating curves
 
-This branch (`proto/storage-outlet-rating`) prototypes the "option 3"
-alternative to the access-based MOL semantics on `feat/storage-mol-redesign`,
-for a side-by-side intuition and performance comparison. It is a prototype:
-the two branches disagree on MOL-binding days by design.
+How storage outlets behave around their minimum operating levels (MOLs),
+their capacities, and the empty storage — and the solver that implements it.
+Adopted 2026-09-02 over an access-based alternative (see "How it differs"
+below for the comparison that settled it); the user-facing description lives
+on the storage node page (`website/docs/docs/storage.md`).
 
 ## Semantics
 
@@ -62,13 +63,15 @@ Releases are continuous in demands and volumes, and mass balance closes by
 construction (`v_final = W − spill − Σ releases`; TwoWayStorage 137-y run:
 worst residual 3.6e-12 ML).
 
-## How it differs from the access-based semantics
+## How it differs from the rejected access-based alternative
 
-Both fix the starvation and mass-balance bugs of the old active-set solver.
-They diverge exactly when *sibling demand or evap drags the end-of-step level
+An access-based semantics ("an outlet may be supplied from any water that
+stood above its MOL today") was implemented first and both fixed the
+starvation and mass-balance bugs of the old active-set solver. The two
+diverge exactly when *sibling demand or evap drags the end-of-step level
 below an outlet's MOL*:
 
-| Scenario (no other fluxes) | access (#1) | rating (#3) |
+| Scenario (no other fluxes) | access (rejected) | rating (adopted) |
 |---|---|---|
 | v=80; ds_2 MOL 50 orders 30; ds_3 no MOL orders 40 | ds_2=30, ds_3=40, v=10 | ds_2=0, ds_3=40, v=40 |
 | TwoWayStorage wet day (+30; ds_1 orders 8, ds_2 MOL at FSL orders 1e6) | ds_1=8, ds_2=30, v=6992 | ds_1=8, ds_2=22, v=7000 (parked) |
@@ -77,14 +80,18 @@ below an outlet's MOL*:
 Access reads the MOL as an *entitlement* ("order fits above your MOL ⇒ order
 met"); rating reads it as *hydraulics* ("the level trace never contradicts
 'no flow below the MOL'"). Notably, rating reproduces what the old solver did
-on its well-behaved days (regression test 17 returns to its original totals),
-without the old solver's leaks and flips.
+on its well-behaved days (regression test 17 keeps its original totals),
+without the old solver's leaks and flips. Rating was adopted because a
+modeller writing `ds_2_outlet = 600` most often means "this valve does not
+flow below 600" — and because it generalises cleanly to capacity curves.
 
 ## Solver
 
-Same row bracketing as the main solver, with a step-aware within-segment walk:
+Same row bracketing as the plain solver, with a step-aware within-segment
+walk over the curve breakpoints (merged, sorted, and deduped once at
+initialise):
 
-1. sort the MOL thresholds inside the segment (at most 4);
+1. slice the breakpoints inside the segment from the precomputed list;
 2. on each threshold-free piece the outflow has at most three linear branches
    (spill covers ds_1's due / the outlet tops up to the due / the outlet is
    capacity-bound) — solve each branch exactly and keep the self-consistent
@@ -100,10 +107,10 @@ with pre-redesign results; all reproducibility baselines pass).
 
 | engine | sim time |
 |---|---|
-| old active-set (main) | 42.5 ms |
-| access #1 (feat branch) | 45.7 ms |
-| rating #3, step MOLs | 47.5 ms |
-| rating #3, continuous rating tables | 42.4 ms |
+| old active-set solver | 42.5 ms |
+| access-based (rejected) | 45.7 ms |
+| rating, step MOLs | 47.5 ms |
+| rating, continuous rating tables | 42.4 ms |
 
 Essentially parity on step MOLs (the naive first cut was 2.7× slower —
 64-iteration bisection per day; the closed-form piece branches recovered it),

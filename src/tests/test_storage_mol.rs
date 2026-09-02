@@ -1,11 +1,11 @@
 // Tests for storage outlet minimum operating levels (MOLs).
 //
-// PROTOTYPE BRANCH: these expectations follow the rating-curve semantics —
-// each outlet's capacity is a (step) function of the end-of-step level, zero
-// at/below its MOL, with the volume parking exactly on a threshold when the
-// root falls inside the step's jump. Tests whose outcomes differ from the
-// access-based semantics on feat/storage-mol-redesign say so in their doc
-// comments; the rest agree under both.
+// These expectations follow the rating-curve semantics
+// (docs/storage_outlet_semantics.md): each outlet's capacity is a (step)
+// function of the end-of-step level, zero at/below its MOL, with the volume
+// parking exactly on a threshold when the root falls inside the step's jump.
+// Some doc comments note where the rejected access-based alternative would
+// have differed; the comparison lives in the semantics doc.
 //
 // The two-way scenario mirrors the TwoWayStorage model reported by Aaron Trim
 // (2026-08-18): a big order pinned at a high MOL must not clamp a small order

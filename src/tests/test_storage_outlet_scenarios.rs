@@ -1,5 +1,5 @@
 // Systematic scenario battery for storage outlet behaviour under the
-// rating-curve semantics (docs/storage_outlet_rating_prototype.md).
+// rating-curve semantics (docs/storage_outlet_semantics.md).
 //
 // Organised to mirror the scenario catalogue agreed 2026-09-02:
 //   A. single outlet, step MOL          E. ds_1 spill interplay
@@ -927,4 +927,103 @@ fn k68_negative_order_is_zero() {
     let r = step(&mut n, 800.0, 0.0, [0.0, -50.0, 0.0, 0.0]);
     assert!(r.flows[1].abs() < 1e-12, "got {}", r.flows[1]);
     assert!(close(r.v, 800.0), "got {}", r.v);
+}
+
+// ---------------------------------------------------------------------------
+// R. Regression tests for the 2026-09-02 independent review findings
+// ---------------------------------------------------------------------------
+
+/// R1: a NaN forced release on a storage with NO outlet curves must not
+/// poison the solve — the legacy path once summed raw dues into the
+/// equilibrium error, so one missing day in a bound series made the volume
+/// NaN for the rest of the run (warm steps included).
+#[test]
+fn r1_nan_forced_release_on_plain_storage() {
+    let mut n = node(VDIMS);
+    n.ds_force_release_input[2] = DynamicInput::Constant { value: f64::NAN, original: "nan".to_string() };
+    let orders = [0.0, 50.0, 0.0, 0.0];
+    let out = run_days(&mut n, 800.0, &vec![(0.0, orders); 3]);
+    for (day, &(v, flows)) in out.iter().enumerate() {
+        assert!(v.is_finite(), "day {day}: volume must stay finite, got {v}");
+        assert!(close(flows[1], 50.0), "day {day}: ds_2 order met, got {}", flows[1]);
+        assert!(flows[2].abs() < 1e-12, "day {day}: NaN force releases nothing, got {}", flows[2]);
+    }
+    assert!(close(out[2].0, 650.0), "got {}", out[2].0);
+}
+
+/// R1b: a negative due (bad upstream data / sentinel) must not create water
+/// on the plain-storage path.
+#[test]
+fn r1_negative_due_creates_no_water() {
+    let mut n = node(VDIMS);
+    n.ds_force_release_input[2] = DynamicInput::Constant { value: -9999.0, original: "-9999".to_string() };
+    let r = step(&mut n, 800.0, 0.0, [0.0, 50.0, 0.0, 0.0]);
+    assert!(close(r.flows[1], 50.0) && r.flows[2].abs() < 1e-12, "got {:?}", r.flows);
+    assert!(close(r.v, 750.0), "no phantom water, got {}", r.v);
+}
+
+/// R2: capacities are validated at initialise for API-built definitions too
+/// (the INI parser is not the only entrance).
+#[test]
+fn r2_api_capacity_validation() {
+    let bad: Vec<(&str, OutletDefinition)> = vec![
+        ("negative capacity", molcap(5.0, -50.0)),
+        ("NaN capacity", molcap(5.0, f64::NAN)),
+        ("infinite capacity", molcap(5.0, f64::INFINITY)),
+        ("decreasing rating capacity",
+         rating(&[(1.0, 100.0), (5.0, 50.0)])),
+        ("negative rating capacity",
+         rating(&[(1.0, 0.0), (5.0, -10.0)])),
+        ("1-point rating table", rating(&[(5.0, 30.0)])),
+    ];
+    for (what, def) in bad {
+        let mut n = node(VDIMS);
+        n.outlet_definition[1] = def;
+        let mut data_cache = DataCache::new();
+        let mut accounts = AccountManager::new();
+        assert!(n.initialise(&mut data_cache, &mut accounts).is_err(),
+                "{what} must be rejected at initialise");
+    }
+}
+
+/// R4: an out-of-range outlet index in the INI is a validation error, not a
+/// panic.
+#[test]
+fn r4_outlet_index_out_of_range_errors() {
+    use crate::io::ini_model_io::IniModelIO;
+    for bad in ["ds_5_outlet = 1.0\n", "ds_0_outlet = 1.0\n"] {
+        let ini = format!(
+            "[kalix]\n\n[node.dam]\ntype = storage\nloc = 0, 0\ninitial_volume = 100\n\
+             dimensions = 0, 0, 0, 0,\n\x2010, 1000, 1, 0,\n{bad}");
+        assert!(IniModelIO::read_model_string(&ini).is_err(),
+                "expected a validation error for {bad:?}");
+    }
+}
+
+/// R5: spill at the empty row would release water the storage doesn't hold;
+/// such a table is rejected at initialise.
+#[test]
+fn r5_spill_at_floor_row_rejected() {
+    let mut n = node("0, 0, 0, 5, 10, 1000, 0, 100,");
+    let mut data_cache = DataCache::new();
+    let mut accounts = AccountManager::new();
+    let err = n.initialise(&mut data_cache, &mut accounts).unwrap_err();
+    assert!(err.contains("spill=0"), "unexpected error: {err}");
+}
+
+/// R3: a dense rating table on one outlet must not crowd out a sibling's
+/// step threshold (the old fixed-size breakpoint array silently dropped
+/// boundaries and lost the parking semantics).
+#[test]
+fn r3_dense_rating_does_not_drop_sibling_step() {
+    // 16 rating points on ds_2 (exactly the old cap) + a MOL step on ds_3.
+    let points: Vec<(f64, f64)> = (1..=16).map(|i| (0.25 * i as f64, i as f64)).collect();
+    let mut n = node(VDIMS);
+    n.outlet_definition[1] = OutletDefinition::OutletWithRatingTable(points);
+    n.outlet_definition[2] = mol(7.0); // volume 700
+    let r = step(&mut n, 800.0, 0.0, [0.0, 5.0, 300.0, 0.0]);
+    assert!(close(r.flows[1], 5.0), "ds_2 met, got {}", r.flows[1]);
+    assert!(close(r.flows[2], 95.0),
+            "ds_3 takes the parking residual above its MOL, got {}", r.flows[2]);
+    assert!(close(r.v, 700.0), "parks on ds_3's MOL, got {}", r.v);
 }

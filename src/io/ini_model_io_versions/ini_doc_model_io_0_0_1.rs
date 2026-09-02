@@ -750,13 +750,26 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_4_OUTLET, INLET))
                         } else if let Some(ds_num) = name_lower.strip_prefix("ds_")
                             .and_then(|s| s.strip_suffix("_outlet"))
-                            .and_then(|s| s.parse::<i32>().ok()) {
+                            .and_then(|s| s.parse::<usize>().ok()) {
+                            if ds_num < 1 || ds_num > n.outlet_definition.len() {
+                                return Err(KalixIoError::Validate(format!(
+                                    "Error on line {}: outlet index in '{}' must be between 1 and {}",
+                                    ini_property.line_number, name, n.outlet_definition.len()
+                                )));
+                            }
                             let params = csv_string_to_f64_vec(v).map_err(KalixIoError::Parse)?;
-                            let i_outlet = (ds_num - 1) as usize;
+                            let i_outlet = ds_num - 1;
                             match params.len() {
                                 0 => n.outlet_definition[i_outlet] = OutletDefinition::None,
                                 1 => n.outlet_definition[i_outlet] = OutletWithMOL(params[0]),
-                                2 => n.outlet_definition[i_outlet] = OutletWithMOLAndCapacity(params[0], params[1]),
+                                2 => {
+                                    if params[1].is_nan() || !params[1].is_finite() || params[1] < 0.0 {
+                                        return Err(KalixIoError::Validate(format!(
+                                            "Error on line {}: outlet capacity must be finite and non-negative (found {}).",
+                                            ini_property.line_number, params[1])));
+                                    }
+                                    n.outlet_definition[i_outlet] = OutletWithMOLAndCapacity(params[0], params[1]);
+                                }
                                 len if len % 2 == 0 => {
                                     // Rating table: (level, capacity) pairs. Capacity
                                     // interpolates linearly in level between points and
