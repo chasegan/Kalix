@@ -115,6 +115,22 @@ class AxisLimitCodecTest {
         }
     }
 
+    /**
+     * Math.round saturates at Long.MAX_VALUE instead of failing, so a finite value whose
+     * scaled form overflows a long would otherwise install a silently wrong bound.
+     */
+    @Test
+    void scaledEncodingsRejectValuesTheLongCannotHold() {
+        assertEquals("Not a valid number: \"1e13\"", assertThrows(IllegalArgumentException.class,
+            () -> AxisLimitCodec.parseX("1e13", XAxisType.NUMERIC)).getMessage());
+        assertEquals("Not a valid percentile: \"1e300%\"", assertThrows(IllegalArgumentException.class,
+            () -> AxisLimitCodec.parseX("1e300%", XAxisType.PERCENTILE)).getMessage());
+        assertEquals("Not a valid number: \"-1e13\"", assertThrows(IllegalArgumentException.class,
+            () -> AxisLimitCodec.parseX("-1e13", XAxisType.NUMERIC)).getMessage());
+        // Just inside the range still encodes.
+        assertEquals(9_000_000_000_000_000_000L, AxisLimitCodec.parseX("9e12", XAxisType.NUMERIC));
+    }
+
     // ---- COUNT ----
 
     @Test

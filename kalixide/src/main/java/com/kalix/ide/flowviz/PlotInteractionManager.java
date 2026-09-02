@@ -916,7 +916,7 @@ public class PlotInteractionManager {
         try {
             Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, selection);
         } catch (IllegalStateException ex) {
-            showInvalidInput(parentComponent, "The clipboard is not available right now.");
+            showClipboardError("The clipboard is not available right now.");
         }
     }
 
@@ -929,10 +929,18 @@ public class PlotInteractionManager {
     private String readClipboardText() {
         try {
             return (String) Toolkit.getDefaultToolkit().getSystemClipboard().getData(DataFlavor.stringFlavor);
-        } catch (UnsupportedFlavorException | IOException | IllegalStateException ex) {
-            showInvalidInput(parentComponent, "The clipboard does not contain text.");
+        } catch (UnsupportedFlavorException | IOException ex) {
+            showClipboardError("The clipboard does not contain text.");
+            return null;
+        } catch (IllegalStateException ex) {
+            showClipboardError("The clipboard is not available right now.");
             return null;
         }
+    }
+
+    /** A clipboard transport failure: nothing the user typed was wrong. */
+    private void showClipboardError(String message) {
+        JOptionPane.showMessageDialog(parentComponent, message, "Clipboard", JOptionPane.ERROR_MESSAGE);
     }
 
     /** One error dialog for every rejected axis limit, whichever path it arrived by. */

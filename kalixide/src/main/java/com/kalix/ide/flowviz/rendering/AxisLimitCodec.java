@@ -22,11 +22,12 @@ import java.util.concurrent.TimeUnit;
  * viewport is not a hydrological concern.</p>
  *
  * <p>Every failure is an {@link IllegalArgumentException} carrying the message shown to
- * the user, so callers need a single catch. This is also the one gate against
- * non-finite input: {@code Double.parseDouble} accepts {@code "NaN"} and
+ * the user, so callers need a single catch. This is also the one gate against input the
+ * encodings cannot hold: {@code Double.parseDouble} accepts {@code "NaN"} and
  * {@code "Infinity"}, and {@code Math.round} would silently turn those into {@code 0}
- * and {@code Long.MAX_VALUE}. {@link ViewPort#validateBounds} then only has to check the
- * ordering of each pair.</p>
+ * and {@code Long.MAX_VALUE}, as it would any finite value whose scaled form overflows
+ * a long. {@link ViewPort#validateBounds} then only has to check the ordering of each
+ * pair.</p>
  */
 public final class AxisLimitCodec {
 
@@ -105,8 +106,8 @@ public final class AxisLimitCodec {
         return switch (xAxisType) {
             case PERCENTILE -> {
                 String number = trimmed.endsWith("%") ? trimmed.substring(0, trimmed.length() - 1).trim() : trimmed;
-                double percentile = parseFinite(number, "Not a valid percentile: \"" + trimmed + "\"");
-                yield Math.round(percentile * PlotTypeTransformer.PERCENTILE_SCALE);
+                yield encodeScaled(number, PlotTypeTransformer.PERCENTILE_SCALE,
+                    "Not a valid percentile: \"" + trimmed + "\"");
             }
             case COUNT -> {
                 try {
@@ -115,10 +116,8 @@ public final class AxisLimitCodec {
                     throw new IllegalArgumentException("Not a valid integer count: \"" + trimmed + "\"");
                 }
             }
-            case NUMERIC -> {
-                double value = parseFinite(trimmed, "Not a valid number: \"" + trimmed + "\"");
-                yield Math.round(value * PlotTypeTransformer.NUMERIC_SCALE);
-            }
+            case NUMERIC -> encodeScaled(trimmed, PlotTypeTransformer.NUMERIC_SCALE,
+                "Not a valid number: \"" + trimmed + "\"");
             case TIME -> {
                 try {
                     yield TimeFormatUtil.parseFlexible(trimmed);
@@ -179,6 +178,19 @@ public final class AxisLimitCodec {
             throw new IllegalArgumentException(errorMessage);
         }
         return value;
+    }
+
+    /**
+     * Parses a number and encodes it as {@code value * scale}, rejecting anything the
+     * long encoding cannot hold: {@code Math.round} saturates at {@code Long.MAX_VALUE}
+     * rather than failing, which would install a silently wrong bound.
+     */
+    private static long encodeScaled(String number, long scale, String errorMessage) {
+        double scaled = parseFinite(number, errorMessage) * scale;
+        if (!Double.isFinite(scaled) || Math.abs(scaled) >= 0x1p63) {
+            throw new IllegalArgumentException(errorMessage);
+        }
+        return Math.round(scaled);
     }
 
     /**

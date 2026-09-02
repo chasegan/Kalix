@@ -731,11 +731,6 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Sets up context menu for tab right-click. Built once and shared across every
-     * {@code labelComponents} entry (icon, name, wrapper panel) since mouse events dispatch to
-     * whichever of them is deepest under the cursor.
-     */
-    /**
      * The settings of the tab behind {@code tabPanel}, for seeding a new tab from it.
      * Falls back to the defaults if the tab can no longer be found, which is what a
      * plain "add tab" starts from too.
@@ -755,6 +750,11 @@ public class VisualizationTabManager {
         return TabSettings.getDefaults();
     }
 
+    /**
+     * Sets up context menu for tab right-click. Built once and shared across every
+     * {@code labelComponents} entry (icon, name, wrapper panel) since mouse events dispatch to
+     * whichever of them is deepest under the cursor.
+     */
     private void setupTabContextMenu(JPanel tabPanel, TabInfo.TabType tabType, Component... labelComponents) {
         JPopupMenu contextMenu = new JPopupMenu();
         boolean isPlot = tabType == TabInfo.TabType.PLOT;
@@ -783,9 +783,9 @@ public class VisualizationTabManager {
         contextMenu.addSeparator();
 
         // Modify block (§1 ⑤). "Duplicate" names no type: the tab is the context (§2.3).
-        // Reset changes the tab's state rather than its existence, so it belongs here and
-        // not with Remove -- §1 ⑥ and §2.5 isolate Remove/Delete only -- even though a
-        // reset is not undoable.
+        // Reset changes the tab's state rather than its existence, so it is a modify
+        // action, not a destructive one, even though it is not undoable; the destructive
+        // block that §1 ⑥ and §8 isolate is Remove alone.
         JMenuItem duplicateItem = new JMenuItem("Duplicate");
         duplicateItem.addActionListener(e -> {
             TabSettings settings = settingsOfTab(tabPanel);
