@@ -637,6 +637,13 @@ public class PlotPanel extends JPanel {
         return coordinateDisplayManager != null && coordinateDisplayManager.isShowCoordinates();
     }
 
+    public void setLegendEnabled(boolean enabled) {
+        if (legendManager != null) {
+            legendManager.setEnabled(enabled);
+            repaint();
+        }
+    }
+
     public void setLegendCollapsed(boolean collapsed) {
         if (legendManager != null) {
             legendManager.setCollapsed(collapsed);
@@ -646,6 +653,10 @@ public class PlotPanel extends JPanel {
 
     public boolean isLegendCollapsed() {
         return legendManager != null && legendManager.isCollapsed();
+    }
+
+    public boolean isLegendEnabled() {
+        return legendManager != null && legendManager.isEnabled();
     }
 
     /**

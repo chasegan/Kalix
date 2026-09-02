@@ -82,7 +82,8 @@ public class PlotLegendManager {
     private int y = -1;
     private DisplayMode displayMode = DisplayMode.FULL_NAME;
 
-    // Callback for collapsed state changes
+    // Callback for enabled or collapsed state changes
+    private Runnable onEnabledChanged = null;
     private Runnable onCollapsedChanged = null;
 
     // Callback invoked when an entry's line sample is clicked, with the series and
@@ -734,6 +735,9 @@ public class PlotLegendManager {
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
         savePreferences();
+        if (onEnabledChanged != null) {
+            onEnabledChanged.run();
+        }
     }
 
     public boolean isEnabled() {
@@ -750,6 +754,10 @@ public class PlotLegendManager {
 
     public boolean isCollapsed() {
         return collapsed;
+    }
+
+    public void setOnEnabledChanged(Runnable callback) {
+        this.onEnabledChanged = callback;
     }
 
     public void setOnCollapsedChanged(Runnable callback) {

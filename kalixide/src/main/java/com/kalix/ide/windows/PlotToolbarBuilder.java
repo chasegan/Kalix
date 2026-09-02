@@ -262,16 +262,15 @@ class PlotToolbarBuilder {
         JToggleButton button = createToggleButton(FontAwesomeSolid.KEY,
             "Show Key", initialState);
 
-        // Update collapsed state when button is clicked
+        // Update enabled state when button is clicked
         button.addActionListener(e -> {
-            plotPanel.setLegendCollapsed(!button.isSelected());
-            PreferenceKeys.PLOT_LEGEND_COLLAPSED.set(!button.isSelected());
+            plotPanel.setLegendEnabled(button.isSelected());
+            PreferenceKeys.PLOT_LEGEND_ENABLED.set(button.isSelected());
         });
 
-        // Set up callback to update button when collapsed state changes from other sources
-        plotPanel.getLegendManager().setOnCollapsedChanged(() -> {
-            boolean collapsed = plotPanel.isLegendCollapsed();
-            button.setSelected(!collapsed);
+        // Set up callback to update button when enabled state changes from other sources
+        plotPanel.getLegendManager().setOnEnabledChanged(() -> {
+            button.setSelected(plotPanel.isLegendEnabled());
         });
 
         toolbar.add(button);
