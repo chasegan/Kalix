@@ -6,32 +6,39 @@ package com.kalix.ide.flowviz.transform;
  */
 public enum PlotType {
     /** Original values - no transformation. */
-    VALUES("Values", "Value"),
+    VALUES("Values", "Value", false),
 
     /** Cumulative sum of values over time. */
-    CUMULATIVE("Cumulative Values", "Cumulative Value"),
+    CUMULATIVE("Cumulative Values", "Cumulative Value", true),
 
     /** Difference from reference series (first selected series). */
-    DIFFERENCE("Difference", "Difference from Reference"),
+    DIFFERENCE("Difference", "Difference from Reference", false),
 
     /** Cumulative difference from reference series. */
-    CUMULATIVE_DIFFERENCE("Cumulative Difference", "Cumulative Difference"),
+    CUMULATIVE_DIFFERENCE("Cumulative Difference", "Cumulative Difference", true),
 
     /** Exceedance probability distribution. */
-    EXCEEDANCE("Exceedance", "Exceedance Probability (%)"),
+    EXCEEDANCE("Exceedance", "Exceedance Probability (%)", true),
 
     /** Double mass curve: cumulative reference on X-axis vs cumulative series on Y-axis. */
-    DOUBLE_MASS("Double Mass", "Cumulative Value"),
+    DOUBLE_MASS("Double Mass", "Cumulative Value", true),
 
     /** Residual mass curve: cumulative deviation from mean over time. */
-    RESIDUAL_MASS("Residual Mass", "Residual Mass");
+    RESIDUAL_MASS("Residual Mass", "Residual Mass", true);
 
     private final String displayName;
     private final String yAxisLabel;
+    private final boolean dataMaskDefault;
 
-    PlotType(String displayName, String yAxisLabel) {
+    /**
+     * @param displayName UI label
+     * @param yAxisLabel Y-axis label appropriate for this plot type
+     * @param dataMaskDefault whether overlapping-data masking should start on for this plot type
+     */
+    PlotType(String displayName, String yAxisLabel, boolean dataMaskDefault) {
         this.displayName = displayName;
         this.yAxisLabel = yAxisLabel;
+        this.dataMaskDefault = dataMaskDefault;
     }
 
     /**
@@ -46,6 +53,13 @@ public enum PlotType {
      */
     public String getYAxisLabel() {
         return yAxisLabel;
+    }
+
+    /**
+     * Whether overlapping-data masking should default to on when this plot type is selected.
+     */
+    public boolean isDataMaskDefault() {
+        return dataMaskDefault;
     }
 
     /**
