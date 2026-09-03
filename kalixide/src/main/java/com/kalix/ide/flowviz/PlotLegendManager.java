@@ -765,6 +765,17 @@ public class PlotLegendManager {
     }
 
     /**
+     * Resets the legend to its default state: shown, expanded, and auto-positioned —
+     * recovering it regardless of how it was hidden, collapsed, or dragged off-screen.
+     */
+    public void reset() {
+        x = -1;
+        y = -1;
+        setCollapsed(false);
+        setEnabled(true);
+    }
+
+    /**
      * Loads legend preferences.
      */
     public void loadPreferences() {

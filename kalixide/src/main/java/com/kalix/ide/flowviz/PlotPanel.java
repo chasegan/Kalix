@@ -196,6 +196,8 @@ public class PlotPanel extends JPanel {
         // Resolver for projecting ref-keyed series to column headers on CSV export.
         plotInteractionManager.setLabelResolverSupplier(() -> labelResolver);
 
+        plotInteractionManager.setLegendResetAction(this::resetLegend);
+
         setupMouseListeners();
     }
 
@@ -657,6 +659,16 @@ public class PlotPanel extends JPanel {
 
     public boolean isLegendEnabled() {
         return legendManager != null && legendManager.isEnabled();
+    }
+
+    /**
+     * Resets the legend to its default state: shown, expanded, and auto-positioned.
+     */
+    public void resetLegend() {
+        if (legendManager != null) {
+            legendManager.reset();
+            repaint();
+        }
     }
 
     /**
