@@ -27,41 +27,6 @@ import java.awt.Dimension;
  */
 class PlotToolbarBuilder {
 
-    // === Toolbar sizing (shared with StatsToolbarBuilder) ===
-    static final int BUTTON_ICON_SIZE = 14;
-    static final Dimension WIDE_DROPDOWN_SIZE = new Dimension(150, 25);
-    static final Dimension NARROW_DROPDOWN_SIZE = new Dimension(80, 25);
-    static final int HORIZONTAL_SPACING = 5;
-    // Shared square footprint for every icon/toggle button on this toolbar, so save,
-    // undo/redo, palette, mask, auto-Y, coordinates and legend all line up identically
-    // rather than each sizing itself off its own icon/border combination.
-    static final Dimension BUTTON_SIZE = new Dimension(28, 28);
-
-    /**
-     * Aggregation period options for time series data (shared with
-     * {@link StatsToolbarBuilder}).
-     */
-    static final String[] AGGREGATION_OPTIONS = {
-        "Original",
-        "Daily",
-        "Monthly",
-        "Annual (Jan-Dec)",
-        "Annual (Feb-Jan)",
-        "Annual (Mar-Feb)",
-        "Annual (Apr-Mar)",
-        "Annual (May-Apr)",
-        "Annual (Jun-May)",
-        "Annual (Jul-Jun)",
-        "Annual (Aug-Jul)",
-        "Annual (Sep-Aug)",
-        "Annual (Oct-Sep)",
-        "Annual (Nov-Oct)",
-        "Annual (Dec-Nov)"
-    };
-
-    /** Aggregation method options (shared with {@link StatsToolbarBuilder}). */
-    static final String[] AGGREGATION_METHOD_OPTIONS = {"Sum", "Min", "Max", "Mean"};
-
     /**
      * Plot type options, derived from {@link PlotType} so its display names have one
      * owner — the enum constants themselves — rather than a hand-maintained copy here.
@@ -142,24 +107,24 @@ class PlotToolbarBuilder {
     PlotToolbarBuilder addAggregationControls() {
         // Resolution label
         toolbar.add(new JLabel("Resolution:"));
-        toolbar.add(Box.createHorizontalStrut(HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
         // Aggregation period dropdown
-        aggregationPeriodCombo = createDropdown(AGGREGATION_OPTIONS,
-            WIDE_DROPDOWN_SIZE, "Aggregation");
+        aggregationPeriodCombo = createDropdown(ToolbarConstants.AGGREGATION_OPTIONS,
+            ToolbarConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
         // Set initial value from current PlotPanel state
         aggregationPeriodCombo.setSelectedItem(plotPanel.getAggregationPeriod().getDisplayName());
         aggregationPeriodCombo.addActionListener(e -> applyAggregation());
         toolbar.add(aggregationPeriodCombo);
 
         // "by" label
-        toolbar.add(Box.createHorizontalStrut(HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
         toolbar.add(new JLabel("by"));
-        toolbar.add(Box.createHorizontalStrut(HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
         // Aggregation method dropdown
-        aggregationMethodCombo = createDropdown(AGGREGATION_METHOD_OPTIONS,
-            NARROW_DROPDOWN_SIZE, "Aggregation method");
+        aggregationMethodCombo = createDropdown(ToolbarConstants.AGGREGATION_METHOD_OPTIONS,
+            ToolbarConstants.NARROW_DROPDOWN_SIZE, "Aggregation method");
         // Set initial value from current PlotPanel state
         aggregationMethodCombo.setSelectedItem(plotPanel.getAggregationMethod().getDisplayName());
         aggregationMethodCombo.addActionListener(e -> applyAggregation());
@@ -200,11 +165,11 @@ class PlotToolbarBuilder {
     PlotToolbarBuilder addPlotTypeDropdown() {
         // Plot Type label
         toolbar.add(new JLabel("Plot Type:"));
-        toolbar.add(Box.createHorizontalStrut(HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
         // Plot type dropdown
         plotTypeCombo = createDropdown(PLOT_TYPE_OPTIONS,
-            WIDE_DROPDOWN_SIZE, "Plot type");
+            ToolbarConstants.WIDE_DROPDOWN_SIZE, "Plot type");
         // Set initial value from current PlotPanel state
         plotTypeCombo.setSelectedItem(plotPanel.getPlotType().getDisplayName());
         plotTypeCombo.addActionListener(e -> {
@@ -220,7 +185,7 @@ class PlotToolbarBuilder {
 
     PlotToolbarBuilder addYSpaceDropdown() {
         ySpaceCombo = createDropdown(Y_SPACE_OPTIONS,
-            NARROW_DROPDOWN_SIZE, "Y-axis scale");
+            ToolbarConstants.NARROW_DROPDOWN_SIZE, "Y-axis scale");
         // Set initial value from current PlotPanel state
         ySpaceCombo.setSelectedItem(plotPanel.getYAxisScale().getDisplayName());
         ySpaceCombo.addActionListener(e -> {
@@ -300,25 +265,25 @@ class PlotToolbarBuilder {
 
     /** Creates a standard icon button. */
     private JButton createIconButton(FontAwesomeSolid icon, String tooltip, Runnable action) {
-        JButton button = new JButton(FontIcon.of(icon, BUTTON_ICON_SIZE));
+        JButton button = new JButton(FontIcon.of(icon, ToolbarConstants.BUTTON_ICON_SIZE));
         button.setToolTipText(tooltip);
         button.setFocusable(false);
-        button.setPreferredSize(BUTTON_SIZE);
-        button.setMinimumSize(BUTTON_SIZE);
-        button.setMaximumSize(BUTTON_SIZE);
+        button.setPreferredSize(ToolbarConstants.BUTTON_SIZE);
+        button.setMinimumSize(ToolbarConstants.BUTTON_SIZE);
+        button.setMaximumSize(ToolbarConstants.BUTTON_SIZE);
         button.addActionListener(e -> action.run());
         return button;
     }
 
     /** Creates a standard toggle button. */
     private JToggleButton createToggleButton(FontAwesomeSolid icon, String tooltip, boolean initialState) {
-        JToggleButton button = new JToggleButton(FontIcon.of(icon, BUTTON_ICON_SIZE));
+        JToggleButton button = new JToggleButton(FontIcon.of(icon, ToolbarConstants.BUTTON_ICON_SIZE));
         button.setToolTipText(tooltip);
         button.setFocusable(false);
         button.setSelected(initialState);
-        button.setPreferredSize(BUTTON_SIZE);
-        button.setMinimumSize(BUTTON_SIZE);
-        button.setMaximumSize(BUTTON_SIZE);
+        button.setPreferredSize(ToolbarConstants.BUTTON_SIZE);
+        button.setMinimumSize(ToolbarConstants.BUTTON_SIZE);
+        button.setMaximumSize(ToolbarConstants.BUTTON_SIZE);
         return button;
     }
 
