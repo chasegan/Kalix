@@ -976,6 +976,58 @@ public class PlotPanel extends JPanel {
     }
 
     /**
+     * Sets plot type and mask mode together as one atomic action: both fields update, the
+     * display dataset rebuilds once (not twice), and exactly one entry is pushed to undo
+     * history. Calling {@link #setPlotType} and {@link #setMaskMode} back to back would each
+     * push their own snapshot, leaving a "phantom" intermediate state (new plot type, stale
+     * mask mode) that undo would visit but the user never actually saw — used by the plot-type
+     * dropdown, which changes both together (per {@link PlotType#isDataMaskDefault()}).
+     */
+    public void setPlotTypeAndMaskMode(PlotType type, MaskMode maskMode) {
+        if (type == null || maskMode == null) {
+            return;
+        }
+        boolean plotTypeChanged = type != this.plotType;
+        boolean maskModeChanged = maskMode != this.maskMode;
+        if (!plotTypeChanged && !maskModeChanged) {
+            return;
+        }
+
+        PlotType oldPlotType = this.plotType;
+
+        boolean wasRestoring = restoringState;
+        restoringState = true; // suppress setPlotType/setMaskMode's own rebuild/fit/pushState
+        try {
+            setPlotType(type);
+            setMaskMode(maskMode);
+        } finally {
+            restoringState = wasRestoring;
+        }
+
+        if (restoringState) {
+            return; // nested inside an outer restore, which rebuilds once at its own end
+        }
+
+        rebuildDisplayDataSet();
+
+        // Same domain-aware fit choice as setPlotType, since plot type may have changed here too.
+        XAxisType oldAxisType = oldPlotType == PlotType.EXCEEDANCE ? XAxisType.PERCENTILE
+            : oldPlotType == PlotType.DOUBLE_MASS ? XAxisType.NUMERIC : XAxisType.TIME;
+        XAxisType newAxisType = type == PlotType.EXCEEDANCE ? XAxisType.PERCENTILE
+            : type == PlotType.DOUBLE_MASS ? XAxisType.NUMERIC : XAxisType.TIME;
+        boolean xAxisDomainChanged = oldAxisType != newAxisType;
+
+        if (xAxisDomainChanged) {
+            zoomToFit();
+        } else if (autoYMode) {
+            fitYAxis();
+        } else {
+            zoomToFit();
+        }
+        pushState();
+    }
+
+    /**
      * Gets the current plot type.
      */
     public PlotType getPlotType() {

@@ -2,6 +2,7 @@ package com.kalix.ide.windows;
 
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.rendering.PlotTypeListCellRenderer;
+import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
@@ -18,6 +19,9 @@ import javax.swing.JLabel;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import java.awt.Dimension;
+
+import static com.kalix.ide.flowviz.stats.MaskMode.ALL;
+import static com.kalix.ide.flowviz.stats.MaskMode.NONE;
 
 /**
  * Builder for a plot tab's toolbar (save, undo/redo, palette, aggregation, mask,
@@ -154,9 +158,7 @@ class PlotToolbarBuilder {
         maskToggle = createToggleButton(FontAwesomeSolid.MASK,
             "Overlapping Data Mask", false);
         maskToggle.addActionListener(e -> {
-            com.kalix.ide.flowviz.stats.MaskMode mode = maskToggle.isSelected()
-                ? com.kalix.ide.flowviz.stats.MaskMode.ALL
-                : com.kalix.ide.flowviz.stats.MaskMode.NONE;
+            MaskMode mode = maskToggle.isSelected() ? ALL : NONE;
             plotPanel.setMaskMode(mode);
         });
         toolbar.add(maskToggle);
@@ -178,7 +180,8 @@ class PlotToolbarBuilder {
         plotTypeCombo.addActionListener(e -> {
             PlotType selected = (PlotType) plotTypeCombo.getSelectedItem();
             if (selected != null) {
-                plotPanel.setPlotType(selected);
+                MaskMode maskMode = selected.isDataMaskDefault() ? ALL : NONE;
+                plotPanel.setPlotTypeAndMaskMode(selected, maskMode);
                 // sync with button
                 maskToggle.setSelected(selected.isDataMaskDefault());
             }
