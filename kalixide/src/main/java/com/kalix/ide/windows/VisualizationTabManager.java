@@ -135,6 +135,7 @@ public class VisualizationTabManager {
         public boolean autoYMode = true;
         public boolean showCoordinates = false;
         public boolean legendCollapsed = false;
+        public boolean legendEnabled = true;
         // Missing-data handling (context menu > Missing data). Mutually exclusive; both
         // false = default "break at gaps".
         public boolean connectAcrossGaps = false;
@@ -163,6 +164,7 @@ public class VisualizationTabManager {
             settings.autoYMode = plotPanel.isAutoYMode();
             settings.showCoordinates = plotPanel.isShowCoordinates();
             settings.legendCollapsed = plotPanel.isLegendCollapsed();
+            settings.legendEnabled = plotPanel.isLegendEnabled();
             settings.connectAcrossGaps = plotPanel.isConnectAcrossGaps();
             settings.showOrphanMarkers = plotPanel.isShowOrphanMarkers();
             settings.selectedSeries = new LinkedHashSet<>(tabInfo.selectedSeries);
@@ -192,6 +194,7 @@ public class VisualizationTabManager {
             settings.showCoordinates = PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.get();
             settings.autoYMode = PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get();
             settings.legendCollapsed = PreferenceKeys.PLOT_LEGEND_COLLAPSED.get();
+            settings.legendEnabled = PreferenceKeys.PLOT_LEGEND_ENABLED.get();
             return settings;
         }
     }
@@ -460,9 +463,10 @@ public class VisualizationTabManager {
         // net result matches the source tab.
         plotPanel.setConnectAcrossGaps(settings.connectAcrossGaps);
         plotPanel.setShowOrphanMarkers(settings.showOrphanMarkers);
-        if (settings.legendCollapsed) {
-            plotPanel.setLegendCollapsed(true);
-        }
+        // Unconditional: the new legend manager starts from the global preference, which
+        // may disagree with this tab's settings in either direction.
+        plotPanel.setLegendCollapsed(settings.legendCollapsed);
+        plotPanel.setLegendEnabled(settings.legendEnabled);
 
         // Populate legend with inherited series (colour resolved at render time)
         for (SeriesRef ref : inheritedSeries) {
@@ -526,7 +530,7 @@ public class VisualizationTabManager {
             .addSeparator()
             .addAutoYToggle(initialAutoY)
             .addCoordinatesToggle(initialShowCoordinates)
-            .addLegendToggle(!plotPanel.isLegendCollapsed());
+            .addLegendToggle(plotPanel.isLegendEnabled());
         return builder.build();
     }
 
@@ -956,7 +960,7 @@ public class VisualizationTabManager {
         if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
             tab.plotPanel.setOnHistoryChanged(null);
             tab.plotPanel.setOnAutoYModeChanged(null);
-            tab.plotPanel.getLegendManager().setOnCollapsedChanged(null);
+            tab.plotPanel.getLegendManager().setOnEnabledChanged(null);
         }
     }
 

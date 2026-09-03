@@ -872,6 +872,19 @@ public class PlotInteractionManager {
 
         contextMenu.add(missingDataMenu);
 
+        contextMenu.addSeparator();
+
+        // Still block 7, but a command rather than a setting (6), so it sits apart from the
+        // settings above. "Key" is what the legend calls itself on screen and on the
+        // toolbar, so the item says "Key" too (2.2: one name per concept).
+        JMenuItem resetKeyItem = new JMenuItem("Reset key");
+        resetKeyItem.addActionListener(e -> {
+            if (parentComponent instanceof PlotPanel plotPanel) {
+                plotPanel.resetLegend();
+            }
+        });
+        contextMenu.add(resetKeyItem);
+
         // Add popup menu listener to update checkbox/radio button states when menu is shown
         contextMenu.addPopupMenuListener(new PopupMenuListener() {
             @Override

@@ -21,8 +21,7 @@ import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.stats.TimeSeriesMasker;
 
 import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
-import java.awt.Color;
+import javax.swing.SwingUtilities;
 import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -33,7 +32,6 @@ import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.util.List;
 import java.util.function.Supplier;
-import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.preferences.PreferenceKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -430,11 +428,17 @@ public class PlotPanel extends JPanel {
     private void setupMouseListeners() {
         MouseAdapter plotMouseHandler = plotInteractionManager.createMouseHandler();
 
-        // Create composite mouse handler that routes events to legend first, then to plot
+        // Create composite mouse handler that routes events to legend first, then to plot.
+        // Only a plain left press belongs to the legend (drag, collapse). A popup trigger
+        // must reach the plot handler even over the legend, or on macOS (where the popup
+        // fires on press) a right-click over the key could never open the menu that holds
+        // "Reset key".
         MouseAdapter compositeHandler = new MouseAdapter() {
             @Override
             public void mousePressed(java.awt.event.MouseEvent e) {
-                if (legendManager != null && legendManager.handleMousePress(e.getX(), e.getY())) {
+                boolean plainLeftPress = SwingUtilities.isLeftMouseButton(e) && !e.isPopupTrigger();
+                if (plainLeftPress && legendManager != null
+                        && legendManager.handleMousePress(e.getX(), e.getY())) {
                     repaint();
                     return; // Event consumed by legend
                 }
@@ -637,6 +641,13 @@ public class PlotPanel extends JPanel {
         return coordinateDisplayManager != null && coordinateDisplayManager.isShowCoordinates();
     }
 
+    public void setLegendEnabled(boolean enabled) {
+        if (legendManager != null) {
+            legendManager.setEnabled(enabled);
+            repaint();
+        }
+    }
+
     public void setLegendCollapsed(boolean collapsed) {
         if (legendManager != null) {
             legendManager.setCollapsed(collapsed);
@@ -646,6 +657,20 @@ public class PlotPanel extends JPanel {
 
     public boolean isLegendCollapsed() {
         return legendManager != null && legendManager.isCollapsed();
+    }
+
+    public boolean isLegendEnabled() {
+        return legendManager != null && legendManager.isEnabled();
+    }
+
+    /**
+     * Resets the legend to its default state: shown, expanded, and auto-positioned.
+     */
+    public void resetLegend() {
+        if (legendManager != null) {
+            legendManager.reset();
+            repaint();
+        }
     }
 
     /**
