@@ -957,11 +957,7 @@ public class PlotPanel extends JPanel {
         rebuildDisplayDataSet();
 
         // Check if X-axis domain changed (switching to/from non-time X-axis types)
-        XAxisType oldAxisType = oldPlotType == PlotType.EXCEEDANCE ? XAxisType.PERCENTILE
-            : oldPlotType == PlotType.DOUBLE_MASS ? XAxisType.NUMERIC : XAxisType.TIME;
-        XAxisType newAxisType = type == PlotType.EXCEEDANCE ? XAxisType.PERCENTILE
-            : type == PlotType.DOUBLE_MASS ? XAxisType.NUMERIC : XAxisType.TIME;
-        boolean xAxisDomainChanged = oldAxisType != newAxisType;
+        boolean xAxisDomainChanged = xAxisTypeFor(oldPlotType) != xAxisTypeFor(type);
 
         // If X-axis domain changed, must recalculate entire viewport (can't preserve X zoom)
         // Otherwise, follow same logic as aggregation changes
@@ -1011,11 +1007,7 @@ public class PlotPanel extends JPanel {
         rebuildDisplayDataSet();
 
         // Same domain-aware fit choice as setPlotType, since plot type may have changed here too.
-        XAxisType oldAxisType = oldPlotType == PlotType.EXCEEDANCE ? XAxisType.PERCENTILE
-            : oldPlotType == PlotType.DOUBLE_MASS ? XAxisType.NUMERIC : XAxisType.TIME;
-        XAxisType newAxisType = type == PlotType.EXCEEDANCE ? XAxisType.PERCENTILE
-            : type == PlotType.DOUBLE_MASS ? XAxisType.NUMERIC : XAxisType.TIME;
-        boolean xAxisDomainChanged = oldAxisType != newAxisType;
+        boolean xAxisDomainChanged = xAxisTypeFor(oldPlotType) != xAxisTypeFor(type);
 
         if (xAxisDomainChanged) {
             zoomToFit();
@@ -1025,6 +1017,16 @@ public class PlotPanel extends JPanel {
             zoomToFit();
         }
         pushState();
+    }
+
+    /**
+     * Maps a plot type to the X-axis domain it plots against, so callers can tell whether
+     * switching between two plot types changes that domain (and therefore can't preserve the
+     * existing X zoom). Shared by {@link #setPlotType} and {@link #setPlotTypeAndMaskMode}.
+     */
+    private static XAxisType xAxisTypeFor(PlotType type) {
+        return type == PlotType.EXCEEDANCE ? XAxisType.PERCENTILE
+            : type == PlotType.DOUBLE_MASS ? XAxisType.NUMERIC : XAxisType.TIME;
     }
 
     /**
