@@ -3,6 +3,7 @@ package com.kalix.ide.windows;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.preferences.PreferenceKeys;
 
@@ -61,8 +62,13 @@ class PlotToolbarBuilder {
     /** Aggregation method options (shared with {@link StatsToolbarBuilder}). */
     static final String[] AGGREGATION_METHOD_OPTIONS = {"Sum", "Min", "Max", "Mean"};
 
-    /** Plot type options. */
-    private static final String[] PLOT_TYPE_OPTIONS = {"Values", "Cumulative Values", "Difference", "Cumulative Difference", "Exceedance", "Double Mass", "Residual Mass"};
+    /**
+     * Plot type options, derived from {@link PlotType} so its display names have one
+     * owner — the enum constants themselves — rather than a hand-maintained copy here.
+     */
+    private static final String[] PLOT_TYPE_OPTIONS = java.util.Arrays.stream(PlotType.values())
+        .map(PlotType::getDisplayName)
+        .toArray(String[]::new);
 
     /** Y-axis scale options. */
     private static final String[] Y_SPACE_OPTIONS = {"Linear", "Log", "Sqrt"};
@@ -204,8 +210,7 @@ class PlotToolbarBuilder {
         plotTypeCombo.addActionListener(e -> {
             String selected = (String) plotTypeCombo.getSelectedItem();
             if (selected != null) {
-                com.kalix.ide.flowviz.transform.PlotType type =
-                    com.kalix.ide.flowviz.transform.PlotType.fromDisplayName(selected);
+                PlotType type = PlotType.fromDisplayName(selected);
                 plotPanel.setPlotType(type);
             }
         });
