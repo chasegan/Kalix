@@ -78,8 +78,13 @@ public class PlotLegendManager {
     // State
     private boolean enabled = true;
     private boolean collapsed = false;
-    private int x = -1; // -1 means auto-position
+    // Top-left corner. While autoPosition is set the key follows the plot area's top-right
+    // corner on every paint; the first drag pins it. Persisted as -1/-1 while auto.
+    private int x = -1;
     private int y = -1;
+    private boolean autoPosition = true;
+    // The plot area from the last paint, so a drag can be clamped before the next paint.
+    private final Rectangle plotArea = new Rectangle();
     private DisplayMode displayMode = DisplayMode.FULL_NAME;
 
     // Callback for enabled state changes (the toolbar's Show Key button follows it)
@@ -309,11 +314,19 @@ public class PlotLegendManager {
         int width = calculateWidth(g2d);
         int height = calculateHeight();
 
-        // Auto-position if not set
-        if (x < 0 || y < 0) {
-            x = viewport.getPlotX() + viewport.getPlotWidth() - width - DEFAULT_OFFSET;
-            y = viewport.getPlotY() + DEFAULT_OFFSET;
+        plotArea.setBounds(viewport.getPlotX(), viewport.getPlotY(),
+                           viewport.getPlotWidth(), viewport.getPlotHeight());
+
+        if (autoPosition) {
+            x = plotArea.x + plotArea.width - width - DEFAULT_OFFSET;
+            y = plotArea.y + DEFAULT_OFFSET;
         }
+
+        // Keep the key inside the plot area on every paint, whatever put it outside: a
+        // drag, a window shrink, a restored tab, or a position inherited from preferences.
+        // Prevention, where "Reset key" is the cure.
+        x = clampAxis(x, plotArea.x, plotArea.width, width);
+        y = clampAxis(y, plotArea.y, plotArea.height, height);
 
         // Update bounds for interaction
         bounds.setBounds(x, y, width, height);
@@ -601,10 +614,28 @@ public class PlotLegendManager {
             hasMoved = true;
         }
 
-        // Update position
-        x = mouseX - dragOffsetX;
-        y = mouseY - dragOffsetY;
+        // Update position, clamped to the area of the last paint so the release (which
+        // persists) cannot save an off-plot position even if it lands before the repaint.
+        autoPosition = false;
+        x = clampAxis(mouseX - dragOffsetX, plotArea.x, plotArea.width, bounds.width);
+        y = clampAxis(mouseY - dragOffsetY, plotArea.y, plotArea.height, bounds.height);
         return true;
+    }
+
+    /**
+     * Clamps one axis of the key's top-left corner so the key stays inside the area. When
+     * the key is larger than the area, the top-left corner is pinned to the area's start
+     * instead, so the title bar and collapse button stay reachable.
+     *
+     * @param position   the key's current start on this axis
+     * @param areaStart  the plot area's start on this axis
+     * @param areaLength the plot area's length on this axis
+     * @param size       the key's length on this axis
+     * @return the clamped start
+     */
+    static int clampAxis(int position, int areaStart, int areaLength, int size) {
+        int maxStart = Math.max(areaStart, areaStart + areaLength - size);
+        return Math.max(areaStart, Math.min(position, maxStart));
     }
 
     /**
@@ -761,8 +792,7 @@ public class PlotLegendManager {
      * recovering it regardless of how it was hidden, collapsed, or dragged off-screen.
      */
     public void reset() {
-        x = -1;
-        y = -1;
+        autoPosition = true;
         collapsed = false;
         enabled = true;
         savePreferences();
@@ -779,6 +809,7 @@ public class PlotLegendManager {
         collapsed = PreferenceKeys.PLOT_LEGEND_COLLAPSED.get();
         x = PreferenceKeys.PLOT_LEGEND_POSITION_X.get();
         y = PreferenceKeys.PLOT_LEGEND_POSITION_Y.get();
+        autoPosition = x < 0 || y < 0;
 
         // Load display mode
         String modeString = PreferenceKeys.PLOT_LEGEND_DISPLAY_MODE.get();
@@ -795,8 +826,8 @@ public class PlotLegendManager {
     public void savePreferences() {
         PreferenceKeys.PLOT_LEGEND_ENABLED.set(enabled);
         PreferenceKeys.PLOT_LEGEND_COLLAPSED.set(collapsed);
-        PreferenceKeys.PLOT_LEGEND_POSITION_X.set(x);
-        PreferenceKeys.PLOT_LEGEND_POSITION_Y.set(y);
+        PreferenceKeys.PLOT_LEGEND_POSITION_X.set(autoPosition ? -1 : x);
+        PreferenceKeys.PLOT_LEGEND_POSITION_Y.set(autoPosition ? -1 : y);
         PreferenceKeys.PLOT_LEGEND_DISPLAY_MODE.set(displayMode.name());
     }
 }
