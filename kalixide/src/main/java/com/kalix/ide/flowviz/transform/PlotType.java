@@ -69,16 +69,4 @@ public enum PlotType {
     public boolean requiresReferenceSeries() {
         return this == DIFFERENCE || this == CUMULATIVE_DIFFERENCE || this == DOUBLE_MASS;
     }
-
-    /**
-     * Parses display name to enum value.
-     */
-    public static PlotType fromDisplayName(String displayName) {
-        for (PlotType type : values()) {
-            if (type.displayName.equals(displayName)) {
-                return type;
-            }
-        }
-        return VALUES;
-    }
 }

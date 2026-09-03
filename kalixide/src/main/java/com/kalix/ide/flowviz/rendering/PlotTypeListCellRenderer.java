@@ -1,7 +1,6 @@
 package com.kalix.ide.flowviz.rendering;
 
 import com.kalix.ide.flowviz.transform.PlotType;
-import com.kalix.ide.icons.OverlayIcon;
 import com.kalix.ide.utils.ThemeUtils;
 
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
