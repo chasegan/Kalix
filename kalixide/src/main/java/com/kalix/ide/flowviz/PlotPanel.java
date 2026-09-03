@@ -21,6 +21,7 @@ import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.stats.TimeSeriesMasker;
 
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -31,7 +32,6 @@ import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.util.List;
 import java.util.function.Supplier;
-
 import com.kalix.ide.preferences.PreferenceKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -193,8 +193,6 @@ public class PlotPanel extends JPanel {
 
         // Resolver for projecting ref-keyed series to column headers on CSV export.
         plotInteractionManager.setLabelResolverSupplier(() -> labelResolver);
-
-        plotInteractionManager.setLegendResetAction(this::resetLegend);
 
         setupMouseListeners();
     }
@@ -430,11 +428,17 @@ public class PlotPanel extends JPanel {
     private void setupMouseListeners() {
         MouseAdapter plotMouseHandler = plotInteractionManager.createMouseHandler();
 
-        // Create composite mouse handler that routes events to legend first, then to plot
+        // Create composite mouse handler that routes events to legend first, then to plot.
+        // Only a plain left press belongs to the legend (drag, collapse). A popup trigger
+        // must reach the plot handler even over the legend, or on macOS (where the popup
+        // fires on press) a right-click over the key could never open the menu that holds
+        // "Reset key".
         MouseAdapter compositeHandler = new MouseAdapter() {
             @Override
             public void mousePressed(java.awt.event.MouseEvent e) {
-                if (legendManager != null && legendManager.handleMousePress(e.getX(), e.getY())) {
+                boolean plainLeftPress = SwingUtilities.isLeftMouseButton(e) && !e.isPopupTrigger();
+                if (plainLeftPress && legendManager != null
+                        && legendManager.handleMousePress(e.getX(), e.getY())) {
                     repaint();
                     return; // Event consumed by legend
                 }

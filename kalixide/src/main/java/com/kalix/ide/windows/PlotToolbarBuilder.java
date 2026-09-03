@@ -263,10 +263,8 @@ class PlotToolbarBuilder {
             "Show Key", initialState);
 
         // Update enabled state when button is clicked
-        button.addActionListener(e -> {
-            plotPanel.setLegendEnabled(button.isSelected());
-            PreferenceKeys.PLOT_LEGEND_ENABLED.set(button.isSelected());
-        });
+        // The legend manager persists its own state, so no preference write here.
+        button.addActionListener(e -> plotPanel.setLegendEnabled(button.isSelected()));
 
         // Set up callback to update button when enabled state changes from other sources
         plotPanel.getLegendManager().setOnEnabledChanged(() -> {

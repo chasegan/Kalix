@@ -463,12 +463,10 @@ public class VisualizationTabManager {
         // net result matches the source tab.
         plotPanel.setConnectAcrossGaps(settings.connectAcrossGaps);
         plotPanel.setShowOrphanMarkers(settings.showOrphanMarkers);
-        if (settings.legendCollapsed) {
-            plotPanel.setLegendCollapsed(true);
-        }
-        if (!settings.legendEnabled) {
-            plotPanel.setLegendEnabled(false);
-        }
+        // Unconditional: the new legend manager starts from the global preference, which
+        // may disagree with this tab's settings in either direction.
+        plotPanel.setLegendCollapsed(settings.legendCollapsed);
+        plotPanel.setLegendEnabled(settings.legendEnabled);
 
         // Populate legend with inherited series (colour resolved at render time)
         for (SeriesRef ref : inheritedSeries) {

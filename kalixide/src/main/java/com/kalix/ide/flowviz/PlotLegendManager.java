@@ -82,9 +82,8 @@ public class PlotLegendManager {
     private int y = -1;
     private DisplayMode displayMode = DisplayMode.FULL_NAME;
 
-    // Callback for enabled or collapsed state changes
+    // Callback for enabled state changes (the toolbar's Show Key button follows it)
     private Runnable onEnabledChanged = null;
-    private Runnable onCollapsedChanged = null;
 
     // Callback invoked when an entry's line sample is clicked, with the series and
     // the click point. Null when style picking is unavailable (non-palette plots).
@@ -747,9 +746,6 @@ public class PlotLegendManager {
     public void setCollapsed(boolean collapsed) {
         this.collapsed = collapsed;
         savePreferences();
-        if (onCollapsedChanged != null) {
-            onCollapsedChanged.run();
-        }
     }
 
     public boolean isCollapsed() {
@@ -760,10 +756,6 @@ public class PlotLegendManager {
         this.onEnabledChanged = callback;
     }
 
-    public void setOnCollapsedChanged(Runnable callback) {
-        this.onCollapsedChanged = callback;
-    }
-
     /**
      * Resets the legend to its default state: shown, expanded, and auto-positioned —
      * recovering it regardless of how it was hidden, collapsed, or dragged off-screen.
@@ -771,8 +763,12 @@ public class PlotLegendManager {
     public void reset() {
         x = -1;
         y = -1;
-        setCollapsed(false);
-        setEnabled(true);
+        collapsed = false;
+        enabled = true;
+        savePreferences();
+        if (onEnabledChanged != null) {
+            onEnabledChanged.run();
+        }
     }
 
     /**

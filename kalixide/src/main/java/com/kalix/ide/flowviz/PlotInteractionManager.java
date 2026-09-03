@@ -104,7 +104,6 @@ public class PlotInteractionManager {
     private Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier;
     private Supplier<com.kalix.ide.flowviz.data.LabelResolver> labelResolverSupplier;
     private BooleanSupplier autoYModeSupplier;
-    private Runnable legendResetAction;
 
 
     /**
@@ -153,13 +152,6 @@ public class PlotInteractionManager {
         this.viewportUpdater = viewportUpdater;
         this.visibleSeriesSupplier = visibleSeriesSupplier;
         this.plotAreaSupplier = plotAreaSupplier;
-    }
-
-    /**
-     * Sets the action invoked by the context menu's "Reset legend" item.
-     */
-    public void setLegendResetAction(Runnable legendResetAction) {
-        this.legendResetAction = legendResetAction;
     }
 
     /**
@@ -880,9 +872,18 @@ public class PlotInteractionManager {
 
         contextMenu.add(missingDataMenu);
 
-        JMenuItem resetLegendItem = new JMenuItem("Reset legend");
-        resetLegendItem.addActionListener(e -> resetLegend());
-        contextMenu.add(resetLegendItem);
+        contextMenu.addSeparator();
+
+        // Still block 7, but a command rather than a setting (6), so it sits apart from the
+        // settings above. "Key" is what the legend calls itself on screen and on the
+        // toolbar, so the item says "Key" too (2.2: one name per concept).
+        JMenuItem resetKeyItem = new JMenuItem("Reset key");
+        resetKeyItem.addActionListener(e -> {
+            if (parentComponent instanceof PlotPanel plotPanel) {
+                plotPanel.resetLegend();
+            }
+        });
+        contextMenu.add(resetKeyItem);
 
         // Add popup menu listener to update checkbox/radio button states when menu is shown
         contextMenu.addPopupMenuListener(new PopupMenuListener() {
@@ -1139,15 +1140,6 @@ public class PlotInteractionManager {
             } else {
                 saveAsCsvFormat(file);
             }
-        }
-    }
-
-    /**
-     * Resets the legend to its default state: shown, expanded, and auto-positioned.
-     */
-    public void resetLegend() {
-        if (legendResetAction != null) {
-            legendResetAction.run();
         }
     }
 
