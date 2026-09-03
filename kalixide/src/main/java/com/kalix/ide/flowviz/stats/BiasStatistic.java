@@ -1,5 +1,7 @@
 package com.kalix.ide.flowviz.stats;
 
+import com.kalix.ide.utils.ValueFormatUtil;
+
 /**
  * Computes the percentage bias between a series and a reference series.
  * Bias% = (mean(series) - mean(reference)) / mean(reference) * 100
@@ -36,7 +38,7 @@ public class BiasStatistic implements Statistic {
         // Calculate: (mean(series) - mean(reference)) / mean(reference) * 100
         double biasPercent = ((seriesMean - referenceMean) / referenceMean) * 100.0;
 
-        return String.format("%.3f", biasPercent);
+        return ValueFormatUtil.formatDataValue(biasPercent);
     }
 
     @Override

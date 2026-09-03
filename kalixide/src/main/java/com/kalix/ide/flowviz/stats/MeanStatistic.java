@@ -1,5 +1,7 @@
 package com.kalix.ide.flowviz.stats;
 
+import com.kalix.ide.utils.ValueFormatUtil;
+
 /**
  * Computes the mean (average) value of a time series.
  */
@@ -18,7 +20,7 @@ public class MeanStatistic implements Statistic {
     @Override
     public String calculate(StatSample series, StatSample reference) {
         double mean = series.mean();
-        return Double.isNaN(mean) ? "-" : String.format("%.3f", mean);
+        return Double.isNaN(mean) ? "-" : ValueFormatUtil.formatDataValue(mean);
     }
 
     @Override

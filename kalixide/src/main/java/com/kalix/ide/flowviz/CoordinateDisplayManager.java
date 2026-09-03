@@ -8,6 +8,7 @@ import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.utils.TimeFormatUtil;
+import com.kalix.ide.utils.ValueFormatUtil;
 
 import javax.swing.JComponent;
 import javax.swing.Timer;
@@ -459,7 +460,7 @@ public class CoordinateDisplayManager {
         // Check if we're in numeric mode (double mass plots)
         if (currentViewport != null && currentViewport.getXAxisType() == XAxisType.NUMERIC) {
             double value = (double) timestampMs / com.kalix.ide.flowviz.transform.PlotTypeTransformer.NUMERIC_SCALE;
-            return String.format("%.2f", value);
+            return ValueFormatUtil.formatDataValue(value);
         }
 
         // Standard time formatting. Pick the format from the visible series' step_size so the
@@ -486,16 +487,11 @@ public class CoordinateDisplayManager {
     }
 
     /**
-     * Formats value for display with appropriate precision.
+     * Formats a value for the hover hint. The rules live in {@link ValueFormatUtil} (issue #363):
+     * a modeller hovering a point wants the number itself, not a 3-figure summary of it.
      */
     private String formatValueForDisplay(double value) {
-        if (value == Math.floor(value) && !Double.isInfinite(value)) {
-            return String.format("%.0f", value);
-        } else if (Math.abs(value) >= 1) {
-            return String.format("%.3g", value);
-        } else {
-            return String.format("%.4g", value);
-        }
+        return ValueFormatUtil.formatDataValue(value);
     }
 
     /**

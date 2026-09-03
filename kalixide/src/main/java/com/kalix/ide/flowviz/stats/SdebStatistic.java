@@ -1,5 +1,7 @@
 package com.kalix.ide.flowviz.stats;
 
+import com.kalix.ide.utils.ValueFormatUtil;
+
 /**
  * Computes the SDEB (Sorted Distributional Error with Bias) objective function.
  * SDEB combines temporal error, distributional error, and bias penalty to evaluate
@@ -58,7 +60,7 @@ public class SdebStatistic implements Statistic {
             reference.sortedValidValues(), series.sortedValidValues(),
             sumObserved, series.sum());
 
-        return String.format("%.3f", sdeb);
+        return ValueFormatUtil.formatDataValue(sdeb);
     }
 
     @Override
