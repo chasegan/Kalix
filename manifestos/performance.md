@@ -73,6 +73,15 @@ below are not a licence to mangle cold code (§5).
    against. This clause claims only what is measured: layout matters, and the
    mechanism is rarely the one you would guess.*
 
+   *Third data point, 2026-09: padding `RoutingNode` (the stride-setting
+   variant) by 4 KB — doubling `NodeEnum`'s stride from 3,880 to ~7,980
+   bytes — measured as no change across speed tests 1/2/4/5 (deltas −3.6%
+   to +1.0%, interleaved runs, sign inconsistent). Stride sensitivity is
+   flat at current model scales (~110 nodes ≈ 430 KB, L2-resident), so a
+   RoutingNode diet — its fourteen inline `[f64; 32]` arrays are 3,584 of
+   its 3,880 bytes — buys nothing today and stays deferred until a
+   cache-spilling benchmark (thousands of nodes) exists to justify it.*
+
 5. **Do each piece of work at the coldest place it can live.** Resolution,
    validation, allocation, and branch decisions belong at setup / `initialise` time,
    not inside the loop. Work done once is work the loop never pays for again.
