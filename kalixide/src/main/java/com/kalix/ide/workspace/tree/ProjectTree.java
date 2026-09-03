@@ -653,6 +653,23 @@ public class ProjectTree extends JTree {
     }
 
     /**
+     * Shows the same root context menu as a right-click on empty tree space (context-menu-style
+     * §4: New file…/New folder… etc. act on the open folder), as if invoked from elsewhere in
+     * the panel — e.g. the header showing the folder's name. Clears the tree's selection, since
+     * the menu acts on the root rather than any selected entry. A no-op if no folder is open.
+     */
+    public void showRootContextMenu(Component invoker, int x, int y) {
+        if (model == null) {
+            return;
+        }
+        clearSelection();
+        JPopupMenu menu = contextMenu.buildFromRoot((FileTreeNode) model.getRoot());
+        if (menu != null) {
+            menu.show(invoker, x, y);
+        }
+    }
+
+    /**
      * Shows the right-click context menu for the given files (e.g. from an editor tab), as if
      * they were right-clicked in the tree, without changing the tree's own selection. Files
      * outside the open folder (or if no folder is open) are silently dropped.
