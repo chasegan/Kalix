@@ -21,8 +21,6 @@ import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.stats.TimeSeriesMasker;
 
 import javax.swing.JPanel;
-import javax.swing.JPopupMenu;
-import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -33,7 +31,7 @@ import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.util.List;
 import java.util.function.Supplier;
-import com.kalix.ide.constants.UIConstants;
+
 import com.kalix.ide.preferences.PreferenceKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
