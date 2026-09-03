@@ -1,6 +1,7 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.flowviz.PlotPanel;
+import com.kalix.ide.flowviz.rendering.PlotTypeListCellRenderer;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
@@ -45,7 +46,7 @@ class PlotToolbarBuilder {
     // Store references to all state-reflecting controls
     private JComboBox<String> aggregationPeriodCombo;
     private JComboBox<String> aggregationMethodCombo;
-    private JComboBox<String> plotTypeCombo;
+    private JComboBox<PlotType> plotTypeCombo;
     private JComboBox<String> ySpaceCombo;
     private JToggleButton maskToggle;
     private JToggleButton autoYToggle;
@@ -167,16 +168,17 @@ class PlotToolbarBuilder {
         toolbar.add(new JLabel("Plot Type:"));
         toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
-        // Plot type dropdown
-        plotTypeCombo = createDropdown(PLOT_TYPE_OPTIONS,
-            ToolbarConstants.WIDE_DROPDOWN_SIZE, "Plot type");
+        // Plot type dropdown - custom construction to display
+        this.plotTypeCombo = new JComboBox<>(PlotType.values());
+        plotTypeCombo.setMaximumSize(ToolbarConstants.WIDE_DROPDOWN_SIZE);
+        plotTypeCombo.setToolTipText("Plot type");
+        plotTypeCombo.setRenderer(new PlotTypeListCellRenderer());
         // Set initial value from current PlotPanel state
-        plotTypeCombo.setSelectedItem(plotPanel.getPlotType().getDisplayName());
+        plotTypeCombo.setSelectedItem(plotPanel.getPlotType());
         plotTypeCombo.addActionListener(e -> {
-            String selected = (String) plotTypeCombo.getSelectedItem();
+            PlotType selected = (PlotType) plotTypeCombo.getSelectedItem();
             if (selected != null) {
-                PlotType type = PlotType.fromDisplayName(selected);
-                plotPanel.setPlotType(type);
+                plotPanel.setPlotType(selected);
             }
         });
         toolbar.add(plotTypeCombo);
