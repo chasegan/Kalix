@@ -179,6 +179,8 @@ class PlotToolbarBuilder {
             PlotType selected = (PlotType) plotTypeCombo.getSelectedItem();
             if (selected != null) {
                 plotPanel.setPlotType(selected);
+                // sync with button
+                maskToggle.setSelected(selected.isDataMaskDefault());
             }
         });
         toolbar.add(plotTypeCombo);
