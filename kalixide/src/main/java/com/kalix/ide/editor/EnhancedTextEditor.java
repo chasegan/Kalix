@@ -75,7 +75,7 @@ public class EnhancedTextEditor extends JPanel {
     private FileDropManager dropManager;
     private LinterManager linterManager;
     private AutoCompleteManager autoCompleteManager;
-    private com.kalix.ide.linter.ui.PropertyHoverTooltipManager propertyHoverTooltipManager;
+    private com.kalix.ide.linter.ui.HoverTipSupplier hoverTips;
     private com.kalix.ide.editor.commands.ContextCommandManager contextCommandManager;
     private NavigationHistory navigationHistory;
 
@@ -113,6 +113,10 @@ public class EnhancedTextEditor extends JPanel {
 
         // Enable bracket matching
         textArea.setBracketMatchingEnabled(true);
+
+        // Hover tips (lint issues, property help) via Swing's ToolTipManager; the
+        // sources are attached by initializeLinter / initializePropertyTooltips.
+        hoverTips = com.kalix.ide.linter.ui.HoverTipSupplier.install(textArea);
 
         // Apply theme-aware colors
         updateThemeColors();
@@ -206,6 +210,7 @@ public class EnhancedTextEditor extends JPanel {
             linterManager.dispose();
         }
         linterManager = LinterComponentFactory.createLinterManager(textArea, schemaManager);
+        hoverTips.setIssueSource(linterManager.getTooltips());
     }
 
     /**
@@ -235,14 +240,7 @@ public class EnhancedTextEditor extends JPanel {
      */
     public void initializePropertyTooltips(SchemaManager schemaManager,
                                           java.util.function.Supplier<ParsedModel> modelSupplier) {
-        if (propertyHoverTooltipManager != null) {
-            propertyHoverTooltipManager.dispose();
-        }
-        if (linterManager != null) {
-            propertyHoverTooltipManager = new com.kalix.ide.linter.ui.PropertyHoverTooltipManager(
-                textArea, schemaManager, modelSupplier,
-                line -> !linterManager.getIssuesForLine(line).isEmpty());
-        }
+        hoverTips.setHelpSource(new com.kalix.ide.linter.ui.PropertyTooltips(textArea, schemaManager, modelSupplier));
     }
 
     /**
@@ -1422,9 +1420,8 @@ public class EnhancedTextEditor extends JPanel {
             linterManager.dispose();
             linterManager = null;
         }
-        if (propertyHoverTooltipManager != null) {
-            propertyHoverTooltipManager.dispose();
-            propertyHoverTooltipManager = null;
+        if (hoverTips != null) {
+            hoverTips.uninstall();
         }
         if (searchManager != null) {
             searchManager.dispose();

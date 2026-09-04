@@ -3,20 +3,16 @@ package com.kalix.ide.editor;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.linter.events.ValidationEventManager;
-import com.kalix.ide.linter.ui.LinterTooltipManager;
-import com.kalix.ide.linter.ui.PropertyHoverTooltipManager;
+import com.kalix.ide.linter.ui.HoverTipSupplier;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.text.AbstractDocument;
 import java.awt.AWTEvent;
-import java.awt.GraphicsEnvironment;
 import java.awt.Toolkit;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 /**
  * Verifies the editor/linter disposal chain (review #21): every listener a
@@ -72,37 +68,20 @@ class EditorDisposalTest {
     }
 
     @Test
-    void linterTooltipManagerDetachesItsMouseListeners() {
-        // Tooltip placement queries the screen devices, which headless has none of.
-        assumeFalse(GraphicsEnvironment.isHeadless(), "tooltip placement requires a display");
+    void hoverTipSupplierDetachesEverythingItInstalled() {
         RSyntaxTextArea textArea = new RSyntaxTextArea();
-        int motionBefore = textArea.getMouseMotionListeners().length;
         int mouseBefore = textArea.getMouseListeners().length;
 
-        LinterTooltipManager manager = new LinterTooltipManager(textArea, new ConcurrentHashMap<>());
-        assertEquals(motionBefore + 1, textArea.getMouseMotionListeners().length);
-        assertEquals(mouseBefore + 1, textArea.getMouseListeners().length);
+        HoverTipSupplier supplier = HoverTipSupplier.install(textArea);
+        assertEquals(supplier, textArea.getToolTipSupplier());
+        // Two listeners: the dismiss-delay idiom's, and ToolTipManager's own on registration.
+        assertEquals(mouseBefore + 2, textArea.getMouseListeners().length);
 
-        manager.dispose();
-        assertEquals(motionBefore, textArea.getMouseMotionListeners().length);
+        supplier.uninstall();
         assertEquals(mouseBefore, textArea.getMouseListeners().length);
-    }
+        assertEquals(null, textArea.getToolTipSupplier());
 
-    @Test
-    void propertyHoverTooltipManagerDetachesItsMouseListeners() {
-        // Tooltip placement queries the screen devices, which headless has none of.
-        assumeFalse(GraphicsEnvironment.isHeadless(), "tooltip placement requires a display");
-        RSyntaxTextArea textArea = new RSyntaxTextArea();
-        int motionBefore = textArea.getMouseMotionListeners().length;
-        int mouseBefore = textArea.getMouseListeners().length;
-
-        PropertyHoverTooltipManager manager =
-            new PropertyHoverTooltipManager(textArea, null, () -> null, line -> false);
-        assertEquals(motionBefore + 1, textArea.getMouseMotionListeners().length);
-        assertEquals(mouseBefore + 1, textArea.getMouseListeners().length);
-
-        manager.dispose();
-        assertEquals(motionBefore, textArea.getMouseMotionListeners().length);
+        supplier.uninstall(); // idempotent
         assertEquals(mouseBefore, textArea.getMouseListeners().length);
     }
 }

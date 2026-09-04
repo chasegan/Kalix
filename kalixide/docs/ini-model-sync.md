@@ -120,7 +120,7 @@ have different documented semantics.
   cannot offer a toggle the validators ignore.
 - Rule/schema changes propagate live: `SchemaManager` fires `onSchemaChanged()`
   on any change and `LinterManager` revalidates immediately; hover help
-  (`linter/ui/PropertyHoverTooltipManager`) resolves the schema per lookup
+  (`linter/ui/PropertyTooltips`) resolves the schema per lookup
   rather than capturing an instance, so a reloaded schema is reflected
   everywhere at once. Autocomplete (`editor/autocomplete/
   KalixCompletionProvider`) reads the same `SchemaManager`, so completion and
