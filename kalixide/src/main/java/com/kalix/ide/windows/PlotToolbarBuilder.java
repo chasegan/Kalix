@@ -1,6 +1,6 @@
 package com.kalix.ide.windows;
 
-import com.kalix.ide.components.JStickyCheckBoxMenuItem;
+import com.kalix.ide.components.SeasonalMaskButton;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.rendering.PlotTypeListCellRenderer;
 import com.kalix.ide.flowviz.stats.MaskMode;
@@ -18,15 +18,9 @@ import javax.swing.Box;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
-import javax.swing.JPopupMenu;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import java.awt.Dimension;
-import java.time.Month;
-import java.time.format.TextStyle;
-import java.util.EnumMap;
-import java.util.EnumSet;
-import java.util.Locale;
 
 import static com.kalix.ide.flowviz.stats.MaskMode.ALL;
 import static com.kalix.ide.flowviz.stats.MaskMode.NONE;
@@ -40,9 +34,6 @@ import static com.kalix.ide.flowviz.stats.MaskMode.NONE;
  */
 class PlotToolbarBuilder {
 
-    /** Seasonal-mask button glyphs: a ticked calendar while a mask is active, plain otherwise. */
-    private static final FontAwesomeSolid SEASONAL_MASK_ON = FontAwesomeSolid.CALENDAR_CHECK;
-    private static final FontAwesomeSolid SEASONAL_MASK_OFF = FontAwesomeSolid.CALENDAR_DAY;
 
     /** Y-axis scale options. */
     private static final String[] Y_SPACE_OPTIONS = {"Linear", "Log", "Sqrt"};
@@ -57,7 +48,7 @@ class PlotToolbarBuilder {
     private JComboBox<PlotType> plotTypeCombo;
     private JComboBox<String> ySpaceCombo;
     private JToggleButton maskToggle;
-    private JButton seasonalMaskButton;
+    private SeasonalMaskButton seasonalMaskButton;
     private JToggleButton autoYToggle;
 
     PlotToolbarBuilder(PlotPanel plotPanel) {
@@ -174,65 +165,9 @@ class PlotToolbarBuilder {
     }
 
     PlotToolbarBuilder addSeasonalMaskButton() {
-        // Construct a menu to be displayed under the button on click.
-        var menu = new JPopupMenu();
-
-        // Now create the button
-        seasonalMaskButton = createIconButton(
-            SEASONAL_MASK_OFF,
-            "Seasonal Data Mask",
-            // Anchor the popup's top-left to the button's bottom-left.
-            () -> menu.show(seasonalMaskButton, 0, seasonalMaskButton.getHeight())
-        ) ;
-
-        // Populate the menu
-        var allItem = new JStickyCheckBoxMenuItem("All");
-        allItem.setSelected(true);
-        // Construct Jan..Dec items
-        var monthItems = new EnumMap<Month, JStickyCheckBoxMenuItem>(Month.class);
-        for (Month month : Month.values()) {
-            String label = month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH);
-            var monthItem = new JStickyCheckBoxMenuItem(label);
-            monthItems.put(month, monthItem);
-        }
-
-        // Register action listeners
-        allItem.addActionListener(e -> {
-            if (!allItem.isSelected()) {
-                allItem.setSelected(false);
-                for (var monthItem : monthItems.values()) {
-                    monthItem.setSelected(true);
-                }
-            } else {
-                for (var item : monthItems.values()) {
-                    item.setSelected(false);
-                }
-            }
-            applySeasonalMaskMode(SeasonalMaskMode.DISABLED);
-        });
-        for (var monthItem : monthItems.values()) {
-            monthItem.addActionListener(e -> {
-                EnumSet<Month> selected = EnumSet.noneOf(Month.class);
-                monthItems.forEach((month, item) -> {
-                    if (item.isSelected()) {
-                        selected.add(month);
-                    }
-                });
-
-                // "All" is the complement of a partial selection: checked exactly when no
-                // individual month is, so deselecting the last month falls back to it.
-                allItem.setSelected(selected.isEmpty());
-                applySeasonalMaskMode(SeasonalMaskMode.of(selected));
-            });
-        }
-
-        // Populate the menu
-        menu.add(allItem);
-        menu.addSeparator();
-        for (var item : monthItems.values()) {
-            menu.add(item);
-        }
-
+        seasonalMaskButton = new SeasonalMaskButton(
+            plotPanel::setSeasonalMaskMode, ToolbarConstants.BUTTON_ICON_SIZE, SeasonalMaskMode.DISABLED);
+        applyToolbarButtonSizing(seasonalMaskButton);
         toolbar.add(seasonalMaskButton);
         return this;
     }
@@ -346,18 +281,6 @@ class PlotToolbarBuilder {
     }
 
    /** Creates a standard icon from a {@link FontAwesomeSolid} */
-   /**
-     * Pushes a seasonal mask mode to the plot and reflects it in the toolbar button. The
-     * button's lit state is derived from the mode rather than from which item was clicked,
-     * so a selection that masks nothing (none, or all twelve) can never look active.
-     */
-    private void applySeasonalMaskMode(SeasonalMaskMode mode) {
-        boolean active = mode instanceof SeasonalMaskMode.Enabled;
-        seasonalMaskButton.setSelected(active);
-        seasonalMaskButton.setIcon(createFontIcon(active ? SEASONAL_MASK_ON : SEASONAL_MASK_OFF));
-        plotPanel.setSeasonalMaskMode(mode);
-    }
-
    private javax.swing.Icon createFontIcon(FontAwesomeSolid icon) {
        return FontIcon.of(icon, ToolbarConstants.BUTTON_ICON_SIZE);
    }
@@ -367,11 +290,16 @@ class PlotToolbarBuilder {
         JButton button = new JButton(createFontIcon(icon));
         button.setToolTipText(tooltip);
         button.setFocusable(false);
+        applyToolbarButtonSizing(button);
+        button.addActionListener(e -> action.run());
+        return button;
+    }
+
+    /** Pins a button to the toolbar's shared square footprint. */
+    private static void applyToolbarButtonSizing(javax.swing.AbstractButton button) {
         button.setPreferredSize(ToolbarConstants.BUTTON_SIZE);
         button.setMinimumSize(ToolbarConstants.BUTTON_SIZE);
         button.setMaximumSize(ToolbarConstants.BUTTON_SIZE);
-        button.addActionListener(e -> action.run());
-        return button;
     }
 
     /** Creates a standard toggle button. */
