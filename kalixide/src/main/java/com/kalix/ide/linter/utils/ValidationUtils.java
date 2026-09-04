@@ -5,7 +5,6 @@ import com.kalix.ide.linter.model.ValidationResult;
 import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.linter.parsing.INIModelParser;
 
-import java.util.List;
 import java.util.regex.Pattern;
 
 /**
@@ -21,17 +20,29 @@ public class ValidationUtils {
     private static final Pattern NODE_PROPERTY_REFERENCE_PATTERN = Pattern.compile("^node\\.([\\w_]+)\\.([\\w_]+)$");
     // var.<block>.<key> - a series written by a [var.*] block, recordable in [outputs]
     private static final Pattern VAR_OUTPUT_REFERENCE_PATTERN = Pattern.compile("^var\\.([\\w_]+)\\.([\\w_]+)$");
-    // Downstream link parameters: ds_1, ds_2, ... - deliberately NOT ds_1_outlet,
-    // ds_1_order etc., whose values are not node names. Shared so every consumer
-    // (reference validation, ordering validation, parsing) agrees on the rule.
-    public static final Pattern DSNODE_PARAM_PATTERN = Pattern.compile("^ds_\\d+$");
+    private static final String DSNODE_PARAM_PREFIX = "ds_";
 
     /**
      * True if the property key is a downstream link parameter (ds_1, ds_2, ...)
-     * whose value names a downstream node.
+     * whose value names a downstream node: {@code ds_} followed by one or more
+     * digits and nothing else. Deliberately NOT ds_1_outlet, ds_1_order etc.,
+     * whose values are not node names. Shared so every consumer (reference
+     * validation, ordering validation, parsing) agrees on the rule. Runs on every
+     * property key of every node per lint pass, hence a character scan rather
+     * than a regex.
      */
     public static boolean isDsNodeParam(String propertyKey) {
-        return DSNODE_PARAM_PATTERN.matcher(propertyKey).matches();
+        int length = propertyKey.length();
+        if (length <= DSNODE_PARAM_PREFIX.length() || !propertyKey.startsWith(DSNODE_PARAM_PREFIX)) {
+            return false;
+        }
+        for (int i = DSNODE_PARAM_PREFIX.length(); i < length; i++) {
+            char c = propertyKey.charAt(i);
+            if (c < '0' || c > '9') {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Outcome of a {@code var.<block>.<key>} existence check. */
@@ -67,20 +78,19 @@ public class ValidationUtils {
     }
 
     /**
-     * Validate output references against schema rule (for full validation).
-     * @param outputRefs List of output references to validate
-     * @param model Parsed model for line number lookup
+     * Validate the model's {@code [outputs]} references against the schema rule.
+     * @param model Parsed model (references and their lines)
      * @param schema Schema containing validation rules
      * @param result ValidationResult to add issues to
      */
-    public static void validateOutputReferencesWithSchema(List<String> outputRefs, INIModelParser.ParsedModel model,
+    public static void validateOutputReferencesWithSchema(INIModelParser.ParsedModel model,
                                                         LinterSchema schema, ValidationResult result) {
         ValidationRule rule = schema.getValidationRule("output_references");
         if (rule == null || !rule.isEnabled()) return;
 
         // Check if this rule uses node-specific output validation
         if ("node_output_validation".equals(rule.getCheck())) {
-            validateNodeSpecificOutputs(outputRefs, model, schema, result, rule);
+            validateNodeSpecificOutputs(model, schema, result, rule);
             return;
         }
 
@@ -93,10 +103,10 @@ public class ValidationUtils {
             outputPattern = OUTPUT_REFERENCE_PATTERN;
         }
 
-        for (String outputRef : outputRefs) {
-            if (!outputPattern.matcher(outputRef).matches()) {
-                result.addIssue(outputRefReportLine(model, outputRef),
-                              "Invalid output reference format: " + outputRef,
+        for (INIModelParser.ListEntry entry : model.getOutputReferenceEntries()) {
+            if (!outputPattern.matcher(entry.text()).matches()) {
+                result.addIssue(entry.lineNumber(),
+                              "Invalid output reference format: " + entry.text(),
                               rule.getSeverity(), "invalid_output_reference");
             }
         }
@@ -104,32 +114,36 @@ public class ValidationUtils {
 
     /**
      * Validate output references using node-specific allowed outputs.
-     * @param outputRefs List of output references to validate
-     * @param model Parsed model for line number lookup
+     * @param model Parsed model (references and their lines)
      * @param schema Schema containing node type definitions
      * @param result ValidationResult to add issues to
      * @param rule The validation rule for error reporting
      */
-    private static void validateNodeSpecificOutputs(List<String> outputRefs, INIModelParser.ParsedModel model,
+    private static void validateNodeSpecificOutputs(INIModelParser.ParsedModel model,
                                                    LinterSchema schema, ValidationResult result, ValidationRule rule) {
-        for (String outputRef : outputRefs) {
+        // Iterate the entries, not the distinct references: a reference written
+        // twice is wrong twice, on two lines.
+        for (INIModelParser.ListEntry entry : model.getOutputReferenceEntries()) {
+            String outputRef = entry.text();
+            int line = entry.lineNumber();
+
             // A var series (var.<block>.<key>, a series written by a [var.*]
             // block) is recordable in [outputs] just like a node output.
             if (outputRef.startsWith("var.")) {
-                validateVarOutputReference(outputRef, model, result, rule);
+                validateVarOutputReference(outputRef, line, model, result, rule);
                 continue;
             }
 
             // Account and RAS series (acc.<account or group>.<field>,
             // ras.<name>.fired) are recordable in [outputs] like node outputs.
             if (outputRef.startsWith("acc.") || outputRef.startsWith("ras.")) {
-                validateAccountingOutputReference(outputRef, model, result, rule);
+                validateAccountingOutputReference(outputRef, line, model, result, rule);
                 continue;
             }
 
             java.util.regex.Matcher matcher = NODE_PROPERTY_REFERENCE_PATTERN.matcher(outputRef);
             if (!matcher.matches()) {
-                result.addIssue(outputRefReportLine(model, outputRef),
+                result.addIssue(line,
                               "Invalid output reference format: " + outputRef + " (should be node.nodename.property)",
                               rule.getSeverity(), "invalid_output_reference");
                 continue;
@@ -139,25 +153,17 @@ public class ValidationUtils {
             String outputProperty = matcher.group(2);
 
             // Check if the node exists
-            if (!model.getNodes().containsKey(nodeName)) {
-                result.addIssue(outputRefReportLine(model, outputRef),
+            INIModelParser.NodeSection node = model.getNodes().get(nodeName);
+            if (node == null) {
+                result.addIssue(line,
                               "Output reference points to non-existent node: " + nodeName,
                               rule.getSeverity(), "invalid_node_reference");
                 continue;
             }
 
-            // Get the node's type
-            INIModelParser.NodeSection node = model.getNodes().get(nodeName);
-            String nodeType = null;
-            for (INIModelParser.Property prop : node.getProperties().values()) {
-                if ("type".equals(prop.getKey())) {
-                    nodeType = prop.getValue();
-                    break;
-                }
-            }
-
+            String nodeType = node.getNodeType();
             if (nodeType == null) {
-                result.addIssue(outputRefReportLine(model, outputRef),
+                result.addIssue(line,
                               "Node " + nodeName + " has no type defined",
                               rule.getSeverity(), "missing_node_type");
                 continue;
@@ -166,7 +172,7 @@ public class ValidationUtils {
             // Get the node type definition and check allowed outputs
             com.kalix.ide.linter.schema.NodeTypeDefinition nodeTypeDef = schema.getNodeType(nodeType);
             if (nodeTypeDef == null) {
-                result.addIssue(outputRefReportLine(model, outputRef),
+                result.addIssue(line,
                               "Unknown node type: " + nodeType,
                               rule.getSeverity(), "unknown_node_type");
                 continue;
@@ -175,7 +181,7 @@ public class ValidationUtils {
             // Check if the output property is allowed for this node type
             // If no allowed outputs are defined, allow everything (fallback to no error/warning)
             if (!nodeTypeDef.allowedOutputs.isEmpty() && !nodeTypeDef.allowedOutputs.contains(outputProperty)) {
-                result.addIssue(outputRefReportLine(model, outputRef),
+                result.addIssue(line,
                               "Output property '" + outputProperty + "' is not allowed for node type '" + nodeType + "'. Allowed outputs: " + nodeTypeDef.allowedOutputs,
                               rule.getSeverity(), "invalid_output_property");
             }
@@ -186,11 +192,11 @@ public class ValidationUtils {
      * Validate a {@code var.<block>.<key>} output reference: the format, and
      * (when the block is present in the model) that the block and key exist.
      */
-    private static void validateVarOutputReference(String outputRef, INIModelParser.ParsedModel model,
+    private static void validateVarOutputReference(String outputRef, int line, INIModelParser.ParsedModel model,
                                                    ValidationResult result, ValidationRule rule) {
         java.util.regex.Matcher matcher = VAR_OUTPUT_REFERENCE_PATTERN.matcher(outputRef);
         if (!matcher.matches()) {
-            result.addIssue(outputRefReportLine(model, outputRef),
+            result.addIssue(line,
                           "Invalid output reference format: " + outputRef + " (should be var.block.name)",
                           rule.getSeverity(), "invalid_output_reference");
             return;
@@ -199,11 +205,11 @@ public class ValidationUtils {
         String blockName = matcher.group(1);
         String varName = matcher.group(2);
         switch (checkVarReference(blockName, varName, model)) {
-            case UNKNOWN_BLOCK -> result.addIssue(outputRefReportLine(model, outputRef),
+            case UNKNOWN_BLOCK -> result.addIssue(line,
                           "Output reference points to unknown var block: " + blockName
                                   + " (no [var." + blockName + "] section is defined)",
                           rule.getSeverity(), "invalid_var_reference");
-            case UNKNOWN_KEY -> result.addIssue(outputRefReportLine(model, outputRef),
+            case UNKNOWN_KEY -> result.addIssue(line,
                           "Output reference points to unknown var: " + varName
                                   + " (no '" + varName + "' in [var." + blockName + "])",
                           rule.getSeverity(), "invalid_var_reference");
@@ -229,12 +235,12 @@ public class ValidationUtils {
      * which the linter does not parse), so this checks shape and field name;
      * the engine catches unknown names at load.
      */
-    private static void validateAccountingOutputReference(String outputRef, INIModelParser.ParsedModel model,
+    private static void validateAccountingOutputReference(String outputRef, int line, INIModelParser.ParsedModel model,
                                                           ValidationResult result, ValidationRule rule) {
         String[] segments = outputRef.split("\\.");
         boolean isRas = outputRef.startsWith("ras.");
         if (segments.length != 3) {
-            result.addIssue(outputRefReportLine(model, outputRef),
+            result.addIssue(line,
                           "Invalid output reference format: " + outputRef + " (should be "
                                   + (isRas ? "ras.name.fired" : "acc.name.field") + ")",
                           rule.getSeverity(), "invalid_output_reference");
@@ -257,21 +263,11 @@ public class ValidationUtils {
         if (!allowed.contains(segments[2].toLowerCase())) {
             java.util.List<String> known = new java.util.ArrayList<>(allowed);
             java.util.Collections.sort(known);
-            result.addIssue(outputRefReportLine(model, outputRef),
+            result.addIssue(line,
                           "Unknown field for " + what + ": " + outputRef
                                   + " (expected one of: " + String.join(", ", known) + ")",
                           rule.getSeverity(), "invalid_output_reference");
         }
-    }
-
-    /**
-     * Report line for an {@code [outputs]} reference: the line the reference was
-     * written on, or a section-level fallback. Hoisted out of the many
-     * output-validation sites that repeated this lookup verbatim.
-     */
-    private static int outputRefReportLine(INIModelParser.ParsedModel model, String outputRef) {
-        Integer lineNumber = model.getOutputReferenceLineNumbers().get(outputRef);
-        return lineNumber != null ? lineNumber : getOutputsSectionFallbackLine(model);
     }
 
     /**
@@ -281,22 +277,6 @@ public class ValidationUtils {
      */
     public static boolean isValidIniVersion(String versionValue) {
         return versionValue != null && INI_VERSION_PATTERN.matcher(versionValue).matches();
-    }
-
-    /**
-     * Get fallback line number for outputs section errors.
-     */
-    private static int getOutputsSectionFallbackLine(INIModelParser.ParsedModel model) {
-        INIModelParser.Section outputsSection = model.getSections().get("outputs");
-        if (outputsSection != null) {
-            // If we have any output references with line numbers, use the first one as approximation
-            if (!model.getOutputReferenceLineNumbers().isEmpty()) {
-                return model.getOutputReferenceLineNumbers().values().iterator().next();
-            }
-            // Otherwise use the section start line + 2
-            return Math.max(outputsSection.getStartLine() + 2, 1);
-        }
-        return 1; // Last resort
     }
 
     /**
@@ -319,20 +299,12 @@ public class ValidationUtils {
         String outputProperty = matcher.group(2);
 
         // Check if the node exists
-        if (!model.getNodes().containsKey(nodeName)) {
+        INIModelParser.NodeSection node = model.getNodes().get(nodeName);
+        if (node == null) {
             return "Node reference points to non-existent node: " + nodeName;
         }
 
-        // Get the node's type
-        INIModelParser.NodeSection node = model.getNodes().get(nodeName);
-        String nodeType = null;
-        for (INIModelParser.Property prop : node.getProperties().values()) {
-            if ("type".equals(prop.getKey())) {
-                nodeType = prop.getValue();
-                break;
-            }
-        }
-
+        String nodeType = node.getNodeType();
         if (nodeType == null) {
             return "Node " + nodeName + " has no type defined";
         }

@@ -79,6 +79,24 @@ public final class IniSyntax {
     }
 
     /**
+     * Splits text into lines on {@code \n}, dropping a trailing {@code \r} from each
+     * so CRLF documents parse identically to LF documents. (A "blank" line that
+     * survived as {@code "\r"} would count as a continuation line, gluing indented
+     * lines after a blank line onto the previous property.) A trailing newline
+     * does not produce an extra empty line.
+     */
+    public static String[] splitLines(String content) {
+        String[] lines = content.split("\n");
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            if (!line.isEmpty() && line.charAt(line.length() - 1) == '\r') {
+                lines[i] = line.substring(0, line.length() - 1);
+            }
+        }
+        return lines;
+    }
+
+    /**
      * True if the line's code (after trimming) starts with {@code [}, i.e. it is a
      * section header, well-formed or not. A malformed header (no closing
      * {@code ]}, or text after it) is still a header attempt, never a property or

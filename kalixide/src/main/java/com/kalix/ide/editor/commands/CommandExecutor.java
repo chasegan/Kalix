@@ -265,13 +265,10 @@ public class CommandExecutor {
         // Output references are stored separately in the parsed model (not as section properties)
         Pattern nodeRefPattern = Pattern.compile("\\bnode\\." + Pattern.quote(oldName) + "\\.");
         String nodeRefReplacement = "node." + newName + ".";
-        for (String outputRef : parsedModel.getOutputReferences()) {
-            // Match: node.OldName.anything
-            if (nodeRefPattern.matcher(outputRef).find()) {
-                Integer lineNumber = parsedModel.getOutputReferenceLineNumbers().get(outputRef);
-                if (lineNumber != null) {
-                    addPatternMatches(replacements, lines, lineNumber, nodeRefPattern, false, nodeRefReplacement);
-                }
+        for (INIModelParser.ListEntry outputRef : parsedModel.getOutputReferenceEntries()) {
+            // Match: node.OldName.anything (every occurrence, each on its own line)
+            if (nodeRefPattern.matcher(outputRef.text()).find()) {
+                addPatternMatches(replacements, lines, outputRef.lineNumber(), nodeRefPattern, false, nodeRefReplacement);
             }
         }
 
@@ -430,12 +427,9 @@ public class CommandExecutor {
         }
 
         // Output references: data.{name}.*
-        for (String outputRef : parsedModel.getOutputReferences()) {
-            if (dataRefPattern.matcher(outputRef).find()) {
-                Integer lineNumber = parsedModel.getOutputReferenceLineNumbers().get(outputRef);
-                if (lineNumber != null) {
-                    addPatternMatches(replacements, lines, lineNumber, dataRefPattern, false, dataRefReplacement);
-                }
+        for (INIModelParser.ListEntry outputRef : parsedModel.getOutputReferenceEntries()) {
+            if (dataRefPattern.matcher(outputRef.text()).find()) {
+                addPatternMatches(replacements, lines, outputRef.lineNumber(), dataRefPattern, false, dataRefReplacement);
             }
         }
     }

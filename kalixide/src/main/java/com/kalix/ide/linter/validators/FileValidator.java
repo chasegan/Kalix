@@ -11,7 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -33,13 +32,16 @@ public class FileValidator implements ValidationStrategy {
         ValidationRule rule = schema.getValidationRule("file_paths");
         if (rule == null || !rule.isEnabled()) return;
 
-        List<String> inputFiles = model.getInputFiles();
-        for (String filePath : inputFiles) {
+        // Every entry on its own line: a path listed twice that does not exist
+        // is wrong on both lines.
+        for (INIModelParser.ListEntry entry : model.getInputFileEntries()) {
+            String filePath = entry.text();
+            int lineNumber = entry.lineNumber();
             if (isPixieBinary(filePath)) {
                 // Reported instead of "does not exist": the .pxb is usually
                 // sitting right there, and pointing at the wrong half of the
                 // pair is the mistake worth naming.
-                result.addIssue(findFilePathLineNumber(model, filePath),
+                result.addIssue(lineNumber,
                               "Name the .pxt half of a Pixie pair here, not the .pxb: "
                                       + pixieSibling(filePath, ".pxt"),
                               rule.getSeverity(), "pixie_binary_named");
@@ -47,7 +49,6 @@ public class FileValidator implements ValidationStrategy {
             }
 
             if (!fileExists(filePath, baseDirectory)) {
-                int lineNumber = findFilePathLineNumber(model, filePath);
                 result.addIssue(lineNumber,
                               "Input file does not exist: " + filePath,
                               rule.getSeverity(), "file_not_found");
@@ -57,7 +58,7 @@ public class FileValidator implements ValidationStrategy {
             if (isPixieMetadata(filePath)) {
                 String companion = pixieSibling(filePath, ".pxb");
                 if (!fileExists(companion, baseDirectory)) {
-                    result.addIssue(findFilePathLineNumber(model, filePath),
+                    result.addIssue(lineNumber,
                                   "Pixie source is missing its companion file: " + companion,
                                   rule.getSeverity(), "pixie_companion_missing");
                 }
@@ -110,17 +111,5 @@ public class FileValidator implements ValidationStrategy {
             fileExistenceCache.remove(cacheKey);
             return false;
         }
-    }
-
-    private int findFilePathLineNumber(INIModelParser.ParsedModel model, String filePath) {
-        // First try to get the exact line number for this file path
-        Integer lineNumber = model.getInputFileLineNumbers().get(filePath);
-        if (lineNumber != null) {
-            return lineNumber;
-        }
-
-        // Fallback to section start line if not found
-        INIModelParser.Section inputsSection = model.getSections().get("data");
-        return inputsSection != null ? inputsSection.getStartLine() + 1 : 1;
     }
 }
