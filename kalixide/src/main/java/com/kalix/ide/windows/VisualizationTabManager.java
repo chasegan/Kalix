@@ -544,7 +544,8 @@ public class VisualizationTabManager {
             .addSeparator()
             .addAggregationControls()
             .addSeparator()
-            .addMaskControls();
+            .addMaskControls()
+            .addSeasonalMaskButton();
         tabInfo.statsToolbar = builder;
         return builder.build();
     }

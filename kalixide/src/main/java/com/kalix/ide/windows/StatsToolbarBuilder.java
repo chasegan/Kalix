@@ -1,9 +1,11 @@
 package com.kalix.ide.windows;
 
+import com.kalix.ide.components.SeasonalMaskButton;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.stats.MaskMode;
+import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.filedialog.FileDialogFilter;
@@ -108,6 +110,19 @@ class StatsToolbarBuilder {
         });
         toolbar.add(maskCombo);
 
+        return this;
+    }
+
+    StatsToolbarBuilder addSeasonalMaskButton() {
+        SeasonalMaskButton seasonalMaskButton = new SeasonalMaskButton(
+            tabInfo.statsModel::setSeasonalMaskMode,
+            ToolbarConstants.BUTTON_ICON_SIZE,
+            SeasonalMaskMode.DISABLED);
+        // The component leaves sizing to its host so it matches whatever toolbar it joins.
+        seasonalMaskButton.setPreferredSize(ToolbarConstants.BUTTON_SIZE);
+        seasonalMaskButton.setMinimumSize(ToolbarConstants.BUTTON_SIZE);
+        seasonalMaskButton.setMaximumSize(ToolbarConstants.BUTTON_SIZE);
+        toolbar.add(seasonalMaskButton);
         return this;
     }
 

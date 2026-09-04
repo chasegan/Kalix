@@ -4,6 +4,7 @@ import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.stats.MaskMode;
+import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
 import com.kalix.ide.flowviz.stats.StatSample;
 import com.kalix.ide.flowviz.stats.Statistic;
 import com.kalix.ide.flowviz.stats.StatisticsRegistry;
@@ -26,6 +27,7 @@ public class StatsTableModel extends AbstractTableModel {
 
     // Masking configuration
     private MaskMode maskMode = MaskMode.ALL;
+    private SeasonalMaskMode seasonalMaskMode = SeasonalMaskMode.DISABLED;
     private SeriesRef referenceSeries = null;  // First series, used for bivariate stats
 
     // Cache of original (unmasked) series data, keyed by ref. LinkedHashMap preserves
@@ -150,6 +152,19 @@ public class StatsTableModel extends AbstractTableModel {
     }
 
     /**
+     * Sets the seasonal mask mode and recomputes all statistics.
+     *
+     * @param mode The seasonal mask mode to apply
+     */
+    public void setSeasonalMaskMode(SeasonalMaskMode mode) {
+        if (mode == null || mode.equals(this.seasonalMaskMode)) {
+            return;
+        }
+        this.seasonalMaskMode = mode;
+        recomputeAllStatistics();
+    }
+
+    /**
      * Gets the current mask mode.
      */
     public MaskMode getMaskMode() {
@@ -186,7 +201,10 @@ public class StatsTableModel extends AbstractTableModel {
         } else {
             // For EACH or NONE modes, only this series needs updating (no shared ALL mask
             // or shared reference sample — EACH masks per series, NONE skips bivariate).
-            Map<String, String> statisticValues = computeStatistics(data, null, null);
+            TimeSeriesData referenceData = referenceSeries != null
+                ? seasonallyMasked(originalSeriesCache.get(referenceSeries)) : null;
+            Map<String, String> statisticValues =
+                computeStatistics(seasonallyMasked(data), null, null, referenceData);
 
             // Remove existing entry if present
             seriesData.removeIf(stats -> stats.ref.equals(ref));
@@ -265,28 +283,65 @@ public class StatsTableModel extends AbstractTableModel {
      * once here and reused — rather than rebuilt inside {@code computeStatistics} per
      * series.</p>
      */
+    /**
+     * Returns the series trimmed to the selected months, or the input untouched when no
+     * seasonal mask is active. Each series is masked against <em>its own</em> timestamps:
+     * a mask is a set of timestamps drawn from one grid, so reusing one mask across series
+     * would drop every point their grids do not share.
+     */
+    /** Single-series form of {@link #seasonallyMasked(Map)}, for the incremental path. */
+    private TimeSeriesData seasonallyMasked(TimeSeriesData series) {
+        if (series == null || !(seasonalMaskMode instanceof SeasonalMaskMode.Enabled)) {
+            return series;
+        }
+        return TimeSeriesMasker.createSeasonalMask(series, seasonalMaskMode).apply(series);
+    }
+
+    private Map<SeriesRef, TimeSeriesData> seasonallyMasked(
+            Map<SeriesRef, TimeSeriesData> series) {
+        if (!(seasonalMaskMode instanceof SeasonalMaskMode.Enabled)) {
+            return series;
+        }
+        Map<SeriesRef, TimeSeriesData> masked = new LinkedHashMap<>();
+        for (Map.Entry<SeriesRef, TimeSeriesData> entry : series.entrySet()) {
+            TimeSeriesData data = entry.getValue();
+            masked.put(entry.getKey(), data == null ? null
+                : TimeSeriesMasker.createSeasonalMask(data, seasonalMaskMode).apply(data));
+        }
+        return masked;
+    }
+
     private void recomputeAllStatistics() {
+        // Seasonal masking restricts the time domain; validity masking intersects valid
+        // points. The two commute, so trimming the inputs up front is equivalent to
+        // composing the masks - and leaves ALL/EACH/NONE below meaning exactly what they
+        // did, just over part of the year. The cache itself stays unmasked: it is the
+        // source of truth that addSeries/setSeries maintain, and trimming it in place
+        // would compound across successive selections.
+        Map<SeriesRef, TimeSeriesData> workingSeries = seasonallyMasked(originalSeriesCache);
+
+        TimeSeriesData referenceData = referenceSeries != null
+            ? workingSeries.get(referenceSeries) : null;
+
         // In ALL mode both the mask and the masked reference are shared across every
         // series — build each a single time, here, and reuse them for all rows.
         TimeSeriesMasker.Mask allMask = null;
         StatSample sharedReferenceSample = null;
         if (maskMode == MaskMode.ALL) {
-            allMask = TimeSeriesMasker.createAllMask(new ArrayList<>(originalSeriesCache.values()));
-            TimeSeriesData referenceData = referenceSeries != null
-                ? originalSeriesCache.get(referenceSeries) : null;
+            allMask = TimeSeriesMasker.createAllMask(new ArrayList<>(workingSeries.values()));
             if (referenceData != null) {
                 sharedReferenceSample = new StatSample(allMask.applyToValues(referenceData));
             }
         }
 
-        // Rebuild seriesData from scratch based on originalSeriesCache
+        // Rebuild seriesData from scratch based on the working series
         List<SeriesStats> newSeriesData = new ArrayList<>();
 
-        for (Map.Entry<SeriesRef, TimeSeriesData> entry : originalSeriesCache.entrySet()) {
-            TimeSeriesData originalData = entry.getValue();
-            if (originalData != null) {
+        for (Map.Entry<SeriesRef, TimeSeriesData> entry : workingSeries.entrySet()) {
+            TimeSeriesData series = entry.getValue();
+            if (series != null) {
                 Map<String, String> newValues =
-                    computeStatistics(originalData, allMask, sharedReferenceSample);
+                    computeStatistics(series, allMask, sharedReferenceSample, referenceData);
                 newSeriesData.add(new SeriesStats(entry.getKey(), newValues));
             }
         }
@@ -304,15 +359,15 @@ public class StatsTableModel extends AbstractTableModel {
      *                    ignored otherwise (pass {@code null} for EACH/NONE).
      * @param allRefSample The shared reference {@link StatSample} for ALL mode (the
      *                    reference series masked by {@code allMask}); ignored otherwise.
+     * @param referenceData The reference series, already seasonally trimmed, or
+     *                    {@code null} when there is none; used in EACH mode.
      * @return Map of statistic names to computed values
      */
     private Map<String, String> computeStatistics(TimeSeriesData series,
                                                   TimeSeriesMasker.Mask allMask,
-                                                  StatSample allRefSample) {
+                                                  StatSample allRefSample,
+                                                  TimeSeriesData referenceData) {
         Map<String, String> values = new HashMap<>();
-
-        TimeSeriesData referenceData = referenceSeries != null
-            ? originalSeriesCache.get(referenceSeries) : null;
 
         // Build the prepared samples for this series and (where relevant) the reference.
         // Masking with the same mask keeps the two samples index-aligned for bivariate
