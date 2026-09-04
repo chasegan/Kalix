@@ -10,7 +10,11 @@ import java.util.List;
  */
 public class PlotStateHistory {
 
-    private static final int MAX_HISTORY_SIZE = 50;
+    // Generous by design: a PlotState is a list of refs, a set of sources, a few
+    // enums and four doubles, so even a full history is kilobytes per tab. The old
+    // 50-entry cap predated source ticks becoming undoable steps and could silently
+    // evict "undo to birth" mid-session.
+    private static final int MAX_HISTORY_SIZE = 1000;
 
     private final List<PlotState> history = new ArrayList<>();
     private int currentIndex = -1;
