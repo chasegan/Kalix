@@ -61,6 +61,7 @@ public class SeasonalMaskButton extends JButton {
         addActionListener(e -> menu.show(this, 0, getHeight()));
 
         showMode(this.mode);
+        syncMenu(this.mode);
     }
 
     /** The mask currently selected. */
@@ -76,6 +77,7 @@ public class SeasonalMaskButton extends JButton {
     public void setMode(SeasonalMaskMode newMode) {
         mode = (newMode != null) ? newMode : SeasonalMaskMode.DISABLED;
         showMode(mode);
+        syncMenu(mode);
     }
 
     private JPopupMenu buildMenu() {
@@ -118,7 +120,13 @@ public class SeasonalMaskButton extends JButton {
         return menu;
     }
 
-    /** Records a user-driven change, updates the glyph, and notifies the sink. */
+    /**
+     * Records a user-driven change, updates the glyph, and notifies the sink. The menu is
+     * deliberately not resynced here: the ticks are what the user just set, and they carry
+     * information the mode does not. Unchecking "All" ticks all twelve months yet still
+     * masks nothing, so of() reports DISABLED - and rewriting the menu from DISABLED would
+     * clear the very ticks the click just made.
+     */
     private void applyMode(SeasonalMaskMode newMode) {
         mode = newMode;
         showMode(newMode);
@@ -126,18 +134,24 @@ public class SeasonalMaskButton extends JButton {
     }
 
     /**
-     * Reflects a mode in the button and menu without notifying the sink. The lit state is
-     * derived from the mode itself, so a selection that masks nothing — none, or all twelve
-     * — can never look active.
+     * Reflects a mode in the button glyph. The lit state is derived from the mode itself,
+     * so a selection that masks nothing - none, or all twelve - can never look active.
      */
     private void showMode(SeasonalMaskMode current) {
         boolean active = current instanceof SeasonalMaskMode.Enabled;
         setSelected(active);
         setIcon(FontIcon.of(active ? ICON_ACTIVE : ICON_INACTIVE, iconSize));
+    }
 
+    /**
+     * Drives the menu ticks from a mode. Only for state arriving from outside - an initial
+     * value, an undo, a tab reset - where there is no user selection to preserve.
+     */
+    private void syncMenu(SeasonalMaskMode current) {
+        boolean active = current instanceof SeasonalMaskMode.Enabled;
         allItem.setSelected(!active);
         for (var entry : monthItems.entrySet()) {
-            entry.getValue().setSelected(current.includes(entry.getKey()) && active);
+            entry.getValue().setSelected(active && current.includes(entry.getKey()));
         }
     }
 }
