@@ -95,8 +95,9 @@ class PlotToolbarBuilder {
             }
         });
 
-        undoButton.setEnabled(false);
-        redoButton.setEnabled(false);
+        // Initialise from the panel: a duplicated tab has history before its toolbar exists.
+        undoButton.setEnabled(plotPanel.canUndo());
+        redoButton.setEnabled(plotPanel.canRedo());
 
         // Update button state whenever history changes
         plotPanel.setOnHistoryChanged(() -> {
@@ -155,8 +156,10 @@ class PlotToolbarBuilder {
     }
 
     PlotToolbarBuilder addMaskToggle() {
+        // Initialise from the panel rather than a constant: by toolbar-build time the panel
+        // may already carry a non-default mask (e.g. tab duplication copies history first).
         maskToggle = createToggleButton(FontAwesomeSolid.MASK,
-            "Overlapping Data Mask", false);
+            "Overlapping Data Mask", plotPanel.getMaskMode() == ALL);
         maskToggle.addActionListener(e -> {
             MaskMode mode = maskToggle.isSelected() ? ALL : NONE;
             plotPanel.setMaskMode(mode);
@@ -179,12 +182,15 @@ class PlotToolbarBuilder {
         plotTypeCombo.setSelectedItem(plotPanel.getPlotType());
         plotTypeCombo.addActionListener(e -> {
             PlotType selected = (PlotType) plotTypeCombo.getSelectedItem();
-            if (selected != null) {
-                MaskMode maskMode = selected.isDataMaskDefault() ? ALL : NONE;
-                plotPanel.setPlotTypeAndMaskMode(selected, maskMode);
-                // sync with button
-                maskToggle.setSelected(selected.isDataMaskDefault());
+            // Re-picking the current type is a no-op: the combo fires even for a same-item
+            // selection, and applying the default then would stomp a manual mask override,
+            // reset the zoom, and push a spurious undo entry.
+            if (selected == null || selected == plotPanel.getPlotType()) {
+                return;
             }
+            plotPanel.setPlotTypeAndMaskMode(selected, selected.isDataMaskDefault() ? ALL : NONE);
+            // Reflect the panel's resulting state rather than recomputing the policy here.
+            maskToggle.setSelected(plotPanel.getMaskMode() == ALL);
         });
         toolbar.add(plotTypeCombo);
         return this;

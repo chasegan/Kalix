@@ -473,6 +473,17 @@ public class VisualizationTabManager {
             plotPanel.addLegendSeries(ref);
         }
 
+        // Copy history from source plot tab (Chrome-style duplicate), or push initial state.
+        // Done BEFORE the toolbar is built: copyHistoryFrom restores the source's current
+        // state (mask mode included, which TabSettings doesn't carry), and the toolbar
+        // controls initialise by reading the panel — building first left them showing
+        // defaults that disagreed with the restored plot.
+        if (settings.sourcePlotPanel != null) {
+            plotPanel.copyHistoryFrom(settings.sourcePlotPanel);
+        } else {
+            plotPanel.pushState();
+        }
+
         // Create container panel with toolbar
         JPanel containerPanel = new JPanel(new BorderLayout());
         JToolBar toolbar = createPlotToolbar(plotPanel, settings.autoYMode, settings.showCoordinates);
@@ -493,13 +504,6 @@ public class VisualizationTabManager {
         // Select the new tab (only when duplicating, not for initial default tabs)
         if (settings.selectedSeries != null) {
             tabbedPane.setSelectedIndex(index);
-        }
-
-        // Copy history from source plot tab (Chrome-style duplicate), or push initial state
-        if (settings.sourcePlotPanel != null) {
-            plotPanel.copyHistoryFrom(settings.sourcePlotPanel);
-        } else {
-            plotPanel.pushState();
         }
 
         return plotPanel;
