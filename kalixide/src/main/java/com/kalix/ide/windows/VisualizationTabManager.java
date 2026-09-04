@@ -455,6 +455,17 @@ public class VisualizationTabManager {
                 ? new LinkedHashSet<>(activeTab.selectedSeries)
                 : new LinkedHashSet<>(sharedDataSet.getSeriesRefs());
         }
+        // TabInfo exists BEFORE the construction batch so the panel's snapshot
+        // supplier can read the tab's true source context: history entry #1 must
+        // carry the sources it was born with, or the first undo back to it would
+        // wrongly clear them.
+        JPanel containerPanel = new JPanel(new BorderLayout());
+        TabInfo tabInfo = new TabInfo(
+            TabInfo.TabType.PLOT, settings.name != null ? settings.name : "", containerPanel, plotPanel, null);
+        tabInfo.selectedSeries.addAll(inheritedSeries);
+        tabInfo.checkedSources.addAll(inheritedSources(settings));
+        plotPanel.setCheckedSourcesSupplier(() -> new LinkedHashSet<>(tabInfo.checkedSources));
+
         // One batched change: series + settings land as a single rebuild and a single
         // history entry, so a fresh tab starts with a one-entry history (no construction
         // intermediates for undo to walk into) and Reset is one undoable step.
@@ -478,19 +489,11 @@ public class VisualizationTabManager {
             plotPanel.copyHistoryFrom(settings.sourcePlotPanel);
         }
 
-        // Create container panel with toolbar
-        JPanel containerPanel = new JPanel(new BorderLayout());
         PlotToolbarBuilder toolbarBuilder = createPlotToolbar(plotPanel, settings.autoYMode, settings.showCoordinates);
         JToolBar toolbar = toolbarBuilder.build();
         containerPanel.add(toolbar, BorderLayout.NORTH);
         containerPanel.add(plotPanel, BorderLayout.CENTER);
-
-        // Add tab with inherited series selection and source context
-        TabInfo tabInfo = new TabInfo(
-            TabInfo.TabType.PLOT, settings.name != null ? settings.name : "", containerPanel, plotPanel, null);
         tabInfo.plotToolbarController = toolbarBuilder.getController();
-        tabInfo.selectedSeries.addAll(inheritedSeries);
-        tabInfo.checkedSources.addAll(inheritedSources(settings));
         tabs.add(tabInfo);
 
         int index = tabbedPane.getTabCount();
@@ -972,7 +975,7 @@ public class VisualizationTabManager {
      * lands as one undoable entry. Uses the same {@link #applyPlotSettings} as tab
      * creation, so a reset tab cannot drift from what a genuinely new tab looks like.
      */
-    private void resetTabAt(int index) {
+    void resetTabAt(int index) {
         if (index < 0 || index >= tabs.size()) {
             return;
         }
@@ -1000,6 +1003,9 @@ public class VisualizationTabManager {
                 tab.statsToolbar.syncFromTab();
             }
         }
+
+        // The canonical record changed in place: reproject the trees (active tab only).
+        notifyTabMutated(tab);
     }
 
     /**
@@ -1071,6 +1077,29 @@ public class VisualizationTabManager {
     }
 
     /**
+     * Reprojects the window-level views (the source and outputs trees, via
+     * {@code onTabChangedCallback} → RunManager.onTabChanged) after an in-place
+     * mutation of a tab's canonical record (selectedSeries / checkedSources).
+     * The trees mirror the ACTIVE tab only, so the active-tab guard lives here
+     * and nowhere else: mutating a background tab stays silent, and its state
+     * is projected later by activation ("Empty restores empty").
+     *
+     * <p>Every in-place mutation of a tab's record must end here — Reset and
+     * the undo/redo sync do. Mutations that happen while the corresponding
+     * tree nodes are being removed in the same operation (removeRunData,
+     * removeLoadedDataset) deliberately do not: their projection is corrected
+     * at the source, and firing a restore mid-removal would be wrong. For
+     * BACKGROUND tabs those silent scrubs can leave the record ahead of the
+     * history top, so the scrub rides into that tab's next unrelated push —
+     * accepted, per the silent-failure rule documented on PlotState.</p>
+     */
+    private void notifyTabMutated(TabInfo tab) {
+        if (tab == getActiveTab() && onTabChangedCallback != null) {
+            onTabChangedCallback.run();
+        }
+    }
+
+    /**
      * Returns the active PLOT tab's TabInfo, or null if a STATS tab is active.
      */
     private TabInfo getActivePlotTab() {
@@ -1132,6 +1161,20 @@ public class VisualizationTabManager {
     public Set<SourceRef> getTargetTabCheckedSources() {
         TabInfo tab = getTargetTab();
         return tab != null ? Collections.unmodifiableSet(tab.checkedSources) : Collections.emptySet();
+    }
+
+    /**
+     * Pushes the target plot tab's current state to its undo history, if it changed.
+     * Source tick/untick is an undoable action in its own right: the window layer
+     * calls this after recording a source change, and when the change also pruned
+     * series (which pushes on its own) the second push dedupes via PlotState.equals.
+     * No-op when a stats tab is active (stats tabs have no history).
+     */
+    public void pushTargetTabHistory() {
+        PlotPanel panel = getTargetPlotPanel();
+        if (panel != null) {
+            panel.pushState();
+        }
     }
 
     /**
@@ -1241,40 +1284,32 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Clears selected series on all tabs.
-     */
-    public void clearAllTabSeries() {
-        for (TabInfo tab : tabs) {
-            tab.selectedSeries.clear();
-            if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
-                tab.plotPanel.clearLegend();
-            } else if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
-                tab.statsModel.clear();
-            }
-        }
-    }
-
-    /**
      * Syncs TabInfo.selectedSeries and tree after an undo/redo changes visible series.
      */
-    private void syncTabSelectionFromPlotState(PlotPanel panel, com.kalix.ide.flowviz.PlotState state) {
+    void syncTabSelectionFromPlotState(PlotPanel panel, com.kalix.ide.flowviz.PlotState state) {
+        TabInfo mutated = null;
         for (TabInfo tab : tabs) {
             if (tab.plotPanel == panel) {
                 tab.selectedSeries.clear();
                 tab.selectedSeries.addAll(state.getVisibleSeries());
+                // The snapshot is the complete view: source context restores too.
+                // Refs whose run/dataset has since been removed fail silently at
+                // projection (unfindable paths are skipped) — see PlotState.
+                tab.checkedSources.clear();
+                tab.checkedSources.addAll(state.getCheckedSources());
 
                 // Rebuild legend to match (colour resolved at render time)
                 panel.clearLegend();
                 for (SeriesRef ref : state.getVisibleSeries()) {
                     panel.addLegendSeries(ref);
                 }
+                mutated = tab;
                 break;
             }
         }
 
-        // Trigger tree sync
-        if (onTabChangedCallback != null) {
-            onTabChangedCallback.run();
+        if (mutated != null) {
+            notifyTabMutated(mutated);
         }
     }
 
