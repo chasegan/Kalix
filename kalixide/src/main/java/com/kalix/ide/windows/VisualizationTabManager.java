@@ -523,6 +523,7 @@ public class VisualizationTabManager {
             .addAggregationControls()
             .addSeparator()
             .addMaskToggle()
+            .addSeasonalMaskButton()
             .addSeparator()
             .addPlotTypeDropdown()
             .addSeparator()
