@@ -7,6 +7,7 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.TimeSeriesRenderer;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
+import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
 import com.kalix.ide.flowviz.style.PaletteSeriesStyleResolver;
 import com.kalix.ide.flowviz.style.PlotPaletteManager;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
@@ -99,6 +100,7 @@ public class PlotPanel extends JPanel {
     private PlotType plotType = PlotType.VALUES;
     private YAxisScale yAxisScale = YAxisScale.LINEAR;
     private MaskMode maskMode = MaskMode.NONE;
+    private SeasonalMaskMode seasonalMaskMode = SeasonalMaskMode.DISABLED;
     private XAxisType xAxisTypeOverride = null;  // If set, overrides automatic axis type selection
 
     // Reference series tracking for DIFFERENCE plot types
@@ -124,6 +126,7 @@ public class PlotPanel extends JPanel {
     /** Value-equality cache key for the transform pipeline (see rebuildDisplayDataSet). */
     private record TransformKey(AggregationPeriod period, AggregationMethod method,
                                 PlotType plotType, Object referenceKey, MaskMode maskMode,
+                                SeasonalMaskMode seasonalMaskMode,
                                 List<SeriesRef> visibleSeries) {}
 
     // Managers
@@ -1082,6 +1085,31 @@ public class PlotPanel extends JPanel {
         return maskMode;
     }
 
+    /**
+     * Sets the seasonal mask mode for this plot.
+     */
+    public void setSeasonalMaskMode(SeasonalMaskMode mode) {
+        // Guard on "no change", not on a particular value - returning early for DISABLED
+        // would mean the off state never gets stored and the mask could never be cleared.
+        if (mode == null || mode.equals(this.seasonalMaskMode)) {
+            return;
+        }
+        this.seasonalMaskMode = mode;
+
+        if (restoringState) {
+            return; // restoreState rebuilds once at the end
+        }
+
+        rebuildDisplayDataSet();
+
+        if (autoYMode) {
+            fitYAxis();
+        } else {
+            zoomToFit();
+        }
+        pushState();
+    }
+
     // === UNDO/REDO ===
 
     /**
@@ -1226,7 +1254,7 @@ public class PlotPanel extends JPanel {
         Object referenceKey = plotType.requiresReferenceSeries() && !visibleSeries.isEmpty()
             ? visibleSeries.get(0) : "none";
         TransformKey transformKey = new TransformKey(aggregationPeriod, aggregationMethod,
-            plotType, referenceKey, maskMode, List.copyOf(visibleSeries));
+            plotType, referenceKey, maskMode, seasonalMaskMode, List.copyOf(visibleSeries));
 
         // Check if we can reuse cached result
         if (transformKey.equals(lastTransformKey) && displayDataSet != null) {
