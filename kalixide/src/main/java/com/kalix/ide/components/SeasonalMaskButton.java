@@ -68,6 +68,16 @@ public class SeasonalMaskButton extends JButton {
         return mode;
     }
 
+    /**
+     * Reflects a mode chosen elsewhere - an undo, a tab reset - in the button and its
+     * menu, <em>without</em> notifying the sink. The caller is already applying the mode;
+     * echoing it back would be a feedback loop.
+     */
+    public void setMode(SeasonalMaskMode newMode) {
+        mode = (newMode != null) ? newMode : SeasonalMaskMode.DISABLED;
+        showMode(mode);
+    }
+
     private JPopupMenu buildMenu() {
         for (Month month : Month.values()) {
             String label = month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH);

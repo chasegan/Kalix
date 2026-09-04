@@ -3,6 +3,7 @@ package com.kalix.ide.flowviz;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.stats.MaskMode;
+import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
@@ -28,6 +29,7 @@ public final class PlotState {
     private final PlotType plotType;
     private final YAxisScale yAxisScale;
     private final MaskMode maskMode;
+    private final SeasonalMaskMode seasonalMaskMode;
     private final boolean autoYMode;
 
     // Viewport zoom/pan state (excludes transient plotArea dimensions)
@@ -42,6 +44,7 @@ public final class PlotState {
                      PlotType plotType,
                      YAxisScale yAxisScale,
                      MaskMode maskMode,
+                     SeasonalMaskMode seasonalMaskMode,
                      boolean autoYMode,
                      long startTimeMs,
                      long endTimeMs,
@@ -53,6 +56,7 @@ public final class PlotState {
         this.plotType = plotType;
         this.yAxisScale = yAxisScale;
         this.maskMode = maskMode;
+        this.seasonalMaskMode = seasonalMaskMode;
         this.autoYMode = autoYMode;
         this.startTimeMs = startTimeMs;
         this.endTimeMs = endTimeMs;
@@ -69,6 +73,7 @@ public final class PlotState {
                                     PlotType plotType,
                                     YAxisScale yAxisScale,
                                     MaskMode maskMode,
+                                    SeasonalMaskMode seasonalMaskMode,
                                     boolean autoYMode,
                                     ViewPort viewport) {
         long startTime = viewport != null ? viewport.getStartTimeMs() : 0;
@@ -77,7 +82,8 @@ public final class PlotState {
         double max = viewport != null ? viewport.getMaxValue() : 0;
 
         return new PlotState(visibleSeries, aggregationPeriod, aggregationMethod,
-            plotType, yAxisScale, maskMode, autoYMode, startTime, endTime, min, max);
+            plotType, yAxisScale, maskMode, seasonalMaskMode, autoYMode,
+            startTime, endTime, min, max);
     }
 
     public List<SeriesRef> getVisibleSeries() { return visibleSeries; }
@@ -86,6 +92,7 @@ public final class PlotState {
     public PlotType getPlotType() { return plotType; }
     public YAxisScale getYAxisScale() { return yAxisScale; }
     public MaskMode getMaskMode() { return maskMode; }
+    public SeasonalMaskMode getSeasonalMaskMode() { return seasonalMaskMode; }
     public boolean isAutoYMode() { return autoYMode; }
     public long getStartTimeMs() { return startTimeMs; }
     public long getEndTimeMs() { return endTimeMs; }
@@ -106,12 +113,14 @@ public final class PlotState {
             && aggregationMethod == s.aggregationMethod
             && plotType == s.plotType
             && yAxisScale == s.yAxisScale
-            && maskMode == s.maskMode;
+            && maskMode == s.maskMode
+            && Objects.equals(seasonalMaskMode, s.seasonalMaskMode);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(visibleSeries, aggregationPeriod, aggregationMethod,
-            plotType, yAxisScale, maskMode, autoYMode, startTimeMs, endTimeMs, minValue, maxValue);
+            plotType, yAxisScale, maskMode, seasonalMaskMode, autoYMode,
+            startTimeMs, endTimeMs, minValue, maxValue);
     }
 }

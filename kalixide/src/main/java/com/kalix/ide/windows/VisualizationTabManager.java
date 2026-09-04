@@ -2,16 +2,21 @@ package com.kalix.ide.windows;
 
 import com.kalix.ide.components.TabDragReorderer;
 import com.kalix.ide.flowviz.PlotPanel;
+import com.kalix.ide.flowviz.PlotState;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.LastSource;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.stats.MaskMode;
+import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.flowviz.transform.PlotType;
+import com.kalix.ide.flowviz.transform.TimeSeriesAggregator;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.preferences.PreferenceKeys;
 
@@ -130,9 +135,11 @@ public class VisualizationTabManager {
         public AggregationMethod aggregationMethod = AggregationMethod.SUM;
 
         // Plot-specific settings (ignored when creating stats tabs)
-        public com.kalix.ide.flowviz.transform.PlotType plotType = com.kalix.ide.flowviz.transform.PlotType.VALUES;
+        public PlotType plotType = PlotType.VALUES;
         public YAxisScale yAxisScale = YAxisScale.LINEAR;
         public boolean autoYMode = true;
+        public MaskMode maskMode = MaskMode.ALL;
+        public SeasonalMaskMode seasonalMaskMode = SeasonalMaskMode.DISABLED;
         public boolean showCoordinates = false;
         public boolean legendCollapsed = false;
         public boolean legendEnabled = true;
@@ -162,6 +169,8 @@ public class VisualizationTabManager {
             settings.plotType = plotPanel.getPlotType();
             settings.yAxisScale = plotPanel.getYAxisScale();
             settings.autoYMode = plotPanel.isAutoYMode();
+            settings.maskMode = plotPanel.getMaskMode();
+            settings.seasonalMaskMode = plotPanel.getSeasonalMaskMode();
             settings.showCoordinates = plotPanel.isShowCoordinates();
             settings.legendCollapsed = plotPanel.isLegendCollapsed();
             settings.legendEnabled = plotPanel.isLegendEnabled();
@@ -471,9 +480,8 @@ public class VisualizationTabManager {
         // Duplicating copies the source's full history (the batchStateChange above
         // already pushed this tab's own initial entry, which the copy replaces).
         // Done BEFORE the toolbar is built: copyHistoryFrom restores the source's current
-        // state (mask mode included, which TabSettings doesn't carry), and the toolbar
-        // controls initialise by reading the panel — building first left them showing
-        // defaults that disagreed with the restored plot.
+        // state, and the toolbar controls initialise by reading the panel — building first
+        // left them showing defaults that disagreed with the restored plot.
         if (settings.sourcePlotPanel != null) {
             plotPanel.copyHistoryFrom(settings.sourcePlotPanel);
         }
@@ -996,7 +1004,8 @@ public class VisualizationTabManager {
         } else {
             tab.statsPeriod = settings.aggregationPeriod;
             tab.statsMethod = settings.aggregationMethod;
-            tab.statsModel.setMaskMode(com.kalix.ide.flowviz.stats.MaskMode.ALL);
+            tab.statsModel.setMaskMode(MaskMode.ALL);
+            tab.statsModel.setSeasonalMaskMode(SeasonalMaskMode.DISABLED);
             rebuildStatsTab(tab);
             if (tab.statsToolbar != null) {
                 tab.statsToolbar.syncFromTab();
@@ -1015,6 +1024,14 @@ public class VisualizationTabManager {
         plotPanel.setPlotType(settings.plotType);
         plotPanel.setYAxisScale(settings.yAxisScale);
         plotPanel.setAutoYMode(settings.autoYMode);
+        // Both masks are also part of PlotState, so on the duplication path
+        // copyHistoryFrom writes them again a moment later. That is deliberate, not an
+        // oversight: the two agree by construction (fromPlotTab reads the same panel
+        // copyHistoryFrom copies), and both writes land inside batchStateChange, where
+        // restoringState makes a setter a bare field assignment - no rebuild, no fit, no
+        // history push. Keeping them here is what lets reset and duplicate share one path.
+        plotPanel.setMaskMode(settings.maskMode);
+        plotPanel.setSeasonalMaskMode(settings.seasonalMaskMode);
         plotPanel.setShowCoordinates(settings.showCoordinates);
         // Order matters: setConnectAcrossGaps(true) clears orphan markers and vice versa,
         // so apply connect first — for every valid (mutually exclusive) combination the
@@ -1221,7 +1238,7 @@ public class VisualizationTabManager {
         for (SeriesRef ref : tab.selectedSeries) {
             TimeSeriesData data = sharedDataSet.getSeries(ref);
             if (data != null) {
-                TimeSeriesData aggregatedData = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
+                TimeSeriesData aggregatedData = TimeSeriesAggregator.aggregate(
                     data, tab.statsPeriod, tab.statsMethod);
                 if (aggregatedData != null) {
                     series.put(ref, aggregatedData);
@@ -1259,7 +1276,7 @@ public class VisualizationTabManager {
     /**
      * Syncs TabInfo.selectedSeries and tree after an undo/redo changes visible series.
      */
-    private void syncTabSelectionFromPlotState(PlotPanel panel, com.kalix.ide.flowviz.PlotState state) {
+    private void syncTabSelectionFromPlotState(PlotPanel panel, PlotState state) {
         for (TabInfo tab : tabs) {
             if (tab.plotPanel == panel) {
                 tab.selectedSeries.clear();
@@ -1340,7 +1357,7 @@ public class VisualizationTabManager {
         for (TabInfo tab : tabs) {
             if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null
                     && tab.selectedSeries.contains(ref)) {
-                TimeSeriesData aggregatedData = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
+                TimeSeriesData aggregatedData = TimeSeriesAggregator.aggregate(
                     data, tab.statsPeriod, tab.statsMethod);
 
                 if (aggregatedData != null) {

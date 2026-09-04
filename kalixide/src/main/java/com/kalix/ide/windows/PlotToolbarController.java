@@ -1,5 +1,6 @@
 package com.kalix.ide.windows;
 
+import com.kalix.ide.components.SeasonalMaskButton;
 import com.kalix.ide.flowviz.transform.PlotType;
 
 import javax.swing.JComboBox;
@@ -17,19 +18,22 @@ class PlotToolbarController {
     private final JComboBox<String> ySpaceCombo;
     private final JToggleButton maskToggle;
     private final JToggleButton autoYToggle;
+    private final SeasonalMaskButton seasonalMaskButton;
 
     PlotToolbarController(JComboBox<String> aggregationPeriodCombo,
                           JComboBox<String> aggregationMethodCombo,
                           JComboBox<PlotType> plotTypeCombo,
                           JComboBox<String> ySpaceCombo,
                           JToggleButton maskToggle,
-                          JToggleButton autoYToggle) {
+                          JToggleButton autoYToggle,
+                          SeasonalMaskButton seasonalMaskButton) {
         this.aggregationPeriodCombo = aggregationPeriodCombo;
         this.aggregationMethodCombo = aggregationMethodCombo;
         this.plotTypeCombo = plotTypeCombo;
         this.ySpaceCombo = ySpaceCombo;
         this.maskToggle = maskToggle;
         this.autoYToggle = autoYToggle;
+        this.seasonalMaskButton = seasonalMaskButton;
     }
 
     /**
@@ -43,6 +47,10 @@ class PlotToolbarController {
         setSilently(ySpaceCombo, state.getYAxisScale().getDisplayName());
         setSilently(maskToggle, state.getMaskMode() == com.kalix.ide.flowviz.stats.MaskMode.ALL);
         setSilently(autoYToggle, state.isAutoYMode());
+        // The button notifies nothing on setMode, so no listener juggling is needed here.
+        if (seasonalMaskButton != null) {
+            seasonalMaskButton.setMode(state.getSeasonalMaskMode());
+        }
     }
 
     private static void setSilently(JComboBox<String> combo, String value) {

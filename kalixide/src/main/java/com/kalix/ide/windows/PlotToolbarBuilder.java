@@ -166,7 +166,8 @@ class PlotToolbarBuilder {
 
     PlotToolbarBuilder addSeasonalMaskButton() {
         seasonalMaskButton = new SeasonalMaskButton(
-            plotPanel::setSeasonalMaskMode, ToolbarConstants.BUTTON_ICON_SIZE, SeasonalMaskMode.DISABLED);
+            plotPanel::setSeasonalMaskMode, ToolbarConstants.BUTTON_ICON_SIZE,
+            plotPanel.getSeasonalMaskMode());
         ToolbarConstants.applyButtonSizing(seasonalMaskButton);
         toolbar.add(seasonalMaskButton);
         return this;
@@ -272,7 +273,7 @@ class PlotToolbarBuilder {
     JToolBar build() {
         controller = new PlotToolbarController(
             aggregationPeriodCombo, aggregationMethodCombo,
-            plotTypeCombo, ySpaceCombo, maskToggle, autoYToggle);
+            plotTypeCombo, ySpaceCombo, maskToggle, autoYToggle, seasonalMaskButton);
         return toolbar;
     }
 

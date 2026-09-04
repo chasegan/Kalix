@@ -1081,6 +1081,13 @@ public class PlotPanel extends JPanel {
     /**
      * Gets the current mask mode.
      */
+    public SeasonalMaskMode getSeasonalMaskMode() {
+        return seasonalMaskMode;
+    }
+
+    /**
+     * Gets the current mask mode.
+     */
     public MaskMode getMaskMode() {
         return maskMode;
     }
@@ -1129,7 +1136,7 @@ public class PlotPanel extends JPanel {
         if (restoringState || originalDataSet == null) return;
         PlotState state = PlotState.capture(
             visibleSeries, aggregationPeriod, aggregationMethod,
-            plotType, yAxisScale, maskMode, autoYMode, currentViewport);
+            plotType, yAxisScale, maskMode, seasonalMaskMode, autoYMode, currentViewport);
         if (stateHistory.pushIfChanged(state) && onHistoryChanged != null) {
             onHistoryChanged.run();
         }
@@ -1152,6 +1159,7 @@ public class PlotPanel extends JPanel {
             setPlotType(state.getPlotType());
             setYAxisScale(state.getYAxisScale());
             setMaskMode(state.getMaskMode());
+            setSeasonalMaskMode(state.getSeasonalMaskMode());
             autoYMode = state.isAutoYMode();
 
             // Apply viewport zoom/pan
