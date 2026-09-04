@@ -1,5 +1,7 @@
 package com.kalix.ide.windows;
 
+import com.kalix.ide.flowviz.transform.PlotType;
+
 import javax.swing.JComboBox;
 import javax.swing.JToggleButton;
 
@@ -11,14 +13,14 @@ import javax.swing.JToggleButton;
 class PlotToolbarController {
     private final JComboBox<String> aggregationPeriodCombo;
     private final JComboBox<String> aggregationMethodCombo;
-    private final JComboBox<String> plotTypeCombo;
+    private final JComboBox<PlotType> plotTypeCombo;
     private final JComboBox<String> ySpaceCombo;
     private final JToggleButton maskToggle;
     private final JToggleButton autoYToggle;
 
     PlotToolbarController(JComboBox<String> aggregationPeriodCombo,
                           JComboBox<String> aggregationMethodCombo,
-                          JComboBox<String> plotTypeCombo,
+                          JComboBox<PlotType> plotTypeCombo,
                           JComboBox<String> ySpaceCombo,
                           JToggleButton maskToggle,
                           JToggleButton autoYToggle) {
@@ -37,7 +39,7 @@ class PlotToolbarController {
     void updateFromState(com.kalix.ide.flowviz.PlotState state) {
         setSilently(aggregationPeriodCombo, state.getAggregationPeriod().getDisplayName());
         setSilently(aggregationMethodCombo, state.getAggregationMethod().getDisplayName());
-        setSilently(plotTypeCombo, state.getPlotType().getDisplayName());
+        setSilently(plotTypeCombo, state.getPlotType());
         setSilently(ySpaceCombo, state.getYAxisScale().getDisplayName());
         setSilently(maskToggle, state.getMaskMode() == com.kalix.ide.flowviz.stats.MaskMode.ALL);
         setSilently(autoYToggle, state.isAutoYMode());
@@ -46,14 +48,30 @@ class PlotToolbarController {
     private static void setSilently(JComboBox<String> combo, String value) {
         java.awt.event.ActionListener[] listeners = combo.getActionListeners();
         for (var l : listeners) combo.removeActionListener(l);
-        combo.setSelectedItem(value);
-        for (var l : listeners) combo.addActionListener(l);
+        try {
+            combo.setSelectedItem(value);
+        } finally {
+            for (var l : listeners) combo.addActionListener(l);
+        }
+    }
+
+    private static void setSilently(JComboBox<PlotType> combo, PlotType value) {
+        java.awt.event.ActionListener[] listeners = combo.getActionListeners();
+        for (var l : listeners) combo.removeActionListener(l);
+        try {
+            combo.setSelectedItem(value);
+        } finally {
+            for (var l : listeners) combo.addActionListener(l);
+        }
     }
 
     private static void setSilently(JToggleButton toggle, boolean selected) {
         java.awt.event.ActionListener[] listeners = toggle.getActionListeners();
         for (var l : listeners) toggle.removeActionListener(l);
-        toggle.setSelected(selected);
-        for (var l : listeners) toggle.addActionListener(l);
+        try {
+            toggle.setSelected(selected);
+        } finally {
+            for (var l : listeners) toggle.addActionListener(l);
+        }
     }
 }

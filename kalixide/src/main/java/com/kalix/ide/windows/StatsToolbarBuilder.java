@@ -23,9 +23,9 @@ import java.io.File;
 
 /**
  * Builder for a stats tab's toolbar (save, aggregation, mask controls), extracted
- * from {@link VisualizationTabManager}. Sizing and the aggregation option lists are
- * shared with {@link PlotToolbarBuilder} so the two toolbars stay visually and
- * behaviourally consistent.
+ * from {@link VisualizationTabManager}. Sizing and the aggregation option lists come from
+ * {@link ToolbarConstants}, also used by {@link PlotToolbarBuilder}, so the two toolbars stay
+ * visually and behaviourally consistent.
  */
 class StatsToolbarBuilder {
     private final JToolBar toolbar;
@@ -55,24 +55,24 @@ class StatsToolbarBuilder {
     StatsToolbarBuilder addAggregationControls() {
         // Resolution label
         toolbar.add(new JLabel("Resolution:"));
-        toolbar.add(Box.createHorizontalStrut(PlotToolbarBuilder.HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
         // Aggregation period dropdown
-        aggregationPeriodCombo = createDropdown(PlotToolbarBuilder.AGGREGATION_OPTIONS,
-            PlotToolbarBuilder.WIDE_DROPDOWN_SIZE, "Aggregation");
+        aggregationPeriodCombo = createDropdown(ToolbarConstants.AGGREGATION_OPTIONS,
+            ToolbarConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
         // Set initial selection from tab info
         aggregationPeriodCombo.setSelectedItem(tabInfo.statsPeriod.getDisplayName());
         aggregationPeriodCombo.addActionListener(e -> applyAggregation());
         toolbar.add(aggregationPeriodCombo);
 
         // "by" label
-        toolbar.add(Box.createHorizontalStrut(PlotToolbarBuilder.HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
         toolbar.add(new JLabel("by"));
-        toolbar.add(Box.createHorizontalStrut(PlotToolbarBuilder.HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
         // Aggregation method dropdown
-        aggregationMethodCombo = createDropdown(PlotToolbarBuilder.AGGREGATION_METHOD_OPTIONS,
-            PlotToolbarBuilder.NARROW_DROPDOWN_SIZE, "Aggregation method");
+        aggregationMethodCombo = createDropdown(ToolbarConstants.AGGREGATION_METHOD_OPTIONS,
+            ToolbarConstants.NARROW_DROPDOWN_SIZE, "Aggregation method");
         // Set initial selection from tab info
         aggregationMethodCombo.setSelectedItem(tabInfo.statsMethod.getDisplayName());
         aggregationMethodCombo.addActionListener(e -> applyAggregation());
@@ -83,14 +83,14 @@ class StatsToolbarBuilder {
 
     StatsToolbarBuilder addMaskControls() {
         // Mask label
-        toolbar.add(Box.createHorizontalStrut(PlotToolbarBuilder.HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
         toolbar.add(new JLabel("Mask:"));
-        toolbar.add(Box.createHorizontalStrut(PlotToolbarBuilder.HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
         // Mask mode dropdown
         String[] maskOptions = {"All", "Each", "None"};
         JComboBox<String> maskCombo = createDropdown(maskOptions,
-            PlotToolbarBuilder.NARROW_DROPDOWN_SIZE, "Mask mode for bivariate statistics");
+            ToolbarConstants.NARROW_DROPDOWN_SIZE, "Mask mode for bivariate statistics");
 
         // Set initial selection from stats model
         if (tabInfo.statsModel != null) {
@@ -206,12 +206,12 @@ class StatsToolbarBuilder {
 
     /** Creates a standard icon button. */
     private JButton createIconButton(FontAwesomeSolid icon, String tooltip, Runnable action) {
-        JButton button = new JButton(FontIcon.of(icon, PlotToolbarBuilder.BUTTON_ICON_SIZE));
+        JButton button = new JButton(FontIcon.of(icon, ToolbarConstants.BUTTON_ICON_SIZE));
         button.setToolTipText(tooltip);
         button.setFocusable(false);
-        button.setPreferredSize(PlotToolbarBuilder.BUTTON_SIZE);
-        button.setMinimumSize(PlotToolbarBuilder.BUTTON_SIZE);
-        button.setMaximumSize(PlotToolbarBuilder.BUTTON_SIZE);
+        button.setPreferredSize(ToolbarConstants.BUTTON_SIZE);
+        button.setMinimumSize(ToolbarConstants.BUTTON_SIZE);
+        button.setMaximumSize(ToolbarConstants.BUTTON_SIZE);
         button.addActionListener(e -> action.run());
         return button;
     }

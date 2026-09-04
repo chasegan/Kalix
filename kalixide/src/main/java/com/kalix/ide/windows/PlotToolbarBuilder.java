@@ -1,8 +1,11 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.flowviz.PlotPanel;
+import com.kalix.ide.flowviz.rendering.PlotTypeListCellRenderer;
+import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.preferences.PreferenceKeys;
 
@@ -17,6 +20,9 @@ import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import java.awt.Dimension;
 
+import static com.kalix.ide.flowviz.stats.MaskMode.ALL;
+import static com.kalix.ide.flowviz.stats.MaskMode.NONE;
+
 /**
  * Builder for a plot tab's toolbar (save, undo/redo, palette, aggregation, mask,
  * plot type, y-scale, and the auto-Y / coordinates / legend toggles), extracted
@@ -25,44 +31,6 @@ import java.awt.Dimension;
  * controls.
  */
 class PlotToolbarBuilder {
-
-    // === Toolbar sizing (shared with StatsToolbarBuilder) ===
-    static final int BUTTON_ICON_SIZE = 14;
-    static final Dimension WIDE_DROPDOWN_SIZE = new Dimension(150, 25);
-    static final Dimension NARROW_DROPDOWN_SIZE = new Dimension(80, 25);
-    static final int HORIZONTAL_SPACING = 5;
-    // Shared square footprint for every icon/toggle button on this toolbar, so save,
-    // undo/redo, palette, mask, auto-Y, coordinates and legend all line up identically
-    // rather than each sizing itself off its own icon/border combination.
-    static final Dimension BUTTON_SIZE = new Dimension(28, 28);
-
-    /**
-     * Aggregation period options for time series data (shared with
-     * {@link StatsToolbarBuilder}).
-     */
-    static final String[] AGGREGATION_OPTIONS = {
-        "Original",
-        "Daily",
-        "Monthly",
-        "Annual (Jan-Dec)",
-        "Annual (Feb-Jan)",
-        "Annual (Mar-Feb)",
-        "Annual (Apr-Mar)",
-        "Annual (May-Apr)",
-        "Annual (Jun-May)",
-        "Annual (Jul-Jun)",
-        "Annual (Aug-Jul)",
-        "Annual (Sep-Aug)",
-        "Annual (Oct-Sep)",
-        "Annual (Nov-Oct)",
-        "Annual (Dec-Nov)"
-    };
-
-    /** Aggregation method options (shared with {@link StatsToolbarBuilder}). */
-    static final String[] AGGREGATION_METHOD_OPTIONS = {"Sum", "Min", "Max", "Mean"};
-
-    /** Plot type options. */
-    private static final String[] PLOT_TYPE_OPTIONS = {"Values", "Cumulative Values", "Difference", "Cumulative Difference", "Exceedance", "Double Mass", "Residual Mass"};
 
     /** Y-axis scale options. */
     private static final String[] Y_SPACE_OPTIONS = {"Linear", "Log", "Sqrt"};
@@ -74,7 +42,7 @@ class PlotToolbarBuilder {
     // Store references to all state-reflecting controls
     private JComboBox<String> aggregationPeriodCombo;
     private JComboBox<String> aggregationMethodCombo;
-    private JComboBox<String> plotTypeCombo;
+    private JComboBox<PlotType> plotTypeCombo;
     private JComboBox<String> ySpaceCombo;
     private JToggleButton maskToggle;
     private JToggleButton autoYToggle;
@@ -119,8 +87,9 @@ class PlotToolbarBuilder {
             }
         });
 
-        undoButton.setEnabled(false);
-        redoButton.setEnabled(false);
+        // Initialise from the panel: a duplicated tab has history before its toolbar exists.
+        undoButton.setEnabled(plotPanel.canUndo());
+        redoButton.setEnabled(plotPanel.canRedo());
 
         // Update button state whenever history changes
         plotPanel.setOnHistoryChanged(() -> {
@@ -136,24 +105,24 @@ class PlotToolbarBuilder {
     PlotToolbarBuilder addAggregationControls() {
         // Resolution label
         toolbar.add(new JLabel("Resolution:"));
-        toolbar.add(Box.createHorizontalStrut(HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
         // Aggregation period dropdown
-        aggregationPeriodCombo = createDropdown(AGGREGATION_OPTIONS,
-            WIDE_DROPDOWN_SIZE, "Aggregation");
+        aggregationPeriodCombo = createDropdown(ToolbarConstants.AGGREGATION_OPTIONS,
+            ToolbarConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
         // Set initial value from current PlotPanel state
         aggregationPeriodCombo.setSelectedItem(plotPanel.getAggregationPeriod().getDisplayName());
         aggregationPeriodCombo.addActionListener(e -> applyAggregation());
         toolbar.add(aggregationPeriodCombo);
 
         // "by" label
-        toolbar.add(Box.createHorizontalStrut(HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
         toolbar.add(new JLabel("by"));
-        toolbar.add(Box.createHorizontalStrut(HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
         // Aggregation method dropdown
-        aggregationMethodCombo = createDropdown(AGGREGATION_METHOD_OPTIONS,
-            NARROW_DROPDOWN_SIZE, "Aggregation method");
+        aggregationMethodCombo = createDropdown(ToolbarConstants.AGGREGATION_METHOD_OPTIONS,
+            ToolbarConstants.NARROW_DROPDOWN_SIZE, "Aggregation method");
         // Set initial value from current PlotPanel state
         aggregationMethodCombo.setSelectedItem(plotPanel.getAggregationMethod().getDisplayName());
         aggregationMethodCombo.addActionListener(e -> applyAggregation());
@@ -179,12 +148,12 @@ class PlotToolbarBuilder {
     }
 
     PlotToolbarBuilder addMaskToggle() {
+        // Initialise from the panel rather than a constant: by toolbar-build time the panel
+        // may already carry a non-default mask (e.g. tab duplication copies history first).
         maskToggle = createToggleButton(FontAwesomeSolid.MASK,
-            "Overlapping Data Mask", false);
+            "Overlapping Data Mask", plotPanel.getMaskMode() == ALL);
         maskToggle.addActionListener(e -> {
-            com.kalix.ide.flowviz.stats.MaskMode mode = maskToggle.isSelected()
-                ? com.kalix.ide.flowviz.stats.MaskMode.ALL
-                : com.kalix.ide.flowviz.stats.MaskMode.NONE;
+            MaskMode mode = maskToggle.isSelected() ? ALL : NONE;
             plotPanel.setMaskMode(mode);
         });
         toolbar.add(maskToggle);
@@ -194,20 +163,26 @@ class PlotToolbarBuilder {
     PlotToolbarBuilder addPlotTypeDropdown() {
         // Plot Type label
         toolbar.add(new JLabel("Plot Type:"));
-        toolbar.add(Box.createHorizontalStrut(HORIZONTAL_SPACING));
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
-        // Plot type dropdown
-        plotTypeCombo = createDropdown(PLOT_TYPE_OPTIONS,
-            WIDE_DROPDOWN_SIZE, "Plot type");
+        // Plot type dropdown - custom construction to display
+        this.plotTypeCombo = new JComboBox<>(PlotType.values());
+        plotTypeCombo.setMaximumSize(ToolbarConstants.WIDE_DROPDOWN_SIZE);
+        plotTypeCombo.setToolTipText("Plot type");
+        plotTypeCombo.setRenderer(new PlotTypeListCellRenderer());
         // Set initial value from current PlotPanel state
-        plotTypeCombo.setSelectedItem(plotPanel.getPlotType().getDisplayName());
+        plotTypeCombo.setSelectedItem(plotPanel.getPlotType());
         plotTypeCombo.addActionListener(e -> {
-            String selected = (String) plotTypeCombo.getSelectedItem();
-            if (selected != null) {
-                com.kalix.ide.flowviz.transform.PlotType type =
-                    com.kalix.ide.flowviz.transform.PlotType.fromDisplayName(selected);
-                plotPanel.setPlotType(type);
+            PlotType selected = (PlotType) plotTypeCombo.getSelectedItem();
+            // Re-picking the current type is a no-op: the combo fires even for a same-item
+            // selection, and applying the default then would stomp a manual mask override,
+            // reset the zoom, and push a spurious undo entry.
+            if (selected == null || selected == plotPanel.getPlotType()) {
+                return;
             }
+            plotPanel.setPlotTypeAndMaskMode(selected, selected.isDataMaskDefault() ? ALL : NONE);
+            // Reflect the panel's resulting state rather than recomputing the policy here.
+            maskToggle.setSelected(plotPanel.getMaskMode() == ALL);
         });
         toolbar.add(plotTypeCombo);
         return this;
@@ -215,7 +190,7 @@ class PlotToolbarBuilder {
 
     PlotToolbarBuilder addYSpaceDropdown() {
         ySpaceCombo = createDropdown(Y_SPACE_OPTIONS,
-            NARROW_DROPDOWN_SIZE, "Y-axis scale");
+            ToolbarConstants.NARROW_DROPDOWN_SIZE, "Y-axis scale");
         // Set initial value from current PlotPanel state
         ySpaceCombo.setSelectedItem(plotPanel.getYAxisScale().getDisplayName());
         ySpaceCombo.addActionListener(e -> {
@@ -295,25 +270,25 @@ class PlotToolbarBuilder {
 
     /** Creates a standard icon button. */
     private JButton createIconButton(FontAwesomeSolid icon, String tooltip, Runnable action) {
-        JButton button = new JButton(FontIcon.of(icon, BUTTON_ICON_SIZE));
+        JButton button = new JButton(FontIcon.of(icon, ToolbarConstants.BUTTON_ICON_SIZE));
         button.setToolTipText(tooltip);
         button.setFocusable(false);
-        button.setPreferredSize(BUTTON_SIZE);
-        button.setMinimumSize(BUTTON_SIZE);
-        button.setMaximumSize(BUTTON_SIZE);
+        button.setPreferredSize(ToolbarConstants.BUTTON_SIZE);
+        button.setMinimumSize(ToolbarConstants.BUTTON_SIZE);
+        button.setMaximumSize(ToolbarConstants.BUTTON_SIZE);
         button.addActionListener(e -> action.run());
         return button;
     }
 
     /** Creates a standard toggle button. */
     private JToggleButton createToggleButton(FontAwesomeSolid icon, String tooltip, boolean initialState) {
-        JToggleButton button = new JToggleButton(FontIcon.of(icon, BUTTON_ICON_SIZE));
+        JToggleButton button = new JToggleButton(FontIcon.of(icon, ToolbarConstants.BUTTON_ICON_SIZE));
         button.setToolTipText(tooltip);
         button.setFocusable(false);
         button.setSelected(initialState);
-        button.setPreferredSize(BUTTON_SIZE);
-        button.setMinimumSize(BUTTON_SIZE);
-        button.setMaximumSize(BUTTON_SIZE);
+        button.setPreferredSize(ToolbarConstants.BUTTON_SIZE);
+        button.setMinimumSize(ToolbarConstants.BUTTON_SIZE);
+        button.setMaximumSize(ToolbarConstants.BUTTON_SIZE);
         return button;
     }
 
