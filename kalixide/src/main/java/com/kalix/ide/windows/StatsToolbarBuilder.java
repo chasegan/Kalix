@@ -3,6 +3,7 @@ package com.kalix.ide.windows;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.filedialog.FileDialogFilter;
@@ -101,8 +102,7 @@ class StatsToolbarBuilder {
         maskCombo.addActionListener(e -> {
             String selected = (String) maskCombo.getSelectedItem();
             if (selected != null && tabInfo.statsModel != null) {
-                com.kalix.ide.flowviz.stats.MaskMode mode =
-                    com.kalix.ide.flowviz.stats.MaskMode.fromDisplayName(selected);
+                MaskMode mode = MaskMode.fromDisplayName(selected);
                 tabInfo.statsModel.setMaskMode(mode);
             }
         });
