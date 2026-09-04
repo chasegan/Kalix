@@ -859,28 +859,36 @@ public class EnhancedTextEditor extends JPanel {
         textArea.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
-                if (!programmaticUpdate) {
-                    updateDirtyFromContent();
-                    notifyExternalListeners((listener, event) -> listener.insertUpdate(event), e);
-                }
+                onDocumentChange(e, (listener, event) -> listener.insertUpdate(event));
             }
 
             @Override
             public void removeUpdate(DocumentEvent e) {
-                if (!programmaticUpdate) {
-                    updateDirtyFromContent();
-                    notifyExternalListeners((listener, event) -> listener.removeUpdate(event), e);
-                }
+                onDocumentChange(e, (listener, event) -> listener.removeUpdate(event));
             }
 
             @Override
             public void changedUpdate(DocumentEvent e) {
-                if (!programmaticUpdate) {
-                    updateDirtyFromContent();
-                    notifyExternalListeners((listener, event) -> listener.changedUpdate(event), e);
-                }
+                onDocumentChange(e, (listener, event) -> listener.changedUpdate(event));
             }
         });
+    }
+
+    /**
+     * One document change. Dirty tracking is suppressed during a programmatic
+     * replacement ({@link #setText}, line-ending normalisation), whose callers set
+     * the dirty state themselves. External listeners are NOT suppressed: the
+     * document's parse cache, the map, and any open parameter sheet must learn of
+     * every change to the text, whoever made it. Withholding programmatic
+     * replacements from them left the cached parse describing the text from
+     * before an optimiser copy-back, so Table View showed the old values (#388).
+     */
+    private void onDocumentChange(DocumentEvent e,
+                                  java.util.function.BiConsumer<DocumentListener, DocumentEvent> method) {
+        if (!programmaticUpdate) {
+            updateDirtyFromContent();
+        }
+        notifyExternalListeners(method, e);
     }
     
     /**
