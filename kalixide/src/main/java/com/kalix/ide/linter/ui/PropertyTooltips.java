@@ -12,6 +12,8 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Document;
 import javax.swing.text.Element;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Supplier;
 
 /**
@@ -25,8 +27,11 @@ import java.util.function.Supplier;
  * text on every mouse move while a tip is showing: a cheap check on the single
  * line's text says whether the pointer could be on a key at all, and the full
  * analysis (document copy, parsed model, {@link EditorPosition}) runs only past
- * that gate and is memoised on the line's text, so resting the pointer on one
- * key costs one analysis, not one per pixel.</p>
+ * that gate. Its results are memoised per line for as long as the parsed model
+ * and the schema are the same objects — a document edit yields a new parsed
+ * model and a schema reload a new schema, so the memo can never describe a
+ * type line that has since changed. Resting on a key costs one analysis, not
+ * one per pixel, and sweeping back over lines already seen costs none.</p>
  */
 public final class PropertyTooltips implements HoverTipSupplier.Source {
 
@@ -38,11 +43,11 @@ public final class PropertyTooltips implements HoverTipSupplier.Source {
     private final SchemaManager schemaManager;
     private final Supplier<INIModelParser.ParsedModel> modelSupplier;
 
-    // Memo of the last analysis: the line it was for, that line's text at the
-    // time, and the resulting tip (null if the position had no help).
-    private int memoLine = -1;
-    private String memoLineText;
-    private String memoTip;
+    // Memo of analyses, valid for one (parsed model, schema) pair: line -> tip,
+    // with a null value recording "no help at this line".
+    private INIModelParser.ParsedModel memoModel;
+    private LinterSchema memoSchema;
+    private final Map<Integer, String> memoByLine = new HashMap<>();
 
     public PropertyTooltips(RSyntaxTextArea textArea,
                             SchemaManager schemaManager,
@@ -60,10 +65,13 @@ public final class PropertyTooltips implements HoverTipSupplier.Source {
             Document doc = textArea.getDocument();
             Element root = doc.getDefaultRootElement();
             Element lineElement = root.getElement(line - 1);
+            if (lineElement == null) {
+                return null; // past the last line
+            }
             int lineStart = lineElement.getStartOffset();
             lineText = doc.getText(lineStart, lineElement.getEndOffset() - lineStart);
             column = offset - lineStart;
-        } catch (BadLocationException | IndexOutOfBoundsException e) {
+        } catch (BadLocationException e) {
             return null;
         }
 
@@ -72,13 +80,21 @@ public final class PropertyTooltips implements HoverTipSupplier.Source {
             return null;
         }
 
-        if (line == memoLine && lineText.equals(memoLineText)) {
-            return memoTip;
+        INIModelParser.ParsedModel model = modelSupplier.get();
+        LinterSchema schema = schemaManager.getCurrentSchema();
+        if (model == null || schema == null) {
+            return null; // nothing to describe with; and no memo, since neither object can change identity
         }
-        String tip = analyse(offset, line);
-        memoLine = line;
-        memoLineText = lineText;
-        memoTip = tip;
+        if (model != memoModel || schema != memoSchema) {
+            memoByLine.clear();
+            memoModel = model;
+            memoSchema = schema;
+        }
+        if (memoByLine.containsKey(line)) {
+            return memoByLine.get(line);
+        }
+        String tip = analyse(offset, model, schema);
+        memoByLine.put(line, tip);
         return tip;
     }
 
@@ -109,9 +125,8 @@ public final class PropertyTooltips implements HoverTipSupplier.Source {
      * {@link EditorPosition}. Returns the tip HTML, or null if the position is
      * not a known property key of a typed node.
      */
-    private String analyse(int offset, int line) {
+    private String analyse(int offset, INIModelParser.ParsedModel model, LinterSchema schema) {
         String fullText = textArea.getText();
-        INIModelParser.ParsedModel model = modelSupplier.get();
         EditorPosition position = EditorPosition.analyze(fullText, offset, model);
 
         // Check if we're on a property header and NOT in value position
@@ -131,10 +146,6 @@ public final class PropertyTooltips implements HoverTipSupplier.Source {
             return null;
         }
 
-        LinterSchema schema = schemaManager.getCurrentSchema();
-        if (schema == null) {
-            return null;
-        }
         NodeTypeDefinition nodeDef = schema.getNodeType(nodeType);
         if (nodeDef == null) {
             return null;

@@ -62,6 +62,10 @@ class HoverTipSupplierTest {
         supplier.uninstall();
     }
 
+    private static MouseEvent mouse(RSyntaxTextArea textArea, int id) {
+        return new MouseEvent(textArea, id, 0, 0, 1, 1, 0, false);
+    }
+
     @Test
     void dismissDelayIsRaisedInsideTheEditorAndRestoredOnExit() {
         ToolTipManager manager = ToolTipManager.sharedInstance();
@@ -69,19 +73,52 @@ class HoverTipSupplierTest {
         RSyntaxTextArea textArea = new RSyntaxTextArea();
         HoverTipSupplier supplier = HoverTipSupplier.install(textArea);
         try {
-            MouseEvent enter = new MouseEvent(textArea, MouseEvent.MOUSE_ENTERED, 0, 0, 1, 1, 0, false);
-            MouseEvent exit = new MouseEvent(textArea, MouseEvent.MOUSE_EXITED, 0, 0, 1, 1, 0, false);
-            for (java.awt.event.MouseListener l : textArea.getMouseListeners()) {
-                l.mouseEntered(enter);
-            }
+            supplier.dismissDelayListener.mouseEntered(mouse(textArea, MouseEvent.MOUSE_ENTERED));
             assertEquals(HoverTipSupplier.EDITOR_DISMISS_DELAY_MS, manager.getDismissDelay());
-            for (java.awt.event.MouseListener l : textArea.getMouseListeners()) {
-                l.mouseExited(exit);
-            }
+            supplier.dismissDelayListener.mouseExited(mouse(textArea, MouseEvent.MOUSE_EXITED));
             assertEquals(original, manager.getDismissDelay());
         } finally {
             supplier.uninstall();
             manager.setDismissDelay(original);
+        }
+    }
+
+    @Test
+    void repeatedEnterDoesNotRatchetTheGlobalDelay() {
+        // The JDK notes a component in an inactive internal frame gets two ENTERED
+        // events; the second must not save our raised value as the "original".
+        ToolTipManager manager = ToolTipManager.sharedInstance();
+        int original = manager.getDismissDelay();
+        RSyntaxTextArea textArea = new RSyntaxTextArea();
+        HoverTipSupplier supplier = HoverTipSupplier.install(textArea);
+        try {
+            supplier.dismissDelayListener.mouseEntered(mouse(textArea, MouseEvent.MOUSE_ENTERED));
+            supplier.dismissDelayListener.mouseEntered(mouse(textArea, MouseEvent.MOUSE_ENTERED));
+            supplier.dismissDelayListener.mouseExited(mouse(textArea, MouseEvent.MOUSE_EXITED));
+            assertEquals(original, manager.getDismissDelay());
+        } finally {
+            supplier.uninstall();
+            manager.setDismissDelay(original);
+        }
+    }
+
+    @Test
+    void uninstallWhilePointerIsInsideRestoresTheGlobalDelay() {
+        // Closing a tab by keyboard: no EXITED ever arrives for the dead text area.
+        ToolTipManager manager = ToolTipManager.sharedInstance();
+        int original = manager.getDismissDelay();
+        boolean enabled = manager.isEnabled();
+        RSyntaxTextArea textArea = new RSyntaxTextArea();
+        HoverTipSupplier supplier = HoverTipSupplier.install(textArea);
+        try {
+            supplier.dismissDelayListener.mouseEntered(mouse(textArea, MouseEvent.MOUSE_ENTERED));
+            supplier.uninstall();
+            assertEquals(original, manager.getDismissDelay());
+            assertEquals(enabled, manager.isEnabled(), "the hide round-trip leaves the manager as it found it");
+        } finally {
+            supplier.uninstall();
+            manager.setDismissDelay(original);
+            manager.setEnabled(enabled);
         }
     }
 

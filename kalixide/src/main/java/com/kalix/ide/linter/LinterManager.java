@@ -174,14 +174,14 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         eventManager.validateNow();
     }
 
-    /**
-     * Get all issues for a specific line number (empty list if none).
-     */
     /** The hover-tip source for this linter's issues, to be attached to the editor's {@code HoverTipSupplier}. */
     public IssueTooltips getTooltips() {
         return tooltips;
     }
 
+    /**
+     * Get all issues for a specific line number (empty list if none).
+     */
     public List<ValidationIssue> getIssuesForLine(int lineNumber) {
         List<ValidationIssue> issues = issuesByLine.get(lineNumber);
         return issues != null ? issues : List.of();

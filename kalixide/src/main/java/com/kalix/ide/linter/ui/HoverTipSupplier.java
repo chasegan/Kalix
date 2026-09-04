@@ -18,9 +18,11 @@ import java.awt.event.MouseEvent;
  * the frame, did not follow it to another desktop, and hid only on mouse events
  * over the text area, so a keyboard action (close tab, minimise, switch desktop)
  * left it standing. {@code ToolTipManager} places a tip inside the frame's layered
- * pane when it fits and in a window <em>owned</em> by the frame when it does not,
- * and hides it on mouse exit, mouse press, focus loss, and whenever the frame
- * moves, hides or resizes. Nothing here can outlive the frame.</p>
+ * pane when it fits, where it moves with the frame, and in a window <em>owned</em>
+ * by the frame when it does not, so it minimises and closes with the frame. It
+ * hides the tip on mouse exit, mouse press, and its dismiss timer, and
+ * {@link #uninstall} hides one that is showing when the editor goes. Nothing here
+ * can outlive the frame.</p>
  *
  * <p>Precedence is explicit: when the hovered line carries validation issues,
  * their tip wins; otherwise the property-help source is asked. Both sources
@@ -53,10 +55,14 @@ public final class HoverTipSupplier implements ToolTipSupplier {
      */
     static final int EDITOR_DISMISS_DELAY_MS = 15_000;
 
+    // All state is EDT-confined: the supplier is installed, queried (by
+    // ToolTipManager) and uninstalled (document close) on the event thread.
     private final RSyntaxTextArea textArea;
-    private final MouseAdapter dismissDelayListener;
-    private volatile Source issueSource;
-    private volatile Source helpSource;
+    /** Raises/restores the dismiss delay on enter/exit. Package-private for tests. */
+    final MouseAdapter dismissDelayListener;
+    private Source issueSource;
+    private Source helpSource;
+    /** The application-wide delay to restore on exit, or -1 while the pointer is outside. */
     private int savedDismissDelay = -1;
     private boolean installed;
 
@@ -65,9 +71,14 @@ public final class HoverTipSupplier implements ToolTipSupplier {
         this.dismissDelayListener = new MouseAdapter() {
             @Override
             public void mouseEntered(MouseEvent e) {
-                ToolTipManager manager = ToolTipManager.sharedInstance();
-                savedDismissDelay = manager.getDismissDelay();
-                manager.setDismissDelay(EDITOR_DISMISS_DELAY_MS);
+                // Guarded: a second ENTERED without an EXITED between (the JDK notes
+                // inactive internal frames send two) must not save our own raised
+                // value as the "original" and ratchet the global delay up for good.
+                if (savedDismissDelay < 0) {
+                    ToolTipManager manager = ToolTipManager.sharedInstance();
+                    savedDismissDelay = manager.getDismissDelay();
+                    manager.setDismissDelay(EDITOR_DISMISS_DELAY_MS);
+                }
             }
 
             @Override
@@ -82,6 +93,10 @@ public final class HoverTipSupplier implements ToolTipSupplier {
      * {@link ToolTipManager}, routes tip text through this supplier, and turns
      * off the library's focusable tips. Sources are attached afterwards with
      * {@link #setIssueSource} and {@link #setHelpSource}.
+     *
+     * <p>Beware {@code JComponent.setToolTipText(null)}: it silently unregisters
+     * the component from {@code ToolTipManager}, so never call it on the editor's
+     * text area.</p>
      */
     public static HoverTipSupplier install(RSyntaxTextArea textArea) {
         HoverTipSupplier supplier = new HoverTipSupplier(textArea);
@@ -137,7 +152,9 @@ public final class HoverTipSupplier implements ToolTipSupplier {
 
     /**
      * Detaches everything installed by {@link #install}: the supplier, the mouse
-     * listener, and the {@link ToolTipManager} registration. Idempotent.
+     * listener, and the {@link ToolTipManager} registration; hides a tip that is
+     * showing, since the manager would otherwise leave it until the next mouse
+     * move or its dismiss timer. Idempotent.
      */
     public void uninstall() {
         if (!installed) {
@@ -146,6 +163,14 @@ public final class HoverTipSupplier implements ToolTipSupplier {
         installed = false;
         issueSource = null;
         helpSource = null;
+        if (savedDismissDelay >= 0) {
+            // The pointer is inside the editor, so a tip may be up: a disable/enable
+            // round trip is ToolTipManager's public way to hide it.
+            ToolTipManager manager = ToolTipManager.sharedInstance();
+            boolean enabled = manager.isEnabled();
+            manager.setEnabled(false);
+            manager.setEnabled(enabled);
+        }
         restoreDismissDelay();
         textArea.removeMouseListener(dismissDelayListener);
         if (textArea.getToolTipSupplier() == this) {
