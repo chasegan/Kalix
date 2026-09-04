@@ -317,3 +317,75 @@ fn test_hourly_model_end_to_end_preserves_step_size() {
         "Output should preserve hour-of-day in every row. Got:\n{}", written
     );
 }
+
+
+/// Issue #169: values of extreme magnitude are written in exponent notation when
+/// that is shorter, and every value still reads back to exactly the same f64.
+#[test]
+fn test_push_f64_compact_is_shortest_and_exact() {
+    use crate::io::csv_io::push_f64_compact;
+    fn text(v: f64) -> String {
+        let mut s = String::new();
+        push_f64_compact(&mut s, v);
+        s
+    }
+
+    // Ordinary magnitudes: exactly what Display wrote before (byte-for-byte).
+    assert_eq!(text(0.0), "0");
+    assert_eq!(text(12.5), "12.5");
+    assert_eq!(text(0.30000000000000004), "0.30000000000000004");
+    assert_eq!(text(1234567.89), "1234567.89");
+    assert_eq!(text(-0.0001), "-0.0001");
+
+    // Extreme magnitudes: the exponent form, when shorter.
+    assert_eq!(text(1.38462e-47), "1.38462e-47");
+    assert_eq!(text(0.00001), "1e-5");
+    assert_eq!(text(1e20), "1e20");
+    assert_eq!(text(-2.5e-9), "-2.5e-9");
+    assert_eq!(text(f64::MIN_POSITIVE), "2.2250738585072014e-308");
+
+    // Extreme but with many digits, where the fixed form is no longer: it stays.
+    assert_eq!(text(1234567890123456.0), "1234567890123456");
+
+    // Non-finite values pass through unchanged.
+    assert_eq!(text(f64::NAN), "NaN");
+    assert_eq!(text(f64::INFINITY), "inf");
+
+    // Exactness: every spelling reads back to the identical bits.
+    for v in [1.38462e-47, 0.00001, 1e20, -2.5e-9, f64::MIN_POSITIVE, f64::MAX, 0.1 + 0.2,
+              123456789.123456789, 9.999e-5, 1e15, 999999999999999.9] {
+        let back: f64 = text(v).parse().expect("parses");
+        assert_eq!(back.to_bits(), v.to_bits(), "{} -> {}", v, text(v));
+    }
+}
+
+/// The exponent spelling survives a full write/read round trip through the CSV
+/// reader, so a results file with extreme values re-imports without loss.
+#[test]
+fn test_csv_round_trip_keeps_extreme_values_exact() {
+    let values: [f64; 6] = [1.38462e-47, 0.0, 12.5, 1e20, -2.5e-9, 0.30000000000000004];
+    let in_path = "./src/tests/example_data/temp_extreme_values_in.csv";
+    let out_path = "./src/tests/example_data/temp_extreme_values_out.csv";
+    {
+        // Written by hand in Display form, as Kalix wrote them before this change.
+        let mut file = std::fs::File::create(in_path).unwrap();
+        writeln!(file, "Date,extreme").unwrap();
+        for (i, v) in values.iter().enumerate() {
+            writeln!(file, "2020-01-{:02},{}", i + 1, v).unwrap();
+        }
+    }
+
+    let series = read_ts(in_path).expect("reads the fixed spelling");
+    let refs: Vec<&_> = series.iter().collect();
+    write_ts(out_path, refs).expect("writes");
+    let text = std::fs::read_to_string(out_path).unwrap();
+    assert!(text.contains("2020-01-01,1.38462e-47\r\n"), "{text}");
+    assert!(text.contains("2020-01-04,1e20\r\n"), "{text}");
+    assert!(text.contains("2020-01-06,0.30000000000000004\r\n"), "{text}");
+
+    let back = read_ts(out_path).expect("reads the exponent spelling");
+    std::fs::remove_file(in_path).ok();
+    std::fs::remove_file(out_path).ok();
+    assert_eq!(back[0].values.iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+               values.iter().map(|v| v.to_bits()).collect::<Vec<_>>());
+}

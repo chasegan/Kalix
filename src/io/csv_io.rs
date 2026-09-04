@@ -214,6 +214,33 @@ fn infer_step_size(timestamps: &[u64]) -> Result<Option<u64>, String> {
 }
 
 
+/// Appends `value` to `buf` in the shortest text that reads back to exactly the
+/// same `f64`.
+///
+/// Rust's `Display` already prints the shortest round-trip digits, but never
+/// uses exponent notation, so 1.38462e-47 came out as a 0.000…0138462 of fifty
+/// characters and 1e20 as twenty-one digits (issue #169). `LowerExp` prints the
+/// same digits with an exponent. For a value of extreme magnitude — below 1e-4
+/// or at least 1e15, where the exponent form can win — both are produced and the
+/// shorter kept. Everything in between, which is nearly all hydrological data,
+/// takes the single `Display` path and is written byte-for-byte as before.
+///
+/// Both forms are exact, so no fidelity is traded: the output is smaller only
+/// where the fixed form was padding with zeros. Every Kalix reader (the engine,
+/// KalixIDE's importer, pandas) accepts the `1.5e-7` spelling.
+pub fn push_f64_compact(buf: &mut String, value: f64) {
+    use std::fmt::Write as _;
+    let magnitude = value.abs();
+    let extreme = value.is_finite() && magnitude != 0.0 && (magnitude < 1e-4 || magnitude >= 1e15);
+    if !extreme {
+        let _ = write!(buf, "{value}");
+        return;
+    }
+    let fixed = format!("{value}");
+    let exponent = format!("{value:e}");
+    buf.push_str(if exponent.len() < fixed.len() { &exponent } else { &fixed });
+}
+
 pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(), CsvError> {
 
     // Check that all timeseries in the vector have the same length
@@ -242,17 +269,16 @@ pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(
     // Build the data section. Pick a single date format for the whole file based on the
     // step_size of the first series (all series in a write share the same step_size in
     // practice). Sub-daily data gets ISO datetime; daily-or-coarser gets date-only.
-    // Values are written straight into the buffer (write! - no per-cell
-    // temporary String), keeping the output bytes identical to before.
-    use std::fmt::Write as _;
+    // Values are written straight into the buffer (no per-cell temporary String
+    // for ordinary magnitudes), in the shortest exact form - see push_f64_compact.
     if timeseries_vector.len() > 0 {
         let step_size = timeseries_vector[0].step_size;
         for i in 0..data_length {
             let timestamp = timeseries_vector[0].timestamp_at(i);
             append_date_string_for_step_size(&mut data_string, timestamp, step_size);
             for ts in timeseries_vector.iter() {
-                let value = ts.values[i];
-                let _ = write!(data_string, ",{value}");
+                data_string.push(',');
+                push_f64_compact(&mut data_string, ts.values[i]);
             }
             data_string.push_str("\r\n");
         }
