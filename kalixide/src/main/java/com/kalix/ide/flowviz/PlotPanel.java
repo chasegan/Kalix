@@ -1286,6 +1286,7 @@ public class PlotPanel extends JPanel {
         }
 
         // Step 2: Apply masking (if enabled)
+        // Step 2.1: Validity/overlapping data masking
         if (maskMode == MaskMode.ALL && aggregatedDataSet.getSeriesRefs().size() > 1) {
             java.util.List<TimeSeriesData> allSeries = new java.util.ArrayList<>();
             for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
@@ -1297,6 +1298,27 @@ public class PlotPanel extends JPanel {
             for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
                 TimeSeriesData masked = mask.apply(aggregatedDataSet.getSeries(ref));
                 maskedDataSet.addSeries(ref, masked);
+            }
+            aggregatedDataSet = maskedDataSet;
+        }
+
+        // Step 2.2: Seasonal masking
+        if (seasonalMaskMode instanceof SeasonalMaskMode.Enabled enabled) {
+            DataSet maskedDataSet = new DataSet();
+
+            // A seasonal mask is a function of a series' timestamps - build once and reuse
+            long[] cachedGrid = null;
+            TimeSeriesMasker.Mask cachedMask = null;
+
+            for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
+                TimeSeriesData series = aggregatedDataSet.getSeries(ref);
+                long[] grid = (series != null) ? series.getTimestamps() : null;
+
+                if ((cachedMask == null) || !sameTimestampGrid(cachedGrid, grid)) {
+                    cachedMask = TimeSeriesMasker.createSeasonalMask(series, enabled);
+                    cachedGrid = grid;
+                }
+                maskedDataSet.addSeries(ref, cachedMask.apply(series));
             }
             aggregatedDataSet = maskedDataSet;
         }
@@ -1317,5 +1339,24 @@ public class PlotPanel extends JPanel {
 
         // Update cache key
         lastTransformKey = transformKey;
+    }
+
+    /**
+     * Whether two series share an identical timestamp grid, and so can share a seasonal
+     * mask. Point count and the first/last timestamps are the cheap reject; equality is
+     * then confirmed <em>exactly</em> with {@link java.util.Arrays#equals}, so two series
+     * that merely start and end together can never be given each other's mask.
+     */
+    private static boolean sameTimestampGrid(long[] a, long[] b) {
+        if (a == b) {
+            return true;
+        }
+        if (a == null || b == null || a.length != b.length) {
+            return false;
+        }
+        if (a.length > 0 && (a[0] != b[0] || a[a.length - 1] != b[b.length - 1])) {
+            return false;
+        }
+        return java.util.Arrays.equals(a, b);
     }
 }
