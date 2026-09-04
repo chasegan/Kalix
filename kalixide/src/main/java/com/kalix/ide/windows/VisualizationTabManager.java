@@ -972,7 +972,7 @@ public class VisualizationTabManager {
      * lands as one undoable entry. Uses the same {@link #applyPlotSettings} as tab
      * creation, so a reset tab cannot drift from what a genuinely new tab looks like.
      */
-    private void resetTabAt(int index) {
+    void resetTabAt(int index) {
         if (index < 0 || index >= tabs.size()) {
             return;
         }
@@ -1000,6 +1000,9 @@ public class VisualizationTabManager {
                 tab.statsToolbar.syncFromTab();
             }
         }
+
+        // The canonical record changed in place: reproject the trees (active tab only).
+        notifyTabMutated(tab);
     }
 
     /**
@@ -1068,6 +1071,26 @@ public class VisualizationTabManager {
             return tabs.get(index);
         }
         return null;
+    }
+
+    /**
+     * Reprojects the window-level views (the source and outputs trees, via
+     * {@code onTabChangedCallback} → RunManager.onTabChanged) after an in-place
+     * mutation of a tab's canonical record (selectedSeries / checkedSources).
+     * The trees mirror the ACTIVE tab only, so the active-tab guard lives here
+     * and nowhere else: mutating a background tab stays silent, and its state
+     * is projected later by activation ("Empty restores empty").
+     *
+     * <p>Every in-place mutation of a tab's record must end here — Reset and
+     * the undo/redo sync do. Mutations that happen while the corresponding
+     * tree nodes are being removed in the same operation (removeRunData,
+     * removeLoadedDataset) deliberately do not: their projection is corrected
+     * at the source, and firing a restore mid-removal would be wrong.</p>
+     */
+    private void notifyTabMutated(TabInfo tab) {
+        if (tab == getActiveTab() && onTabChangedCallback != null) {
+            onTabChangedCallback.run();
+        }
     }
 
     /**
@@ -1241,23 +1264,10 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Clears selected series on all tabs.
-     */
-    public void clearAllTabSeries() {
-        for (TabInfo tab : tabs) {
-            tab.selectedSeries.clear();
-            if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
-                tab.plotPanel.clearLegend();
-            } else if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
-                tab.statsModel.clear();
-            }
-        }
-    }
-
-    /**
      * Syncs TabInfo.selectedSeries and tree after an undo/redo changes visible series.
      */
-    private void syncTabSelectionFromPlotState(PlotPanel panel, com.kalix.ide.flowviz.PlotState state) {
+    void syncTabSelectionFromPlotState(PlotPanel panel, com.kalix.ide.flowviz.PlotState state) {
+        TabInfo mutated = null;
         for (TabInfo tab : tabs) {
             if (tab.plotPanel == panel) {
                 tab.selectedSeries.clear();
@@ -1268,13 +1278,13 @@ public class VisualizationTabManager {
                 for (SeriesRef ref : state.getVisibleSeries()) {
                     panel.addLegendSeries(ref);
                 }
+                mutated = tab;
                 break;
             }
         }
 
-        // Trigger tree sync
-        if (onTabChangedCallback != null) {
-            onTabChangedCallback.run();
+        if (mutated != null) {
+            notifyTabMutated(mutated);
         }
     }
 
