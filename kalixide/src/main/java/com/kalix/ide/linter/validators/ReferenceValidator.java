@@ -28,7 +28,7 @@ public class ReferenceValidator implements ValidationStrategy {
         // Shared validation logic covers format checks and, in the schema's
         // node_output_validation mode, node existence and allowed outputs.
         // (A second node-existence loop here used to duplicate that diagnostic.)
-        ValidationUtils.validateOutputReferencesWithSchema(model.getOutputReferences(), model, schema, result);
+        ValidationUtils.validateOutputReferencesWithSchema(model, schema, result);
     }
 
     private void validateDownstreamReferences(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {

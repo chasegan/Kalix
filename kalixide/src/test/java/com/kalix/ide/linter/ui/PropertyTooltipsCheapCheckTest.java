@@ -2,7 +2,7 @@ package com.kalix.ide.linter.ui;
 
 import org.junit.jupiter.api.Test;
 
-import static com.kalix.ide.linter.ui.PropertyHoverTooltipManager.isPossiblePropertyKeyPosition;
+import static com.kalix.ide.linter.ui.PropertyTooltips.isPossiblePropertyKeyPosition;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * line's text alone, so the full document analysis only runs in the dwell
  * timer for plausible candidates.
  */
-class PropertyHoverTooltipManagerCheapCheckTest {
+class PropertyTooltipsCheapCheckTest {
 
     @Test
     void keyPositionOnPropertyLineIsCandidate() {

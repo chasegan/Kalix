@@ -50,12 +50,28 @@ Now there is one implementation:
   includes explicit parser-agreement cases: comments containing `[`,
   commented-out `# loc =` lines, keys ending in "loc" (`refloc`), indented
   headers, trailing whitespace after `]`, duplicates, CRLF, sections at EOF.
+  `ParserAgreementTest` goes further: it parses every `.ini` in the repository
+  with both `ModelParser` and `INIModelParser` and asserts they agree on every
+  node, type, location and link, so the two products cannot drift apart
+  unnoticed.
 
 The linter has its own parser, **`linter/parsing/INIModelParser`**, because it
 needs a different product (sections + typed properties + line numbers +
 continuation chains). Where the two parsers share a rule, the rule lives in one
 place:
 
+- Line splitting (`IniSyntax.splitLines`, LF and CRLF) and the per-line scan
+  are shared too. Neither parser uses a regular expression per line any more:
+  both run after every edit (the map's on the EDT), and on an 8,000-line model
+  each takes well under a millisecond.
+- Comments and section headers: `linter/parsing/IniSyntax` is the one copy of
+  the engine's line grammar (`#` is the only comment marker, inert inside double
+  quotes; `;` never is; a header may carry a trailing comment). Every IDE
+  scanner of model text — `INIModelParser`, `ModelParser`, `NodeSectionLocator`,
+  the syntax highlighter, `ParameterSheetWindow`, the Run Manager's outputs
+  scan — routes through it, so `[node.x] # note` (issue #142) cannot again be a
+  header to one and a stray line to another. `IniSyntaxTest` pins the rule; the
+  same cases are pinned on the Rust side in `custom_ini_parser.rs`.
 - Continuation lines: `linter/parsing/IniContinuation` documents the chain rule
   and its coupling to `INIModelParser.collectContinuationLines`; both LF and
   CRLF now parse identically (a trailing `\r` is stripped per line, verified by
@@ -104,7 +120,7 @@ have different documented semantics.
   cannot offer a toggle the validators ignore.
 - Rule/schema changes propagate live: `SchemaManager` fires `onSchemaChanged()`
   on any change and `LinterManager` revalidates immediately; hover help
-  (`linter/ui/PropertyHoverTooltipManager`) resolves the schema per lookup
+  (`linter/ui/PropertyTooltips`) resolves the schema per lookup
   rather than capturing an instance, so a reloaded schema is reflected
   everywhere at once. Autocomplete (`editor/autocomplete/
   KalixCompletionProvider`) reads the same `SchemaManager`, so completion and

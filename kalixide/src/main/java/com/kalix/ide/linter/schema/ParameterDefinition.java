@@ -11,4 +11,6 @@ public class ParameterDefinition {
     public Double min;    // For number/integer types
     public Double max;    // For number/integer types
     public String pattern; // For custom validation
+    /** {@link #pattern} compiled once at schema load; null if absent or invalid. */
+    public java.util.regex.Pattern compiledPattern;
 }

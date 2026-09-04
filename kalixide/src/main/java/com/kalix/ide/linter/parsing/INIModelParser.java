@@ -1,8 +1,5 @@
 package com.kalix.ide.linter.parsing;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -10,25 +7,51 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Parses INI model files into structured sections for validation.
+ *
+ * <p>Comment and header recognition come from {@link IniSyntax}, the IDE's single
+ * copy of the engine's line grammar: every line is split into code and
+ * {@code #} comment first, so a comment can never masquerade as a header, a
+ * property, or a list item, and a header may carry a trailing comment.</p>
+ *
+ * <p>This parser runs on every lint pass and again for editor context queries,
+ * so the per-line work is plain string scanning, no regular expressions: a
+ * line is a header if its code starts with {@code [}, a property if it has an
+ * {@code =} after a non-empty key, and a list item otherwise.</p>
  */
 public class INIModelParser {
 
-    private static final Logger logger = LoggerFactory.getLogger(INIModelParser.class);
+    /** Rule name for a line that begins with {@code ;} — not a comment in Kalix. */
+    public static final String RULE_SEMICOLON_COMMENT = "semicolon_comment";
+    /** Rule name for a line that begins with {@code [} but is not a complete header. */
+    public static final String RULE_MALFORMED_SECTION_HEADER = "malformed_section_header";
 
-    private static final Pattern SECTION_PATTERN = Pattern.compile("^\\s*\\[([^\\]]+)\\]\\s*$");
-    private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("^\\s*([^=]+?)\\s*=\\s*(.*)\\s*$");
-    private static final Pattern COMMENT_PATTERN = Pattern.compile("^\\s*[;#].*$");
-    private static final Pattern NODE_SECTION_PATTERN = Pattern.compile("^node\\.(.+)$");
+    /**
+     * A lexical problem found while parsing: something the engine would reject (or
+     * silently misread) before any schema rule applies. Reported by
+     * {@code ModelLinter} under {@code ruleName}, so the schema can set its severity.
+     */
+    public record SyntaxIssue(int lineNumber, String message, String ruleName) {
+    }
+
+    /**
+     * One bare entry of a list section ({@code [data]} file paths, {@code [outputs]}
+     * references) with the line it was written on. Unlike the text-keyed line
+     * maps, the entry lists keep every occurrence, so a duplicated entry can be
+     * reported (or renamed) on each of its lines.
+     */
+    public record ListEntry(String text, int lineNumber) {
+    }
 
     public static class ParsedModel {
+        private final List<SyntaxIssue> syntaxIssues = new ArrayList<>();
         private final Map<String, Section> sections = new LinkedHashMap<>();
         private final List<String> inputFiles = new ArrayList<>();
+        private final List<ListEntry> inputFileEntries = new ArrayList<>();
         private final List<String> outputReferences = new ArrayList<>();
+        private final List<ListEntry> outputReferenceEntries = new ArrayList<>();
         private final Map<String, Integer> outputReferenceLineNumbers = new LinkedHashMap<>(); // Track line numbers for output refs
         private final Map<String, Integer> inputFileLineNumbers = new LinkedHashMap<>(); // Track line numbers for input files
         private final Map<String, String> inputFileAliases = new LinkedHashMap<>();
@@ -36,10 +59,17 @@ public class INIModelParser {
         private final Map<String, NodeSection> nodes = new LinkedHashMap<>();
         private final List<NodeSection> allNodeSections = new ArrayList<>(); // Track all nodes including duplicates
 
+        public List<SyntaxIssue> getSyntaxIssues() { return syntaxIssues; }
         public Map<String, Section> getSections() { return sections; }
         public List<String> getInputFiles() { return inputFiles; }
+        /** Every {@code [data]} file path with its line, in document order, duplicates included. */
+        public List<ListEntry> getInputFileEntries() { return inputFileEntries; }
         public List<String> getOutputReferences() { return outputReferences; }
+        /** Every {@code [outputs]} reference with its line, in document order, duplicates included. */
+        public List<ListEntry> getOutputReferenceEntries() { return outputReferenceEntries; }
+        /** Line of the LAST occurrence of each output reference; see {@link #getOutputReferenceEntries()}. */
         public Map<String, Integer> getOutputReferenceLineNumbers() { return outputReferenceLineNumbers; }
+        /** Line of the LAST occurrence of each input file path; see {@link #getInputFileEntries()}. */
         public Map<String, Integer> getInputFileLineNumbers() { return inputFileLineNumbers; }
         public Map<String, String> getInputFileAliases() { return inputFileAliases; }
         public Map<String, Integer> getInputFileAliasLineNumbers() { return inputFileAliasLineNumbers; }
@@ -65,7 +95,9 @@ public class INIModelParser {
         public int getStartLine() { return startLine; }
         ///  endLine is the line number of the end of the section
         public int getEndLine() { return endLine; }
+        /** Properties by key; a repeated key resolves to its LAST occurrence. */
         public Map<String, Property> getProperties() { return properties; }
+        /** Every property in document order, repeated keys included. */
         public List<Property> getAllProperties() { return allProperties; }
 
         public void updateEndLine(int lineNumber) {
@@ -73,8 +105,9 @@ public class INIModelParser {
         }
 
         public void addProperty(String key, String value, int lineNumber) {
-            properties.put(key, new Property(key, value, lineNumber));
-            allProperties.add(new Property(key, value, lineNumber));
+            Property property = new Property(key, value, lineNumber);
+            properties.put(key, property);
+            allProperties.add(property);
         }
     }
 
@@ -113,123 +146,127 @@ public class INIModelParser {
      */
     public static ParsedModel parse(String content) {
         ParsedModel model = new ParsedModel();
+        String[] lines = IniSyntax.splitLines(content);
+        Section currentSection = null;
 
-        try {
-            String[] lines = splitLines(content);
-            int lineNumber = 0;
-            Section currentSection = null;
+        for (int i = 0; i < lines.length; i++) {
+            int lineNumber = i + 1;
+            // Code only: the inline '#' comment (if any) is gone from here on.
+            String line = IniSyntax.stripComment(lines[i]).trim();
 
-            for (int i = 0; i < lines.length; i++) {
-                lineNumber = i + 1;
-                String line = lines[i].trim();
+            // Skip empty lines and comment-only lines
+            if (line.isEmpty()) {
+                continue;
+            }
+            char first = line.charAt(0);
 
-                // Skip empty lines and comments
-                if (line.isEmpty() || COMMENT_PATTERN.matcher(line).matches()) {
+            // Check for section header. A malformed one ('[node.a', or text after
+            // ']') is an engine error, and it still closes the previous section.
+            if (first == '[') {
+                String sectionName = IniSyntax.sectionName(line);
+                if (sectionName == null) {
+                    model.getSyntaxIssues().add(new SyntaxIssue(lineNumber,
+                        "Malformed section header: expected '[name]' with only a '#' comment after it",
+                        RULE_MALFORMED_SECTION_HEADER));
+                    currentSection = null;
                     continue;
                 }
-
-                // Check for section header
-                Matcher sectionMatcher = SECTION_PATTERN.matcher(line);
-                if (sectionMatcher.matches()) {
-                    String sectionName = sectionMatcher.group(1).trim();
-                    currentSection = createSection(sectionName, lineNumber, model);
-                    continue;
-                }
-
-                // Check for key-value pair
-                Matcher kvMatcher = KEY_VALUE_PATTERN.matcher(line);
-                // inputs section handled separately
-                if (kvMatcher.matches() && currentSection != null
-                        && !("data".equals(currentSection.getName()))) {
-                    String key = kvMatcher.group(1).trim();
-                    String value = kvMatcher.group(2).trim();
-
-                    // Handle line continuation - collect continuation lines (comments will be removed in collectContinuationLines)
-                    LineContinuationResult continuationResult = collectContinuationLines(lines, i, value);
-                    value = continuationResult.combinedValue;
-                    i = continuationResult.lastLineIndex; // Skip processed continuation lines
-                    int endLineNumber = i + 1;
-
-                    currentSection.addProperty(key, value, lineNumber);
-                    currentSection.updateEndLine(endLineNumber);
-
-                    // Special handling for node type
-                    if (currentSection instanceof NodeSection && "type".equals(key)) {
-                        ((NodeSection) currentSection).setNodeType(value);
-                    }
-                    continue;
-                }
-
-                // Handle special sections without key-value pairs
-                if (currentSection != null) {
-                    if ("data".equals(currentSection.getName())) {
-                        // Input files can be:
-                        // 1. Key-value pairs: alias = ./path/to/file.csv
-                        // 2. Direct file paths: ./path/to/file.csv
-                        // Handle continuation here too (comments will be removed in collectContinuationLines)
-                        LineContinuationResult continuationResult = collectContinuationLines(lines, i, line);
-                        String fullLine = continuationResult.combinedValue;
-                        i = continuationResult.lastLineIndex;
-
-                        // Check if it's a key-value pair (alias = file_path)
-                        Matcher kvMatcherAlias = KEY_VALUE_PATTERN.matcher(fullLine);
-                        if (kvMatcherAlias.matches()) {
-                            String alias = kvMatcherAlias.group(1).trim();
-                            String filePath = kvMatcherAlias.group(2).trim();
-
-                            // Check for duplicate aliases
-                            if (model.getInputFileAliases().containsKey(alias)) {
-                                logger.warn("Duplicate alias '{}' at line {}. Previous definition at line {}.",
-                                    alias, lineNumber, model.getInputFileAliasLineNumbers().get(alias));
-                            }
-
-                            model.getInputFileAliases().put(alias, filePath);
-                            model.getInputFileAliasLineNumbers().put(alias, lineNumber);
-                            model.getInputFiles().add(filePath);
-                            model.getInputFileLineNumbers().put(filePath, lineNumber);
-                        } else {
-                            // Direct file path (no alias)
-                            model.getInputFiles().add(fullLine);
-                            model.getInputFileLineNumbers().put(fullLine, lineNumber);
-                        }
-
-                        currentSection.updateEndLine(i + 1);
-                    } else if ("outputs".equals(currentSection.getName())) {
-                        // Output references are listed directly - handle continuation here too (comments will be removed in collectContinuationLines)
-                        LineContinuationResult continuationResult = collectContinuationLines(lines, i, line);
-                        String fullLine = continuationResult.combinedValue;
-                        i = continuationResult.lastLineIndex;
-
-                        model.getOutputReferences().add(fullLine);
-                        model.getOutputReferenceLineNumbers().put(fullLine, lineNumber);
-                        currentSection.updateEndLine(i + 1);
-                    }
-                }
+                currentSection = createSection(sectionName, lineNumber, model);
+                continue;
             }
 
-        } catch (Exception e) {
-            logger.error("Error parsing INI content", e);
+            // ';' is not a comment marker in Kalix (it terminates statements in
+            // expression blocks). A line starting with one is a mistake the engine
+            // would swallow as a list item; flag it and read no meaning into it.
+            if (first == ';') {
+                model.getSyntaxIssues().add(new SyntaxIssue(lineNumber,
+                    "';' does not start a comment in Kalix models; use '#'",
+                    RULE_SEMICOLON_COMMENT));
+                continue;
+            }
+
+            // Lines before the first section header mean nothing to the linter
+            // (the engine rejects them; the missing header is the thing to fix).
+            if (currentSection == null) {
+                continue;
+            }
+
+            if ("data".equals(currentSection.getName())) {
+                i = parseDataEntry(lines, i, line, lineNumber, currentSection, model);
+                continue;
+            }
+
+            // Key-value pair: a non-empty key before the first '='. (The line is
+            // trimmed, so any '=' past position 0 leaves a non-empty key.)
+            int equals = line.indexOf('=');
+            if (equals > 0) {
+                String key = line.substring(0, equals).trim();
+                LineContinuationResult continuation = collectContinuationLines(lines, i, line.substring(equals + 1));
+                String value = continuation.combinedValue;
+                i = continuation.lastLineIndex; // Skip processed continuation lines
+
+                currentSection.addProperty(key, value, lineNumber);
+                currentSection.updateEndLine(i + 1);
+
+                // Special handling for node type
+                if (currentSection instanceof NodeSection && "type".equals(key)) {
+                    ((NodeSection) currentSection).setNodeType(value);
+                }
+                continue;
+            }
+
+            // A bare line: an output reference in [outputs], nothing elsewhere
+            if ("outputs".equals(currentSection.getName())) {
+                LineContinuationResult continuation = collectContinuationLines(lines, i, line);
+                i = continuation.lastLineIndex;
+                model.getOutputReferences().add(continuation.combinedValue);
+                model.getOutputReferenceEntries().add(new ListEntry(continuation.combinedValue, lineNumber));
+                model.getOutputReferenceLineNumbers().put(continuation.combinedValue, lineNumber);
+                currentSection.updateEndLine(i + 1);
+            }
         }
 
         return model;
     }
 
     /**
-     * Split content into lines, stripping a trailing '\r' from each line so CRLF
-     * documents parse identically to LF documents. Without this, a "blank" line in
-     * a CRLF file survives as "\r", which {@link #collectContinuationLines} treats
-     * as a continuation line - gluing indented lines after a blank line onto the
-     * previous property, contrary to {@link IniContinuation}'s documented rule.
+     * One {@code [data]} entry, which takes one of two forms:
+     * <ol>
+     *   <li>{@code alias = ./path/to/file.csv} — recorded as an alias, an input file,
+     *       and a section property (so a repeated alias is a duplicate property
+     *       like any other, per {@code DuplicatePropertyValidator});</li>
+     *   <li>{@code ./path/to/file.csv} — a direct file path.</li>
+     * </ol>
+     * Either form may continue onto indented lines; the {@code =} is looked for in
+     * the joined text, matching how the engine reads it.
+     *
+     * @return the index of the last line consumed (the entry's last continuation line)
      */
-    private static String[] splitLines(String content) {
-        String[] lines = content.split("\n");
-        for (int i = 0; i < lines.length; i++) {
-            String line = lines[i];
-            if (!line.isEmpty() && line.charAt(line.length() - 1) == '\r') {
-                lines[i] = line.substring(0, line.length() - 1);
-            }
+    private static int parseDataEntry(String[] lines, int index, String line, int lineNumber,
+                                      Section section, ParsedModel model) {
+        LineContinuationResult continuation = collectContinuationLines(lines, index, line);
+        String fullLine = continuation.combinedValue;
+
+        int equals = fullLine.indexOf('=');
+        if (equals > 0) {
+            String alias = fullLine.substring(0, equals).trim();
+            String filePath = fullLine.substring(equals + 1).trim();
+
+            section.addProperty(alias, filePath, lineNumber);
+            model.getInputFileAliases().put(alias, filePath);
+            model.getInputFileAliasLineNumbers().put(alias, lineNumber);
+            model.getInputFiles().add(filePath);
+            model.getInputFileEntries().add(new ListEntry(filePath, lineNumber));
+            model.getInputFileLineNumbers().put(filePath, lineNumber);
+        } else {
+            // Direct file path (no alias)
+            model.getInputFiles().add(fullLine);
+            model.getInputFileEntries().add(new ListEntry(fullLine, lineNumber));
+            model.getInputFileLineNumbers().put(fullLine, lineNumber);
         }
-        return lines;
+
+        section.updateEndLine(continuation.lastLineIndex + 1);
+        return continuation.lastLineIndex;
     }
 
     /**
@@ -246,34 +283,13 @@ public class INIModelParser {
     }
 
     /**
-     * Remove comments from a line. Comments start with '#'.
-     */
-    private static String removeComments(String line) {
-        int commentIndex = -1;
-
-        // Find the first occurrence of the comment character
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (c == '#') {
-                commentIndex = i;
-                break;
-            }
-        }
-
-        if (commentIndex >= 0) {
-            return line.substring(0, commentIndex).trim();
-        }
-
-        return line;
-    }
-
-    /**
      * Collect continuation lines and concatenate them to the initial value.
-     * A continuation line is non-empty and starts with whitespace.
+     * A continuation line is non-empty and starts with whitespace (the rule
+     * {@link IniContinuation} documents). Comments are stripped from every
+     * line, including the initial value, per {@link IniSyntax}.
      */
     private static LineContinuationResult collectContinuationLines(String[] lines, int startIndex, String initialValue) {
-        // Remove comments from initial value first
-        StringBuilder combinedValue = new StringBuilder(removeComments(initialValue));
+        StringBuilder combinedValue = new StringBuilder(IniSyntax.stripComment(initialValue).trim());
         int currentIndex = startIndex;
 
         // Look ahead for continuation lines
@@ -283,11 +299,12 @@ public class INIModelParser {
             // Check if this is a continuation line: non-empty and starts with whitespace
             if (!nextLine.isEmpty() && Character.isWhitespace(nextLine.charAt(0))) {
                 // This is a continuation line - remove comments and append it (trimmed)
-                String continuationContent = removeComments(nextLine).trim();
+                String continuationContent = IniSyntax.stripComment(nextLine).trim();
                 if (!continuationContent.isEmpty()) {
                     // Add a space before appending to maintain separation
-                    if (!combinedValue.isEmpty() && !combinedValue.toString().endsWith(" ")) {
-                        combinedValue.append(" ");
+                    int length = combinedValue.length();
+                    if (length > 0 && combinedValue.charAt(length - 1) != ' ') {
+                        combinedValue.append(' ');
                     }
                     combinedValue.append(continuationContent);
                 }
@@ -301,13 +318,14 @@ public class INIModelParser {
         return new LineContinuationResult(combinedValue.toString(), currentIndex);
     }
 
+    private static final String NODE_SECTION_PREFIX = "node.";
+
     private static Section createSection(String sectionName, int lineNumber, ParsedModel model) {
         Section section;
 
-        // Check if this is a node section
-        Matcher nodeMatcher = NODE_SECTION_PATTERN.matcher(sectionName);
-        if (nodeMatcher.matches()) {
-            String nodeName = nodeMatcher.group(1);
+        // Check if this is a node section: "node.<name>" with a non-empty name
+        if (sectionName.startsWith(NODE_SECTION_PREFIX) && sectionName.length() > NODE_SECTION_PREFIX.length()) {
+            String nodeName = sectionName.substring(NODE_SECTION_PREFIX.length());
             section = new NodeSection(sectionName, nodeName, lineNumber);
 
             // Add to all nodes list (preserves duplicates)

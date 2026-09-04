@@ -22,6 +22,10 @@ pub struct IniSection {
     pub properties: IndexMap<String, IniProperty>,
     /// Comments and blank lines before [section]
     pub leading_lines: Vec<String>,
+    /// Inline comment following the `[section]` header, kept verbatim
+    /// including the whitespace between `]` and `#` so a round-trip preserves
+    /// the author's alignment. `None` when the header has no comment.
+    pub header_comment: Option<String>,
     /// Line where [section] appears
     pub line_number: usize,
     /// Used for mark-and-sweep updates
@@ -53,6 +57,13 @@ impl IniDocument {
         }
     }
 
+    /// Parses Kalix INI text.
+    ///
+    /// The comment grammar, shared with the IDE's parsers (see the website's
+    /// Conventions page, "Comments"): `#` starts a comment anywhere outside
+    /// double quotes, on every kind of line - blank, `[section]` header,
+    /// `key = value`, continuation, and bare list item. `;` is never a
+    /// comment marker (it terminates statements inside expression blocks).
     pub fn parse(content: &str) -> Result<Self, String> {
         let mut sections = IndexMap::new();
         let mut trailing_comments = Vec::new();
@@ -67,27 +78,42 @@ impl IniDocument {
             let line_number = line_idx + 1;
             let trimmed = line.trim();
 
-            // Handle empty lines - store as blank leading lines
-            if trimmed.is_empty() {
+            // Split the line into its code and its inline comment (if any) up
+            // front, so that a '#' comment can never masquerade as a section
+            // header, a '=' in a comment can never make a key=value line, and
+            // so on. `code` is what the line means; `inline_comment` is text.
+            let (code, inline_comment) = match Self::find_comment_start(trimmed) {
+                Some(pos) => (trimmed[..pos].trim_end(), Some(trimmed[pos..].to_string())),
+                None => (trimmed, None),
+            };
+
+            // Handle empty and comment-only lines - store as leading lines
+            if code.is_empty() {
                 pending_comments.push(line.to_string());
                 line_idx += 1;
                 continue;
             }
 
-            // Handle comments
-            if trimmed.starts_with('#') {
-                pending_comments.push(line.to_string());
-                line_idx += 1;
-                continue;
-            }
+            // Handle section headers. A line that starts with '[' is a header
+            // or nothing: silently absorbing it as a list item of the previous
+            // section (as once happened to '[node.x] # note') hides the error
+            // far from its cause.
+            if code.starts_with('[') {
+                if !code.ends_with(']') || code.len() < 2 {
+                    return Err(format!("Malformed section header at line {}: {}", line_number, trimmed));
+                }
+                let section_name = code[1..code.len()-1].to_string();
 
-            // Handle section headers
-            if trimmed.starts_with('[') && trimmed.ends_with(']') {
-                let section_name = trimmed[1..trimmed.len()-1].to_string();
+                // Keep the gap between ']' and '#' so the header round-trips verbatim.
+                let header_comment = inline_comment.map(|c| {
+                    let gap = &trimmed[code.len()..trimmed.len() - c.len()];
+                    format!("{}{}", gap, c)
+                });
 
                 sections.insert(section_name.clone(), IniSection {
                     properties: IndexMap::new(),
                     leading_lines: pending_comments.clone(),
+                    header_comment,
                     line_number,
                     valid: true,
                 });
@@ -99,17 +125,11 @@ impl IniDocument {
             }
 
             // Handle properties or list items
-            if let Some(eq_pos) = trimmed.find('=') {
+            if let Some(eq_pos) = code.find('=') {
                 // Key=value property
-                let key = trimmed[..eq_pos].trim().to_string();
-                let mut value_part = trimmed[eq_pos + 1..].trim();
-
-                // Check for inline comment
-                let mut inline_comment = None;
-                if let Some(comment_pos) = Self::find_comment_start(value_part) {
-                    inline_comment = Some(value_part[comment_pos..].trim().to_string());
-                    value_part = value_part[..comment_pos].trim();
-                }
+                let key = code[..eq_pos].trim().to_string();
+                let value_part = code[eq_pos + 1..].trim();
+                let inline_comment = inline_comment.map(|c| c.trim().to_string());
 
                 let mut raw_lines = vec![line.to_string()];
                 let mut comments = Vec::new();
@@ -186,7 +206,9 @@ impl IniDocument {
                 // Handle list items (lines without = in sections like [data] or [outputs])
                 match &state {
                     ParseState::InSection(section_name) => {
-                        // Use the line content as the key, empty value indicates list item
+                        // Use the line's code as the key, empty value indicates list item.
+                        // The inline comment is kept (slot 0, as for a property's first
+                        // line) so a canonical rewrite of the item can carry it along.
                         let section = sections.get_mut(section_name).unwrap();
 
                         let property = IniProperty {
@@ -194,11 +216,11 @@ impl IniDocument {
                             line_number,
                             raw_lines: vec![line.to_string()],
                             leading_lines: pending_comments.clone(),
-                            comments: Vec::new(),
+                            comments: vec![inline_comment.map(|c| c.trim().to_string())],
                             valid: true,
                         };
 
-                        section.properties.insert(trimmed.to_string(), property);
+                        section.properties.insert(code.to_string(), property);
                         pending_comments.clear();
                         line_idx += 1;
                         continue;
@@ -381,7 +403,7 @@ impl IniDocument {
             }
 
             // Add section header
-            result.push_str(&format!("[{}]\n", section_name));
+            result.push_str(&format!("[{}]{}\n", section_name, section.header_comment.as_deref().unwrap_or("")));
 
             // Iterate properties in insertion order (preserved by IndexMap)
             for prop_name in section.properties.keys() {
@@ -397,8 +419,12 @@ impl IniDocument {
                     // Property was modified or newly created - format canonically
                     // Check if this is a list item (empty value = no key=value syntax)
                     if property.value.is_empty() {
-                        // List item (no key=value syntax)
+                        // List item (no key=value syntax), carrying its inline comment
                         result.push_str(prop_name);
+                        if let Some(Some(comment)) = property.comments.first() {
+                            result.push_str("  ");
+                            result.push_str(comment);
+                        }
                         result.push('\n');
                     } else {
                         // Regular property - may be multi-line
@@ -487,6 +513,7 @@ impl Default for IniSection {
         IniSection {
             properties: IndexMap::new(),
             leading_lines: Vec::new(),
+            header_comment: None,
             line_number: 0, // New sections don't have a line number from original file
             valid: true,
         }
@@ -761,6 +788,97 @@ params = 100.0, 2.0,  # First comment
         assert!(output.contains("200.0, 4.0,  # First comment"));
         assert!(output.contains("75.0,  # Second comment"));
         assert!(output.contains("1.5\n")); // Third line with no comment
+    }
+
+    // --- Comment grammar: '#' anywhere outside quotes, on every kind of line ---
+
+    #[test]
+    fn section_header_with_trailing_comment_is_a_header() {
+        // Issue #142: '[node.x] # note' used to be absorbed as a list item of the
+        // previous section, dragging every property below it along.
+        let content = "[data]\nrain.csv\n\n[node.a]   # UAW in Bulloo\ntype = gr4j\nloc = 1, 2\n";
+        let doc = IniDocument::parse(content).unwrap();
+
+        assert_eq!(doc.get_section_names(), vec!["data", "node.a"]);
+        let data = &doc.sections["data"];
+        assert_eq!(data.properties.keys().collect::<Vec<_>>(), vec!["rain.csv"]);
+        let node = &doc.sections["node.a"];
+        assert_eq!(node.header_comment.as_deref(), Some("   # UAW in Bulloo"));
+        assert_eq!(node.properties["type"].value, "gr4j");
+        assert_eq!(node.properties["loc"].value, "1, 2");
+        assert_eq!(node.line_number, 4);
+    }
+
+    #[test]
+    fn section_header_comment_round_trips_verbatim() {
+        let content = "[node.a]      # aligned\ntype = gr4j\n[node.b]\ntype = gauge\n";
+        let mut doc = IniDocument::parse(content).unwrap();
+        assert_eq!(doc.to_string(), content);
+
+        // Editing a property must not disturb the header's comment.
+        doc.set_property("node.a", "type", "sacramento");
+        assert!(doc.to_string().starts_with("[node.a]      # aligned\ntype = sacramento\n"));
+    }
+
+    #[test]
+    fn section_header_comment_may_contain_brackets_and_equals() {
+        let content = "[node.a] # see [node.b], x = 1\ntype = gr4j\n";
+        let doc = IniDocument::parse(content).unwrap();
+        assert_eq!(doc.get_section_names(), vec!["node.a"]);
+        assert_eq!(doc.get_property("node.a", "type"), Some("gr4j"));
+    }
+
+    #[test]
+    fn malformed_section_header_is_an_error() {
+        for bad in ["[node.a\ntype = gr4j\n", "[node.a] trailing junk\n", "[\n"] {
+            let err = IniDocument::parse(bad).unwrap_err();
+            assert!(err.starts_with("Malformed section header at line 1"), "{bad:?} -> {err}");
+        }
+    }
+
+    #[test]
+    fn list_item_inline_comment_is_not_part_of_the_key() {
+        let content = "[outputs]\nnode.a.dsflow # gauge flow\nnode.b.dsflow\n";
+        let doc = IniDocument::parse(content).unwrap();
+        let outputs = &doc.sections["outputs"];
+
+        assert_eq!(outputs.properties.keys().collect::<Vec<_>>(), vec!["node.a.dsflow", "node.b.dsflow"]);
+        assert_eq!(outputs.properties["node.a.dsflow"].comments, vec![Some("# gauge flow".to_string())]);
+        assert_eq!(outputs.properties["node.b.dsflow"].comments, vec![None]);
+
+        let legacy = doc.to_legacy_format();
+        assert_eq!(legacy["outputs"]["node.a.dsflow"], None);
+
+        // Unchanged items round-trip verbatim; a rewritten item keeps its comment.
+        assert_eq!(doc.to_string(), content);
+        let mut doc = doc;
+        doc.set_property("outputs", "node.a.dsflow", "");
+        assert_eq!(doc.to_string(), "[outputs]\nnode.a.dsflow  # gauge flow\nnode.b.dsflow\n");
+    }
+
+    #[test]
+    fn list_item_comment_containing_equals_is_still_a_list_item() {
+        let content = "[outputs]\nnode.a.dsflow # flow = big\n";
+        let doc = IniDocument::parse(content).unwrap();
+        assert_eq!(doc.sections["outputs"].properties.keys().collect::<Vec<_>>(), vec!["node.a.dsflow"]);
+    }
+
+    #[test]
+    fn hash_inside_quotes_is_not_a_comment() {
+        let content = "[data]\n\"weird # name.csv\"\nalias = \"a # b\" # real comment\n";
+        let doc = IniDocument::parse(content).unwrap();
+        let data = &doc.sections["data"];
+        assert!(data.properties.contains_key("\"weird # name.csv\""));
+        assert_eq!(data.properties["alias"].value, "\"a # b\"");
+        assert_eq!(data.properties["alias"].comments, vec![Some("# real comment".to_string())]);
+    }
+
+    #[test]
+    fn semicolon_is_not_a_comment_marker() {
+        // ';' terminates statements in expression blocks; it never starts a comment.
+        let content = "[node.a]\nexpr = { x = 1; x + 1 }\n";
+        let doc = IniDocument::parse(content).unwrap();
+        assert_eq!(doc.get_property("node.a", "expr"), Some("{ x = 1; x + 1 }"));
     }
 
     #[test]

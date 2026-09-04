@@ -224,11 +224,11 @@ instead.
 use for exactly this reason.
 
 **Tests run with `java.awt.headless=true`** (`build.gradle.kts`), so a display-dependent
-regression fails on the developer's machine rather than only on Linux CI. Exactly two
-tests are gated (`EditorDisposalTest`, tooltip placement, which genuinely needs screen
-devices). If a test truly needs a display, gate the **method** and say why — never the
-class. A gate that silently skips is a coverage loss reported as a pass: 24 tests were
-skipped that way and nobody noticed until they were counted.
+regression fails on the developer's machine rather than only on Linux CI. No test is
+gated on a display at present (the last two, for tooltip placement, went when hover
+tips moved to `ToolTipManager`). If a test truly needs a display, gate the **method**
+and say why — never the class. A gate that silently skips is a coverage loss reported
+as a pass: 24 tests were skipped that way and nobody noticed until they were counted.
 
 ## Build Commands
 

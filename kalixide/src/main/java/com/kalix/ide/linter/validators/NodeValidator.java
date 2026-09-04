@@ -8,8 +8,6 @@ import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.linter.schema.DataType;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.schema.ParameterDefinition;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
@@ -18,7 +16,6 @@ import java.util.List;
  */
 public class NodeValidator implements ValidationStrategy {
 
-    private static final Logger logger = LoggerFactory.getLogger(NodeValidator.class);
     private final FunctionExpressionValidator functionValidator = new FunctionExpressionValidator();
 
     @Override
@@ -108,8 +105,8 @@ public class NodeValidator implements ValidationStrategy {
                 validateNumberSequenceWithCount(node, prop, typeDef, schema, result);
                 break;
             case "string":
-                if (paramDef.pattern != null) {
-                    validateStringPattern(prop, paramDef.pattern, result);
+                if (paramDef.compiledPattern != null) {
+                    validateStringPattern(prop, paramDef.compiledPattern, result);
                 }
                 break;
             case "boolean":
@@ -215,10 +212,7 @@ public class NodeValidator implements ValidationStrategy {
             return; // No count constraint specified
         }
 
-        // Count the actual number of values (trim trailing commas and whitespace first)
-        String trimmedValue = prop.getValue().replaceAll("[,\\s]+$", "");
-        String[] values = trimmedValue.split("\\s*,\\s*");
-        int actualCount = values.length;
+        int actualCount = countSequenceValues(prop.getValue());
         int expectedCount = paramDef.count;
 
         if (actualCount != expectedCount) {
@@ -227,6 +221,26 @@ public class NodeValidator implements ValidationStrategy {
                                       prop.getKey(), expectedCount, actualCount),
                           ValidationRule.Severity.ERROR, "incorrect_parameter_count");
         }
+    }
+
+    /**
+     * The number of comma-separated values in a sequence, ignoring trailing commas
+     * and whitespace: one more than the number of remaining commas. (An empty
+     * sequence counts as one value, as the former split-based count did; the
+     * format check above has already rejected it.)
+     */
+    static int countSequenceValues(String value) {
+        int end = value.length();
+        while (end > 0 && (value.charAt(end - 1) == ',' || Character.isWhitespace(value.charAt(end - 1)))) {
+            end--;
+        }
+        int count = 1;
+        for (int i = 0; i < end; i++) {
+            if (value.charAt(i) == ',') {
+                count++;
+            }
+        }
+        return count;
     }
 
     private void validateInteger(INIModelParser.Property prop, LinterSchema schema, ValidationResult result,
@@ -266,17 +280,11 @@ public class NodeValidator implements ValidationStrategy {
         }
     }
 
-    private void validateStringPattern(INIModelParser.Property prop, String pattern, ValidationResult result) {
-        try {
-            java.util.regex.Pattern regex = java.util.regex.Pattern.compile(pattern);
-            if (!regex.matcher(prop.getValue()).matches()) {
-                result.addIssue(prop.getLineNumber(),
-                              "Invalid format for parameter '" + prop.getKey() + "': " + prop.getValue(),
-                              ValidationRule.Severity.ERROR, "invalid_string_format");
-            }
-        } catch (java.util.regex.PatternSyntaxException e) {
-            // Invalid regex in schema - log but don't fail validation
-            logger.warn("Invalid regex pattern in schema for parameter {}: {}", prop.getKey(), pattern);
+    private void validateStringPattern(INIModelParser.Property prop, java.util.regex.Pattern pattern, ValidationResult result) {
+        if (!pattern.matcher(prop.getValue()).matches()) {
+            result.addIssue(prop.getLineNumber(),
+                          "Invalid format for parameter '" + prop.getKey() + "': " + prop.getValue(),
+                          ValidationRule.Severity.ERROR, "invalid_string_format");
         }
     }
 }

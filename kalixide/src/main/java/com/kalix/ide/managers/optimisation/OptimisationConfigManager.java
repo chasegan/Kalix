@@ -1,5 +1,6 @@
 package com.kalix.ide.managers.optimisation;
 
+import com.kalix.ide.linter.parsing.IniSyntax;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.document.WorkspaceView;
@@ -427,23 +428,20 @@ public class OptimisationConfigManager {
         boolean inOutputsSection = false;
 
         for (String line : lines) {
-            String trimmedLine = line.trim();
-
-            // Check if we're entering the [outputs] section
-            if (trimmedLine.equalsIgnoreCase("[outputs]")) {
-                inOutputsSection = true;
+            // Code only: '#' comments are not part of a header or an output name.
+            String code = IniSyntax.stripComment(line).trim();
+            if (code.isEmpty()) {
                 continue;
             }
 
-            // Check if we're entering a new section (leaving [outputs])
-            if (trimmedLine.startsWith("[") && trimmedLine.endsWith("]") && !trimmedLine.equalsIgnoreCase("[outputs]")) {
-                inOutputsSection = false;
+            // Any section header enters or leaves [outputs]
+            if (IniSyntax.isSectionHeaderLine(code)) {
+                inOutputsSection = "outputs".equalsIgnoreCase(IniSyntax.sectionName(code));
                 continue;
             }
 
-            // If we're in the outputs section and the line is not empty or a comment
-            if (inOutputsSection && !trimmedLine.isEmpty() && !trimmedLine.startsWith("#")) {
-                outputs.add(trimmedLine);
+            if (inOutputsSection) {
+                outputs.add(code);
             }
         }
 

@@ -138,14 +138,38 @@ class NodeSectionLocatorTest {
     }
 
     @Test
-    void headerWithTrailingCommentIsNotAHeader() {
-        // The parser's trimmed-line pattern requires the line to end at ']', so
-        // '[node.a] # x' is not a header — but it still closes the previous section.
-        String text = "[node.a]\nloc = 1, 2\n[node.b] # not a header\nloc = 3, 4\n";
+    void headerWithTrailingCommentIsAHeader() {
+        // Issue #142: '[node.b] # note' is a header with a comment, per the shared
+        // grammar (IniSyntax / the engine). It closes [node.a] and opens [node.b].
+        String text = "[node.a]\nloc = 1, 2\n[node.b]   # UAW in Bulloo\nloc = 3, 4\n";
         NodeSection a = NodeSectionLocator.find(text, "a");
         assertNotNull(a);
         assertEquals(text.indexOf("[node.b]"), a.end());
+
+        NodeSection b = NodeSectionLocator.find(text, "b");
+        assertNotNull(b);
+        assertEquals(text.indexOf("[node.b]"), b.start());
+        assertEquals(text.length(), b.end());
+        assertEquals("3, 4", text.substring(b.locValue().start(), b.locValue().end()));
+    }
+
+    @Test
+    void malformedHeaderClosesSectionButOpensNone() {
+        // A line starting with '[' is a header attempt or nothing: '[node.b' and
+        // '[node.b] junk' are engine errors, never list items of [node.a].
+        String text = "[node.a]\nloc = 1, 2\n[node.b junk\nloc = 3, 4\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        assertNotNull(a);
+        assertEquals(text.indexOf("[node.b"), a.end());
         assertNull(NodeSectionLocator.find(text, "b"));
+    }
+
+    @Test
+    void dsReferenceWithTrailingCommentExcludesComment() {
+        String text = "[node.a]\nds_1 = b   # to the gauge\n";
+        List<DsReference> refs = NodeSectionLocator.findDsReferences(text);
+        assertEquals(1, refs.size());
+        assertEquals("b", refs.get(0).target());
     }
 
     @Test
