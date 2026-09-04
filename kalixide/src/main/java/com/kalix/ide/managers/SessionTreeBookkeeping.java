@@ -108,6 +108,30 @@ public final class SessionTreeBookkeeping<S> {
         completionTimestamps.remove(sessionKey);
     }
 
+    /** The recorded completion timestamp for a session, or {@code null} if none. */
+    public Long completionTimestamp(String sessionKey) {
+        return completionTimestamps.get(sessionKey);
+    }
+
+    /**
+     * The session with the most recent completion timestamp, or {@code null} when no
+     * tracked session has completed. Used to self-heal the "Last" alias when the run
+     * it points at is removed: because {@link #remove} clears a session's timestamp,
+     * calling this after removals yields the best SURVIVOR with no exclusion logic.
+     * Ties (same millisecond) resolve arbitrarily but deterministically per map state.
+     */
+    public String latestCompletedSession() {
+        String best = null;
+        long bestTime = Long.MIN_VALUE;
+        for (Map.Entry<String, Long> e : completionTimestamps.entrySet()) {
+            if (e.getValue() != null && e.getValue() > bestTime) {
+                bestTime = e.getValue();
+                best = e.getKey();
+            }
+        }
+        return best;
+    }
+
     // === Removal ===
 
     /**

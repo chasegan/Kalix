@@ -31,8 +31,11 @@ import java.util.Set;
  * </ol>
  *
  * <p>{@link RunTreeController} drives this class: it calls {@link #onRunCompleted}
- * when it detects a completion, {@link #onRunRemoved} when a session leaves the tree,
- * and {@link #onRunRenamed} when a run's display name changes.</p>
+ * when it detects a completion; when the session that IS Last leaves the tree it
+ * calls {@link #rebindLast} with the most recently completed survivor (Last is a
+ * standing subscription to "whichever run is newest", so removal self-heals), or
+ * {@link #clearLast} when no completed run survives; and {@link #onRunRenamed}
+ * when a run's display name changes.</p>
  */
 class LastRunTracker {
 
@@ -111,16 +114,50 @@ class LastRunTracker {
         }
     }
 
-    /**
-     * Clears the Last state if the removed session was the Last run, removing the
-     * "Last run" child node from the tree.
-     */
-    void onRunRemoved(String sessionKey) {
-        if (lastRunInfo != null && lastRunInfo.getSession().getSessionKey().equals(sessionKey)) {
-            lastRunInfo = null;
-            lastRunCompletionTime = 0L;
+    /** Whether {@code sessionKey} is the session the Last alias currently points at. */
+    boolean isLastSession(String sessionKey) {
+        return lastRunInfo != null && lastRunInfo.getSession().getSessionKey().equals(sessionKey);
+    }
 
-            // Properly remove the Last child node
+    /**
+     * Re-points Last at {@code runnerUp} after the run it referenced was removed —
+     * the self-heal half of the "Last is whichever run is newest" contract. Goes
+     * straight to {@link #updateLastRun} (NOT {@link #onRunCompleted}, whose recency
+     * guard correctly rejects promotions backwards in time — which is exactly what
+     * healing is): the guarded replace-existing-child path swaps the node, honours
+     * the tab's recorded LastSource, rebuilds the outputs tree, reconciles, and
+     * {@code refreshLastSeries} silently re-points every plotted [Last] series.
+     */
+    void rebindLast(RunInfoImpl runnerUp, long completionTime) {
+        updateLastRun(runnerUp, completionTime);
+    }
+
+    /**
+     * Clears the Last state when the removed session was Last and no completed run
+     * survives, restoring every tab to the default tab's birth state: LastSeries
+     * selections and LastSource are deliberately KEPT everywhere (Last identity is
+     * generational, not run-bound — the next completion re-lights them via
+     * {@link #updateLastRun}'s recorded-context contract), the Last node leaves the
+     * tree, and stale renders are dropped uniformly.
+     *
+     * <p>The tree surgery is guarded: {@code removePath} on a checked node fires the
+     * check-change listener, and unguarded that ran the full user-tick path against
+     * whichever tab was active — stripping its [Last] selection and sources. That
+     * was the root cause of the one-tab-loses-its-lines asymmetry.</p>
+     */
+    void clearLast() {
+        if (lastRunInfo == null) {
+            return;
+        }
+        lastRunInfo = null;
+        lastRunCompletionTime = 0L;
+        // In-flight [Last] fetches must not repopulate the pool after removal: with
+        // the resolver now null they would store under a raw LastSeries key. The
+        // generation guard in refreshLastSeries' callbacks drops them.
+        lastRunGeneration++;
+
+        fetchCoordinator.beginProgrammaticUpdate();
+        try {
             if (lastRunChildNode != null) {
                 int childIndex = lastRunNode.getIndex(lastRunChildNode);
                 Object[] removedChild = new Object[]{lastRunChildNode};
@@ -129,7 +166,18 @@ class LastRunTracker {
                 treeModel.nodesWereRemoved(lastRunNode, new int[]{childIndex}, removedChild);
                 lastRunChildNode = null;
             }
+            // Read-only reprojection, mirroring onTabChanged: no snapshot, no
+            // reconcile, no history push.
+            window.updateOutputsTree();
+            window.restoreTreeChecksForSeries(tabManager.getTargetTabSelectedSeries());
+        } finally {
+            fetchCoordinator.endProgrammaticUpdate();
         }
+
+        // The pool data died with the run (stored under RunSeries keys via the
+        // resolver); drop the stale rendered lines on every tab, not just whichever
+        // one next happens to rebuild.
+        tabManager.updateAllTabs(false);
     }
 
     /**

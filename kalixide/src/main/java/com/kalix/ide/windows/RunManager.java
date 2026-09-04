@@ -1080,6 +1080,12 @@ public class RunManager extends JFrame {
         Set<SourceRef> snapshot = currentCheckedSourceRefs();
         // Build the new set fully before recording it: the recorded set is a live view of
         // the very set the setter replaces.
+        //
+        // Caution: "has a node" is not proof of representability DURING TEARDOWN — a
+        // node mid-removal is still attached when its removePath check-change fires,
+        // so an unguarded removal would see its ref as representable-but-unchecked
+        // and silently drop it here (this stripped LastSource from the active tab
+        // until Last-node removal was guarded; see LastRunTracker.clearLast).
         for (SourceRef ref : recorded) {
             if (pathForSourceRef(ref) == null) {
                 snapshot.add(ref);
