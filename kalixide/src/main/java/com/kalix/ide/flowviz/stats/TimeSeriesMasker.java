@@ -2,7 +2,11 @@ package com.kalix.ide.flowviz.stats;
 
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 
+import java.time.LocalDate;
+import java.time.Month;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Utilities for creating and applying masks to time series data.
@@ -22,6 +26,9 @@ public class TimeSeriesMasker {
     private TimeSeriesMasker() {
         // Utility class
     }
+
+    /** Milliseconds in a day, for the epoch-day conversion shared with the aggregator. */
+    private static final long DAY_MS = 86_400_000L;
 
     /**
      * An immutable, sorted set of "valid" timestamps. Applying it to a series keeps only
@@ -159,6 +166,46 @@ public class TimeSeriesMasker {
             return new Mask(new long[0]);
         }
         return new Mask(intersectSorted(validTimestampsOf(reference), validTimestampsOf(series)));
+    }
+
+    /**
+     * Creates a mask of the timestamps falling in the selected months. This composes with the validity masks.
+     * {@link LocalDate} per month present, not one per point.</p>
+     */
+    public static Mask createSeasonalMask(TimeSeriesData series, SeasonalMaskMode mode) {
+        if (series == null) {
+            return new Mask(new long[0]);
+        }
+        long[] timestamps = series.getTimestamps();
+        int n = timestamps.length;
+        if (n == 0) {
+            return new Mask(new long[0]);
+        }
+        if (!(mode instanceof SeasonalMaskMode.Enabled( Set<Month> months ))) {
+            return new Mask(Arrays.copyOf(timestamps, n));
+        }
+
+        long[] kept = new long[n];
+        int k = 0;
+
+        int i = 0;
+        while (i < n) {
+            LocalDate day = LocalDate.ofEpochDay(Math.floorDiv(timestamps[i], DAY_MS));
+            // Exclusive upper bound of this point's calendar month.
+            long monthEndMs = day.withDayOfMonth(1).plusMonths(1).toEpochDay() * DAY_MS;
+            boolean keepMonth = months.contains(day.getMonth());
+
+            int runStart = i;
+            while (i < n && timestamps[i] < monthEndMs) {
+                i++;
+            }
+            if (keepMonth) {
+                System.arraycopy(timestamps, runStart, kept, k, i - runStart);
+                k += i - runStart;
+            }
+        }
+
+        return new Mask(k == n ? kept : Arrays.copyOf(kept, k));
     }
 
     /**
