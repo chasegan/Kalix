@@ -1093,6 +1093,19 @@ public class PlotPanel extends JPanel {
     }
 
     /**
+     * Supplies the owning tab's checked sources at snapshot time, so undo captures
+     * the complete view (sources + series + settings) without the panel knowing
+     * anything about the window's trees. Set by VisualizationTabManager before the
+     * construction batch, so even history entry #1 carries true sources.
+     */
+    public void setCheckedSourcesSupplier(
+            java.util.function.Supplier<java.util.Set<com.kalix.ide.flowviz.data.SourceRef>> supplier) {
+        this.checkedSourcesSupplier = supplier;
+    }
+
+    private java.util.function.Supplier<java.util.Set<com.kalix.ide.flowviz.data.SourceRef>> checkedSourcesSupplier;
+
+    /**
      * Captures and pushes the current state to history (if changed).
      * Called after user-initiated setting changes. Skipped during state restore
      * and before data is loaded (to avoid junk history from initial setup).
@@ -1100,7 +1113,9 @@ public class PlotPanel extends JPanel {
     public void pushState() {
         if (restoringState || originalDataSet == null) return;
         PlotState state = PlotState.capture(
-            visibleSeries, aggregationPeriod, aggregationMethod,
+            visibleSeries,
+            checkedSourcesSupplier != null ? checkedSourcesSupplier.get() : java.util.Set.of(),
+            aggregationPeriod, aggregationMethod,
             plotType, yAxisScale, maskMode, autoYMode, currentViewport);
         if (stateHistory.pushIfChanged(state) && onHistoryChanged != null) {
             onHistoryChanged.run();

@@ -100,4 +100,36 @@ class VisualizationTabManagerResetTest {
         assertEquals(undone.getVisibleSeries(), new java.util.ArrayList<>(mgr.getTargetTabSelectedSeries()),
             "the canonical record matches the restored state");
     }
+
+    @Test
+    void constructionSnapshotCarriesTrueSources() {
+        VisualizationTabManager mgr = newManager();
+        VisualizationTabManager.TabSettings settings = emptySettings();
+        settings.checkedSources = new LinkedHashSet<>(Set.of(SRC));
+        mgr.addPlotTabFromSettings(settings);
+
+        assertEquals(Set.of(SRC), mgr.getTargetPlotPanel().currentState().getCheckedSources(),
+            "history entry #1 must carry the sources the tab was born with");
+    }
+
+    @Test
+    void sourceChangesAreUndoableAndRestoreThroughTheSeam() {
+        VisualizationTabManager mgr = newManager();
+        VisualizationTabManager.TabSettings settings = emptySettings();
+        settings.checkedSources = new LinkedHashSet<>(Set.of(SRC));
+        mgr.addPlotTabFromSettings(settings);           // entry 1: {SRC}
+
+        mgr.setTargetTabCheckedSources(Set.of());       // source-only change...
+        mgr.pushTargetTabHistory();                      // ...is its own undo entry
+        assertTrue(mgr.getTargetPlotPanel().canUndo(), "source-only change pushed an entry");
+
+        mgr.pushTargetTabHistory();                      // unchanged state dedupes
+        PlotState undone = mgr.getTargetPlotPanel().undo();
+        mgr.syncTabSelectionFromPlotState(mgr.getTargetPlotPanel(), undone);
+
+        assertEquals(Set.of(SRC), mgr.getTargetTabCheckedSources(),
+            "undo restores the source context into the canonical record");
+        assertTrue(!mgr.getTargetPlotPanel().canUndo(),
+            "the duplicate push deduped: exactly one source-change entry existed");
+    }
 }

@@ -903,6 +903,10 @@ public class RunManager extends JFrame {
         } finally {
             fetchCoordinator.endProgrammaticUpdate();
         }
+
+        // A source tick/untick is an undoable action in its own right. If the
+        // reconcile above already pushed (series were pruned), this dedupes.
+        tabManager.pushTargetTabHistory();
     }
 
     /**

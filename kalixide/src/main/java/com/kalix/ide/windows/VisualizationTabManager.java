@@ -455,6 +455,17 @@ public class VisualizationTabManager {
                 ? new LinkedHashSet<>(activeTab.selectedSeries)
                 : new LinkedHashSet<>(sharedDataSet.getSeriesRefs());
         }
+        // TabInfo exists BEFORE the construction batch so the panel's snapshot
+        // supplier can read the tab's true source context: history entry #1 must
+        // carry the sources it was born with, or the first undo back to it would
+        // wrongly clear them.
+        JPanel containerPanel = new JPanel(new BorderLayout());
+        TabInfo tabInfo = new TabInfo(
+            TabInfo.TabType.PLOT, settings.name != null ? settings.name : "", containerPanel, plotPanel, null);
+        tabInfo.selectedSeries.addAll(inheritedSeries);
+        tabInfo.checkedSources.addAll(inheritedSources(settings));
+        plotPanel.setCheckedSourcesSupplier(() -> new LinkedHashSet<>(tabInfo.checkedSources));
+
         // One batched change: series + settings land as a single rebuild and a single
         // history entry, so a fresh tab starts with a one-entry history (no construction
         // intermediates for undo to walk into) and Reset is one undoable step.
@@ -478,19 +489,11 @@ public class VisualizationTabManager {
             plotPanel.copyHistoryFrom(settings.sourcePlotPanel);
         }
 
-        // Create container panel with toolbar
-        JPanel containerPanel = new JPanel(new BorderLayout());
         PlotToolbarBuilder toolbarBuilder = createPlotToolbar(plotPanel, settings.autoYMode, settings.showCoordinates);
         JToolBar toolbar = toolbarBuilder.build();
         containerPanel.add(toolbar, BorderLayout.NORTH);
         containerPanel.add(plotPanel, BorderLayout.CENTER);
-
-        // Add tab with inherited series selection and source context
-        TabInfo tabInfo = new TabInfo(
-            TabInfo.TabType.PLOT, settings.name != null ? settings.name : "", containerPanel, plotPanel, null);
         tabInfo.plotToolbarController = toolbarBuilder.getController();
-        tabInfo.selectedSeries.addAll(inheritedSeries);
-        tabInfo.checkedSources.addAll(inheritedSources(settings));
         tabs.add(tabInfo);
 
         int index = tabbedPane.getTabCount();
@@ -1158,6 +1161,20 @@ public class VisualizationTabManager {
     }
 
     /**
+     * Pushes the target plot tab's current state to its undo history, if it changed.
+     * Source tick/untick is an undoable action in its own right: the window layer
+     * calls this after recording a source change, and when the change also pruned
+     * series (which pushes on its own) the second push dedupes via PlotState.equals.
+     * No-op when a stats tab is active (stats tabs have no history).
+     */
+    public void pushTargetTabHistory() {
+        PlotPanel panel = getTargetPlotPanel();
+        if (panel != null) {
+            panel.pushState();
+        }
+    }
+
+    /**
      * Records the checked data sources on the target tab (in the given order).
      * Pure bookkeeping — no visual side effects; the source tree itself is the
      * caller's responsibility.
@@ -1272,6 +1289,11 @@ public class VisualizationTabManager {
             if (tab.plotPanel == panel) {
                 tab.selectedSeries.clear();
                 tab.selectedSeries.addAll(state.getVisibleSeries());
+                // The snapshot is the complete view: source context restores too.
+                // Refs whose run/dataset has since been removed fail silently at
+                // projection (unfindable paths are skipped) — see PlotState.
+                tab.checkedSources.clear();
+                tab.checkedSources.addAll(state.getCheckedSources());
 
                 // Rebuild legend to match (colour resolved at render time)
                 panel.clearLegend();
