@@ -268,9 +268,14 @@ class PlotToolbarBuilder {
         return controller;
     }
 
+   /** Creates a standard icon from a {@link FontAwesomeSolid} */
+   private javax.swing.Icon createFontIcon(FontAwesomeSolid icon) {
+       return FontIcon.of(icon, ToolbarConstants.BUTTON_ICON_SIZE);
+   }
+
     /** Creates a standard icon button. */
     private JButton createIconButton(FontAwesomeSolid icon, String tooltip, Runnable action) {
-        JButton button = new JButton(FontIcon.of(icon, ToolbarConstants.BUTTON_ICON_SIZE));
+        JButton button = new JButton(createFontIcon(icon));
         button.setToolTipText(tooltip);
         button.setFocusable(false);
         button.setPreferredSize(ToolbarConstants.BUTTON_SIZE);
