@@ -48,21 +48,30 @@ class PlotToolbarController {
     private static void setSilently(JComboBox<String> combo, String value) {
         java.awt.event.ActionListener[] listeners = combo.getActionListeners();
         for (var l : listeners) combo.removeActionListener(l);
-        combo.setSelectedItem(value);
-        for (var l : listeners) combo.addActionListener(l);
+        try {
+            combo.setSelectedItem(value);
+        } finally {
+            for (var l : listeners) combo.addActionListener(l);
+        }
     }
 
     private static void setSilently(JComboBox<PlotType> combo, PlotType value) {
         java.awt.event.ActionListener[] listeners = combo.getActionListeners();
         for (var l : listeners) combo.removeActionListener(l);
-        combo.setSelectedItem(value);
-        for (var l : listeners) combo.addActionListener(l);
+        try {
+            combo.setSelectedItem(value);
+        } finally {
+            for (var l : listeners) combo.addActionListener(l);
+        }
     }
 
     private static void setSilently(JToggleButton toggle, boolean selected) {
         java.awt.event.ActionListener[] listeners = toggle.getActionListeners();
         for (var l : listeners) toggle.removeActionListener(l);
-        toggle.setSelected(selected);
-        for (var l : listeners) toggle.addActionListener(l);
+        try {
+            toggle.setSelected(selected);
+        } finally {
+            for (var l : listeners) toggle.addActionListener(l);
+        }
     }
 }

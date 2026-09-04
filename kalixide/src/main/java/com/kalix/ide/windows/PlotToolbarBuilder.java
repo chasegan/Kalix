@@ -32,14 +32,6 @@ import static com.kalix.ide.flowviz.stats.MaskMode.NONE;
  */
 class PlotToolbarBuilder {
 
-    /**
-     * Plot type options, derived from {@link PlotType} so its display names have one
-     * owner — the enum constants themselves — rather than a hand-maintained copy here.
-     */
-    private static final String[] PLOT_TYPE_OPTIONS = java.util.Arrays.stream(PlotType.values())
-        .map(PlotType::getDisplayName)
-        .toArray(String[]::new);
-
     /** Y-axis scale options. */
     private static final String[] Y_SPACE_OPTIONS = {"Linear", "Log", "Sqrt"};
 

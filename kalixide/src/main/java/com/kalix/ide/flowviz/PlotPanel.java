@@ -938,17 +938,45 @@ public class PlotPanel extends JPanel {
     }
 
     /**
-     * Sets the plot type for this plot.
+     * Sets the plot type for this plot, keeping the current mask mode.
      * Triggers rebuild of display dataset to apply the transformation.
      */
     public void setPlotType(PlotType type) {
-        if (type == null || type == this.plotType) {
+        if (type == null) {
+            return;
+        }
+        setPlotTypeAndMaskMode(type, this.maskMode);
+    }
+
+    /**
+     * Sets plot type and mask mode together as one atomic action: both fields update, the
+     * display dataset rebuilds once (not twice), and exactly one entry is pushed to undo
+     * history. Pushing the two changes separately would leave a "phantom" intermediate state
+     * (new plot type, stale mask mode) that undo would visit but the user never actually saw
+     * — used by the plot-type dropdown, which changes both together (per
+     * {@link PlotType#isDataMaskDefault()}).
+     *
+     * <p>This is the primitive: {@link #setPlotType} and {@link #setMaskMode} delegate here,
+     * so the rebuild/fit/push tail lives in exactly one place. The mask concerned is the
+     * <em>overlapping-data</em> mask ({@link MaskMode}) only; further filter dimensions
+     * (e.g. a seasonal filter, issue #235) are deliberately outside this coupling and belong
+     * in orthogonal fields, not new MaskMode variants.</p>
+     */
+    public void setPlotTypeAndMaskMode(PlotType type, MaskMode maskMode) {
+        if (type == null || maskMode == null) {
+            return;
+        }
+        boolean plotTypeChanged = type != this.plotType;
+        if (!plotTypeChanged && maskMode == this.maskMode) {
             return;
         }
 
         PlotType oldPlotType = this.plotType;
         this.plotType = type;
-        lastReferenceSeries = null; // Reset reference tracking
+        if (plotTypeChanged) {
+            lastReferenceSeries = null; // Reset reference tracking
+        }
+        this.maskMode = maskMode;
 
         if (restoringState) {
             return; // restoreState rebuilds once at the end
@@ -956,57 +984,8 @@ public class PlotPanel extends JPanel {
 
         rebuildDisplayDataSet();
 
-        // Check if X-axis domain changed (switching to/from non-time X-axis types)
-        boolean xAxisDomainChanged = xAxisTypeFor(oldPlotType) != xAxisTypeFor(type);
-
-        // If X-axis domain changed, must recalculate entire viewport (can't preserve X zoom)
-        // Otherwise, follow same logic as aggregation changes
-        if (xAxisDomainChanged) {
-            zoomToFit();  // Full recalculation - X domain is completely different
-        } else if (autoYMode) {
-            fitYAxis();   // Preserve X zoom, fit Y to new data
-        } else {
-            zoomToFit();  // Zoom to fit both axes
-        }
-        pushState();
-    }
-
-    /**
-     * Sets plot type and mask mode together as one atomic action: both fields update, the
-     * display dataset rebuilds once (not twice), and exactly one entry is pushed to undo
-     * history. Calling {@link #setPlotType} and {@link #setMaskMode} back to back would each
-     * push their own snapshot, leaving a "phantom" intermediate state (new plot type, stale
-     * mask mode) that undo would visit but the user never actually saw — used by the plot-type
-     * dropdown, which changes both together (per {@link PlotType#isDataMaskDefault()}).
-     */
-    public void setPlotTypeAndMaskMode(PlotType type, MaskMode maskMode) {
-        if (type == null || maskMode == null) {
-            return;
-        }
-        boolean plotTypeChanged = type != this.plotType;
-        boolean maskModeChanged = maskMode != this.maskMode;
-        if (!plotTypeChanged && !maskModeChanged) {
-            return;
-        }
-
-        PlotType oldPlotType = this.plotType;
-
-        boolean wasRestoring = restoringState;
-        restoringState = true; // suppress setPlotType/setMaskMode's own rebuild/fit/pushState
-        try {
-            setPlotType(type);
-            setMaskMode(maskMode);
-        } finally {
-            restoringState = wasRestoring;
-        }
-
-        if (restoringState) {
-            return; // nested inside an outer restore, which rebuilds once at its own end
-        }
-
-        rebuildDisplayDataSet();
-
-        // Same domain-aware fit choice as setPlotType, since plot type may have changed here too.
+        // If the X-axis domain changed, the viewport must be fully recalculated (X zoom
+        // can't be preserved); otherwise follow the same logic as aggregation changes.
         boolean xAxisDomainChanged = xAxisTypeFor(oldPlotType) != xAxisTypeFor(type);
 
         if (xAxisDomainChanged) {
@@ -1041,23 +1020,10 @@ public class PlotPanel extends JPanel {
      * When ALL, only timestamps where all visible series have valid data are included.
      */
     public void setMaskMode(MaskMode mode) {
-        if (mode == null || mode == this.maskMode) {
+        if (mode == null) {
             return;
         }
-        this.maskMode = mode;
-
-        if (restoringState) {
-            return; // restoreState rebuilds once at the end
-        }
-
-        rebuildDisplayDataSet();
-
-        if (autoYMode) {
-            fitYAxis();
-        } else {
-            zoomToFit();
-        }
-        pushState();
+        setPlotTypeAndMaskMode(this.plotType, mode);
     }
 
     /**

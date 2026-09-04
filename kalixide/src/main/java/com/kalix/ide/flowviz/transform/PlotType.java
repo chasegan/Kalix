@@ -56,7 +56,10 @@ public enum PlotType {
     }
 
     /**
-     * Whether overlapping-data masking should default to on when this plot type is selected.
+     * Whether overlapping-data masking should default to on when this plot type is selected
+     * from the toolbar dropdown (issue #369). This flag concerns the overlapping-data mask
+     * ({@code MaskMode}) only; other filter dimensions (e.g. a seasonal filter, issue #235)
+     * are deliberately independent of plot type and of this flag.
      */
     public boolean isDataMaskDefault() {
         return dataMaskDefault;

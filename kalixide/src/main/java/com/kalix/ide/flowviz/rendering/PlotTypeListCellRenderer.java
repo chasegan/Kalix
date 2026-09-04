@@ -24,6 +24,9 @@ import static com.kalix.ide.windows.ToolbarConstants.HORIZONTAL_SPACING;
  * Renders each {@link PlotType} combo-box item as its display name (left-aligned) plus a glyph
  * (right-aligned) showing whether that plot type starts with overlapping-data masking on
  * ({@link PlotType#isDataMaskDefault()}).
+ *
+ * <p>Rubber-stamp renderer: one cached component is reconfigured per call rather than
+ * allocated per call, matching the codebase's other list renderers.</p>
  */
 public class PlotTypeListCellRenderer implements ListCellRenderer<PlotType> {
 
@@ -45,6 +48,23 @@ public class PlotTypeListCellRenderer implements ListCellRenderer<PlotType> {
         }
     };
 
+    private final JPanel panel = new JPanel(new BorderLayout(HORIZONTAL_SPACING, 0));
+    private final JLabel textLabel = new JLabel();
+    private final JLabel iconLabel = new JLabel();
+
+    public PlotTypeListCellRenderer() {
+        panel.setOpaque(true);
+        textLabel.setBorder(BorderFactory.createEmptyBorder(2, HORIZONTAL_SPACING, 2, 0));
+        // Every icon (whichever glyph, or the blank placeholder) sits in the same padded box
+        // rather than flush against the row's edge, so rows stay visually uniform regardless
+        // of which glyph is showing (FontIcon already reports the same square footprint for
+        // every glyph - this is about breathing room, not the reported size). No left padding
+        // here: that gap already comes from the BorderLayout hgap between the two labels.
+        iconLabel.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, HORIZONTAL_SPACING));
+        panel.add(textLabel, BorderLayout.WEST);
+        panel.add(iconLabel, BorderLayout.EAST);
+    }
+
     @Override
     public Component getListCellRendererComponent(
         JList<? extends PlotType> list,
@@ -56,14 +76,9 @@ public class PlotTypeListCellRenderer implements ListCellRenderer<PlotType> {
         Color background = isSelected ? list.getSelectionBackground() : list.getBackground();
         Color foreground = isSelected ? list.getSelectionForeground() : list.getForeground();
 
-        JPanel panel = new JPanel(new BorderLayout(HORIZONTAL_SPACING, 0));
-        panel.setOpaque(true);
         panel.setBackground(background);
-
-        JLabel textLabel = new JLabel(value == null ? "" : value.getDisplayName());
+        textLabel.setText(value == null ? "" : value.getDisplayName());
         textLabel.setForeground(foreground);
-        textLabel.setBorder(BorderFactory.createEmptyBorder(2, HORIZONTAL_SPACING, 2, 0));
-        panel.add(textLabel, BorderLayout.WEST);
 
         Icon icon;
         if (value == null || index == -1) {
@@ -79,14 +94,7 @@ public class PlotTypeListCellRenderer implements ListCellRenderer<PlotType> {
                 ? FontIcon.of(FontAwesomeSolid.MASK, BUTTON_ICON_SIZE, iconColor)
                 : FontIcon.of(FontAwesomeSolid.BAN, BUTTON_ICON_SIZE, iconColor);
         }
-        // Every icon (whichever glyph, or the blank placeholder) sits in the same padded box
-        // rather than flush against the row's edge, so rows stay visually uniform regardless
-        // of which glyph is showing (FontIcon already reports the same square footprint for
-        // every glyph - this is about breathing room, not the reported size). No left padding
-        // here: that gap already comes from the BorderLayout hgap between the two labels.
-        JLabel iconLabel = new JLabel(icon);
-        iconLabel.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, HORIZONTAL_SPACING));
-        panel.add(iconLabel, BorderLayout.EAST);
+        iconLabel.setIcon(icon);
 
         return panel;
     }
