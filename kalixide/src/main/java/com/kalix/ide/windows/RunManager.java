@@ -1000,12 +1000,13 @@ public class RunManager extends JFrame {
         }
         datasetSeriesCache.keySet().removeIf(dsRef -> dsRef.datasetId().equals(absPath));
 
-        // Strip them from every tab's selection, legend, visible-series, and stats,
-        // and forget the dataset from every tab's recorded source context.
-        tabManager.removeSeriesFromAllTabs(refs);
-        tabManager.removeSourceFromAllTabs(new DatasetSource(absPath));
-
-        // Remove the tree node — selection changes (if any) refresh the outputs tree.
+        // Remove the tree node FIRST, exactly as run removal does (RunTreeController
+        // removes paths before removeRunData). If the dataset was checked, removePath
+        // fires the tick listener synchronously: its snapshot+reconcile prunes the
+        // dataset's sources AND series from the active tab in ONE history entry.
+        // Running the scrubs first pushed while the record still held the dead
+        // source, and the listener then pushed again without it — two entries
+        // differing only in sources, making the first Undo a visible no-op.
         for (int i = 0; i < loadedDatasetsNode.getChildCount(); i++) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) loadedDatasetsNode.getChildAt(i);
             var path = child.getPath();
@@ -1016,6 +1017,13 @@ public class RunManager extends JFrame {
                 break;
             }
         }
+
+        // Strip them from every tab's selection, legend, visible-series, and stats,
+        // and forget the dataset from every tab's recorded source context. For the
+        // active tab these are no-ops (the listener above already did both, and the
+        // duplicate push dedupes); background tabs are scrubbed silently by design.
+        tabManager.removeSeriesFromAllTabs(refs);
+        tabManager.removeSourceFromAllTabs(new DatasetSource(absPath));
 
         if (statusUpdater != null) {
             statusUpdater.accept("Removed dataset: " + info.fileName);

@@ -1088,7 +1088,10 @@ public class VisualizationTabManager {
      * the undo/redo sync do. Mutations that happen while the corresponding
      * tree nodes are being removed in the same operation (removeRunData,
      * removeLoadedDataset) deliberately do not: their projection is corrected
-     * at the source, and firing a restore mid-removal would be wrong.</p>
+     * at the source, and firing a restore mid-removal would be wrong. For
+     * BACKGROUND tabs those silent scrubs can leave the record ahead of the
+     * history top, so the scrub rides into that tab's next unrelated push —
+     * accepted, per the silent-failure rule documented on PlotState.</p>
      */
     private void notifyTabMutated(TabInfo tab) {
         if (tab == getActiveTab() && onTabChangedCallback != null) {

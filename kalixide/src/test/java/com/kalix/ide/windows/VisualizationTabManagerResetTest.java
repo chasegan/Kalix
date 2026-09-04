@@ -12,11 +12,14 @@ import com.kalix.ide.flowviz.style.StrokeStyle;
 import org.junit.jupiter.api.Test;
 
 import java.awt.Color;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -97,7 +100,7 @@ class VisualizationTabManagerResetTest {
         mgr.syncTabSelectionFromPlotState(mgr.getTargetPlotPanel(), undone);
 
         assertEquals(1, notifications.get(), "undo sync must reproject the trees once");
-        assertEquals(undone.getVisibleSeries(), new java.util.ArrayList<>(mgr.getTargetTabSelectedSeries()),
+        assertEquals(undone.getVisibleSeries(), new ArrayList<>(mgr.getTargetTabSelectedSeries()),
             "the canonical record matches the restored state");
     }
 
@@ -129,7 +132,68 @@ class VisualizationTabManagerResetTest {
 
         assertEquals(Set.of(SRC), mgr.getTargetTabCheckedSources(),
             "undo restores the source context into the canonical record");
-        assertTrue(!mgr.getTargetPlotPanel().canUndo(),
+        assertFalse(mgr.getTargetPlotPanel().canUndo(),
             "the duplicate push deduped: exactly one source-change entry existed");
+    }
+
+    @Test
+    void undoOfResetRestoresTheCompleteView() {
+        VisualizationTabManager mgr = newManager();
+        VisualizationTabManager.TabSettings settings = emptySettings();
+        settings.checkedSources = new LinkedHashSet<>(Set.of(SRC));
+        mgr.addPlotTabFromSettings(settings);           // entry 1: sources={SRC}
+        mgr.setTargetTabSelectedSeries(Set.of(REF));    // entry 2: +series
+
+        AtomicInteger notifications = new AtomicInteger();
+        mgr.setOnTabChangedCallback(notifications::incrementAndGet);
+
+        mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex()); // entry 3: empty
+        assertEquals(1, notifications.get());
+
+        PlotState undone = mgr.getTargetPlotPanel().undo();
+        mgr.syncTabSelectionFromPlotState(mgr.getTargetPlotPanel(), undone);
+
+        assertEquals(2, notifications.get(), "undo-of-reset reprojects the trees");
+        assertEquals(Set.of(REF), mgr.getTargetTabSelectedSeries(),
+            "the reset's series come back");
+        assertEquals(Set.of(SRC), mgr.getTargetTabCheckedSources(),
+            "the reset's source context comes back too -- the complete view");
+    }
+
+    @Test
+    void statsTabResetNotifiesAndClearsCanonicalRecord() {
+        VisualizationTabManager mgr = newManager();
+        VisualizationTabManager.TabSettings settings = emptySettings();
+        settings.selectedSeries = new LinkedHashSet<>(Set.of(REF));
+        settings.checkedSources = new LinkedHashSet<>(Set.of(SRC));
+        mgr.addStatsTabFromSettings(settings);          // stats tab, selected
+
+        AtomicInteger notifications = new AtomicInteger();
+        mgr.setOnTabChangedCallback(notifications::incrementAndGet);
+
+        mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex());
+
+        assertEquals(1, notifications.get(),
+            "a stats-tab reset must reproject the trees too -- same defect class as plot");
+        assertTrue(mgr.getTargetTabSelectedSeries().isEmpty());
+        assertTrue(mgr.getTargetTabCheckedSources().isEmpty());
+    }
+
+    @Test
+    void snapshotPreservesCheckedSourceOrder() {
+        // Four sources, not two: Set.copyOf's salt-randomised order would match
+        // insertion order ~50% of the time with two elements, making the pin a
+        // coin flip; with four it fails on ~96% of JVM runs if order is lost.
+        List<SourceRef> ordered = List.of(
+            new DatasetSource("/test/a.csv"), new DatasetSource("/test/b.csv"),
+            new DatasetSource("/test/c.csv"), new DatasetSource("/test/d.csv"));
+        VisualizationTabManager mgr = newManager();
+        VisualizationTabManager.TabSettings settings = emptySettings();
+        settings.checkedSources = new LinkedHashSet<>(ordered);
+        mgr.addPlotTabFromSettings(settings);
+
+        assertEquals(ordered,
+            new ArrayList<>(mgr.getTargetPlotPanel().currentState().getCheckedSources()),
+            "source order is load-bearing (outputs-tree section order) and must survive the snapshot");
     }
 }

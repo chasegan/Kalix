@@ -9,6 +9,8 @@ import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -27,7 +29,7 @@ import java.util.Set;
  * outlive its sources — a run deleted or a dataset unloaded after the snapshot was
  * taken. Restoring such a snapshot fails silently by design: the tab record regains
  * the stale ref, projection skips paths it cannot find, and ids are never reused
- * (see {@link RunSource}), so nothing wrong can be resurrected under the same name.</p>
+ * (see {@link com.kalix.ide.flowviz.data.RunSource}), so nothing wrong can be resurrected under the same name.</p>
  */
 public final class PlotState {
 
@@ -59,7 +61,10 @@ public final class PlotState {
                      double minValue,
                      double maxValue) {
         this.visibleSeries = List.copyOf(visibleSeries);
-        this.checkedSources = Set.copyOf(checkedSources);
+        // Order-preserving copy: source order is load-bearing (it drives the outputs
+        // tree's section order), and Set.copyOf's iteration order is salt-randomised
+        // per JVM run — an undo must not reorder a multi-source tab's sections.
+        this.checkedSources = Collections.unmodifiableSet(new LinkedHashSet<>(checkedSources));
         this.aggregationPeriod = aggregationPeriod;
         this.aggregationMethod = aggregationMethod;
         this.plotType = plotType;

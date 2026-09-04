@@ -3,6 +3,7 @@ package com.kalix.ide.flowviz;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
+import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.TimeSeriesRenderer;
 import com.kalix.ide.flowviz.rendering.ViewPort;
@@ -31,6 +32,7 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Supplier;
 import com.kalix.ide.preferences.PreferenceKeys;
 import org.slf4j.Logger;
@@ -1098,12 +1100,11 @@ public class PlotPanel extends JPanel {
      * anything about the window's trees. Set by VisualizationTabManager before the
      * construction batch, so even history entry #1 carries true sources.
      */
-    public void setCheckedSourcesSupplier(
-            java.util.function.Supplier<java.util.Set<com.kalix.ide.flowviz.data.SourceRef>> supplier) {
+    public void setCheckedSourcesSupplier(Supplier<Set<SourceRef>> supplier) {
         this.checkedSourcesSupplier = supplier;
     }
 
-    private java.util.function.Supplier<java.util.Set<com.kalix.ide.flowviz.data.SourceRef>> checkedSourcesSupplier;
+    private Supplier<Set<SourceRef>> checkedSourcesSupplier;
 
     /**
      * Captures and pushes the current state to history (if changed).
@@ -1114,7 +1115,7 @@ public class PlotPanel extends JPanel {
         if (restoringState || originalDataSet == null) return;
         PlotState state = PlotState.capture(
             visibleSeries,
-            checkedSourcesSupplier != null ? checkedSourcesSupplier.get() : java.util.Set.of(),
+            checkedSourcesSupplier != null ? checkedSourcesSupplier.get() : Set.of(),
             aggregationPeriod, aggregationMethod,
             plotType, yAxisScale, maskMode, autoYMode, currentViewport);
         if (stateHistory.pushIfChanged(state) && onHistoryChanged != null) {
@@ -1159,6 +1160,12 @@ public class PlotPanel extends JPanel {
 
     /**
      * Undoes the last state change. Returns the restored state, or null if at beginning.
+     *
+     * <p><b>Callers must route the returned state through
+     * {@code VisualizationTabManager.syncTabSelectionFromPlotState}</b> (as the toolbar's
+     * undo button does): this method restores only the panel; the tab's canonical
+     * record and the window trees sync at that call-site seam. A direct caller — a
+     * future key binding, say — that skips it silently desyncs the trees.</p>
      */
     public PlotState undo() {
         PlotState state = stateHistory.undo();
@@ -1171,6 +1178,7 @@ public class PlotPanel extends JPanel {
 
     /**
      * Redoes the last undone state change. Returns the restored state, or null if at end.
+     * Same call-site contract as {@link #undo()}: route the result through the sync seam.
      */
     public PlotState redo() {
         PlotState state = stateHistory.redo();
