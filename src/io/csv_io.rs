@@ -214,31 +214,48 @@ fn infer_step_size(timestamps: &[u64]) -> Result<Option<u64>, String> {
 }
 
 
-/// Appends `value` to `buf` in the shortest text that reads back to exactly the
-/// same `f64`.
+/// Appends `value` to `buf` as text that reads back to exactly the same `f64`,
+/// in exponent notation when the value is of extreme magnitude and that form
+/// is shorter.
 ///
 /// Rust's `Display` already prints the shortest round-trip digits, but never
 /// uses exponent notation, so 1.38462e-47 came out as a 0.000…0138462 of fifty
 /// characters and 1e20 as twenty-one digits (issue #169). `LowerExp` prints the
-/// same digits with an exponent. For a value of extreme magnitude — below 1e-4
-/// or at least 1e15, where the exponent form can win — both are produced and the
-/// shorter kept. Everything in between, which is nearly all hydrological data,
-/// takes the single `Display` path and is written byte-for-byte as before.
+/// same digits with an exponent, so both spellings are exact and no fidelity is
+/// traded. Values in the ordinary band, from 1e-4 up to (not including) 1e15 —
+/// nearly all hydrological data — take the single `Display` path and are written
+/// byte-for-byte as before, even where an exponent form would be a character or
+/// two shorter (`0.001`, `100000`): the saving that matters is the run of zeros
+/// outside the band.
 ///
-/// Both forms are exact, so no fidelity is traded: the output is smaller only
-/// where the fixed form was padding with zeros. Every Kalix reader (the engine,
+/// Allocation-free (performance.md §6): below 1e-4 the exponent form is always
+/// shorter, so it is written directly; at 1e15 and above both forms are written
+/// into `buf` and the longer one removed. Every Kalix reader (the engine,
 /// KalixIDE's importer, pandas) accepts the `1.5e-7` spelling.
 pub fn push_f64_compact(buf: &mut String, value: f64) {
     use std::fmt::Write as _;
     let magnitude = value.abs();
-    let extreme = value.is_finite() && magnitude != 0.0 && (magnitude < 1e-4 || magnitude >= 1e15);
-    if !extreme {
+    if !value.is_finite() || magnitude == 0.0 || (magnitude >= 1e-4 && magnitude < 1e15) {
         let _ = write!(buf, "{value}");
-        return;
+    } else if magnitude < 1e-4 {
+        // Fixed form is at least "0." plus four zeros plus the digits; exponent
+        // form is the digits plus "e-N". The exponent form always wins here.
+        let _ = write!(buf, "{value:e}");
+    } else {
+        // Large: "1e20" beats "100000000000000000000", but "1234567890123456"
+        // beats "1.234567890123456e15". Write both, keep the shorter (fixed on a tie).
+        let start = buf.len();
+        let _ = write!(buf, "{value:e}");
+        let exponent_end = buf.len();
+        let _ = write!(buf, "{value}");
+        let exponent_len = exponent_end - start;
+        let fixed_len = buf.len() - exponent_end;
+        if exponent_len < fixed_len {
+            buf.truncate(exponent_end);
+        } else {
+            buf.drain(start..exponent_end);
+        }
     }
-    let fixed = format!("{value}");
-    let exponent = format!("{value:e}");
-    buf.push_str(if exponent.len() < fixed.len() { &exponent } else { &fixed });
 }
 
 pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(), CsvError> {

@@ -346,6 +346,23 @@ fn test_push_f64_compact_is_shortest_and_exact() {
 
     // Extreme but with many digits, where the fixed form is no longer: it stays.
     assert_eq!(text(1234567890123456.0), "1234567890123456");
+    assert_eq!(text(1234567890120000.0), "1234567890120000"); // a tie keeps the fixed form
+    assert_eq!(text(1e15), "1e15");
+
+    // The band edges: 1e-4 itself is ordinary; just below it is not.
+    assert_eq!(text(0.0001), "0.0001");
+    assert_eq!(text(9.999999999999999e-5), "9.999999999999999e-5");
+    assert_eq!(text(999999999999999.9), "999999999999999.9");
+
+    // Subnormals: the fixed form was 326 characters.
+    assert_eq!(text(5e-324), "5e-324");
+    assert_eq!(text(-0.0), "-0");
+
+    // Appending never disturbs what is already in the buffer.
+    let mut buf = String::from("2020-01-01,");
+    push_f64_compact(&mut buf, 1e20);
+    push_f64_compact(&mut buf, 1234567890123456.0);
+    assert_eq!(buf, "2020-01-01,1e201234567890123456");
 
     // Non-finite values pass through unchanged.
     assert_eq!(text(f64::NAN), "NaN");
