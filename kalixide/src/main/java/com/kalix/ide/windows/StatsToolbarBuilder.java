@@ -36,6 +36,7 @@ class StatsToolbarBuilder {
     // Store dropdown references for coordinated updates
     private JComboBox<String> aggregationPeriodCombo;
     private JComboBox<String> aggregationMethodCombo;
+    private JComboBox<String> maskCombo;
 
     StatsToolbarBuilder(VisualizationTabManager.TabInfo tabInfo, JTable statsTable, DataSet dataSet) {
         this.tabInfo = tabInfo;
@@ -89,7 +90,7 @@ class StatsToolbarBuilder {
 
         // Mask mode dropdown
         String[] maskOptions = {"All", "Each", "None"};
-        JComboBox<String> maskCombo = createDropdown(maskOptions,
+        maskCombo = createDropdown(maskOptions,
             ToolbarConstants.NARROW_DROPDOWN_SIZE, "Mask mode for bivariate statistics");
 
         // Set initial selection from stats model
@@ -111,6 +112,23 @@ class StatsToolbarBuilder {
     }
 
     /** Applies current aggregation settings to stats. */
+    /**
+     * Resyncs the aggregation and mask dropdowns from the tab's current state — used by
+     * in-place Reset. Setting a combo fires its listener, which harmlessly re-applies
+     * the value it already holds (the stats pipeline is cheap, and empty after a reset).
+     */
+    void syncFromTab() {
+        if (aggregationPeriodCombo != null) {
+            aggregationPeriodCombo.setSelectedItem(tabInfo.statsPeriod.getDisplayName());
+        }
+        if (aggregationMethodCombo != null) {
+            aggregationMethodCombo.setSelectedItem(tabInfo.statsMethod.getDisplayName());
+        }
+        if (maskCombo != null && tabInfo.statsModel != null) {
+            maskCombo.setSelectedItem(tabInfo.statsModel.getMaskMode().getDisplayName());
+        }
+    }
+
     private void applyAggregation() {
         if (aggregationPeriodCombo == null || aggregationMethodCombo == null) {
             return;

@@ -228,6 +228,11 @@ public class VisualizationTabManager {
         // remember the label for renaming
         JLabel nameLabel;
 
+        // Toolbar handles, set once the toolbar is built: let in-place operations
+        // (Reset) resync the toolbar controls from the tab's actual state.
+        PlotToolbarController plotToolbarController; // plot tabs only
+        StatsToolbarBuilder statsToolbar;            // stats tabs only
+
         TabInfo(TabType type, String name, JComponent component, PlotPanel plotPanel, StatsTableModel statsModel) {
             this.type = type;
             this.name = name;
@@ -450,49 +455,40 @@ public class VisualizationTabManager {
                 ? new LinkedHashSet<>(activeTab.selectedSeries)
                 : new LinkedHashSet<>(sharedDataSet.getSeriesRefs());
         }
-        plotPanel.setVisibleSeries(new ArrayList<>(inheritedSeries));
-
-        // Apply all settings from TabSettings (must be done AFTER setVisibleSeries)
-        plotPanel.setAggregation(settings.aggregationPeriod, settings.aggregationMethod);
-        plotPanel.setPlotType(settings.plotType);
-        plotPanel.setYAxisScale(settings.yAxisScale);
-        plotPanel.setAutoYMode(settings.autoYMode);
-        plotPanel.setShowCoordinates(settings.showCoordinates);
-        // Order matters: setConnectAcrossGaps(true) clears orphan markers and vice versa,
-        // so apply connect first — for every valid (mutually exclusive) combination the
-        // net result matches the source tab.
-        plotPanel.setConnectAcrossGaps(settings.connectAcrossGaps);
-        plotPanel.setShowOrphanMarkers(settings.showOrphanMarkers);
-        // Unconditional: the new legend manager starts from the global preference, which
-        // may disagree with this tab's settings in either direction.
-        plotPanel.setLegendCollapsed(settings.legendCollapsed);
-        plotPanel.setLegendEnabled(settings.legendEnabled);
+        // One batched change: series + settings land as a single rebuild and a single
+        // history entry, so a fresh tab starts with a one-entry history (no construction
+        // intermediates for undo to walk into) and Reset is one undoable step.
+        plotPanel.batchStateChange(() -> {
+            plotPanel.setVisibleSeries(new ArrayList<>(inheritedSeries));
+            applyPlotSettings(plotPanel, settings);
+        });
 
         // Populate legend with inherited series (colour resolved at render time)
         for (SeriesRef ref : inheritedSeries) {
             plotPanel.addLegendSeries(ref);
         }
 
-        // Copy history from source plot tab (Chrome-style duplicate), or push initial state.
+        // Duplicating copies the source's full history (the batchStateChange above
+        // already pushed this tab's own initial entry, which the copy replaces).
         // Done BEFORE the toolbar is built: copyHistoryFrom restores the source's current
         // state (mask mode included, which TabSettings doesn't carry), and the toolbar
         // controls initialise by reading the panel — building first left them showing
         // defaults that disagreed with the restored plot.
         if (settings.sourcePlotPanel != null) {
             plotPanel.copyHistoryFrom(settings.sourcePlotPanel);
-        } else {
-            plotPanel.pushState();
         }
 
         // Create container panel with toolbar
         JPanel containerPanel = new JPanel(new BorderLayout());
-        JToolBar toolbar = createPlotToolbar(plotPanel, settings.autoYMode, settings.showCoordinates);
+        PlotToolbarBuilder toolbarBuilder = createPlotToolbar(plotPanel, settings.autoYMode, settings.showCoordinates);
+        JToolBar toolbar = toolbarBuilder.build();
         containerPanel.add(toolbar, BorderLayout.NORTH);
         containerPanel.add(plotPanel, BorderLayout.CENTER);
 
         // Add tab with inherited series selection and source context
         TabInfo tabInfo = new TabInfo(
             TabInfo.TabType.PLOT, settings.name != null ? settings.name : "", containerPanel, plotPanel, null);
+        tabInfo.plotToolbarController = toolbarBuilder.getController();
         tabInfo.selectedSeries.addAll(inheritedSeries);
         tabInfo.checkedSources.addAll(inheritedSources(settings));
         tabs.add(tabInfo);
@@ -512,7 +508,7 @@ public class VisualizationTabManager {
     /**
      * Creates a toolbar for a plot tab.
      */
-    private JToolBar createPlotToolbar(PlotPanel plotPanel, boolean initialAutoY, boolean initialShowCoordinates) {
+    private PlotToolbarBuilder createPlotToolbar(PlotPanel plotPanel, boolean initialAutoY, boolean initialShowCoordinates) {
         PlotToolbarBuilder builder = new PlotToolbarBuilder(plotPanel);
         builder
             .setOnUndoRedo(state -> {
@@ -535,20 +531,21 @@ public class VisualizationTabManager {
             .addAutoYToggle(initialAutoY)
             .addCoordinatesToggle(initialShowCoordinates)
             .addLegendToggle(plotPanel.isLegendEnabled());
-        return builder.build();
+        return builder;
     }
 
     /**
      * Creates a toolbar for a stats tab.
      */
     private JToolBar createStatsToolbar(TabInfo tabInfo, JTable statsTable) {
-        return new StatsToolbarBuilder(tabInfo, statsTable, sharedDataSet)
+        StatsToolbarBuilder builder = new StatsToolbarBuilder(tabInfo, statsTable, sharedDataSet)
             .addSaveButton()
             .addSeparator()
             .addAggregationControls()
             .addSeparator()
-            .addMaskControls()
-            .build();
+            .addMaskControls();
+        tabInfo.statsToolbar = builder;
+        return builder.build();
     }
 
     /**
@@ -791,9 +788,9 @@ public class VisualizationTabManager {
         contextMenu.addSeparator();
 
         // Modify block (§1 ⑤). "Duplicate" names no type: the tab is the context (§2.3).
-        // Reset changes the tab's state rather than its existence, so it is a modify
-        // action, not a destructive one, even though it is not undoable; the destructive
-        // block that §1 ⑥ and §8 isolate is Remove alone.
+        // Reset changes the tab's state rather than its existence — in place, keeping
+        // the tab's name and history, undoable on plot tabs — so it is a modify action;
+        // the destructive block that §1 ⑥ and §8 isolate is Remove alone.
         JMenuItem duplicateItem = new JMenuItem("Duplicate");
         duplicateItem.addActionListener(e -> {
             TabSettings settings = settingsOfTab(tabPanel);
@@ -958,7 +955,7 @@ public class VisualizationTabManager {
      * Detaches the toolbar callbacks a plot tab's toolbar installed on its panel. This
      * is the owner's side of the contract with {@code PlotPanel.removeNotify()}, which
      * leaves those callbacks alone so a re-parented tab keeps working; they are released
-     * here, when the tab is genuinely discarded (close, reset).
+     * here, when the tab is genuinely discarded (close).
      */
     private void detachTabCallbacks(TabInfo tab) {
         if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
@@ -969,40 +966,63 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Resets the tab at {@code index} to a brand-new tab of the same type: default
-     * settings from preferences, no series selected, no checked sources — dropping all
-     * data selection and plot/stats configuration. Implemented as remove-then-recreate
-     * rather than clearing the existing tab's fields in place, so "reset" can never drift
-     * from what a genuinely new tab looks like.
+     * Resets the tab at {@code index} in place: default settings from preferences, no
+     * series selected, no checked sources — while preserving the tab's identity (name,
+     * position, toolbar) and, for plot tabs, its undo history, onto which the reset
+     * lands as one undoable entry. Uses the same {@link #applyPlotSettings} as tab
+     * creation, so a reset tab cannot drift from what a genuinely new tab looks like.
      */
     private void resetTabAt(int index) {
         if (index < 0 || index >= tabs.size()) {
             return;
         }
-        TabInfo oldTab = tabs.get(index);
-        TabInfo.TabType type = oldTab.type;
-
-        detachTabCallbacks(oldTab);
-        tabs.remove(index);
-        tabbedPane.removeTabAt(index);
-
-        // Brand-new, unnamed tab with nothing selected and nothing inherited — always
-        // appended at the end by addPlotTabFromSettings/addStatsTabFromSettings, then
-        // moved back into the slot the old tab occupied so tab order is undisturbed.
+        TabInfo tab = tabs.get(index);
         TabSettings settings = TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>();
 
-        if (type == TabInfo.TabType.PLOT) {
-            addPlotTabFromSettings(settings);
+        tab.selectedSeries.clear();
+        tab.checkedSources.clear();
+
+        if (tab.type == TabInfo.TabType.PLOT) {
+            tab.plotPanel.batchStateChange(() -> {
+                tab.plotPanel.setVisibleSeries(new ArrayList<>());
+                applyPlotSettings(tab.plotPanel, settings);
+            });
+            tab.plotPanel.getLegendManager().clear();
+            if (tab.plotToolbarController != null) {
+                tab.plotToolbarController.updateFromState(tab.plotPanel.currentState());
+            }
         } else {
-            addStatsTabFromSettings(settings);
+            tab.statsPeriod = settings.aggregationPeriod;
+            tab.statsMethod = settings.aggregationMethod;
+            tab.statsModel.setMaskMode(com.kalix.ide.flowviz.stats.MaskMode.ALL);
+            rebuildStatsTab(tab);
+            if (tab.statsToolbar != null) {
+                tab.statsToolbar.syncFromTab();
+            }
         }
+    }
 
-        int newIndex = tabbedPane.getTabCount() - 1;
-        if (newIndex != index) {
-            reorderTab(newIndex, index);
-        }
+    /**
+     * Applies a TabSettings' plot configuration to a panel — the single owner of "what
+     * settings a plot tab has", used by both tab creation and in-place Reset so the two
+     * can never drift apart. Call inside {@link PlotPanel#batchStateChange}: several of
+     * these setters would otherwise each rebuild and push history.
+     */
+    private static void applyPlotSettings(PlotPanel plotPanel, TabSettings settings) {
+        plotPanel.setAggregation(settings.aggregationPeriod, settings.aggregationMethod);
+        plotPanel.setPlotType(settings.plotType);
+        plotPanel.setYAxisScale(settings.yAxisScale);
+        plotPanel.setAutoYMode(settings.autoYMode);
+        plotPanel.setShowCoordinates(settings.showCoordinates);
+        // Order matters: setConnectAcrossGaps(true) clears orphan markers and vice versa,
+        // so apply connect first — for every valid (mutually exclusive) combination the
+        // net result matches the source tab.
+        plotPanel.setConnectAcrossGaps(settings.connectAcrossGaps);
+        plotPanel.setShowOrphanMarkers(settings.showOrphanMarkers);
+        // Unconditional: the new legend manager starts from the global preference, which
+        // may disagree with this tab's settings in either direction.
+        plotPanel.setLegendCollapsed(settings.legendCollapsed);
+        plotPanel.setLegendEnabled(settings.legendEnabled);
     }
 
     /**

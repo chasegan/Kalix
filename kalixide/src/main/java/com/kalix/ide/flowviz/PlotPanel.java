@@ -1009,6 +1009,55 @@ public class PlotPanel extends JPanel {
     }
 
     /**
+     * Runs several state changes as one atomic action: the setters called inside
+     * {@code changes} only assign fields (their own rebuild/fit/push is suppressed via
+     * {@code restoringState}, the same contract {@code restoreState} uses), then the
+     * display dataset rebuilds once, the viewport is fitted once — domain-aware, exactly
+     * as {@link #setPlotTypeAndMaskMode} fits — and exactly one entry is pushed to undo
+     * history. Nesting inside an outer batch or restore is safe: the inner call only
+     * assigns fields and the outermost caller does the single rebuild/fit/push.
+     *
+     * <p>Used wherever a gesture changes several fields at once (tab construction,
+     * tab reset) so undo never visits an intermediate state the user did not see.</p>
+     */
+    public void batchStateChange(Runnable changes) {
+        PlotType oldPlotType = this.plotType;
+
+        boolean wasRestoring = restoringState;
+        restoringState = true;
+        try {
+            changes.run();
+        } finally {
+            restoringState = wasRestoring;
+        }
+
+        if (restoringState) {
+            return; // nested: the outermost batch/restore rebuilds once at its own end
+        }
+
+        rebuildDisplayDataSet();
+
+        boolean xAxisDomainChanged = xAxisTypeFor(oldPlotType) != xAxisTypeFor(this.plotType);
+        if (xAxisDomainChanged) {
+            zoomToFit();
+        } else if (autoYMode) {
+            fitYAxis();
+        } else {
+            zoomToFit();
+        }
+        pushState();
+    }
+
+    /**
+     * The current undo-history snapshot, or null if none has been pushed yet. Lets owners
+     * (e.g. the toolbar controller after a batched change) resync UI from the same
+     * {@link PlotState} the undo machinery uses, rather than from a parallel reading.
+     */
+    public PlotState currentState() {
+        return stateHistory.current();
+    }
+
+    /**
      * Gets the current plot type.
      */
     public PlotType getPlotType() {
