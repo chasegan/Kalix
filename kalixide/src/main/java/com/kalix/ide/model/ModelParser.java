@@ -1,5 +1,6 @@
 package com.kalix.ide.model;
 
+import com.kalix.ide.linter.parsing.IniSyntax;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,10 +31,11 @@ public class ModelParser {
     }
     private static final Logger logger = LoggerFactory.getLogger(ModelParser.class);
 
+    // All patterns match a line's code — the '#' comment is stripped first via IniSyntax.
     private static final Pattern NODE_SECTION_PATTERN = Pattern.compile("^\\[node\\.([^\\]]+)\\]$");
-    private static final Pattern TYPE_PATTERN = Pattern.compile("^type\\s*=\\s*(.+?)\\s*(?:[#;].*)?$");
-    private static final Pattern LOC_PATTERN = Pattern.compile("^loc\\s*=\\s*([0-9.eE+-]+)\\s*,\\s*([0-9.eE+-]+)(?:\\s*[#;].*)?$");
-    private static final Pattern DOWNSTREAM_LINK_PATTERN = Pattern.compile("^ds_(\\d+)\\s*=\\s*(.+?)\\s*(?:[#;].*)?$");
+    private static final Pattern TYPE_PATTERN = Pattern.compile("^type\\s*=\\s*(.+?)\\s*$");
+    private static final Pattern LOC_PATTERN = Pattern.compile("^loc\\s*=\\s*([0-9.eE+-]+)\\s*,\\s*([0-9.eE+-]+)$");
+    private static final Pattern DOWNSTREAM_LINK_PATTERN = Pattern.compile("^ds_(\\d+)\\s*=\\s*(.+?)\\s*$");
 
     /**
      * Parse INI model text and extract nodes and links.
@@ -51,10 +53,11 @@ public class ModelParser {
             List<LinkInfo> currentNodeLinks = new ArrayList<>();
 
             while ((line = reader.readLine()) != null) {
-                line = line.trim();
+                // Code only: a trailing '#' comment on any line is not part of it.
+                line = IniSyntax.stripComment(line).trim();
 
-                // Skip empty lines and comments
-                if (line.isEmpty() || line.startsWith("#")) {
+                // Skip empty lines and comment-only lines
+                if (line.isEmpty()) {
                     continue;
                 }
 

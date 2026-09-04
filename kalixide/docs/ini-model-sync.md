@@ -56,6 +56,14 @@ needs a different product (sections + typed properties + line numbers +
 continuation chains). Where the two parsers share a rule, the rule lives in one
 place:
 
+- Comments and section headers: `linter/parsing/IniSyntax` is the one copy of
+  the engine's line grammar (`#` is the only comment marker, inert inside double
+  quotes; `;` never is; a header may carry a trailing comment). Every IDE
+  scanner of model text — `INIModelParser`, `ModelParser`, `NodeSectionLocator`,
+  the syntax highlighter, `ParameterSheetWindow`, the Run Manager's outputs
+  scan — routes through it, so `[node.x] # note` (issue #142) cannot again be a
+  header to one and a stray line to another. `IniSyntaxTest` pins the rule; the
+  same cases are pinned on the Rust side in `custom_ini_parser.rs`.
 - Continuation lines: `linter/parsing/IniContinuation` documents the chain rule
   and its coupling to `INIModelParser.collectContinuationLines`; both LF and
   CRLF now parse identically (a trailing `\r` is stripped per line, verified by

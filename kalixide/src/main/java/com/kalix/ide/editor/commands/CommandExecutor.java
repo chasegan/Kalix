@@ -1,5 +1,6 @@
 package com.kalix.ide.editor.commands;
 
+import com.kalix.ide.linter.parsing.IniSyntax;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.model.NodeInsertionPoint;
 import com.kalix.ide.model.SectionSplice;
@@ -513,13 +514,8 @@ public class CommandExecutor {
      * region the parser read values from.
      */
     private static int commentStartColumn(String line) {
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (c == '#') {
-                return i;
-            }
-        }
-        return line.length();
+        int at = IniSyntax.commentStart(line);
+        return at < 0 ? line.length() : at;
     }
 
     /**

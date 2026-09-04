@@ -15,17 +15,34 @@ import java.util.regex.Pattern;
 
 /**
  * Parses INI model files into structured sections for validation.
+ *
+ * <p>Comment and header recognition come from {@link IniSyntax}, the IDE's single
+ * copy of the engine's line grammar: every line is split into code and
+ * {@code #} comment first, so a comment can never masquerade as a header, a
+ * property, or a list item, and a header may carry a trailing comment.</p>
  */
 public class INIModelParser {
 
     private static final Logger logger = LoggerFactory.getLogger(INIModelParser.class);
 
-    private static final Pattern SECTION_PATTERN = Pattern.compile("^\\s*\\[([^\\]]+)\\]\\s*$");
     private static final Pattern KEY_VALUE_PATTERN = Pattern.compile("^\\s*([^=]+?)\\s*=\\s*(.*)\\s*$");
-    private static final Pattern COMMENT_PATTERN = Pattern.compile("^\\s*[;#].*$");
     private static final Pattern NODE_SECTION_PATTERN = Pattern.compile("^node\\.(.+)$");
 
+    /** Rule name for a line that begins with {@code ;} — not a comment in Kalix. */
+    public static final String RULE_SEMICOLON_COMMENT = "semicolon_comment";
+    /** Rule name for a line that begins with {@code [} but is not a complete header. */
+    public static final String RULE_MALFORMED_SECTION_HEADER = "malformed_section_header";
+
+    /**
+     * A lexical problem found while parsing: something the engine would reject (or
+     * silently misread) before any schema rule applies. Reported by
+     * {@code ModelLinter} under {@code ruleName}, so the schema can set its severity.
+     */
+    public record SyntaxIssue(int lineNumber, String message, String ruleName) {
+    }
+
     public static class ParsedModel {
+        private final List<SyntaxIssue> syntaxIssues = new ArrayList<>();
         private final Map<String, Section> sections = new LinkedHashMap<>();
         private final List<String> inputFiles = new ArrayList<>();
         private final List<String> outputReferences = new ArrayList<>();
@@ -36,6 +53,7 @@ public class INIModelParser {
         private final Map<String, NodeSection> nodes = new LinkedHashMap<>();
         private final List<NodeSection> allNodeSections = new ArrayList<>(); // Track all nodes including duplicates
 
+        public List<SyntaxIssue> getSyntaxIssues() { return syntaxIssues; }
         public Map<String, Section> getSections() { return sections; }
         public List<String> getInputFiles() { return inputFiles; }
         public List<String> getOutputReferences() { return outputReferences; }
@@ -121,18 +139,36 @@ public class INIModelParser {
 
             for (int i = 0; i < lines.length; i++) {
                 lineNumber = i + 1;
-                String line = lines[i].trim();
+                // Code only: the inline '#' comment (if any) is gone from here on.
+                String line = IniSyntax.stripComment(lines[i]).trim();
 
-                // Skip empty lines and comments
-                if (line.isEmpty() || COMMENT_PATTERN.matcher(line).matches()) {
+                // Skip empty lines and comment-only lines
+                if (line.isEmpty()) {
                     continue;
                 }
 
-                // Check for section header
-                Matcher sectionMatcher = SECTION_PATTERN.matcher(line);
-                if (sectionMatcher.matches()) {
-                    String sectionName = sectionMatcher.group(1).trim();
+                // Check for section header. A malformed one ('[node.a', or text after
+                // ']') is an engine error, and it still closes the previous section.
+                if (IniSyntax.isSectionHeaderLine(line)) {
+                    String sectionName = IniSyntax.sectionName(line);
+                    if (sectionName == null) {
+                        model.getSyntaxIssues().add(new SyntaxIssue(lineNumber,
+                            "Malformed section header: expected '[name]' with only a '#' comment after it",
+                            RULE_MALFORMED_SECTION_HEADER));
+                        currentSection = null;
+                        continue;
+                    }
                     currentSection = createSection(sectionName, lineNumber, model);
+                    continue;
+                }
+
+                // ';' is not a comment marker in Kalix (it terminates statements in
+                // expression blocks). A line starting with one is a mistake the engine
+                // would swallow as a list item; flag it and read no meaning into it.
+                if (line.charAt(0) == ';') {
+                    model.getSyntaxIssues().add(new SyntaxIssue(lineNumber,
+                        "';' does not start a comment in Kalix models; use '#'",
+                        RULE_SEMICOLON_COMMENT));
                     continue;
                 }
 
@@ -246,25 +282,10 @@ public class INIModelParser {
     }
 
     /**
-     * Remove comments from a line. Comments start with '#'.
+     * Remove the inline comment from a line and trim it, per {@link IniSyntax}.
      */
     private static String removeComments(String line) {
-        int commentIndex = -1;
-
-        // Find the first occurrence of the comment character
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (c == '#') {
-                commentIndex = i;
-                break;
-            }
-        }
-
-        if (commentIndex >= 0) {
-            return line.substring(0, commentIndex).trim();
-        }
-
-        return line;
+        return IniSyntax.stripComment(line).trim();
     }
 
     /**

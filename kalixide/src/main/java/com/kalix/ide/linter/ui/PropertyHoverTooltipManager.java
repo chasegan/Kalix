@@ -1,5 +1,6 @@
 package com.kalix.ide.linter.ui;
 
+import com.kalix.ide.linter.parsing.IniSyntax;
 import com.kalix.ide.editor.EditorPosition;
 import com.kalix.ide.linter.LinterSchema;
 import com.kalix.ide.linter.SchemaManager;
@@ -154,16 +155,11 @@ public class PropertyHoverTooltipManager extends DwellTooltipSupport {
         if (Character.isWhitespace(first) || first == '#' || first == '[') {
             return false;
         }
-        for (int i = 0; i < lineText.length(); i++) {
-            char c = lineText.charAt(i);
-            if (c == '=') {
-                return column < i; // on the key portion, not the value
-            }
-            if (c == '#') {
-                return false; // comment before any '='
-            }
+        int equals = IniSyntax.stripComment(lineText).indexOf('=');
+        if (equals < 0) {
+            return false; // no '=' before any comment: not a property header
         }
-        return false; // no '=': not a property header
+        return column < equals; // on the key portion, not the value
     }
 
     /**
