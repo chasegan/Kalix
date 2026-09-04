@@ -1,5 +1,6 @@
 package com.kalix.ide.windows;
 
+import javax.swing.AbstractButton;
 import java.awt.Dimension;
 
 /**
@@ -20,6 +21,18 @@ public final class ToolbarConstants {
     static final Dimension NARROW_DROPDOWN_SIZE = new Dimension(80, 25);
     public static final int HORIZONTAL_SPACING = 5;
     static final Dimension BUTTON_SIZE = new Dimension(28, 28);
+
+    /**
+     * Pins a button to the toolbar's shared square footprint, so every icon and toggle
+     * lines up regardless of the glyph and border it would otherwise size itself from.
+     * All three bounds are set because a {@link javax.swing.JToolBar} honours the maximum
+     * when it lays out, and the minimum when space runs short.
+     */
+    static void applyButtonSizing(AbstractButton button) {
+        button.setPreferredSize(BUTTON_SIZE);
+        button.setMinimumSize(BUTTON_SIZE);
+        button.setMaximumSize(BUTTON_SIZE);
+    }
 
     /** Aggregation period options for time series data. */
     static final String[] AGGREGATION_OPTIONS = {

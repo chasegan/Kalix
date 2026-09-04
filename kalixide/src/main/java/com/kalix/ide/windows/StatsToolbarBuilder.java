@@ -119,9 +119,7 @@ class StatsToolbarBuilder {
             ToolbarConstants.BUTTON_ICON_SIZE,
             SeasonalMaskMode.DISABLED);
         // The component leaves sizing to its host so it matches whatever toolbar it joins.
-        seasonalMaskButton.setPreferredSize(ToolbarConstants.BUTTON_SIZE);
-        seasonalMaskButton.setMinimumSize(ToolbarConstants.BUTTON_SIZE);
-        seasonalMaskButton.setMaximumSize(ToolbarConstants.BUTTON_SIZE);
+        ToolbarConstants.applyButtonSizing(seasonalMaskButton);
         toolbar.add(seasonalMaskButton);
         return this;
     }
@@ -242,9 +240,7 @@ class StatsToolbarBuilder {
         JButton button = new JButton(FontIcon.of(icon, ToolbarConstants.BUTTON_ICON_SIZE));
         button.setToolTipText(tooltip);
         button.setFocusable(false);
-        button.setPreferredSize(ToolbarConstants.BUTTON_SIZE);
-        button.setMinimumSize(ToolbarConstants.BUTTON_SIZE);
-        button.setMaximumSize(ToolbarConstants.BUTTON_SIZE);
+        ToolbarConstants.applyButtonSizing(button);
         button.addActionListener(e -> action.run());
         return button;
     }

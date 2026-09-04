@@ -167,7 +167,7 @@ class PlotToolbarBuilder {
     PlotToolbarBuilder addSeasonalMaskButton() {
         seasonalMaskButton = new SeasonalMaskButton(
             plotPanel::setSeasonalMaskMode, ToolbarConstants.BUTTON_ICON_SIZE, SeasonalMaskMode.DISABLED);
-        applyToolbarButtonSizing(seasonalMaskButton);
+        ToolbarConstants.applyButtonSizing(seasonalMaskButton);
         toolbar.add(seasonalMaskButton);
         return this;
     }
@@ -290,17 +290,11 @@ class PlotToolbarBuilder {
         JButton button = new JButton(createFontIcon(icon));
         button.setToolTipText(tooltip);
         button.setFocusable(false);
-        applyToolbarButtonSizing(button);
+        ToolbarConstants.applyButtonSizing(button);
         button.addActionListener(e -> action.run());
         return button;
     }
 
-    /** Pins a button to the toolbar's shared square footprint. */
-    private static void applyToolbarButtonSizing(javax.swing.AbstractButton button) {
-        button.setPreferredSize(ToolbarConstants.BUTTON_SIZE);
-        button.setMinimumSize(ToolbarConstants.BUTTON_SIZE);
-        button.setMaximumSize(ToolbarConstants.BUTTON_SIZE);
-    }
 
     /** Creates a standard toggle button. */
     private JToggleButton createToggleButton(FontAwesomeSolid icon, String tooltip, boolean initialState) {
@@ -308,9 +302,7 @@ class PlotToolbarBuilder {
         button.setToolTipText(tooltip);
         button.setFocusable(false);
         button.setSelected(initialState);
-        button.setPreferredSize(ToolbarConstants.BUTTON_SIZE);
-        button.setMinimumSize(ToolbarConstants.BUTTON_SIZE);
-        button.setMaximumSize(ToolbarConstants.BUTTON_SIZE);
+        ToolbarConstants.applyButtonSizing(button);
         return button;
     }
 
