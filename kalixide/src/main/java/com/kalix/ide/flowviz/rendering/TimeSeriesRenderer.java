@@ -24,7 +24,7 @@ public class TimeSeriesRenderer {
     private final AxisRenderer axisRenderer;
 
     // Resolves each series to its colour + stroke at paint time (late-bound, so
-    // palette edits propagate). Set by PlotPanel immediately after construction.
+    // palette edits propagate). Set by FlowVizPanel immediately after construction.
     private SeriesStyleResolver styleResolver;
 
     // Rendering options

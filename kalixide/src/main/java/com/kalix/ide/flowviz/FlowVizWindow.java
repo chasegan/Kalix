@@ -29,7 +29,7 @@ public class FlowVizWindow extends JFrame {
     private static final List<FlowVizWindow> openWindows = new ArrayList<>();
     private static int windowCounter = 0;
     
-    private PlotPanel plotPanel;
+    private FlowVizPanel vizPanel;
     private DataPanel dataPanel;
     private JSplitPane splitPane;
     private JToolBar toolBar;
@@ -128,16 +128,16 @@ public class FlowVizWindow extends JFrame {
     }
     
     private void initializeComponents() {
-        plotPanel = new PlotPanel();
+        vizPanel = new FlowVizPanel();
         // FlowVizWindow only ever mints DatasetSeries refs (via refFor); the baseName
         // already encodes "filename: SeriesName" from the loader, so projecting it back
         // to a label is just the baseName — adding " [filename.csv]" would be redundant.
-        plotPanel.setLabelResolver(ref -> ref instanceof com.kalix.ide.flowviz.data.DatasetSeries d
+        vizPanel.setLabelResolver(ref -> ref instanceof com.kalix.ide.flowviz.data.DatasetSeries d
             ? d.baseName()
             : String.valueOf(ref));
         // Auto-Y mode and precision will be initialized by action manager
-        plotPanel.setAutoYMode(true);  // Default value, will be updated by loadPreferences
-        plotPanel.setPrecision64Supplier(() -> actionManager == null || actionManager.isPrecision64());
+        vizPanel.setAutoYMode(true);  // Default value, will be updated by loadPreferences
+        vizPanel.setPrecision64Supplier(() -> actionManager == null || actionManager.isPrecision64());
         dataPanel = new DataPanel();
         dataPanel.setPreferredSize(new Dimension(250, 0));
     }
@@ -149,7 +149,7 @@ public class FlowVizWindow extends JFrame {
         splitPane = new JSplitPane(
             JSplitPane.HORIZONTAL_SPLIT,
             dataPanel,
-            plotPanel
+            vizPanel
         );
         splitPane.setDividerLocation(250);
         splitPane.setResizeWeight(0.0); // Keep data panel fixed width
@@ -186,7 +186,7 @@ public class FlowVizWindow extends JFrame {
         menuManager.setupStateSuppliers(
             actionManager::isDataVisible,
             actionManager::isAutoYMode,
-            () -> plotPanel.isShowCoordinates(),
+            () -> vizPanel.isShowCoordinates(),
             actionManager::isPrecision64
         );
 
@@ -263,7 +263,7 @@ public class FlowVizWindow extends JFrame {
         SwingUtilities.invokeLater(() -> {
             if (actionManager != null) {
                 autoYButton.setSelected(actionManager.isAutoYMode());
-                coordButton.setSelected(plotPanel.isShowCoordinates());
+                coordButton.setSelected(vizPanel.isShowCoordinates());
                 dataButton.setSelected(actionManager.isDataVisible());
             }
         });
@@ -285,7 +285,7 @@ public class FlowVizWindow extends JFrame {
 
                 dataPanel.addSeries(ref, seriesColor, data.getPointCount());
                 requestPlotPanelUpdate();
-                plotPanel.addLegendSeries(ref);
+                vizPanel.addLegendSeries(ref);
                 updateTitle();
             }
 
@@ -293,7 +293,7 @@ public class FlowVizWindow extends JFrame {
             public void onSeriesRemoved(SeriesRef ref) {
                 dataPanel.removeSeries(ref);
                 requestPlotPanelUpdate();
-                plotPanel.removeLegendSeries(ref);
+                vizPanel.removeLegendSeries(ref);
                 updateTitle();
             }
 
@@ -386,7 +386,7 @@ public class FlowVizWindow extends JFrame {
 
     private void updatePlotPanel() {
         // Update plot panel with current data and colors
-        plotPanel.setDataSet(dataSet);
+        vizPanel.setDataSet(dataSet);
 
         // The pool is ref-keyed; build the colour map by pool insertion order.
         List<SeriesRef> allRefs = dataSet.getSeriesRefs();
@@ -400,8 +400,8 @@ public class FlowVizWindow extends JFrame {
             visibleRefs = allRefs;
         }
 
-        plotPanel.setStyleResolver(new MapStyleResolver(colorMap));
-        plotPanel.setVisibleSeries(visibleRefs);
+        vizPanel.setStyleResolver(new MapStyleResolver(colorMap));
+        vizPanel.setVisibleSeries(visibleRefs);
     }
 
     private void updatePlotVisibility() {
@@ -410,7 +410,7 @@ public class FlowVizWindow extends JFrame {
         if (visibleRefs.isEmpty() && !dataSet.isEmpty()) {
             visibleRefs = dataSet.getSeriesRefs();
         }
-        plotPanel.setVisibleSeries(visibleRefs);
+        vizPanel.setVisibleSeries(visibleRefs);
     }
 
     private void setupDataManager() {
@@ -430,7 +430,7 @@ public class FlowVizWindow extends JFrame {
     private void setupActionManager() {
         // Create action manager with callbacks for parent communication
         actionManager = new FlowVizActionManager(
-            plotPanel,
+            vizPanel,
             dataPanel,
             splitPane,
             menuManager,
@@ -446,7 +446,7 @@ public class FlowVizWindow extends JFrame {
     private void loadPreferences() {
         // Load coordinate display preference (default: false)
         boolean showCoordinates = PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.get();
-        plotPanel.setShowCoordinates(showCoordinates);
+        vizPanel.setShowCoordinates(showCoordinates);
 
         // Other preferences are loaded by the action manager
 

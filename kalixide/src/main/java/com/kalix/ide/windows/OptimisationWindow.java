@@ -26,7 +26,7 @@ import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.windows.optimisation.ModelSelectorPanel;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
-import com.kalix.ide.flowviz.PlotPanel;
+import com.kalix.ide.flowviz.FlowVizPanel;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
@@ -101,7 +101,7 @@ public class OptimisationWindow extends JFrame {
     private OptimisationGuiBuilder guiBuilder;
     private KalixIniTextArea configEditor;
     private KalixIniTextArea optimisedModelEditor;  // Editor showing optimised model INI
-    private PlotPanel convergencePlot;     // Convergence plot
+    private FlowVizPanel convergencePlot;     // Convergence plot
     private JLabel bestObjectiveLabel;     // Label showing best objective value
     private JLabel evaluationProgressLabel; // Label showing evaluation count and progress
     private JLabel startTimeLabel;         // Label showing optimization start time

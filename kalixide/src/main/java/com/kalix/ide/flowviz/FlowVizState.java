@@ -17,7 +17,7 @@ import java.util.Set;
 
 /**
  * Immutable snapshot of all user-facing plot state.
- * Used by {@link PlotStateHistory} for undo/redo navigation.
+ * Used by {@link FlowVizStateHistory} for undo/redo navigation.
  *
  * <p>Identity in {@code visibleSeries} is carried as {@link SeriesRef}, not as a
  * rendered label. This means undo restores the same logical series even if the run
@@ -31,7 +31,7 @@ import java.util.Set;
  * the stale ref, projection skips paths it cannot find, and ids are never reused
  * (see {@link com.kalix.ide.flowviz.data.RunSource}), so nothing wrong can be resurrected under the same name.</p>
  */
-public final class PlotState {
+public final class FlowVizState {
 
     private final List<SeriesRef> visibleSeries;
     private final Set<SourceRef> checkedSources;
@@ -48,7 +48,7 @@ public final class PlotState {
     private final double minValue;
     private final double maxValue;
 
-    public PlotState(List<SeriesRef> visibleSeries,
+    public FlowVizState(List<SeriesRef> visibleSeries,
                      Set<SourceRef> checkedSources,
                      AggregationPeriod aggregationPeriod,
                      AggregationMethod aggregationMethod,
@@ -78,9 +78,9 @@ public final class PlotState {
     }
 
     /**
-     * Captures the current state from a PlotPanel's fields.
+     * Captures the current state from a FlowVizPanel's fields.
      */
-    public static PlotState capture(List<SeriesRef> visibleSeries,
+    public static FlowVizState capture(List<SeriesRef> visibleSeries,
                                     Set<SourceRef> checkedSources,
                                     AggregationPeriod aggregationPeriod,
                                     AggregationMethod aggregationMethod,
@@ -94,7 +94,7 @@ public final class PlotState {
         double min = viewport != null ? viewport.getMinValue() : 0;
         double max = viewport != null ? viewport.getMaxValue() : 0;
 
-        return new PlotState(visibleSeries, checkedSources, aggregationPeriod,
+        return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod,
             aggregationMethod, plotType, yAxisScale, maskMode, autoYMode,
             startTime, endTime, min, max);
     }
@@ -115,7 +115,7 @@ public final class PlotState {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof PlotState s)) return false;
+        if (!(o instanceof FlowVizState s)) return false;
         return autoYMode == s.autoYMode
             && startTimeMs == s.startTimeMs
             && endTimeMs == s.endTimeMs

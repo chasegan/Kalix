@@ -39,7 +39,7 @@ class PlotPanelDisplayPipelineTest {
         DataSet pool = new DataSet();
         pool.addSeries(REF, daily(6));
 
-        PlotPanel panel = new PlotPanel();
+        FlowVizPanel panel = new FlowVizPanel();
         panel.setDataSet(pool);
         panel.setVisibleSeries(List.of(REF));
 
@@ -61,7 +61,7 @@ class PlotPanelDisplayPipelineTest {
         pool.addSeries(a, new TimeSeriesData(timestamps, new double[] {1, Double.NaN, 3}));
         pool.addSeries(b, new TimeSeriesData(timestamps, new double[] {10, 20, 30}));
 
-        PlotPanel panel = new PlotPanel();
+        FlowVizPanel panel = new FlowVizPanel();
         panel.setDataSet(pool);
         panel.setVisibleSeries(List.of(a, b));
         panel.setMaskMode(com.kalix.ide.flowviz.stats.MaskMode.EACH);

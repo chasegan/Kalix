@@ -89,7 +89,7 @@ class UnifiedTabBehaviourTest {
         assertNotNull(periodCombo);
 
         periodCombo.setSelectedItem(AggregationPeriod.DAILY.getDisplayName());
-        PlotPanel panel = mgr.getTargetPlotPanel();
+        FlowVizPanel panel = mgr.getTargetVizPanel();
         assertEquals(AggregationPeriod.DAILY, panel.getAggregationPeriod());
         assertTrue(panel.canUndo());
 
@@ -105,7 +105,7 @@ class UnifiedTabBehaviourTest {
     void sourceTicksOnStatsViewTabsPushHistory() {
         VisualizationTabManager mgr = manager(new DataSet());
         mgr.addStatsTabFromSettings(emptySettings());
-        PlotPanel panel = mgr.getTargetPlotPanel();
+        FlowVizPanel panel = mgr.getTargetVizPanel();
         assertFalse(panel.canUndo(), "fresh tab: one-entry history");
 
         mgr.setTargetTabCheckedSources(Set.of(SRC));
@@ -120,7 +120,7 @@ class UnifiedTabBehaviourTest {
         mgr.addStatsTabFromSettings(emptySettings());
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
         combo(tabRoot, "Aggregation").setSelectedItem(AggregationPeriod.DAILY.getDisplayName());
-        PlotPanel panel = mgr.getTargetPlotPanel();
+        FlowVizPanel panel = mgr.getTargetVizPanel();
 
         mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex());
         assertEquals(AggregationPeriod.ORIGINAL, panel.getAggregationPeriod());
@@ -158,7 +158,7 @@ class UnifiedTabBehaviourTest {
             VisualizationTabManager.TabSettings.fromTab(mgr.tabAt(0));
         mgr.addStatsTabFromSettings(duplicated);
 
-        PlotPanel copy = mgr.getTargetPlotPanel(); // the new tab is selected
+        FlowVizPanel copy = mgr.getTargetVizPanel(); // the new tab is selected
         assertEquals(AggregationPeriod.DAILY, copy.getAggregationPeriod());
         assertEquals(AggregationMethod.SUM, copy.getAggregationMethod());
         assertTrue(copy.canUndo(), "stats-view duplication is Chrome-style now: history copied");

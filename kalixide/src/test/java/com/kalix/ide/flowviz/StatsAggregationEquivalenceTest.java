@@ -126,9 +126,9 @@ class StatsAggregationEquivalenceTest {
         periodCombo.setSelectedItem(AggregationPeriod.DAILY.getDisplayName());
         methodCombo.setSelectedItem(AggregationMethod.MEAN.getDisplayName());
 
-        assertEquals(AggregationPeriod.DAILY, toolbar.getTargetPlotPanel().getAggregationPeriod(),
+        assertEquals(AggregationPeriod.DAILY, toolbar.getTargetVizPanel().getAggregationPeriod(),
             "the combo drives the state-owning panel");
-        assertTrue(toolbar.getTargetPlotPanel().canUndo(),
+        assertTrue(toolbar.getTargetVizPanel().canUndo(),
             "stats aggregation changes are undoable now");
         assertEquals(expected, snapshot(toolbarModel),
             "toolbar recompute must match the batch path");
@@ -141,7 +141,7 @@ class StatsAggregationEquivalenceTest {
         StatsTableModel model = defaults
             .addStatsTabFromSettings(statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM));
         assertEquals(MaskMode.ALL, model.getMaskMode());
-        assertEquals(MaskMode.ALL, defaults.getTargetPlotPanel().getMaskMode(),
+        assertEquals(MaskMode.ALL, defaults.getTargetVizPanel().getMaskMode(),
             "the panel owns the mask; the model is its projection");
 
         // Carried: duplication-style settings preserve a non-default mask.

@@ -80,8 +80,8 @@ class ViewToggleTest {
         assertNotNull(statsToggle);
         statsToggle.doClick();
 
-        assertEquals(VisualizationTabManager.TabInfo.TabType.STATS, mgr.tabAt(0).viewMode);
-        assertFalse(mgr.getTargetPlotPanel().canUndo(), "a toggle must never be an undo entry");
+        assertEquals(FlowVizView.STATS, mgr.tabAt(0).viewMode);
+        assertFalse(mgr.getTargetVizPanel().canUndo(), "a toggle must never be an undo entry");
         assertEquals(0, treeNotifications.get(), "the selection is unchanged: no tree reprojection");
     }
 
@@ -111,8 +111,8 @@ class ViewToggleTest {
         button(tabRoot, "Stats view").doClick();
         button(tabRoot, "Plot view").doClick();
 
-        assertEquals(VisualizationTabManager.TabInfo.TabType.PLOT, mgr.tabAt(0).viewMode);
-        assertFalse(mgr.getTargetPlotPanel().canUndo(), "round-trip left no history behind");
+        assertEquals(FlowVizView.PLOT, mgr.tabAt(0).viewMode);
+        assertFalse(mgr.getTargetVizPanel().canUndo(), "round-trip left no history behind");
     }
 
     @Test
@@ -123,10 +123,10 @@ class ViewToggleTest {
 
         VisualizationTabManager.TabSettings duplicated =
             VisualizationTabManager.TabSettings.fromTab(mgr.tabAt(0));
-        assertEquals(VisualizationTabManager.TabInfo.TabType.STATS, duplicated.activeView);
+        assertEquals(FlowVizView.STATS, duplicated.activeView);
 
         mgr.addTabFromSettings(duplicated);
-        assertEquals(VisualizationTabManager.TabInfo.TabType.STATS, mgr.tabAt(1).viewMode,
+        assertEquals(FlowVizView.STATS, mgr.tabAt(1).viewMode,
             "a duplicate opens on the same page as its source");
     }
 

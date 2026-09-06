@@ -21,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class PlotPanelHistoryCopyTest {
 
-    private static PlotPanel panelWithHistory() {
-        PlotPanel panel = new PlotPanel();
+    private static FlowVizPanel panelWithHistory() {
+        FlowVizPanel panel = new FlowVizPanel();
         panel.setDataSet(new DataSet());
         panel.setVisibleSeries(List.of());                                   // entry 1 (defaults)
         panel.setAggregation(AggregationPeriod.DAILY, AggregationMethod.MEAN); // entry 2
@@ -32,9 +32,9 @@ class PlotPanelHistoryCopyTest {
 
     @Test
     void duplicateCarriesCurrentStateIncludingMask() {
-        PlotPanel source = panelWithHistory();
+        FlowVizPanel source = panelWithHistory();
 
-        PlotPanel copy = new PlotPanel();
+        FlowVizPanel copy = new FlowVizPanel();
         copy.setDataSet(new DataSet());
         copy.copyHistoryFrom(source);
 
@@ -47,7 +47,7 @@ class PlotPanelHistoryCopyTest {
 
     @Test
     void undoOnTheCopyWalksTheSourcesPast() {
-        PlotPanel copy = new PlotPanel();
+        FlowVizPanel copy = new FlowVizPanel();
         copy.setDataSet(new DataSet());
         copy.copyHistoryFrom(panelWithHistory());
 
@@ -59,10 +59,10 @@ class PlotPanelHistoryCopyTest {
 
     @Test
     void redoTailIsPreserved() {
-        PlotPanel source = panelWithHistory();
+        FlowVizPanel source = panelWithHistory();
         source.undo(); // source now mid-history with a redo tail
 
-        PlotPanel copy = new PlotPanel();
+        FlowVizPanel copy = new FlowVizPanel();
         copy.setDataSet(new DataSet());
         copy.copyHistoryFrom(source);
 

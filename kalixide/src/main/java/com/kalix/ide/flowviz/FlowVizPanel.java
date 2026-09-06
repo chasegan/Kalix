@@ -72,9 +72,9 @@ import org.slf4j.LoggerFactory;
  * @see com.kalix.ide.flowviz.VisualizationTabManager#updateAllTabs
  * @see com.kalix.ide.flowviz.rendering.LODManager
  */
-public class PlotPanel extends JPanel {
+public class FlowVizPanel extends JPanel {
 
-    private static final Logger logger = LoggerFactory.getLogger(PlotPanel.class);
+    private static final Logger logger = LoggerFactory.getLogger(FlowVizPanel.class);
 
     // Plot margins
     private static final int MARGIN_LEFT = 80;
@@ -134,7 +134,7 @@ public class PlotPanel extends JPanel {
     private final PlotLegendManager legendManager;
 
     // === UNDO/REDO ===
-    private final PlotStateHistory stateHistory = new PlotStateHistory();
+    private final FlowVizStateHistory stateHistory = new FlowVizStateHistory();
     private boolean restoringState = false;  // Suppresses pushState() during restore
     private Runnable onHistoryChanged;       // Callback for toolbar button enable/disable
     private Runnable onAutoYModeChanged;     // Callback for the toolbar auto-Y toggle
@@ -150,7 +150,7 @@ public class PlotPanel extends JPanel {
     private SeriesSlotManager registeredSlotManager;
     private final javax.swing.Timer viewportCoalesceTimer;  // Coalesces rapid zoom/pan changes
 
-    public PlotPanel() {
+    public FlowVizPanel() {
         // Background is theme-driven; set here and re-resolved in updateUI() on theme switch.
         setBackground(com.kalix.ide.flowviz.rendering.PlotColors.fromUIManager().background);
 
@@ -1058,9 +1058,9 @@ public class PlotPanel extends JPanel {
     /**
      * The current undo-history snapshot, or null if none has been pushed yet. Lets owners
      * (e.g. the toolbar controller after a batched change) resync UI from the same
-     * {@link PlotState} the undo machinery uses, rather than from a parallel reading.
+     * {@link FlowVizState} the undo machinery uses, rather than from a parallel reading.
      */
-    public PlotState currentState() {
+    public FlowVizState currentState() {
         return stateHistory.current();
     }
 
@@ -1118,7 +1118,7 @@ public class PlotPanel extends JPanel {
      */
     public void pushState() {
         if (restoringState || originalDataSet == null) return;
-        PlotState state = PlotState.capture(
+        FlowVizState state = FlowVizState.capture(
             visibleSeries,
             checkedSourcesSupplier != null ? checkedSourcesSupplier.get() : Set.of(),
             aggregationPeriod, aggregationMethod,
@@ -1135,7 +1135,7 @@ public class PlotPanel extends JPanel {
      * the single {@code refreshData(false)} at the end rebuilds against the final
      * settings. Undo on a large dataset used to pay up to five full aggregations.
      */
-    private void restoreState(PlotState state) {
+    private void restoreState(FlowVizState state) {
         restoringState = true;
         viewportCoalesceTimer.stop();
         try {
@@ -1167,13 +1167,13 @@ public class PlotPanel extends JPanel {
      * Undoes the last state change. Returns the restored state, or null if at beginning.
      *
      * <p><b>Callers must route the returned state through
-     * {@code VisualizationTabManager.syncTabSelectionFromPlotState}</b> (as the toolbar's
+     * {@code VisualizationTabManager.syncTabSelectionFromState}</b> (as the toolbar's
      * undo button does): this method restores only the panel; the tab's canonical
      * record and the window trees sync at that call-site seam. A direct caller — a
      * future key binding, say — that skips it silently desyncs the trees.</p>
      */
-    public PlotState undo() {
-        PlotState state = stateHistory.undo();
+    public FlowVizState undo() {
+        FlowVizState state = stateHistory.undo();
         if (state != null) {
             restoreState(state);
             if (onHistoryChanged != null) onHistoryChanged.run();
@@ -1185,8 +1185,8 @@ public class PlotPanel extends JPanel {
      * Redoes the last undone state change. Returns the restored state, or null if at end.
      * Same call-site contract as {@link #undo()}: route the result through the sync seam.
      */
-    public PlotState redo() {
-        PlotState state = stateHistory.redo();
+    public FlowVizState redo() {
+        FlowVizState state = stateHistory.redo();
         if (state != null) {
             restoreState(state);
             if (onHistoryChanged != null) onHistoryChanged.run();
@@ -1198,12 +1198,12 @@ public class PlotPanel extends JPanel {
     public boolean canRedo() { return stateHistory.canRedo(); }
 
     /**
-     * Copies the full state history from another PlotPanel (Chrome-style tab duplication).
+     * Copies the full state history from another FlowVizPanel (Chrome-style tab duplication).
      * Restores the current state including viewport so the new tab looks identical.
      */
-    public void copyHistoryFrom(PlotPanel source) {
+    public void copyHistoryFrom(FlowVizPanel source) {
         stateHistory.copyFrom(source.stateHistory);
-        PlotState current = stateHistory.current();
+        FlowVizState current = stateHistory.current();
         if (current != null) {
             restoreState(current);
         }

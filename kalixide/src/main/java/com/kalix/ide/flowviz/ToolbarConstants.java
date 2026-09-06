@@ -4,7 +4,7 @@ import java.awt.Dimension;
 
 /**
  * Sizing and shared option lists for the unified viz toolbar
- * ({@link VizToolbarBuilder}), kept in one place. Same pattern as
+ * ({@link FlowVizToolbarBuilder}), kept in one place. Same pattern as
  * {@link com.kalix.ide.constants.UIConstants}.
  */
 public final class ToolbarConstants {

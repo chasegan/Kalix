@@ -6,13 +6,13 @@ import javax.swing.JComboBox;
 import javax.swing.JToggleButton;
 
 /**
- * Controller for updating the unified viz toolbar's controls from a PlotState
- * without triggering listeners. Built by {@link VizToolbarBuilder#build}; used
+ * Controller for updating the unified viz toolbar's controls from a FlowVizState
+ * without triggering listeners. Built by {@link FlowVizToolbarBuilder#build}; used
  * by the undo/redo callback and in-place Reset to reflect a restored state back
  * into the dropdowns and toggles — a fired listener would drive the panel and
  * loop the very undo being reflected.
  */
-class VizToolbarController {
+class FlowVizToolbarController {
     private final JComboBox<String> aggregationPeriodCombo;
     private final JComboBox<String> aggregationMethodCombo;
     private final JComboBox<String> maskCombo;
@@ -20,7 +20,7 @@ class VizToolbarController {
     private final JComboBox<String> ySpaceCombo;
     private final JToggleButton autoYToggle;
 
-    VizToolbarController(JComboBox<String> aggregationPeriodCombo,
+    FlowVizToolbarController(JComboBox<String> aggregationPeriodCombo,
                          JComboBox<String> aggregationMethodCombo,
                          JComboBox<String> maskCombo,
                          JComboBox<PlotType> plotTypeCombo,
@@ -38,10 +38,10 @@ class VizToolbarController {
      * Updates all toolbar controls to reflect the given state.
      * Temporarily removes listeners to avoid triggering state pushes.
      */
-    void updateFromState(PlotState state) {
+    void updateFromState(FlowVizState state) {
         setSilently(aggregationPeriodCombo, state.getAggregationPeriod().getDisplayName());
         setSilently(aggregationMethodCombo, state.getAggregationMethod().getDisplayName());
-        setSilently(maskCombo, VizToolbarBuilder.maskItem(state.getMaskMode()));
+        setSilently(maskCombo, FlowVizToolbarBuilder.maskItem(state.getMaskMode()));
         setSilently(plotTypeCombo, state.getPlotType());
         setSilently(ySpaceCombo, state.getYAxisScale().getDisplayName());
         setSilently(autoYToggle, state.isAutoYMode());

@@ -2,7 +2,7 @@ package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.components.KalixIniTextArea;
-import com.kalix.ide.flowviz.PlotPanel;
+import com.kalix.ide.flowviz.FlowVizPanel;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -354,7 +354,7 @@ public class OptimisationWindowInitializer {
         public final JButton runButton;
         public final JLabel configStatusLabel;
         public final KalixIniTextArea optimisedModelEditor;
-        public final PlotPanel convergencePlot;
+        public final FlowVizPanel convergencePlot;
 
         public InitializationResult(
                 JTree optTree,
@@ -369,7 +369,7 @@ public class OptimisationWindowInitializer {
                 JButton runButton,
                 JLabel configStatusLabel,
                 KalixIniTextArea optimisedModelEditor,
-                PlotPanel convergencePlot) {
+                FlowVizPanel convergencePlot) {
             this.optTree = optTree;
             this.treeModel = treeModel;
             this.rootNode = rootNode;

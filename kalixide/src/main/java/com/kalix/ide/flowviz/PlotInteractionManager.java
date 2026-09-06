@@ -394,8 +394,8 @@ public class PlotInteractionManager {
     public void zoomToFit() {
         // This will be implemented by calling back to the parent component
         // as it requires access to the full data fitting logic
-        if (parentComponent instanceof PlotPanel) {
-            ((PlotPanel) parentComponent).zoomToFit();
+        if (parentComponent instanceof FlowVizPanel) {
+            ((FlowVizPanel) parentComponent).zoomToFit();
         }
     }
 
@@ -702,7 +702,7 @@ public class PlotInteractionManager {
      * an empty tab the menu is a list of no-ops and error dialogs.
      *
      * <p>The evidence is data in the display set for a visible series, not the viewport
-     * and not the selection: {@code PlotPanel} synthesises a placeholder viewport
+     * and not the selection: {@code FlowVizPanel} synthesises a placeholder viewport
      * ("now +/- 1 hour") while painting an empty panel, and a series is added to the
      * visible list the moment it is ticked, before its fetch completes (or fails). The
      * display set only holds series whose data has arrived, which is the same test
@@ -827,8 +827,8 @@ public class PlotInteractionManager {
 
         autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
         autoYMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof PlotPanel plotPanel) {
-                plotPanel.setAutoYMode(autoYMenuItem.isSelected());
+            if (parentComponent instanceof FlowVizPanel vizPanel) {
+                vizPanel.setAutoYMode(autoYMenuItem.isSelected());
             }
         });
         contextMenu.add(autoYMenuItem);
@@ -839,8 +839,8 @@ public class PlotInteractionManager {
         for (YAxisScale scale : YAxisScale.values()) {
             JRadioButtonMenuItem scaleItem = new JRadioButtonMenuItem(scale.getDisplayName());
             scaleItem.addActionListener(e -> {
-                if (parentComponent instanceof PlotPanel) {
-                    ((PlotPanel) parentComponent).setYAxisScale(scale);
+                if (parentComponent instanceof FlowVizPanel) {
+                    ((FlowVizPanel) parentComponent).setYAxisScale(scale);
                 }
             });
             yAxisScaleGroup.add(scaleItem);
@@ -850,22 +850,22 @@ public class PlotInteractionManager {
 
         // Missing Data submenu. "Draw across gaps" and "Mark orphan points" are mutually
         // exclusive — drawing a continuous line removes the gaps that orphan points would mark —
-        // but either may be off. They are checkboxes (mutual exclusion enforced in PlotPanel)
+        // but either may be off. They are checkboxes (mutual exclusion enforced in FlowVizPanel)
         // rather than a radio group, which could not express the "neither selected" state.
         JMenu missingDataMenu = new JMenu("Missing data");
 
         connectGapsMenuItem = new JCheckBoxMenuItem("Draw across gaps");
         connectGapsMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof PlotPanel plotPanel) {
-                plotPanel.setConnectAcrossGaps(connectGapsMenuItem.isSelected());
+            if (parentComponent instanceof FlowVizPanel vizPanel) {
+                vizPanel.setConnectAcrossGaps(connectGapsMenuItem.isSelected());
             }
         });
         missingDataMenu.add(connectGapsMenuItem);
 
         orphanMarkersMenuItem = new JCheckBoxMenuItem("Mark orphan points");
         orphanMarkersMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof PlotPanel plotPanel) {
-                plotPanel.setShowOrphanMarkers(orphanMarkersMenuItem.isSelected());
+            if (parentComponent instanceof FlowVizPanel vizPanel) {
+                vizPanel.setShowOrphanMarkers(orphanMarkersMenuItem.isSelected());
             }
         });
         missingDataMenu.add(orphanMarkersMenuItem);
@@ -879,8 +879,8 @@ public class PlotInteractionManager {
         // toolbar, so the item says "Key" too (2.2: one name per concept).
         JMenuItem resetKeyItem = new JMenuItem("Reset key");
         resetKeyItem.addActionListener(e -> {
-            if (parentComponent instanceof PlotPanel plotPanel) {
-                plotPanel.resetLegend();
+            if (parentComponent instanceof FlowVizPanel vizPanel) {
+                vizPanel.resetLegend();
             }
         });
         contextMenu.add(resetKeyItem);
@@ -893,17 +893,17 @@ public class PlotInteractionManager {
                 pasteXAxisItem.setEnabled(clipboardHasText);
                 pasteYAxisItem.setEnabled(clipboardHasText);
 
-                // Sync the checkbox state with the current PlotPanel state
-                if (parentComponent instanceof PlotPanel plotPanel) {
-                    // Get the current auto-Y state from the PlotPanel
-                    autoYMenuItem.setSelected(plotPanel.isAutoYMode());
+                // Sync the checkbox state with the current FlowVizPanel state
+                if (parentComponent instanceof FlowVizPanel vizPanel) {
+                    // Get the current auto-Y state from the FlowVizPanel
+                    autoYMenuItem.setSelected(vizPanel.isAutoYMode());
 
                     // Sync gap-handling toggles
-                    connectGapsMenuItem.setSelected(plotPanel.isConnectAcrossGaps());
-                    orphanMarkersMenuItem.setSelected(plotPanel.isShowOrphanMarkers());
+                    connectGapsMenuItem.setSelected(vizPanel.isConnectAcrossGaps());
+                    orphanMarkersMenuItem.setSelected(vizPanel.isShowOrphanMarkers());
 
                     // Get the current Y-axis scale and select the corresponding radio button
-                    YAxisScale currentScale = plotPanel.getYAxisScale();
+                    YAxisScale currentScale = vizPanel.getYAxisScale();
                     for (int i = 0; i < yAxisScaleMenu.getItemCount(); i++) {
                         JMenuItem item = yAxisScaleMenu.getItem(i);
                         if (item instanceof JRadioButtonMenuItem radioItem) {
@@ -987,8 +987,8 @@ public class PlotInteractionManager {
      */
     private void applyExplicitLimits(long startTime, long endTime, double minValue, double maxValue) {
         acceptNewAxes(startTime, endTime, minValue, maxValue);
-        if (parentComponent instanceof PlotPanel plotPanel) {
-            plotPanel.setAutoYMode(false);
+        if (parentComponent instanceof FlowVizPanel vizPanel) {
+            vizPanel.setAutoYMode(false);
         }
     }
 

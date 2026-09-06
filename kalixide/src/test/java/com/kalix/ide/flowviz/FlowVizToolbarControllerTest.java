@@ -53,17 +53,17 @@ class VizToolbarControllerTest {
         settings.checkedSources = new LinkedHashSet<>();
         mgr.addPlotTabFromSettings(settings);
 
-        PlotPanel panel = mgr.getTargetPlotPanel();
+        FlowVizPanel panel = mgr.getTargetVizPanel();
         panel.setAggregation(AggregationPeriod.DAILY, AggregationMethod.MEAN); // entry 2
 
-        VizToolbarController controller = mgr.tabAt(0).vizToolbar.getController();
+        FlowVizToolbarController controller = mgr.tabAt(0).vizToolbar.getController();
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
         JComboBox<?> periodCombo = combo(tabRoot, "Aggregation");
         JComboBox<?> maskCombo = combo(tabRoot, "Mask mode for bivariate statistics");
         assertNotNull(periodCombo);
         assertNotNull(maskCombo);
 
-        PlotState previous = panel.undo(); // the construction-entry state (defaults)
+        FlowVizState previous = panel.undo(); // the construction-entry state (defaults)
         assertNotNull(previous);
         panel.redo();                      // panel back at DAILY/MEAN
 
@@ -71,7 +71,7 @@ class VizToolbarControllerTest {
 
         // The controls reflect the given state...
         assertEquals(previous.getAggregationPeriod().getDisplayName(), periodCombo.getSelectedItem());
-        assertEquals(VizToolbarBuilder.maskItem(previous.getMaskMode()), maskCombo.getSelectedItem());
+        assertEquals(FlowVizToolbarBuilder.maskItem(previous.getMaskMode()), maskCombo.getSelectedItem());
         // ...but the panel was NOT driven: its state and history are untouched.
         assertEquals(AggregationPeriod.DAILY, panel.getAggregationPeriod(),
             "a fired combo listener would have re-applied the old aggregation");

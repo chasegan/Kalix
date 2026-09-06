@@ -38,12 +38,12 @@ import java.util.function.Consumer;
  * never disagree), and the plot-only cluster (palette, plot type, y-scale,
  * auto-Y, coordinates, legend) shown only in the plot view.
  *
- * <p>All controls drive the tab's state-owning {@link PlotPanel}; the mask is
+ * <p>All controls drive the tab's state-owning {@link FlowVizPanel}; the mask is
  * the ternary combo everywhere (the plot's old binary toggle is gone — EACH now
  * has a plot rendering too). Reflection back into the controls goes through
- * {@link VizToolbarController} with listeners silenced.
+ * {@link FlowVizToolbarController} with listeners silenced.
  */
-class VizToolbarBuilder {
+class FlowVizToolbarBuilder {
 
     /** Y-axis scale options. */
     private static final String[] Y_SPACE_OPTIONS = {"Linear", "Log", "Sqrt"};
@@ -52,9 +52,9 @@ class VizToolbarBuilder {
     private final VisualizationTabManager.TabInfo tabInfo;
     private final JTable statsTable;
 
-    private Consumer<PlotState> onUndoRedo;
+    private Consumer<FlowVizState> onUndoRedo;
     private Runnable onStateApplied;
-    private Consumer<VisualizationTabManager.TabInfo.TabType> onViewToggle;
+    private Consumer<FlowVizView> onViewToggle;
 
     private JToggleButton plotViewToggle;
     private JToggleButton statsViewToggle;
@@ -67,9 +67,9 @@ class VizToolbarBuilder {
 
     /** The plot-only cluster (incl. its separators/labels), hidden in the stats view. */
     private final List<JComponent> plotOnlyComponents = new ArrayList<>();
-    private VizToolbarController controller;
+    private FlowVizToolbarController controller;
 
-    VizToolbarBuilder(VisualizationTabManager.TabInfo tabInfo, JTable statsTable) {
+    FlowVizToolbarBuilder(VisualizationTabManager.TabInfo tabInfo, JTable statsTable) {
         this.tabInfo = tabInfo;
         this.statsTable = statsTable;
         this.toolbar = new JToolBar();
@@ -77,25 +77,25 @@ class VizToolbarBuilder {
         this.toolbar.setRollover(true);
     }
 
-    VizToolbarBuilder setOnUndoRedo(Consumer<PlotState> callback) {
+    FlowVizToolbarBuilder setOnUndoRedo(Consumer<FlowVizState> callback) {
         this.onUndoRedo = callback;
         return this;
     }
 
     /** Invoked after a control applied a state change, so the owner reprojects the stats table. */
-    VizToolbarBuilder setOnStateApplied(Runnable callback) {
+    FlowVizToolbarBuilder setOnStateApplied(Runnable callback) {
         this.onStateApplied = callback;
         return this;
     }
 
-    VizToolbarBuilder setOnViewToggle(Consumer<VisualizationTabManager.TabInfo.TabType> callback) {
+    FlowVizToolbarBuilder setOnViewToggle(Consumer<FlowVizView> callback) {
         this.onViewToggle = callback;
         return this;
     }
 
     /** Builds the full toolbar and initialises every control from the tab's panel state. */
     JToolBar build(boolean initialAutoY, boolean initialShowCoordinates) {
-        PlotPanel plotPanel = tabInfo.plotPanel;
+        FlowVizPanel vizPanel = tabInfo.vizPanel;
 
         addViewToggle();
         toolbar.addSeparator();
@@ -116,18 +116,18 @@ class VizToolbarBuilder {
         plotOnly(new JToolBar.Separator());
         addAutoYToggle(initialAutoY);
         addCoordinatesToggle(initialShowCoordinates);
-        addLegendToggle(plotPanel.isLegendEnabled());
+        addLegendToggle(vizPanel.isLegendEnabled());
         plotOnly(createIconButton(FontAwesomeSolid.PALETTE,
             "Plot Palettes…", PlotPaletteWindow::showWindow));
 
-        controller = new VizToolbarController(
+        controller = new FlowVizToolbarController(
             aggregationPeriodCombo, aggregationMethodCombo, maskCombo,
             plotTypeCombo, ySpaceCombo, autoYToggle);
         applyViewMode(tabInfo.viewMode);
         return toolbar;
     }
 
-    VizToolbarController getController() {
+    FlowVizToolbarController getController() {
         return controller;
     }
 
@@ -136,8 +136,8 @@ class VizToolbarBuilder {
      * stats view and the toggle pair follows. Selection is set directly (no action
      * fires), so this is safe from the switch path itself.
      */
-    void applyViewMode(VisualizationTabManager.TabInfo.TabType mode) {
-        boolean plot = mode == VisualizationTabManager.TabInfo.TabType.PLOT;
+    void applyViewMode(FlowVizView mode) {
+        boolean plot = mode == FlowVizView.PLOT;
         for (JComponent component : plotOnlyComponents) {
             component.setVisible(plot);
         }
@@ -153,8 +153,8 @@ class VizToolbarBuilder {
         ButtonGroup group = new ButtonGroup();
         group.add(plotViewToggle);
         group.add(statsViewToggle);
-        plotViewToggle.addActionListener(e -> fireViewToggle(VisualizationTabManager.TabInfo.TabType.PLOT));
-        statsViewToggle.addActionListener(e -> fireViewToggle(VisualizationTabManager.TabInfo.TabType.STATS));
+        plotViewToggle.addActionListener(e -> fireViewToggle(FlowVizView.PLOT));
+        statsViewToggle.addActionListener(e -> fireViewToggle(FlowVizView.STATS));
         // Rigid holder: FlatLaf's tab-style buttons size slightly differently per
         // selection state, which nudged everything to the right of the pair on
         // every toggle. GridLayout forces two equal fixed cells regardless.
@@ -169,7 +169,7 @@ class VizToolbarBuilder {
         toolbar.add(holder);
     }
 
-    private void fireViewToggle(VisualizationTabManager.TabInfo.TabType mode) {
+    private void fireViewToggle(FlowVizView mode) {
         if (onViewToggle != null) {
             onViewToggle.accept(mode);
         }
@@ -191,8 +191,8 @@ class VizToolbarBuilder {
         // Shared position, view-dispatched action: the plot's timeseries save or
         // the stats table's CSV export, whichever page is showing.
         JButton button = createIconButton(FontAwesomeSolid.SAVE, "Save Data", () -> {
-            if (tabInfo.viewMode == VisualizationTabManager.TabInfo.TabType.PLOT) {
-                tabInfo.plotPanel.saveData();
+            if (tabInfo.viewMode == FlowVizView.PLOT) {
+                tabInfo.vizPanel.saveData();
             } else {
                 saveStatsData();
             }
@@ -202,24 +202,24 @@ class VizToolbarBuilder {
 
     private void addUndoRedoButtons() {
         JButton undoButton = createIconButton(FontAwesomeSolid.UNDO, "Undo", () -> {
-            PlotState state = tabInfo.plotPanel.undo();
+            FlowVizState state = tabInfo.vizPanel.undo();
             if (state != null && onUndoRedo != null) {
                 onUndoRedo.accept(state);
             }
         });
         JButton redoButton = createIconButton(FontAwesomeSolid.REDO, "Redo", () -> {
-            PlotState state = tabInfo.plotPanel.redo();
+            FlowVizState state = tabInfo.vizPanel.redo();
             if (state != null && onUndoRedo != null) {
                 onUndoRedo.accept(state);
             }
         });
 
         // Initialise from the panel: a duplicated tab has history before its toolbar exists.
-        undoButton.setEnabled(tabInfo.plotPanel.canUndo());
-        redoButton.setEnabled(tabInfo.plotPanel.canRedo());
-        tabInfo.plotPanel.setOnHistoryChanged(() -> {
-            undoButton.setEnabled(tabInfo.plotPanel.canUndo());
-            redoButton.setEnabled(tabInfo.plotPanel.canRedo());
+        undoButton.setEnabled(tabInfo.vizPanel.canUndo());
+        redoButton.setEnabled(tabInfo.vizPanel.canRedo());
+        tabInfo.vizPanel.setOnHistoryChanged(() -> {
+            undoButton.setEnabled(tabInfo.vizPanel.canUndo());
+            redoButton.setEnabled(tabInfo.vizPanel.canRedo());
         });
 
         toolbar.add(undoButton);
@@ -231,7 +231,7 @@ class VizToolbarBuilder {
         // and once changed, "[Daily] by [Mean]" reads as its own sentence.
         aggregationPeriodCombo = createDropdown(ToolbarConstants.AGGREGATION_OPTIONS,
             ToolbarConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
-        aggregationPeriodCombo.setSelectedItem(tabInfo.plotPanel.getAggregationPeriod().getDisplayName());
+        aggregationPeriodCombo.setSelectedItem(tabInfo.vizPanel.getAggregationPeriod().getDisplayName());
         aggregationPeriodCombo.addActionListener(e -> applyAggregation());
         toolbar.add(aggregationPeriodCombo);
 
@@ -241,7 +241,7 @@ class VizToolbarBuilder {
 
         aggregationMethodCombo = createDropdown(ToolbarConstants.AGGREGATION_METHOD_OPTIONS,
             ToolbarConstants.NARROW_DROPDOWN_SIZE, "Aggregation method");
-        aggregationMethodCombo.setSelectedItem(tabInfo.plotPanel.getAggregationMethod().getDisplayName());
+        aggregationMethodCombo.setSelectedItem(tabInfo.vizPanel.getAggregationMethod().getDisplayName());
         aggregationMethodCombo.addActionListener(e -> applyAggregation());
         toolbar.add(aggregationMethodCombo);
     }
@@ -258,11 +258,11 @@ class VizToolbarBuilder {
             maskItem(MaskMode.ALL), maskItem(MaskMode.EACH), maskItem(MaskMode.NONE)};
         maskCombo = createDropdown(maskOptions,
             ToolbarConstants.MASK_DROPDOWN_SIZE, "Mask mode for bivariate statistics");
-        maskCombo.setSelectedItem(maskItem(tabInfo.plotPanel.getMaskMode()));
+        maskCombo.setSelectedItem(maskItem(tabInfo.vizPanel.getMaskMode()));
         maskCombo.addActionListener(e -> {
             String selected = (String) maskCombo.getSelectedItem();
             if (selected != null) {
-                tabInfo.plotPanel.setMaskMode(
+                tabInfo.vizPanel.setMaskMode(
                     MaskMode.fromDisplayName(selected.substring("Mask ".length())));
                 applied();
             }
@@ -279,7 +279,7 @@ class VizToolbarBuilder {
         if (periodStr != null && methodStr != null) {
             AggregationPeriod period = AggregationPeriod.fromDisplayName(periodStr);
             AggregationMethod method = AggregationMethod.fromDisplayName(methodStr);
-            tabInfo.plotPanel.setAggregation(period, method);
+            tabInfo.vizPanel.setAggregation(period, method);
             applied();
         }
     }
@@ -289,19 +289,19 @@ class VizToolbarBuilder {
         plotTypeCombo.setMaximumSize(ToolbarConstants.WIDE_DROPDOWN_SIZE);
         plotTypeCombo.setToolTipText("Plot type");
         plotTypeCombo.setRenderer(new PlotTypeListCellRenderer());
-        plotTypeCombo.setSelectedItem(tabInfo.plotPanel.getPlotType());
+        plotTypeCombo.setSelectedItem(tabInfo.vizPanel.getPlotType());
         plotTypeCombo.addActionListener(e -> {
             PlotType selected = (PlotType) plotTypeCombo.getSelectedItem();
             // Re-picking the current type is a no-op: the combo fires even for a same-item
             // selection, and applying the default then would stomp a manual mask override,
             // reset the zoom, and push a spurious undo entry.
-            if (selected == null || selected == tabInfo.plotPanel.getPlotType()) {
+            if (selected == null || selected == tabInfo.vizPanel.getPlotType()) {
                 return;
             }
-            tabInfo.plotPanel.setPlotTypeAndMaskMode(selected,
+            tabInfo.vizPanel.setPlotTypeAndMaskMode(selected,
                 selected.isDataMaskDefault() ? MaskMode.ALL : MaskMode.NONE);
             // Reflect the panel's resulting mask silently (the mask is shared state now).
-            VizToolbarController.setSilently(maskCombo, maskItem(tabInfo.plotPanel.getMaskMode()));
+            FlowVizToolbarController.setSilently(maskCombo, maskItem(tabInfo.vizPanel.getMaskMode()));
             applied();
         });
         plotOnly(plotTypeCombo);
@@ -310,11 +310,11 @@ class VizToolbarBuilder {
     private void addYSpaceDropdown() {
         ySpaceCombo = createDropdown(Y_SPACE_OPTIONS,
             ToolbarConstants.NARROW_DROPDOWN_SIZE, "Y-axis scale");
-        ySpaceCombo.setSelectedItem(tabInfo.plotPanel.getYAxisScale().getDisplayName());
+        ySpaceCombo.setSelectedItem(tabInfo.vizPanel.getYAxisScale().getDisplayName());
         ySpaceCombo.addActionListener(e -> {
             String selected = (String) ySpaceCombo.getSelectedItem();
             if (selected != null) {
-                tabInfo.plotPanel.setYAxisScale(YAxisScale.fromDisplayName(selected));
+                tabInfo.vizPanel.setYAxisScale(YAxisScale.fromDisplayName(selected));
             }
         });
         plotOnly(ySpaceCombo);
@@ -324,19 +324,19 @@ class VizToolbarBuilder {
         autoYToggle = createToggleButton(FontAwesomeSolid.ARROWS_ALT_V, "Auto-Y Mode", initialState);
         autoYToggle.addActionListener(e -> {
             boolean enabled = autoYToggle.isSelected();
-            tabInfo.plotPanel.setAutoYMode(enabled);
+            tabInfo.vizPanel.setAutoYMode(enabled);
             PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(enabled);
         });
         // Follow changes made elsewhere (context menu, explicit axis limits). Only the
         // toolbar records the preference: those paths change this plot, not the default.
-        tabInfo.plotPanel.setOnAutoYModeChanged(() -> autoYToggle.setSelected(tabInfo.plotPanel.isAutoYMode()));
+        tabInfo.vizPanel.setOnAutoYModeChanged(() -> autoYToggle.setSelected(tabInfo.vizPanel.isAutoYMode()));
         plotOnly(autoYToggle);
     }
 
     private void addCoordinatesToggle(boolean initialState) {
         JToggleButton button = createToggleButton(FontAwesomeSolid.CROSSHAIRS, "Show Coordinates", initialState);
         button.addActionListener(e -> {
-            tabInfo.plotPanel.setShowCoordinates(button.isSelected());
+            tabInfo.vizPanel.setShowCoordinates(button.isSelected());
             PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.set(button.isSelected());
         });
         plotOnly(button);
@@ -345,9 +345,9 @@ class VizToolbarBuilder {
     private void addLegendToggle(boolean initialState) {
         JToggleButton button = createToggleButton(FontAwesomeSolid.KEY, "Show Key", initialState);
         // The legend manager persists its own state, so no preference write here.
-        button.addActionListener(e -> tabInfo.plotPanel.setLegendEnabled(button.isSelected()));
-        tabInfo.plotPanel.getLegendManager().setOnEnabledChanged(() ->
-            button.setSelected(tabInfo.plotPanel.isLegendEnabled()));
+        button.addActionListener(e -> tabInfo.vizPanel.setLegendEnabled(button.isSelected()));
+        tabInfo.vizPanel.getLegendManager().setOnEnabledChanged(() ->
+            button.setSelected(tabInfo.vizPanel.isLegendEnabled()));
         plotOnly(button);
     }
 
