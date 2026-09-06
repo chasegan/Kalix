@@ -32,7 +32,7 @@ public class ContextSplitCoordinator {
     }
 
     /** The remembered expanded width of the region (meaningful even while collapsed). */
-    public int width() {
+    public int getWidth() {
         return width;
     }
 

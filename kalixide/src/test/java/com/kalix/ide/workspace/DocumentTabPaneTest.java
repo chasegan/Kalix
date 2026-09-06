@@ -85,7 +85,7 @@ class DocumentTabPaneTest {
     }
 
     @Test
-    void toggleContextViewFlipsAndPersistsTheSharedState() {
+    void toggleContextViewFlipsPersistsAndRelaysOutTheActiveSplit() {
         DocumentManager dm = new DocumentManager();
         boolean[] persistedCollapsed = new boolean[1];
         ContextSplitCoordinator coordinator = new ContextSplitCoordinator(420, false,
@@ -93,12 +93,19 @@ class DocumentTabPaneTest {
         DocumentTabPane pane = pane(dm, coordinator);
         dm.setActiveDocument(new KalixDocument(DocumentKind.MODEL));
 
+        DocumentSplitView root = (DocumentSplitView) pane.getTabbedPane().getComponentAt(0);
+        root.setSize(800, 600);
+        root.doLayout(); // realise the split so the toggle's immediate re-layout is observable
+
         pane.toggleContextView();
         assertTrue(pane.isContextViewCollapsed());
         assertTrue(persistedCollapsed[0]);
+        assertEquals(0, root.getSplit().getDividerSize(), "active tab collapses immediately");
 
         pane.toggleContextView();
         assertFalse(pane.isContextViewCollapsed());
         assertFalse(persistedCollapsed[0]);
+        assertEquals(800 - 420 - root.getSplit().getDividerSize(), root.getSplit().getDividerLocation(),
+            "active tab expands immediately to the shared width");
     }
 }

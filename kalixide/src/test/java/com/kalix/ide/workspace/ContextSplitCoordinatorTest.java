@@ -22,11 +22,11 @@ class ContextSplitCoordinatorTest {
             (w, col) -> persisted.add(w + ":" + col));
 
         c.setWidth(300);
-        assertEquals(300, c.width());
+        assertEquals(300, c.getWidth());
         c.setWidth(300); // unchanged -> no persist
         c.setWidth(0);   // transient collapse artefact -> ignored
         c.setWidth(-5);
-        assertEquals(300, c.width());
+        assertEquals(300, c.getWidth());
         assertEquals(List.of("300:false"), persisted);
     }
 
@@ -38,7 +38,7 @@ class ContextSplitCoordinatorTest {
 
         c.setCollapsed(true);
         assertTrue(c.isCollapsed());
-        assertEquals(420, c.width(), "collapse keeps the remembered expanded width");
+        assertEquals(420, c.getWidth(), "collapse keeps the remembered expanded width");
         c.setCollapsed(true); // unchanged -> no persist
         c.setCollapsed(false);
         assertFalse(c.isCollapsed());

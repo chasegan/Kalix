@@ -13,6 +13,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -27,7 +28,7 @@ public class FileOperationsManager {
 
     private final Component parentComponent;
     private final DocumentManager documentManager;
-    private final java.util.function.Function<File, KalixDocument> documentFactory;
+    private final Function<File, KalixDocument> documentFactory;
     private final Consumer<String> statusUpdateCallback;
     private final Consumer<String> addRecentFileCallback;
     private final Runnable fileChangedCallback;
@@ -48,7 +49,7 @@ public class FileOperationsManager {
      */
     public FileOperationsManager(Component parentComponent,
                                  DocumentManager documentManager,
-                                 java.util.function.Function<File, KalixDocument> documentFactory,
+                                 Function<File, KalixDocument> documentFactory,
                                  Consumer<String> statusUpdateCallback,
                                  Consumer<String> addRecentFileCallback,
                                  Runnable fileChangedCallback,

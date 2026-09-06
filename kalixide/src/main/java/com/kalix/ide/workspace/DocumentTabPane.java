@@ -7,6 +7,7 @@ import com.kalix.ide.document.KalixDocument;
 
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
+import javax.swing.MenuSelectionManager;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Component;
@@ -59,7 +60,7 @@ public class DocumentTabPane extends JPanel {
      * the root can become a composite (editor | contextual view) without breaking
      * close buttons, context menus or drag-reorder.
      */
-    private final Map<KalixDocument, java.awt.Component> tabRoots = new IdentityHashMap<>();
+    private final Map<KalixDocument, Component> tabRoots = new IdentityHashMap<>();
 
     List<String> tabNames;
 
@@ -236,7 +237,7 @@ public class DocumentTabPane extends JPanel {
         try {
             // May add a conflict
             this.rebuildTabNames();
-            java.awt.Component root = tabRootFor(document);
+            Component root = tabRootFor(document);
             tabRoots.put(document, root);
             tabbedPane.addTab(tabTitle(document), root);
             int index = indexOf(document);
@@ -312,8 +313,8 @@ public class DocumentTabPane extends JPanel {
      * Built once per document and stored in {@link #tabRoots}; tab↔document
      * resolution never assumes the root is the editor.
      */
-    private java.awt.Component tabRootFor(KalixDocument document) {
-        java.awt.Component contextView = document.getContextView();
+    private Component tabRootFor(KalixDocument document) {
+        Component contextView = document.getContextView();
         if (contextView == null) {
             return document.getEditor();
         }
@@ -329,7 +330,7 @@ public class DocumentTabPane extends JPanel {
      */
     public void setContextViewCollapsed(boolean collapsed) {
         contextSplitCoordinator.setCollapsed(collapsed);
-        java.awt.Component root = tabRoots.get(documentManager.getActiveDocument());
+        Component root = tabRoots.get(documentManager.getActiveDocument());
         if (root instanceof DocumentSplitView view) {
             view.applySharedLayout();
         }
@@ -352,6 +353,12 @@ public class DocumentTabPane extends JPanel {
      */
     private void focusEditorOf(KalixDocument document) {
         SwingUtilities.invokeLater(() -> {
+            // Leave focus alone while a menu is open: the tab context-menu path
+            // activates the document and then shows its popup, so this deferred focus
+            // would otherwise land under the open menu and degrade its keyboard handling.
+            if (MenuSelectionManager.defaultManager().getSelectedPath().length > 0) {
+                return;
+            }
             if (documentManager.getActiveDocument() == document) {
                 document.getEditor().getTextArea().requestFocusInWindow();
             }
@@ -359,7 +366,7 @@ public class DocumentTabPane extends JPanel {
     }
 
     int indexOf(KalixDocument document) {
-        java.awt.Component root = tabRoots.get(document);
+        Component root = tabRoots.get(document);
         return root != null ? tabbedPane.indexOfComponent(root) : -1;
     }
 
@@ -374,7 +381,7 @@ public class DocumentTabPane extends JPanel {
     }
 
     /** The underlying tab strip — package-private, for tests. */
-    javax.swing.JTabbedPane getTabbedPane() {
+    JTabbedPane getTabbedPane() {
         return tabbedPane;
     }
 

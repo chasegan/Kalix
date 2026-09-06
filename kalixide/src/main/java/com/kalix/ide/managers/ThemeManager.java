@@ -180,7 +180,9 @@ public class ThemeManager {
      * Registers theme-aware components that need custom theme updates. Maps are not
      * registered: every document's map is mounted inside its tab, so a theme switch
      * reaches all of them via {@code updateComponentTreeUI} (MapPanel re-resolves
-     * its colours in {@code updateUI()}).
+     * its colours in {@code updateUI()}). The active-editor registration remains
+     * because RSyntaxTextArea's theme updates go beyond a LaF walk; it could migrate
+     * to the same updateUI pattern later.
      *
      * @param textEditor The active EnhancedTextEditor instance to update
      */

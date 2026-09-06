@@ -11,6 +11,7 @@ import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.dialogs.PreferencesDialog;
 import com.kalix.ide.linter.LinterPreferencesPanel;
 import com.kalix.ide.linter.SchemaManager;
+import com.kalix.ide.document.DocumentKind;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.DocumentWorkspaceView;
 import com.kalix.ide.document.KalixDocument;
@@ -41,6 +42,8 @@ import com.kalix.ide.preferences.ui.ThemePreferencePage;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.utils.TerminalActions;
 import com.kalix.ide.utils.WindowsIntegration;
+import com.kalix.ide.workspace.ContextSplitCoordinator;
+import com.kalix.ide.workspace.DocumentTabPane;
 import com.kalix.ide.workspace.ProjectTreePanel;
 import com.kalix.ide.workspace.WorkspacePanel;
 import com.kalix.ide.workspace.tree.TreeHost;
@@ -115,7 +118,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private com.kalix.ide.parametersheet.ParameterSheetWindow parameterSheetWindow;
     private WorkspacePanel workspacePanel;
     private ProjectTreePanel projectTreePanel;
-    private com.kalix.ide.workspace.DocumentTabPane documentTabPane;
+    private DocumentTabPane documentTabPane;
     private JLabel statusLabel;
     private AutoHidingProgressBar progressBar;
     private JToolBar toolBar;
@@ -469,9 +472,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      *
      * @return the newly created, configured, registered document
      */
-    private KalixDocument createDocument(java.io.File file) {
-        KalixDocument document = new KalixDocument(
-            com.kalix.ide.document.DocumentKind.forFile(file));
+    private KalixDocument createDocument(File file) {
+        KalixDocument document = new KalixDocument(DocumentKind.forFile(file));
         configureDocument(document);
         documentManager.addDocument(document);
         return document;
@@ -800,16 +802,17 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         projectTreePanel.setShowHidden(isShowHiddenFiles());
         // The contextual-view region's width and collapsed state are shared across all
         // tabs (one remembered divider, exactly as when the region was a single shared
-        // panel) and persisted under the same preference keys as before.
-        com.kalix.ide.workspace.ContextSplitCoordinator contextSplitCoordinator =
-            new com.kalix.ide.workspace.ContextSplitCoordinator(
-                PreferenceKeys.UI_MAP_WIDTH.get(),
-                PreferenceKeys.UI_MAP_COLLAPSED.get(),
-                (width, collapsed) -> {
-                    PreferenceKeys.UI_MAP_WIDTH.set(width);
-                    PreferenceKeys.UI_MAP_COLLAPSED.set(collapsed);
-                });
-        documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(
+        // panel) and persisted under the same preference keys as before. The keys (and
+        // the "Toggle Map" wording) deliberately keep their map naming for back-compat;
+        // rename them when a second context-view kind (CSV table/plot) exists.
+        ContextSplitCoordinator contextSplitCoordinator = new ContextSplitCoordinator(
+            PreferenceKeys.UI_MAP_WIDTH.get(),
+            PreferenceKeys.UI_MAP_COLLAPSED.get(),
+            (width, collapsed) -> {
+                PreferenceKeys.UI_MAP_WIDTH.set(width);
+                PreferenceKeys.UI_MAP_COLLAPSED.set(collapsed);
+            });
+        documentTabPane = new DocumentTabPane(
             documentManager,
             this::requestCloseDocument,
             this::showTabContextMenu,

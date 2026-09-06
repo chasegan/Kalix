@@ -90,6 +90,10 @@ is a deliberate later layer enabled by the document-subtype design.
 needed by the three-region layout. They are removed in Phase 2 in favour of a
 purpose-built nested-split layout. Net code reduction.
 
+> **Amended (September 2026):** the split layout itself was later reshaped —
+> `[ tree | tabs ]` outside, `[ editor | context ]` inside each tab (see the
+> Addendum). Docking never returned.
+
 ### 5. Tree component: `JTree` + a thin custom layer (not a from-scratch widget)
 
 `JTree` under FlatLaf gives modern look, keyboard nav, selection, expand/collapse,
@@ -118,8 +122,12 @@ macOS.
   `newUntitled()`, `getActiveDocument()`, listeners
   `onActiveDocumentChanged / onOpened / onClosed`. The spine everything listens to.
 
-- **`DocumentFactory`** — maps file extension → which `KalixDocument` subtype to
-  build. The single place where "what does opening this file mean" is decided.
+- **Document typing** — `DocumentKind.forFile` maps file extension → kind, and a
+  factory function (`KalixIDE.createDocument`, injected into
+  `FileOperationsManager`) builds the right bundle: the single place where "what
+  does opening this file mean" is decided. (The originally planned
+  `DocumentFactory` class + subtype hierarchy is deferred until a second rich
+  kind — CSV — actually exists.)
 
 - **`WorkspacePanel`** — the outer layout: one `JSplitPane`
   `[ tree | document tabs ]`; the tree is collapsible with a persisted size. The

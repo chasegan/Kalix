@@ -172,7 +172,8 @@ public class MapPanel extends JPanel {
      * frame on a theme switch; with every document's map mounted inside its tab,
      * that walk reaches all of them — no per-activation catch-up needed. Also runs
      * during construction (from JPanel's constructor), which is safe:
-     * {@link #updateThemeColors()} touches no instance fields, only UIManager.
+     * {@link #updateThemeColors()} reads only UIManager and calls inherited
+     * {@code setBackground}/{@code repaint} — no MapPanel-declared state.
      */
     @Override
     public void updateUI() {
@@ -520,11 +521,11 @@ public class MapPanel extends JPanel {
     }
     
     /**
-     * Updates the panel colors based on the current UI theme.
-     * This method should be called when the theme changes.
-     * Now supports enhanced unified theme integration.
+     * Resolves the panel colours from the current UI theme. Internal to the theme
+     * flow: {@link #updateUI()} is the single entry point (construction and every
+     * LaF switch) — callers never invoke this directly.
      */
-    public void updateThemeColors() {
+    private void updateThemeColors() {
         // Custom MapPanel background color from the active theme
         // (themes define MapPanel.background in resources/themes/*.properties)
         Color customMapBg = UIManager.getColor("MapPanel.background");

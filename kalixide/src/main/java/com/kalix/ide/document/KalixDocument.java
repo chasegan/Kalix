@@ -16,10 +16,12 @@ import java.io.File;
 import java.util.function.Supplier;
 
 /**
- * Represents a single open document (one model file) and the bundle of state and
- * views that belong to it: the backing {@link File}, the {@link EnhancedTextEditor}
- * editing its text, the {@link HydrologicalModel} parsed from that text, and the
- * {@link MapPanel} visualising the model.
+ * Represents a single open document — one per tab — and the bundle of state and
+ * views that belong to it. Every document owns its backing {@link File} (nullable
+ * = untitled) and the {@link EnhancedTextEditor} editing its text; a
+ * {@link DocumentKind#MODEL} document additionally owns the
+ * {@link HydrologicalModel} parsed from that text and the {@link MapPanel}
+ * visualising it (both {@code null} for other kinds).
  *
  * <p>A {@code KalixDocument} owns the per-document wiring that used to live in
  * {@code KalixIDE}: parsing text into the model on edits, bidirectional text&lt;-&gt;map
@@ -28,8 +30,9 @@ import java.util.function.Supplier;
  * per-document via RSyntaxTextArea's native undo stack — no shared or custom
  * {@code UndoManager} is involved.
  *
- * <p>This is the unit that becomes "many" when multi-document support lands
- * (see {@code docs/multi-document-architecture.md}). In Phase 1 there is exactly one.
+ * <p>The workspace layer builds each tab's content from these views (the editor,
+ * plus {@link #getContextView()} when present — see
+ * {@code docs/multi-document-architecture.md}, Addendum).
  *
  * <p>Application-level concerns (status bar, title bar, file watching, theme
  * registration, linter/autocomplete service wiring) are intentionally <em>not</em>

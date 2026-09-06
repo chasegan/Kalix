@@ -93,7 +93,7 @@ public class DocumentSplitView extends JPanel {
                 split.setDividerLocation(width);
             } else {
                 split.setDividerSize(defaultDividerSize);
-                split.setDividerLocation(Math.max(0, width - coordinator.width() - defaultDividerSize));
+                split.setDividerLocation(Math.max(0, width - coordinator.getWidth() - defaultDividerSize));
             }
         } finally {
             applyingLayout = false;
@@ -102,7 +102,12 @@ public class DocumentSplitView extends JPanel {
 
     private void installDividerListener() {
         split.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
-            if (applyingLayout || coordinator.isCollapsed()) {
+            // Only the visible tab's split may write back. Hidden (but once-painted)
+            // splits are also laid out on window resize, and resizeWeight redistribution
+            // fires divider moves on them too — their divider is allowed to be stale
+            // (the componentShown catch-up re-applies shared state on reveal), so a
+            // write from here would clobber a fresher width with a stale one.
+            if (applyingLayout || coordinator.isCollapsed() || !isVisible()) {
                 return;
             }
             // Width measured from the right edge, matching resizeWeight 1.0 (a window
