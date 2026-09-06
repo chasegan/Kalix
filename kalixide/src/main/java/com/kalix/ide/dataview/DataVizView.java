@@ -486,6 +486,10 @@ public final class DataVizView extends JPanel {
             if (disposed || session != target || vizManager == null) {
                 return;
             }
+            // Run Manager parity (SeriesFetchCoordinator.shouldResetZoom): a plot
+            // that showed nothing zooms to fit its first data; additive changes
+            // preserve the user's window.
+            boolean firstData = dataSet.isEmpty();
             if (result != null) {
                 long[] timestamps = result.timestamps();
                 for (int i = 0; i < found.size(); i++) {
@@ -500,7 +504,7 @@ public final class DataVizView extends JPanel {
                     dataSet.removeSeries(ref);
                 }
             }
-            vizManager.updateAllTabs(false); // zoom preserved across refreshes
+            vizManager.updateAllTabs(firstData); // fit first data; else preserve zoom
             note.setText(result != null && result.badDateRows() > 0
                 ? String.format("%,d rows skipped: unparseable dates", result.badDateRows())
                 : " ");

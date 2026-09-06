@@ -6,6 +6,7 @@ import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
+import com.kalix.ide.components.WrapLayout;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -26,6 +27,9 @@ import javax.swing.JTable;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
@@ -75,6 +79,18 @@ class FlowVizToolbarBuilder {
         this.toolbar = new JToolBar();
         this.toolbar.setFloatable(false);
         this.toolbar.setRollover(true);
+        // Controls flow onto further rows when the plot region is narrow (the
+        // data viewer's mount can be small): WrapLayout reports a wrapped
+        // preferred height, so the host grows a second row instead of clipping.
+        this.toolbar.setLayout(new WrapLayout(FlowLayout.LEADING, 0, 2));
+        this.toolbar.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                // The wrap count depends on the width just set: recompute the
+                // preferred height (no-op once the height settles).
+                toolbar.revalidate();
+            }
+        });
     }
 
     FlowVizToolbarBuilder setOnUndoRedo(Consumer<FlowVizState> callback) {
@@ -286,6 +302,7 @@ class FlowVizToolbarBuilder {
 
     private void addPlotTypeDropdown() {
         this.plotTypeCombo = new JComboBox<>(PlotType.values());
+        plotTypeCombo.setPreferredSize(ToolbarConstants.WIDE_DROPDOWN_SIZE);
         plotTypeCombo.setMaximumSize(ToolbarConstants.WIDE_DROPDOWN_SIZE);
         plotTypeCombo.setToolTipText("Plot type");
         plotTypeCombo.setRenderer(new PlotTypeListCellRenderer());
@@ -434,6 +451,8 @@ class FlowVizToolbarBuilder {
     /** Creates a standard dropdown. */
     private JComboBox<String> createDropdown(String[] options, Dimension size, String tooltip) {
         JComboBox<String> combo = new JComboBox<>(options);
+        // Both: FlowLayout-based wrapping sizes by preferred, BoxLayout clamped by max.
+        combo.setPreferredSize(size);
         combo.setMaximumSize(size);
         combo.setToolTipText(tooltip);
         return combo;
