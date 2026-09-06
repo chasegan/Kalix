@@ -110,7 +110,10 @@ public class FileOperationsManager {
     }
 
     /**
-     * Opens a model file in a new tab, or focuses its existing tab if already open.
+     * Opens a file in a new tab — model, data or plain text; the document kind is
+     * decided from the file — or focuses its existing tab if already open. The
+     * name is historic: every open path (menu, tree, drag-drop, session restore)
+     * routes through here.
      *
      * @param file The file to load
      */
@@ -127,8 +130,7 @@ public class FileOperationsManager {
         // read it directly (docs/data-file-viewer.md). Everything else loads as text.
         KalixDocument document;
         if (DocumentKind.forFile(file) == DocumentKind.DATA && KalixDocument.exceedsEditableGate(file)) {
-            document = documentFactory.apply(file); // kind decided by file type
-            document.setFile(file);
+            document = documentFactory.apply(file); // the DATA ctor takes the backing file
         } else {
             final String content;
             try {
@@ -223,6 +225,10 @@ public class FileOperationsManager {
             // Reset dirty state
             document.setDirty(false);
 
+            // A data document's virtual table indexes byte offsets this save just
+            // moved; rebuild its views from the new bytes (no-op for other kinds).
+            document.refreshDataViewAfterSave();
+
             // Save as last opened file for session restoration
             PreferenceKeys.LAST_OPENED_FILE.set(currentFile.getAbsolutePath());
 
@@ -294,6 +300,7 @@ public class FileOperationsManager {
             // Update current file and reset dirty state
             document.setFile(selectedFile);
             document.setDirty(false);
+            document.refreshDataViewAfterSave(); // see saveKalixDocument
 
             // Add to recent files
             addRecentFileCallback.accept(selectedFile.getAbsolutePath());

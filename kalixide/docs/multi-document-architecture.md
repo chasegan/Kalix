@@ -84,6 +84,11 @@ Every file opens as text in a tab. `.ini` tabs additionally drive the map. CSV /
 pixie files open as text too for now; richer behaviour (add-to-plot, plot view)
 is a deliberate later layer enabled by the document-subtype design.
 
+> **Amended (September 2026):** CSV (including `.res.csv`) now opens as a DATA
+> document — text primary with a virtual table context view, and a large-file
+> gate on the editable buffer (`docs/data-file-viewer.md`). Pixie still opens
+> as text.
+
 ### 4. The docking system is removed
 
 `DockingArea` / `DockableMapPanel` / `DockableTextEditor` are unused and not
@@ -200,9 +205,11 @@ view, composed by a per-tab `DocumentSplitView`. What this buys:
 
 - **A full-width tab strip.** The tab bar runs to the window's right edge, so many
   more tabs are visible before scrolling.
-- **Typed tab content.** A non-model file's tab is just its editor today; a future
-  CSV tab can carry a table/plot as *its* context view, a text tab file details —
-  per tab, without a shared panel having to dispatch on the active document's type.
+- **Typed tab content.** Delivered for CSV (see `docs/data-file-viewer.md`): a
+  data tab carries a virtual table as *its* context view, with text primary and
+  a read-only virtual text view above the large-file gate. File details for
+  plain-text tabs remain future — per tab, without a shared panel having to
+  dispatch on the active document's type.
 - **A stronger form of decision 1.** "The contextual view is a pure projection of
   the active tab" becomes structural: the view is part of the tab, so it cannot
   even transiently disagree with it. `ContextViewPanel`'s swap-on-activation logic

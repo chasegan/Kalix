@@ -7,6 +7,7 @@ import javax.swing.AbstractAction;
 import javax.swing.JComponent;
 import javax.swing.KeyStroke;
 import javax.swing.Scrollable;
+import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import java.awt.Color;
@@ -265,7 +266,7 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
 
     @Override
     public int getScrollableBlockIncrement(Rectangle visibleRect, int orientation, int direction) {
-        return orientation == javax.swing.SwingConstants.VERTICAL
+        return orientation == SwingConstants.VERTICAL
             ? Math.max(lineHeight(), visibleRect.height - lineHeight())
             : visibleRect.width;
     }

@@ -21,7 +21,8 @@ import java.awt.Dimension;
  */
 public final class DataViewPanel extends JPanel {
 
-    private final DataViewSession session;
+    /** Non-final: replaced with a fresh session after a save rewrites the file. */
+    private DataViewSession session;
     private final JTable table;
     private final JLabel status = new JLabel();
 
@@ -44,7 +45,10 @@ public final class DataViewPanel extends JPanel {
         status.setBorder(BorderFactory.createEmptyBorder(3, 8, 3, 8));
         add(status, BorderLayout.SOUTH);
         refreshStatus();
+        registerStatusListener();
+    }
 
+    private void registerStatusListener() {
         session.addListener(new DataViewSession.Listener() {
             @Override
             public void onProgress(long rows, long lines, long indexedBytes, long totalBytes, boolean complete) {
@@ -58,6 +62,19 @@ public final class DataViewPanel extends JPanel {
         });
     }
 
+    /**
+     * Swaps in a freshly opened session after a save rewrote the file (stale
+     * checkpoints would otherwise parse the new bytes at old offsets). EDT only;
+     * the caller ({@code KalixDocument.refreshDataViewAfterSave}) closes the old
+     * session after this returns.
+     */
+    public void replaceSession(DataViewSession fresh) {
+        this.session = fresh;
+        table.setModel(new VirtualDataTableModel(fresh));
+        registerStatusListener();
+        refreshStatus();
+    }
+
     private void refreshStatus() {
         CsvDialect dialect = session.dialect();
         String delimiter = switch (dialect.delimiter()) {
@@ -68,6 +85,7 @@ public final class DataViewPanel extends JPanel {
 
         StringBuilder text = new StringBuilder();
         text.append("delimiter ").append(delimiter)
+            .append("  ·  quote ").append(dialect.quote())
             .append("  ·  ").append(dialect.charset().name())
             .append("  ·  ").append(dialect.lineEndingLabel())
             .append("  ·  ").append(String.format("%,d rows", dataRows));
@@ -95,5 +113,10 @@ public final class DataViewPanel extends JPanel {
     /** The underlying table — package-private, for tests. */
     JTable getTable() {
         return table;
+    }
+
+    /** The status strip's current text — package-private, for tests. */
+    String getStatusText() {
+        return status.getText();
     }
 }

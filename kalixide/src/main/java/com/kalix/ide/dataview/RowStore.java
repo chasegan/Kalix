@@ -126,7 +126,9 @@ public final class RowStore implements AutoCloseable {
      * tests and background use (bulk copy); the UI path is
      * {@link #rowIfLoaded(long)} + a scheduled {@link #ensureBlockLoaded(long)}.
      */
-    public String[] row(long rowNumber) {
+    public synchronized String[] row(long rowNumber) {
+        // Synchronized so ensure+read happens under the load monitor: a concurrent
+        // load cannot evict this block between the two (bulk copy correctness).
         if (rowNumber < 0 || rowNumber >= rowIndex.itemCount()) {
             return null;
         }

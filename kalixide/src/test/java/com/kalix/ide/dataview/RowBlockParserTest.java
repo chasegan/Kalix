@@ -12,6 +12,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RowBlockParserTest {
 
@@ -78,5 +79,21 @@ class RowBlockParserTest {
     void multiByteUtf8SurvivesFieldDecoding() throws IOException {
         List<String[]> rows = parse("name,unit\nflöde,m³/s\n", 0, 10);
         assertArrayEquals(new String[] {"flöde", "m³/s"}, rows.get(1));
+    }
+
+    @Test
+    void aRunawayRowIsTruncatedInsteadOfAccumulatingTheFile() throws IOException {
+        // A stray unbalanced quote makes one logical row span everything after it;
+        // the parser must bail at its byte cap rather than buffer the remainder
+        // (which for a 1GB file would OOM the whole IDE).
+        StringBuilder sb = new StringBuilder("\"unclosed\n");
+        String filler = "x".repeat(1024);
+        while (sb.length() < RowBlockParser.MAX_BLOCK_BYTES + 2_000_000) {
+            sb.append(filler).append('\n');
+        }
+        List<String[]> rows = parse(sb.toString(), 0, 10);
+        assertEquals(1, rows.size(), "everything after the stray quote is one (truncated) row");
+        assertTrue(rows.get(0)[0].length() <= RowBlockParser.MAX_BLOCK_BYTES + 128 * 1024,
+            "accumulation stops near the cap");
     }
 }

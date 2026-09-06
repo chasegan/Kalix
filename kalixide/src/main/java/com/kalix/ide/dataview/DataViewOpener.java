@@ -36,7 +36,12 @@ public final class DataViewOpener {
     private DataViewOpener() {
     }
 
-    /** Opens the right kind of session for the file. Blocking I/O — off the EDT. */
+    /**
+     * Opens the right kind of session for the file. Does a small, bounded amount
+     * of blocking I/O (a head read; for {@code .res.csv} a capped header scan) —
+     * currently invoked from the open path on the EDT, like the pre-existing
+     * whole-file text read there, so everything here must stay bounded and cheap.
+     */
     public static DataViewSession openFor(File file) throws IOException {
         String name = file.getName().toLowerCase(Locale.ROOT);
         if (name.endsWith(".res.csv")) {
@@ -68,6 +73,12 @@ public final class DataViewOpener {
             int b;
             while ((b = in.read()) >= 0) {
                 position++;
+                // Checked every byte, not only on newlines: a marker-less or
+                // CR-only file must never be scanned to EOF (this runs on the
+                // open path).
+                if (position > MAX_HEADER_SCAN_BYTES) {
+                    break;
+                }
                 if (b == '\n') {
                     String text = line.toString();
                     if (text.endsWith("\r")) {
@@ -77,9 +88,6 @@ public final class DataViewOpener {
                         return position;
                     }
                     line.setLength(0);
-                    if (position > MAX_HEADER_SCAN_BYTES) {
-                        break;
-                    }
                 } else if (line.length() < 64) {
                     line.append((char) b);
                 }

@@ -64,8 +64,9 @@ the engine is Swing-free and headless-tested):
 
 - **Lazy block access** (`RowBlockParser` + `RowStore`): a block is one index
   stride; any row is one checkpointed seek plus a bounded parse; parsed blocks
-  live in a size-bounded LRU. Steady-state heap is the cache bound regardless
-  of file size. The EDT never touches I/O or parsing: a cache miss renders a
+  live in a bounded cache (insertion-order eviction — approximate LRU is
+  deliberately traded for lock-free reads, and prefetch hides the occasional
+  re-fetch). Steady-state heap is the cache bound regardless of file size. The EDT never touches I/O or parsing: a cache miss renders a
   placeholder for a frame and repaints when the block lands (the
   `DirectoryLister` doctrine, applied to file contents).
 
@@ -97,7 +98,9 @@ the host can refuse honestly.
 - **External changes don't refresh a data session.** The auto-reload watcher
   refreshes editable buffers only; a read-only data view keeps its index until
   the tab is reopened (a changed file mid-view degrades gracefully — reads
-  clamp; a reload affordance is future work).
+  clamp; a reload affordance is future work). Saving a data document from its
+  *own* editor does refresh: the session is rebuilt from the new bytes after
+  every save, so the table never parses stale offsets.
 - **`.res.csv` virtual views show the data region only** (text and table both
   start past `EOH`). Below the gate the real editor still shows the whole file,
   extended header included.

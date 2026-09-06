@@ -1,6 +1,7 @@
 package com.kalix.ide.document;
 
 import com.kalix.ide.dataview.DataViewPanel;
+import com.kalix.ide.dataview.DataViewSession;
 import com.kalix.ide.dataview.VirtualTextArea;
 
 import org.junit.jupiter.api.Test;
@@ -11,8 +12,10 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -72,6 +75,63 @@ class DataDocumentTest {
             assertInstanceOf(DataViewPanel.class, doc.getContextView());
         } finally {
             doc.dispose();
+        }
+    }
+
+    @Test
+    void aFailedSessionAboveTheGateStaysReadOnly() {
+        // The blocker scenario: session open fails (missing file / dropped share).
+        // The tab must NOT degrade to an editable empty buffer over a real file.
+        KalixDocument doc = new KalixDocument(
+            DocumentKind.DATA, new File("/nonexistent/kalix-test-missing.csv"), true);
+        try {
+            assertFalse(doc.isEditable(), "no session + empty buffer must never be saveable");
+            assertSame(doc.getEditor(), doc.getPrimaryView(),
+                "virtual text unavailable: the (unsaveable) editor is the fallback");
+            assertNull(doc.getContextView());
+        } finally {
+            doc.dispose();
+        }
+    }
+
+    @Test
+    void savingRebuildsTheDataSessionFromTheNewBytes() throws IOException {
+        File file = csvFile(); // header + 2 data rows
+        KalixDocument doc = new KalixDocument(DocumentKind.DATA, file);
+        try {
+            await("initial index", () -> {
+                DataViewSession s = doc.getDataViewSession();
+                return s != null && s.isIndexingComplete();
+            });
+            DataViewSession old = doc.getDataViewSession();
+            assertEquals(3, old.rowCount());
+
+            // Simulate the save's rewrite shifting every byte offset.
+            Files.writeString(file.toPath(), "Date,flow\n2020-01-01,1.5\n", StandardCharsets.UTF_8);
+            doc.refreshDataViewAfterSave();
+
+            await("session rebuilt", () -> {
+                DataViewSession s = doc.getDataViewSession();
+                return s != old && s != null && s.isIndexingComplete();
+            });
+            assertEquals(2, doc.getDataViewSession().rowCount(),
+                "the fresh session indexes the new bytes");
+        } finally {
+            doc.dispose();
+        }
+    }
+
+    private static void await(String what, BooleanSupplier condition) {
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (!condition.getAsBoolean()) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new AssertionError("Timed out waiting for: " + what);
+            }
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                throw new AssertionError(e);
+            }
         }
     }
 

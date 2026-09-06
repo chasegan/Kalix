@@ -101,8 +101,12 @@ public final class LineStore implements AutoCloseable {
         }
     }
 
-    /** Synchronous convenience for tests and bulk copy. */
-    public String line(long lineNumber) {
+    /**
+     * Synchronous convenience for tests and bulk copy. Synchronized so ensure+read
+     * happens under the load monitor: a concurrent load cannot evict this block
+     * between the two (a racing scroll during a large clipboard copy).
+     */
+    public synchronized String line(long lineNumber) {
         if (lineNumber < 0 || lineNumber >= lineIndex.itemCount()) {
             return null;
         }
@@ -117,13 +121,18 @@ public final class LineStore implements AutoCloseable {
         ByteArrayOutputStream line = new ByteArrayOutputStream(128);
         boolean lineHasContent = false;
 
+        long bytesConsumed = 0;
         outer:
         while (true) {
+            if (bytesConsumed > RowBlockParser.MAX_BLOCK_BYTES) {
+                break; // a file with no newlines must not accumulate into memory
+            }
             buffer.clear();
             int n = channel.read(buffer);
             if (n < 0) {
                 break;
             }
+            bytesConsumed += n;
             buffer.flip();
             for (int i = 0; i < n; i++) {
                 byte b = buffer.get(i);

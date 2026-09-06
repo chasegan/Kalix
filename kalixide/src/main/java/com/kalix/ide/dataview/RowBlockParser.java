@@ -29,6 +29,15 @@ public final class RowBlockParser {
 
     private static final int CHUNK_BYTES = 64 * 1024;
 
+    /**
+     * Bail-out bound per block parse. A stray unbalanced quote makes one "row"
+     * span the rest of the file (honest RFC behaviour, and the indexer agrees) —
+     * without a byte cap, loading that block would accumulate the file's
+     * remainder in memory and OOM the whole IDE. Truncated content still renders;
+     * the raw text view remains unaffected either way.
+     */
+    static final int MAX_BLOCK_BYTES = 8 * 1024 * 1024;
+
     private RowBlockParser() {
     }
 
@@ -54,13 +63,18 @@ public final class RowBlockParser {
         boolean quotePending = false; // saw a quote while quoted: escape or close?
         boolean rowHasContent = false;
 
+        long bytesConsumed = 0;
         outer:
         while (true) {
+            if (bytesConsumed > MAX_BLOCK_BYTES) {
+                break; // runaway row (stray quote): truncate rather than accumulate
+            }
             buffer.clear();
             int n = channel.read(buffer);
             if (n < 0) {
                 break;
             }
+            bytesConsumed += n;
             buffer.flip();
             for (int i = 0; i < n; i++) {
                 byte b = buffer.get(i);

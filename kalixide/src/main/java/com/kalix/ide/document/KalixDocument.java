@@ -59,8 +59,11 @@ public class KalixDocument implements OpenModel {
     private final HydrologicalModel model;
 
     // --- DATA-kind bundle (all null for other kinds) ---
-    /** {@code null} for non-data kinds, or when the data view failed to open. */
-    private final DataViewSession dataViewSession;
+    /**
+     * {@code null} for non-data kinds, or when the data view failed to open.
+     * Volatile, non-final: rebuilt after saves (see {@link #refreshDataViewAfterSave()}).
+     */
+    private volatile DataViewSession dataViewSession;
     private final DataViewPanel dataViewPanel;
     private final VirtualTextArea largeTextArea;
     private final JScrollPane largeTextScroller;
@@ -134,24 +137,31 @@ public class KalixDocument implements OpenModel {
             this.mapPanel = null;
         }
 
+        if (file != null) {
+            this.file = file; // the load path may setFile again with the same file; harmless
+        }
+
         if (kind == DocumentKind.DATA) {
             if (file == null) {
                 throw new IllegalArgumentException("DATA documents need a backing file");
             }
-            this.file = file;
             DataViewSession session = null;
             try {
                 session = DataViewOpener.openFor(file);
             } catch (IOException e) {
-                // The tab still opens (as a plain editor); only the data views are lost.
+                // The tab still opens; only the data views are lost.
                 logger.warn("Data view unavailable for {}: {}", file, e.getMessage());
             }
             this.dataViewSession = session;
             this.dataViewPanel = session != null ? new DataViewPanel(session) : null;
-            boolean effectiveLarge = largeReadOnly && session != null;
-            this.largeTextArea = effectiveLarge ? new VirtualTextArea(session) : null;
-            this.largeTextScroller = effectiveLarge ? new JScrollPane(largeTextArea) : null;
-            this.largeReadOnly = effectiveLarge;
+            boolean virtualText = largeReadOnly && session != null;
+            this.largeTextArea = virtualText ? new VirtualTextArea(session) : null;
+            this.largeTextScroller = virtualText ? new JScrollPane(largeTextArea) : null;
+            // Above the gate the document is read-only EVEN IF the session failed:
+            // in that case the editor buffer is empty (the load path never reads the
+            // file), and an editable empty buffer over a real file is one Save All
+            // away from truncating it to nothing.
+            this.largeReadOnly = largeReadOnly;
         } else {
             this.dataViewSession = null;
             this.dataViewPanel = null;
@@ -332,12 +342,14 @@ public class KalixDocument implements OpenModel {
      * read-only text view (the file never enters an editor buffer).
      */
     public JComponent getPrimaryView() {
-        return largeReadOnly ? largeTextScroller : editor;
+        // A read-only document whose session failed falls back to its (empty,
+        // unsaveable) editor rather than a null component.
+        return largeReadOnly && largeTextScroller != null ? largeTextScroller : editor;
     }
 
     /** The component that should receive focus when this document's tab activates. */
     public Component getPrimaryFocusComponent() {
-        return largeReadOnly ? largeTextArea : editor.getTextArea();
+        return largeReadOnly && largeTextArea != null ? largeTextArea : editor.getTextArea();
     }
 
     /**
@@ -349,9 +361,41 @@ public class KalixDocument implements OpenModel {
         return !largeReadOnly;
     }
 
-    /** This document's data session, or {@code null} for non-data kinds. For tests. */
-    public DataViewSession getDataViewSession() {
+    /** This document's data session, or {@code null} for non-data kinds. Package-private, for tests. */
+    DataViewSession getDataViewSession() {
         return dataViewSession;
+    }
+
+    /**
+     * Rebuilds the data views from the file after this document's text was saved.
+     * A below-gate data document is editable, so a save moves every byte offset
+     * the session's index recorded — parsing from stale checkpoints would render
+     * misaligned garbage presented as data. The fresh session is opened off the
+     * EDT and swapped in on it; the old session closes after the swap. No-op for
+     * non-data kinds, read-only views (nothing can be saved) and failed sessions.
+     */
+    public void refreshDataViewAfterSave() {
+        if (kind != DocumentKind.DATA || dataViewPanel == null || !isEditable() || file == null) {
+            return;
+        }
+        File target = file; // Save As may have re-pointed the document; read the new bytes
+        Thread reloader = new Thread(() -> {
+            try {
+                DataViewSession fresh = DataViewOpener.openFor(target);
+                SwingUtilities.invokeLater(() -> {
+                    DataViewSession old = dataViewSession;
+                    dataViewSession = fresh;
+                    dataViewPanel.replaceSession(fresh);
+                    if (old != null) {
+                        old.close();
+                    }
+                });
+            } catch (IOException e) {
+                logger.warn("Data view refresh failed for {}: {}", target, e.getMessage());
+            }
+        }, "kalix-dataview-reload");
+        reloader.setDaemon(true);
+        reloader.start();
     }
 
     /**

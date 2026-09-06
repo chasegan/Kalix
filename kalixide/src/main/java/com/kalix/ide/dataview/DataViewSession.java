@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -158,11 +159,25 @@ public final class DataViewSession implements AutoCloseable {
 
         CheckpointIndex rowIndex = new CheckpointIndex(STRIDE);
         CheckpointIndex lineIndex = new CheckpointIndex(STRIDE);
-        RowStore rowStore = new RowStore(
-            Files.newByteChannel(file, StandardOpenOption.READ), dialect, rowIndex, MAX_CACHED_BLOCKS);
-        LineStore lineStore = new LineStore(
-            Files.newByteChannel(file, StandardOpenOption.READ), dialect, lineIndex, MAX_CACHED_BLOCKS);
-        SeekableByteChannel indexerChannel = Files.newByteChannel(file, StandardOpenOption.READ);
+        RowStore rowStore = null;
+        LineStore lineStore = null;
+        SeekableByteChannel indexerChannel;
+        try {
+            rowStore = new RowStore(
+                Files.newByteChannel(file, StandardOpenOption.READ), dialect, rowIndex, MAX_CACHED_BLOCKS);
+            lineStore = new LineStore(
+                Files.newByteChannel(file, StandardOpenOption.READ), dialect, lineIndex, MAX_CACHED_BLOCKS);
+            indexerChannel = Files.newByteChannel(file, StandardOpenOption.READ);
+        } catch (IOException e) {
+            // A failed open must not leak the channels that did open.
+            if (rowStore != null) {
+                closeQuietly(rowStore::close);
+            }
+            if (lineStore != null) {
+                closeQuietly(lineStore::close);
+            }
+            throw e;
+        }
 
         DataViewSession session = new DataViewSession(
             file, dialect, dataStartOffset + dialect.bomLength(), presetColumnNames,
@@ -172,10 +187,6 @@ public final class DataViewSession implements AutoCloseable {
     }
 
     // --- State reads (all EDT-safe) ---
-
-    public Path file() {
-        return file;
-    }
 
     public CsvDialect dialect() {
         return dialect;
@@ -335,13 +346,27 @@ public final class DataViewSession implements AutoCloseable {
     private void maybeRequestStructure() {
         if (rowIndex.itemCount() > 0 && structureRequested.compareAndSet(false, true)) {
             submit(() -> {
-                rowStore.ensureBlockLoaded(0);
-                String[] first = rowStore.rowIfLoaded(0);
-                if (first != null) {
-                    headerRow = first;
-                    columnCount = first.length;
-                    notifyEdt(Listener::onStructureKnown);
-                    notifyEdt(l -> l.onRowBlockLoaded(0, blockCount(rowIndex, 0)));
+                boolean known = false;
+                try {
+                    rowStore.ensureBlockLoaded(0);
+                    String[] first = rowStore.rowIfLoaded(0);
+                    if (first != null) {
+                        if (presetColumnNames == null) {
+                            // Preset names (.res.csv) already fixed the column count;
+                            // a ragged first data row must not narrow the table.
+                            headerRow = first;
+                            columnCount = first.length;
+                        }
+                        known = true;
+                        notifyEdt(Listener::onStructureKnown);
+                        notifyEdt(l -> l.onRowBlockLoaded(0, blockCount(rowIndex, 0)));
+                    }
+                } finally {
+                    if (!known) {
+                        // Transient I/O failure: allow the next progress event to retry
+                        // rather than leaving the table 0-column forever.
+                        structureRequested.set(false);
+                    }
                 }
             });
         }
@@ -406,7 +431,7 @@ public final class DataViewSession implements AutoCloseable {
                     }
                 }
             });
-        } catch (java.util.concurrent.RejectedExecutionException ignored) {
+        } catch (RejectedExecutionException ignored) {
             // Closed concurrently; nothing to do.
         }
     }
