@@ -316,9 +316,9 @@ public class DocumentTabPane extends JPanel {
     private Component tabRootFor(KalixDocument document) {
         Component contextView = document.getContextView();
         if (contextView == null) {
-            return document.getEditor();
+            return document.getPrimaryView();
         }
-        return new DocumentSplitView(document.getEditor(), contextView, contextSplitCoordinator);
+        return new DocumentSplitView(document.getPrimaryView(), contextView, contextSplitCoordinator);
     }
 
     // --- Contextual view (the region inside each tab) ---
@@ -360,7 +360,7 @@ public class DocumentTabPane extends JPanel {
                 return;
             }
             if (documentManager.getActiveDocument() == document) {
-                document.getEditor().getTextArea().requestFocusInWindow();
+                document.getPrimaryFocusComponent().requestFocusInWindow();
             }
         });
     }

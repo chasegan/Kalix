@@ -25,7 +25,8 @@ class DocumentTypingTest {
         assertEquals(DocumentKind.MODEL, DocumentKind.forFile(new File("/x/model.ini")));
         assertEquals(DocumentKind.MODEL, DocumentKind.forFile(new File("/x/MODEL.INI")), "case-insensitive");
         assertEquals(DocumentKind.TEXT, DocumentKind.forFile(new File("/x/notes.txt")));
-        assertEquals(DocumentKind.TEXT, DocumentKind.forFile(new File("/x/data.csv")));
+        assertEquals(DocumentKind.DATA, DocumentKind.forFile(new File("/x/data.csv")),
+            "csv is DATA since the data-file viewer (DataDocumentTest pins the bundle)");
     }
 
     @Test

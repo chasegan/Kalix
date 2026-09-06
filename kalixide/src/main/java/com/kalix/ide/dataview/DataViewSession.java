@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.SwingUtilities;
 import java.io.IOException;
-import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -75,6 +75,10 @@ public final class DataViewSession implements AutoCloseable {
 
     private final Path file;
     private final CsvDialect dialect;
+    /** Where the tabular data begins (past any BOM or extended format header). */
+    private final long indexStartOffset;
+    /** Externally supplied column names (.res.csv), or {@code null} to use the data's own header. */
+    private final String[] presetColumnNames;
     private final CheckpointIndex rowIndex;
     private final CheckpointIndex lineIndex;
     private final RowStore rowStore;
@@ -94,12 +98,18 @@ public final class DataViewSession implements AutoCloseable {
     private volatile int columnCount;
     private long lastProgressNotifyNanos; // indexer thread only
 
-    private DataViewSession(Path file, CsvDialect dialect,
+    private DataViewSession(Path file, CsvDialect dialect, long indexStartOffset,
+                            String[] presetColumnNames,
                             CheckpointIndex rowIndex, CheckpointIndex lineIndex,
                             RowStore rowStore, LineStore lineStore,
                             SeekableByteChannel indexerChannel) {
         this.file = file;
         this.dialect = dialect;
+        this.indexStartOffset = indexStartOffset;
+        this.presetColumnNames = presetColumnNames;
+        if (presetColumnNames != null) {
+            this.columnCount = presetColumnNames.length;
+        }
         this.rowIndex = rowIndex;
         this.lineIndex = lineIndex;
         this.rowStore = rowStore;
@@ -119,11 +129,32 @@ public final class DataViewSession implements AutoCloseable {
      * starts the background index pass. Blocking I/O — call off the EDT.
      */
     public static DataViewSession open(Path file) throws IOException {
+        return open(file, 0L, null);
+    }
+
+    /**
+     * Variant for formats whose tabular data starts mid-file with externally
+     * known column names (e.g. {@code .res.csv}: the extended header supplies
+     * the names, and {@code dataStartOffset} points just past its EOH marker).
+     * The dialect is sniffed from the data region; preset column names force
+     * "no header row in the data".
+     */
+    public static DataViewSession open(Path file, long dataStartOffset,
+                                       String[] presetColumnNames) throws IOException {
         byte[] head;
-        try (InputStream in = Files.newInputStream(file, StandardOpenOption.READ)) {
-            head = in.readNBytes(HEAD_BYTES);
+        try (SeekableByteChannel headChannel = Files.newByteChannel(file, StandardOpenOption.READ)) {
+            headChannel.position(dataStartOffset);
+            ByteBuffer buffer = ByteBuffer.allocate(HEAD_BYTES);
+            int n = headChannel.read(buffer);
+            head = new byte[Math.max(0, n)];
+            buffer.flip();
+            buffer.get(head);
         }
         CsvDialect dialect = DialectSniffer.sniff(head);
+        if (presetColumnNames != null && dialect.hasHeaderRow()) {
+            dialect = new CsvDialect(dialect.delimiter(), dialect.quote(), dialect.charset(),
+                dialect.bomLength(), false, dialect.lineEndingLabel());
+        }
 
         CheckpointIndex rowIndex = new CheckpointIndex(STRIDE);
         CheckpointIndex lineIndex = new CheckpointIndex(STRIDE);
@@ -134,7 +165,8 @@ public final class DataViewSession implements AutoCloseable {
         SeekableByteChannel indexerChannel = Files.newByteChannel(file, StandardOpenOption.READ);
 
         DataViewSession session = new DataViewSession(
-            file, dialect, rowIndex, lineIndex, rowStore, lineStore, indexerChannel);
+            file, dialect, dataStartOffset + dialect.bomLength(), presetColumnNames,
+            rowIndex, lineIndex, rowStore, lineStore, indexerChannel);
         session.indexerThread.start();
         return session;
     }
@@ -178,6 +210,23 @@ public final class DataViewSession implements AutoCloseable {
     /** Field count of the header (or first row); 0 until structure is known. */
     public int columnCount() {
         return columnCount;
+    }
+
+    /**
+     * Column names for the table: preset names (formats with an external
+     * header, e.g. {@code .res.csv}), else the in-data header row, else
+     * {@code null} (generic names).
+     */
+    public String[] columnNames() {
+        if (presetColumnNames != null) {
+            return presetColumnNames;
+        }
+        return dialect.hasHeaderRow() ? headerRow : null;
+    }
+
+    /** Whether row 0 of the data region is a header row (hidden by the table). */
+    public boolean headerRowInData() {
+        return dialect.hasHeaderRow();
     }
 
     public String[] rowIfLoaded(long fileRow) {
@@ -256,7 +305,7 @@ public final class DataViewSession implements AutoCloseable {
 
     private void runIndexer() {
         try {
-            CsvIndexer.index(indexerChannel, dialect.bomLength(), dialect,
+            CsvIndexer.index(indexerChannel, indexStartOffset, dialect,
                 rowIndex, lineIndex, this::onIndexProgress, () -> closed);
             if (!closed) {
                 indexingComplete = true;

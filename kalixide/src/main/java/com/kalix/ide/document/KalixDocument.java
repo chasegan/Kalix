@@ -1,18 +1,27 @@
 package com.kalix.ide.document;
 
 import com.kalix.ide.MapPanel;
+import com.kalix.ide.dataview.DataViewOpener;
+import com.kalix.ide.dataview.DataViewPanel;
+import com.kalix.ide.dataview.DataViewSession;
+import com.kalix.ide.dataview.VirtualTextArea;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelChangeEvent;
+import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.swing.JComponent;
+import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import java.awt.Component;
 import java.io.File;
+import java.io.IOException;
 import java.util.function.Supplier;
 
 /**
@@ -48,6 +57,15 @@ public class KalixDocument implements OpenModel {
     private final MapPanel mapPanel;
     /** {@code null} for non-model kinds — see {@link #getModel()}. */
     private final HydrologicalModel model;
+
+    // --- DATA-kind bundle (all null for other kinds) ---
+    /** {@code null} for non-data kinds, or when the data view failed to open. */
+    private final DataViewSession dataViewSession;
+    private final DataViewPanel dataViewPanel;
+    private final VirtualTextArea largeTextArea;
+    private final JScrollPane largeTextScroller;
+    /** True for a DATA document above the editable-text gate: virtual read-only views. */
+    private final boolean largeReadOnly;
 
     /** Backing file, or {@code null} for an untitled document. */
     private File file;
@@ -89,6 +107,20 @@ public class KalixDocument implements OpenModel {
      * {@code null} and the contextual view empty.
      */
     public KalixDocument(DocumentKind kind) {
+        this(kind, null);
+    }
+
+    /**
+     * Creates a document of the given kind for the given backing file. DATA
+     * documents require the file at construction (their virtual views read it
+     * directly); for other kinds it may be {@code null} (untitled).
+     */
+    public KalixDocument(DocumentKind kind, File file) {
+        this(kind, file, kind == DocumentKind.DATA && exceedsEditableGate(file));
+    }
+
+    /** Test seam: the gate decision is injectable so tests need no 50MB files. */
+    KalixDocument(DocumentKind kind, File file, boolean largeReadOnly) {
         this.kind = kind;
         this.editor = new EnhancedTextEditor();
         if (kind == DocumentKind.MODEL) {
@@ -102,7 +134,47 @@ public class KalixDocument implements OpenModel {
             this.mapPanel = null;
         }
 
+        if (kind == DocumentKind.DATA) {
+            if (file == null) {
+                throw new IllegalArgumentException("DATA documents need a backing file");
+            }
+            this.file = file;
+            DataViewSession session = null;
+            try {
+                session = DataViewOpener.openFor(file);
+            } catch (IOException e) {
+                // The tab still opens (as a plain editor); only the data views are lost.
+                logger.warn("Data view unavailable for {}: {}", file, e.getMessage());
+            }
+            this.dataViewSession = session;
+            this.dataViewPanel = session != null ? new DataViewPanel(session) : null;
+            boolean effectiveLarge = largeReadOnly && session != null;
+            this.largeTextArea = effectiveLarge ? new VirtualTextArea(session) : null;
+            this.largeTextScroller = effectiveLarge ? new JScrollPane(largeTextArea) : null;
+            this.largeReadOnly = effectiveLarge;
+        } else {
+            this.dataViewSession = null;
+            this.dataViewPanel = null;
+            this.largeTextArea = null;
+            this.largeTextScroller = null;
+            this.largeReadOnly = false;
+        }
+
         wire();
+    }
+
+    /**
+     * Whether a data file is too large to load into an editable text buffer
+     * (the Editor → Load and Save gate preference). Above the gate a data tab
+     * shows virtual read-only views instead — the file never enters an editor
+     * buffer (see {@code docs/data-file-viewer.md} for the physics).
+     */
+    public static boolean exceedsEditableGate(File file) {
+        if (file == null) {
+            return false;
+        }
+        long gateBytes = PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.get() * 1024L * 1024L;
+        return file.length() > gateBytes;
     }
 
     /**
@@ -247,11 +319,39 @@ public class KalixDocument implements OpenModel {
     /**
      * Returns the component shown in the contextual view for this document, or
      * {@code null} if this document has no contextual view (in which case the
-     * region collapses). For a model document this is the map; a TEXT document
-     * has none; a future data kind would return a table or plot here.
+     * region collapses). For a model document this is the map; for a data
+     * document the virtual table; a TEXT document has none.
      */
-    public java.awt.Component getContextView() {
-        return mapPanel;
+    public Component getContextView() {
+        return mapPanel != null ? mapPanel : dataViewPanel;
+    }
+
+    /**
+     * The main (left) component of this document's tab: normally the text
+     * editor; for a DATA document above the editable gate, the virtual
+     * read-only text view (the file never enters an editor buffer).
+     */
+    public JComponent getPrimaryView() {
+        return largeReadOnly ? largeTextScroller : editor;
+    }
+
+    /** The component that should receive focus when this document's tab activates. */
+    public Component getPrimaryFocusComponent() {
+        return largeReadOnly ? largeTextArea : editor.getTextArea();
+    }
+
+    /**
+     * Whether this document's text can be edited and saved. False only for a
+     * DATA document above the editable gate — its tab is a viewer, and save
+     * paths must refuse rather than write an empty buffer over the file.
+     */
+    public boolean isEditable() {
+        return !largeReadOnly;
+    }
+
+    /** This document's data session, or {@code null} for non-data kinds. For tests. */
+    public DataViewSession getDataViewSession() {
+        return dataViewSession;
     }
 
     /**
@@ -344,5 +444,8 @@ public class KalixDocument implements OpenModel {
      */
     public void dispose() {
         editor.dispose();
+        if (dataViewSession != null) {
+            dataViewSession.close(); // aborts any in-flight indexing within one read
+        }
     }
 }

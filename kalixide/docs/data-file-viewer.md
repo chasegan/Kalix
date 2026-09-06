@@ -1,6 +1,7 @@
 # Data File Viewer
 
-Status: **In progress** — V1a (engine) under way.
+Status: **V1 delivered** (engine, projections, and the tab mount — V1a/b/c below);
+the "Later" items remain open.
 
 The viewer for data files (`.csv`, `.res.csv`; pixie later) opened as tabs in the
 IDE. Built for the realities of modelling data: files up to ~1GB, sometimes on
@@ -90,3 +91,19 @@ the host can refuse honestly.
   `.res.csv` dispatch.
 - **Later**: plot view via FlowViz; pixie; head-region editing; overlay-based
   editing; column stats.
+
+## V1 limitations (known, accepted)
+
+- **External changes don't refresh a data session.** The auto-reload watcher
+  refreshes editable buffers only; a read-only data view keeps its index until
+  the tab is reopened (a changed file mid-view degrades gracefully — reads
+  clamp; a reload affordance is future work).
+- **`.res.csv` virtual views show the data region only** (text and table both
+  start past `EOH`). Below the gate the real editor still shows the whole file,
+  extended header included.
+- **The gate applies to DATA files only.** A giant `.txt`/log still loads fully
+  into an editor buffer, exactly as before this work; gating TEXT files through
+  the same virtual view is future work.
+- **UTF-16 data files** are detected and reported but not virtually viewable
+  (the byte scanner is ASCII-compatible-charset only); below the gate they open
+  in the editor as always.

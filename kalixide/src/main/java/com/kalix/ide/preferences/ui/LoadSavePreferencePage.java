@@ -3,7 +3,10 @@ package com.kalix.ide.preferences.ui;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.JCheckBox;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JSpinner;
+import javax.swing.SpinnerNumberModel;
 import java.awt.BorderLayout;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
@@ -19,6 +22,7 @@ public class LoadSavePreferencePage extends AbstractPreferencePage {
 
     private JCheckBox autoReloadCheckBox;
     private JCheckBox promptSaveOnExitCheckBox;
+    private JSpinner largeFileGateSpinner;
 
     /**
      * @param onAutoReloadChanged notified with the new value after the auto-reload
@@ -72,6 +76,24 @@ public class LoadSavePreferencePage extends AbstractPreferencePage {
             PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT.set(enabled);
         });
         formPanel.add(promptSaveOnExitCheckBox, gbc);
+
+        // Large data file gate: above this size, data files open as read-only
+        // virtual views instead of an editable text buffer.
+        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1;
+        gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
+        JLabel gateLabel = new JLabel("Open data files read-only above (MB):");
+        gateLabel.setToolTipText("Data files (.csv) larger than this open as fast read-only views "
+            + "(raw text + table) instead of an editable text buffer. Editing very large files in "
+            + "a text buffer costs several times the file size in memory and makes typing sluggish.");
+        formPanel.add(gateLabel, gbc);
+
+        gbc.gridx = 1; gbc.gridy = 2;
+        largeFileGateSpinner = new JSpinner(new SpinnerNumberModel(
+            (int) PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.get(), 1, 4000, 10));
+        largeFileGateSpinner.setToolTipText(gateLabel.getToolTipText());
+        largeFileGateSpinner.addChangeListener(e ->
+            PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.set((Integer) largeFileGateSpinner.getValue()));
+        formPanel.add(largeFileGateSpinner, gbc);
 
         add(formPanel, BorderLayout.NORTH);
     }

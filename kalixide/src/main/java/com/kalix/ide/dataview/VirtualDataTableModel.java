@@ -26,7 +26,7 @@ public final class VirtualDataTableModel extends AbstractTableModel {
 
     public VirtualDataTableModel(DataViewSession session) {
         this.session = session;
-        this.headerOffset = session.dialect().hasHeaderRow() ? 1 : 0;
+        this.headerOffset = session.headerRowInData() ? 1 : 0;
         this.knownRowCount = viewRowCount();
         this.knownColumnCount = session.columnCount();
         session.addListener(new DataViewSession.Listener() {
@@ -77,7 +77,7 @@ public final class VirtualDataTableModel extends AbstractTableModel {
 
     @Override
     public String getColumnName(int column) {
-        String[] header = session.headerRow();
+        String[] header = session.columnNames();
         if (header != null && column < header.length && !header[column].isBlank()) {
             return header[column];
         }

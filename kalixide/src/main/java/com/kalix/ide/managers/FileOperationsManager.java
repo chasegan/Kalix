@@ -3,6 +3,7 @@ package com.kalix.ide.managers;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.document.DocumentKind;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -122,19 +123,27 @@ public class FileOperationsManager {
             return;
         }
 
-        final String content;
-        try {
-            content = Files.readString(file.toPath());
-        } catch (IOException e) {
-            showFileOpenError(file, e);
-            return;
-        }
+        // A large data file never enters an editor buffer — the tab's virtual views
+        // read it directly (docs/data-file-viewer.md). Everything else loads as text.
+        KalixDocument document;
+        if (DocumentKind.forFile(file) == DocumentKind.DATA && KalixDocument.exceedsEditableGate(file)) {
+            document = documentFactory.apply(file); // kind decided by file type
+            document.setFile(file);
+        } else {
+            final String content;
+            try {
+                content = Files.readString(file.toPath());
+            } catch (IOException e) {
+                showFileOpenError(file, e);
+                return;
+            }
 
-        // Create the document only after a successful read, so a failed open leaves no
-        // empty tab behind.
-        KalixDocument document = documentFactory.apply(file); // kind decided by file type
-        document.setText(content);
-        document.setFile(file);
+            // Create the document only after a successful read, so a failed open
+            // leaves no empty tab behind.
+            document = documentFactory.apply(file); // kind decided by file type
+            document.setText(content);
+            document.setFile(file);
+        }
 
         // Add to recent files and remember as last opened for session restoration.
         addRecentFileCallback.accept(file.getAbsolutePath());
@@ -143,9 +152,13 @@ public class FileOperationsManager {
         documentManager.setActiveDocument(document);
         document.parseModelFromText(true);
 
-        String format = getFileFormat(file.getName());
-        statusUpdateCallback.accept(String.format("Opened %s model: %s (%s format)",
-            format, file.getName(), format));
+        if (document.isModel()) {
+            String format = getFileFormat(file.getName());
+            statusUpdateCallback.accept(String.format("Opened %s model: %s (%s format)",
+                format, file.getName(), format));
+        } else {
+            statusUpdateCallback.accept("Opened: " + file.getName());
+        }
     }
 
     /**
@@ -159,6 +172,9 @@ public class FileOperationsManager {
         KalixDocument document = documentManager.findByFile(file);
         if (document == null) {
             return; // no open document backs this file; nothing to reload
+        }
+        if (!document.isEditable()) {
+            return; // read-only data views read the file directly; no buffer to refresh
         }
         try {
             String content = Files.readString(file.toPath());
@@ -181,6 +197,12 @@ public class FileOperationsManager {
 
     private void saveKalixDocument(KalixDocument document) {
         if (document == null) {
+            return;
+        }
+        if (!document.isEditable()) {
+            // A read-only data view has no editor buffer; writing it out would
+            // replace the file with nothing.
+            statusUpdateCallback.accept("Read-only data view — nothing to save");
             return;
         }
         File currentFile = document.getFile();
@@ -229,6 +251,10 @@ public class FileOperationsManager {
         }
         // If null here, then no document is available
         if (document == null) {
+            return;
+        }
+        if (!document.isEditable()) {
+            statusUpdateCallback.accept("Read-only data view — nothing to save");
             return;
         }
         // The dialog handles default-extension appending and overwrite confirmation.

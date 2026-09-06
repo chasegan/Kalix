@@ -473,7 +473,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * @return the newly created, configured, registered document
      */
     private KalixDocument createDocument(File file) {
-        KalixDocument document = new KalixDocument(DocumentKind.forFile(file));
+        KalixDocument document = new KalixDocument(DocumentKind.forFile(file), file);
         configureDocument(document);
         documentManager.addDocument(document);
         return document;

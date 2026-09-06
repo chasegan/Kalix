@@ -112,6 +112,15 @@ public final class PreferenceKeys {
     public static final Pref<Boolean> FILE_PROMPT_SAVE_ON_EXIT =
         Pref.fileBoolean("file.promptSaveOnExit", true);
 
+    /**
+     * Size (MB) above which data files open as read-only virtual views instead of
+     * an editable text buffer. Physics, not taste: an editable document costs ~3×
+     * the file size in heap and a keystroke near the top of a large buffer memmoves
+     * most of it (see docs/data-file-viewer.md).
+     */
+    public static final Pref<Integer> EDITOR_LARGE_FILE_GATE_MB =
+        Pref.fileInt("editor.largeFileGateMb", 50);
+
     /** External editor command template. */
     public static final Pref<String> FILE_EXTERNAL_EDITOR_COMMAND =
         Pref.fileString("file.externalEditorCommand", "code <folder_path> <file_path>");
