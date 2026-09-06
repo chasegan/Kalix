@@ -109,17 +109,15 @@ class VizToolbarBuilder {
 
         // --- Plot-only cluster (hidden in the stats view) ---
         plotOnly(new JToolBar.Separator());
-        JButton palette = createIconButton(FontAwesomeSolid.PALETTE,
-            "Plot Palettes…", PlotPaletteWindow::showWindow);
-        plotOnly(palette);
-        plotOnly(new JToolBar.Separator());
         addPlotTypeDropdown();
-        plotOnly(new JToolBar.Separator());
+        plotOnly((JComponent) Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
         addYSpaceDropdown();
         plotOnly(new JToolBar.Separator());
         addAutoYToggle(initialAutoY);
         addCoordinatesToggle(initialShowCoordinates);
         addLegendToggle(plotPanel.isLegendEnabled());
+        plotOnly(createIconButton(FontAwesomeSolid.PALETTE,
+            "Plot Palettes…", PlotPaletteWindow::showWindow));
 
         controller = new VizToolbarController(
             aggregationPeriodCombo, aggregationMethodCombo, maskCombo,
