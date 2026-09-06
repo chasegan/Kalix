@@ -1,4 +1,4 @@
-package com.kalix.ide.windows;
+package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.style.LineStyle;
 import com.kalix.ide.flowviz.style.PlotPalette;
@@ -57,7 +57,7 @@ import java.util.List;
  * it does not listen back to the manager. Selecting a palette makes it the global
  * active palette; editing a slot commits a new {@link PlotPalette} via
  * {@code updatePalette}. Either way the manager fires its change event, which the
- * open {@code PlotPanel}s observe and repaint — that is the live propagation.
+ * open {@code FlowVizPanel}s observe and repaint — that is the live propagation.
  *
  * <p>One shared instance; {@link #showWindow()} creates it on first use and
  * re-shows it thereafter.</p>

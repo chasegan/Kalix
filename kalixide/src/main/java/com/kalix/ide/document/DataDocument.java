@@ -2,6 +2,7 @@ package com.kalix.ide.document;
 
 import com.kalix.ide.dataview.DataViewOpener;
 import com.kalix.ide.dataview.DataViewPanel;
+import com.kalix.ide.dataview.DataVizView;
 import com.kalix.ide.dataview.DataViewSession;
 import com.kalix.ide.dataview.VirtualTextArea;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -35,6 +36,8 @@ public class DataDocument extends KalixDocument {
      */
     private volatile DataViewSession dataViewSession;
     private final DataViewPanel dataViewPanel;
+    /** The plot-above-table bundle; {@code null} when the data view failed to open. */
+    private final DataVizView dataVizView;
     private final VirtualTextArea largeTextArea;
     private final JScrollPane largeTextScroller;
     /** True above the editable-text gate: virtual read-only views. */
@@ -72,6 +75,7 @@ public class DataDocument extends KalixDocument {
         if (dataViewPanel != null) {
             dataViewPanel.setShowInFileHandler(this::showDataLineInText);
         }
+        this.dataVizView = dataViewPanel != null ? new DataVizView(dataViewPanel, session) : null;
         boolean virtualText = largeReadOnly && session != null;
         this.largeTextArea = virtualText ? new VirtualTextArea(session) : null;
         this.largeTextScroller = virtualText ? new JScrollPane(largeTextArea) : null;
@@ -96,10 +100,13 @@ public class DataDocument extends KalixDocument {
         return file.length() > gateBytes;
     }
 
-    /** A data document's contextual view is its virtual table (null if the open failed). */
+    /**
+     * A data document's contextual view: the collapsed-by-default plot region
+     * above the virtual table (null if the open failed).
+     */
     @Override
     public Component getContextView() {
-        return dataViewPanel;
+        return dataVizView;
     }
 
     @Override
@@ -193,6 +200,9 @@ public class DataDocument extends KalixDocument {
                 if (largeTextArea != null) {
                     largeTextArea.replaceSession(fresh);
                 }
+                if (dataVizView != null) {
+                    dataVizView.onSessionReplaced(fresh); // plotted columns re-extract
+                }
                 if (old != null) {
                     old.close();
                 }
@@ -230,6 +240,9 @@ public class DataDocument extends KalixDocument {
     @Override
     public void dispose() {
         disposed = true; // a rebuild finishing after this closes its fresh session
+        if (dataVizView != null) {
+            dataVizView.dispose(); // in-flight extraction passes abandon their work
+        }
         super.dispose();
         DataViewSession session = dataViewSession;
         if (session != null) {

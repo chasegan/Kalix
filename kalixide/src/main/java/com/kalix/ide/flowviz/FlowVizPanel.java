@@ -16,7 +16,7 @@ import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
-import com.kalix.ide.flowviz.transform.TimeSeriesAggregator;
+import com.kalix.ide.flowviz.transform.AggregationPipeline;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.stats.TimeSeriesMasker;
@@ -69,12 +69,12 @@ import org.slf4j.LoggerFactory;
  *   → TimeSeriesRenderer.render()        [with LOD optimization for large datasets]
  * </pre>
  *
- * @see com.kalix.ide.windows.VisualizationTabManager#updateAllTabs
+ * @see com.kalix.ide.flowviz.VisualizationTabManager#updateAllTabs
  * @see com.kalix.ide.flowviz.rendering.LODManager
  */
-public class PlotPanel extends JPanel {
+public class FlowVizPanel extends JPanel {
 
-    private static final Logger logger = LoggerFactory.getLogger(PlotPanel.class);
+    private static final Logger logger = LoggerFactory.getLogger(FlowVizPanel.class);
 
     // Plot margins
     private static final int MARGIN_LEFT = 80;
@@ -134,7 +134,7 @@ public class PlotPanel extends JPanel {
     private final PlotLegendManager legendManager;
 
     // === UNDO/REDO ===
-    private final PlotStateHistory stateHistory = new PlotStateHistory();
+    private final FlowVizStateHistory stateHistory = new FlowVizStateHistory();
     private boolean restoringState = false;  // Suppresses pushState() during restore
     private Runnable onHistoryChanged;       // Callback for toolbar button enable/disable
     private Runnable onAutoYModeChanged;     // Callback for the toolbar auto-Y toggle
@@ -150,7 +150,7 @@ public class PlotPanel extends JPanel {
     private SeriesSlotManager registeredSlotManager;
     private final javax.swing.Timer viewportCoalesceTimer;  // Coalesces rapid zoom/pan changes
 
-    public PlotPanel() {
+    public FlowVizPanel() {
         // Background is theme-driven; set here and re-resolved in updateUI() on theme switch.
         setBackground(com.kalix.ide.flowviz.rendering.PlotColors.fromUIManager().background);
 
@@ -873,6 +873,11 @@ public class PlotPanel extends JPanel {
         return aggregationMethod;
     }
 
+    /** The transformed dataset the renderer draws — package-private, for tests. */
+    DataSet displayDataSetForTests() {
+        return displayDataSet;
+    }
+
     /**
      * Refreshes the display dataset from the original data.
      *
@@ -886,6 +891,50 @@ public class PlotPanel extends JPanel {
     /** Re-arms auto-fitting for live-updating owners (call when a new run's data begins). */
     public void resetUserViewportTouched() {
         userViewportTouched = false;
+    }
+
+    /**
+     * Centres the viewport on a datapoint — the plot-side "Show in plot",
+     * mirroring how "Show in file" reveals a row. The time axis re-centres on
+     * {@code timeMs} keeping its span; the value axis re-centres on
+     * {@code value} only when it is finite, currently off-screen, and the
+     * scale is linear (log/sqrt spans don't translate symmetrically). Counts
+     * as a user pan: touched flag set, coalesced into undo like a drag.
+     */
+    public void centerViewportOn(long timeMs, double value) {
+        if (currentViewport == null) {
+            return;
+        }
+        if (determineXAxisType() != XAxisType.TIME) {
+            // Exceedance (percentile) and Double-Mass (numeric) domains are not
+            // epoch time: centring a date there would scroll orders of magnitude
+            // past the data and blank the plot. Refuse audibly instead.
+            java.awt.Toolkit.getDefaultToolkit().beep();
+            return;
+        }
+        long span = currentViewport.getTimeRangeMs();
+        long newStart = timeMs - span / 2;
+        double minValue = currentViewport.getMinValue();
+        double maxValue = currentViewport.getMaxValue();
+        if (!Double.isNaN(value) && !Double.isInfinite(value)
+                && yAxisScale == YAxisScale.LINEAR
+                && (value < minValue || value > maxValue)) {
+            double valueSpan = maxValue - minValue;
+            minValue = value - valueSpan / 2;
+            maxValue = value + valueSpan / 2;
+        }
+        currentViewport = new ViewPort(newStart, newStart + span, minValue, maxValue,
+            currentViewport.getPlotX(), currentViewport.getPlotY(),
+            currentViewport.getPlotWidth(), currentViewport.getPlotHeight(),
+            yAxisScale, determineXAxisType());
+        userViewportTouched = true;
+        viewportCoalesceTimer.restart(); // one history entry, like a pan
+        repaint();
+    }
+
+    /** The current viewport — package-private, for tests. */
+    ViewPort viewportForTests() {
+        return currentViewport;
     }
 
     public void refreshData(boolean resetZoom) {
@@ -1053,9 +1102,9 @@ public class PlotPanel extends JPanel {
     /**
      * The current undo-history snapshot, or null if none has been pushed yet. Lets owners
      * (e.g. the toolbar controller after a batched change) resync UI from the same
-     * {@link PlotState} the undo machinery uses, rather than from a parallel reading.
+     * {@link FlowVizState} the undo machinery uses, rather than from a parallel reading.
      */
-    public PlotState currentState() {
+    public FlowVizState currentState() {
         return stateHistory.current();
     }
 
@@ -1113,7 +1162,7 @@ public class PlotPanel extends JPanel {
      */
     public void pushState() {
         if (restoringState || originalDataSet == null) return;
-        PlotState state = PlotState.capture(
+        FlowVizState state = FlowVizState.capture(
             visibleSeries,
             checkedSourcesSupplier != null ? checkedSourcesSupplier.get() : Set.of(),
             aggregationPeriod, aggregationMethod,
@@ -1130,7 +1179,7 @@ public class PlotPanel extends JPanel {
      * the single {@code refreshData(false)} at the end rebuilds against the final
      * settings. Undo on a large dataset used to pay up to five full aggregations.
      */
-    private void restoreState(PlotState state) {
+    private void restoreState(FlowVizState state) {
         restoringState = true;
         viewportCoalesceTimer.stop();
         try {
@@ -1162,13 +1211,13 @@ public class PlotPanel extends JPanel {
      * Undoes the last state change. Returns the restored state, or null if at beginning.
      *
      * <p><b>Callers must route the returned state through
-     * {@code VisualizationTabManager.syncTabSelectionFromPlotState}</b> (as the toolbar's
+     * {@code VisualizationTabManager.syncTabSelectionFromState}</b> (as the toolbar's
      * undo button does): this method restores only the panel; the tab's canonical
      * record and the window trees sync at that call-site seam. A direct caller — a
      * future key binding, say — that skips it silently desyncs the trees.</p>
      */
-    public PlotState undo() {
-        PlotState state = stateHistory.undo();
+    public FlowVizState undo() {
+        FlowVizState state = stateHistory.undo();
         if (state != null) {
             restoreState(state);
             if (onHistoryChanged != null) onHistoryChanged.run();
@@ -1180,8 +1229,8 @@ public class PlotPanel extends JPanel {
      * Redoes the last undone state change. Returns the restored state, or null if at end.
      * Same call-site contract as {@link #undo()}: route the result through the sync seam.
      */
-    public PlotState redo() {
-        PlotState state = stateHistory.redo();
+    public FlowVizState redo() {
+        FlowVizState state = stateHistory.redo();
         if (state != null) {
             restoreState(state);
             if (onHistoryChanged != null) onHistoryChanged.run();
@@ -1193,12 +1242,12 @@ public class PlotPanel extends JPanel {
     public boolean canRedo() { return stateHistory.canRedo(); }
 
     /**
-     * Copies the full state history from another PlotPanel (Chrome-style tab duplication).
+     * Copies the full state history from another FlowVizPanel (Chrome-style tab duplication).
      * Restores the current state including viewport so the new tab looks identical.
      */
-    public void copyHistoryFrom(PlotPanel source) {
+    public void copyHistoryFrom(FlowVizPanel source) {
         stateHistory.copyFrom(source.stateHistory);
-        PlotState current = stateHistory.current();
+        FlowVizState current = stateHistory.current();
         if (current != null) {
             restoreState(current);
         }
@@ -1259,26 +1308,14 @@ public class PlotPanel extends JPanel {
         // Display data is changing - clear LOD rendering cache so renderer doesn't draw stale lines
         renderer.clearCache();
 
-        // Step 1: Build aggregated dataset (only for visible series, not the full pool).
-        // The transient aggregatedDataSet is keyed by SeriesRef directly — the pipeline
-        // never touches string identity.
+        // Step 1: Build aggregated dataset (only for visible series, not the full
+        // pool) through the one shared AggregationPipeline — the same orchestration
+        // that feeds the stats table, so the two projections can never disagree.
+        // The transient aggregatedDataSet is keyed by SeriesRef directly — the
+        // pipeline never touches string identity.
         DataSet aggregatedDataSet = new DataSet();
-
-        for (SeriesRef ref : visibleSeries) {
-            TimeSeriesData originalSeries = originalDataSet.getSeries(ref);
-            if (originalSeries == null) continue;
-
-            // Apply aggregation (returns nameless data; identity is the ref)
-            TimeSeriesData aggregatedSeries = TimeSeriesAggregator.aggregate(
-                originalSeries,
-                aggregationPeriod,
-                aggregationMethod
-            );
-
-            if (aggregatedSeries != null) {
-                aggregatedDataSet.addSeries(ref, aggregatedSeries);
-            }
-        }
+        AggregationPipeline.aggregate(originalDataSet, visibleSeries,
+            aggregationPeriod, aggregationMethod).forEach(aggregatedDataSet::addSeries);
 
         // Step 2: Apply masking (if enabled)
         if (maskMode == MaskMode.ALL && aggregatedDataSet.getSeriesRefs().size() > 1) {
@@ -1292,6 +1329,21 @@ public class PlotPanel extends JPanel {
             for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
                 TimeSeriesData masked = mask.apply(aggregatedDataSet.getSeries(ref));
                 maskedDataSet.addSeries(ref, masked);
+            }
+            aggregatedDataSet = maskedDataSet;
+        } else if (maskMode == MaskMode.EACH && aggregatedDataSet.getSeriesRefs().size() > 1) {
+            // EACH on the plot: each non-reference series filtered to its pairwise
+            // overlap with the reference — exactly the data its bivariate statistic
+            // uses — while the reference draws on its own valid points. Makes the
+            // shared mask setting mean the same thing in both views.
+            java.util.List<SeriesRef> refs = new java.util.ArrayList<>(aggregatedDataSet.getSeriesRefs());
+            TimeSeriesData reference = aggregatedDataSet.getSeries(refs.get(0));
+            DataSet maskedDataSet = new DataSet();
+            maskedDataSet.addSeries(refs.get(0), reference);
+            for (int i = 1; i < refs.size(); i++) {
+                TimeSeriesData series = aggregatedDataSet.getSeries(refs.get(i));
+                TimeSeriesMasker.Mask mask = TimeSeriesMasker.createEachMask(reference, series);
+                maskedDataSet.addSeries(refs.get(i), mask.apply(series));
             }
             aggregatedDataSet = maskedDataSet;
         }

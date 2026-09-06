@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins {@link PlotPanel#batchStateChange}: several setters inside one batch produce
+ * Pins {@link FlowVizPanel#batchStateChange}: several setters inside one batch produce
  * exactly one undo entry, and undo restores the pre-batch state — the contract tab
  * construction and in-place Reset rely on.
  */
@@ -21,7 +21,7 @@ class PlotPanelBatchStateTest {
 
     @Test
     void batchedSettersPushExactlyOneUndoEntry() {
-        PlotPanel panel = new PlotPanel();
+        FlowVizPanel panel = new FlowVizPanel();
         panel.setDataSet(new DataSet());
         panel.pushState(); // baseline entry
         assertFalse(panel.canUndo(), "baseline alone: nothing to undo");

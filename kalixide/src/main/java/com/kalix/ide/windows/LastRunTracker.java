@@ -1,6 +1,7 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.data.LastSeries;
 import com.kalix.ide.flowviz.data.LastSource;
 import com.kalix.ide.flowviz.data.SeriesRef;

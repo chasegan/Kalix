@@ -31,9 +31,9 @@ After construction, refs flow through these collections:
 |---|---|---|
 | `plotDataSet` (the shared pool) | `Map<SeriesRef, TimeSeriesData>` (via `DataSet.seriesByRef`) — `LastSeries` keys are redirected to `RunSeries` by the pool's `LastSeriesResolver`, so storage only ever holds `RunSeries` / `DatasetSeries` keys | `RunManager` |
 | `tab.selectedSeries` (per tab) | `Set<SeriesRef>` | `VisualizationTabManager.TabInfo` |
-| `sharedColorMap` | `Map<SeriesRef, Color>` | `SeriesColorManager` (reference shared with `VisualizationTabManager`, `PlotPanel`, `TimeSeriesRenderer`, `CoordinateDisplayManager`) |
-| `PlotPanel.visibleSeries` | `List<SeriesRef>` | `PlotPanel` (reference shared with `TimeSeriesRenderer`, `CoordinateDisplayManager`, `PlotInteractionManager` via supplier) |
-| `PlotState.visibleSeries` | `List<SeriesRef>` | `PlotStateHistory` (undo/redo) |
+| `sharedColorMap` | `Map<SeriesRef, Color>` | `SeriesColorManager` (reference shared with `VisualizationTabManager`, `FlowVizPanel`, `TimeSeriesRenderer`, `CoordinateDisplayManager`) |
+| `FlowVizPanel.visibleSeries` | `List<SeriesRef>` | `FlowVizPanel` (reference shared with `TimeSeriesRenderer`, `CoordinateDisplayManager`, `PlotInteractionManager` via supplier) |
+| `FlowVizState.visibleSeries` | `List<SeriesRef>` | `FlowVizStateHistory` (undo/redo) |
 | `StatsTableModel.seriesData` (`SeriesStats.ref`) | row identity by ref | `StatsTableModel` |
 | `StatsTableModel.originalSeriesCache` | `Map<SeriesRef, TimeSeriesData>` | `StatsTableModel` |
 | `TimeSeriesRenderer.seriesRenderModes` | `Map<SeriesRef, SeriesRenderMode>` | `TimeSeriesRenderer` |
@@ -45,14 +45,14 @@ After construction, refs flow through these collections:
 
 A single resolver, constructed in `RunManager` (`new DefaultLabelResolver(this::runNameForId)`), is wired down to:
 
-- `VisualizationTabManager.setLabelResolver` (called once during RunManager init)
-- → each `PlotPanel.setLabelResolver`, which forwards to `PlotLegendManager.setLabelResolver` (the legend is the only label-rendering surface on a PlotPanel)
+- `VisualizationTabManager.setHost` — RunManager installs a `VizHost` during init; the manager reads `host.labelResolver()` and applies it at tab creation
+- → each `FlowVizPanel.setLabelResolver`, which forwards to `PlotLegendManager.setLabelResolver` (the legend is the only label-rendering surface on a FlowVizPanel)
 - → each `StatsTableModel.setLabelResolver`
 - `PlotInteractionManager` gets the resolver via a supplier (`setLabelResolverSupplier`) — used by the CSV-export path to produce column headers.
 
 `CoordinateDisplayManager` does **not** receive a resolver: the hover overlay renders time/value only, no series label. (Earlier revisions carried a dead `labelResolver` field there; it has been removed.)
 
-`OptimisationPlotManager` and `FlowVizWindow` construct their `PlotPanel`s outside the `RunManager` → `VisualizationTabManager` wiring, so each installs its own small lambda resolver directly (both project `DatasetSeries` → `baseName`, since their synthetic/file series carry the display name in the baseName already).
+`OptimisationPlotManager` and `FlowVizWindow` construct their `FlowVizPanel`s outside the `RunManager` → `VisualizationTabManager` wiring, so each installs its own small lambda resolver directly (both project `DatasetSeries` → `baseName`, since their synthetic/file series carry the display name in the baseName already). `DataVizView` (the data viewer's plot mount) hosts its own `VisualizationTabManager` and supplies `new DefaultLabelResolver(id -> null)` through its `VizHost` — dataset refs need no run lookup.
 
 All UI surfaces that need a string call `labelResolver.labelFor(ref)` at render time. Run name lookup is `O(runs)` linear over `sessionToTreeNode.values()`; the run count is small.
 
@@ -109,7 +109,7 @@ There is no longer any legacy string-keyed code path — the file-import bridge 
 
 ## Known foot-guns for the auditor
 
-- `LabelResolver` wiring is set-up-time only — plumbed from RunManager → VisualizationTabManager → PlotPanel/StatsTableModel during init. `OptimisationPlotManager` and `FlowVizWindow` build their own `PlotPanel`s outside that path and install their own lambda resolvers. If some *other* code path constructs a `PlotPanel`/`StatsTableModel` and installs no resolver, the legend / stats column 0 falls through to `String.valueOf(ref)` and shows `"RunSeries[runId=…, baseName=…]"`. That's a wiring bug, not a label bug.
+- `LabelResolver` wiring is set-up-time only — plumbed from the owner's `VizHost` (installed via `VisualizationTabManager.setHost`) → FlowVizPanel/StatsTableModel at tab creation. `OptimisationPlotManager` and `FlowVizWindow` build their own `FlowVizPanel`s outside that path and install their own lambda resolvers. If some *other* code path constructs a `FlowVizPanel`/`StatsTableModel` and installs no resolver, the legend / stats column 0 falls through to `String.valueOf(ref)` and shows `"RunSeries[runId=…, baseName=…]"`. That's a wiring bug, not a label bug.
 - The `LODManager` cache key uses `ref.toString()`. Record `toString()` is stable and value-equal so this is fine, but anyone introducing a new `SeriesRef` variant must ensure the toString format is unambiguous.
 - `OptimisationPlotManager` uses `"(optimisation)"` as a sentinel datasetId. Treat as a known intentional fiction.
 - `FlowVizDataManager.uniqueRefFor` appends `" (2)"`, `" (3)"`… to the baseName when a `DatasetSeries` ref is already in the pool (same file loaded twice, or colliding display labels). The disambiguation lives in the baseName, so the ref stays unique.
@@ -122,11 +122,11 @@ There is no longer any legacy string-keyed code path — the file-import bridge 
 | Data | `flowviz/data/DataSet.java` (ref-keyed), `TimeSeriesData.java` (nameless) |
 | Identity | `models/RunInfoImpl.java` (runId, withName) |
 | Producer | `windows/RunManager.java` (onOutputsTreeSelectionChanged, seriesRefForLeaf, refreshLastSeries, renameRun) |
-| Tabs | `windows/VisualizationTabManager.java` (TabInfo, tab.selectedSeries, sharedColorMap wiring) |
-| Plot pipeline | `flowviz/PlotPanel.java`, `flowviz/rendering/TimeSeriesRenderer.java`, `LODManager.java` |
+| Tabs | `flowviz/VisualizationTabManager.java` (TabInfo, tab.selectedSeries, sharedColorMap wiring) |
+| Plot pipeline | `flowviz/FlowVizPanel.java`, `flowviz/rendering/TimeSeriesRenderer.java`, `LODManager.java` |
 | Legend | `flowviz/PlotLegendManager.java` (renders via LabelResolver) |
 | Stats | `flowviz/models/StatsTableModel.java` (ref-keyed; column 0 via LabelResolver) |
-| Undo | `flowviz/PlotState.java` (List<SeriesRef>) |
+| Undo | `flowviz/FlowVizState.java` (List<SeriesRef>) |
 | Color | `managers/SeriesColorManager.java` (Map<SeriesRef, Color>) |
 | Transforms | `flowviz/transform/TimeSeriesAggregator.java`, `PlotTypeTransformer.java`, `flowviz/stats/TimeSeriesMasker.java` (all return nameless data) |
 | Ref minting | `managers/OutputsTreeBuilder.java` (`SeriesLeafNode.ref`); `FlowVizDataManager.uniqueRefFor` |

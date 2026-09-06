@@ -1,5 +1,7 @@
 package com.kalix.ide.dataview;
 
+import com.kalix.ide.io.CsvDates;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -206,6 +208,16 @@ public final class DataViewSession implements AutoCloseable {
         return dialect;
     }
 
+    /** The backing file — package-private, for the column extractor. */
+    Path filePath() {
+        return file;
+    }
+
+    /** Byte offset where tabular data begins (past any BOM or extended header) — package-private. */
+    long dataStartOffset() {
+        return indexStartOffset;
+    }
+
     /** Raw row count indexed so far — includes the header row when present. */
     public long rowCount() {
         return rowIndex.itemCount();
@@ -397,6 +409,80 @@ public final class DataViewSession implements AutoCloseable {
 
     private boolean rowMatches(ByteArrayOutputStream rowBytes, String needleLower) {
         return rowBytes.toString(dialect.charset()).toLowerCase(Locale.ROOT).contains(needleLower);
+    }
+
+    /**
+     * The first data row whose first-column date parses to a timestamp at or
+     * after {@code targetMillis} (hydrologic files are chronological), or -1
+     * when none does or the first column is not dates ({@link CsvDates} is the
+     * authority, as everywhere). Same streamed-scan shape as
+     * {@link #findNextRow}: one sequential pass on its own channel, the block
+     * caches untouched. Blocking I/O — background threads only.
+     */
+    public long findDateRow(long targetMillis) throws IOException {
+        if (rowIndex.itemCount() == 0) {
+            return -1;
+        }
+        long headerRows = dialect.hasHeaderRow() ? 1 : 0;
+        try (SeekableByteChannel probe = Files.newByteChannel(file, StandardOpenOption.READ)) {
+            probe.position(indexStartOffset);
+            ByteBuffer buffer = ByteBuffer.allocate(256 * 1024);
+            ByteArrayOutputStream firstField = new ByteArrayOutputStream(64);
+            byte quote = (byte) dialect.quote();
+            byte delimiter = (byte) dialect.delimiter();
+            boolean inQuotes = false;
+            boolean fieldDone = false;
+            long row = 0;
+            CsvDates.Spec spec = null;
+            while (true) {
+                buffer.clear();
+                int n = probe.read(buffer);
+                if (n < 0) {
+                    break;
+                }
+                buffer.flip();
+                for (int i = 0; i < n; i++) {
+                    byte b = buffer.get(i);
+                    if (b == quote) {
+                        inQuotes = !inQuotes;
+                    } else if (b == '\n' && !inQuotes) {
+                        String text = firstField.toString(dialect.charset()).trim();
+                        if (row >= headerRows && !text.isEmpty()) {
+                            if (spec == null) {
+                                spec = CsvDates.detect(text);
+                            }
+                            if (spec != null) {
+                                long ts = CsvDates.parseMillis(text, spec);
+                                if (ts != CsvDates.INVALID_TS && ts >= targetMillis) {
+                                    return row;
+                                }
+                            }
+                        }
+                        firstField.reset();
+                        fieldDone = false;
+                        row++;
+                    } else if (b == delimiter && !inQuotes) {
+                        fieldDone = true;
+                    } else if (!fieldDone && b != '\r' && firstField.size() < 4096) {
+                        firstField.write(b);
+                    }
+                }
+            }
+            // Final row without a trailing newline.
+            String text = firstField.toString(dialect.charset()).trim();
+            if (row >= headerRows && !text.isEmpty()) {
+                if (spec == null) {
+                    spec = CsvDates.detect(text);
+                }
+                if (spec != null) {
+                    long ts = CsvDates.parseMillis(text, spec);
+                    if (ts != CsvDates.INVALID_TS && ts >= targetMillis) {
+                        return row;
+                    }
+                }
+            }
+        }
+        return -1;
     }
 
     public String[] rowIfLoaded(long fileRow) {

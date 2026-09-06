@@ -1,6 +1,8 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.flowviz.VisualizationTabManager;
+import com.kalix.ide.flowviz.VizHost;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DatasetSource;
 import com.kalix.ide.flowviz.data.LabelResolver;
@@ -400,19 +402,26 @@ public class RunManager extends JFrame {
         tabManager = new VisualizationTabManager(plotDataSet,
             new PaletteSeriesStyleResolver(seriesSlotManager, PlotPaletteManager.getInstance()));
 
-        // Wire the label resolver so legends, stats column 0, etc. project SeriesRef
-        // → user-visible label at render time. Must happen *before* the default plot
-        // tab is added so the new PlotPanel picks it up.
-        tabManager.setLabelResolver(labelResolver);
+        // Install this window as the manager's host: label projection for legends
+        // and stats rows, the model directory as the "Save Data" dialog seed, and
+        // tree re-sync when the active tab (or its record) changes. Must happen
+        // *before* the default plot tab is added so the first panel picks it up.
+        tabManager.setHost(new VizHost() {
+            @Override
+            public com.kalix.ide.flowviz.data.LabelResolver labelResolver() {
+                return labelResolver;
+            }
 
-        // Seed each plot tab's "Save Data" dialog with the model directory so it opens
-        // in the same folder as the run tree's "Save results (csv)". Must happen *before*
-        // the default plot tab is added so the first PlotPanel picks it up.
-        tabManager.setBaseDirectorySupplier(
-            () -> baseDirectorySupplier != null ? baseDirectorySupplier.get() : null);
+            @Override
+            public java.io.File baseDirectory() {
+                return baseDirectorySupplier != null ? baseDirectorySupplier.get() : null;
+            }
 
-        // Sync tree selection when user switches tabs
-        tabManager.setOnTabChangedCallback(this::onTabChanged);
+            @Override
+            public void onActiveTabChanged() {
+                onTabChanged();
+            }
+        });
 
         // Add the default tab: one plot tab with "Last run" checked and nothing else.
         // The same factory repopulates the strip when the final tab is closed, so a

@@ -1,6 +1,6 @@
 package com.kalix.ide.managers.optimisation;
 
-import com.kalix.ide.flowviz.PlotPanel;
+import com.kalix.ide.flowviz.FlowVizPanel;
 import com.kalix.ide.flowviz.style.MapStyleResolver;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
@@ -43,7 +43,7 @@ public class OptimisationPlotManager {
     private static final SeriesRef REF_BEST_OBJECTIVE = new DatasetSeries("(optimisation)", "Best Objective");
     private static final SeriesRef REF_POPULATION = new DatasetSeries("(optimisation)", "Population");
 
-    private final PlotPanel convergencePlot;
+    private final FlowVizPanel convergencePlot;
     private final DataSet convergenceDataSet;
 
     // Reference time for COUNT axis conversion
@@ -57,7 +57,7 @@ public class OptimisationPlotManager {
         this.convergenceDataSet = new DataSet();
 
         // Initialize plot panel
-        this.convergencePlot = new PlotPanel();
+        this.convergencePlot = new FlowVizPanel();
         // Synthetic refs carry the human-readable base name directly; no run-name
         // projection is needed.
         this.convergencePlot.setLabelResolver(ref -> ref instanceof DatasetSeries d
@@ -76,7 +76,7 @@ public class OptimisationPlotManager {
      *
      * @return The plot panel
      */
-    public PlotPanel getPlotPanel() {
+    public FlowVizPanel getPlotPanel() {
         return convergencePlot;
     }
 

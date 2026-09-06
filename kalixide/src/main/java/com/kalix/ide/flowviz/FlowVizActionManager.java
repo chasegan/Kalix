@@ -22,7 +22,7 @@ import java.util.function.Consumer;
  */
 public class FlowVizActionManager {
 
-    private final PlotPanel plotPanel;
+    private final FlowVizPanel vizPanel;
     private final DataPanel dataPanel;
     private final JSplitPane splitPane;
     private final FlowVizMenuManager menuManager;
@@ -40,7 +40,7 @@ public class FlowVizActionManager {
     /**
      * Creates a new FlowVizActionManager.
      *
-     * @param plotPanel The plot panel for zoom and display operations
+     * @param vizPanel The plot panel for zoom and display operations
      * @param dataPanel The data panel for series management
      * @param splitPane The split pane for layout management
      * @param menuManager The menu manager for state synchronization
@@ -48,10 +48,10 @@ public class FlowVizActionManager {
      * @param titleUpdater Callback to update window title
      * @param currentFileUpdater Callback to update current file reference
      */
-    public FlowVizActionManager(PlotPanel plotPanel, DataPanel dataPanel, JSplitPane splitPane,
+    public FlowVizActionManager(FlowVizPanel vizPanel, DataPanel dataPanel, JSplitPane splitPane,
                                FlowVizMenuManager menuManager, FlowVizDataManager dataManager,
                                Runnable titleUpdater, Consumer<File> currentFileUpdater) {
-        this.plotPanel = plotPanel;
+        this.vizPanel = vizPanel;
         this.dataPanel = dataPanel;
         this.splitPane = splitPane;
         this.menuManager = menuManager;
@@ -112,21 +112,21 @@ public class FlowVizActionManager {
      * Zooms into the plot.
      */
     public void zoomIn() {
-        plotPanel.zoomIn();
+        vizPanel.zoomIn();
     }
 
     /**
      * Zooms out from the plot.
      */
     public void zoomOut() {
-        plotPanel.zoomOut();
+        vizPanel.zoomOut();
     }
 
     /**
      * Zooms to fit all data in the view.
      */
     public void zoomToFit() {
-        plotPanel.zoomToFit();
+        vizPanel.zoomToFit();
     }
 
     /**
@@ -134,7 +134,7 @@ public class FlowVizActionManager {
      */
     public void toggleAutoYMode() {
         autoYMode = !autoYMode;
-        plotPanel.setAutoYMode(autoYMode);
+        vizPanel.setAutoYMode(autoYMode);
 
         // Save preference
         PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(autoYMode);
@@ -146,9 +146,9 @@ public class FlowVizActionManager {
      * Toggles coordinate display on the plot.
      */
     public void toggleCoordinateDisplay() {
-        boolean currentState = plotPanel.isShowCoordinates();
+        boolean currentState = vizPanel.isShowCoordinates();
         boolean newState = !currentState;
-        plotPanel.setShowCoordinates(newState);
+        vizPanel.setShowCoordinates(newState);
 
         // Save preference
         PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.set(newState);
@@ -171,7 +171,7 @@ public class FlowVizActionManager {
      * Resets the view to default zoom and pan settings.
      */
     public void resetView() {
-        plotPanel.resetView();
+        vizPanel.resetView();
     }
 
     /**
@@ -192,7 +192,7 @@ public class FlowVizActionManager {
      * Shows the About dialog with application information.
      */
     public void showAbout() {
-        JOptionPane.showMessageDialog(plotPanel.getParent(),
+        JOptionPane.showMessageDialog(vizPanel.getParent(),
             """
             FlowViz - Time Series Visualization Tool
             Version 1.0
@@ -207,7 +207,7 @@ public class FlowVizActionManager {
      * Shows keyboard shortcuts help dialog.
      */
     public void showShortcuts() {
-        JOptionPane.showMessageDialog(plotPanel.getParent(),
+        JOptionPane.showMessageDialog(vizPanel.getParent(),
             """
             FlowViz Keyboard & Mouse Shortcuts:
 
@@ -241,7 +241,7 @@ public class FlowVizActionManager {
 
         // Load auto-Y mode preference (default: true)
         autoYMode = PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get();
-        plotPanel.setAutoYMode(autoYMode);
+        vizPanel.setAutoYMode(autoYMode);
     }
 
     /**

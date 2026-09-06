@@ -1,6 +1,5 @@
-package com.kalix.ide.windows;
+package com.kalix.ide.flowviz;
 
-import com.kalix.ide.flowviz.PlotState;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DatasetSource;
@@ -53,7 +52,7 @@ class VisualizationTabManagerResetTest {
         mgr.setTargetTabCheckedSources(Set.of(SRC));
 
         AtomicInteger notifications = new AtomicInteger();
-        mgr.setOnTabChangedCallback(notifications::incrementAndGet);
+        mgr.setHost(countingHost(notifications));
 
         mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex());
 
@@ -72,7 +71,7 @@ class VisualizationTabManagerResetTest {
         mgr.getTabbedPane().setSelectedIndex(0);              // tab 0 active
 
         AtomicInteger notifications = new AtomicInteger();
-        mgr.setOnTabChangedCallback(notifications::incrementAndGet);
+        mgr.setHost(countingHost(notifications));
 
         mgr.resetTabAt(1);                                    // background reset
 
@@ -94,10 +93,10 @@ class VisualizationTabManagerResetTest {
         mgr.setTargetTabSelectedSeries(Set.of(REF)); // pushes an undoable selection state
 
         AtomicInteger notifications = new AtomicInteger();
-        mgr.setOnTabChangedCallback(notifications::incrementAndGet);
+        mgr.setHost(countingHost(notifications));
 
-        PlotState undone = mgr.getTargetPlotPanel().undo();
-        mgr.syncTabSelectionFromPlotState(mgr.getTargetPlotPanel(), undone);
+        FlowVizState undone = mgr.getTargetVizPanel().undo();
+        mgr.syncTabSelectionFromState(mgr.getTargetVizPanel(), undone);
 
         assertEquals(1, notifications.get(), "undo sync must reproject the trees once");
         assertEquals(undone.getVisibleSeries(), new ArrayList<>(mgr.getTargetTabSelectedSeries()),
@@ -111,7 +110,7 @@ class VisualizationTabManagerResetTest {
         settings.checkedSources = new LinkedHashSet<>(Set.of(SRC));
         mgr.addPlotTabFromSettings(settings);
 
-        assertEquals(Set.of(SRC), mgr.getTargetPlotPanel().currentState().getCheckedSources(),
+        assertEquals(Set.of(SRC), mgr.getTargetVizPanel().currentState().getCheckedSources(),
             "history entry #1 must carry the sources the tab was born with");
     }
 
@@ -124,15 +123,15 @@ class VisualizationTabManagerResetTest {
 
         mgr.setTargetTabCheckedSources(Set.of());       // source-only change...
         mgr.pushTargetTabHistory();                      // ...is its own undo entry
-        assertTrue(mgr.getTargetPlotPanel().canUndo(), "source-only change pushed an entry");
+        assertTrue(mgr.getTargetVizPanel().canUndo(), "source-only change pushed an entry");
 
         mgr.pushTargetTabHistory();                      // unchanged state dedupes
-        PlotState undone = mgr.getTargetPlotPanel().undo();
-        mgr.syncTabSelectionFromPlotState(mgr.getTargetPlotPanel(), undone);
+        FlowVizState undone = mgr.getTargetVizPanel().undo();
+        mgr.syncTabSelectionFromState(mgr.getTargetVizPanel(), undone);
 
         assertEquals(Set.of(SRC), mgr.getTargetTabCheckedSources(),
             "undo restores the source context into the canonical record");
-        assertFalse(mgr.getTargetPlotPanel().canUndo(),
+        assertFalse(mgr.getTargetVizPanel().canUndo(),
             "the duplicate push deduped: exactly one source-change entry existed");
     }
 
@@ -145,13 +144,13 @@ class VisualizationTabManagerResetTest {
         mgr.setTargetTabSelectedSeries(Set.of(REF));    // entry 2: +series
 
         AtomicInteger notifications = new AtomicInteger();
-        mgr.setOnTabChangedCallback(notifications::incrementAndGet);
+        mgr.setHost(countingHost(notifications));
 
         mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex()); // entry 3: empty
         assertEquals(1, notifications.get());
 
-        PlotState undone = mgr.getTargetPlotPanel().undo();
-        mgr.syncTabSelectionFromPlotState(mgr.getTargetPlotPanel(), undone);
+        FlowVizState undone = mgr.getTargetVizPanel().undo();
+        mgr.syncTabSelectionFromState(mgr.getTargetVizPanel(), undone);
 
         assertEquals(2, notifications.get(), "undo-of-reset reprojects the trees");
         assertEquals(Set.of(REF), mgr.getTargetTabSelectedSeries(),
@@ -169,7 +168,7 @@ class VisualizationTabManagerResetTest {
         mgr.addStatsTabFromSettings(settings);          // stats tab, selected
 
         AtomicInteger notifications = new AtomicInteger();
-        mgr.setOnTabChangedCallback(notifications::incrementAndGet);
+        mgr.setHost(countingHost(notifications));
 
         mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex());
 
@@ -193,7 +192,17 @@ class VisualizationTabManagerResetTest {
         mgr.addPlotTabFromSettings(settings);
 
         assertEquals(ordered,
-            new ArrayList<>(mgr.getTargetPlotPanel().currentState().getCheckedSources()),
+            new ArrayList<>(mgr.getTargetVizPanel().currentState().getCheckedSources()),
             "source order is load-bearing (outputs-tree section order) and must survive the snapshot");
+    }
+
+    /** A host that only counts active-tab-change notifications. */
+    private static VizHost countingHost(java.util.concurrent.atomic.AtomicInteger counter) {
+        return new VizHost() {
+            @Override
+            public void onActiveTabChanged() {
+                counter.incrementAndGet();
+            }
+        };
     }
 }

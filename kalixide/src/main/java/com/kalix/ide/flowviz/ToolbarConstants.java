@@ -1,12 +1,11 @@
-package com.kalix.ide.windows;
+package com.kalix.ide.flowviz;
 
 import java.awt.Dimension;
 
 /**
- * Sizing and shared option lists for the plot and stats toolbars ({@link PlotToolbarBuilder},
- * {@link StatsToolbarBuilder}), pulled into one place so the two builders draw from a single
- * definition instead of one owning the constants and the other reaching across as
- * {@code PlotToolbarBuilder.FIELD}. Same pattern as {@link com.kalix.ide.constants.UIConstants}.
+ * Sizing and shared option lists for the unified viz toolbar
+ * ({@link FlowVizToolbarBuilder}), kept in one place. Same pattern as
+ * {@link com.kalix.ide.constants.UIConstants}.
  */
 public final class ToolbarConstants {
 
@@ -18,12 +17,14 @@ public final class ToolbarConstants {
     public static final int BUTTON_ICON_SIZE = 14;
     static final Dimension WIDE_DROPDOWN_SIZE = new Dimension(150, 25);
     static final Dimension NARROW_DROPDOWN_SIZE = new Dimension(80, 25);
+    /** Fits "Mask None"/"Mask Each" — the label-free mask combo carries its own noun. */
+    static final Dimension MASK_DROPDOWN_SIZE = new Dimension(105, 25);
     public static final int HORIZONTAL_SPACING = 5;
     static final Dimension BUTTON_SIZE = new Dimension(28, 28);
 
     /** Aggregation period options for time series data. */
     static final String[] AGGREGATION_OPTIONS = {
-        "Original",
+        "Native Resolution",
         "Daily",
         "Monthly",
         "Annual (Jan-Dec)",

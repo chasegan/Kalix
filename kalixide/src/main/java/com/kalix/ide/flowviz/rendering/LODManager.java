@@ -28,7 +28,7 @@ import java.util.WeakHashMap;
  * callers that want to drop the memory eagerly.
  *
  * @see TimeSeriesRenderer
- * @see com.kalix.ide.flowviz.PlotPanel#refreshData
+ * @see com.kalix.ide.flowviz.FlowVizPanel#refreshData
  */
 public class LODManager {
 
