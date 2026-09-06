@@ -893,6 +893,43 @@ public class FlowVizPanel extends JPanel {
         userViewportTouched = false;
     }
 
+    /**
+     * Centres the viewport on a datapoint — the plot-side "Show in plot",
+     * mirroring how "Show in file" reveals a row. The time axis re-centres on
+     * {@code timeMs} keeping its span; the value axis re-centres on
+     * {@code value} only when it is finite, currently off-screen, and the
+     * scale is linear (log/sqrt spans don't translate symmetrically). Counts
+     * as a user pan: touched flag set, coalesced into undo like a drag.
+     */
+    public void centerViewportOn(long timeMs, double value) {
+        if (currentViewport == null) {
+            return;
+        }
+        long span = currentViewport.getTimeRangeMs();
+        long newStart = timeMs - span / 2;
+        double minValue = currentViewport.getMinValue();
+        double maxValue = currentViewport.getMaxValue();
+        if (!Double.isNaN(value) && !Double.isInfinite(value)
+                && yAxisScale == YAxisScale.LINEAR
+                && (value < minValue || value > maxValue)) {
+            double valueSpan = maxValue - minValue;
+            minValue = value - valueSpan / 2;
+            maxValue = value + valueSpan / 2;
+        }
+        currentViewport = new ViewPort(newStart, newStart + span, minValue, maxValue,
+            currentViewport.getPlotX(), currentViewport.getPlotY(),
+            currentViewport.getPlotWidth(), currentViewport.getPlotHeight(),
+            yAxisScale, determineXAxisType());
+        userViewportTouched = true;
+        viewportCoalesceTimer.restart(); // one history entry, like a pan
+        repaint();
+    }
+
+    /** The current viewport — package-private, for tests. */
+    ViewPort viewportForTests() {
+        return currentViewport;
+    }
+
     public void refreshData(boolean resetZoom) {
         // Invalidate transform cache to force rebuild with new data
         lastTransformKey = null;

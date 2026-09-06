@@ -130,6 +130,24 @@ class DataVizViewTest {
     }
 
     @Test
+    void showInPlotCentresLikeAUserPan() throws Exception {
+        DataVizView view = openView("date,a\n2020-01-01,1\n2020-06-01,2\n2020-12-31,3\n", () -> 100);
+        try {
+            await(() -> view.dataSetForTests() != null && view.dataSetForTests().hasSeries(ref("a")),
+                "default extraction");
+            SwingUtilities.invokeAndWait(() -> {
+                // Re-arm the flag so the assertion below proves centerViewportOn ran.
+                view.vizManagerForTests().getTargetVizPanel().resetUserViewportTouched();
+                view.showInPlot(2, 1); // file row 2 = 2020-06-01
+            });
+            assertTrue(view.vizManagerForTests().getTargetVizPanel().isUserViewportTouched(),
+                "Show in plot centres like a user pan");
+        } finally {
+            session.close();
+        }
+    }
+
+    @Test
     void dateAxisColumnCannotBeToggled() throws Exception {
         DataVizView view = openView("date,a\n2020-01-01,1\n", () -> 100);
         try {

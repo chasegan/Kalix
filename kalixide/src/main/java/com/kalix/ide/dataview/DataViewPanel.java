@@ -2,6 +2,7 @@ package com.kalix.ide.dataview;
 
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.UIConstants;
+import com.kalix.ide.io.CsvDates;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,6 +22,8 @@ import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -50,7 +53,13 @@ public final class DataViewPanel extends JPanel {
     private final JLabel status = new JLabel();
     private final JPanel statusBar = new JPanel(new BorderLayout());
 
+    // Context-menu handles: the viz mount inserts its items around these.
+    private JPopupMenu tableMenu;
+    private JMenuItem showInFileItem;
+    private JMenuItem copyItem;
+
     private String lastSearch = "";
+    private String lastDateSearch = "";
     /** Receives the data-region physical line for "Show in file" (wired by the host document). */
     private LongConsumer showInFileHandler;
     /** One search / one line-mapping at a time: holding F3 must not stack full-file scans. */
@@ -149,13 +158,18 @@ public final class DataViewPanel extends JPanel {
     /** Context menu + keyboard interactions: Find, Show in File, Copy. */
     private void installInteractions() {
         JPopupMenu menu = new JPopupMenu();
+        this.tableMenu = menu;
         JMenuItem find = new JMenuItem("Find…");
         find.addActionListener(e -> promptFind());
         JMenuItem findNext = new JMenuItem("Find next");
         findNext.addActionListener(e -> findNext());
+        JMenuItem findDate = new JMenuItem("Find date…"); // ellipsis: opens a dialog (§2.4)
+        findDate.addActionListener(e -> promptFindDate());
         JMenuItem showInFile = new JMenuItem("Show in file"); // sentence case per context-menu-style §2.1
+        this.showInFileItem = showInFile;
         showInFile.addActionListener(e -> showSelectedRowInFile());
         JMenuItem copy = new JMenuItem("Copy");
+        this.copyItem = copy;
         copy.addActionListener(e -> {
             // JTable's built-in copy: selected cells as tab-delimited lines.
             Action builtIn = table.getActionMap().get("copy");
@@ -165,6 +179,7 @@ public final class DataViewPanel extends JPanel {
         });
         menu.add(find);
         menu.add(findNext);
+        menu.add(findDate);
         menu.addSeparator();
         menu.add(showInFile);
         menu.addSeparator();
@@ -298,6 +313,120 @@ public final class DataViewPanel extends JPanel {
         }, "kalix-dataview-line-map");
         mapper.setDaemon(true);
         mapper.start();
+    }
+
+    /**
+     * Prompts for a date and jumps to the first row at or after it. The input
+     * is parsed by the same {@link CsvDates} ladder the file's own dates use,
+     * so anything the viewer can read, the user can type.
+     */
+    private void promptFindDate() {
+        String input = (String) JOptionPane.showInputDialog(this, "Go to date (e.g. 2020-06-01):",
+            "Find date", JOptionPane.PLAIN_MESSAGE, null, null, lastDateSearch);
+        if (input == null || input.isBlank()) {
+            return;
+        }
+        lastDateSearch = input;
+        CsvDates.Spec spec = CsvDates.detect(input.trim());
+        if (spec == null) {
+            Toolkit.getDefaultToolkit().beep(); // not a recognisable date
+            return;
+        }
+        long target = CsvDates.parseMillis(input.trim(), spec);
+        if (!searchInFlight.compareAndSet(false, true)) {
+            return; // a scan is already running
+        }
+        DataViewSession targetSession = session;
+        Thread searcher = new Thread(() -> {
+            try {
+                long found = targetSession.findDateRow(target);
+                SwingUtilities.invokeLater(() -> {
+                    if (targetSession != session) {
+                        return; // the session was swapped mid-search
+                    }
+                    if (found < 0) {
+                        Toolkit.getDefaultToolkit().beep();
+                    } else {
+                        scrollToFileRow(found);
+                    }
+                });
+            } catch (IOException e) {
+                logger.warn("Date search failed: {}", e.getMessage());
+            } finally {
+                searchInFlight.set(false);
+            }
+        }, "kalix-dataview-date-search");
+        searcher.setDaemon(true);
+        searcher.start();
+    }
+
+    /** Actions the data-viz mount contributes to the table's context menu. */
+    public interface PlotActions {
+        boolean isColumnPlotted(int modelColumn);
+
+        void togglePlotted(int modelColumn);
+
+        /** Centres the plot on the datapoint at (file row, model column). */
+        void showInPlot(long fileRow, int modelColumn);
+    }
+
+    /**
+     * Installs the viz mount's context-menu items: "Show in plot" beside
+     * "Show in file", and the dynamic Plot ⁄ Unplot toggle for the selected
+     * column. Items that cannot apply to the current selection are hidden,
+     * not greyed (context-menu-style §4); the toggle quotes its target (§5).
+     */
+    public void installPlotActions(PlotActions actions) {
+        JMenuItem showInPlot = new JMenuItem("Show in plot");
+        showInPlot.addActionListener(e -> {
+            int viewRow = table.getSelectedRow();
+            if (viewRow >= 0) {
+                actions.showInPlot(viewRow + (session.headerRowInData() ? 1 : 0), selectedModelColumn());
+            }
+        });
+        tableMenu.insert(showInPlot, tableMenu.getComponentIndex(showInFileItem) + 1);
+
+        JPopupMenu.Separator plotSeparator = new JPopupMenu.Separator();
+        JMenuItem plotToggle = new JMenuItem();
+        plotToggle.addActionListener(e -> {
+            int column = selectedModelColumn();
+            if (column > 0) {
+                actions.togglePlotted(column);
+            }
+        });
+        int copyIndex = tableMenu.getComponentIndex(copyItem);
+        tableMenu.insert(plotToggle, copyIndex);
+        tableMenu.insert(plotSeparator, copyIndex);
+
+        tableMenu.addPopupMenuListener(new PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+                int column = selectedModelColumn();
+                boolean dataColumn = column > 0; // column 0 is the date axis
+                plotSeparator.setVisible(dataColumn);
+                plotToggle.setVisible(dataColumn);
+                if (dataColumn) {
+                    String name = table.getModel().getColumnName(column);
+                    plotToggle.setText(
+                        (actions.isColumnPlotted(column) ? "Unplot \"" : "Plot \"") + name + "\"");
+                }
+                showInPlot.setVisible(table.getSelectedRow() >= 0);
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {
+            }
+
+            @Override
+            public void popupMenuCanceled(PopupMenuEvent e) {
+            }
+        });
+    }
+
+    /** The model index of the selected column, or -1. */
+    private int selectedModelColumn() {
+        int viewColumn = table.getSelectedColumn();
+        return viewColumn >= 0 ? table.convertColumnIndexToModel(viewColumn) : -1;
     }
 
     /** Re-resolves the theme's grid colour after a LaF switch. Null-guarded: runs during JPanel's constructor too. */

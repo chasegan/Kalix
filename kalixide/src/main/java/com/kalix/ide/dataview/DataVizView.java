@@ -13,6 +13,8 @@ import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.flowviz.style.PaletteSeriesStyleResolver;
 import com.kalix.ide.flowviz.style.PlotPaletteManager;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
+import com.kalix.ide.io.CsvDates;
+import com.kalix.ide.io.TimeSeriesCsvImporter;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.slf4j.Logger;
@@ -29,6 +31,7 @@ import javax.swing.table.TableCellRenderer;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Toolkit;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -126,6 +129,24 @@ public final class DataVizView extends JPanel {
         tablePanel.setStatusAccessory(note);
 
         buildViz();
+        tablePanel.installPlotActions(new DataViewPanel.PlotActions() {
+            @Override
+            public boolean isColumnPlotted(int modelColumn) {
+                DataViewSession current = DataVizView.this.session;
+                return current != null
+                    && plottedColumnNames().contains(VirtualDataTableModel.columnName(current, modelColumn));
+            }
+
+            @Override
+            public void togglePlotted(int modelColumn) {
+                toggleColumn(modelColumn);
+            }
+
+            @Override
+            public void showInPlot(long fileRow, int modelColumn) {
+                DataVizView.this.showInPlot(fileRow, modelColumn);
+            }
+        });
         tablePanel.setMinimumSize(new Dimension(0, 0));
         split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, vizManager.getTabbedPane(), tablePanel);
         split.setResizeWeight(0); // the table absorbs window resizes
@@ -298,6 +319,8 @@ public final class DataVizView extends JPanel {
         header.setDefaultRenderer((table, value, isSelected, hasFocus, row, column) -> {
             Component c = base.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             if (c instanceof JLabel label) {
+                // Full column name as the tooltip: wide files clip their headers.
+                label.setToolTipText(label.getText());
                 int modelColumn = table.convertColumnIndexToModel(column);
                 if (modelColumn > 0 && plottedColumnNames().contains(label.getText())) {
                     label.setText(PLOTTED_MARK + label.getText());
@@ -305,7 +328,6 @@ public final class DataVizView extends JPanel {
             }
             return c;
         });
-        header.setToolTipText("Click a column to plot it (or unplot it)");
     }
 
     /**
@@ -336,6 +358,35 @@ public final class DataVizView extends JPanel {
         vizManager.pushTargetTabHistory();
         scheduleExtraction();
         tablePanel.getTable().getTableHeader().repaint();
+    }
+
+    /**
+     * Centres the target tab's plot on the datapoint at (file row, column) —
+     * the plot-side sibling of "Show in file". EDT only; the row is on screen
+     * (the user just right-clicked it), so its block is loaded.
+     */
+    void showInPlot(long fileRow, int modelColumn) {
+        DataViewSession current = session;
+        if (current == null || vizManager == null) {
+            return;
+        }
+        String[] row = current.rowIfLoaded(fileRow);
+        if (row == null || row.length == 0) {
+            Toolkit.getDefaultToolkit().beep();
+            return;
+        }
+        String dateText = row[0].trim();
+        CsvDates.Spec spec = CsvDates.detect(dateText);
+        long timestamp = spec == null ? CsvDates.INVALID_TS : CsvDates.parseMillis(dateText, spec);
+        if (timestamp == CsvDates.INVALID_TS) {
+            Toolkit.getDefaultToolkit().beep(); // this row carries no date to centre on
+            return;
+        }
+        double value = Double.NaN;
+        if (modelColumn > 0 && modelColumn < row.length) {
+            value = TimeSeriesCsvImporter.parseNumericValue(row[modelColumn].trim());
+        }
+        vizManager.getTargetVizPanel().centerViewportOn(timestamp, value);
     }
 
     /** Column names plotted on the target tab (for the header accents). */
