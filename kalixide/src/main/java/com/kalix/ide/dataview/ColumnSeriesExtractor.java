@@ -35,6 +35,14 @@ public final class ColumnSeriesExtractor {
     private static final int DATE_PROBE_ROWS = 20;
     private static final int CHUNK_BYTES = 256 * 1024;
     private static final int INITIAL_CAPACITY = 1024;
+    /**
+     * Bail-out bound per accumulated field. A stray unbalanced quote makes one
+     * "row" span the rest of the file (honest RFC behaviour — the indexer
+     * agrees), and without a cap a wanted field would accumulate gigabytes.
+     * Mirrors {@link RowBlockParser#MAX_BLOCK_BYTES}'s defence; checked per
+     * chunk, so the overshoot is at most {@link #CHUNK_BYTES}.
+     */
+    static final int MAX_FIELD_BYTES = 1_000_000;
 
     /**
      * One extraction's outcome. Either a refusal (with the honest reason — the
@@ -73,8 +81,9 @@ public final class ColumnSeriesExtractor {
      * @param skipHeaderRow   whether the first data-region row is a header
      * @param columnIndices   0-based column indices to extract (column 0 is the
      *                        date axis, always read — do not request it)
-     * @param maxRows         hard safety bound on materialised rows (the caller
-     *                        refuses over-threshold files before ever calling)
+     * @param maxRows         hard bound on materialised rows; exceeding it is a
+     *                        refusal, never a silent truncation (the caller's
+     *                        row-count pre-check can be stale while indexing runs)
      * @param cancelled       polled per data row; a cancelled extraction returns
      *                        {@code null} and its partial work is discarded
      * @return the result, or {@code null} when cancelled
@@ -116,6 +125,15 @@ public final class ColumnSeriesExtractor {
 
             reading:
             while (true) {
+                // Poll per chunk as well as per row: a runaway row (stray quote)
+                // has no row boundaries, and dispose() must still stop the pass.
+                if (cancelled != null && cancelled.getAsBoolean()) {
+                    return null;
+                }
+                if (field.size() > MAX_FIELD_BYTES) {
+                    return Result.refuse(String.format(
+                        "a field exceeds %,d bytes — likely an unbalanced quote", MAX_FIELD_BYTES));
+                }
                 buffer.clear();
                 int n = channel.read(buffer);
                 if (n < 0) {
@@ -166,8 +184,8 @@ public final class ColumnSeriesExtractor {
                         dateText = null;
                         rowHasContent = false;
                         Arrays.fill(staged, Double.NaN);
-                        if (out.size() >= maxRows) {
-                            break reading;
+                        if (out.size() > maxRows) {
+                            break reading; // one row past the cap: evidence for the refusal below
                         }
                     } else if (b == '\r') {
                         continue; // dropped outside quotes (CRLF); preserved inside quotes above
@@ -178,7 +196,7 @@ public final class ColumnSeriesExtractor {
             }
 
             // Final row without a trailing newline.
-            if (rowHasContent && out.size() < maxRows) {
+            if (rowHasContent && out.size() <= maxRows) {
                 dateText = endField(field, fieldIndex, slotByColumn, staged, dialect, dateText);
                 if (!headerPending && !consumeRow(state, dateText, staged, out)) {
                     return Result.refuse("the first column does not parse as dates");
@@ -188,6 +206,12 @@ public final class ColumnSeriesExtractor {
 
         if (state.spec == null && state.probedRows > 0) {
             return Result.refuse("the first column does not parse as dates");
+        }
+        if (out.size() > maxRows) {
+            // The caller's row-count pre-check may have run against a still-growing
+            // index; the file itself is the authority. Refuse rather than publish a
+            // silent truncation that contradicts that pre-check later.
+            return Result.refuse(String.format("more than %,d data rows", maxRows));
         }
         return new Result(null, out.timestamps(), out.columns(), state.badDateRows);
     }
@@ -231,6 +255,10 @@ public final class ColumnSeriesExtractor {
                 state.probedRows++;
                 return state.probedRows <= DATE_PROBE_ROWS;
             }
+            // Probe rows that failed before the format was found were data rows
+            // this pass dropped — count them so the skipped-rows note is honest.
+            state.badDateRows += state.probedRows;
+            state.probedRows = 0;
         }
         long timestamp = CsvDates.parseMillis(date, state.spec);
         if (timestamp == CsvDates.INVALID_TS) {

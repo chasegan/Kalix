@@ -135,12 +135,41 @@ class ColumnSeriesExtractorTest {
     }
 
     @Test
-    void maxRowsBoundsTheMaterialisation() throws IOException {
+    void exceedingMaxRowsRefusesRatherThanTruncating() throws IOException {
         Path file = write("date,v\n2020-01-01,1\n2020-01-02,2\n2020-01-03,3\n");
+        ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
+            file, HEADERED, 0, true, new int[] {1}, 2, null);
+        assertTrue(r.refused(), "a silent truncation would contradict the caller's pre-check");
+        assertTrue(r.refusal().contains("more than 2"));
+    }
+
+    @Test
+    void exactlyMaxRowsIsNotARefusal() throws IOException {
+        Path file = write("date,v\n2020-01-01,1\n2020-01-02,2\n");
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
             file, HEADERED, 0, true, new int[] {1}, 2, null);
         assertFalse(r.refused());
         assertEquals(2, r.timestamps().length);
+    }
+
+    @Test
+    void leadingNonDateRowsAreCountedOnceTheFormatIsFound() throws IOException {
+        Path file = write("date,v\njunk,9\n2020-01-01,1\n");
+        ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
+            file, HEADERED, 0, true, new int[] {1}, Long.MAX_VALUE, null);
+        assertFalse(r.refused());
+        assertEquals(1, r.timestamps().length);
+        assertEquals(1, r.badDateRows(), "the failed probe row was a dropped data row");
+    }
+
+    @Test
+    void runawayQuotedFieldRefusesInsteadOfAccumulating() throws IOException {
+        StringBuilder content = new StringBuilder("date,v\n2020-01-01,\"");
+        content.append("x".repeat(ColumnSeriesExtractor.MAX_FIELD_BYTES + 300_000));
+        ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
+            write(content.toString()), HEADERED, 0, true, new int[] {1}, Long.MAX_VALUE, null);
+        assertTrue(r.refused());
+        assertTrue(r.refusal().contains("quote"));
     }
 
     @Test

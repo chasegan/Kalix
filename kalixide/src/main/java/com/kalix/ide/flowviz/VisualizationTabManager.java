@@ -1262,11 +1262,11 @@ public class VisualizationTabManager {
      * Gets every tab's state-owning panel (all tabs have one).
      */
     public List<FlowVizPanel> getAllVizPanels() {
-        List<FlowVizPanel> plotPanels = new ArrayList<>();
+        List<FlowVizPanel> vizPanels = new ArrayList<>();
         for (TabInfo tab : tabs) {
-            plotPanels.add(tab.vizPanel);
+            vizPanels.add(tab.vizPanel);
         }
-        return plotPanels;
+        return vizPanels;
     }
 
     /**

@@ -8,6 +8,7 @@ import com.kalix.ide.flowviz.data.DefaultLabelResolver;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.flowviz.style.PaletteSeriesStyleResolver;
 import com.kalix.ide.flowviz.style.PlotPaletteManager;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
@@ -20,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JSplitPane;
@@ -56,7 +58,9 @@ import java.util.function.Supplier;
  * to the tab's history like any other selection change. Series are identified
  * as {@link DatasetSeries}(absolute path, column name) — stable across session
  * rebuilds, so plot state survives file refreshes. The first data column is
- * plotted by default so the expanded region is never blank.
+ * plotted by default so the expanded region is never blank. Columns are matched
+ * by display name: a file with two identically-named columns maps both onto the
+ * first — a known v1 limitation.
  *
  * <h2>Materialisation</h2>
  * Plotting needs whole columns in memory (unlike the virtual table), so every
@@ -86,6 +90,8 @@ public final class DataVizView extends JPanel {
     private final JButton toggleButton = new JButton(COLLAPSED_TEXT);
     private final JLabel note = new JLabel(" ");
     private final LongSupplier rowLimit;
+    /** The theme's header renderer we wrapped; refreshed by hand on a LaF switch. */
+    private TableCellRenderer wrappedHeaderBase;
 
     /** Swapped by {@link #onSessionReplaced}; extraction passes snapshot it. */
     private volatile DataViewSession session;
@@ -179,6 +185,19 @@ public final class DataVizView extends JPanel {
     /** Stops future extraction passes; in-flight ones abandon their work. */
     public void dispose() {
         disposed = true;
+    }
+
+    /**
+     * The wrapped header renderer is not a child component, so a LaF/theme
+     * switch never reaches it through the component tree — refresh it by hand
+     * or the table header keeps painting the previous theme's colours.
+     */
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        if (wrappedHeaderBase instanceof JComponent component) {
+            component.updateUI();
+        }
     }
 
     // --- Expand / collapse -------------------------------------------------
@@ -300,6 +319,7 @@ public final class DataVizView extends JPanel {
         // Decorate the theme's own renderer rather than replacing it: plotted
         // columns get an accent mark while the plot region is open.
         TableCellRenderer base = header.getDefaultRenderer();
+        wrappedHeaderBase = base; // see updateUI: refreshed by hand on theme switch
         header.setDefaultRenderer((table, value, isSelected, hasFocus, row, column) -> {
             Component c = base.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
             if (c instanceof JLabel label && expanded) {
@@ -394,7 +414,7 @@ public final class DataVizView extends JPanel {
         long limit = rowLimit.getAsLong();
         long dataRows = Math.max(0, target.rowCount() - (target.headerRowInData() ? 1 : 0));
         if (dataRows > limit) {
-            setNote(String.format(
+            publishRefusal(target, String.format(
                 "Plot disabled: %,d rows exceeds the %,d-row limit (Preferences → Editor → Load and Save)",
                 dataRows, limit));
             return;
@@ -451,7 +471,7 @@ public final class DataVizView extends JPanel {
                 return; // cancelled (disposed or session swapped): a new pass follows
             }
             if (result.refused()) {
-                setNote("Plot unavailable: " + result.refusal());
+                publishRefusal(target, "Plot unavailable: " + result.refusal());
                 return;
             }
         }
@@ -485,6 +505,34 @@ public final class DataVizView extends JPanel {
                 ? String.format("%,d rows skipped: unparseable dates", result.badDateRows())
                 : " ");
             tablePanel.getTable().getTableHeader().repaint();
+        });
+    }
+
+    /**
+     * Lands a refusal on the EDT: the note explains why, and any previously
+     * materialised data is withdrawn — a plot must never stand beside a note
+     * saying plotting is unavailable. The selection (and its undo history)
+     * survives: only the data clears, and a later under-limit pass restores it.
+     */
+    private void publishRefusal(DataViewSession target, String text) {
+        SwingUtilities.invokeLater(() -> {
+            if (disposed || session != target) {
+                return;
+            }
+            note.setText(text);
+            if (dataSet == null || dataSet.isEmpty() || vizManager == null) {
+                return;
+            }
+            List<SeriesRef> removed = new ArrayList<>(dataSet.getSeriesRefs());
+            for (SeriesRef ref : removed) {
+                dataSet.removeSeries(ref);
+            }
+            for (StatsTableModel model : vizManager.getAllStatsModels()) {
+                for (SeriesRef ref : removed) {
+                    model.removeSeries(ref);
+                }
+            }
+            vizManager.updateAllTabs(false);
         });
     }
 
