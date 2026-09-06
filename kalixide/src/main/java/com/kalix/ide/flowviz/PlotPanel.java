@@ -69,7 +69,7 @@ import org.slf4j.LoggerFactory;
  *   → TimeSeriesRenderer.render()        [with LOD optimization for large datasets]
  * </pre>
  *
- * @see com.kalix.ide.windows.VisualizationTabManager#updateAllTabs
+ * @see com.kalix.ide.flowviz.VisualizationTabManager#updateAllTabs
  * @see com.kalix.ide.flowviz.rendering.LODManager
  */
 public class PlotPanel extends JPanel {

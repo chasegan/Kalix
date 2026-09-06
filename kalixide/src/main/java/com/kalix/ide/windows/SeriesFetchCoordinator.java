@@ -2,6 +2,7 @@ package com.kalix.ide.windows;
 
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;

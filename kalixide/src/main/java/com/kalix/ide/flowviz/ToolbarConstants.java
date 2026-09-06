@@ -1,4 +1,4 @@
-package com.kalix.ide.windows;
+package com.kalix.ide.flowviz;
 
 import java.awt.Dimension;
 

@@ -1,4 +1,4 @@
-package com.kalix.ide.windows;
+package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.style.LineStyle;
 import com.kalix.ide.flowviz.style.PlotPalette;

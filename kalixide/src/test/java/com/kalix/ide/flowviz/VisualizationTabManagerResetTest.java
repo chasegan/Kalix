@@ -1,6 +1,5 @@
-package com.kalix.ide.windows;
+package com.kalix.ide.flowviz;
 
-import com.kalix.ide.flowviz.PlotState;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DatasetSource;
@@ -53,7 +52,7 @@ class VisualizationTabManagerResetTest {
         mgr.setTargetTabCheckedSources(Set.of(SRC));
 
         AtomicInteger notifications = new AtomicInteger();
-        mgr.setOnTabChangedCallback(notifications::incrementAndGet);
+        mgr.setHost(countingHost(notifications));
 
         mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex());
 
@@ -72,7 +71,7 @@ class VisualizationTabManagerResetTest {
         mgr.getTabbedPane().setSelectedIndex(0);              // tab 0 active
 
         AtomicInteger notifications = new AtomicInteger();
-        mgr.setOnTabChangedCallback(notifications::incrementAndGet);
+        mgr.setHost(countingHost(notifications));
 
         mgr.resetTabAt(1);                                    // background reset
 
@@ -94,7 +93,7 @@ class VisualizationTabManagerResetTest {
         mgr.setTargetTabSelectedSeries(Set.of(REF)); // pushes an undoable selection state
 
         AtomicInteger notifications = new AtomicInteger();
-        mgr.setOnTabChangedCallback(notifications::incrementAndGet);
+        mgr.setHost(countingHost(notifications));
 
         PlotState undone = mgr.getTargetPlotPanel().undo();
         mgr.syncTabSelectionFromPlotState(mgr.getTargetPlotPanel(), undone);
@@ -145,7 +144,7 @@ class VisualizationTabManagerResetTest {
         mgr.setTargetTabSelectedSeries(Set.of(REF));    // entry 2: +series
 
         AtomicInteger notifications = new AtomicInteger();
-        mgr.setOnTabChangedCallback(notifications::incrementAndGet);
+        mgr.setHost(countingHost(notifications));
 
         mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex()); // entry 3: empty
         assertEquals(1, notifications.get());
@@ -169,7 +168,7 @@ class VisualizationTabManagerResetTest {
         mgr.addStatsTabFromSettings(settings);          // stats tab, selected
 
         AtomicInteger notifications = new AtomicInteger();
-        mgr.setOnTabChangedCallback(notifications::incrementAndGet);
+        mgr.setHost(countingHost(notifications));
 
         mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex());
 
@@ -195,5 +194,15 @@ class VisualizationTabManagerResetTest {
         assertEquals(ordered,
             new ArrayList<>(mgr.getTargetPlotPanel().currentState().getCheckedSources()),
             "source order is load-bearing (outputs-tree section order) and must survive the snapshot");
+    }
+
+    /** A host that only counts active-tab-change notifications. */
+    private static VizHost countingHost(java.util.concurrent.atomic.AtomicInteger counter) {
+        return new VizHost() {
+            @Override
+            public void onActiveTabChanged() {
+                counter.incrementAndGet();
+            }
+        };
     }
 }

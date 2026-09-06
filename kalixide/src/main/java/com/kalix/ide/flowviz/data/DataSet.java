@@ -26,7 +26,7 @@ import java.util.function.Function;
  * {@link #addSeries} replaces any existing series under the same ref.
  *
  * @see com.kalix.ide.windows.RunManager
- * @see com.kalix.ide.windows.VisualizationTabManager
+ * @see com.kalix.ide.flowviz.VisualizationTabManager
  */
 public class DataSet {
 

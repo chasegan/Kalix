@@ -1,7 +1,6 @@
-package com.kalix.ide.windows;
+package com.kalix.ide.flowviz;
 
 import com.kalix.ide.components.TabDragReorderer;
-import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.LastSource;
@@ -44,7 +43,6 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -94,13 +92,11 @@ public class VisualizationTabManager {
     private final JTabbedPane tabbedPane;
     private final DataSet sharedDataSet;           // Single source of truth for all tabs
     private final SeriesStyleResolver styleResolver;  // Shared resolver — consistent styling across all tabs
-    private LabelResolver labelResolver;  // injected by owner; passed down to PlotPanels
-    private java.util.function.Supplier<File> baseDirectorySupplier;  // seeds plot Save dialog's start folder
+    private VizHost host = new VizHost() { };  // all-defaults host until the owner installs one
     private final List<TabInfo> tabs;
 
     // Tab change tracking
     private int lastActivePlotTabIndex = 0;
-    private Runnable onTabChangedCallback;
 
     // Default tab names ("View 1", "View 2", ...). Session-monotonic: numbers are
     // never reused after a close, so no two tabs can share a default name and
@@ -307,48 +303,25 @@ public class VisualizationTabManager {
             if (active != null && active.viewMode == TabInfo.TabType.PLOT) {
                 lastActivePlotTabIndex = tabbedPane.getSelectedIndex();
             }
-            if (onTabChangedCallback != null) {
-                onTabChangedCallback.run();
-            }
+            host.onActiveTabChanged();
         });
     }
 
     /**
-     * Sets a callback to be invoked when the active tab changes.
-     * Used by RunManager to synchronize tree selection with the active tab.
+     * Installs the owning window's {@link VizHost} — label projection, save-dialog
+     * seeding, and active-tab-change notification, in one seam. Call before the
+     * first tab is added so new panels pick the context up; installing later
+     * retrofits the label resolver onto existing tabs. Never null: the manager
+     * starts with an all-defaults host, which is the complete "no sources,
+     * default labels" configuration rather than a degraded one.
      */
-    public void setOnTabChangedCallback(Runnable callback) {
-        this.onTabChangedCallback = callback;
-    }
-
-    /**
-     * Sets the {@link LabelResolver} used by child PlotPanels (and indirectly by their
-     * legend / hover overlays) to project {@link SeriesRef}s to display strings. Called
-     * by the owning RunManager during initialization.
-     */
-    public void setLabelResolver(LabelResolver resolver) {
-        this.labelResolver = resolver;
+    public void setHost(VizHost host) {
+        this.host = host;
+        LabelResolver labels = host.labelResolver();
         for (TabInfo tab : tabs) {
-            if (tab.plotPanel != null) {
-                tab.plotPanel.setLabelResolver(resolver);
-            }
-            if (tab.statsModel != null) {
-                tab.statsModel.setLabelResolver(resolver);
-            }
-        }
-    }
-
-    /**
-     * Sets the base directory supplier used to seed each plot tab's "Save Data" file
-     * dialog start folder (the model's directory, or {@code null} if no file is loaded).
-     * Applied to existing plot tabs and to any created afterwards. Call before the first
-     * tab is added so the default plot tab picks it up.
-     */
-    public void setBaseDirectorySupplier(java.util.function.Supplier<File> supplier) {
-        this.baseDirectorySupplier = supplier;
-        for (TabInfo tab : tabs) {
-            if (tab.plotPanel != null) {
-                tab.plotPanel.setBaseDirectorySupplier(supplier);
+            if (labels != null) {
+                tab.plotPanel.setLabelResolver(labels);
+                tab.statsModel.setLabelResolver(labels);
             }
         }
     }
@@ -467,16 +440,17 @@ public class VisualizationTabManager {
         PlotPanel plotPanel = new PlotPanel();
         plotPanel.setDataSet(sharedDataSet);
         plotPanel.setStyleResolver(styleResolver);
-        if (labelResolver != null) {
-            plotPanel.setLabelResolver(labelResolver);
+        LabelResolver labels = host.labelResolver();
+        if (labels != null) {
+            plotPanel.setLabelResolver(labels);
         }
-        if (baseDirectorySupplier != null) {
-            plotPanel.setBaseDirectorySupplier(baseDirectorySupplier);
-        }
+        // Read through the current host at each dialog open (the host can be
+        // installed after early tabs exist).
+        plotPanel.setBaseDirectorySupplier(() -> host.baseDirectory());
 
         StatsTableModel statsModel = new StatsTableModel();
-        if (labelResolver != null) {
-            statsModel.setLabelResolver(labelResolver);
+        if (labels != null) {
+            statsModel.setLabelResolver(labels);
         }
 
         // Use series from settings if provided, otherwise inherit from active tab
@@ -1037,7 +1011,7 @@ public class VisualizationTabManager {
 
     /**
      * Reprojects the window-level views (the source and outputs trees, via
-     * {@code onTabChangedCallback} → RunManager.onTabChanged) after an in-place
+     * {@link VizHost#onActiveTabChanged}) after an in-place
      * mutation of a tab's canonical record (selectedSeries / checkedSources).
      * The trees mirror the ACTIVE tab only, so the active-tab guard lives here
      * and nowhere else: mutating a background tab stays silent, and its state
@@ -1053,8 +1027,8 @@ public class VisualizationTabManager {
      * accepted, per the silent-failure rule documented on PlotState.</p>
      */
     private void notifyTabMutated(TabInfo tab) {
-        if (tab == getActiveTab() && onTabChangedCallback != null) {
-            onTabChangedCallback.run();
+        if (tab == getActiveTab()) {
+            host.onActiveTabChanged();
         }
     }
 

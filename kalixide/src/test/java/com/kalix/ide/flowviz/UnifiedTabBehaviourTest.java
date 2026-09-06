@@ -1,6 +1,5 @@
-package com.kalix.ide.windows;
+package com.kalix.ide.flowviz;
 
-import com.kalix.ide.flowviz.PlotPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DatasetSource;

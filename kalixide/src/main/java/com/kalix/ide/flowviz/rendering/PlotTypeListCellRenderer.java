@@ -17,8 +17,8 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 
-import static com.kalix.ide.windows.ToolbarConstants.BUTTON_ICON_SIZE;
-import static com.kalix.ide.windows.ToolbarConstants.HORIZONTAL_SPACING;
+import static com.kalix.ide.flowviz.ToolbarConstants.BUTTON_ICON_SIZE;
+import static com.kalix.ide.flowviz.ToolbarConstants.HORIZONTAL_SPACING;
 
 /**
  * Renders each {@link PlotType} combo-box item as its display name (left-aligned) plus a glyph

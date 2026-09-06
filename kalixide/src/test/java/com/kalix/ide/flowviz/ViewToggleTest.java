@@ -1,4 +1,4 @@
-package com.kalix.ide.windows;
+package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
@@ -73,7 +73,7 @@ class ViewToggleTest {
         VisualizationTabManager mgr = manager(new DataSet());
         mgr.addPlotTabFromSettings(settingsWith());
         AtomicInteger treeNotifications = new AtomicInteger();
-        mgr.setOnTabChangedCallback(treeNotifications::incrementAndGet);
+        mgr.setHost(countingHost(treeNotifications));
 
         AbstractButton statsToggle = button(
             (Container) mgr.getTabbedPane().getSelectedComponent(), "Stats view");
@@ -128,5 +128,15 @@ class ViewToggleTest {
         mgr.addTabFromSettings(duplicated);
         assertEquals(VisualizationTabManager.TabInfo.TabType.STATS, mgr.tabAt(1).viewMode,
             "a duplicate opens on the same page as its source");
+    }
+
+    /** A host that only counts active-tab-change notifications. */
+    private static VizHost countingHost(java.util.concurrent.atomic.AtomicInteger counter) {
+        return new VizHost() {
+            @Override
+            public void onActiveTabChanged() {
+                counter.incrementAndGet();
+            }
+        };
     }
 }
