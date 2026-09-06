@@ -1,11 +1,16 @@
 package com.kalix.ide.dataview;
 
+import com.kalix.ide.constants.UIConstants;
+
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
+import javax.swing.UIManager;
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Dimension;
 
 /**
  * The table projection mounted as a data document's contextual view: a virtual
@@ -27,6 +32,13 @@ public final class DataViewPanel extends JPanel {
         table = new JTable(new VirtualDataTableModel(session));
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF); // wide files scroll horizontally
         table.setFillsViewportHeight(true);
+        // House table styling (matching TableView / the Optimiser tables): faint
+        // grid lines for cell visibility. FlatLaf defaults intercell spacing to
+        // 0,0, which hides the grid even when shown.
+        table.setRowHeight(UIConstants.TableView.ROW_HEIGHT);
+        table.setShowGrid(true);
+        table.setIntercellSpacing(new Dimension(1, 1));
+        applyGridColor();
         add(new JScrollPane(table), BorderLayout.CENTER);
 
         status.setBorder(BorderFactory.createEmptyBorder(3, 8, 3, 8));
@@ -64,6 +76,20 @@ public final class DataViewPanel extends JPanel {
                 100 * session.indexedBytes() / session.totalBytes()));
         }
         status.setText(text.toString());
+    }
+
+    /** Re-resolves the theme's grid colour after a LaF switch. Null-guarded: runs during JPanel's constructor too. */
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        if (table != null) {
+            applyGridColor();
+        }
+    }
+
+    private void applyGridColor() {
+        Color gridColor = UIManager.getColor("Table.gridColor");
+        table.setGridColor(gridColor != null ? gridColor : UIConstants.TableView.FALLBACK_GRID_COLOR);
     }
 
     /** The underlying table — package-private, for tests. */
