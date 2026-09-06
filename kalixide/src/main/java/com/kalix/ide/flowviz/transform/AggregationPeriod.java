@@ -5,7 +5,7 @@ package com.kalix.ide.flowviz.transform;
  */
 public enum AggregationPeriod {
     /** Original resolution - no aggregation. */
-    ORIGINAL("Original"),
+    ORIGINAL("Native Resolution"),
 
     /** Aggregate to daily values. Useful for sub-daily series (e.g. hourly). */
     DAILY("Daily"),

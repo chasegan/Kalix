@@ -228,9 +228,8 @@ class VizToolbarBuilder {
     }
 
     private void addAggregationControls() {
-        toolbar.add(new JLabel("Res:"));
-        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
-
+        // No label: the default item ("Native Resolution") teaches the control,
+        // and once changed, "[Daily] by [Mean]" reads as its own sentence.
         aggregationPeriodCombo = createDropdown(ToolbarConstants.AGGREGATION_OPTIONS,
             ToolbarConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
         aggregationPeriodCombo.setSelectedItem(tabInfo.plotPanel.getAggregationPeriod().getDisplayName());

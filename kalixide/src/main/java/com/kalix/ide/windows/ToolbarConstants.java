@@ -24,7 +24,7 @@ public final class ToolbarConstants {
 
     /** Aggregation period options for time series data. */
     static final String[] AGGREGATION_OPTIONS = {
-        "Original",
+        "Native Resolution",
         "Daily",
         "Monthly",
         "Annual (Jan-Dec)",
