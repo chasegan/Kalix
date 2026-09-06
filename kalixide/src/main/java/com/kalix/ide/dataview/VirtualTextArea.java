@@ -133,8 +133,11 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
         long target = Math.max(0, Math.min(line, count - 1));
         selectLines(target, target);
         int lineHeight = lineHeight();
+        // Clamped like getPreferredSize: past the int-pixel ceiling (~100M+ lines)
+        // this lands at the scrollable end rather than wrapping negative.
+        long y = Math.max(0, (target - 2) * (long) lineHeight);
         scrollRectToVisible(new Rectangle(
-            0, (int) Math.max(0, (target - 2) * lineHeight), 1, lineHeight * 5));
+            0, (int) Math.min(y, Integer.MAX_VALUE - 4096L), 1, lineHeight * 5));
         repaint();
     }
 

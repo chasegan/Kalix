@@ -102,7 +102,7 @@ public final class LineStore implements AutoCloseable {
     }
 
     /** Drops one cached block — see {@link RowStore#evictBlock(long)}. */
-    public synchronized void evictBlock(long block) {
+    synchronized void evictBlock(long block) {
         if (blocks.remove(block) != null) {
             insertionOrder.remove(block);
         }

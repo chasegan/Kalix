@@ -16,6 +16,7 @@ import javax.swing.text.BadLocationException;
 import java.awt.Component;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -30,7 +31,7 @@ public class DataDocument extends KalixDocument {
 
     /**
      * {@code null} when the data view failed to open. Volatile, non-final:
-     * rebuilt after saves (see {@link #refreshDataViewAfterSave()}).
+     * rebuilt whenever the file's bytes change (see {@link #refreshDataViewFromDisk()}).
      */
     private volatile DataViewSession dataViewSession;
     private final DataViewPanel dataViewPanel;
@@ -39,9 +40,12 @@ public class DataDocument extends KalixDocument {
     /** True above the editable-text gate: virtual read-only views. */
     private final boolean largeReadOnly;
 
-    /** Serialises full session rebuilds; a burst of change events coalesces into one trailing rerun. */
+    /** Set by every refresh request; drained by the single refresh worker. */
+    private final AtomicBoolean refreshRequested = new AtomicBoolean(false);
+    /** Guards the single refresh worker; a burst of requests coalesces into its drain loop. */
     private final AtomicBoolean refreshInFlight = new AtomicBoolean(false);
-    private final AtomicBoolean refreshQueuedAgain = new AtomicBoolean(false);
+    /** Once the tab is closed, no session may be installed (or left open) by a late rebuild. */
+    private volatile boolean disposed = false;
 
     /** Data documents require their backing file at construction (the views read it directly). */
     public DataDocument(File file) {
@@ -127,47 +131,41 @@ public class DataDocument extends KalixDocument {
      * parsing from stale checkpoints would render misaligned garbage presented
      * as data.
      *
-     * <p>Two paths: a pure append (a running simulation writing results) is
-     * handled in place by {@link DataViewSession#tryResumeAppend()} — the views
-     * simply keep growing, the "live tail". Anything else rebuilds the session
-     * off the EDT and swaps it into the table (and, above the gate, the virtual
-     * text view); the old session closes after the swap. Bursts of change
-     * events coalesce into at most one trailing rebuild.
+     * <p>All file probing happens on a single refresh worker, never the EDT
+     * (external events arrive on the EDT and a stat on a stalled share must not
+     * freeze the UI). The worker drains a request flag, so a burst of change
+     * events coalesces and the trailing request is never lost. Two paths per
+     * request: a pure append (a running simulation writing results) is handled
+     * in place by {@link DataViewSession#tryResumeAppend()} — the views simply
+     * keep growing, the "live tail"; anything else rebuilds the session and
+     * swaps it into the table (and, above the gate, the virtual text view),
+     * closing the old one. A rebuild finishing after the tab was closed closes
+     * the fresh session instead of installing it.
      */
     @Override
     public void refreshDataViewFromDisk() {
-        if (dataViewPanel == null || getFile() == null) {
+        if (dataViewPanel == null || getFile() == null || disposed) {
             return;
         }
-        DataViewSession current = dataViewSession;
-        if (current != null && current.tryResumeAppend()) {
-            return; // pure growth: live tail, views extend in place
-        }
+        refreshRequested.set(true);
+        maybeStartRefreshWorker();
+    }
+
+    private void maybeStartRefreshWorker() {
         if (!refreshInFlight.compareAndSet(false, true)) {
-            refreshQueuedAgain.set(true);
-            return;
+            return; // the running worker drains refreshRequested before exiting
         }
-        File target = getFile(); // Save As may have re-pointed the document; read the new bytes
         Thread reloader = new Thread(() -> {
             try {
-                DataViewSession fresh = DataViewOpener.openFor(target);
-                SwingUtilities.invokeLater(() -> {
-                    DataViewSession old = dataViewSession;
-                    dataViewSession = fresh;
-                    dataViewPanel.replaceSession(fresh);
-                    if (largeTextArea != null) {
-                        largeTextArea.replaceSession(fresh);
-                    }
-                    if (old != null) {
-                        old.close();
-                    }
-                });
-            } catch (IOException e) {
-                logger.warn("Data view refresh failed for {}: {}", target, e.getMessage());
+                while (!disposed && refreshRequested.getAndSet(false)) {
+                    refreshOnce();
+                }
             } finally {
                 refreshInFlight.set(false);
-                if (refreshQueuedAgain.getAndSet(false)) {
-                    SwingUtilities.invokeLater(this::refreshDataViewFromDisk);
+                // A request that landed between the drain and the flag clear must
+                // not be stranded with no worker to serve it.
+                if (refreshRequested.get() && !disposed) {
+                    maybeStartRefreshWorker();
                 }
             }
         }, "kalix-dataview-reload");
@@ -175,8 +173,39 @@ public class DataDocument extends KalixDocument {
         reloader.start();
     }
 
+    /** One refresh: resume in place if the file purely grew, else rebuild and swap. Worker thread. */
+    private void refreshOnce() {
+        DataViewSession current = dataViewSession;
+        if (current != null && current.tryResumeAppend()) {
+            return; // pure growth (or already tailing): views extend in place
+        }
+        File target = getFile(); // Save As may have re-pointed the document; read the new bytes
+        try {
+            DataViewSession fresh = DataViewOpener.openFor(target);
+            SwingUtilities.invokeAndWait(() -> {
+                if (disposed) {
+                    fresh.close(); // the tab died while we were rebuilding
+                    return;
+                }
+                DataViewSession old = dataViewSession;
+                dataViewSession = fresh;
+                dataViewPanel.replaceSession(fresh);
+                if (largeTextArea != null) {
+                    largeTextArea.replaceSession(fresh);
+                }
+                if (old != null) {
+                    old.close();
+                }
+            });
+        } catch (IOException e) {
+            logger.warn("Data view refresh failed for {}: {}", target, e.getMessage());
+        } catch (InterruptedException | InvocationTargetException e) {
+            logger.warn("Data view refresh interrupted for {}: {}", target, e.getMessage());
+        }
+    }
+
     /**
-     * "Show in File": reveals a data-region physical line in whichever text side
+     * "Show in file": reveals a data-region physical line in whichever text side
      * this tab has — the virtual text view above the gate, or the real editor
      * below it (offset by any extended format header the editor also shows).
      */
@@ -200,6 +229,7 @@ public class DataDocument extends KalixDocument {
 
     @Override
     public void dispose() {
+        disposed = true; // a rebuild finishing after this closes its fresh session
         super.dispose();
         DataViewSession session = dataViewSession;
         if (session != null) {

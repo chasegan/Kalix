@@ -1,7 +1,8 @@
 # Data File Viewer
 
-Status: **V1 delivered** (engine, projections, and the tab mount — V1a/b/c below);
-the "Later" items remain open.
+Status: **V1.1 delivered** (engine, projections, tab mount, external-change
+refresh with live tail, and the table tools — stages below); the "Later" items
+remain open.
 
 The viewer for data files (`.csv`, `.res.csv`; pixie later) opened as tabs in the
 IDE. Built for the realities of modelling data: files up to ~1GB, sometimes on
@@ -108,9 +109,10 @@ the host can refuse honestly.
   writing results — is handled in place by append-resume: the indexed region's
   clean end and unchanged tail bytes are verified, indexing continues from the
   old end, and the views simply keep growing ("live tail"). Anything else
-  rebuilds the session off the EDT and swaps it into the views; bursts of
-  change events coalesce into one trailing rebuild. The table never parses
-  stale offsets.
+  rebuilds the session and swaps it into the views. Both the probe and the
+  rebuild run on a single background refresh worker — never the EDT — whose
+  drain loop coalesces bursts of change events without ever losing the
+  trailing one. The table never parses stale offsets.
 - **`.res.csv` virtual views show the data region only** (text and table both
   start past `EOH`). Below the gate the real editor still shows the whole file,
   extended header included.

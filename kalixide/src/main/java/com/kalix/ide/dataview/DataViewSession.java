@@ -135,7 +135,7 @@ public final class DataViewSession implements AutoCloseable {
             t.setDaemon(true);
             return t;
         });
-        this.indexerThread = new Thread(() -> runIndexer(indexStartOffset), "kalix-dataview-indexer");
+        this.indexerThread = new Thread(() -> runIndexer(indexStartOffset, false), "kalix-dataview-indexer");
         this.indexerThread.setDaemon(true);
     }
 
@@ -473,7 +473,7 @@ public final class DataViewSession implements AutoCloseable {
         }
     }
 
-    private void runIndexer(long fromOffset) {
+    private void runIndexer(long fromOffset, boolean resumePass) {
         try {
             CsvIndexer.Outcome outcome = CsvIndexer.index(indexerChannel, fromOffset, dialect,
                 rowIndex, lineIndex, this::onIndexProgress, () -> closed);
@@ -490,7 +490,24 @@ public final class DataViewSession implements AutoCloseable {
                 logger.warn("Indexing failed for {}: {}", file, e.getMessage());
             }
         } finally {
-            resumeRunning.set(false);
+            if (resumePass) {
+                // Only a resume pass owns the flag; the initial pass clearing it
+                // could let a full rebuild race a live resume.
+                resumeRunning.set(false);
+            }
+        }
+        // A change event that landed while this pass was finishing was answered
+        // with "the running tail will pick it up" — untrue once the reader hit
+        // EOF. Chain one more resume if the file already grew past what we
+        // indexed, so a simulation's final rows are never silently missed.
+        if (!closed && indexingComplete) {
+            try {
+                if (Files.size(file) > rowIndex.indexedBytes()) {
+                    tryResumeAppend();
+                }
+            } catch (IOException ignored) {
+                // The next external event will handle it.
+            }
         }
     }
 
@@ -518,14 +535,24 @@ public final class DataViewSession implements AutoCloseable {
      * tail bytes are unchanged: indexing resumes from the old end, every count,
      * checkpoint and cached block stays valid, and the views simply keep growing.
      *
+     * <p>Blocking I/O (a stat plus a small verification read) — background
+     * threads only; the completed pass re-checks the file size itself, so a
+     * growth event answered "already tailing" is never lost.
+     *
      * @return true when the change was handled here (or a resume is already
      *         running); false when the caller must rebuild the session instead
      */
     public boolean tryResumeAppend() {
         if (closed || resumeRunning.get()) {
-            return true; // nothing to do / the running tail will pick the growth up
+            return true; // nothing to do / the running tail re-checks size at its end
         }
         if (!indexingComplete || !cleanEnd || tailSample == null) {
+            return false;
+        }
+        if (rowIndex.itemCount() == 0) {
+            // A file opened while empty sniffed its dialect from zero bytes;
+            // the first real content must re-sniff via a rebuild, not lock the
+            // guessed dialect in by resuming.
             return false;
         }
         long oldEnd = rowIndex.indexedBytes();
@@ -564,7 +591,7 @@ public final class DataViewSession implements AutoCloseable {
         indexingComplete = false;
         rowIndex.reopen();
         lineIndex.reopen();
-        Thread resumer = new Thread(() -> runIndexer(oldEnd), "kalix-dataview-indexer-resume");
+        Thread resumer = new Thread(() -> runIndexer(oldEnd, true), "kalix-dataview-indexer-resume");
         resumer.setDaemon(true);
         resumer.start();
         return true;

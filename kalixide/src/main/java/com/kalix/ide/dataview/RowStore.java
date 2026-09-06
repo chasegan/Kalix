@@ -126,7 +126,7 @@ public final class RowStore implements AutoCloseable {
      * it may have been cached partial, and appended rows landing in the same
      * block must be re-parsed rather than served short.
      */
-    public synchronized void evictBlock(long block) {
+    synchronized void evictBlock(long block) {
         if (blocks.remove(block) != null) {
             insertionOrder.remove(block);
         }

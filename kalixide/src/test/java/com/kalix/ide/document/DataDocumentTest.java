@@ -121,6 +121,63 @@ class DataDocumentTest {
         }
     }
 
+    @Test
+    void aboveGateRebuildSwapsTheVirtualTextArea() throws IOException {
+        File file = csvFile(); // 3 physical lines
+        DataDocument doc = new DataDocument(file, true); // read-only virtual pair
+        try {
+            await("initial index", () -> {
+                DataViewSession s = doc.getDataViewSession();
+                return s != null && s.isIndexingComplete();
+            });
+            DataViewSession old = doc.getDataViewSession();
+            var area = (com.kalix.ide.dataview.VirtualTextArea) doc.getPrimaryFocusComponent();
+            int lineHeight = area.getFontMetrics(area.getFont()).getHeight();
+
+            // A rewrite (smaller file) forces the rebuild path, not a resume.
+            Files.writeString(file.toPath(), "a\nb\nc\nd\ne\n", StandardCharsets.UTF_8);
+            doc.refreshDataViewFromDisk();
+
+            await("session rebuilt", () -> {
+                DataViewSession s = doc.getDataViewSession();
+                return s != old && s != null && s.isIndexingComplete();
+            });
+            await("virtual text view tracks the fresh session",
+                () -> area.getPreferredSize().height == 5L * lineHeight);
+        } finally {
+            doc.dispose();
+        }
+    }
+
+    @Test
+    void aBurstOfRefreshRequestsConvergesOnTheFinalBytes() throws IOException {
+        File file = csvFile();
+        DataDocument doc = new DataDocument(file);
+        try {
+            await("initial index", () -> {
+                DataViewSession s = doc.getDataViewSession();
+                return s != null && s.isIndexingComplete();
+            });
+            // Two rewrites with a hail of refresh requests around them: the drain
+            // loop must coalesce the burst WITHOUT losing the trailing request,
+            // so the views always converge on the final bytes.
+            Files.writeString(file.toPath(), "h1,h2\n1,2\n", StandardCharsets.UTF_8);
+            for (int i = 0; i < 4; i++) {
+                doc.refreshDataViewFromDisk();
+            }
+            Files.writeString(file.toPath(), "h1,h2\n1,2\n3,4\n5,6\n", StandardCharsets.UTF_8);
+            for (int i = 0; i < 4; i++) {
+                doc.refreshDataViewFromDisk();
+            }
+            await("converges on the final bytes", () -> {
+                DataViewSession s = doc.getDataViewSession();
+                return s != null && s.isIndexingComplete() && s.rowCount() == 4;
+            });
+        } finally {
+            doc.dispose();
+        }
+    }
+
     private static void await(String what, BooleanSupplier condition) {
         long deadline = System.currentTimeMillis() + 10_000;
         while (!condition.getAsBoolean()) {

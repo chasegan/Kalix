@@ -30,6 +30,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongConsumer;
 
 /**
@@ -43,14 +44,17 @@ public final class DataViewPanel extends JPanel {
 
     private static final Logger logger = LoggerFactory.getLogger(DataViewPanel.class);
 
-    /** Non-final: replaced with a fresh session after a save rewrites the file. */
+    /** Non-final: replaced with a fresh session after the file is rebuilt from disk. */
     private DataViewSession session;
     private final JTable table;
     private final JLabel status = new JLabel();
 
     private String lastSearch = "";
-    /** Receives the data-region physical line for "Show in File" (wired by the host document). */
+    /** Receives the data-region physical line for "Show in file" (wired by the host document). */
     private LongConsumer showInFileHandler;
+    /** One search / one line-mapping at a time: holding F3 must not stack full-file scans. */
+    private final AtomicBoolean searchInFlight = new AtomicBoolean(false);
+    private final AtomicBoolean lineMapInFlight = new AtomicBoolean(false);
 
     public DataViewPanel(DataViewSession session) {
         super(new BorderLayout());
@@ -92,10 +96,10 @@ public final class DataViewPanel extends JPanel {
     }
 
     /**
-     * Swaps in a freshly opened session after a save rewrote the file (stale
-     * checkpoints would otherwise parse the new bytes at old offsets). EDT only;
-     * the caller ({@code KalixDocument.refreshDataViewAfterSave}) closes the old
-     * session after this returns.
+     * Swaps in a freshly opened session after the file was rebuilt from disk
+     * (stale checkpoints would otherwise parse the new bytes at old offsets).
+     * EDT only; the caller ({@code DataDocument.refreshDataViewFromDisk}) closes
+     * the old session after this returns.
      */
     public void replaceSession(DataViewSession fresh) {
         this.session = fresh;
@@ -135,9 +139,9 @@ public final class DataViewPanel extends JPanel {
         JPopupMenu menu = new JPopupMenu();
         JMenuItem find = new JMenuItem("Find…");
         find.addActionListener(e -> promptFind());
-        JMenuItem findNext = new JMenuItem("Find Next");
+        JMenuItem findNext = new JMenuItem("Find next");
         findNext.addActionListener(e -> findNext());
-        JMenuItem showInFile = new JMenuItem("Show in File");
+        JMenuItem showInFile = new JMenuItem("Show in file"); // sentence case per context-menu-style §2.1
         showInFile.addActionListener(e -> showSelectedRowInFile());
         JMenuItem copy = new JMenuItem("Copy");
         copy.addActionListener(e -> {
@@ -218,6 +222,9 @@ public final class DataViewPanel extends JPanel {
 
     /** Streams the search on a worker thread; the EDT only receives the landing row. */
     private void runSearch(String needle) {
+        if (!searchInFlight.compareAndSet(false, true)) {
+            return; // a scan is already running ("a 1GB file takes a few seconds")
+        }
         long headerOffset = session.headerRowInData() ? 1 : 0;
         int selectedView = table.getSelectedRow();
         long fromExclusive = selectedView >= 0 ? selectedView + headerOffset : headerOffset - 1;
@@ -237,6 +244,8 @@ public final class DataViewPanel extends JPanel {
                 });
             } catch (IOException e) {
                 logger.warn("Data search failed: {}", e.getMessage());
+            } finally {
+                searchInFlight.set(false);
             }
         }, "kalix-dataview-search");
         searcher.setDaemon(true);
@@ -256,7 +265,7 @@ public final class DataViewPanel extends JPanel {
     private void showSelectedRowInFile() {
         LongConsumer handler = showInFileHandler;
         int viewRow = table.getSelectedRow();
-        if (handler == null || viewRow < 0) {
+        if (handler == null || viewRow < 0 || !lineMapInFlight.compareAndSet(false, true)) {
             return;
         }
         long fileRow = viewRow + (session.headerRowInData() ? 1 : 0);
@@ -271,6 +280,8 @@ public final class DataViewPanel extends JPanel {
                 });
             } catch (IOException e) {
                 logger.warn("Show in file failed: {}", e.getMessage());
+            } finally {
+                lineMapInFlight.set(false);
             }
         }, "kalix-dataview-line-map");
         mapper.setDaemon(true);
