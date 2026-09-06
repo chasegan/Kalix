@@ -25,7 +25,7 @@ class DocumentManagerTest {
 
 
     private static KalixDocument doc() {
-        return new KalixDocument();
+        return new ModelDocument();
     }
 
     @Test

@@ -11,7 +11,6 @@ import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.dialogs.PreferencesDialog;
 import com.kalix.ide.linter.LinterPreferencesPanel;
 import com.kalix.ide.linter.SchemaManager;
-import com.kalix.ide.document.DocumentKind;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.DocumentWorkspaceView;
 import com.kalix.ide.document.KalixDocument;
@@ -473,7 +472,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * @return the newly created, configured, registered document
      */
     private KalixDocument createDocument(File file) {
-        KalixDocument document = new KalixDocument(DocumentKind.forFile(file), file);
+        KalixDocument document = KalixDocument.createFor(file);
         configureDocument(document);
         documentManager.addDocument(document);
         return document;

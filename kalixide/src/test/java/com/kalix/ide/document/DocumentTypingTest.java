@@ -31,17 +31,17 @@ class DocumentTypingTest {
 
     @Test
     void modelDocumentsKeepTheFullBundle() {
-        KalixDocument doc = new KalixDocument(DocumentKind.MODEL);
+        KalixDocument doc = new ModelDocument();
         assertTrue(doc.isModel());
         assertNotNull(doc.getModel());
         assertNotNull(doc.getMapPanel());
         assertNotNull(doc.getContextView(), "a model's contextual view is its map");
-        assertSame(DocumentKind.MODEL, new KalixDocument().getKind(), "no-arg ctor stays MODEL");
+        assertSame(DocumentKind.MODEL, new ModelDocument().getKind(), "ModelDocument is the MODEL kind");
     }
 
     @Test
     void textDocumentsHaveEditorOnlyAndNullContext() {
-        KalixDocument doc = new KalixDocument(DocumentKind.TEXT);
+        KalixDocument doc = new TextDocument();
         assertFalse(doc.isModel());
         assertNull(doc.getModel());
         assertNull(doc.getMapPanel());
@@ -53,14 +53,14 @@ class DocumentTypingTest {
 
     @Test
     void onlyModelDocumentsAreOptimisable() {
-        KalixDocument text = new KalixDocument(DocumentKind.TEXT);
+        KalixDocument text = new TextDocument();
         text.setFile(new File("/x/notes.txt"));
         assertFalse(text.isOptimisable(), "a text document is never an optimisation target");
 
-        KalixDocument model = new KalixDocument(DocumentKind.MODEL);
+        KalixDocument model = new ModelDocument();
         model.setFile(new File("/x/model.ini"));
         assertTrue(model.isOptimisable());
-        assertFalse(new KalixDocument(DocumentKind.MODEL).isOptimisable(), "unsaved: no working dir");
+        assertFalse(new ModelDocument().isOptimisable(), "unsaved: no working dir");
     }
 
     @Test
@@ -68,8 +68,8 @@ class DocumentTypingTest {
         DocumentManager dm = new DocumentManager();
         DocumentWorkspaceView view = new DocumentWorkspaceView(dm, () -> null);
 
-        KalixDocument model = new KalixDocument(DocumentKind.MODEL);
-        KalixDocument text = new KalixDocument(DocumentKind.TEXT);
+        KalixDocument model = new ModelDocument();
+        KalixDocument text = new TextDocument();
         dm.addDocument(model);
         dm.addDocument(text);
 

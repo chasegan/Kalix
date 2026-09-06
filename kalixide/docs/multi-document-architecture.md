@@ -119,20 +119,22 @@ macOS.
 
 - **`ModelDocument extends KalixDocument`** (for `.ini`) — additionally owns its
   `HydrologicalModel` + `MapPanel`, wires text↔map sync internally at
-  construction, and returns the map from `getContextView()`. Future `DataDocument`
-  would return a plot view — that is why this is a type hierarchy.
+  construction, and returns the map from `getContextView()`. The foreseen
+  hierarchy exists as of September 2026: **`DataDocument`** returns the virtual
+  data table and owns the large-file editable gate
+  (`docs/data-file-viewer.md`); **`TextDocument`** is the editor alone.
 
 - **`DocumentManager`** — owns the set of open documents and the active-document
   concept. API: `open(File)` (create or focus), `close(doc)` (with dirty check),
   `newUntitled()`, `getActiveDocument()`, listeners
   `onActiveDocumentChanged / onOpened / onClosed`. The spine everything listens to.
 
-- **Document typing** — `DocumentKind.forFile` maps file extension → kind, and a
-  factory function (`KalixIDE.createDocument`, injected into
-  `FileOperationsManager`) builds the right bundle: the single place where "what
-  does opening this file mean" is decided. (The originally planned
-  `DocumentFactory` class + subtype hierarchy is deferred until a second rich
-  kind — CSV — actually exists.)
+- **Document typing** — `DocumentKind.forFile` maps file extension → kind, and
+  `KalixDocument.createFor` maps kind → subtype (`ModelDocument` /
+  `DataDocument` / `TextDocument`): the single place where "what does opening
+  this file mean" is decided, reached via `KalixIDE.createDocument` (which adds
+  the shared-service wiring) injected into `FileOperationsManager`. The subtype
+  split foreseen at Phase 1 landed with the data-file viewer (September 2026).
 
 - **`WorkspacePanel`** — the outer layout: one `JSplitPane`
   `[ tree | document tabs ]`; the tree is collapsible with a persisted size. The

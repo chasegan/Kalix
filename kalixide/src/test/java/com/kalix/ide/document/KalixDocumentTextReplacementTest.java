@@ -34,7 +34,7 @@ class KalixDocumentTextReplacementTest {
 
     @Test
     void parsedModelReflectsAProgrammaticReplacement() {
-        KalixDocument document = new KalixDocument();
+        KalixDocument document = new ModelDocument();
         document.setText(BEFORE);
         INIModelParser.ParsedModel first = document.getModelSupplier().get();
         assertEquals("1, 2, 3", paramsOf(first));
@@ -48,7 +48,7 @@ class KalixDocumentTextReplacementTest {
 
     @Test
     void unchangedTextStillReusesTheMemoisedParse() {
-        KalixDocument document = new KalixDocument();
+        KalixDocument document = new ModelDocument();
         document.setText(BEFORE);
         assertSame(document.getModelSupplier().get(), document.getModelSupplier().get());
     }

@@ -49,7 +49,7 @@ class DataDocumentTest {
 
     @Test
     void belowTheGateTheEditorIsPrimaryWithATableBesideIt() throws IOException {
-        KalixDocument doc = new KalixDocument(DocumentKind.DATA, csvFile());
+        DataDocument doc = new DataDocument(csvFile());
         try {
             assertTrue(doc.isEditable(), "small data files stay editable text");
             assertSame(doc.getEditor(), doc.getPrimaryView());
@@ -65,7 +65,7 @@ class DataDocumentTest {
 
     @Test
     void aboveTheGateTheTabIsAReadOnlyVirtualPair() throws IOException {
-        KalixDocument doc = new KalixDocument(DocumentKind.DATA, csvFile(), true); // gate seam
+        DataDocument doc = new DataDocument(csvFile(), true); // gate seam
         try {
             assertFalse(doc.isEditable(),
                 "save paths must refuse: there is no editor buffer to write");
@@ -82,8 +82,8 @@ class DataDocumentTest {
     void aFailedSessionAboveTheGateStaysReadOnly() {
         // The blocker scenario: session open fails (missing file / dropped share).
         // The tab must NOT degrade to an editable empty buffer over a real file.
-        KalixDocument doc = new KalixDocument(
-            DocumentKind.DATA, new File("/nonexistent/kalix-test-missing.csv"), true);
+        DataDocument doc = new DataDocument(
+            new File("/nonexistent/kalix-test-missing.csv"), true);
         try {
             assertFalse(doc.isEditable(), "no session + empty buffer must never be saveable");
             assertSame(doc.getEditor(), doc.getPrimaryView(),
@@ -97,7 +97,7 @@ class DataDocumentTest {
     @Test
     void savingRebuildsTheDataSessionFromTheNewBytes() throws IOException {
         File file = csvFile(); // header + 2 data rows
-        KalixDocument doc = new KalixDocument(DocumentKind.DATA, file);
+        DataDocument doc = new DataDocument(file);
         try {
             await("initial index", () -> {
                 DataViewSession s = doc.getDataViewSession();
@@ -138,12 +138,12 @@ class DataDocumentTest {
     @Test
     void dataDocumentsRequireABackingFile() {
         assertThrows(IllegalArgumentException.class,
-            () -> new KalixDocument(DocumentKind.DATA, null));
+            () -> new DataDocument(null));
     }
 
     @Test
     void theGateIgnoresSmallAndAbsentFiles() throws IOException {
-        assertFalse(KalixDocument.exceedsEditableGate(null));
-        assertFalse(KalixDocument.exceedsEditableGate(csvFile()), "a few bytes is under any sane gate");
+        assertFalse(DataDocument.exceedsEditableGate(null));
+        assertFalse(DataDocument.exceedsEditableGate(csvFile()), "a few bytes is under any sane gate");
     }
 }

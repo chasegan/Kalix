@@ -1,8 +1,9 @@
 package com.kalix.ide.workspace;
 
-import com.kalix.ide.document.DocumentKind;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
+import com.kalix.ide.document.ModelDocument;
+import com.kalix.ide.document.TextDocument;
 
 import org.junit.jupiter.api.Test;
 
@@ -36,8 +37,8 @@ class DocumentTabPaneTest {
         DocumentManager dm = new DocumentManager();
         DocumentTabPane pane = pane(dm);
 
-        KalixDocument model = new KalixDocument(DocumentKind.MODEL);
-        KalixDocument text = new KalixDocument(DocumentKind.TEXT);
+        KalixDocument model = new ModelDocument();
+        KalixDocument text = new TextDocument();
         dm.setActiveDocument(model);
         dm.setActiveDocument(text);
 
@@ -53,8 +54,8 @@ class DocumentTabPaneTest {
         DocumentManager dm = new DocumentManager();
         DocumentTabPane pane = pane(dm);
 
-        KalixDocument a = new KalixDocument(DocumentKind.MODEL);
-        KalixDocument b = new KalixDocument(DocumentKind.TEXT);
+        KalixDocument a = new ModelDocument();
+        KalixDocument b = new TextDocument();
         dm.setActiveDocument(a);
         dm.setActiveDocument(b);
         dm.closeDocument(b);
@@ -70,8 +71,8 @@ class DocumentTabPaneTest {
         DocumentManager dm = new DocumentManager();
         DocumentTabPane pane = pane(dm);
 
-        KalixDocument model = new KalixDocument(DocumentKind.MODEL);
-        KalixDocument text = new KalixDocument(DocumentKind.TEXT);
+        KalixDocument model = new ModelDocument();
+        KalixDocument text = new TextDocument();
         dm.setActiveDocument(model);
         dm.setActiveDocument(text);
 
@@ -91,7 +92,7 @@ class DocumentTabPaneTest {
         ContextSplitCoordinator coordinator = new ContextSplitCoordinator(420, false,
             (w, c) -> persistedCollapsed[0] = c);
         DocumentTabPane pane = pane(dm, coordinator);
-        dm.setActiveDocument(new KalixDocument(DocumentKind.MODEL));
+        dm.setActiveDocument(new ModelDocument());
 
         DocumentSplitView root = (DocumentSplitView) pane.getTabbedPane().getComponentAt(0);
         root.setSize(800, 600);

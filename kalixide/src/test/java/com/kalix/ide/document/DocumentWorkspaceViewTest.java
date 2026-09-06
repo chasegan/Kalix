@@ -39,8 +39,8 @@ class DocumentWorkspaceViewTest {
         DocumentManager manager = new DocumentManager();
         DocumentWorkspaceView sources = new DocumentWorkspaceView(manager, () -> null);
 
-        KalixDocument first = new KalixDocument();
-        KalixDocument second = new KalixDocument();
+        KalixDocument first = new ModelDocument();
+        KalixDocument second = new ModelDocument();
         manager.addDocument(first);
         manager.addDocument(second);
 
@@ -59,8 +59,8 @@ class DocumentWorkspaceViewTest {
         DocumentManager manager = new DocumentManager();
         DocumentWorkspaceView sources = new DocumentWorkspaceView(manager, () -> null);
 
-        KalixDocument first = new KalixDocument();
-        KalixDocument second = new KalixDocument();
+        KalixDocument first = new ModelDocument();
+        KalixDocument second = new ModelDocument();
         manager.setActiveDocument(first);
         assertSame(first, sources.activeModel());
 
@@ -80,7 +80,7 @@ class DocumentWorkspaceViewTest {
 
         // Missing any of these would leave the Optimiser's model list stale — offering
         // a closed model, or omitting one the user just opened.
-        KalixDocument first = new KalixDocument();
+        KalixDocument first = new ModelDocument();
         manager.addDocument(first);
         int afterOpen = notifications.get();
         assertTrue(afterOpen > 0, "opening a document must notify");
@@ -96,7 +96,7 @@ class DocumentWorkspaceViewTest {
     @Test
     @DisplayName("A document is an OpenModel, and is optimisable only once saved")
     void testDocumentSatisfiesOpenModel() {
-        KalixDocument document = new KalixDocument();
+        KalixDocument document = new ModelDocument();
 
         OpenModel source = document;
         assertEquals("Untitled", source.getDisplayName());
@@ -113,8 +113,8 @@ class DocumentWorkspaceViewTest {
     @DisplayName("Resolving an open model returns that exact document")
     void testResolveMatchesOnIdentity() {
         DocumentManager manager = new DocumentManager();
-        KalixDocument first = new KalixDocument();
-        KalixDocument second = new KalixDocument();
+        KalixDocument first = new ModelDocument();
+        KalixDocument second = new ModelDocument();
         manager.addDocument(first);
         manager.addDocument(second);
 
@@ -128,7 +128,7 @@ class DocumentWorkspaceViewTest {
         DocumentManager manager = new DocumentManager();
         File file = new File(System.getProperty("java.io.tmpdir"), "catchment.ini");
 
-        KalixDocument original = new KalixDocument();
+        KalixDocument original = new ModelDocument();
         original.setFile(file);
         manager.addDocument(original);
 
@@ -136,7 +136,7 @@ class DocumentWorkspaceViewTest {
         // backed by the same file. An optimisation still holding the old handle must copy
         // its result back into the reopened tab, not report "not open".
         manager.closeDocument(original);
-        KalixDocument reopened = new KalixDocument();
+        KalixDocument reopened = new ModelDocument();
         reopened.setFile(file);
         manager.addDocument(reopened);
 
@@ -147,7 +147,7 @@ class DocumentWorkspaceViewTest {
     @DisplayName("A model whose file is gone from the workspace resolves to nothing")
     void testResolveReturnsNullWhenNotOpen() {
         DocumentManager manager = new DocumentManager();
-        KalixDocument document = new KalixDocument();
+        KalixDocument document = new ModelDocument();
         document.setFile(new File(System.getProperty("java.io.tmpdir"), "gone.ini"));
         manager.addDocument(document);
         manager.closeDocument(document);
@@ -160,12 +160,12 @@ class DocumentWorkspaceViewTest {
     @DisplayName("An unsaved model never resolves by file")
     void testResolveDoesNotMatchUnsavedModelsByFile() {
         DocumentManager manager = new DocumentManager();
-        KalixDocument open = new KalixDocument();
+        KalixDocument open = new ModelDocument();
         manager.addDocument(open);
 
         // Two unsaved documents both have a null file; falling back on that would make
         // any closed untitled document resolve to an unrelated open one.
-        KalixDocument otherUnsaved = new KalixDocument();
+        KalixDocument otherUnsaved = new ModelDocument();
         assertNull(manager.resolve(otherUnsaved));
     }
 
@@ -177,6 +177,6 @@ class DocumentWorkspaceViewTest {
 
         sources.addChangeListener(null);
 
-        assertDoesNotThrow(() -> manager.addDocument(new KalixDocument()));
+        assertDoesNotThrow(() -> manager.addDocument(new ModelDocument()));
     }
 }

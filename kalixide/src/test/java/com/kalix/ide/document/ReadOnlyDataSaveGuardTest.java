@@ -25,7 +25,7 @@ class ReadOnlyDataSaveGuardTest {
 
     private static FileOperationsManager manager(DocumentManager dm, List<String> status) {
         return new FileOperationsManager(
-            null, dm, f -> new KalixDocument(DocumentKind.forFile(f), f),
+            null, dm, KalixDocument::createFor,
             status::add, s -> { }, () -> { }, null);
     }
 
@@ -39,7 +39,7 @@ class ReadOnlyDataSaveGuardTest {
         DocumentManager dm = new DocumentManager();
         List<String> status = new ArrayList<>();
         FileOperationsManager fom = manager(dm, status);
-        KalixDocument doc = new KalixDocument(DocumentKind.DATA, file.toFile(), true); // gate seam
+        KalixDocument doc = new DataDocument(file.toFile(), true); // gate seam
         try {
             dm.setActiveDocument(doc);
             fom.saveModel();
@@ -60,8 +60,8 @@ class ReadOnlyDataSaveGuardTest {
         DocumentManager dm = new DocumentManager();
         List<String> status = new ArrayList<>();
         FileOperationsManager fom = manager(dm, status);
-        KalixDocument doc = new KalixDocument(
-            DocumentKind.DATA, new File("/nonexistent/kalix-saveguard-missing.csv"), true);
+        KalixDocument doc = new DataDocument(
+            new File("/nonexistent/kalix-saveguard-missing.csv"), true);
         try {
             dm.setActiveDocument(doc);
             fom.saveAllModels();

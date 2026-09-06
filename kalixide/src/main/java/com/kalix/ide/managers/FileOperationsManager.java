@@ -3,6 +3,7 @@ package com.kalix.ide.managers;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.document.DataDocument;
 import com.kalix.ide.document.DocumentKind;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
@@ -129,7 +130,7 @@ public class FileOperationsManager {
         // A large data file never enters an editor buffer — the tab's virtual views
         // read it directly (docs/data-file-viewer.md). Everything else loads as text.
         KalixDocument document;
-        if (DocumentKind.forFile(file) == DocumentKind.DATA && KalixDocument.exceedsEditableGate(file)) {
+        if (DocumentKind.forFile(file) == DocumentKind.DATA && DataDocument.exceedsEditableGate(file)) {
             document = documentFactory.apply(file); // the DATA ctor takes the backing file
         } else {
             final String content;

@@ -1,88 +1,55 @@
 package com.kalix.ide.document;
 
 import com.kalix.ide.MapPanel;
-import com.kalix.ide.dataview.DataViewOpener;
-import com.kalix.ide.dataview.DataViewPanel;
-import com.kalix.ide.dataview.DataViewSession;
-import com.kalix.ide.dataview.VirtualTextArea;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.model.HydrologicalModel;
-import com.kalix.ide.model.ModelChangeEvent;
-import com.kalix.ide.preferences.PreferenceKeys;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.swing.JComponent;
-import javax.swing.JScrollPane;
-import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.Component;
 import java.io.File;
-import java.io.IOException;
 import java.util.function.Supplier;
 
 /**
- * Represents a single open document — one per tab — and the bundle of state and
- * views that belong to it. Every document owns its backing {@link File} (nullable
- * = untitled) and the {@link EnhancedTextEditor} editing its text; a
- * {@link DocumentKind#MODEL} document additionally owns the
- * {@link HydrologicalModel} parsed from that text and the {@link MapPanel}
- * visualising it (both {@code null} for other kinds).
+ * A single open document — one per tab — and the bundle of state and views that
+ * belong to it. Every document owns its backing {@link File} (nullable =
+ * untitled) and the {@link EnhancedTextEditor} editing its text; the subtypes
+ * add their kind's bundle:
  *
- * <p>A {@code KalixDocument} owns the per-document wiring that used to live in
- * {@code KalixIDE}: parsing text into the model on edits, bidirectional text&lt;-&gt;map
- * synchronisation, and per-document auto-zoom when the model first gains nodes.
- * Because each document owns its own editor instance, undo/redo history is naturally
- * per-document via RSyntaxTextArea's native undo stack — no shared or custom
- * {@code UndoManager} is involved.
+ * <ul>
+ * <li>{@link ModelDocument} — a Kalix model: parsed {@link HydrologicalModel} +
+ *     {@link MapPanel}, text↔map sync and per-document auto-zoom;</li>
+ * <li>{@link DataDocument} — a delimited data file: virtual data views and the
+ *     large-file editable gate (see {@code docs/data-file-viewer.md});</li>
+ * <li>{@link TextDocument} — plain text: the editor alone.</li>
+ * </ul>
  *
- * <p>The workspace layer builds each tab's content from these views (the editor,
- * plus {@link #getContextView()} when present — see
- * {@code docs/multi-document-architecture.md}, Addendum).
+ * <p>{@link #createFor(File)} is the single place where "what does opening this
+ * file mean" is decided: {@link DocumentKind#forFile} names the kind, this maps
+ * it to a subtype. Because each document owns its own editor instance, undo/redo
+ * history is naturally per-document via RSyntaxTextArea's native undo stack —
+ * no shared or custom {@code UndoManager} is involved.
+ *
+ * <p>The workspace layer builds each tab's content from the polymorphic views
+ * here — {@link #getPrimaryView()} plus {@link #getContextView()} when present
+ * (see {@code docs/multi-document-architecture.md}, Addendum) — and the save
+ * paths consult {@link #isEditable()}.
  *
  * <p>Application-level concerns (status bar, title bar, file watching, theme
  * registration, linter/autocomplete service wiring) are intentionally <em>not</em>
  * owned here — they observe or attach to the active document from {@code KalixIDE}.
  */
-public class KalixDocument implements OpenModel {
-
-    private static final Logger logger = LoggerFactory.getLogger(KalixDocument.class);
+public abstract class KalixDocument implements OpenModel {
 
     private final DocumentKind kind;
     private final EnhancedTextEditor editor;
-    /** {@code null} for non-model kinds — see {@link #getMapPanel()}. */
-    private final MapPanel mapPanel;
-    /** {@code null} for non-model kinds — see {@link #getModel()}. */
-    private final HydrologicalModel model;
-
-    // --- DATA-kind bundle (all null for other kinds) ---
-    /**
-     * {@code null} for non-data kinds, or when the data view failed to open.
-     * Volatile, non-final: rebuilt after saves (see {@link #refreshDataViewAfterSave()}).
-     */
-    private volatile DataViewSession dataViewSession;
-    private final DataViewPanel dataViewPanel;
-    private final VirtualTextArea largeTextArea;
-    private final JScrollPane largeTextScroller;
-    /** True for a DATA document above the editable-text gate: virtual read-only views. */
-    private final boolean largeReadOnly;
 
     /** Backing file, or {@code null} for an untitled document. */
     private File file;
 
-    /** Node count at the last model change, used to auto-zoom on the 0 -&gt; &gt;0 transition. */
-    private int previousNodeCount = 0;
-
-    // --- Parse coalescing and memoization (all EDT-confined) ---
-
-    /** Whether a model parse is already queued on the EDT; further edits coalesce into it. */
-    private boolean parseQueued = false;
-
-    /** Whether the queued parse should zoom-to-fit (ORed across coalesced requests). */
-    private boolean queuedAutoZoom = false;
+    // --- Memoized linter parse (EDT-confined) ---
 
     /** Bumped on every document edit; keys the memoized linter parse. */
     private long modificationCount = 0;
@@ -94,111 +61,17 @@ public class KalixDocument implements OpenModel {
     private INIModelParser.ParsedModel cachedParsedModel;
 
     /**
-     * Creates a document, constructing its own editor, map and model, and performs
-     * all per-document wiring. Application-level features that depend on shared
-     * services (linter, autocomplete, context commands, theme registration) are
-     * attached to {@link #getEditor()} / {@link #getMapPanel()} by the host after
-     * construction.
+     * Creates the document's editor and its edit wiring. Subtype constructors
+     * build their kind's bundle on top. Application-level features that depend
+     * on shared services (linter, autocomplete, context commands) are attached
+     * to {@link #getEditor()} by the host after construction.
      */
-    public KalixDocument() {
-        this(DocumentKind.MODEL);
-    }
-
-    /**
-     * Creates a document of the given kind. MODEL documents build the full
-     * bundle; other kinds build the editor alone, leaving model and map
-     * {@code null} and the contextual view empty.
-     */
-    public KalixDocument(DocumentKind kind) {
-        this(kind, null);
-    }
-
-    /**
-     * Creates a document of the given kind for the given backing file. DATA
-     * documents require the file at construction (their virtual views read it
-     * directly); for other kinds it may be {@code null} (untitled).
-     */
-    public KalixDocument(DocumentKind kind, File file) {
-        this(kind, file, kind == DocumentKind.DATA && exceedsEditableGate(file));
-    }
-
-    /** Test seam: the gate decision is injectable so tests need no 50MB files. */
-    KalixDocument(DocumentKind kind, File file, boolean largeReadOnly) {
+    protected KalixDocument(DocumentKind kind) {
         this.kind = kind;
         this.editor = new EnhancedTextEditor();
-        if (kind == DocumentKind.MODEL) {
-            this.model = new HydrologicalModel();
-            // The map panel is bound to its model and editor at construction; all
-            // map-side collaborators (text sync, clipboard, context menu, search)
-            // are wired inside, symmetrically and exactly once.
-            this.mapPanel = new MapPanel(model, editor);
-        } else {
-            this.model = null;
-            this.mapPanel = null;
-        }
-
-        if (file != null) {
-            this.file = file; // the load path may setFile again with the same file; harmless
-        }
-
-        if (kind == DocumentKind.DATA) {
-            if (file == null) {
-                throw new IllegalArgumentException("DATA documents need a backing file");
-            }
-            DataViewSession session = null;
-            try {
-                session = DataViewOpener.openFor(file);
-            } catch (IOException e) {
-                // The tab still opens; only the data views are lost.
-                logger.warn("Data view unavailable for {}: {}", file, e.getMessage());
-            }
-            this.dataViewSession = session;
-            this.dataViewPanel = session != null ? new DataViewPanel(session) : null;
-            boolean virtualText = largeReadOnly && session != null;
-            this.largeTextArea = virtualText ? new VirtualTextArea(session) : null;
-            this.largeTextScroller = virtualText ? new JScrollPane(largeTextArea) : null;
-            // Above the gate the document is read-only EVEN IF the session failed:
-            // in that case the editor buffer is empty (the load path never reads the
-            // file), and an editable empty buffer over a real file is one Save All
-            // away from truncating it to nothing.
-            this.largeReadOnly = largeReadOnly;
-        } else {
-            this.dataViewSession = null;
-            this.dataViewPanel = null;
-            this.largeTextArea = null;
-            this.largeTextScroller = null;
-            this.largeReadOnly = false;
-        }
-
-        wire();
-    }
-
-    /**
-     * Whether a data file is too large to load into an editable text buffer
-     * (the Editor → Load and Save gate preference). Above the gate a data tab
-     * shows virtual read-only views instead — the file never enters an editor
-     * buffer (see {@code docs/data-file-viewer.md} for the physics).
-     */
-    public static boolean exceedsEditableGate(File file) {
-        if (file == null) {
-            return false;
-        }
-        long gateBytes = PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.get() * 1024L * 1024L;
-        return file.length() > gateBytes;
-    }
-
-    /**
-     * Establishes the per-document connections between editor, model and map.
-     */
-    private void wire() {
-        // Wire map panel to editor for "Show on Map" context menu action.
-        if (mapPanel != null) {
-            editor.setMapPanel(mapPanel);
-        }
-
-        // Re-parse the model whenever the text changes (coalesced; see
-        // parseModelFromText). The modification count keys the memoized
-        // linter parse handed out by getModelSupplier().
+        // Re-parse on every text change (coalesced by ModelDocument; a no-op for
+        // other kinds). The modification count keys the memoized linter parse
+        // handed out by getModelSupplier().
         editor.addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -215,11 +88,19 @@ public class KalixDocument implements OpenModel {
                 onDocumentEdit();
             }
         });
+    }
 
-        // Per-document auto-zoom: fit the view when the model first gains nodes.
-        if (model != null) {
-            model.addChangeListener(this::onModelChanged);
-        }
+    /**
+     * Creates the right document subtype for the file — the single place where
+     * "what does opening this file mean" is decided. {@code null} (a new
+     * untitled document) creates a model, seeded by the caller.
+     */
+    public static KalixDocument createFor(File file) {
+        return switch (DocumentKind.forFile(file)) {
+            case MODEL -> new ModelDocument();
+            case DATA -> new DataDocument(file);
+            case TEXT -> new TextDocument();
+        };
     }
 
     /** Reacts to a single document edit: invalidates the memoized parse, queues a re-parse. */
@@ -229,56 +110,14 @@ public class KalixDocument implements OpenModel {
     }
 
     /**
-     * Parses the current editor text into the model using incremental parsing.
-     *
-     * <p>Coalesced: document events arrive per keystroke (and in bursts for
-     * multi-event operations like replace), but only one parse is ever queued on
-     * the EDT — further requests while one is pending are no-ops, with the
-     * zoom-to-fit flag ORed into the pending parse. EDT-confined, like every
-     * caller (document listeners and file-load paths).</p>
+     * Parses the current editor text into this document's model, if it has one.
+     * A safe no-op for kinds without a model — every open path calls this.
+     * {@link ModelDocument} overrides with the real (coalesced) parse.
      *
      * @param autoZoomToFit if true, zoom the map to fit after parsing (used on file loads)
      */
     public void parseModelFromText(boolean autoZoomToFit) {
-        if (model == null) {
-            return; // non-model documents have nothing to parse into
-        }
-        queuedAutoZoom |= autoZoomToFit;
-        if (parseQueued) {
-            return;
-        }
-        parseQueued = true;
-        SwingUtilities.invokeLater(() -> {
-            boolean zoomToFit = queuedAutoZoom;
-            parseQueued = false;
-            queuedAutoZoom = false;
-            try {
-                String text = editor.getText();
-                if (text != null) {
-                    model.parseFromIniTextIncremental(text);
-                    if (zoomToFit) {
-                        mapPanel.zoomToFit();
-                    }
-                }
-            } catch (Exception e) {
-                // Log parsing errors but don't disrupt the UI.
-                logger.warn("Error parsing model from text: {}", e.getMessage());
-            }
-        });
-    }
-
-    /**
-     * Auto-zooms the map to fit when the model transitions from 0 to &gt;0 nodes,
-     * i.e. when content first appears (typing into an empty model, or a load).
-     */
-    private void onModelChanged(ModelChangeEvent event) {
-        SwingUtilities.invokeLater(() -> {
-            int currentNodeCount = model.getStatistics().getNodeCount();
-            if (previousNodeCount == 0 && currentNodeCount > 0) {
-                mapPanel.zoomToFit();
-            }
-            previousNodeCount = currentNodeCount;
-        });
+        // Only a model document has a model to parse into.
     }
 
     /**
@@ -305,97 +144,70 @@ public class KalixDocument implements OpenModel {
         };
     }
 
-    // --- Views ---
+    // --- Views (subtypes override what their bundle provides) ---
 
     public EnhancedTextEditor getEditor() {
         return editor;
     }
 
     /** This document's kind, fixed at creation. */
-    public DocumentKind getKind() {
+    public final DocumentKind getKind() {
         return kind;
     }
 
     /** Whether this document holds a Kalix model (and therefore a map). */
-    public boolean isModel() {
+    public final boolean isModel() {
         return kind == DocumentKind.MODEL;
     }
 
     /** The map visualising this document's model, or {@code null} for non-model kinds. */
     public MapPanel getMapPanel() {
-        return mapPanel;
+        return null;
+    }
+
+    /** This document's parsed model, or {@code null} for non-model kinds. */
+    public HydrologicalModel getModel() {
+        return null;
     }
 
     /**
-     * Returns the component shown in the contextual view for this document, or
-     * {@code null} if this document has no contextual view (in which case the
-     * region collapses). For a model document this is the map; for a data
-     * document the virtual table; a TEXT document has none.
+     * The component shown in the contextual view for this document, or
+     * {@code null} if it has none (the region collapses). The map for a model
+     * document, the virtual table for a data document.
      */
     public Component getContextView() {
-        return mapPanel != null ? mapPanel : dataViewPanel;
+        return null;
     }
 
     /**
-     * The main (left) component of this document's tab: normally the text
-     * editor; for a DATA document above the editable gate, the virtual
-     * read-only text view (the file never enters an editor buffer).
+     * The main (left) component of this document's tab: the text editor, unless
+     * a subtype substitutes a virtual view (a large read-only data document).
      */
     public JComponent getPrimaryView() {
-        // A read-only document whose session failed falls back to its (empty,
-        // unsaveable) editor rather than a null component.
-        return largeReadOnly && largeTextScroller != null ? largeTextScroller : editor;
+        return editor;
     }
 
     /** The component that should receive focus when this document's tab activates. */
     public Component getPrimaryFocusComponent() {
-        return largeReadOnly && largeTextArea != null ? largeTextArea : editor.getTextArea();
+        return editor.getTextArea();
     }
 
     /**
      * Whether this document's text can be edited and saved. False only for a
-     * DATA document above the editable gate — its tab is a viewer, and save
+     * data document above the editable gate — its tab is a viewer, and save
      * paths must refuse rather than write an empty buffer over the file.
      */
     public boolean isEditable() {
-        return !largeReadOnly;
-    }
-
-    /** This document's data session, or {@code null} for non-data kinds. Package-private, for tests. */
-    DataViewSession getDataViewSession() {
-        return dataViewSession;
+        return true;
     }
 
     /**
-     * Rebuilds the data views from the file after this document's text was saved.
-     * A below-gate data document is editable, so a save moves every byte offset
-     * the session's index recorded — parsing from stale checkpoints would render
-     * misaligned garbage presented as data. The fresh session is opened off the
-     * EDT and swapped in on it; the old session closes after the swap. No-op for
-     * non-data kinds, read-only views (nothing can be saved) and failed sessions.
+     * Rebuilds a data document's virtual views after its text was saved (their
+     * indexes record byte offsets the save just moved). A no-op for every other
+     * kind — the save paths call this unconditionally.
      */
     public void refreshDataViewAfterSave() {
-        if (kind != DocumentKind.DATA || dataViewPanel == null || !isEditable() || file == null) {
-            return;
-        }
-        File target = file; // Save As may have re-pointed the document; read the new bytes
-        Thread reloader = new Thread(() -> {
-            try {
-                DataViewSession fresh = DataViewOpener.openFor(target);
-                SwingUtilities.invokeLater(() -> {
-                    DataViewSession old = dataViewSession;
-                    dataViewSession = fresh;
-                    dataViewPanel.replaceSession(fresh);
-                    if (old != null) {
-                        old.close();
-                    }
-                });
-            } catch (IOException e) {
-                logger.warn("Data view refresh failed for {}: {}", target, e.getMessage());
-            }
-        }, "kalix-dataview-reload");
-        reloader.setDaemon(true);
-        reloader.start();
+        // Only a data document has views to rebuild.
     }
 
     /**
@@ -410,11 +222,6 @@ public class KalixDocument implements OpenModel {
      */
     public String getDisplayName() {
         return this.hasFile() ? file.getName() : "Untitled";
-    }
-
-    /** This document's parsed model, or {@code null} for non-model kinds. */
-    public HydrologicalModel getModel() {
-        return model;
     }
 
     /** Only model documents with a working directory can be optimisation targets. */
@@ -484,12 +291,10 @@ public class KalixDocument implements OpenModel {
      * importantly the editor's global listeners and background executors (linter,
      * auto-complete, input-data registry) via {@link EnhancedTextEditor#dispose()}.
      * Called by {@code DocumentManager.closeDocument} for every close path; without
-     * it every closed tab leaked its entire editor graph. Idempotent.
+     * it every closed tab leaked its entire editor graph. Idempotent. Subtypes
+     * extend this with their bundle's teardown.
      */
     public void dispose() {
         editor.dispose();
-        if (dataViewSession != null) {
-            dataViewSession.close(); // aborts any in-flight indexing within one read
-        }
     }
 }

@@ -7,16 +7,11 @@ import java.util.Locale;
 
 /**
  * What kind of content a {@link KalixDocument} holds, decided from its file at
- * creation and fixed for the document's lifetime.
- *
- * <p>MODEL documents get the full bundle (editor + {@code HydrologicalModel} +
- * {@code MapPanel}); DATA documents get the data-view bundle (a
- * {@code DataViewSession} feeding a table context view, with the text side
- * editable below the large-file gate and a virtual read-only view above it —
- * see {@code docs/data-file-viewer.md}); TEXT documents get the editor alone
- * and a {@code null} contextual view. Per the architecture doc, splitting
- * {@code KalixDocument} into subtypes waits until the DATA bundle grows
- * further (plot view, overlay editing).</p>
+ * creation and fixed for the document's lifetime. Each kind maps to the subtype
+ * {@link KalixDocument#createFor} builds: MODEL → {@link ModelDocument}
+ * (editor + model + map), DATA → {@link DataDocument} (virtual data views and
+ * the large-file gate — see {@code docs/data-file-viewer.md}), TEXT →
+ * {@link TextDocument} (the editor alone).
  */
 public enum DocumentKind {
 

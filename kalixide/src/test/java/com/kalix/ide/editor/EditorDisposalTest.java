@@ -2,6 +2,7 @@ package com.kalix.ide.editor;
 
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
+import com.kalix.ide.document.ModelDocument;
 import com.kalix.ide.linter.events.ValidationEventManager;
 import com.kalix.ide.linter.ui.HoverTipSupplier;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
@@ -44,7 +45,7 @@ class EditorDisposalTest {
     void closingADocumentDisposesItsEditor() {
         int before = awtMouseListenerCount();
         DocumentManager dm = new DocumentManager();
-        KalixDocument document = new KalixDocument();
+        KalixDocument document = new ModelDocument();
         dm.addDocument(document);
         assertEquals(before + 1, awtMouseListenerCount());
 
