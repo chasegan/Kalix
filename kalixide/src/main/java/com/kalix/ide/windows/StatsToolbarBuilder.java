@@ -1,9 +1,9 @@
 package com.kalix.ide.windows;
 
-import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.PlotState;
+import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
-import com.kalix.ide.flowviz.transform.AggregationPipeline;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 
@@ -19,31 +19,46 @@ import javax.swing.JTable;
 import javax.swing.JToolBar;
 import java.awt.Dimension;
 import java.io.File;
+import java.util.function.Consumer;
 
 /**
- * Builder for a stats tab's toolbar (save, aggregation, mask controls), extracted
- * from {@link VisualizationTabManager}. Sizing and the aggregation option lists come from
- * {@link ToolbarConstants}, also used by {@link PlotToolbarBuilder}, so the two toolbars stay
- * visually and behaviourally consistent.
+ * Builder for a stats-view tab's toolbar (save, undo/redo, aggregation, mask).
+ * The controls drive the tab's state-owning {@code PlotPanel} — so every change
+ * here is undoable and shared with the plot projection — and report application
+ * through {@code onStateApplied} so the owner reprojects the stats table.
+ * Sizing and the aggregation option lists come from {@link ToolbarConstants},
+ * also used by {@link PlotToolbarBuilder}, so the two toolbars stay consistent.
  */
 class StatsToolbarBuilder {
     private final JToolBar toolbar;
     private final VisualizationTabManager.TabInfo tabInfo;
     private final JTable statsTable;
-    private final DataSet dataSet;
+
+    private Consumer<PlotState> onUndoRedo;
+    private Runnable onStateApplied;
 
     // Store dropdown references for coordinated updates
     private JComboBox<String> aggregationPeriodCombo;
     private JComboBox<String> aggregationMethodCombo;
     private JComboBox<String> maskCombo;
 
-    StatsToolbarBuilder(VisualizationTabManager.TabInfo tabInfo, JTable statsTable, DataSet dataSet) {
+    StatsToolbarBuilder(VisualizationTabManager.TabInfo tabInfo, JTable statsTable) {
         this.tabInfo = tabInfo;
         this.statsTable = statsTable;
-        this.dataSet = dataSet;
         this.toolbar = new JToolBar();
         this.toolbar.setFloatable(false);
         this.toolbar.setRollover(true);
+    }
+
+    StatsToolbarBuilder setOnUndoRedo(Consumer<PlotState> callback) {
+        this.onUndoRedo = callback;
+        return this;
+    }
+
+    /** Invoked after a control applied a state change, so the owner reprojects the stats table. */
+    StatsToolbarBuilder setOnStateApplied(Runnable callback) {
+        this.onStateApplied = callback;
+        return this;
     }
 
     StatsToolbarBuilder addSaveButton() {
@@ -52,16 +67,42 @@ class StatsToolbarBuilder {
         return this;
     }
 
+    StatsToolbarBuilder addUndoRedoButtons() {
+        JButton undoButton = createIconButton(FontAwesomeSolid.UNDO, "Undo", () -> {
+            PlotState state = tabInfo.plotPanel.undo();
+            if (state != null && onUndoRedo != null) {
+                onUndoRedo.accept(state);
+            }
+        });
+        JButton redoButton = createIconButton(FontAwesomeSolid.REDO, "Redo", () -> {
+            PlotState state = tabInfo.plotPanel.redo();
+            if (state != null && onUndoRedo != null) {
+                onUndoRedo.accept(state);
+            }
+        });
+
+        // Initialise from the panel: a duplicated tab has history before its toolbar exists.
+        undoButton.setEnabled(tabInfo.plotPanel.canUndo());
+        redoButton.setEnabled(tabInfo.plotPanel.canRedo());
+        tabInfo.plotPanel.setOnHistoryChanged(() -> {
+            undoButton.setEnabled(tabInfo.plotPanel.canUndo());
+            redoButton.setEnabled(tabInfo.plotPanel.canRedo());
+        });
+
+        toolbar.add(undoButton);
+        toolbar.add(redoButton);
+        return this;
+    }
+
     StatsToolbarBuilder addAggregationControls() {
         // Resolution label
         toolbar.add(new JLabel("Resolution:"));
         toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
-        // Aggregation period dropdown
+        // Aggregation period dropdown, initialised from the state-owning panel
         aggregationPeriodCombo = createDropdown(ToolbarConstants.AGGREGATION_OPTIONS,
             ToolbarConstants.WIDE_DROPDOWN_SIZE, "Aggregation");
-        // Set initial selection from tab info
-        aggregationPeriodCombo.setSelectedItem(tabInfo.statsPeriod.getDisplayName());
+        aggregationPeriodCombo.setSelectedItem(tabInfo.plotPanel.getAggregationPeriod().getDisplayName());
         aggregationPeriodCombo.addActionListener(e -> applyAggregation());
         toolbar.add(aggregationPeriodCombo);
 
@@ -73,8 +114,7 @@ class StatsToolbarBuilder {
         // Aggregation method dropdown
         aggregationMethodCombo = createDropdown(ToolbarConstants.AGGREGATION_METHOD_OPTIONS,
             ToolbarConstants.NARROW_DROPDOWN_SIZE, "Aggregation method");
-        // Set initial selection from tab info
-        aggregationMethodCombo.setSelectedItem(tabInfo.statsMethod.getDisplayName());
+        aggregationMethodCombo.setSelectedItem(tabInfo.plotPanel.getAggregationMethod().getDisplayName());
         aggregationMethodCombo.addActionListener(e -> applyAggregation());
         toolbar.add(aggregationMethodCombo);
 
@@ -87,22 +127,16 @@ class StatsToolbarBuilder {
         toolbar.add(new JLabel("Mask:"));
         toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
-        // Mask mode dropdown
+        // Mask mode dropdown, driving the shared (undoable) state
         String[] maskOptions = {"All", "Each", "None"};
         maskCombo = createDropdown(maskOptions,
             ToolbarConstants.NARROW_DROPDOWN_SIZE, "Mask mode for bivariate statistics");
-
-        // Set initial selection from stats model
-        if (tabInfo.statsModel != null) {
-            maskCombo.setSelectedItem(tabInfo.statsModel.getMaskMode().getDisplayName());
-        }
-
+        maskCombo.setSelectedItem(tabInfo.plotPanel.getMaskMode().getDisplayName());
         maskCombo.addActionListener(e -> {
             String selected = (String) maskCombo.getSelectedItem();
-            if (selected != null && tabInfo.statsModel != null) {
-                com.kalix.ide.flowviz.stats.MaskMode mode =
-                    com.kalix.ide.flowviz.stats.MaskMode.fromDisplayName(selected);
-                tabInfo.statsModel.setMaskMode(mode);
+            if (selected != null) {
+                tabInfo.plotPanel.setMaskMode(MaskMode.fromDisplayName(selected));
+                applied();
             }
         });
         toolbar.add(maskCombo);
@@ -110,21 +144,21 @@ class StatsToolbarBuilder {
         return this;
     }
 
-    /** Applies current aggregation settings to stats. */
     /**
      * Resyncs the aggregation and mask dropdowns from the tab's current state — used by
-     * in-place Reset. Setting a combo fires its listener, which harmlessly re-applies
-     * the value it already holds (the stats pipeline is cheap, and empty after a reset).
+     * in-place Reset and the undo/redo callback. Setting a combo fires its listener,
+     * which harmlessly re-applies the value the panel already holds (the push dedupes
+     * via PlotState.equals, so no spurious history entry).
      */
     void syncFromTab() {
         if (aggregationPeriodCombo != null) {
-            aggregationPeriodCombo.setSelectedItem(tabInfo.statsPeriod.getDisplayName());
+            aggregationPeriodCombo.setSelectedItem(tabInfo.plotPanel.getAggregationPeriod().getDisplayName());
         }
         if (aggregationMethodCombo != null) {
-            aggregationMethodCombo.setSelectedItem(tabInfo.statsMethod.getDisplayName());
+            aggregationMethodCombo.setSelectedItem(tabInfo.plotPanel.getAggregationMethod().getDisplayName());
         }
-        if (maskCombo != null && tabInfo.statsModel != null) {
-            maskCombo.setSelectedItem(tabInfo.statsModel.getMaskMode().getDisplayName());
+        if (maskCombo != null) {
+            maskCombo.setSelectedItem(tabInfo.plotPanel.getMaskMode().getDisplayName());
         }
     }
 
@@ -139,26 +173,17 @@ class StatsToolbarBuilder {
         if (periodStr != null && methodStr != null) {
             AggregationPeriod period = AggregationPeriod.fromDisplayName(periodStr);
             AggregationMethod method = AggregationMethod.fromDisplayName(methodStr);
-
-            // Update tab info aggregation settings
-            tabInfo.statsPeriod = period;
-            tabInfo.statsMethod = method;
-
-            // Recompute stats with aggregated data
-            recomputeStats();
+            // The panel owns the state: this pushes one undoable entry shared
+            // with the plot projection.
+            tabInfo.plotPanel.setAggregation(period, method);
+            applied();
         }
     }
 
-    /** Recomputes stats with current aggregation settings, filtered to per-tab series. */
-    private void recomputeStats() {
-        if (tabInfo.statsModel == null || dataSet == null) {
-            return;
+    private void applied() {
+        if (onStateApplied != null) {
+            onStateApplied.run();
         }
-        // The one shared pipeline (same as the plot and rebuildStatsTab), applied
-        // as a single batch — replaces per-series adds that were O(n²) in All-mask
-        // mode (every add recomputed the shared mask).
-        tabInfo.statsModel.setSeries(AggregationPipeline.aggregate(
-            dataSet, tabInfo.selectedSeries, tabInfo.statsPeriod, tabInfo.statsMethod));
     }
 
     /** Saves stats data to CSV. */

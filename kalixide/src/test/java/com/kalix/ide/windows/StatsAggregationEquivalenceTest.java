@@ -13,21 +13,24 @@ import com.kalix.ide.flowviz.transform.AggregationPeriod;
 
 import org.junit.jupiter.api.Test;
 
-import javax.swing.JPanel;
-import javax.swing.JTable;
+import javax.swing.JComboBox;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The tripwire for the aggregation consolidation: every path that fills a stats
- * table (batch rebuild on tab creation, per-series async update, and the stats
- * toolbar's recompute) must produce identical statistics for identical inputs —
- * plus the duplication mask-carry contract.
+ * table (batch rebuild at tab creation, per-series async update, and the stats
+ * toolbar's recompute driven through the real combos) must produce identical
+ * statistics for identical inputs — plus the duplication mask-carry contract.
  */
 class StatsAggregationEquivalenceTest {
 
@@ -68,76 +71,85 @@ class StatsAggregationEquivalenceTest {
         return rows;
     }
 
-    private static VisualizationTabManager.TabSettings statsSettings() {
+    private static VisualizationTabManager.TabSettings statsSettings(
+            AggregationPeriod period, AggregationMethod method) {
         VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
         settings.selectedSeries = new LinkedHashSet<>(List.of(R1, R2));
         settings.checkedSources = new LinkedHashSet<>();
-        settings.aggregationPeriod = AggregationPeriod.DAILY;
-        settings.aggregationMethod = AggregationMethod.MEAN;
+        settings.aggregationPeriod = period;
+        settings.aggregationMethod = method;
         return settings;
+    }
+
+    /** Finds a combo by tooltip anywhere in the active tab's component tree. */
+    private static JComboBox<?> combo(Container root, String tooltip) {
+        for (Component component : root.getComponents()) {
+            if (component instanceof JComboBox<?> box && tooltip.equals(box.getToolTipText())) {
+                return box;
+            }
+            if (component instanceof Container container) {
+                JComboBox<?> found = combo(container, tooltip);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     @Test
     void allThreeStatsFillPathsProduceIdenticalTables() {
         // Path A: batch rebuild at tab creation (pool already populated).
-        StatsTableModel batch = manager(pool()).addStatsTabFromSettings(statsSettings());
+        StatsTableModel batch = manager(pool())
+            .addStatsTabFromSettings(statsSettings(AggregationPeriod.DAILY, AggregationMethod.MEAN));
         List<List<String>> expected = snapshot(batch);
         assertFalse(expected.isEmpty(), "fixture sanity: statistics were computed");
 
-        // Path B: per-series async updates into an initially empty pool.
+        // Path B: per-series async updates into a visible stats view.
         VisualizationTabManager async = manager(new DataSet());
-        async.addStatsTabFromSettings(statsSettings());
+        async.addStatsTabFromSettings(statsSettings(AggregationPeriod.DAILY, AggregationMethod.MEAN));
         async.updateSeriesInStatsTabsWithAggregation(R1, daily(1, 2, 3, 4, 5, 6));
         async.updateSeriesInStatsTabsWithAggregation(R2, daily(2, 4, 6, 8, 10, 12));
         assertEquals(expected, snapshot(async.getAllStatsModels().get(0)),
             "async per-series path must match the batch path");
 
-        // Path C: the stats toolbar's recompute, driven through the real combos.
-        StatsTableModel toolbarModel = new StatsTableModel();
-        VisualizationTabManager.TabInfo tabInfo = new VisualizationTabManager.TabInfo(
-            VisualizationTabManager.TabInfo.TabType.STATS, "", new JPanel(), null, toolbarModel);
-        tabInfo.selectedSeries.addAll(List.of(R1, R2));
-        tabInfo.statsPeriod = AggregationPeriod.ORIGINAL; // driven to DAILY via the combo below
-        tabInfo.statsMethod = AggregationMethod.SUM;
-        StatsToolbarBuilder builder = new StatsToolbarBuilder(tabInfo, new JTable(toolbarModel), pool());
-        builder.addAggregationControls();
-        builder.build();
-        // Real listener firings, exactly as a user changing the dropdowns.
-        driveCombo(builder, AggregationPeriod.DAILY.getDisplayName(),
-            AggregationMethod.MEAN.getDisplayName());
-        assertEquals(AggregationPeriod.DAILY, tabInfo.statsPeriod);
+        // Path C: the stats toolbar's recompute, driven through the real combos
+        // (which now drive the state-owning panel — undoably).
+        VisualizationTabManager toolbar = manager(pool());
+        StatsTableModel toolbarModel = toolbar
+            .addStatsTabFromSettings(statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM));
+        Container tabRoot = (Container) toolbar.getTabbedPane().getSelectedComponent();
+        JComboBox<?> periodCombo = combo(tabRoot, "Aggregation");
+        JComboBox<?> methodCombo = combo(tabRoot, "Aggregation method");
+        assertNotNull(periodCombo);
+        assertNotNull(methodCombo);
+        periodCombo.setSelectedItem(AggregationPeriod.DAILY.getDisplayName());
+        methodCombo.setSelectedItem(AggregationMethod.MEAN.getDisplayName());
+
+        assertEquals(AggregationPeriod.DAILY, toolbar.getTargetPlotPanel().getAggregationPeriod(),
+            "the combo drives the state-owning panel");
+        assertTrue(toolbar.getTargetPlotPanel().canUndo(),
+            "stats aggregation changes are undoable now");
         assertEquals(expected, snapshot(toolbarModel),
             "toolbar recompute must match the batch path");
     }
 
-    private static void driveCombo(StatsToolbarBuilder builder, String period, String method) {
-        javax.swing.JToolBar toolbar = builder.build();
-        for (java.awt.Component component : toolbar.getComponents()) {
-            if (component instanceof javax.swing.JComboBox<?> combo) {
-                if ("Aggregation".equals(combo.getToolTipText())) {
-                    combo.setSelectedItem(period);
-                } else if ("Aggregation method".equals(combo.getToolTipText())) {
-                    combo.setSelectedItem(method);
-                }
-            }
-        }
-    }
-
     @Test
-    void statsTabDuplicationCarriesTheMaskMode() {
-        StatsTableModel sourceModel = new StatsTableModel();
-        sourceModel.setMaskMode(MaskMode.NONE); // away from the ALL default
-        VisualizationTabManager.TabInfo source = new VisualizationTabManager.TabInfo(
-            VisualizationTabManager.TabInfo.TabType.STATS, "", new JPanel(), null, sourceModel);
+    void statsTabCreationCarriesTheMaskModeAndDefaultsToAll() {
+        // Default: a stats-view tab starts at the historical ALL default.
+        VisualizationTabManager defaults = manager(new DataSet());
+        StatsTableModel model = defaults
+            .addStatsTabFromSettings(statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM));
+        assertEquals(MaskMode.ALL, model.getMaskMode());
+        assertEquals(MaskMode.ALL, defaults.getTargetPlotPanel().getMaskMode(),
+            "the panel owns the mask; the model is its projection");
 
+        // Carried: duplication-style settings preserve a non-default mask.
+        VisualizationTabManager carried = manager(new DataSet());
         VisualizationTabManager.TabSettings settings =
-            VisualizationTabManager.TabSettings.fromStatsTab(source);
-        assertEquals(MaskMode.NONE, settings.maskMode, "settings capture the live mask");
-
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>();
-        VisualizationTabManager mgr = manager(new DataSet());
-        StatsTableModel duplicate = mgr.addStatsTabFromSettings(settings);
+            statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM);
+        settings.maskMode = MaskMode.NONE;
+        StatsTableModel duplicate = carried.addStatsTabFromSettings(settings);
         assertEquals(MaskMode.NONE, duplicate.getMaskMode(),
             "duplication no longer silently resets the mask to ALL");
     }

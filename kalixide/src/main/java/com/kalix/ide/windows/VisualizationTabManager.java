@@ -14,6 +14,7 @@ import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.transform.AggregationPipeline;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.flowviz.transform.TimeSeriesAggregator;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.preferences.PreferenceKeys;
 
@@ -62,12 +63,19 @@ import java.util.Set;
  * which series from the pool it displays. Plot tabs render only their selected series;
  * stats tabs compute statistics only for theirs.
  *
- * <h2>Tab Types</h2>
+ * <h2>Unified Tabs</h2>
+ * Every tab owns the full bundle: a {@link PlotPanel} — the canonical state owner
+ * (selection, checked sources, aggregation, mask, undo history) — plus a
+ * {@link StatsTableModel} projection of the same state. The tab's view mode
+ * decides which projection is mounted:
  * <ul>
- *   <li><b>PLOT</b> - Time series chart with per-tab aggregation, transforms, masking,
- *       undo/redo history, and LOD rendering</li>
- *   <li><b>STATS</b> - Statistics table showing min/max/mean/etc. for the tab's selected series</li>
+ *   <li><b>PLOT</b> - the time-series chart (transforms, LOD rendering)</li>
+ *   <li><b>STATS</b> - the statistics table (min/max/mean/etc.), fed from the
+ *       same aggregation settings through the shared {@link AggregationPipeline},
+ *       so the two projections can never disagree</li>
  * </ul>
+ * The hidden projection is lazy: data and state changes mark it dirty and it
+ * recomputes when shown (the view toggle arrives in the next stage).
  *
  * <h2>New Tab Behavior</h2>
  * New tabs inherit the active tab's series selection and settings. Plot tabs created
@@ -161,9 +169,12 @@ public class VisualizationTabManager {
         public PlotPanel sourcePlotPanel = null;
 
         /**
-         * Extract settings from a plot tab.
+         * Extracts settings from a tab. Every tab's canonical state lives on its
+         * {@link PlotPanel}, whatever view it currently shows, so there is one
+         * factory — the history reference makes duplication Chrome-style (full
+         * undo history, current state restored) for both views.
          */
-        public static TabSettings fromPlotTab(TabInfo tabInfo) {
+        public static TabSettings fromTab(TabInfo tabInfo) {
             PlotPanel plotPanel = tabInfo.plotPanel;
             TabSettings settings = new TabSettings();
             settings.name = tabInfo.name;
@@ -185,21 +196,6 @@ public class VisualizationTabManager {
         }
 
         /**
-         * Extract settings from a stats tab.
-         */
-        public static TabSettings fromStatsTab(TabInfo statsTabInfo) {
-            TabSettings settings = new TabSettings();
-            settings.name = statsTabInfo.name;
-            settings.aggregationPeriod = statsTabInfo.statsPeriod;
-            settings.aggregationMethod = statsTabInfo.statsMethod;
-            settings.maskMode = statsTabInfo.statsModel != null
-                ? statsTabInfo.statsModel.getMaskMode() : null;
-            settings.selectedSeries = new LinkedHashSet<>(statsTabInfo.selectedSeries);
-            settings.checkedSources = new LinkedHashSet<>(statsTabInfo.checkedSources);
-            return settings;
-        }
-
-        /**
          * Get default settings from preferences.
          */
         public static TabSettings getDefaults() {
@@ -213,18 +209,23 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Represents a visualization tab with its type and components. Package-private:
-     * {@link StatsToolbarBuilder} reads/writes the stats aggregation fields.
+     * Represents a visualization tab. Every tab owns the full bundle — a
+     * {@link PlotPanel} (the canonical state owner: selection, sources,
+     * aggregation, mask, undo history) plus a {@link StatsTableModel}
+     * projection of the same state — and mounts one of them per its view mode.
+     * Package-private: {@link StatsToolbarBuilder} drives the panel through it.
      */
     static class TabInfo {
         enum TabType { PLOT, STATS }
 
-        final TabType type;
+        /** Which projection this tab currently shows. Mutable by design (the view toggle). */
+        TabType viewMode;
         final JComponent component;
-        final PlotPanel plotPanel; // null for stats tabs
-        final StatsTableModel statsModel; // null for plot tabs
+        final PlotPanel plotPanel;
+        final StatsTableModel statsModel;
 
-        // Per-tab selected series (plot tabs only). Preserves insertion order for legend consistency.
+        // Per-tab selected series. Preserves insertion order for legend consistency
+        // and the bivariate statistics reference (first series).
         final Set<SeriesRef> selectedSeries = new LinkedHashSet<>();
 
         // Per-tab checked data sources — the source-tree context this tab was built in.
@@ -232,9 +233,8 @@ public class VisualizationTabManager {
         // tab is a complete view: sources + series + plot settings. Empty restores empty.
         final Set<SourceRef> checkedSources = new LinkedHashSet<>();
 
-        // Aggregation settings for stats tabs
-        AggregationPeriod statsPeriod = AggregationPeriod.ORIGINAL;
-        AggregationMethod statsMethod = AggregationMethod.SUM;
+        /** The hidden stats projection missed a state/data change; recompute when shown. */
+        boolean statsDirty = false;
 
         // Tab user-supplied identifier
         String name;
@@ -243,11 +243,11 @@ public class VisualizationTabManager {
 
         // Toolbar handles, set once the toolbar is built: let in-place operations
         // (Reset) resync the toolbar controls from the tab's actual state.
-        PlotToolbarController plotToolbarController; // plot tabs only
-        StatsToolbarBuilder statsToolbar;            // stats tabs only
+        PlotToolbarController plotToolbarController; // plot-view toolbars only
+        StatsToolbarBuilder statsToolbar;            // stats-view toolbars only
 
-        TabInfo(TabType type, String name, JComponent component, PlotPanel plotPanel, StatsTableModel statsModel) {
-            this.type = type;
+        TabInfo(TabType viewMode, String name, JComponent component, PlotPanel plotPanel, StatsTableModel statsModel) {
+            this.viewMode = viewMode;
             this.name = name;
             this.component = component;
             this.plotPanel = plotPanel;
@@ -297,7 +297,7 @@ public class VisualizationTabManager {
         // Track tab changes for tree synchronization
         this.tabbedPane.addChangeListener(e -> {
             TabInfo active = getActiveTab();
-            if (active != null && active.type == TabInfo.TabType.PLOT) {
+            if (active != null && active.viewMode == TabInfo.TabType.PLOT) {
                 lastActivePlotTabIndex = tabbedPane.getSelectedIndex();
             }
             if (onTabChangedCallback != null) {
@@ -447,7 +447,16 @@ public class VisualizationTabManager {
      * @return The created PlotPanel
      */
     public PlotPanel addPlotTabFromSettings(TabSettings settings) {
-        // Create new plot panel with shared dataset
+        return addTabFromSettings(settings, TabInfo.TabType.PLOT).plotPanel;
+    }
+
+    /**
+     * Creates a unified tab. Every tab gets the full bundle (panel as state
+     * owner, stats model as projection); {@code viewMode} decides which is
+     * mounted — the view toggle (next stage) will switch them live.
+     */
+    private TabInfo addTabFromSettings(TabSettings settings, TabInfo.TabType viewMode) {
+        // Create the state-owning panel with the shared dataset
         PlotPanel plotPanel = new PlotPanel();
         plotPanel.setDataSet(sharedDataSet);
         plotPanel.setStyleResolver(styleResolver);
@@ -458,12 +467,17 @@ public class VisualizationTabManager {
             plotPanel.setBaseDirectorySupplier(baseDirectorySupplier);
         }
 
+        StatsTableModel statsModel = new StatsTableModel();
+        if (labelResolver != null) {
+            statsModel.setLabelResolver(labelResolver);
+        }
+
         // Use series from settings if provided, otherwise inherit from active tab
         Set<SeriesRef> inheritedSeries;
         if (settings.selectedSeries != null) {
             inheritedSeries = new LinkedHashSet<>(settings.selectedSeries);
         } else {
-            TabInfo activeTab = getActivePlotTab();
+            TabInfo activeTab = getActiveTab();
             inheritedSeries = activeTab != null
                 ? new LinkedHashSet<>(activeTab.selectedSeries)
                 : new LinkedHashSet<>(sharedDataSet.getSeriesRefs());
@@ -474,7 +488,7 @@ public class VisualizationTabManager {
         // wrongly clear them.
         JPanel containerPanel = new JPanel(new BorderLayout());
         TabInfo tabInfo = new TabInfo(
-            TabInfo.TabType.PLOT, settings.name != null ? settings.name : "", containerPanel, plotPanel, null);
+            viewMode, settings.name != null ? settings.name : "", containerPanel, plotPanel, statsModel);
         tabInfo.selectedSeries.addAll(inheritedSeries);
         tabInfo.checkedSources.addAll(inheritedSources(settings));
         plotPanel.setCheckedSourcesSupplier(() -> new LinkedHashSet<>(tabInfo.checkedSources));
@@ -485,6 +499,14 @@ public class VisualizationTabManager {
         plotPanel.batchStateChange(() -> {
             plotPanel.setVisibleSeries(new ArrayList<>(inheritedSeries));
             applyPlotSettings(plotPanel, settings);
+            // Mask: carried explicitly (duplication), else the created kind's
+            // default — plot NONE (the panel default), stats ALL (the historical
+            // stats default). Undoable like every other shared setting.
+            if (settings.maskMode != null) {
+                plotPanel.setMaskMode(settings.maskMode);
+            } else if (viewMode == TabInfo.TabType.STATS) {
+                plotPanel.setMaskMode(MaskMode.ALL);
+            }
         });
 
         // Populate legend with inherited series (colour resolved at render time)
@@ -495,19 +517,34 @@ public class VisualizationTabManager {
         // Duplicating copies the source's full history (the batchStateChange above
         // already pushed this tab's own initial entry, which the copy replaces).
         // Done BEFORE the toolbar is built: copyHistoryFrom restores the source's current
-        // state (mask mode included, which TabSettings doesn't carry), and the toolbar
-        // controls initialise by reading the panel — building first left them showing
-        // defaults that disagreed with the restored plot.
+        // state, and the toolbar controls initialise by reading the panel — building
+        // first left them showing defaults that disagreed with the restored state.
         if (settings.sourcePlotPanel != null) {
             plotPanel.copyHistoryFrom(settings.sourcePlotPanel);
         }
 
-        PlotToolbarBuilder toolbarBuilder = createPlotToolbar(plotPanel, settings.autoYMode, settings.showCoordinates);
-        JToolBar toolbar = toolbarBuilder.build();
-        containerPanel.add(toolbar, BorderLayout.NORTH);
-        containerPanel.add(plotPanel, BorderLayout.CENTER);
-        tabInfo.plotToolbarController = toolbarBuilder.getController();
         tabs.add(tabInfo);
+
+        if (viewMode == TabInfo.TabType.PLOT) {
+            PlotToolbarBuilder toolbarBuilder = createPlotToolbar(plotPanel, settings.autoYMode, settings.showCoordinates);
+            containerPanel.add(toolbarBuilder.build(), BorderLayout.NORTH);
+            containerPanel.add(plotPanel, BorderLayout.CENTER);
+            tabInfo.plotToolbarController = toolbarBuilder.getController();
+        } else {
+            JTable table = new JTable(statsModel);
+            table.setFillsViewportHeight(true);
+            table.setRowSelectionAllowed(false);
+            applyStatsTableRenderer(table);
+            // Narrow index column (0); wider Series column (1) for longer series names.
+            if (table.getColumnCount() > 1) {
+                table.getColumnModel().getColumn(0).setMaxWidth(48);
+                table.getColumnModel().getColumn(0).setPreferredWidth(40);
+                table.getColumnModel().getColumn(1).setPreferredWidth(200);
+            }
+            refreshStatsProjection(tabInfo); // populate before showing
+            containerPanel.add(createStatsToolbar(tabInfo, table), BorderLayout.NORTH);
+            containerPanel.add(new JScrollPane(table), BorderLayout.CENTER);
+        }
 
         int index = tabbedPane.getTabCount();
         tabbedPane.addTab(tabInfo.name, containerPanel);
@@ -518,7 +555,7 @@ public class VisualizationTabManager {
             tabbedPane.setSelectedIndex(index);
         }
 
-        return plotPanel;
+        return tabInfo;
     }
 
     /**
@@ -551,11 +588,20 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Creates a toolbar for a stats tab.
+     * Creates a toolbar for a stats-view tab. The controls drive the tab's
+     * panel (the state owner), so aggregation and mask changes are undoable and
+     * land in the same history the plot view walks.
      */
     private JToolBar createStatsToolbar(TabInfo tabInfo, JTable statsTable) {
-        StatsToolbarBuilder builder = new StatsToolbarBuilder(tabInfo, statsTable, sharedDataSet)
+        StatsToolbarBuilder builder = new StatsToolbarBuilder(tabInfo, statsTable);
+        builder
+            .setOnUndoRedo(state -> {
+                syncTabSelectionFromPlotState(tabInfo.plotPanel, state);
+                builder.syncFromTab();
+            })
+            .setOnStateApplied(() -> refreshStatsProjection(tabInfo))
             .addSaveButton()
+            .addUndoRedoButtons()
             .addSeparator()
             .addAggregationControls()
             .addSeparator()
@@ -616,98 +662,19 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Adds a new statistics tab.
+     * Adds a new statistics-view tab with the given settings.
      *
-     * @return The created StatsTableModel
-     */
-    public StatsTableModel addStatsTab() {
-        return addStatsTabFromSettings(TabSettings.getDefaults());
-    }
-
-    /**
-     * Adds a new statistics tab with settings copied from another tab.
-     * The new stats tab will have the same settings and all series from the source tab.
-     *
-     * @param settings The settings to apply to the new stats tab
-     * @return The created StatsTableModel
+     * @return The created StatsTableModel (the tab's stats projection)
      */
     public StatsTableModel addStatsTabFromSettings(TabSettings settings) {
-        // Create new stats table
-        StatsTableModel model = new StatsTableModel();
-        if (labelResolver != null) {
-            model.setLabelResolver(labelResolver);
-        }
-        JTable table = new JTable(model);
-        table.setFillsViewportHeight(true);
-        table.setRowSelectionAllowed(false);
-
-        // Apply custom renderer to color statistics columns
-        applyStatsTableRenderer(table);
-
-        // Narrow index column (0); wider Series column (1) for longer series names.
-        if (table.getColumnCount() > 1) {
-            table.getColumnModel().getColumn(0).setMaxWidth(48);
-            table.getColumnModel().getColumn(0).setPreferredWidth(40);
-            table.getColumnModel().getColumn(1).setPreferredWidth(200);
-        }
-
-        JScrollPane scrollPane = new JScrollPane(table);
-
-        // Create container panel with toolbar
-        JPanel containerPanel = new JPanel(new BorderLayout());
-
-        // Create tab info so we can reference it in toolbar builder
-        TabInfo tabInfo = new TabInfo(
-            TabInfo.TabType.STATS, settings.name != null ? settings.name : "", containerPanel, null, model);
-
-        // Apply aggregation settings from TabSettings
-        tabInfo.statsPeriod = settings.aggregationPeriod;
-        tabInfo.statsMethod = settings.aggregationMethod;
-        if (settings.maskMode != null) {
-            // Carried from the source tab: duplication previously lost the mask,
-            // silently resetting it to ALL.
-            model.setMaskMode(settings.maskMode);
-        }
-
-        // Use series from settings if provided, otherwise inherit from active tab
-        if (settings.selectedSeries != null) {
-            tabInfo.selectedSeries.addAll(settings.selectedSeries);
-        } else {
-            TabInfo activeTab = getActiveTab();
-            if (activeTab != null && !activeTab.selectedSeries.isEmpty()) {
-                tabInfo.selectedSeries.addAll(activeTab.selectedSeries);
-            } else {
-                tabInfo.selectedSeries.addAll(sharedDataSet.getSeriesRefs());
-            }
-        }
-        tabInfo.checkedSources.addAll(inheritedSources(settings));
-
-        tabs.add(tabInfo);
-
-        // Populate with inherited series data
-        rebuildStatsTab(tabInfo);
-
-        JToolBar toolbar = createStatsToolbar(tabInfo, table);
-        containerPanel.add(toolbar, BorderLayout.NORTH);
-        containerPanel.add(scrollPane, BorderLayout.CENTER);
-
-        int index = tabbedPane.getTabCount();
-        tabbedPane.addTab(tabInfo.name, containerPanel);
-        setupTabIcon(index, tabInfo);
-
-        // Select the new tab (only when duplicating, not for initial default tabs)
-        if (settings.selectedSeries != null) {
-            tabbedPane.setSelectedIndex(index);
-        }
-
-        return model;
+        return addTabFromSettings(settings, TabInfo.TabType.STATS).statsModel;
     }
 
     /**
      * Sets up a tab with an icon and interaction handlers.
      */
     private void setupTabIcon(int index, TabInfo tabInfo) {
-        TabInfo.TabType tabType = tabInfo.type;
+        TabInfo.TabType tabType = tabInfo.viewMode;
 
         // Create tab panel with the icon and name label
         JPanel tabPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,
@@ -766,14 +733,7 @@ public class VisualizationTabManager {
         if (tabIndex == -1 || tabIndex >= tabs.size()) {
             return TabSettings.getDefaults();
         }
-        TabInfo sourceTab = tabs.get(tabIndex);
-        if (sourceTab.type == TabInfo.TabType.PLOT && sourceTab.plotPanel != null) {
-            return TabSettings.fromPlotTab(sourceTab);
-        }
-        if (sourceTab.type == TabInfo.TabType.STATS) {
-            return TabSettings.fromStatsTab(sourceTab);
-        }
-        return TabSettings.getDefaults();
+        return TabSettings.fromTab(tabs.get(tabIndex));
     }
 
     /**
@@ -979,11 +939,9 @@ public class VisualizationTabManager {
      * here, when the tab is genuinely discarded (close).
      */
     private void detachTabCallbacks(TabInfo tab) {
-        if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
-            tab.plotPanel.setOnHistoryChanged(null);
-            tab.plotPanel.setOnAutoYModeChanged(null);
-            tab.plotPanel.getLegendManager().setOnEnabledChanged(null);
-        }
+        tab.plotPanel.setOnHistoryChanged(null);
+        tab.plotPanel.setOnAutoYModeChanged(null);
+        tab.plotPanel.getLegendManager().setOnEnabledChanged(null);
     }
 
     /**
@@ -1003,23 +961,24 @@ public class VisualizationTabManager {
         tab.selectedSeries.clear();
         tab.checkedSources.clear();
 
-        if (tab.type == TabInfo.TabType.PLOT) {
-            tab.plotPanel.batchStateChange(() -> {
-                tab.plotPanel.setVisibleSeries(new ArrayList<>());
-                applyPlotSettings(tab.plotPanel, settings);
-            });
-            tab.plotPanel.getLegendManager().clear();
-            if (tab.plotToolbarController != null) {
-                tab.plotToolbarController.updateFromState(tab.plotPanel.currentState());
+        // One reset path for both views: the panel owns the state, so a stats-view
+        // reset is now just as undoable as a plot-view one. Mask semantics per view
+        // are preserved: a plot-view reset leaves the mask alone (as it always has),
+        // a stats-view reset restores the stats default (ALL).
+        tab.plotPanel.batchStateChange(() -> {
+            tab.plotPanel.setVisibleSeries(new ArrayList<>());
+            applyPlotSettings(tab.plotPanel, settings);
+            if (tab.viewMode == TabInfo.TabType.STATS) {
+                tab.plotPanel.setMaskMode(MaskMode.ALL);
             }
-        } else {
-            tab.statsPeriod = settings.aggregationPeriod;
-            tab.statsMethod = settings.aggregationMethod;
-            tab.statsModel.setMaskMode(com.kalix.ide.flowviz.stats.MaskMode.ALL);
-            rebuildStatsTab(tab);
-            if (tab.statsToolbar != null) {
-                tab.statsToolbar.syncFromTab();
-            }
+        });
+        tab.plotPanel.getLegendManager().clear();
+        if (tab.plotToolbarController != null) {
+            tab.plotToolbarController.updateFromState(tab.plotPanel.currentState());
+        }
+        refreshStatsProjection(tab);
+        if (tab.statsToolbar != null) {
+            tab.statsToolbar.syncFromTab();
         }
 
         // The canonical record changed in place: reproject the trees (active tab only).
@@ -1056,14 +1015,16 @@ public class VisualizationTabManager {
      */
     public void updateAllTabs(boolean resetZoom) {
         for (TabInfo tab : tabs) {
-            if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
+            if (tab.viewMode == TabInfo.TabType.PLOT) {
                 tab.plotPanel.setStyleResolver(styleResolver);
                 tab.plotPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
                 tab.plotPanel.refreshData(resetZoom);
+            } else {
+                // Hidden plot page: skipped, refreshed when the view toggles (next
+                // stage). The visible stats page is refreshed via the explicit
+                // calls (updateSeriesInStatsTabsWithAggregation, projections).
+                tab.statsDirty = true;
             }
-            // Stats tabs are intentionally not touched here — they are refreshed via
-            // explicit calls (updateSeriesInStatsTabsWithAggregation, rebuildStatsTab),
-            // not through DataSet listeners.
         }
     }
 
@@ -1118,27 +1079,16 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Returns the active PLOT tab's TabInfo, or null if a STATS tab is active.
-     */
-    private TabInfo getActivePlotTab() {
-        TabInfo active = getActiveTab();
-        if (active != null && active.type == TabInfo.TabType.PLOT) {
-            return active;
-        }
-        return null;
-    }
-
-    /**
-     * Returns the last-active plot tab (fallback when a stats tab is focused).
+     * Returns the last-active plot-view tab (fallback when no tab is selected).
      */
     private TabInfo getLastActivePlotTab() {
         if (lastActivePlotTabIndex >= 0 && lastActivePlotTabIndex < tabs.size()) {
             TabInfo tab = tabs.get(lastActivePlotTabIndex);
-            if (tab.type == TabInfo.TabType.PLOT) return tab;
+            if (tab.viewMode == TabInfo.TabType.PLOT) return tab;
         }
-        // Fallback: first plot tab
+        // Fallback: first plot-view tab
         for (TabInfo tab : tabs) {
-            if (tab.type == TabInfo.TabType.PLOT) return tab;
+            if (tab.viewMode == TabInfo.TabType.PLOT) return tab;
         }
         return null;
     }
@@ -1182,11 +1132,12 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Pushes the target plot tab's current state to its undo history, if it changed.
+     * Pushes the target tab's current state to its undo history, if it changed.
      * Source tick/untick is an undoable action in its own right: the window layer
      * calls this after recording a source change, and when the change also pruned
      * series (which pushes on its own) the second push dedupes via PlotState.equals.
-     * No-op when a stats tab is active (stats tabs have no history).
+     * Every tab has a history now — a stats-view tab's source ticks are just as
+     * undoable as a plot-view tab's.
      */
     public void pushTargetTabHistory() {
         PlotPanel panel = getTargetPlotPanel();
@@ -1220,7 +1171,8 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Returns the PlotPanel for the target tab (null if it's a stats tab).
+     * Returns the state-owning panel for the target tab (every tab has one),
+     * or null when there is no tab at all.
      */
     public PlotPanel getTargetPlotPanel() {
         TabInfo tab = getTargetTab();
@@ -1253,31 +1205,39 @@ public class VisualizationTabManager {
         tab.selectedSeries.clear();
         tab.selectedSeries.addAll(ordered);
 
-        if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
-            // Rebuild legend (colour resolved at render time)
-            tab.plotPanel.clearLegend();
-            for (SeriesRef ref : ordered) {
-                tab.plotPanel.addLegendSeries(ref);
-            }
-
-            // Update visible series and refresh
-            tab.plotPanel.setStyleResolver(styleResolver);
-            tab.plotPanel.setVisibleSeries(new ArrayList<>(ordered));
-            tab.plotPanel.refreshData(false);
-        } else if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
-            // Rebuild stats table to show only selected series
-            rebuildStatsTab(tab);
+        // The panel is the state owner for every tab: the selection lands there
+        // (undoably) whatever view is showing. The display refresh is only paid
+        // for the visible plot page; the stats projection follows (or dirties).
+        tab.plotPanel.clearLegend();
+        for (SeriesRef ref : ordered) {
+            tab.plotPanel.addLegendSeries(ref);
         }
+        tab.plotPanel.setStyleResolver(styleResolver);
+        tab.plotPanel.setVisibleSeries(new ArrayList<>(ordered));
+        if (tab.viewMode == TabInfo.TabType.PLOT) {
+            tab.plotPanel.refreshData(false);
+        }
+        refreshStatsProjection(tab);
     }
 
     /**
-     * Rebuilds a stats tab to show only its selected series. Collects all series first and
-     * hands them to {@link StatsTableModel#setSeries} so statistics are recomputed once,
-     * not once per series.
+     * Brings a tab's stats projection in line with its panel state (selection,
+     * aggregation, mask) — immediately when the stats view is showing, else a
+     * dirty mark for the view toggle to honour. One shared-pipeline call, one
+     * batch recompute.
      */
-    private void rebuildStatsTab(TabInfo tab) {
+    private void refreshStatsProjection(TabInfo tab) {
+        if (tab.viewMode != TabInfo.TabType.STATS) {
+            tab.statsDirty = true;
+            return;
+        }
+        tab.statsDirty = false;
+        if (tab.statsModel.getMaskMode() != tab.plotPanel.getMaskMode()) {
+            tab.statsModel.setMaskMode(tab.plotPanel.getMaskMode());
+        }
         tab.statsModel.setSeries(AggregationPipeline.aggregate(
-            sharedDataSet, tab.selectedSeries, tab.statsPeriod, tab.statsMethod));
+            sharedDataSet, tab.selectedSeries,
+            tab.plotPanel.getAggregationPeriod(), tab.plotPanel.getAggregationMethod()));
     }
 
     /**
@@ -1311,6 +1271,8 @@ public class VisualizationTabManager {
                 for (SeriesRef ref : state.getVisibleSeries()) {
                     panel.addLegendSeries(ref);
                 }
+                // The stats projection follows the restored state (or dirties).
+                refreshStatsProjection(tab);
                 mutated = tab;
                 break;
             }
@@ -1345,29 +1307,30 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Gets all plot panels from plot tabs.
+     * Gets every tab's state-owning panel (all tabs have one).
      */
     public List<PlotPanel> getAllPlotPanels() {
         List<PlotPanel> plotPanels = new ArrayList<>();
         for (TabInfo tab : tabs) {
-            if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
-                plotPanels.add(tab.plotPanel);
-            }
+            plotPanels.add(tab.plotPanel);
         }
         return plotPanels;
     }
 
     /**
-     * Gets all stats models from stats tabs.
+     * Gets every tab's stats projection (all tabs have one).
      */
     public List<StatsTableModel> getAllStatsModels() {
         List<StatsTableModel> models = new ArrayList<>();
         for (TabInfo tab : tabs) {
-            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
-                models.add(tab.statsModel);
-            }
+            models.add(tab.statsModel);
         }
         return models;
+    }
+
+    /** The tab at the given strip index — package-private, for tests. */
+    TabInfo tabAt(int index) {
+        return tabs.get(index);
     }
 
     /**
@@ -1379,38 +1342,51 @@ public class VisualizationTabManager {
      */
     public void updateSeriesInStatsTabsWithAggregation(SeriesRef ref, TimeSeriesData data) {
         for (TabInfo tab : tabs) {
-            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null
-                    && tab.selectedSeries.contains(ref)) {
-                TimeSeriesData aggregatedData = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
-                    data, tab.statsPeriod, tab.statsMethod);
-
+            if (!tab.selectedSeries.contains(ref)) {
+                continue;
+            }
+            if (tab.viewMode == TabInfo.TabType.STATS) {
+                TimeSeriesData aggregatedData = TimeSeriesAggregator.aggregate(
+                    data, tab.plotPanel.getAggregationPeriod(), tab.plotPanel.getAggregationMethod());
                 if (aggregatedData != null) {
                     tab.statsModel.addOrUpdateSeries(ref, aggregatedData);
                 }
+            } else {
+                tab.statsDirty = true; // hidden projection catches up when shown
             }
         }
     }
 
     /**
-     * Adds a loading series entry to all stats tabs that include the given ref.
+     * Adds a loading series entry to the stats projection of every tab that
+     * includes the given ref (visible stats pages only; hidden ones dirty).
      */
     public void addLoadingSeriesInStatsTabs(SeriesRef ref) {
         for (TabInfo tab : tabs) {
-            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null
-                    && tab.selectedSeries.contains(ref)) {
+            if (!tab.selectedSeries.contains(ref)) {
+                continue;
+            }
+            if (tab.viewMode == TabInfo.TabType.STATS) {
                 tab.statsModel.addLoadingSeries(ref);
+            } else {
+                tab.statsDirty = true;
             }
         }
     }
 
     /**
-     * Adds an error series entry to all stats tabs that include the given ref.
+     * Adds an error series entry to the stats projection of every tab that
+     * includes the given ref (visible stats pages only; hidden ones dirty).
      */
     public void addErrorSeriesInStatsTabs(SeriesRef ref, String errorMessage) {
         for (TabInfo tab : tabs) {
-            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null
-                    && tab.selectedSeries.contains(ref)) {
+            if (!tab.selectedSeries.contains(ref)) {
+                continue;
+            }
+            if (tab.viewMode == TabInfo.TabType.STATS) {
                 tab.statsModel.addErrorSeries(ref, errorMessage);
+            } else {
+                tab.statsDirty = true;
             }
         }
     }
@@ -1429,26 +1405,23 @@ public class VisualizationTabManager {
             if (!changed) {
                 continue;
             }
-            if (tab.type == TabInfo.TabType.PLOT && tab.plotPanel != null) {
-                for (SeriesRef ref : refs) {
-                    tab.plotPanel.removeLegendSeries(ref);
-                }
-                tab.plotPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
+            for (SeriesRef ref : refs) {
+                tab.plotPanel.removeLegendSeries(ref);
+                tab.statsModel.removeSeries(ref);
+            }
+            tab.plotPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
+            if (tab.viewMode == TabInfo.TabType.PLOT) {
                 tab.plotPanel.refreshData(false);
-            } else if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
-                for (SeriesRef ref : refs) {
-                    tab.statsModel.removeSeries(ref);
-                }
             }
         }
     }
 
     /**
-     * Removes a series from all stats tabs.
+     * Removes a series from every stats-view tab's selection and projection.
      */
     public void removeSeriesFromStatsTabs(SeriesRef ref) {
         for (TabInfo tab : tabs) {
-            if (tab.type == TabInfo.TabType.STATS && tab.statsModel != null) {
+            if (tab.viewMode == TabInfo.TabType.STATS) {
                 tab.selectedSeries.remove(ref);
                 tab.statsModel.removeSeries(ref);
             }
