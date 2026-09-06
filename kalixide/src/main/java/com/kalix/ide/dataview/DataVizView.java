@@ -38,8 +38,11 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongSupplier;
@@ -101,11 +104,13 @@ public final class DataVizView extends JPanel {
 
     /**
      * Tabs whose selection went empty→non-empty and owe a zoom-to-fit once
-     * their data lands. Run Manager parity: {@code SeriesFetchCoordinator}'s
+     * their data lands, each keyed to the ref whose arrival proves the tab has
+     * something to fit — a publish from an older snapshot must not consume the
+     * mark early. Run Manager parity: {@code SeriesFetchCoordinator}'s
      * {@code shouldResetZoom} is per-tab, so a new "View 2" fits its first
      * columns while every other tab keeps its window. EDT-only.
      */
-    private final Set<FlowVizPanel> pendingZoomFit = new LinkedHashSet<>();
+    private final Map<FlowVizPanel, SeriesRef> pendingZoomFit = new LinkedHashMap<>();
 
     /** Set by every extraction trigger; drained by the single extraction worker. */
     private final AtomicBoolean extractRequested = new AtomicBoolean(false);
@@ -255,16 +260,17 @@ public final class DataVizView extends JPanel {
         settings.selectedSeries = new LinkedHashSet<>();
         settings.checkedSources = new LinkedHashSet<>(); // the no-sources host state
         String firstColumn = firstDataColumnName();
-        if (firstColumn != null) {
+        DatasetSeries firstRef = firstColumn != null ? new DatasetSeries(datasetId(), firstColumn) : null;
+        if (firstRef != null) {
             // First data column plotted by default, so the region is never blank.
-            settings.selectedSeries.add(new DatasetSeries(datasetId(), firstColumn));
+            settings.selectedSeries.add(firstRef);
             defaultSelectionPending = false;
         } else {
             defaultSelectionPending = true; // structure not indexed yet; owed on arrival
         }
         FlowVizPanel firstPanel = vizManager.addPlotTabFromSettings(settings);
-        if (firstColumn != null) {
-            pendingZoomFit.add(firstPanel); // fit once the default column's data lands
+        if (firstRef != null) {
+            pendingZoomFit.put(firstPanel, firstRef); // fit once the default column's data lands
         }
         installHeaderInteractions();
     }
@@ -278,11 +284,12 @@ public final class DataVizView extends JPanel {
             return;
         }
         defaultSelectionPending = false;
+        DatasetSeries firstRef = new DatasetSeries(datasetId(), firstColumn);
         Set<SeriesRef> selection = new LinkedHashSet<>(vizManager.getTargetTabSelectedSeries());
-        selection.add(new DatasetSeries(datasetId(), firstColumn));
+        selection.add(firstRef);
         vizManager.setTargetTabSelectedSeries(selection);
         vizManager.pushTargetTabHistory();
-        pendingZoomFit.add(vizManager.getTargetVizPanel()); // its first data fits
+        pendingZoomFit.put(vizManager.getTargetVizPanel(), firstRef); // its first data fits
         scheduleExtraction();
     }
 
@@ -352,7 +359,7 @@ public final class DataVizView extends JPanel {
         }
         if (wasEmpty && !next.isEmpty()) {
             // This tab showed nothing: fit its window once the data lands.
-            pendingZoomFit.add(vizManager.getTargetVizPanel());
+            pendingZoomFit.put(vizManager.getTargetVizPanel(), ref);
         }
         vizManager.setTargetTabSelectedSeries(next);
         vizManager.pushTargetTabHistory();
@@ -533,15 +540,23 @@ public final class DataVizView extends JPanel {
             }
             vizManager.updateAllTabs(false);
             // Per-tab first-data fits: a tab whose selection went empty→non-empty
-            // zooms to its data now that it exists; every other tab keeps the
-            // user's window. updateTab(panel, true) guards against empty data.
+            // zooms to its data once that data actually exists. A publish from an
+            // older snapshot must not consume the mark early, so each mark waits
+            // for its keyed ref to be present in the pool.
             if (!pendingZoomFit.isEmpty()) {
-                for (FlowVizPanel panel : vizManager.getAllVizPanels()) {
-                    if (pendingZoomFit.remove(panel)) {
-                        vizManager.updateTab(panel, true);
+                List<FlowVizPanel> live = vizManager.getAllVizPanels();
+                Iterator<Map.Entry<FlowVizPanel, SeriesRef>> marks = pendingZoomFit.entrySet().iterator();
+                while (marks.hasNext()) {
+                    Map.Entry<FlowVizPanel, SeriesRef> mark = marks.next();
+                    if (!live.contains(mark.getKey())) {
+                        marks.remove(); // the tab closed before its data arrived
+                    } else if (dataSet.hasSeries(mark.getValue())) {
+                        marks.remove();
+                        vizManager.updateTab(mark.getKey(), true);
                     }
+                    // else: this pass didn't carry the tab's data; the mark
+                    // survives for the drain-loop's next pass.
                 }
-                pendingZoomFit.clear(); // drop panels of since-closed tabs
             }
             note.setText(result != null && result.badDateRows() > 0
                 ? String.format("%,d rows skipped: unparseable dates", result.badDateRows())
@@ -618,7 +633,7 @@ public final class DataVizView extends JPanel {
     }
 
     /** Tabs still owing a first-data zoom fit — package-private, for tests. */
-    Set<FlowVizPanel> pendingZoomFitForTests() {
+    Map<FlowVizPanel, SeriesRef> pendingZoomFitForTests() {
         return pendingZoomFit;
     }
 }

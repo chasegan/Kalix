@@ -905,6 +905,13 @@ public class FlowVizPanel extends JPanel {
         if (currentViewport == null) {
             return;
         }
+        if (determineXAxisType() != XAxisType.TIME) {
+            // Exceedance (percentile) and Double-Mass (numeric) domains are not
+            // epoch time: centring a date there would scroll orders of magnitude
+            // past the data and blank the plot. Refuse audibly instead.
+            java.awt.Toolkit.getDefaultToolkit().beep();
+            return;
+        }
         long span = currentViewport.getTimeRangeMs();
         long newStart = timeMs - span / 2;
         double minValue = currentViewport.getMinValue();

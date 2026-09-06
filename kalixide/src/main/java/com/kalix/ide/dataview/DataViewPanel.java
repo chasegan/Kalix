@@ -344,7 +344,10 @@ public final class DataViewPanel extends JPanel {
                     if (targetSession != session) {
                         return; // the session was swapped mid-search
                     }
-                    if (found < 0) {
+                    if (found < 0 || found >= targetSession.rowCount()) {
+                        // Miss — or the row exists in the file but isn't indexed
+                        // yet (still loading), so there is nothing to land on:
+                        // either way, say so rather than silently doing nothing.
                         Toolkit.getDefaultToolkit().beep();
                     } else {
                         scrollToFileRow(found);
@@ -395,8 +398,8 @@ public final class DataViewPanel extends JPanel {
             }
         });
         int copyIndex = tableMenu.getComponentIndex(copyItem);
-        tableMenu.insert(plotToggle, copyIndex);
         tableMenu.insert(plotSeparator, copyIndex);
+        tableMenu.insert(plotToggle, copyIndex); // lands before its separator: … | Plot "col" | Copy
 
         tableMenu.addPopupMenuListener(new PopupMenuListener() {
             @Override
