@@ -121,6 +121,15 @@ public final class PreferenceKeys {
     public static final Pref<Integer> EDITOR_LARGE_FILE_GATE_MB =
         Pref.fileInt("editor.largeFileGateMb", 50);
 
+    /**
+     * Maximum data-file row count the data viewer will materialise for plotting.
+     * The virtual table never loads whole columns, but plotting must (8 bytes per
+     * value per plotted series), so it is bounded separately — above the bound the
+     * plot region refuses honestly with a note rather than a dialog.
+     */
+    public static final Pref<Integer> DATAVIEW_PLOT_MAX_ROWS =
+        Pref.fileInt("dataview.plotMaxRows", 5_000_000);
+
     /** External editor command template. */
     public static final Pref<String> FILE_EXTERNAL_EDITOR_COMMAND =
         Pref.fileString("file.externalEditorCommand", "code <folder_path> <file_path>");

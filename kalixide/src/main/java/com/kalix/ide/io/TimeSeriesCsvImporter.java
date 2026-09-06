@@ -8,11 +8,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -90,33 +86,6 @@ import java.util.regex.Pattern;
 public class TimeSeriesCsvImporter {
 
     /**
-     * Common date/time patterns supported by the importer.
-     * Patterns are tried in order until one succeeds.
-     * Non-standard month-first formats (M/d/yyyy) are demoted to the end.
-     *
-     * <p>Day/month fields use single-letter tokens ({@code d}, {@code M}) rather
-     * than {@code dd}/{@code MM} so that both zero-padded ("01/06/2007") and
-     * unpadded ("1/06/2007") values parse — Java's parser treats {@code dd} as
-     * requiring exactly two digits, which rejects single-digit days.</p>
-     */
-    private static final DateTimeFormatter[] DATE_FORMATTERS = {
-        DateTimeFormatter.ofPattern("yyyy-M-d HH:mm:ss"),
-        DateTimeFormatter.ofPattern("yyyy-M-d HH:mm"),
-        DateTimeFormatter.ofPattern("yyyy-M-d"),
-        DateTimeFormatter.ofPattern("yyyy/M/d HH:mm:ss"),
-        DateTimeFormatter.ofPattern("yyyy/M/d HH:mm"),
-        DateTimeFormatter.ofPattern("yyyy/M/d"),
-        DateTimeFormatter.ofPattern("d/M/yyyy HH:mm:ss"),
-        DateTimeFormatter.ofPattern("d/M/yyyy HH:mm"),
-        DateTimeFormatter.ofPattern("d/M/yyyy"),
-        DateTimeFormatter.ISO_LOCAL_DATE_TIME,
-        DateTimeFormatter.ISO_LOCAL_DATE,
-        DateTimeFormatter.ofPattern("M/d/yyyy HH:mm:ss"),
-        DateTimeFormatter.ofPattern("M/d/yyyy HH:mm"),
-        DateTimeFormatter.ofPattern("M/d/yyyy")
-    };
-
-    /**
      * Patterns that represent missing or invalid values.
      * These are converted to NaN in the imported data.
      */
@@ -133,9 +102,6 @@ public class TimeSeriesCsvImporter {
 
     /** Number of leading lines sampled for delimiter and date-format detection. */
     private static final int SAMPLE_LINES = 10;
-
-    /** Sentinel for "could not parse timestamp" from {@link #parseTimestampMillis}. */
-    private static final long INVALID_TS = Long.MIN_VALUE;
 
     /**
      * Private constructor to prevent instantiation of this utility class.
@@ -370,7 +336,7 @@ public class TimeSeriesCsvImporter {
                 // Detect date format — the formatter AND whether it is date-only — once,
                 // using the sampled data rows, so per-row parsing never relies on
                 // exception-driven fallback in the steady state.
-                DateFormatSpec dateFormat = detectDateFormat(sample, delimiter);
+                CsvDates.Spec dateFormat = detectDateFormat(sample, delimiter);
                 if (dateFormat == null) {
                     errors.add("Could not detect date format in first column");
                     return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
@@ -420,8 +386,8 @@ public class TimeSeriesCsvImporter {
                     }
 
                     // Parse timestamp
-                    long timestamp = parseTimestampMillis(values[0].trim(), dateFormat);
-                    if (timestamp == INVALID_TS) {
+                    long timestamp = CsvDates.parseMillis(values[0].trim(), dateFormat);
+                    if (timestamp == CsvDates.INVALID_TS) {
                         warnings.add(String.format("Line %d: Could not parse date/time '%s'",
                             fileLine, values[0]));
                         continue;
@@ -622,79 +588,25 @@ public class TimeSeriesCsvImporter {
     }
 
     /**
-     * The detected date format: the formatter plus whether values are date-only
-     * (parsed via {@link LocalDate}) or full date-times. Capturing date-only-ness at
-     * detection time means steady-state parsing takes the right branch directly instead
-     * of throwing and catching a {@link DateTimeParseException} on every row of a
-     * date-only file (the common daily case).
-     */
-    private record DateFormatSpec(DateTimeFormatter formatter, boolean dateOnly) {}
-
-    /**
      * Attempts to detect the date format used in the CSV file from sampled lines.
+     * The ladder itself lives in {@link CsvDates}, shared with the data viewer's
+     * column extractor so the two can never disagree about what a date is.
      */
-    private static DateFormatSpec detectDateFormat(List<String> sampleLines, char delimiter) {
+    private static CsvDates.Spec detectDateFormat(List<String> sampleLines, char delimiter) {
         if (sampleLines.size() < 2) return null;
 
-        // Try parsing first few data rows with different formats
+        // Try the first few data rows against the shared ladder
         for (int lineNum = 1; lineNum < Math.min(6, sampleLines.size()); lineNum++) {
             String[] values = parseLine(sampleLines.get(lineNum), delimiter);
             if (values.length == 0) continue;
 
-            String dateString = values[0].trim();
-            if (dateString.isEmpty()) continue;
-
-            for (DateTimeFormatter formatter : DATE_FORMATTERS) {
-                try {
-                    LocalDateTime.parse(dateString, formatter);
-                    return new DateFormatSpec(formatter, false);
-                } catch (DateTimeParseException e) {
-                    // fall through to date-only probe
-                }
-                try {
-                    LocalDate.parse(dateString, formatter);
-                    return new DateFormatSpec(formatter, true);
-                } catch (DateTimeParseException e) {
-                    // try next formatter
-                }
+            CsvDates.Spec spec = CsvDates.detect(values[0].trim());
+            if (spec != null) {
+                return spec;
             }
         }
 
         return null; // No format worked
-    }
-
-    /**
-     * Parses a date/time string to epoch millis (UTC) using the detected format,
-     * taking the date-only or date-time branch directly. The opposite branch is kept
-     * as a rare fallback for mixed files; unparseable values yield {@link #INVALID_TS}.
-     */
-    private static long parseTimestampMillis(String dateString, DateFormatSpec spec) {
-        if (dateString.isEmpty()) {
-            return INVALID_TS;
-        }
-        if (spec.dateOnly()) {
-            try {
-                return LocalDate.parse(dateString, spec.formatter()).toEpochDay() * 86_400_000L;
-            } catch (DateTimeParseException e) {
-                try {
-                    return LocalDateTime.parse(dateString, spec.formatter())
-                        .toInstant(ZoneOffset.UTC).toEpochMilli();
-                } catch (DateTimeParseException e2) {
-                    return INVALID_TS;
-                }
-            }
-        } else {
-            try {
-                return LocalDateTime.parse(dateString, spec.formatter())
-                    .toInstant(ZoneOffset.UTC).toEpochMilli();
-            } catch (DateTimeParseException e) {
-                try {
-                    return LocalDate.parse(dateString, spec.formatter()).toEpochDay() * 86_400_000L;
-                } catch (DateTimeParseException e2) {
-                    return INVALID_TS;
-                }
-            }
-        }
     }
 
     /**
@@ -705,10 +617,11 @@ public class TimeSeriesCsvImporter {
      * European file — is rejected as NaN rather than silently misread ({@code 1,5} must
      * never become 15).
      *
-     * <p>Package-private for testing. Returns a primitive: missing or unparseable
+     * <p>Public: the data viewer's column extractor shares it, so a value plots
+     * exactly as it would import. Returns a primitive: missing or unparseable
      * values are {@link Double#NaN}.</p>
      */
-    static double parseNumericValue(String valueString) {
+    public static double parseNumericValue(String valueString) {
         if (valueString == null || isMissingValue(valueString)) {
             return Double.NaN;
         }

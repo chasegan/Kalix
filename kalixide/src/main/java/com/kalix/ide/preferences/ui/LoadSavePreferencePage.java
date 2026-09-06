@@ -23,6 +23,7 @@ public class LoadSavePreferencePage extends AbstractPreferencePage {
     private JCheckBox autoReloadCheckBox;
     private JCheckBox promptSaveOnExitCheckBox;
     private JSpinner largeFileGateSpinner;
+    private JSpinner plotMaxRowsSpinner;
 
     /**
      * @param onAutoReloadChanged notified with the new value after the auto-reload
@@ -94,6 +95,25 @@ public class LoadSavePreferencePage extends AbstractPreferencePage {
         largeFileGateSpinner.addChangeListener(e ->
             PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.set((Integer) largeFileGateSpinner.getValue()));
         formPanel.add(largeFileGateSpinner, gbc);
+
+        // Data-view plot materialisation limit: the table view stays virtual at any
+        // size, but plotting materialises whole columns in memory, so it is bounded
+        // separately (and refuses honestly above the bound).
+        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 1;
+        gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
+        JLabel plotRowsLabel = new JLabel("Plot data files up to (rows):");
+        plotRowsLabel.setToolTipText("Data files with more rows than this open with plotting disabled. "
+            + "The table view stays fast at any size, but plotting loads whole columns into memory "
+            + "(8 bytes per value per plotted series).");
+        formPanel.add(plotRowsLabel, gbc);
+
+        gbc.gridx = 1; gbc.gridy = 3;
+        plotMaxRowsSpinner = new JSpinner(new SpinnerNumberModel(
+            (int) PreferenceKeys.DATAVIEW_PLOT_MAX_ROWS.get(), 1_000, 1_000_000_000, 500_000));
+        plotMaxRowsSpinner.setToolTipText(plotRowsLabel.getToolTipText());
+        plotMaxRowsSpinner.addChangeListener(e ->
+            PreferenceKeys.DATAVIEW_PLOT_MAX_ROWS.set((Integer) plotMaxRowsSpinner.getValue()));
+        formPanel.add(plotMaxRowsSpinner, gbc);
 
         add(formPanel, BorderLayout.NORTH);
     }

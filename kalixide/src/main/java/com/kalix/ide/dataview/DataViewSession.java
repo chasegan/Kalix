@@ -206,6 +206,16 @@ public final class DataViewSession implements AutoCloseable {
         return dialect;
     }
 
+    /** The backing file — package-private, for the column extractor. */
+    Path filePath() {
+        return file;
+    }
+
+    /** Byte offset where tabular data begins (past any BOM or extended header) — package-private. */
+    long dataStartOffset() {
+        return indexStartOffset;
+    }
+
     /** Raw row count indexed so far — includes the header row when present. */
     public long rowCount() {
         return rowIndex.itemCount();
