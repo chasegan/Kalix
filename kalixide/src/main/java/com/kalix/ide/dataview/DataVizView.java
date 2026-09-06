@@ -1,5 +1,6 @@
 package com.kalix.ide.dataview;
 
+import com.kalix.ide.flowviz.FlowVizPanel;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
 import com.kalix.ide.flowviz.data.DataSet;
@@ -31,6 +32,7 @@ import javax.swing.table.TableCellRenderer;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -48,7 +50,8 @@ import java.util.function.Supplier;
  * A data document's contextual view once it can plot: the FlowViz unit above
  * the virtual table, sharing one screen. The plot region is <b>collapsed by
  * default</b> (divider at the top edge, size 0 — the {@code DocumentSplitView}
- * idiom) behind a slim "Plot" header strip; expanding it lazily builds a full
+ * idiom) behind a slim "Plot" toggle in the table's status strip — a full-width
+ * row above the table would read as a title; expanding it lazily builds a full
  * {@link VisualizationTabManager} mount — tabs, plot ⁄ stats toggle, shared
  * aggregation, undo — over a private per-mount {@link DataSet}.
  *
@@ -65,7 +68,7 @@ import java.util.function.Supplier;
  * <h2>Materialisation</h2>
  * Plotting needs whole columns in memory (unlike the virtual table), so every
  * pass is bounded by {@link PreferenceKeys#DATAVIEW_PLOT_MAX_ROWS} and refused
- * honestly — a note in the header strip, never a dialog. Extraction runs on a
+ * honestly — a note beside the toggle, never a dialog. Extraction runs on a
  * single coalescing worker (the {@code DataDocument} drain-loop pattern): a
  * burst of triggers costs one streamed re-read via
  * {@link ColumnSeriesExtractor}.
@@ -103,6 +106,14 @@ public final class DataVizView extends JPanel {
     /** First-expand default selection still owed (structure unknown at build time). */
     private boolean defaultSelectionPending = false;
 
+    /**
+     * Tabs whose selection went empty→non-empty and owe a zoom-to-fit once
+     * their data lands. Run Manager parity: {@code SeriesFetchCoordinator}'s
+     * {@code shouldResetZoom} is per-tab, so a new "View 2" fits its first
+     * columns while every other tab keeps its window. EDT-only.
+     */
+    private final Set<FlowVizPanel> pendingZoomFit = new LinkedHashSet<>();
+
     /** Set by every extraction trigger; drained by the single extraction worker. */
     private final AtomicBoolean extractRequested = new AtomicBoolean(false);
     private final AtomicBoolean extractInFlight = new AtomicBoolean(false);
@@ -119,18 +130,20 @@ public final class DataVizView extends JPanel {
         this.session = session;
         this.rowLimit = rowLimit;
 
-        // Slim header affordance: the toggle plus an honest status note (refusal
-        // reasons, skipped-row counts) — information in the strip, never a dialog.
+        // The affordance lives in the table's status strip, beside the dialect
+        // facts, with an honest status note (refusal reasons, skipped-row
+        // counts) — a full-width row above the table read as a title.
         toggleButton.setFocusable(false);
         toggleButton.setToolTipText("Show or hide the plot region");
         toggleButton.putClientProperty(FlatClientProperties.BUTTON_TYPE,
             FlatClientProperties.BUTTON_TYPE_TOOLBAR_BUTTON);
         toggleButton.addActionListener(e -> setExpanded(!expanded));
         note.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
-        JPanel strip = new JPanel(new BorderLayout());
-        strip.add(toggleButton, BorderLayout.WEST);
-        strip.add(note, BorderLayout.CENTER);
-        add(strip, BorderLayout.NORTH);
+        JPanel accessory = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        accessory.setOpaque(false);
+        accessory.add(toggleButton);
+        accessory.add(note);
+        tablePanel.setStatusAccessory(accessory);
 
         // The placeholder keeps the split's geometry stable until the viz unit is
         // built; once built, the unit stays mounted and only the divider moves
@@ -267,7 +280,10 @@ public final class DataVizView extends JPanel {
         } else {
             defaultSelectionPending = true; // structure not indexed yet; owed on arrival
         }
-        vizManager.addPlotTabFromSettings(settings);
+        FlowVizPanel firstPanel = vizManager.addPlotTabFromSettings(settings);
+        if (firstColumn != null) {
+            pendingZoomFit.add(firstPanel); // fit once the default column's data lands
+        }
 
         split.setTopComponent(vizManager.getTabbedPane());
         vizManager.getTabbedPane().setMinimumSize(new Dimension(0, 0));
@@ -287,6 +303,7 @@ public final class DataVizView extends JPanel {
         selection.add(new DatasetSeries(datasetId(), firstColumn));
         vizManager.setTargetTabSelectedSeries(selection);
         vizManager.pushTargetTabHistory();
+        pendingZoomFit.add(vizManager.getTargetVizPanel()); // its first data fits
         scheduleExtraction();
     }
 
@@ -349,8 +366,13 @@ public final class DataVizView extends JPanel {
         DatasetSeries ref = new DatasetSeries(datasetId(),
             VirtualDataTableModel.columnName(current, modelColumn));
         Set<SeriesRef> next = new LinkedHashSet<>(vizManager.getTargetTabSelectedSeries());
+        boolean wasEmpty = next.isEmpty();
         if (!next.remove(ref)) {
             next.add(ref);
+        }
+        if (wasEmpty && !next.isEmpty()) {
+            // This tab showed nothing: fit its window once the data lands.
+            pendingZoomFit.add(vizManager.getTargetVizPanel());
         }
         vizManager.setTargetTabSelectedSeries(next);
         vizManager.pushTargetTabHistory();
@@ -486,10 +508,6 @@ public final class DataVizView extends JPanel {
             if (disposed || session != target || vizManager == null) {
                 return;
             }
-            // Run Manager parity (SeriesFetchCoordinator.shouldResetZoom): a plot
-            // that showed nothing zooms to fit its first data; additive changes
-            // preserve the user's window.
-            boolean firstData = dataSet.isEmpty();
             if (result != null) {
                 long[] timestamps = result.timestamps();
                 for (int i = 0; i < found.size(); i++) {
@@ -504,7 +522,18 @@ public final class DataVizView extends JPanel {
                     dataSet.removeSeries(ref);
                 }
             }
-            vizManager.updateAllTabs(firstData); // fit first data; else preserve zoom
+            vizManager.updateAllTabs(false);
+            // Per-tab first-data fits: a tab whose selection went empty→non-empty
+            // zooms to its data now that it exists; every other tab keeps the
+            // user's window. updateTab(panel, true) guards against empty data.
+            if (!pendingZoomFit.isEmpty()) {
+                for (FlowVizPanel panel : vizManager.getAllVizPanels()) {
+                    if (pendingZoomFit.remove(panel)) {
+                        vizManager.updateTab(panel, true);
+                    }
+                }
+                pendingZoomFit.clear(); // drop panels of since-closed tabs
+            }
             note.setText(result != null && result.badDateRows() > 0
                 ? String.format("%,d rows skipped: unparseable dates", result.badDateRows())
                 : " ");
@@ -582,5 +611,10 @@ public final class DataVizView extends JPanel {
     /** Whether the plot region is currently expanded — package-private, for tests. */
     boolean isExpanded() {
         return expanded;
+    }
+
+    /** Tabs still owing a first-data zoom fit — package-private, for tests. */
+    Set<FlowVizPanel> pendingZoomFitForTests() {
+        return pendingZoomFit;
     }
 }

@@ -48,6 +48,7 @@ public final class DataViewPanel extends JPanel {
     private DataViewSession session;
     private final JTable table;
     private final JLabel status = new JLabel();
+    private final JPanel statusBar = new JPanel(new BorderLayout());
 
     private String lastSearch = "";
     /** Receives the data-region physical line for "Show in file" (wired by the host document). */
@@ -76,9 +77,20 @@ public final class DataViewPanel extends JPanel {
         add(new JScrollPane(table), BorderLayout.CENTER);
 
         status.setBorder(BorderFactory.createEmptyBorder(3, 8, 3, 8));
-        add(status, BorderLayout.SOUTH);
+        statusBar.add(status, BorderLayout.CENTER);
+        add(statusBar, BorderLayout.SOUTH);
         refreshStatus();
         registerStatusListener();
+    }
+
+    /**
+     * Installs a leading accessory in the status strip — the data-viz mount's
+     * "Plot" toggle lives here, beside the dialect facts, rather than as a
+     * full-width row above the table that would read as a title.
+     */
+    public void setStatusAccessory(JComponent accessory) {
+        statusBar.add(accessory, BorderLayout.WEST);
+        statusBar.revalidate();
     }
 
     private void registerStatusListener() {

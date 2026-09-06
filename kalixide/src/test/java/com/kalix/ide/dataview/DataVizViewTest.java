@@ -1,5 +1,6 @@
 package com.kalix.ide.dataview;
 
+import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 
 import org.junit.jupiter.api.Test;
@@ -106,6 +107,31 @@ class DataVizViewTest {
             assertFalse(view.vizManagerForTests().getTargetTabSelectedSeries().contains(ref("b")));
             assertTrue(view.dataSetForTests().hasSeries(ref("b")),
                 "the pool keeps deselected data (like the Run Manager's)");
+        } finally {
+            session.close();
+        }
+    }
+
+    @Test
+    void newTabsFirstColumnsGetTheirOwnZoomFit() throws Exception {
+        DataVizView view = openView("date,a,b\n2020-01-01,1,10\n2020-01-02,2,20\n", () -> 100);
+        try {
+            expand(view);
+            await(() -> view.dataSetForTests() != null && view.dataSetForTests().hasSeries(ref("a")),
+                "default extraction");
+            SwingUtilities.invokeAndWait(() -> {
+                // "View 2": a fresh empty tab, then its first column — the pool
+                // is NOT empty (View 1's data), so the fit must be per-tab.
+                VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
+                settings.selectedSeries = new java.util.LinkedHashSet<>();
+                settings.checkedSources = new java.util.LinkedHashSet<>();
+                view.vizManagerForTests().addPlotTabFromSettings(settings);
+                view.toggleColumn(2);
+                org.junit.jupiter.api.Assertions.assertFalse(view.pendingZoomFitForTests().isEmpty(),
+                    "the new tab owes a zoom fit");
+            });
+            await(() -> view.dataSetForTests().hasSeries(ref("b"))
+                && view.pendingZoomFitForTests().isEmpty(), "the fit was honoured at publish");
         } finally {
             session.close();
         }
