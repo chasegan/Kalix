@@ -40,7 +40,7 @@ class RowStoreTest {
     }
 
     @Test
-    void randomAccessAcrossBlocksSurvivesLruEviction() throws IOException {
+    void randomAccessAcrossBlocksSurvivesEviction() throws IOException {
         try (RowStore store = store(fileWithRows(100), 8, 2)) {
             assertEquals(100, store.rowCount());
             // Jump around far more blocks than the cache holds; every read must
@@ -63,11 +63,14 @@ class RowStoreTest {
     }
 
     @Test
-    void loadProbeReportsCacheState() throws IOException {
+    void lockFreeReadsSeeOnlyLoadedBlocks() throws IOException {
         try (RowStore store = store(fileWithRows(20), 4, 2)) {
             assertFalse(store.isRowLoaded(0));
-            store.row(0);
+            assertNull(store.rowIfLoaded(0), "rowIfLoaded never triggers a load");
+
+            store.ensureBlockLoaded(0);
             assertTrue(store.isRowLoaded(3), "same block as row 0");
+            assertEquals("row3", store.rowIfLoaded(3)[0]);
             assertFalse(store.isRowLoaded(19), "different block, untouched");
         }
     }
