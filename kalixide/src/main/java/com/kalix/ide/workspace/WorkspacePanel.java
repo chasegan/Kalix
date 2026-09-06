@@ -9,75 +9,59 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 
 /**
- * The main three-region work area: <code>[ project tree | editor | contextual view ]</code>,
- * built from two nested {@link JSplitPane}s. The editor occupies the centre and is the
- * always-present anchor; the tree (left) and contextual view (right, the map) can each be
- * resized by dragging their divider and collapsed independently.
+ * The main work area: <code>[ project tree | document tabs ]</code>, one
+ * {@link JSplitPane}. The tab strip runs the full remaining width and is the
+ * always-present anchor; the tree (left) can be resized by dragging the divider and
+ * collapsed. Each tab carries its own editor|contextual-view split — see
+ * {@link DocumentSplitView} and {@code docs/multi-document-architecture.md} (Addendum).
  *
- * <p>This replaces the old docking system with a purpose-built layout
- * (see {@code docs/multi-document-architecture.md}, Phase 2).
- *
- * <p>Resize behaviour: when the window grows, the editor absorbs the extra space while the
- * tree and map keep their widths — the VSCode-like feel. Region widths and collapsed states
- * are reported via {@link LayoutChangeListener} so the host can persist them; the persisted
- * values are passed back in through the constructor and applied once the panel is realised.
+ * <p>Resize behaviour: when the window grows, the tab area absorbs the extra space
+ * while the tree keeps its width — the VSCode-like feel. The tree width and collapsed
+ * state are reported via {@link LayoutChangeListener} so the host can persist them;
+ * the persisted values are passed back in through the constructor and applied once
+ * the panel is realised.
  */
 public class WorkspacePanel extends JPanel {
 
-    /** Notified whenever a region width or collapsed state changes, so it can be persisted. */
+    /** Notified whenever the tree width or collapsed state changes, so it can be persisted. */
     public interface LayoutChangeListener {
-        void onLayoutChanged(int treeWidth, int mapWidth, boolean treeCollapsed, boolean mapCollapsed);
+        void onLayoutChanged(int treeWidth, boolean treeCollapsed);
     }
 
-    private final JSplitPane outerSplit; // [ tree | innerSplit ]
-    private final JSplitPane innerSplit; // [ editor | map ]
+    private final JSplitPane split; // [ tree | centre ]
     private final int defaultDividerSize;
 
     private boolean treeCollapsed;
-    private boolean mapCollapsed;
     private int treeWidth; // remembered expanded width of the tree region
-    private int mapWidth;  // remembered expanded width of the map region
 
     private boolean initialLayoutApplied = false;
-    private boolean applyingLayout = false; // suppress divider-listener feedback while we set dividers
+    private boolean applyingLayout = false; // suppress divider-listener feedback while we set the divider
     private LayoutChangeListener layoutChangeListener;
 
     /**
      * @param tree          the left region component (project tree)
-     * @param editor        the centre region component (active document's editor)
-     * @param map           the right region component (contextual view / map)
+     * @param centre        the centre region component (the document tab strip)
      * @param treeWidth     initial expanded width of the tree region
-     * @param mapWidth      initial expanded width of the map region
      * @param treeCollapsed whether the tree region starts collapsed
-     * @param mapCollapsed  whether the map region starts collapsed
      */
-    public WorkspacePanel(JComponent tree, JComponent editor, JComponent map,
-                          int treeWidth, int mapWidth,
-                          boolean treeCollapsed, boolean mapCollapsed) {
+    public WorkspacePanel(JComponent tree, JComponent centre,
+                          int treeWidth, boolean treeCollapsed) {
         super(new BorderLayout());
         this.treeWidth = treeWidth;
-        this.mapWidth = mapWidth;
         this.treeCollapsed = treeCollapsed;
-        this.mapCollapsed = mapCollapsed;
 
-        // Allow the side regions to collapse fully (divider all the way to the edge).
+        // Allow the tree to collapse fully (divider all the way to the edge).
         tree.setMinimumSize(new Dimension(0, 0));
-        editor.setMinimumSize(new Dimension(0, 0));
-        map.setMinimumSize(new Dimension(0, 0));
+        centre.setMinimumSize(new Dimension(0, 0));
 
-        innerSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, editor, map);
-        innerSplit.setResizeWeight(1.0); // editor absorbs resize; map keeps its width
-        innerSplit.setContinuousLayout(true);
-        innerSplit.setBorder(null);
+        split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tree, centre);
+        split.setResizeWeight(0.0); // tree keeps its width; the rest absorbs resize
+        split.setContinuousLayout(true);
+        split.setBorder(null);
 
-        outerSplit = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tree, innerSplit);
-        outerSplit.setResizeWeight(0.0); // tree keeps its width; the rest absorbs resize
-        outerSplit.setContinuousLayout(true);
-        outerSplit.setBorder(null);
+        this.defaultDividerSize = split.getDividerSize();
 
-        this.defaultDividerSize = outerSplit.getDividerSize();
-
-        add(outerSplit, BorderLayout.CENTER);
+        add(split, BorderLayout.CENTER);
 
         // Apply the persisted layout once the panel actually has a size, then start
         // listening for user-driven divider drags.
@@ -87,59 +71,34 @@ public class WorkspacePanel extends JPanel {
                 if (!initialLayoutApplied && getWidth() > 0 && getHeight() > 0) {
                     initialLayoutApplied = true;
                     applyLayout();
-                    installDividerListeners();
+                    installDividerListener();
                 }
             }
         });
     }
 
-    /**
-     * Pushes the current width/collapsed state onto the two split panes.
-     */
+    /** Pushes the current width/collapsed state onto the split pane. */
     private void applyLayout() {
         applyingLayout = true;
         try {
-            // Outer (tree) divider.
             if (treeCollapsed) {
-                outerSplit.setDividerSize(0);
-                outerSplit.setDividerLocation(0);
+                split.setDividerSize(0);
+                split.setDividerLocation(0);
             } else {
-                outerSplit.setDividerSize(defaultDividerSize);
-                outerSplit.setDividerLocation(treeWidth);
-            }
-            outerSplit.validate(); // force innerSplit to take up its new bounds
-
-            // Inner (map) divider, measured from the right edge.
-            int innerW = innerSplit.getWidth();
-            if (innerW <= 0) {
-                innerW = getWidth();
-            }
-            if (mapCollapsed) {
-                innerSplit.setDividerSize(0);
-                innerSplit.setDividerLocation(innerW);
-            } else {
-                innerSplit.setDividerSize(defaultDividerSize);
-                innerSplit.setDividerLocation(Math.max(0, innerW - mapWidth - defaultDividerSize));
+                split.setDividerSize(defaultDividerSize);
+                split.setDividerLocation(treeWidth);
             }
         } finally {
             applyingLayout = false;
         }
     }
 
-    private void installDividerListeners() {
-        outerSplit.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
+    private void installDividerListener() {
+        split.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
             if (applyingLayout || treeCollapsed) {
                 return;
             }
-            treeWidth = outerSplit.getDividerLocation();
-            fireLayoutChanged();
-        });
-        innerSplit.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
-            if (applyingLayout || mapCollapsed) {
-                return;
-            }
-            int innerW = innerSplit.getWidth();
-            mapWidth = Math.max(0, innerW - innerSplit.getDividerLocation() - innerSplit.getDividerSize());
+            treeWidth = split.getDividerLocation();
             fireLayoutChanged();
         });
     }
@@ -152,7 +111,7 @@ public class WorkspacePanel extends JPanel {
         }
         if (collapsed) {
             // Remember the current width so we can restore it on expand.
-            int w = outerSplit.getDividerLocation();
+            int w = split.getDividerLocation();
             if (w > 0) {
                 treeWidth = w;
             }
@@ -162,35 +121,8 @@ public class WorkspacePanel extends JPanel {
         fireLayoutChanged();
     }
 
-    public void setMapCollapsed(boolean collapsed) {
-        if (collapsed == mapCollapsed) {
-            return;
-        }
-        if (collapsed) {
-            int w = innerSplit.getWidth() - innerSplit.getDividerLocation() - innerSplit.getDividerSize();
-            if (w > 0) {
-                mapWidth = w;
-            }
-        }
-        mapCollapsed = collapsed;
-        applyLayout();
-        fireLayoutChanged();
-    }
-
-    public void toggleTree() {
-        setTreeCollapsed(!treeCollapsed);
-    }
-
-    public void toggleMap() {
-        setMapCollapsed(!mapCollapsed);
-    }
-
     public boolean isTreeCollapsed() {
         return treeCollapsed;
-    }
-
-    public boolean isMapCollapsed() {
-        return mapCollapsed;
     }
 
     public void setLayoutChangeListener(LayoutChangeListener listener) {
@@ -199,7 +131,7 @@ public class WorkspacePanel extends JPanel {
 
     private void fireLayoutChanged() {
         if (layoutChangeListener != null) {
-            layoutChangeListener.onLayoutChanged(treeWidth, mapWidth, treeCollapsed, mapCollapsed);
+            layoutChangeListener.onLayoutChanged(treeWidth, treeCollapsed);
         }
     }
 }

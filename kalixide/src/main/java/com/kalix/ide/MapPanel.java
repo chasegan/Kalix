@@ -128,7 +128,8 @@ public class MapPanel extends JPanel {
         this.model = java.util.Objects.requireNonNull(model, "model");
         this.textEditor = java.util.Objects.requireNonNull(textEditor, "textEditor");
 
-        updateThemeColors();
+        // Theme colours are resolved by updateUI(), which JPanel's constructor has
+        // already run by this point (and which re-runs on every LaF switch).
 
         // Enable keyboard focus for delete key handling
         setFocusable(true);
@@ -163,6 +164,20 @@ public class MapPanel extends JPanel {
         if (pendingZoomToFit && width > 0 && height > 0) {
             zoomToFit();
         }
+    }
+
+    /**
+     * Re-resolves the theme-derived background whenever the look-and-feel changes.
+     * ThemeManager runs {@code SwingUtilities.updateComponentTreeUI} over the main
+     * frame on a theme switch; with every document's map mounted inside its tab,
+     * that walk reaches all of them — no per-activation catch-up needed. Also runs
+     * during construction (from JPanel's constructor), which is safe:
+     * {@link #updateThemeColors()} touches no instance fields, only UIManager.
+     */
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        updateThemeColors();
     }
 
     /** The rotation cursor, built on first use. EDT-confined; see the field. */

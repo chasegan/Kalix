@@ -7,6 +7,7 @@ import com.kalix.ide.document.KalixDocument;
 
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
+import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Cursor;
@@ -23,9 +24,11 @@ import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 /**
- * The centre region: a tab strip with one tab per open {@link KalixDocument},
- * each tab's content being that document's editor. This is the always-present
- * anchor of the work area.
+ * The centre region: a tab strip with one tab per open {@link KalixDocument}.
+ * Each tab's content is the document's editor — or, for a document with a
+ * contextual view (the map for a model), an editor|context
+ * {@link DocumentSplitView} sharing one remembered divider across all tabs.
+ * This is the always-present anchor of the work area.
  *
  * <p>
  * It is a thin view over {@link DocumentManager}: it observes opened / closed /
@@ -45,6 +48,7 @@ public class DocumentTabPane extends JPanel {
     private final Consumer<KalixDocument> closeRequestHandler;
     private final ContextMenuRequestHandler contextMenuRequestHandler;
     private final Supplier<java.io.File> projectDirectorySupplier;
+    private final ContextSplitCoordinator contextSplitCoordinator;
 
     /** Suppresses selection-change feedback while we mutate the tab strip programmatically. */
     private boolean syncing = false;
@@ -69,7 +73,8 @@ public class DocumentTabPane extends JPanel {
         DocumentManager documentManager,
         Consumer<KalixDocument> closeRequestHandler,
         ContextMenuRequestHandler contextMenuRequestHandler,
-        Supplier<java.io.File> projectDirectorySupplier
+        Supplier<java.io.File> projectDirectorySupplier,
+        ContextSplitCoordinator contextSplitCoordinator
     ) {
         super(new BorderLayout());
         this.documentManager = documentManager;
@@ -77,6 +82,7 @@ public class DocumentTabPane extends JPanel {
         this.contextMenuRequestHandler = contextMenuRequestHandler;
         this.tabNames = new ArrayList<>();
         this.projectDirectorySupplier = projectDirectorySupplier;
+        this.contextSplitCoordinator = contextSplitCoordinator;
 
         tabbedPane = new JTabbedPane();
         tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
@@ -271,6 +277,7 @@ public class DocumentTabPane extends JPanel {
                 syncing = false;
             }
         }
+        focusEditorOf(document);
     }
 
     // --- User-driven tab interactions ---
@@ -299,12 +306,56 @@ public class DocumentTabPane extends JPanel {
     // --- Helpers ---
 
     /**
-     * The component a document's tab shows. Today this is the bare editor; the
-     * map-in-tab stage replaces it with an editor|contextual-view composite —
-     * this method is the single seam that changes.
+     * The component a document's tab shows: the bare editor for a document with no
+     * contextual view, or an editor|context {@link DocumentSplitView} sharing the
+     * one remembered divider for a document that has one (the map for a model).
+     * Built once per document and stored in {@link #tabRoots}; tab↔document
+     * resolution never assumes the root is the editor.
      */
     private java.awt.Component tabRootFor(KalixDocument document) {
-        return document.getEditor();
+        java.awt.Component contextView = document.getContextView();
+        if (contextView == null) {
+            return document.getEditor();
+        }
+        return new DocumentSplitView(document.getEditor(), contextView, contextSplitCoordinator);
+    }
+
+    // --- Contextual view (the region inside each tab) ---
+
+    /**
+     * Collapses or expands the contextual-view region. The shared state changes for
+     * every tab; the active tab's split is re-laid out immediately, hidden tabs
+     * catch up when next shown (see {@link DocumentSplitView}).
+     */
+    public void setContextViewCollapsed(boolean collapsed) {
+        contextSplitCoordinator.setCollapsed(collapsed);
+        java.awt.Component root = tabRoots.get(documentManager.getActiveDocument());
+        if (root instanceof DocumentSplitView view) {
+            view.applySharedLayout();
+        }
+    }
+
+    public boolean isContextViewCollapsed() {
+        return contextSplitCoordinator.isCollapsed();
+    }
+
+    public void toggleContextView() {
+        setContextViewCollapsed(!isContextViewCollapsed());
+    }
+
+    /**
+     * Puts keyboard focus in the newly active document's editor. With composite tab
+     * content the tab pane would otherwise leave focus on the tab header (or hand it
+     * to the composite's first focusable child), so typing after a tab switch must
+     * be routed explicitly. Deferred so it runs after the selection settles; skipped
+     * if the active document changed again in the meantime.
+     */
+    private void focusEditorOf(KalixDocument document) {
+        SwingUtilities.invokeLater(() -> {
+            if (documentManager.getActiveDocument() == document) {
+                document.getEditor().getTextArea().requestFocusInWindow();
+            }
+        });
     }
 
     int indexOf(KalixDocument document) {

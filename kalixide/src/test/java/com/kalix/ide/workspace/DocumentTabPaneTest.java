@@ -6,20 +6,29 @@ import com.kalix.ide.document.KalixDocument;
 
 import org.junit.jupiter.api.Test;
 
+import java.awt.Component;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins tab↔document identity through the per-document root map (map-in-tab
- * stage 1): resolution must not depend on the tab content being the editor
- * component, so stage 2 can wrap it in an editor|context composite.
+ * Pins tab↔document identity through the per-document root map (map-in-tab):
+ * a model document's tab content is an editor|context composite, a text
+ * document's is its bare editor, and resolution must work for both.
  */
 class DocumentTabPaneTest {
 
     private static DocumentTabPane pane(DocumentManager dm) {
-        return new DocumentTabPane(dm, doc -> { }, (files, invoker, x, y) -> { }, () -> null);
+        return pane(dm, new ContextSplitCoordinator(420, false, (w, c) -> { }));
+    }
+
+    private static DocumentTabPane pane(DocumentManager dm, ContextSplitCoordinator coordinator) {
+        return new DocumentTabPane(dm, doc -> { }, (files, invoker, x, y) -> { }, () -> null, coordinator);
     }
 
     @Test
@@ -54,5 +63,42 @@ class DocumentTabPaneTest {
         assertEquals(-1, pane.indexOf(b), "closed document resolves to no tab");
         assertEquals(List.of(a), dm.getDocuments());
         assertSame(a, pane.documentAt(0));
+    }
+
+    @Test
+    void modelTabsGetAnEditorContextCompositeTextTabsTheBareEditor() {
+        DocumentManager dm = new DocumentManager();
+        DocumentTabPane pane = pane(dm);
+
+        KalixDocument model = new KalixDocument(DocumentKind.MODEL);
+        KalixDocument text = new KalixDocument(DocumentKind.TEXT);
+        dm.setActiveDocument(model);
+        dm.setActiveDocument(text);
+
+        Component modelRoot = pane.getTabbedPane().getComponentAt(0);
+        Component textRoot = pane.getTabbedPane().getComponentAt(1);
+        assertInstanceOf(DocumentSplitView.class, modelRoot,
+            "a document with a contextual view mounts an editor|context split");
+        assertNotSame(model.getEditor(), modelRoot);
+        assertSame(text.getEditor(), textRoot,
+            "no contextual view -> the editor itself is the tab content");
+    }
+
+    @Test
+    void toggleContextViewFlipsAndPersistsTheSharedState() {
+        DocumentManager dm = new DocumentManager();
+        boolean[] persistedCollapsed = new boolean[1];
+        ContextSplitCoordinator coordinator = new ContextSplitCoordinator(420, false,
+            (w, c) -> persistedCollapsed[0] = c);
+        DocumentTabPane pane = pane(dm, coordinator);
+        dm.setActiveDocument(new KalixDocument(DocumentKind.MODEL));
+
+        pane.toggleContextView();
+        assertTrue(pane.isContextViewCollapsed());
+        assertTrue(persistedCollapsed[0]);
+
+        pane.toggleContextView();
+        assertFalse(pane.isContextViewCollapsed());
+        assertFalse(persistedCollapsed[0]);
     }
 }

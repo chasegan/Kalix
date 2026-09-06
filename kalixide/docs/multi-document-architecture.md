@@ -1,6 +1,8 @@
 # Multi-Document Workspace Architecture
 
 Status: **Complete** — all five phases delivered.
+Amended September 2026: the contextual view moved *inside* each tab (see the
+Addendum at the end); the diagram and decision notes below are updated to match.
 
 Map zoom/pan is intentionally not persisted per file (auto-fit-on-load is the
 chosen default); everything else in the plan below is implemented.
@@ -11,22 +13,25 @@ Move KalixIDE from a single-file application to a VSCode-style, project-oriented
 experience: open a modelling project *folder*, see all its files in a tree on the
 left, and open, run, and switch between multiple models seamlessly.
 
-The end-state main window has three regions, left to right:
+The main window has two regions, with the contextual view living inside each tab:
 
 ```
-+-----------+------------------------------+------------------+
-|           |  tab  tab  tab               |                  |
-|  project  +------------------------------+   contextual     |
-|   tree    |                              |      view        |
-| (JTree)   |   text editor (active tab)   |  (map for the    |
-|           |                              |   active model)  |
-|           |                              |                  |
-+-----------+------------------------------+------------------+
++-----------+-------------------------------------------------+
+|           |  tab  tab  tab  tab  tab  tab                   |
+|  project  +--------------------------------+----------------+
+|   tree    |                                |   contextual   |
+| (JTree)   |   text editor (active tab)     |     view       |
+|           |                                |  (map for a    |
+|           |                                |   model tab)   |
++-----------+--------------------------------+----------------+
 ```
 
 - **Left** — project file tree (collapsible, resizable).
-- **Centre** — tabbed text editors, one tab per open file. This is the always-present anchor.
-- **Right** — *contextual view of the active tab* (collapsible, resizable).
+- **Centre** — one tab per open file, the tab strip running the full remaining
+  width. This is the always-present anchor. Each tab's content is its document's
+  editor plus — for documents with a contextual view — an editor|context split
+  (`DocumentSplitView`) whose divider width and collapsed state are shared across
+  all tabs (`ContextSplitCoordinator`).
 
 ## Settled design decisions
 
@@ -50,6 +55,13 @@ We considered a "pinned map" (map stays on the last model even when a non-model
 tab is focused). Rejected for Phase 1 because it reintroduces the duality. If we
 ever want it, the clean form is an *opt-in* lock (à la VSCode's locked Markdown
 preview), where the duality exists only when the user explicitly asks for it.
+
+> **Amended (September 2026):** the contextual view now lives *inside* each tab
+> rather than in a shared right-hand panel — see the Addendum. This strengthens
+> the invariant above: the view is no longer even a projection that must track
+> the active tab, it is *part of* the tab. The pinned-map idea is thereby off the
+> table entirely (a non-model tab simply has no map region), a trade-off accepted
+> knowingly.
 
 ### 2. Per-document ownership, symmetric across views
 
@@ -109,12 +121,15 @@ macOS.
 - **`DocumentFactory`** — maps file extension → which `KalixDocument` subtype to
   build. The single place where "what does opening this file mean" is decided.
 
-- **`WorkspacePanel`** — the three-region layout: nested `JSplitPane`s
-  `[ tree | editor-tabs | context-view ]`; tree and context regions independently
-  collapsible with persisted sizes. Editor area is the always-present anchor.
+- **`WorkspacePanel`** — the outer layout: one `JSplitPane`
+  `[ tree | document tabs ]`; the tree is collapsible with a persisted size. The
+  tab area is the always-present anchor.
 
-- **`ContextViewPanel`** — right region. Listens to `onActiveDocumentChanged`;
-  shows `activeDoc.getContextView()` or collapses if `null`. No independent state.
+- **`DocumentSplitView` + `ContextSplitCoordinator`** — per-tab
+  `[ editor | contextual view ]` split (built only for documents whose
+  `getContextView()` is non-null), sharing one remembered divider width and
+  collapsed state across all tabs. Replaced the original shared
+  `ContextViewPanel` (September 2026 — see the Addendum).
 
 ## Phases (each is independently shippable)
 
@@ -168,3 +183,40 @@ polish.
   count. Watch at Phase 3.
 - **Tests:** `DocumentManager` / `DocumentFactory` are plain logic — unit-tested.
   Phase 1 acceptance is "no behaviour change", verified against existing flows.
+
+## Addendum (September 2026): the contextual view lives inside each tab
+
+The shared right-hand region (`ContextViewPanel`) was replaced: each tab's content
+is now the document's editor plus, for documents that have one, its contextual
+view, composed by a per-tab `DocumentSplitView`. What this buys:
+
+- **A full-width tab strip.** The tab bar runs to the window's right edge, so many
+  more tabs are visible before scrolling.
+- **Typed tab content.** A non-model file's tab is just its editor today; a future
+  CSV tab can carry a table/plot as *its* context view, a text tab file details —
+  per tab, without a shared panel having to dispatch on the active document's type.
+- **A stronger form of decision 1.** "The contextual view is a pure projection of
+  the active tab" becomes structural: the view is part of the tab, so it cannot
+  even transiently disagree with it. `ContextViewPanel`'s swap-on-activation logic
+  is deleted rather than maintained.
+
+What stays deliberately unchanged: there is still **one** remembered region width
+and collapsed state for the whole application (`ContextSplitCoordinator`, persisted
+under the same preference keys as before) — dragging the divider in one tab moves
+it for every tab, and View → Toggle Map collapses the region everywhere. The
+visible split applies changes immediately; hidden ones catch up when shown.
+
+Consequences worked through at the time:
+
+- **Tab identity** resolves through a per-document root map in `DocumentTabPane`
+  (never through `getEditor()`), so the composite root changes no tab bookkeeping.
+- **First-layout ordering**: `DocumentSplitView` lands the shared divider in
+  `doLayout()` *before* the split's children get bounds, so `MapPanel`'s deferred
+  zoom-to-fit completes at the real width and a collapsed region never flashes open.
+- **Theme switches** simplify: with every map mounted, `updateComponentTreeUI`
+  reaches them all — `MapPanel.updateUI()` re-resolves its theme colours, and the
+  old per-activation catch-up (and ThemeManager's map registration) is gone.
+- **Focus**: selecting a tab explicitly focuses its editor (the composite would
+  otherwise leave focus on the tab header).
+- **Losing "map visible while a non-model tab is active"** is accepted; if ever
+  wanted, the clean form remains the opt-in lock described under decision 1.
