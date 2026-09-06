@@ -1,34 +1,37 @@
 package com.kalix.ide.windows;
 
+import com.kalix.ide.flowviz.PlotState;
 import com.kalix.ide.flowviz.transform.PlotType;
 
 import javax.swing.JComboBox;
 import javax.swing.JToggleButton;
 
 /**
- * Controller for updating plot-toolbar controls from a PlotState without triggering
- * listeners. Built by {@link PlotToolbarBuilder#build()}; used by the undo/redo
- * callback to reflect a restored state back into the toolbar's dropdowns and toggles.
+ * Controller for updating the unified viz toolbar's controls from a PlotState
+ * without triggering listeners. Built by {@link VizToolbarBuilder#build}; used
+ * by the undo/redo callback and in-place Reset to reflect a restored state back
+ * into the dropdowns and toggles — a fired listener would drive the panel and
+ * loop the very undo being reflected.
  */
-class PlotToolbarController {
+class VizToolbarController {
     private final JComboBox<String> aggregationPeriodCombo;
     private final JComboBox<String> aggregationMethodCombo;
+    private final JComboBox<String> maskCombo;
     private final JComboBox<PlotType> plotTypeCombo;
     private final JComboBox<String> ySpaceCombo;
-    private final JToggleButton maskToggle;
     private final JToggleButton autoYToggle;
 
-    PlotToolbarController(JComboBox<String> aggregationPeriodCombo,
-                          JComboBox<String> aggregationMethodCombo,
-                          JComboBox<PlotType> plotTypeCombo,
-                          JComboBox<String> ySpaceCombo,
-                          JToggleButton maskToggle,
-                          JToggleButton autoYToggle) {
+    VizToolbarController(JComboBox<String> aggregationPeriodCombo,
+                         JComboBox<String> aggregationMethodCombo,
+                         JComboBox<String> maskCombo,
+                         JComboBox<PlotType> plotTypeCombo,
+                         JComboBox<String> ySpaceCombo,
+                         JToggleButton autoYToggle) {
         this.aggregationPeriodCombo = aggregationPeriodCombo;
         this.aggregationMethodCombo = aggregationMethodCombo;
+        this.maskCombo = maskCombo;
         this.plotTypeCombo = plotTypeCombo;
         this.ySpaceCombo = ySpaceCombo;
-        this.maskToggle = maskToggle;
         this.autoYToggle = autoYToggle;
     }
 
@@ -36,16 +39,16 @@ class PlotToolbarController {
      * Updates all toolbar controls to reflect the given state.
      * Temporarily removes listeners to avoid triggering state pushes.
      */
-    void updateFromState(com.kalix.ide.flowviz.PlotState state) {
+    void updateFromState(PlotState state) {
         setSilently(aggregationPeriodCombo, state.getAggregationPeriod().getDisplayName());
         setSilently(aggregationMethodCombo, state.getAggregationMethod().getDisplayName());
+        setSilently(maskCombo, state.getMaskMode().getDisplayName());
         setSilently(plotTypeCombo, state.getPlotType());
         setSilently(ySpaceCombo, state.getYAxisScale().getDisplayName());
-        setSilently(maskToggle, state.getMaskMode() == com.kalix.ide.flowviz.stats.MaskMode.ALL);
         setSilently(autoYToggle, state.isAutoYMode());
     }
 
-    private static void setSilently(JComboBox<String> combo, String value) {
+    static void setSilently(JComboBox<String> combo, String value) {
         java.awt.event.ActionListener[] listeners = combo.getActionListeners();
         for (var l : listeners) combo.removeActionListener(l);
         try {

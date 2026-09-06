@@ -1287,6 +1287,21 @@ public class PlotPanel extends JPanel {
                 maskedDataSet.addSeries(ref, masked);
             }
             aggregatedDataSet = maskedDataSet;
+        } else if (maskMode == MaskMode.EACH && aggregatedDataSet.getSeriesRefs().size() > 1) {
+            // EACH on the plot: each non-reference series filtered to its pairwise
+            // overlap with the reference — exactly the data its bivariate statistic
+            // uses — while the reference draws on its own valid points. Makes the
+            // shared mask setting mean the same thing in both views.
+            java.util.List<SeriesRef> refs = new java.util.ArrayList<>(aggregatedDataSet.getSeriesRefs());
+            TimeSeriesData reference = aggregatedDataSet.getSeries(refs.get(0));
+            DataSet maskedDataSet = new DataSet();
+            maskedDataSet.addSeries(refs.get(0), reference);
+            for (int i = 1; i < refs.size(); i++) {
+                TimeSeriesData series = aggregatedDataSet.getSeries(refs.get(i));
+                TimeSeriesMasker.Mask mask = TimeSeriesMasker.createEachMask(reference, series);
+                maskedDataSet.addSeries(refs.get(i), mask.apply(series));
+            }
+            aggregatedDataSet = maskedDataSet;
         }
 
         // Step 3: Apply plot type transformation

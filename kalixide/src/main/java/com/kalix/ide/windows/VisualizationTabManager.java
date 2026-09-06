@@ -37,6 +37,7 @@ import javax.swing.JToolBar;
 import javax.swing.Icon;
 import javax.swing.UIManager;
 import java.awt.BorderLayout;
+import java.awt.CardLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
@@ -147,6 +148,9 @@ public class VisualizationTabManager {
          */
         public MaskMode maskMode = null;
 
+        /** Which view the created tab shows; duplication copies it (a duplicate looks identical). */
+        TabInfo.TabType activeView = TabInfo.TabType.PLOT;
+
         // Plot-specific settings (ignored when creating stats tabs)
         public com.kalix.ide.flowviz.transform.PlotType plotType = com.kalix.ide.flowviz.transform.PlotType.VALUES;
         public YAxisScale yAxisScale = YAxisScale.LINEAR;
@@ -178,6 +182,7 @@ public class VisualizationTabManager {
             PlotPanel plotPanel = tabInfo.plotPanel;
             TabSettings settings = new TabSettings();
             settings.name = tabInfo.name;
+            settings.activeView = tabInfo.viewMode;
             settings.aggregationPeriod = plotPanel.getAggregationPeriod();
             settings.aggregationMethod = plotPanel.getAggregationMethod();
             settings.maskMode = plotPanel.getMaskMode();
@@ -241,10 +246,10 @@ public class VisualizationTabManager {
         // remember the label for renaming
         JLabel nameLabel;
 
-        // Toolbar handles, set once the toolbar is built: let in-place operations
-        // (Reset) resync the toolbar controls from the tab's actual state.
-        PlotToolbarController plotToolbarController; // plot-view toolbars only
-        StatsToolbarBuilder statsToolbar;            // stats-view toolbars only
+        // Toolbar/view handles, set once built: let in-place operations (Reset,
+        // the view toggle) drive the tab's UI from its actual state.
+        VizToolbarBuilder vizToolbar;
+        JPanel viewCards; // CardLayout holding the plot page and the stats page
 
         TabInfo(TabType viewMode, String name, JComponent component, PlotPanel plotPanel, StatsTableModel statsModel) {
             this.viewMode = viewMode;
@@ -525,26 +530,40 @@ public class VisualizationTabManager {
 
         tabs.add(tabInfo);
 
-        if (viewMode == TabInfo.TabType.PLOT) {
-            PlotToolbarBuilder toolbarBuilder = createPlotToolbar(plotPanel, settings.autoYMode, settings.showCoordinates);
-            containerPanel.add(toolbarBuilder.build(), BorderLayout.NORTH);
-            containerPanel.add(plotPanel, BorderLayout.CENTER);
-            tabInfo.plotToolbarController = toolbarBuilder.getController();
-        } else {
-            JTable table = new JTable(statsModel);
-            table.setFillsViewportHeight(true);
-            table.setRowSelectionAllowed(false);
-            applyStatsTableRenderer(table);
-            // Narrow index column (0); wider Series column (1) for longer series names.
-            if (table.getColumnCount() > 1) {
-                table.getColumnModel().getColumn(0).setMaxWidth(48);
-                table.getColumnModel().getColumn(0).setPreferredWidth(40);
-                table.getColumnModel().getColumn(1).setPreferredWidth(200);
-            }
-            refreshStatsProjection(tabInfo); // populate before showing
-            containerPanel.add(createStatsToolbar(tabInfo, table), BorderLayout.NORTH);
-            containerPanel.add(new JScrollPane(table), BorderLayout.CENTER);
+        // Every tab mounts BOTH pages in a CardLayout — the view toggle switches
+        // them live with no re-parenting (re-parenting would trip PlotPanel's
+        // removeNotify teardown and flicker).
+        JTable table = new JTable(statsModel);
+        table.setFillsViewportHeight(true);
+        table.setRowSelectionAllowed(false);
+        applyStatsTableRenderer(table);
+        // Narrow index column (0); wider Series column (1) for longer series names.
+        if (table.getColumnCount() > 1) {
+            table.getColumnModel().getColumn(0).setMaxWidth(48);
+            table.getColumnModel().getColumn(0).setPreferredWidth(40);
+            table.getColumnModel().getColumn(1).setPreferredWidth(200);
         }
+        // Populate the visible stats page now; a hidden one just starts dirty
+        // and catches up on toggle.
+        refreshStatsProjection(tabInfo);
+
+        VizToolbarBuilder toolbarBuilder = new VizToolbarBuilder(tabInfo, table);
+        toolbarBuilder
+            .setOnUndoRedo(state -> {
+                syncTabSelectionFromPlotState(plotPanel, state);
+                toolbarBuilder.getController().updateFromState(state);
+            })
+            .setOnStateApplied(() -> refreshStatsProjection(tabInfo))
+            .setOnViewToggle(mode -> switchView(tabInfo, mode));
+        containerPanel.add(toolbarBuilder.build(settings.autoYMode, settings.showCoordinates), BorderLayout.NORTH);
+        tabInfo.vizToolbar = toolbarBuilder;
+
+        JPanel viewCards = new JPanel(new CardLayout());
+        viewCards.add(plotPanel, TabInfo.TabType.PLOT.name());
+        viewCards.add(new JScrollPane(table), TabInfo.TabType.STATS.name());
+        ((CardLayout) viewCards.getLayout()).show(viewCards, viewMode.name());
+        tabInfo.viewCards = viewCards;
+        containerPanel.add(viewCards, BorderLayout.CENTER);
 
         int index = tabbedPane.getTabCount();
         tabbedPane.addTab(tabInfo.name, containerPanel);
@@ -559,55 +578,32 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Creates a toolbar for a plot tab.
+     * Switches a tab between its plot and stats pages. Pure presentation: no
+     * history entry (Ctrl+Z must never flip the page), no tree reprojection
+     * (the selection is unchanged). The newly shown page catches up — a dirty
+     * stats projection recomputes, a stale plot page refreshes.
      */
-    private PlotToolbarBuilder createPlotToolbar(PlotPanel plotPanel, boolean initialAutoY, boolean initialShowCoordinates) {
-        PlotToolbarBuilder builder = new PlotToolbarBuilder(plotPanel);
-        builder
-            .setOnUndoRedo(state -> {
-                syncTabSelectionFromPlotState(plotPanel, state);
-                builder.getController().updateFromState(state);
-            })
-            .addSaveButton()
-            .addUndoRedoButtons()
-            .addSeparator()
-            .addPaletteButton()
-            .addSeparator()
-            .addAggregationControls()
-            .addSeparator()
-            .addMaskToggle()
-            .addSeparator()
-            .addPlotTypeDropdown()
-            .addSeparator()
-            .addYSpaceDropdown()
-            .addSeparator()
-            .addAutoYToggle(initialAutoY)
-            .addCoordinatesToggle(initialShowCoordinates)
-            .addLegendToggle(plotPanel.isLegendEnabled());
-        return builder;
-    }
-
-    /**
-     * Creates a toolbar for a stats-view tab. The controls drive the tab's
-     * panel (the state owner), so aggregation and mask changes are undoable and
-     * land in the same history the plot view walks.
-     */
-    private JToolBar createStatsToolbar(TabInfo tabInfo, JTable statsTable) {
-        StatsToolbarBuilder builder = new StatsToolbarBuilder(tabInfo, statsTable);
-        builder
-            .setOnUndoRedo(state -> {
-                syncTabSelectionFromPlotState(tabInfo.plotPanel, state);
-                builder.syncFromTab();
-            })
-            .setOnStateApplied(() -> refreshStatsProjection(tabInfo))
-            .addSaveButton()
-            .addUndoRedoButtons()
-            .addSeparator()
-            .addAggregationControls()
-            .addSeparator()
-            .addMaskControls();
-        tabInfo.statsToolbar = builder;
-        return builder.build();
+    void switchView(TabInfo tab, TabInfo.TabType mode) {
+        if (tab.viewMode == mode) {
+            return;
+        }
+        tab.viewMode = mode;
+        ((CardLayout) tab.viewCards.getLayout()).show(tab.viewCards, mode.name());
+        if (tab.vizToolbar != null) {
+            tab.vizToolbar.applyViewMode(mode);
+        }
+        if (mode == TabInfo.TabType.STATS) {
+            if (tab.statsDirty) {
+                refreshStatsProjection(tab);
+            }
+        } else {
+            // The plot page skipped display refreshes while hidden; the panel
+            // already holds the selection, so this is a rebuild, not a re-push.
+            tab.plotPanel.refreshData(false);
+            if (tab == getActiveTab()) {
+                lastActivePlotTabIndex = tabbedPane.getSelectedIndex();
+            }
+        }
     }
 
     /**
@@ -670,12 +666,15 @@ public class VisualizationTabManager {
         return addTabFromSettings(settings, TabInfo.TabType.STATS).statsModel;
     }
 
+    /** Creates a tab honouring the settings' recorded view (Duplicate's path). */
+    TabInfo addTabFromSettings(TabSettings settings) {
+        return addTabFromSettings(settings, settings.activeView);
+    }
+
     /**
      * Sets up a tab with an icon and interaction handlers.
      */
     private void setupTabIcon(int index, TabInfo tabInfo) {
-        TabInfo.TabType tabType = tabInfo.viewMode;
-
         // Create tab panel with the icon and name label
         JPanel tabPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,
             UIConstants.TAB_PANEL_PADDING, UIConstants.TAB_PANEL_PADDING));
@@ -683,13 +682,9 @@ public class VisualizationTabManager {
         JPanel labelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, UIConstants.TAB_PANEL_PADDING, 0));
         labelPanel.setOpaque(false);
 
-        // Create icon based on tab type
-        FontIcon tabIcon;
-        if (tabType == TabInfo.TabType.PLOT) {
-            tabIcon = FontIcon.of(FontAwesomeSolid.CHART_LINE, UIConstants.TAB_ICON_SIZE);
-        } else {
-            tabIcon = FontIcon.of(FontAwesomeSolid.CALCULATOR, UIConstants.TAB_ICON_SIZE);
-        }
+        // One stable icon for every tab: the toolbar's view toggle announces the
+        // page, and a mutating tab icon would make tab identity unstable.
+        FontIcon tabIcon = FontIcon.of(FontAwesomeSolid.CHART_LINE, UIConstants.TAB_ICON_SIZE);
 
         JLabel nameLabel = new JLabel(tabInfo.name);
         updateNameLabelPadding(nameLabel);
@@ -706,7 +701,7 @@ public class VisualizationTabManager {
         setupTabDragAndDrop(iconLabel, nameLabel, labelPanel);
 
         // Add context menu support
-        setupTabContextMenu(tabPanel, tabType, iconLabel, nameLabel, labelPanel);
+        setupTabContextMenu(tabPanel, iconLabel, nameLabel, labelPanel);
         setupTabDoubleClickRename(tabPanel, iconLabel, nameLabel, labelPanel);
         tabInfo.registerNameLabel(nameLabel);
     }
@@ -741,9 +736,8 @@ public class VisualizationTabManager {
      * {@code labelComponents} entry (icon, name, wrapper panel) since mouse events dispatch to
      * whichever of them is deepest under the cursor.
      */
-    private void setupTabContextMenu(JPanel tabPanel, TabInfo.TabType tabType, Component... labelComponents) {
+    private void setupTabContextMenu(JPanel tabPanel, Component... labelComponents) {
         JPopupMenu contextMenu = new JPopupMenu();
-        boolean isPlot = tabType == TabInfo.TabType.PLOT;
 
         // Primary block (context-menu-style §1 ①): the default action, which on a tab is
         // what double-click does (setupTabDoubleClickRename). Ellipsis: opens a dialog (§2.4).
@@ -753,34 +747,13 @@ public class VisualizationTabManager {
 
         contextMenu.addSeparator();
 
-        // Create block (§1 ④), in the sanctioned verbless "New …" form (§2.2). The new tab
-        // is of the other type and starts from this tab's settings, as Duplicate does.
-        JMenuItem newOtherTypeItem = new JMenuItem(isPlot ? "New stats tab" : "New plot tab");
-        newOtherTypeItem.addActionListener(e -> {
-            TabSettings settings = settingsOfTab(tabPanel);
-            if (isPlot) {
-                addStatsTabFromSettings(settings);
-            } else {
-                addPlotTabFromSettings(settings);
-            }
-        });
-        contextMenu.add(newOtherTypeItem);
-
-        contextMenu.addSeparator();
-
-        // Modify block (§1 ⑤). "Duplicate" names no type: the tab is the context (§2.3).
-        // Reset changes the tab's state rather than its existence — in place, keeping
-        // the tab's name and history, undoable on plot tabs — so it is a modify action;
-        // the destructive block that §1 ⑥ and §8 isolate is Remove alone.
+        // Modify block (§1 ⑤). "Duplicate" names no type: the tab is the context (§2.3),
+        // and it copies the active view — the old "new tab of the other kind" gesture is
+        // now Duplicate + the view toggle. Reset changes the tab's state rather than its
+        // existence — in place, keeping the tab's name and history, undoable — so it is
+        // a modify action; the destructive block that §1 ⑥ and §8 isolate is Remove alone.
         JMenuItem duplicateItem = new JMenuItem("Duplicate");
-        duplicateItem.addActionListener(e -> {
-            TabSettings settings = settingsOfTab(tabPanel);
-            if (isPlot) {
-                addPlotTabFromSettings(settings);
-            } else {
-                addStatsTabFromSettings(settings);
-            }
-        });
+        duplicateItem.addActionListener(e -> addTabFromSettings(settingsOfTab(tabPanel)));
         contextMenu.add(duplicateItem);
 
         JMenuItem resetItem = new JMenuItem("Reset");
@@ -973,13 +946,10 @@ public class VisualizationTabManager {
             }
         });
         tab.plotPanel.getLegendManager().clear();
-        if (tab.plotToolbarController != null) {
-            tab.plotToolbarController.updateFromState(tab.plotPanel.currentState());
+        if (tab.vizToolbar != null) {
+            tab.vizToolbar.getController().updateFromState(tab.plotPanel.currentState());
         }
         refreshStatsProjection(tab);
-        if (tab.statsToolbar != null) {
-            tab.statsToolbar.syncFromTab();
-        }
 
         // The canonical record changed in place: reproject the trees (active tab only).
         notifyTabMutated(tab);

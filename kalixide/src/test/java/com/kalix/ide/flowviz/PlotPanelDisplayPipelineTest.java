@@ -51,4 +51,32 @@ class PlotPanelDisplayPipelineTest {
         assertEquals(1, panel.displayDataSetForTests().getSeries(REF).getPointCount(),
             "six January days aggregate to one monthly point");
     }
+
+    @Test
+    void eachMaskFiltersNonReferenceSeriesToPairwiseOverlap() {
+        long[] timestamps = {1_577_836_800_000L, 1_577_836_800_000L + DAY_MS, 1_577_836_800_000L + 2 * DAY_MS};
+        SeriesRef a = new DatasetSeries("/t.csv", "reference");
+        SeriesRef b = new DatasetSeries("/t.csv", "other");
+        DataSet pool = new DataSet();
+        pool.addSeries(a, new TimeSeriesData(timestamps, new double[] {1, Double.NaN, 3}));
+        pool.addSeries(b, new TimeSeriesData(timestamps, new double[] {10, 20, 30}));
+
+        PlotPanel panel = new PlotPanel();
+        panel.setDataSet(pool);
+        panel.setVisibleSeries(List.of(a, b));
+        panel.setMaskMode(com.kalix.ide.flowviz.stats.MaskMode.EACH);
+
+        DataSet displayed = panel.displayDataSetForTests();
+        // The reference draws on its own valid points, untouched (3 points, gap at 1)...
+        assertEquals(3, displayed.getSeries(a).getPointCount());
+        assertEquals(1.0, displayed.getSeries(a).getValues()[0]);
+        // ...and the non-reference series is FILTERED to the pairwise overlap
+        // (the mask drops points, it does not NaN them): exactly the data its
+        // bivariate statistic uses.
+        TimeSeriesData other = displayed.getSeries(b);
+        assertEquals(2, other.getPointCount(), "the point under the reference's gap is dropped");
+        assertEquals(10.0, other.getValues()[0], 0.0);
+        assertEquals(30.0, other.getValues()[1], 0.0);
+        assertEquals(timestamps[2], other.getTimestamps()[1], "overlap keeps original timestamps");
+    }
 }
