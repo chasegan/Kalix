@@ -15,7 +15,9 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.function.Supplier;
@@ -46,6 +48,14 @@ public class DocumentTabPane extends JPanel {
 
     /** Suppresses selection-change feedback while we mutate the tab strip programmatically. */
     private boolean syncing = false;
+
+    /**
+     * The root component each document contributes as its tab's content. Tab↔document
+     * resolution goes through this map, never through {@code getEditor()} directly, so
+     * the root can become a composite (editor | contextual view) without breaking
+     * close buttons, context menus or drag-reorder.
+     */
+    private final Map<KalixDocument, java.awt.Component> tabRoots = new IdentityHashMap<>();
 
     List<String> tabNames;
 
@@ -220,7 +230,9 @@ public class DocumentTabPane extends JPanel {
         try {
             // May add a conflict
             this.rebuildTabNames();
-            tabbedPane.addTab(tabTitle(document), document.getEditor());
+            java.awt.Component root = tabRootFor(document);
+            tabRoots.put(document, root);
+            tabbedPane.addTab(tabTitle(document), root);
             int index = indexOf(document);
             tabbedPane.setToolTipTextAt(index, tabTooltip(document));
             this.refreshTabs();
@@ -239,6 +251,7 @@ public class DocumentTabPane extends JPanel {
             // May remove conflict
             this.rebuildTabNames();
             tabbedPane.removeTabAt(index);
+            tabRoots.remove(document);
             this.refreshTabs();
         } finally {
             syncing = false;
@@ -285,18 +298,33 @@ public class DocumentTabPane extends JPanel {
 
     // --- Helpers ---
 
-    private int indexOf(KalixDocument document) {
-        return tabbedPane.indexOfComponent(document.getEditor());
+    /**
+     * The component a document's tab shows. Today this is the bare editor; the
+     * map-in-tab stage replaces it with an editor|contextual-view composite —
+     * this method is the single seam that changes.
+     */
+    private java.awt.Component tabRootFor(KalixDocument document) {
+        return document.getEditor();
     }
 
-    private KalixDocument documentAt(int tabIndex) {
+    int indexOf(KalixDocument document) {
+        java.awt.Component root = tabRoots.get(document);
+        return root != null ? tabbedPane.indexOfComponent(root) : -1;
+    }
+
+    KalixDocument documentAt(int tabIndex) {
         Component content = tabbedPane.getComponentAt(tabIndex);
         for (KalixDocument document : documentManager.getDocuments()) {
-            if (document.getEditor() == content) {
+            if (tabRoots.get(document) == content) {
                 return document;
             }
         }
         return null;
+    }
+
+    /** The underlying tab strip — package-private, for tests. */
+    javax.swing.JTabbedPane getTabbedPane() {
+        return tabbedPane;
     }
 
     private String tabTitle(KalixDocument document) {

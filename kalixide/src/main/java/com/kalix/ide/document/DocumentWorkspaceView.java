@@ -34,12 +34,21 @@ public class DocumentWorkspaceView implements WorkspaceView {
 
     @Override
     public List<? extends OpenModel> openModels() {
-        return documentManager.getDocuments();
+        // Model documents only: auxiliary windows (the Optimiser's model selector,
+        // future Run Manager listings) must never see a text/data tab as a model.
+        List<KalixDocument> models = new ArrayList<>();
+        for (KalixDocument document : documentManager.getDocuments()) {
+            if (document.isModel()) {
+                models.add(document);
+            }
+        }
+        return models;
     }
 
     @Override
     public OpenModel activeModel() {
-        return documentManager.getActiveDocument();
+        KalixDocument active = documentManager.getActiveDocument();
+        return active != null && active.isModel() ? active : null;
     }
 
     @Override

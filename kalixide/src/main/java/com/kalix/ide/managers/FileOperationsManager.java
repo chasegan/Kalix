@@ -27,7 +27,7 @@ public class FileOperationsManager {
 
     private final Component parentComponent;
     private final DocumentManager documentManager;
-    private final Supplier<KalixDocument> documentFactory;
+    private final java.util.function.Function<File, KalixDocument> documentFactory;
     private final Consumer<String> statusUpdateCallback;
     private final Consumer<String> addRecentFileCallback;
     private final Runnable fileChangedCallback;
@@ -48,7 +48,7 @@ public class FileOperationsManager {
      */
     public FileOperationsManager(Component parentComponent,
                                  DocumentManager documentManager,
-                                 Supplier<KalixDocument> documentFactory,
+                                 java.util.function.Function<File, KalixDocument> documentFactory,
                                  Consumer<String> statusUpdateCallback,
                                  Consumer<String> addRecentFileCallback,
                                  Runnable fileChangedCallback,
@@ -74,7 +74,7 @@ public class FileOperationsManager {
      * Creates a new untitled document in its own tab and makes it active.
      */
     public void newModel() {
-        KalixDocument document = documentFactory.get();
+        KalixDocument document = documentFactory.apply(null); // untitled = model
         document.setText(AppConstants.DEFAULT_MODEL_TEXT);
         document.setFile(null);
 
@@ -131,7 +131,7 @@ public class FileOperationsManager {
 
         // Create the document only after a successful read, so a failed open leaves no
         // empty tab behind.
-        KalixDocument document = documentFactory.get();
+        KalixDocument document = documentFactory.apply(file); // kind decided by file type
         document.setText(content);
         document.setFile(file);
 

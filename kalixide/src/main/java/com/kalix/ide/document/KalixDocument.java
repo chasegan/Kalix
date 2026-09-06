@@ -39,8 +39,11 @@ public class KalixDocument implements OpenModel {
 
     private static final Logger logger = LoggerFactory.getLogger(KalixDocument.class);
 
+    private final DocumentKind kind;
     private final EnhancedTextEditor editor;
+    /** {@code null} for non-model kinds — see {@link #getMapPanel()}. */
     private final MapPanel mapPanel;
+    /** {@code null} for non-model kinds — see {@link #getModel()}. */
     private final HydrologicalModel model;
 
     /** Backing file, or {@code null} for an untitled document. */
@@ -74,12 +77,27 @@ public class KalixDocument implements OpenModel {
      * construction.
      */
     public KalixDocument() {
+        this(DocumentKind.MODEL);
+    }
+
+    /**
+     * Creates a document of the given kind. MODEL documents build the full
+     * bundle; other kinds build the editor alone, leaving model and map
+     * {@code null} and the contextual view empty.
+     */
+    public KalixDocument(DocumentKind kind) {
+        this.kind = kind;
         this.editor = new EnhancedTextEditor();
-        this.model = new HydrologicalModel();
-        // The map panel is bound to its model and editor at construction; all
-        // map-side collaborators (text sync, clipboard, context menu, search)
-        // are wired inside, symmetrically and exactly once.
-        this.mapPanel = new MapPanel(model, editor);
+        if (kind == DocumentKind.MODEL) {
+            this.model = new HydrologicalModel();
+            // The map panel is bound to its model and editor at construction; all
+            // map-side collaborators (text sync, clipboard, context menu, search)
+            // are wired inside, symmetrically and exactly once.
+            this.mapPanel = new MapPanel(model, editor);
+        } else {
+            this.model = null;
+            this.mapPanel = null;
+        }
 
         wire();
     }
@@ -89,7 +107,9 @@ public class KalixDocument implements OpenModel {
      */
     private void wire() {
         // Wire map panel to editor for "Show on Map" context menu action.
-        editor.setMapPanel(mapPanel);
+        if (mapPanel != null) {
+            editor.setMapPanel(mapPanel);
+        }
 
         // Re-parse the model whenever the text changes (coalesced; see
         // parseModelFromText). The modification count keys the memoized
@@ -112,7 +132,9 @@ public class KalixDocument implements OpenModel {
         });
 
         // Per-document auto-zoom: fit the view when the model first gains nodes.
-        model.addChangeListener(this::onModelChanged);
+        if (model != null) {
+            model.addChangeListener(this::onModelChanged);
+        }
     }
 
     /** Reacts to a single document edit: invalidates the memoized parse, queues a re-parse. */
@@ -133,6 +155,9 @@ public class KalixDocument implements OpenModel {
      * @param autoZoomToFit if true, zoom the map to fit after parsing (used on file loads)
      */
     public void parseModelFromText(boolean autoZoomToFit) {
+        if (model == null) {
+            return; // non-model documents have nothing to parse into
+        }
         queuedAutoZoom |= autoZoomToFit;
         if (parseQueued) {
             return;
@@ -201,17 +226,26 @@ public class KalixDocument implements OpenModel {
         return editor;
     }
 
+    /** This document's kind, fixed at creation. */
+    public DocumentKind getKind() {
+        return kind;
+    }
+
+    /** Whether this document holds a Kalix model (and therefore a map). */
+    public boolean isModel() {
+        return kind == DocumentKind.MODEL;
+    }
+
+    /** The map visualising this document's model, or {@code null} for non-model kinds. */
     public MapPanel getMapPanel() {
         return mapPanel;
     }
 
     /**
-     * Returns the component shown in the right-hand contextual view when this document
-     * is active, or {@code null} if this document has no contextual view (in which case
-     * the contextual view region collapses). For a model document this is the map.
-     *
-     * <p>When non-model document types are introduced (Phase 4), a base type would
-     * return {@code null} here and a data type would return a plot.
+     * Returns the component shown in the contextual view for this document, or
+     * {@code null} if this document has no contextual view (in which case the
+     * region collapses). For a model document this is the map; a TEXT document
+     * has none; a future data kind would return a table or plot here.
      */
     public java.awt.Component getContextView() {
         return mapPanel;
@@ -231,8 +265,15 @@ public class KalixDocument implements OpenModel {
         return this.hasFile() ? file.getName() : "Untitled";
     }
 
+    /** This document's parsed model, or {@code null} for non-model kinds. */
     public HydrologicalModel getModel() {
         return model;
+    }
+
+    /** Only model documents with a working directory can be optimisation targets. */
+    @Override
+    public boolean isOptimisable() {
+        return isModel() && getWorkingDirectory() != null;
     }
 
     // --- File ---
