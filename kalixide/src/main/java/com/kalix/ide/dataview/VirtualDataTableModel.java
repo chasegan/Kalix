@@ -77,6 +77,15 @@ public final class VirtualDataTableModel extends AbstractTableModel {
 
     @Override
     public String getColumnName(int column) {
+        return columnName(session, column);
+    }
+
+    /**
+     * The display name of a session column — shared with the viz mount
+     * ({@link DataVizView}) so header clicks and series refs always agree with
+     * what the table shows, generic fallback names included.
+     */
+    static String columnName(DataViewSession session, int column) {
         String[] header = session.columnNames();
         if (header != null && column < header.length && !header[column].isBlank()) {
             return header[column];

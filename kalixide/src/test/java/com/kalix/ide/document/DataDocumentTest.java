@@ -1,6 +1,6 @@
 package com.kalix.ide.document;
 
-import com.kalix.ide.dataview.DataViewPanel;
+import com.kalix.ide.dataview.DataVizView;
 import com.kalix.ide.dataview.DataViewSession;
 import com.kalix.ide.dataview.VirtualTextArea;
 
@@ -53,8 +53,8 @@ class DataDocumentTest {
         try {
             assertTrue(doc.isEditable(), "small data files stay editable text");
             assertSame(doc.getEditor(), doc.getPrimaryView());
-            assertInstanceOf(DataViewPanel.class, doc.getContextView(),
-                "the contextual view is the virtual table");
+            assertInstanceOf(DataVizView.class, doc.getContextView(),
+                "the contextual view is the plot-above-table bundle");
             assertNotNull(doc.getDataViewSession());
             assertFalse(doc.isModel());
             assertFalse(doc.isOptimisable());
@@ -72,7 +72,7 @@ class DataDocumentTest {
             assertInstanceOf(JScrollPane.class, doc.getPrimaryView(),
                 "primary content is the virtual text view, not the editor");
             assertInstanceOf(VirtualTextArea.class, doc.getPrimaryFocusComponent());
-            assertInstanceOf(DataViewPanel.class, doc.getContextView());
+            assertInstanceOf(DataVizView.class, doc.getContextView());
         } finally {
             doc.dispose();
         }
