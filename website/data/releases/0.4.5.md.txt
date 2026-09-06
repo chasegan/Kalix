@@ -20,3 +20,18 @@ pip: "pip install kalix==0.4.5"
 - Fixed: unloading a dataset left a do-nothing undo step; a duplicated tab could show a stale mask toggle; re-selecting the current plot type discarded a manual mask override and reset the zoom.
 - Table View no longer goes stale after the optimiser rewrites the model.
 - Editor hover tips now go through Swing's tooltip manager, fixing stale property help and dismiss delays.
+- The model map now lives inside each model's tab (previously one shared panel): every open model keeps its own map, with the region's width and collapsed state shared and remembered across tabs.
+- New data file viewer. Opening a `.csv` (including Source `.res.csv` results) shows a virtual table built for big files — a 1GB file on a network drive opens instantly and stays responsive while it indexes in the background:
+    - The status strip declares what the viewer decided — delimiter, quote character, encoding, line endings, row count — so the interpretation is never silent.
+    - The raw text stays alongside the table. Above a size threshold (default 50MB, Preferences → Editor → Load and Save) data files open as fast read-only views instead of an editable text buffer.
+    - Live tail: a running simulation appending results simply grows the views in place.
+    - Right-click: `Find…`, `Find next`, `Find date…` (jumps to the first row at or after a typed date), `Show in file`, and `Copy`.
+- Plot and stats tabs are now one unified tab: every tab has a plot page and a stats page over the same series, aggregation and mask, switched with a toolbar toggle — the two views can never disagree.
+    - One merged toolbar: shared save/undo/aggregation/mask controls plus the plot-only cluster; controls flow onto a second row when the plot area is narrow.
+    - Undo/redo now works in the stats view too (both pages walk one shared history), and `Duplicate` plus the view toggle replaces the old "new plot tab" / "new stats tab" gestures.
+    - Overlapping-data masking is the same three-way control everywhere (`Mask All` / `Mask Each` / `Mask None`), and `Mask Each` now has a plot rendering.
+    - Tabs start with default names (`View 1`, `View 2`, …) instead of an icon; renaming works as before.
+- Plotting in the data viewer: every data tab now carries the full plotting tool above its table — the same tabs, plot ⁄ stats toggle, aggregation and undo as the Run Manager.
+    - Click a column header to plot or unplot that column (plotted columns get an accent mark, and the full column name shows as a tooltip); the first data column is plotted by default.
+    - Right-click a datapoint for `Show in plot` (centres the plot on it, keeping your zoom level) or `Plot "column"` / `Unplot "column"`.
+    - Plotting loads whole columns into memory, so it is bounded by a new row-count preference (default 5,000,000; Preferences → Editor → Load and Save). Over-limit or non-date files say why in the status strip — never a dialog, never a silent failure.
