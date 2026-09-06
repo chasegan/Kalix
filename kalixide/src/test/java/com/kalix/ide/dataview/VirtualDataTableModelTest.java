@@ -57,7 +57,13 @@ class VirtualDataTableModelTest {
     void headerBecomesColumnNamesNotRowZero() throws IOException {
         try (DataViewSession session = DataViewSession.open(bigCsv(10))) {
             VirtualDataTableModel model = onEdt(() -> new VirtualDataTableModel(session));
+            // Row count and column structure arrive via two INDEPENDENT async
+            // signals (the indexer's completion event vs the structure fetch's
+            // block-0 parse); await both — on slow CI runners the completion
+            // event reliably beats the structure fetch (Linux/Windows failures
+            // on 6d324a06).
             await("model sees all data rows", () -> onEdt(model::getRowCount) == 10);
+            await("structure known", () -> onEdt(model::getColumnCount) == 2);
 
             assertEquals(2, (int) onEdt(model::getColumnCount));
             assertEquals("Date", onEdt(() -> model.getColumnName(0)));
