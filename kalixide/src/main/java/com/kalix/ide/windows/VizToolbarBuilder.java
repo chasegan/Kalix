@@ -109,9 +109,12 @@ class VizToolbarBuilder {
 
         // --- Plot-only cluster (hidden in the stats view) ---
         plotOnly(new JToolBar.Separator());
-        addPlotTypeDropdown();
+        // Reads as one phrase: "Type: [Linear] [Exceedance]".
+        plotOnly(new JLabel("Type:"));
         plotOnly((JComponent) Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
         addYSpaceDropdown();
+        plotOnly((JComponent) Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
+        addPlotTypeDropdown();
         plotOnly(new JToolBar.Separator());
         addAutoYToggle(initialAutoY);
         addCoordinatesToggle(initialShowCoordinates);
@@ -284,11 +287,6 @@ class VizToolbarBuilder {
     }
 
     private void addPlotTypeDropdown() {
-        JLabel label = new JLabel("Type:");
-        plotOnly(label);
-        JComponent strut = (JComponent) Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING);
-        plotOnly(strut);
-
         this.plotTypeCombo = new JComboBox<>(PlotType.values());
         plotTypeCombo.setMaximumSize(ToolbarConstants.WIDE_DROPDOWN_SIZE);
         plotTypeCombo.setToolTipText("Plot type");
