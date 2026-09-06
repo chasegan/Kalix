@@ -16,7 +16,7 @@ import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
-import com.kalix.ide.flowviz.transform.TimeSeriesAggregator;
+import com.kalix.ide.flowviz.transform.AggregationPipeline;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.stats.TimeSeriesMasker;
@@ -873,6 +873,11 @@ public class PlotPanel extends JPanel {
         return aggregationMethod;
     }
 
+    /** The transformed dataset the renderer draws — package-private, for tests. */
+    DataSet displayDataSetForTests() {
+        return displayDataSet;
+    }
+
     /**
      * Refreshes the display dataset from the original data.
      *
@@ -1259,26 +1264,14 @@ public class PlotPanel extends JPanel {
         // Display data is changing - clear LOD rendering cache so renderer doesn't draw stale lines
         renderer.clearCache();
 
-        // Step 1: Build aggregated dataset (only for visible series, not the full pool).
-        // The transient aggregatedDataSet is keyed by SeriesRef directly — the pipeline
-        // never touches string identity.
+        // Step 1: Build aggregated dataset (only for visible series, not the full
+        // pool) through the one shared AggregationPipeline — the same orchestration
+        // that feeds the stats table, so the two projections can never disagree.
+        // The transient aggregatedDataSet is keyed by SeriesRef directly — the
+        // pipeline never touches string identity.
         DataSet aggregatedDataSet = new DataSet();
-
-        for (SeriesRef ref : visibleSeries) {
-            TimeSeriesData originalSeries = originalDataSet.getSeries(ref);
-            if (originalSeries == null) continue;
-
-            // Apply aggregation (returns nameless data; identity is the ref)
-            TimeSeriesData aggregatedSeries = TimeSeriesAggregator.aggregate(
-                originalSeries,
-                aggregationPeriod,
-                aggregationMethod
-            );
-
-            if (aggregatedSeries != null) {
-                aggregatedDataSet.addSeries(ref, aggregatedSeries);
-            }
-        }
+        AggregationPipeline.aggregate(originalDataSet, visibleSeries,
+            aggregationPeriod, aggregationMethod).forEach(aggregatedDataSet::addSeries);
 
         // Step 2: Apply masking (if enabled)
         if (maskMode == MaskMode.ALL && aggregatedDataSet.getSeriesRefs().size() > 1) {

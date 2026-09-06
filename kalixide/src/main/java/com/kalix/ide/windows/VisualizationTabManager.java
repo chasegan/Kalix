@@ -10,6 +10,8 @@ import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.flowviz.models.StatsTableModel;
+import com.kalix.ide.flowviz.stats.MaskMode;
+import com.kalix.ide.flowviz.transform.AggregationPipeline;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.YAxisScale;
@@ -129,6 +131,14 @@ public class VisualizationTabManager {
         public AggregationPeriod aggregationPeriod = AggregationPeriod.ORIGINAL;
         public AggregationMethod aggregationMethod = AggregationMethod.SUM;
 
+        /**
+         * Mask mode carried across duplication; {@code null} = the created kind's
+         * default (plot NONE / stats ALL). Plot duplication also restores mask via
+         * the copied history; this field makes cross-kind duplication deliberate
+         * and stops stats duplication silently resetting the mask.
+         */
+        public MaskMode maskMode = null;
+
         // Plot-specific settings (ignored when creating stats tabs)
         public com.kalix.ide.flowviz.transform.PlotType plotType = com.kalix.ide.flowviz.transform.PlotType.VALUES;
         public YAxisScale yAxisScale = YAxisScale.LINEAR;
@@ -159,6 +169,7 @@ public class VisualizationTabManager {
             settings.name = tabInfo.name;
             settings.aggregationPeriod = plotPanel.getAggregationPeriod();
             settings.aggregationMethod = plotPanel.getAggregationMethod();
+            settings.maskMode = plotPanel.getMaskMode();
             settings.plotType = plotPanel.getPlotType();
             settings.yAxisScale = plotPanel.getYAxisScale();
             settings.autoYMode = plotPanel.isAutoYMode();
@@ -181,6 +192,8 @@ public class VisualizationTabManager {
             settings.name = statsTabInfo.name;
             settings.aggregationPeriod = statsTabInfo.statsPeriod;
             settings.aggregationMethod = statsTabInfo.statsMethod;
+            settings.maskMode = statsTabInfo.statsModel != null
+                ? statsTabInfo.statsModel.getMaskMode() : null;
             settings.selectedSeries = new LinkedHashSet<>(statsTabInfo.selectedSeries);
             settings.checkedSources = new LinkedHashSet<>(statsTabInfo.checkedSources);
             return settings;
@@ -650,6 +663,11 @@ public class VisualizationTabManager {
         // Apply aggregation settings from TabSettings
         tabInfo.statsPeriod = settings.aggregationPeriod;
         tabInfo.statsMethod = settings.aggregationMethod;
+        if (settings.maskMode != null) {
+            // Carried from the source tab: duplication previously lost the mask,
+            // silently resetting it to ALL.
+            model.setMaskMode(settings.maskMode);
+        }
 
         // Use series from settings if provided, otherwise inherit from active tab
         if (settings.selectedSeries != null) {
@@ -1258,18 +1276,8 @@ public class VisualizationTabManager {
      * not once per series.
      */
     private void rebuildStatsTab(TabInfo tab) {
-        java.util.LinkedHashMap<SeriesRef, TimeSeriesData> series = new java.util.LinkedHashMap<>();
-        for (SeriesRef ref : tab.selectedSeries) {
-            TimeSeriesData data = sharedDataSet.getSeries(ref);
-            if (data != null) {
-                TimeSeriesData aggregatedData = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
-                    data, tab.statsPeriod, tab.statsMethod);
-                if (aggregatedData != null) {
-                    series.put(ref, aggregatedData);
-                }
-            }
-        }
-        tab.statsModel.setSeries(series);
+        tab.statsModel.setSeries(AggregationPipeline.aggregate(
+            sharedDataSet, tab.selectedSeries, tab.statsPeriod, tab.statsMethod));
     }
 
     /**

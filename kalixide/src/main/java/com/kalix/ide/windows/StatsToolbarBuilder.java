@@ -1,10 +1,9 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.flowviz.data.DataSet;
-import com.kalix.ide.flowviz.data.SeriesRef;
-import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.flowviz.transform.AggregationPipeline;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 
@@ -155,18 +154,11 @@ class StatsToolbarBuilder {
         if (tabInfo.statsModel == null || dataSet == null) {
             return;
         }
-
-        tabInfo.statsModel.clear();
-        for (SeriesRef ref : tabInfo.selectedSeries) {
-            TimeSeriesData originalSeries = dataSet.getSeries(ref);
-            if (originalSeries != null) {
-                TimeSeriesData aggregatedSeries = com.kalix.ide.flowviz.transform.TimeSeriesAggregator.aggregate(
-                    originalSeries, tabInfo.statsPeriod, tabInfo.statsMethod);
-                if (aggregatedSeries != null) {
-                    tabInfo.statsModel.addOrUpdateSeries(ref, aggregatedSeries);
-                }
-            }
-        }
+        // The one shared pipeline (same as the plot and rebuildStatsTab), applied
+        // as a single batch — replaces per-series adds that were O(n²) in All-mask
+        // mode (every add recomputed the shared mask).
+        tabInfo.statsModel.setSeries(AggregationPipeline.aggregate(
+            dataSet, tabInfo.selectedSeries, tabInfo.statsPeriod, tabInfo.statsMethod));
     }
 
     /** Saves stats data to CSV. */
