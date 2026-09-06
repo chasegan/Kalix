@@ -42,7 +42,7 @@ class VizToolbarController {
     void updateFromState(PlotState state) {
         setSilently(aggregationPeriodCombo, state.getAggregationPeriod().getDisplayName());
         setSilently(aggregationMethodCombo, state.getAggregationMethod().getDisplayName());
-        setSilently(maskCombo, state.getMaskMode().getDisplayName());
+        setSilently(maskCombo, VizToolbarBuilder.maskItem(state.getMaskMode()));
         setSilently(plotTypeCombo, state.getPlotType());
         setSilently(ySpaceCombo, state.getYAxisScale().getDisplayName());
         setSilently(autoYToggle, state.isAutoYMode());

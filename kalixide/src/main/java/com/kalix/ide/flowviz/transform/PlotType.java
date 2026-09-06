@@ -9,13 +9,13 @@ public enum PlotType {
     VALUES("Values", "Value", false),
 
     /** Cumulative sum of values over time. */
-    CUMULATIVE("Cumulative Values", "Cumulative Value", true),
+    CUMULATIVE("Cumulative Vals", "Cumulative Value", true),
 
     /** Difference from reference series (first selected series). */
     DIFFERENCE("Difference", "Difference from Reference", false),
 
     /** Cumulative difference from reference series. */
-    CUMULATIVE_DIFFERENCE("Cumulative Difference", "Cumulative Difference", true),
+    CUMULATIVE_DIFFERENCE("Cumulative Diff", "Cumulative Difference", true),
 
     /** Exceedance probability distribution. */
     EXCEEDANCE("Exceedance", "Exceedance Probability (%)", true),

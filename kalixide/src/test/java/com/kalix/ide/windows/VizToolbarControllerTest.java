@@ -73,7 +73,7 @@ class VizToolbarControllerTest {
 
         // The controls reflect the given state...
         assertEquals(previous.getAggregationPeriod().getDisplayName(), periodCombo.getSelectedItem());
-        assertEquals(previous.getMaskMode().getDisplayName(), maskCombo.getSelectedItem());
+        assertEquals(VizToolbarBuilder.maskItem(previous.getMaskMode()), maskCombo.getSelectedItem());
         // ...but the panel was NOT driven: its state and history are untouched.
         assertEquals(AggregationPeriod.DAILY, panel.getAggregationPeriod(),
             "a fired combo listener would have re-applied the old aggregation");

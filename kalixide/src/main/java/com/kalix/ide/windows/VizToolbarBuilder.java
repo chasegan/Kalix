@@ -23,6 +23,7 @@ import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.JTable;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
@@ -155,8 +156,18 @@ class VizToolbarBuilder {
         group.add(statsViewToggle);
         plotViewToggle.addActionListener(e -> fireViewToggle(VisualizationTabManager.TabInfo.TabType.PLOT));
         statsViewToggle.addActionListener(e -> fireViewToggle(VisualizationTabManager.TabInfo.TabType.STATS));
-        toolbar.add(plotViewToggle);
-        toolbar.add(statsViewToggle);
+        // Rigid holder: FlatLaf's tab-style buttons size slightly differently per
+        // selection state, which nudged everything to the right of the pair on
+        // every toggle. GridLayout forces two equal fixed cells regardless.
+        JPanel holder = new JPanel(new java.awt.GridLayout(1, 2, 0, 0));
+        holder.setOpaque(false);
+        Dimension pair = new Dimension(ToolbarConstants.BUTTON_SIZE.width * 2, ToolbarConstants.BUTTON_SIZE.height);
+        holder.setPreferredSize(pair);
+        holder.setMinimumSize(pair);
+        holder.setMaximumSize(pair);
+        holder.add(plotViewToggle);
+        holder.add(statsViewToggle);
+        toolbar.add(holder);
     }
 
     private void fireViewToggle(VisualizationTabManager.TabInfo.TabType mode) {
@@ -217,7 +228,7 @@ class VizToolbarBuilder {
     }
 
     private void addAggregationControls() {
-        toolbar.add(new JLabel("Resolution:"));
+        toolbar.add(new JLabel("Res:"));
         toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
         aggregationPeriodCombo = createDropdown(ToolbarConstants.AGGREGATION_OPTIONS,
@@ -237,19 +248,24 @@ class VizToolbarBuilder {
         toolbar.add(aggregationMethodCombo);
     }
 
+    /** The mask combo item for a mode — the combo carries its own noun, no label. */
+    static String maskItem(MaskMode mode) {
+        return "Mask " + mode.getDisplayName();
+    }
+
     private void addMaskControls() {
         toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
-        toolbar.add(new JLabel("Mask:"));
-        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
 
-        String[] maskOptions = {"All", "Each", "None"};
+        String[] maskOptions = {
+            maskItem(MaskMode.ALL), maskItem(MaskMode.EACH), maskItem(MaskMode.NONE)};
         maskCombo = createDropdown(maskOptions,
-            ToolbarConstants.NARROW_DROPDOWN_SIZE, "Mask mode for bivariate statistics");
-        maskCombo.setSelectedItem(tabInfo.plotPanel.getMaskMode().getDisplayName());
+            ToolbarConstants.MASK_DROPDOWN_SIZE, "Mask mode for bivariate statistics");
+        maskCombo.setSelectedItem(maskItem(tabInfo.plotPanel.getMaskMode()));
         maskCombo.addActionListener(e -> {
             String selected = (String) maskCombo.getSelectedItem();
             if (selected != null) {
-                tabInfo.plotPanel.setMaskMode(MaskMode.fromDisplayName(selected));
+                tabInfo.plotPanel.setMaskMode(
+                    MaskMode.fromDisplayName(selected.substring("Mask ".length())));
                 applied();
             }
         });
@@ -271,7 +287,7 @@ class VizToolbarBuilder {
     }
 
     private void addPlotTypeDropdown() {
-        JLabel label = new JLabel("Plot Type:");
+        JLabel label = new JLabel("Type:");
         plotOnly(label);
         JComponent strut = (JComponent) Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING);
         plotOnly(strut);
@@ -292,7 +308,7 @@ class VizToolbarBuilder {
             tabInfo.plotPanel.setPlotTypeAndMaskMode(selected,
                 selected.isDataMaskDefault() ? MaskMode.ALL : MaskMode.NONE);
             // Reflect the panel's resulting mask silently (the mask is shared state now).
-            VizToolbarController.setSilently(maskCombo, tabInfo.plotPanel.getMaskMode().getDisplayName());
+            VizToolbarController.setSilently(maskCombo, maskItem(tabInfo.plotPanel.getMaskMode()));
             applied();
         });
         plotOnly(plotTypeCombo);
