@@ -177,12 +177,17 @@ public class FileOperationsManager {
             return; // no open document backs this file; nothing to reload
         }
         if (!document.isEditable()) {
-            return; // read-only data views read the file directly; no buffer to refresh
+            // A read-only data view has no buffer to reload; refresh its virtual
+            // views instead (append-resume "live tail", or a full rebuild).
+            document.refreshDataViewFromDisk();
+            statusUpdateCallback.accept("Data view refreshed: " + file.getName());
+            return;
         }
         try {
             String content = Files.readString(file.toPath());
             document.setText(content); // setText resets dirty state
             document.parseModelFromText(true);
+            document.refreshDataViewFromDisk(); // data docs: re-index the new bytes
             statusUpdateCallback.accept("File reloaded: " + file.getName());
         } catch (IOException e) {
             statusUpdateCallback.accept("Failed to reload file: " + file.getName());
@@ -228,7 +233,7 @@ public class FileOperationsManager {
 
             // A data document's virtual table indexes byte offsets this save just
             // moved; rebuild its views from the new bytes (no-op for other kinds).
-            document.refreshDataViewAfterSave();
+            document.refreshDataViewFromDisk();
 
             // Save as last opened file for session restoration
             PreferenceKeys.LAST_OPENED_FILE.set(currentFile.getAbsolutePath());
@@ -301,7 +306,7 @@ public class FileOperationsManager {
             // Update current file and reset dirty state
             document.setFile(selectedFile);
             document.setDirty(false);
-            document.refreshDataViewAfterSave(); // see saveKalixDocument
+            document.refreshDataViewFromDisk(); // see saveKalixDocument
 
             // Add to recent files
             addRecentFileCallback.accept(selectedFile.getAbsolutePath());

@@ -12,9 +12,11 @@ import org.slf4j.LoggerFactory;
 import javax.swing.JComponent;
 import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
+import javax.swing.text.BadLocationException;
 import java.awt.Component;
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A delimited data file ({@code .csv}, including {@code .res.csv}): the virtual
@@ -36,6 +38,10 @@ public class DataDocument extends KalixDocument {
     private final JScrollPane largeTextScroller;
     /** True above the editable-text gate: virtual read-only views. */
     private final boolean largeReadOnly;
+
+    /** Serialises full session rebuilds; a burst of change events coalesces into one trailing rerun. */
+    private final AtomicBoolean refreshInFlight = new AtomicBoolean(false);
+    private final AtomicBoolean refreshQueuedAgain = new AtomicBoolean(false);
 
     /** Data documents require their backing file at construction (the views read it directly). */
     public DataDocument(File file) {
@@ -59,6 +65,9 @@ public class DataDocument extends KalixDocument {
         }
         this.dataViewSession = session;
         this.dataViewPanel = session != null ? new DataViewPanel(session) : null;
+        if (dataViewPanel != null) {
+            dataViewPanel.setShowInFileHandler(this::showDataLineInText);
+        }
         boolean virtualText = largeReadOnly && session != null;
         this.largeTextArea = virtualText ? new VirtualTextArea(session) : null;
         this.largeTextScroller = virtualText ? new JScrollPane(largeTextArea) : null;
@@ -112,16 +121,30 @@ public class DataDocument extends KalixDocument {
     }
 
     /**
-     * Rebuilds the data views from the file after this document's text was saved.
-     * A below-gate data document is editable, so a save moves every byte offset
-     * the session's index recorded — parsing from stale checkpoints would render
-     * misaligned garbage presented as data. The fresh session is opened off the
-     * EDT and swapped in on it; the old session closes after the swap. No-op for
-     * read-only views (nothing can be saved) and failed sessions.
+     * Brings the data views back in line with the file's bytes after they
+     * changed — a save from this document's own editor, or an external change.
+     * The session's indexes record byte offsets the change may have moved;
+     * parsing from stale checkpoints would render misaligned garbage presented
+     * as data.
+     *
+     * <p>Two paths: a pure append (a running simulation writing results) is
+     * handled in place by {@link DataViewSession#tryResumeAppend()} — the views
+     * simply keep growing, the "live tail". Anything else rebuilds the session
+     * off the EDT and swaps it into the table (and, above the gate, the virtual
+     * text view); the old session closes after the swap. Bursts of change
+     * events coalesce into at most one trailing rebuild.
      */
     @Override
-    public void refreshDataViewAfterSave() {
-        if (dataViewPanel == null || !isEditable() || getFile() == null) {
+    public void refreshDataViewFromDisk() {
+        if (dataViewPanel == null || getFile() == null) {
+            return;
+        }
+        DataViewSession current = dataViewSession;
+        if (current != null && current.tryResumeAppend()) {
+            return; // pure growth: live tail, views extend in place
+        }
+        if (!refreshInFlight.compareAndSet(false, true)) {
+            refreshQueuedAgain.set(true);
             return;
         }
         File target = getFile(); // Save As may have re-pointed the document; read the new bytes
@@ -132,16 +155,47 @@ public class DataDocument extends KalixDocument {
                     DataViewSession old = dataViewSession;
                     dataViewSession = fresh;
                     dataViewPanel.replaceSession(fresh);
+                    if (largeTextArea != null) {
+                        largeTextArea.replaceSession(fresh);
+                    }
                     if (old != null) {
                         old.close();
                     }
                 });
             } catch (IOException e) {
                 logger.warn("Data view refresh failed for {}: {}", target, e.getMessage());
+            } finally {
+                refreshInFlight.set(false);
+                if (refreshQueuedAgain.getAndSet(false)) {
+                    SwingUtilities.invokeLater(this::refreshDataViewFromDisk);
+                }
             }
         }, "kalix-dataview-reload");
         reloader.setDaemon(true);
         reloader.start();
+    }
+
+    /**
+     * "Show in File": reveals a data-region physical line in whichever text side
+     * this tab has — the virtual text view above the gate, or the real editor
+     * below it (offset by any extended format header the editor also shows).
+     */
+    private void showDataLineInText(long dataLine) {
+        if (largeTextArea != null) {
+            largeTextArea.showLine(dataLine);
+            largeTextArea.requestFocusInWindow();
+            return;
+        }
+        DataViewSession session = dataViewSession;
+        long editorLine = dataLine + (session != null ? session.headerLinesBeforeData() : 0);
+        var textArea = getEditor().getTextArea();
+        try {
+            int line = (int) Math.max(0, Math.min(editorLine, textArea.getLineCount() - 1L));
+            textArea.setCaretPosition(textArea.getLineStartOffset(line));
+            textArea.requestFocusInWindow();
+        } catch (BadLocationException e) {
+            // Out of range (the file changed underneath); nothing to navigate to.
+        }
     }
 
     @Override

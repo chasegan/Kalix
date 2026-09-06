@@ -68,6 +68,21 @@ class VirtualTextAreaTest {
     }
 
     @Test
+    void replaceSessionTracksTheNewFileAndShowLineSelects() throws IOException {
+        try (DataViewSession first = session("a\nb\n")) {
+            VirtualTextArea area = new VirtualTextArea(first);
+            int lineHeight = area.getFontMetrics(area.getFont()).getHeight();
+            try (DataViewSession fresh = session("a\nb\nc\nd\ne\n")) {
+                area.replaceSession(fresh);
+                assertEquals(5L * lineHeight, area.getPreferredSize().height,
+                    "geometry follows the fresh session");
+                area.showLine(4); // unparented: scrolling is a no-op, selection still lands
+                assertEquals(4, area.selectionStart());
+            }
+        }
+    }
+
+    @Test
     void emptySelectionAndOversizeSelectionCopyNothing() throws IOException {
         try (DataViewSession s = session("a\nb\n")) {
             VirtualTextArea area = new VirtualTextArea(s);

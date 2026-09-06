@@ -122,6 +122,17 @@ public final class RowStore implements AutoCloseable {
     }
 
     /**
+     * Drops one cached block. Append-resume uses this on the old final block:
+     * it may have been cached partial, and appended rows landing in the same
+     * block must be re-parsed rather than served short.
+     */
+    public synchronized void evictBlock(long block) {
+        if (blocks.remove(block) != null) {
+            insertionOrder.remove(block);
+        }
+    }
+
+    /**
      * Synchronous access: loads the block if needed, then reads the row. For
      * tests and background use (bulk copy); the UI path is
      * {@link #rowIfLoaded(long)} + a scheduled {@link #ensureBlockLoaded(long)}.

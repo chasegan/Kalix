@@ -108,7 +108,7 @@ class DataDocumentTest {
 
             // Simulate the save's rewrite shifting every byte offset.
             Files.writeString(file.toPath(), "Date,flow\n2020-01-01,1.5\n", StandardCharsets.UTF_8);
-            doc.refreshDataViewAfterSave();
+            doc.refreshDataViewFromDisk();
 
             await("session rebuilt", () -> {
                 DataViewSession s = doc.getDataViewSession();

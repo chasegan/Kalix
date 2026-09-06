@@ -46,7 +46,8 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
     private static final int H_PAD = 8;
     private static final int MIN_WIDTH = 400;
 
-    private final DataViewSession session;
+    /** Non-final: replaced with a fresh session after the file is rebuilt from disk. */
+    private DataViewSession session;
 
     /** Selected line range; -1 anchor = no selection. */
     private long selectionAnchor = -1;
@@ -67,18 +68,7 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
         setFocusable(true);
         resolveColors();
 
-        session.addListener(new DataViewSession.Listener() {
-            @Override
-            public void onProgress(long rows, long lines, long indexedBytes, long totalBytes, boolean complete) {
-                revalidate(); // preferred height grew
-                repaint();
-            }
-
-            @Override
-            public void onLineBlockLoaded(long firstLine, int count) {
-                repaint();
-            }
-        });
+        registerSessionListener();
 
         MouseAdapter mouse = new MouseAdapter() {
             @Override
@@ -106,6 +96,46 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
                 copySelection();
             }
         });
+    }
+
+    private void registerSessionListener() {
+        session.addListener(new DataViewSession.Listener() {
+            @Override
+            public void onProgress(long rows, long lines, long indexedBytes, long totalBytes, boolean complete) {
+                revalidate(); // preferred height grew
+                repaint();
+            }
+
+            @Override
+            public void onLineBlockLoaded(long firstLine, int count) {
+                repaint();
+            }
+        });
+    }
+
+    /**
+     * Swaps in a fresh session after the file was rebuilt from disk. EDT only;
+     * the caller closes the old session (which drops its listeners) afterwards.
+     */
+    public void replaceSession(DataViewSession fresh) {
+        this.session = fresh;
+        registerSessionListener();
+        revalidate();
+        repaint();
+    }
+
+    /** Scrolls the given line into view (with a little context) and selects it. EDT only. */
+    public void showLine(long line) {
+        long count = session.lineCount();
+        if (count == 0) {
+            return;
+        }
+        long target = Math.max(0, Math.min(line, count - 1));
+        selectLines(target, target);
+        int lineHeight = lineHeight();
+        scrollRectToVisible(new Rectangle(
+            0, (int) Math.max(0, (target - 2) * lineHeight), 1, lineHeight * 5));
+        repaint();
     }
 
     /** Re-resolves theme colours; runs on every LaF switch via updateComponentTreeUI. */

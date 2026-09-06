@@ -40,6 +40,15 @@ public final class CsvIndexer {
         void onProgress(long rows, long lines, long indexedBytes, long totalBytes);
     }
 
+    /**
+     * End-state of an index pass. {@code cleanEnd} means the file ended at a row
+     * boundary with quote parity closed — the precondition for append-resume:
+     * appended bytes then start a NEW row, so indexing can continue from the old
+     * end with every existing count and checkpoint still valid.
+     */
+    public record Outcome(boolean cleanEnd) {
+    }
+
     private CsvIndexer() {
     }
 
@@ -47,11 +56,16 @@ public final class CsvIndexer {
      * Indexes the file from {@code startOffset} (after any BOM, or after an
      * extended header for formats like {@code .res.csv}) to the end.
      *
+     * <p>Resume-friendly: the running counts start from the indexes' current
+     * item counts, so calling again with reopened indexes and {@code startOffset}
+     * at the previously indexed end continues an append-only file in place
+     * (the caller verifies the clean-end + unchanged-prefix preconditions).
+     *
      * @param cancelled polled once per chunk; return {@code true} to abort
      */
-    public static void index(SeekableByteChannel channel, long startOffset, CsvDialect dialect,
-                             CheckpointIndex rows, CheckpointIndex lines,
-                             Progress progress, BooleanSupplier cancelled) throws IOException {
+    public static Outcome index(SeekableByteChannel channel, long startOffset, CsvDialect dialect,
+                                CheckpointIndex rows, CheckpointIndex lines,
+                                Progress progress, BooleanSupplier cancelled) throws IOException {
         long totalBytes = channel.size();
         rows.setTotalBytes(totalBytes);
         lines.setTotalBytes(totalBytes);
@@ -63,13 +77,13 @@ public final class CsvIndexer {
         boolean inQuotes = false;
         boolean rowOpen = false;   // bytes seen since the last row boundary
         boolean lineOpen = false;
-        long rowCount = 0;
-        long lineCount = 0;
+        long rowCount = rows.itemCount();   // 0 for a fresh index; continues on resume
+        long lineCount = lines.itemCount();
         long position = startOffset;
 
         while (true) {
             if (cancelled != null && cancelled.getAsBoolean()) {
-                return; // indexes keep their partial counts and never complete
+                return new Outcome(false); // indexes keep partial counts, never complete
             }
             buffer.clear();
             int n = channel.read(buffer);
@@ -112,7 +126,10 @@ public final class CsvIndexer {
             }
         }
 
-        // A final line without a trailing newline is still a row/line.
+        // A final line without a trailing newline is still a row/line — but such
+        // an end is NOT clean for append purposes (appended bytes would continue
+        // that row, invalidating the count).
+        boolean cleanEnd = !rowOpen && !inQuotes;
         if (rowOpen) {
             rowCount++;
         }
@@ -124,5 +141,6 @@ public final class CsvIndexer {
         if (progress != null) {
             progress.onProgress(rowCount, lineCount, position, totalBytes);
         }
+        return new Outcome(cleanEnd);
     }
 }

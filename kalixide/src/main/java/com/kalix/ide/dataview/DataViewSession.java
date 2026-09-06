@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.SwingUtilities;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
@@ -11,7 +12,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -80,6 +83,8 @@ public final class DataViewSession implements AutoCloseable {
     private final long indexStartOffset;
     /** Externally supplied column names (.res.csv), or {@code null} to use the data's own header. */
     private final String[] presetColumnNames;
+    /** Physical lines occupied by an extended format header before the data region (.res.csv). */
+    private final long headerLinesBeforeData;
     private final CheckpointIndex rowIndex;
     private final CheckpointIndex lineIndex;
     private final RowStore rowStore;
@@ -99,8 +104,16 @@ public final class DataViewSession implements AutoCloseable {
     private volatile int columnCount;
     private long lastProgressNotifyNanos; // indexer thread only
 
+    // --- Append-resume state (see tryResumeAppend) ---
+    /** Whether the last index pass ended at a row boundary with quotes closed. */
+    private volatile boolean cleanEnd = false;
+    /** The last bytes of the indexed region, to verify an append changed nothing behind it. */
+    private volatile byte[] tailSample;
+    private volatile long tailSampleOffset;
+    private final AtomicBoolean resumeRunning = new AtomicBoolean(false);
+
     private DataViewSession(Path file, CsvDialect dialect, long indexStartOffset,
-                            String[] presetColumnNames,
+                            String[] presetColumnNames, long headerLinesBeforeData,
                             CheckpointIndex rowIndex, CheckpointIndex lineIndex,
                             RowStore rowStore, LineStore lineStore,
                             SeekableByteChannel indexerChannel) {
@@ -108,6 +121,7 @@ public final class DataViewSession implements AutoCloseable {
         this.dialect = dialect;
         this.indexStartOffset = indexStartOffset;
         this.presetColumnNames = presetColumnNames;
+        this.headerLinesBeforeData = headerLinesBeforeData;
         if (presetColumnNames != null) {
             this.columnCount = presetColumnNames.length;
         }
@@ -121,7 +135,7 @@ public final class DataViewSession implements AutoCloseable {
             t.setDaemon(true);
             return t;
         });
-        this.indexerThread = new Thread(this::runIndexer, "kalix-dataview-indexer");
+        this.indexerThread = new Thread(() -> runIndexer(indexStartOffset), "kalix-dataview-indexer");
         this.indexerThread.setDaemon(true);
     }
 
@@ -130,7 +144,7 @@ public final class DataViewSession implements AutoCloseable {
      * starts the background index pass. Blocking I/O — call off the EDT.
      */
     public static DataViewSession open(Path file) throws IOException {
-        return open(file, 0L, null);
+        return open(file, 0L, null, 0L);
     }
 
     /**
@@ -140,8 +154,8 @@ public final class DataViewSession implements AutoCloseable {
      * The dialect is sniffed from the data region; preset column names force
      * "no header row in the data".
      */
-    public static DataViewSession open(Path file, long dataStartOffset,
-                                       String[] presetColumnNames) throws IOException {
+    public static DataViewSession open(Path file, long dataStartOffset, String[] presetColumnNames,
+                                       long headerLinesBeforeData) throws IOException {
         byte[] head;
         try (SeekableByteChannel headChannel = Files.newByteChannel(file, StandardOpenOption.READ)) {
             headChannel.position(dataStartOffset);
@@ -181,7 +195,7 @@ public final class DataViewSession implements AutoCloseable {
 
         DataViewSession session = new DataViewSession(
             file, dialect, dataStartOffset + dialect.bomLength(), presetColumnNames,
-            rowIndex, lineIndex, rowStore, lineStore, indexerChannel);
+            headerLinesBeforeData, rowIndex, lineIndex, rowStore, lineStore, indexerChannel);
         session.indexerThread.start();
         return session;
     }
@@ -238,6 +252,151 @@ public final class DataViewSession implements AutoCloseable {
     /** Whether row 0 of the data region is a header row (hidden by the table). */
     public boolean headerRowInData() {
         return dialect.hasHeaderRow();
+    }
+
+    /**
+     * Physical lines occupied by an extended format header before the data
+     * region (0 for plain CSV) — for mapping data-region lines onto an editor
+     * that shows the whole file.
+     */
+    public long headerLinesBeforeData() {
+        return headerLinesBeforeData;
+    }
+
+    /**
+     * The physical line (data-region numbering) on which the given row starts.
+     * Quoted newlines make rows and lines diverge, so this walks the byte
+     * offsets both indexes share: seek the row's checkpoint, scan to the row's
+     * first byte, then count newlines from the nearest line checkpoint. At most
+     * two sub-stride scans. Blocking I/O — background threads only.
+     */
+    public long lineNumberForRow(long row) throws IOException {
+        CheckpointIndex.Checkpoint rowCheckpoint = rowIndex.floorCheckpoint(row);
+        if (rowCheckpoint == null) {
+            return 0;
+        }
+        try (SeekableByteChannel probe = Files.newByteChannel(file, StandardOpenOption.READ)) {
+            long rowStart = rowCheckpoint.byteOffset();
+            if (row > rowCheckpoint.firstItem()) {
+                rowStart = scanToRowStart(probe, rowCheckpoint.byteOffset(), row - rowCheckpoint.firstItem());
+            }
+            CheckpointIndex.Checkpoint lineCheckpoint = lineIndex.floorCheckpointByOffset(rowStart);
+            if (lineCheckpoint == null) {
+                return 0;
+            }
+            return lineCheckpoint.firstItem() + countNewlines(probe, lineCheckpoint.byteOffset(), rowStart);
+        }
+    }
+
+    /** Byte offset where the {@code rowsToSkip}-th row after {@code from} starts (quote-aware). */
+    private long scanToRowStart(SeekableByteChannel probe, long from, long rowsToSkip) throws IOException {
+        probe.position(from);
+        ByteBuffer buffer = ByteBuffer.allocate(64 * 1024);
+        byte quote = (byte) dialect.quote();
+        boolean inQuotes = false;
+        long remaining = rowsToSkip;
+        long position = from;
+        while (true) {
+            buffer.clear();
+            int n = probe.read(buffer);
+            if (n < 0) {
+                return position;
+            }
+            buffer.flip();
+            for (int i = 0; i < n; i++) {
+                byte b = buffer.get(i);
+                if (b == quote) {
+                    inQuotes = !inQuotes;
+                } else if (b == '\n' && !inQuotes) {
+                    remaining--;
+                    if (remaining == 0) {
+                        return position + i + 1;
+                    }
+                }
+            }
+            position += n;
+        }
+    }
+
+    /** Newlines in {@code [from, toExclusive)}. */
+    private static long countNewlines(SeekableByteChannel probe, long from, long toExclusive) throws IOException {
+        probe.position(from);
+        ByteBuffer buffer = ByteBuffer.allocate(64 * 1024);
+        long count = 0;
+        long position = from;
+        while (position < toExclusive) {
+            buffer.clear();
+            buffer.limit((int) Math.min(buffer.capacity(), toExclusive - position));
+            int n = probe.read(buffer);
+            if (n < 0) {
+                break;
+            }
+            buffer.flip();
+            for (int i = 0; i < n; i++) {
+                if (buffer.get(i) == '\n') {
+                    count++;
+                }
+            }
+            position += n;
+        }
+        return count;
+    }
+
+    /**
+     * The next row at or after {@code fromRowExclusive + 1} whose raw text
+     * contains {@code needle} (case-insensitive), or -1. One sequential streamed
+     * scan on its own channel — the block caches are untouched. Blocking I/O —
+     * background threads only; a 1GB file takes a few seconds.
+     */
+    public long findNextRow(long fromRowExclusive, String needle) throws IOException {
+        long start = Math.max(0, fromRowExclusive + 1);
+        if (needle == null || needle.isEmpty() || start >= rowIndex.itemCount()) {
+            return -1;
+        }
+        String needleLower = needle.toLowerCase(Locale.ROOT);
+        CheckpointIndex.Checkpoint checkpoint = rowIndex.floorCheckpoint(start);
+        if (checkpoint == null) {
+            return -1;
+        }
+        try (SeekableByteChannel probe = Files.newByteChannel(file, StandardOpenOption.READ)) {
+            probe.position(checkpoint.byteOffset());
+            ByteBuffer buffer = ByteBuffer.allocate(256 * 1024);
+            ByteArrayOutputStream rowBytes = new ByteArrayOutputStream(256);
+            byte quote = (byte) dialect.quote();
+            boolean inQuotes = false;
+            long row = checkpoint.firstItem();
+            while (true) {
+                buffer.clear();
+                int n = probe.read(buffer);
+                if (n < 0) {
+                    break;
+                }
+                buffer.flip();
+                for (int i = 0; i < n; i++) {
+                    byte b = buffer.get(i);
+                    if (b == quote) {
+                        inQuotes = !inQuotes;
+                    }
+                    if (b == '\n' && !inQuotes) {
+                        if (row >= start && rowMatches(rowBytes, needleLower)) {
+                            return row;
+                        }
+                        rowBytes.reset();
+                        row++;
+                    } else if (rowBytes.size() < 1_000_000) {
+                        rowBytes.write(b);
+                    }
+                }
+            }
+            if (rowBytes.size() > 0 && row >= start && rowMatches(rowBytes, needleLower)) {
+                return row; // final row without a trailing newline
+            }
+        }
+        return -1;
+    }
+
+    private boolean rowMatches(ByteArrayOutputStream rowBytes, String needleLower) {
+        return rowBytes.toString(dialect.charset()).toLowerCase(Locale.ROOT).contains(needleLower);
     }
 
     public String[] rowIfLoaded(long fileRow) {
@@ -314,11 +473,13 @@ public final class DataViewSession implements AutoCloseable {
         }
     }
 
-    private void runIndexer() {
+    private void runIndexer(long fromOffset) {
         try {
-            CsvIndexer.index(indexerChannel, indexStartOffset, dialect,
+            CsvIndexer.Outcome outcome = CsvIndexer.index(indexerChannel, fromOffset, dialect,
                 rowIndex, lineIndex, this::onIndexProgress, () -> closed);
             if (!closed) {
+                cleanEnd = outcome.cleanEnd();
+                captureTailSample();
                 indexingComplete = true;
                 maybeRequestStructure();
                 notifyEdt(l -> l.onProgress(rowIndex.itemCount(), lineIndex.itemCount(),
@@ -328,7 +489,85 @@ public final class DataViewSession implements AutoCloseable {
             if (!closed) {
                 logger.warn("Indexing failed for {}: {}", file, e.getMessage());
             }
+        } finally {
+            resumeRunning.set(false);
         }
+    }
+
+    /** Remembers the tail of the indexed region so an append can be verified as pure growth. */
+    private void captureTailSample() {
+        try {
+            long end = rowIndex.indexedBytes();
+            int length = (int) Math.max(0, Math.min(4096, end - indexStartOffset));
+            ByteBuffer buffer = ByteBuffer.allocate(length);
+            indexerChannel.position(end - length);
+            while (buffer.hasRemaining() && indexerChannel.read(buffer) >= 0) {
+                // fill
+            }
+            tailSample = buffer.array();
+            tailSampleOffset = end - length;
+        } catch (IOException e) {
+            tailSample = null; // resume unavailable; a change will rebuild instead
+        }
+    }
+
+    /**
+     * Attempts to continue indexing after the file grew — the "live tail" of a
+     * running simulation appending results. Succeeds when the file is strictly
+     * larger, the indexed region ended cleanly (newline, quotes closed) and its
+     * tail bytes are unchanged: indexing resumes from the old end, every count,
+     * checkpoint and cached block stays valid, and the views simply keep growing.
+     *
+     * @return true when the change was handled here (or a resume is already
+     *         running); false when the caller must rebuild the session instead
+     */
+    public boolean tryResumeAppend() {
+        if (closed || resumeRunning.get()) {
+            return true; // nothing to do / the running tail will pick the growth up
+        }
+        if (!indexingComplete || !cleanEnd || tailSample == null) {
+            return false;
+        }
+        long oldEnd = rowIndex.indexedBytes();
+        try {
+            if (Files.size(file) <= oldEnd) {
+                return false; // shrunk or same size: not an append
+            }
+            byte[] current = new byte[tailSample.length];
+            try (SeekableByteChannel probe = Files.newByteChannel(file, StandardOpenOption.READ)) {
+                probe.position(tailSampleOffset);
+                ByteBuffer buffer = ByteBuffer.wrap(current);
+                while (buffer.hasRemaining() && probe.read(buffer) >= 0) {
+                    // fill
+                }
+                if (buffer.hasRemaining()) {
+                    return false; // truncated under us
+                }
+            }
+            if (!Arrays.equals(current, tailSample)) {
+                return false; // rewritten behind us, not appended
+            }
+        } catch (IOException e) {
+            return false;
+        }
+        if (!resumeRunning.compareAndSet(false, true)) {
+            return true;
+        }
+        // The old final blocks may be cached partial; appended items landing in
+        // the same block must re-parse rather than be served short.
+        if (rowIndex.itemCount() > 0) {
+            rowStore.evictBlock(rowStore.blockOf(rowIndex.itemCount() - 1));
+        }
+        if (lineIndex.itemCount() > 0) {
+            lineStore.evictBlock(lineStore.blockOf(lineIndex.itemCount() - 1));
+        }
+        indexingComplete = false;
+        rowIndex.reopen();
+        lineIndex.reopen();
+        Thread resumer = new Thread(() -> runIndexer(oldEnd), "kalix-dataview-indexer-resume");
+        resumer.setDaemon(true);
+        resumer.start();
+        return true;
     }
 
     /** Indexer-thread callback; throttled before touching the EDT. */

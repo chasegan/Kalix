@@ -55,21 +55,26 @@ public final class DataViewOpener {
     }
 
     private static DataViewSession openSourceResCsv(File file) throws IOException {
-        long dataStart = offsetPastMarkerLine(file, SourceResCsvFormat.MARKER_EOH);
+        HeaderScan scan = scanPastMarkerLine(file, SourceResCsvFormat.MARKER_EOH);
         List<String> seriesNames = new SourceResCsvHeaderReader().readSeriesNames(file);
         String[] columns = new String[seriesNames.size() + 1];
         columns[0] = "Date";
         for (int i = 0; i < seriesNames.size(); i++) {
             columns[i + 1] = seriesNames.get(i);
         }
-        return DataViewSession.open(file.toPath(), dataStart, columns);
+        return DataViewSession.open(file.toPath(), scan.dataStartOffset(), columns, scan.headerLines());
     }
 
-    /** Byte offset of the line following the given marker line ({@code EOH}). */
-    private static long offsetPastMarkerLine(File file, String marker) throws IOException {
+    /** Where the data region begins, and how many physical lines the header occupies before it. */
+    private record HeaderScan(long dataStartOffset, long headerLines) {
+    }
+
+    /** Locates the line following the given marker line ({@code EOH}). */
+    private static HeaderScan scanPastMarkerLine(File file, String marker) throws IOException {
         try (InputStream in = new BufferedInputStream(Files.newInputStream(file.toPath()))) {
             StringBuilder line = new StringBuilder(32);
             long position = 0;
+            long lines = 0;
             int b;
             while ((b = in.read()) >= 0) {
                 position++;
@@ -80,12 +85,13 @@ public final class DataViewOpener {
                     break;
                 }
                 if (b == '\n') {
+                    lines++;
                     String text = line.toString();
                     if (text.endsWith("\r")) {
                         text = text.substring(0, text.length() - 1);
                     }
                     if (text.equals(marker)) {
-                        return position;
+                        return new HeaderScan(position, lines);
                     }
                     line.setLength(0);
                 } else if (line.length() < 64) {

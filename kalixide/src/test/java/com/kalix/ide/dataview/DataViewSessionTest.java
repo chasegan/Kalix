@@ -6,9 +6,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -99,5 +101,71 @@ class DataViewSessionTest {
         DataViewSession session = DataViewSession.open(bigCsv(50_000));
         session.close(); // likely mid-index; must abort cleanly
         session.close(); // idempotent
+    }
+
+    @Test
+    void appendResumeLiveTailExtendsInPlace() throws IOException {
+        Path file = bigCsv(1500); // final block (stride 1024) is partial
+        try (DataViewSession session = DataViewSession.open(file)) {
+            await("indexing complete", session::isIndexingComplete);
+            assertEquals(1501, session.rowCount());
+
+            // Cache the partial final block, then let the file grow.
+            session.requestRow(1500);
+            await("tail block loaded", () -> session.rowIfLoaded(1500) != null);
+            StringBuilder appended = new StringBuilder();
+            for (int i = 0; i < 100; i++) {
+                appended.append("2020-01-02,9.9\n");
+            }
+            Files.writeString(file, appended, StandardCharsets.UTF_8, StandardOpenOption.APPEND);
+
+            assertTrue(session.tryResumeAppend(), "pure growth resumes in place");
+            await("resume complete", () -> session.isIndexingComplete() && session.rowCount() == 1601);
+
+            // Appended rows landing in the previously-partial block must be servable.
+            session.requestRow(1550);
+            await("appended row loads", () -> session.rowIfLoaded(1550) != null);
+            assertEquals("9.9", session.rowIfLoaded(1550)[1]);
+        }
+    }
+
+    @Test
+    void aRewriteOrUncleanEndRefusesResume() throws IOException {
+        Path rewritten = bigCsv(50);
+        try (DataViewSession session = DataViewSession.open(rewritten)) {
+            await("indexing complete", session::isIndexingComplete);
+            Files.writeString(rewritten, "completely,different\n1,2\n", StandardCharsets.UTF_8);
+            assertFalse(session.tryResumeAppend(), "rewritten bytes need a rebuild");
+        }
+
+        Path unterminated = csvFile("a,b\nc,d"); // no trailing newline: appended bytes would extend row 1
+        try (DataViewSession session = DataViewSession.open(unterminated)) {
+            await("indexing complete", session::isIndexingComplete);
+            Files.writeString(unterminated, "x,y\n", StandardCharsets.UTF_8, StandardOpenOption.APPEND);
+            assertFalse(session.tryResumeAppend(), "an unclean end cannot be resumed");
+        }
+    }
+
+    @Test
+    void lineNumberForRowWalksQuotedNewlines() throws IOException {
+        // Row 1 spans two physical lines; row 2 therefore starts on line 3.
+        try (DataViewSession session = DataViewSession.open(csvFile("a,b\nc,\"x\ny\"\ne,f\n"))) {
+            await("indexing complete", session::isIndexingComplete);
+            assertEquals(0, session.lineNumberForRow(0));
+            assertEquals(1, session.lineNumberForRow(1));
+            assertEquals(3, session.lineNumberForRow(2));
+        }
+    }
+
+    @Test
+    void findNextRowStreamsCaseInsensitivelyFromTheCursor() throws IOException {
+        try (DataViewSession session = DataViewSession.open(
+                csvFile("Date,flow\n2020-01-01,AAA\n2020-01-02,bbb\n2020-01-03,aaa\n"))) {
+            await("indexing complete", session::isIndexingComplete);
+            assertEquals(1, session.findNextRow(0, "aaa"), "case-insensitive match");
+            assertEquals(3, session.findNextRow(1, "AAA"), "continues past the cursor");
+            assertEquals(-1, session.findNextRow(3, "aaa"), "no wrap-around");
+            assertEquals(-1, session.findNextRow(0, "zzz"));
+        }
     }
 }

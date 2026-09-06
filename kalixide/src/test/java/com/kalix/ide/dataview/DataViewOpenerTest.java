@@ -76,6 +76,8 @@ class DataViewOpenerTest {
             // labelled here exactly as it is in the run tree and FlowViz.
             assertEquals("flow_at_a", columns[1]);
             assertEquals("level_at_b", columns[2]);
+            assertEquals(12, session.headerLinesBeforeData(),
+                "extended header lines, for mapping data lines onto the full-file editor");
 
             session.requestRow(0);
             await("first data row", () -> session.rowIfLoaded(0) != null);

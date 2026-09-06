@@ -202,12 +202,13 @@ public abstract class KalixDocument implements OpenModel {
     }
 
     /**
-     * Rebuilds a data document's virtual views after its text was saved (their
-     * indexes record byte offsets the save just moved). A no-op for every other
-     * kind — the save paths call this unconditionally.
+     * Brings a data document's virtual views back in line with the file's bytes
+     * after they changed — a save from this document's own editor, or an external
+     * change reported by the file watcher. A no-op for every other kind — the
+     * save and reload paths call this unconditionally.
      */
-    public void refreshDataViewAfterSave() {
-        // Only a data document has views to rebuild.
+    public void refreshDataViewFromDisk() {
+        // Only a data document has views to refresh.
     }
 
     /**

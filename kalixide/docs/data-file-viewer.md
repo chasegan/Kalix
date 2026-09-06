@@ -90,17 +90,27 @@ the host can refuse honestly.
   `getContextView()` seam (editable editor below the gate / virtual text
   above), the gate preference in Editor → Load and Save, the status strip,
   `.res.csv` dispatch.
+- **V1.1 — refresh & table tools** (September 2026): external-change refresh
+  with append-resume live tail; the table context menu — Find… / Find Next
+  (streamed, case-insensitive, on its own channel so the block caches stay
+  untouched), Show in File (row → physical line via the byte offsets both
+  indexes share, quoted newlines handled; lands in the virtual text view above
+  the gate or the real editor below it, offset by any extended header), and
+  Copy (JTable's native tab-delimited copy).
 - **Later**: plot view via FlowViz; pixie; head-region editing; overlay-based
   editing; column stats.
 
 ## V1 limitations (known, accepted)
 
-- **External changes don't refresh a data session.** The auto-reload watcher
-  refreshes editable buffers only; a read-only data view keeps its index until
-  the tab is reopened (a changed file mid-view degrades gracefully — reads
-  clamp; a reload affordance is future work). Saving a data document from its
-  *own* editor does refresh: the session is rebuilt from the new bytes after
-  every save, so the table never parses stale offsets.
+- **External changes refresh the views (V1.1).** The auto-reload watcher routes
+  every data-file change (and every save from the document's own editor)
+  through `refreshDataViewFromDisk`. A pure append — a running simulation
+  writing results — is handled in place by append-resume: the indexed region's
+  clean end and unchanged tail bytes are verified, indexing continues from the
+  old end, and the views simply keep growing ("live tail"). Anything else
+  rebuilds the session off the EDT and swaps it into the views; bursts of
+  change events coalesce into one trailing rebuild. The table never parses
+  stale offsets.
 - **`.res.csv` virtual views show the data region only** (text and table both
   start past `EOH`). Below the gate the real editor still shows the whole file,
   extended header included.

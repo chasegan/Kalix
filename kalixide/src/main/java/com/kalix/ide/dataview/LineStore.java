@@ -101,6 +101,13 @@ public final class LineStore implements AutoCloseable {
         }
     }
 
+    /** Drops one cached block — see {@link RowStore#evictBlock(long)}. */
+    public synchronized void evictBlock(long block) {
+        if (blocks.remove(block) != null) {
+            insertionOrder.remove(block);
+        }
+    }
+
     /**
      * Synchronous convenience for tests and bulk copy. Synchronized so ensure+read
      * happens under the load monitor: a concurrent load cannot evict this block

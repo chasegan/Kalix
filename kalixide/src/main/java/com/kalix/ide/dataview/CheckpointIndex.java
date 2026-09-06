@@ -70,6 +70,15 @@ public final class CheckpointIndex {
         this.complete = true;
     }
 
+    /**
+     * Reopens a completed index for append-resume: counts and checkpoints stay
+     * valid (the prefix is unchanged), only completeness clears while the
+     * indexer continues from the old end.
+     */
+    synchronized void reopen() {
+        this.complete = false;
+    }
+
     /** Items indexed so far — the final count once {@link #isComplete()}. */
     public synchronized long itemCount() {
         return itemCount;
@@ -101,5 +110,26 @@ public final class CheckpointIndex {
         }
         int idx = (int) Math.min(item / stride, checkpointCount - 1L);
         return new Checkpoint((long) idx * stride, offsets[idx]);
+    }
+
+    /**
+     * The last checkpoint at or before the given byte offset (offsets ascend),
+     * or {@code null} if none. Lets the row and line indexes be cross-referenced
+     * through the byte positions they share ("Show in file").
+     */
+    public synchronized Checkpoint floorCheckpointByOffset(long byteOffset) {
+        int lo = 0;
+        int hi = checkpointCount - 1;
+        int best = -1;
+        while (lo <= hi) {
+            int mid = (lo + hi) >>> 1;
+            if (offsets[mid] <= byteOffset) {
+                best = mid;
+                lo = mid + 1;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return best < 0 ? null : new Checkpoint((long) best * stride, offsets[best]);
     }
 }
