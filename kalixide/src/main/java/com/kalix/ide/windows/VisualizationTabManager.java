@@ -22,7 +22,6 @@ import com.formdev.flatlaf.FlatClientProperties;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
-import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -103,6 +102,11 @@ public class VisualizationTabManager {
     private int lastActivePlotTabIndex = 0;
     private Runnable onTabChangedCallback;
 
+    // Default tab names ("View 1", "View 2", ...). Session-monotonic: numbers are
+    // never reused after a close, so no two tabs can share a default name and
+    // existing tabs never renumber under the user.
+    private int nextViewNumber = 1;
+
     // Ghost-style drag-to-reorder, shared across all tabs (custom tab components, so it attaches
     // to each tab's handle rather than the strip). Initialized once tabbedPane exists.
     private final TabDragReorderer tabReorderer;
@@ -112,20 +116,9 @@ public class VisualizationTabManager {
      * {@link PlotToolbarBuilder}; these cover the tab strip itself.
      */
     private static class UIConstants {
-        static final int TAB_ICON_SIZE = 14;
         static final int TAB_PANEL_PADDING = 2;
-        // Gap between the tab icon and its name label — collapsed to 0 when the name is
-        // empty so an unnamed tab doesn't show a dangling space after the icon.
-        static final int TAB_NAME_LABEL_GAP = 4;
-    }
-
-    /**
-     * Pads {@code nameLabel} on its leading edge so it sits clear of the tab icon, unless
-     * the name is empty — an unnamed tab then shows just the icon, with no trailing gap.
-     */
-    private static void updateNameLabelPadding(JLabel nameLabel) {
-        boolean hasName = nameLabel.getText() != null && !nameLabel.getText().isEmpty();
-        nameLabel.setBorder(BorderFactory.createEmptyBorder(0, hasName ? UIConstants.TAB_NAME_LABEL_GAP : 0, 0, 0));
+        /** Glyph size for the trailing "+" (new tab) button in the tab strip. */
+        static final int NEW_TAB_ICON_SIZE = 14;
     }
 
     /**
@@ -150,6 +143,13 @@ public class VisualizationTabManager {
 
         /** Which view the created tab shows; duplication copies it (a duplicate looks identical). */
         TabInfo.TabType activeView = TabInfo.TabType.PLOT;
+
+        /**
+         * Whether {@link #name} is a machine-assigned default. A duplicate of a
+         * default-named tab gets a fresh number (two "View 1"s help nobody); a
+         * duplicate of a user-named tab keeps the copied name.
+         */
+        boolean nameIsDefault = false;
 
         // Plot-specific settings (ignored when creating stats tabs)
         public com.kalix.ide.flowviz.transform.PlotType plotType = com.kalix.ide.flowviz.transform.PlotType.VALUES;
@@ -182,6 +182,7 @@ public class VisualizationTabManager {
             PlotPanel plotPanel = tabInfo.plotPanel;
             TabSettings settings = new TabSettings();
             settings.name = tabInfo.name;
+            settings.nameIsDefault = tabInfo.name != null && tabInfo.name.equals(tabInfo.defaultName);
             settings.activeView = tabInfo.viewMode;
             settings.aggregationPeriod = plotPanel.getAggregationPeriod();
             settings.aggregationMethod = plotPanel.getAggregationMethod();
@@ -241,8 +242,10 @@ public class VisualizationTabManager {
         /** The hidden stats projection missed a state/data change; recompute when shown. */
         boolean statsDirty = false;
 
-        // Tab user-supplied identifier
+        // Tab identifier: starts as a machine default ("View n"), user-renamable
         String name;
+        /** The machine-assigned default name; rename-to-empty reverts to it. */
+        String defaultName;
         // remember the label for renaming
         JLabel nameLabel;
 
@@ -262,7 +265,6 @@ public class VisualizationTabManager {
         void rename(String name) {
             this.name = name;
             this.nameLabel.setText(name);
-            updateNameLabelPadding(this.nameLabel);
         }
 
         void registerNameLabel(JLabel nameLabel) {
@@ -361,11 +363,11 @@ public class VisualizationTabManager {
      * lets the button keep its preferred size at the trailing edge.</p>
      */
     private JComponent createNewPlotTrailing() {
-        // No explicit icon colour, matching the PLOT/STATS tab icons: an uncoloured
-        // FontIcon leaves the Graphics colour alone and so paints in the component's
-        // foreground, which follows the theme and survives updateComponentTreeUI.
-        // Setting one here would bake a colour that goes stale on the next theme switch.
-        FontIcon icon = FontIcon.of(FontAwesomeSolid.PLUS, UIConstants.TAB_ICON_SIZE);
+        // No explicit icon colour: an uncoloured FontIcon leaves the Graphics colour
+        // alone and so paints in the component's foreground, which follows the theme
+        // and survives updateComponentTreeUI. Setting one here would bake a colour
+        // that goes stale on the next theme switch.
+        FontIcon icon = FontIcon.of(FontAwesomeSolid.PLUS, UIConstants.NEW_TAB_ICON_SIZE);
 
         JButton button = new JButton(icon);
         button.setToolTipText("New plot tab");
@@ -492,8 +494,18 @@ public class VisualizationTabManager {
         // carry the sources it was born with, or the first undo back to it would
         // wrongly clear them.
         JPanel containerPanel = new JPanel(new BorderLayout());
-        TabInfo tabInfo = new TabInfo(
-            viewMode, settings.name != null ? settings.name : "", containerPanel, plotPanel, statsModel);
+        // Naming: a user-chosen name is kept (duplication of a renamed tab); an
+        // absent or default-pattern name gets a fresh "View n".
+        String name;
+        if (settings.name == null || settings.name.isEmpty() || settings.nameIsDefault) {
+            name = "View " + nextViewNumber++;
+        } else {
+            name = settings.name;
+        }
+        TabInfo tabInfo = new TabInfo(viewMode, name, containerPanel, plotPanel, statsModel);
+        if (!name.equals(settings.name)) {
+            tabInfo.defaultName = name;
+        }
         tabInfo.selectedSeries.addAll(inheritedSeries);
         tabInfo.checkedSources.addAll(inheritedSources(settings));
         plotPanel.setCheckedSourcesSupplier(() -> new LinkedHashSet<>(tabInfo.checkedSources));
@@ -567,7 +579,7 @@ public class VisualizationTabManager {
 
         int index = tabbedPane.getTabCount();
         tabbedPane.addTab(tabInfo.name, containerPanel);
-        setupTabIcon(index, tabInfo);
+        setupTabHandle(index, tabInfo);
 
         // Select the new tab (only when duplicating, not for initial default tabs)
         if (settings.selectedSeries != null) {
@@ -674,35 +686,28 @@ public class VisualizationTabManager {
     /**
      * Sets up a tab with an icon and interaction handlers.
      */
-    private void setupTabIcon(int index, TabInfo tabInfo) {
-        // Create tab panel with the icon and name label
+    private void setupTabHandle(int index, TabInfo tabInfo) {
+        // The handle is the name alone. Tabs carry no icon: every tab is the same
+        // unified kind now (the toolbar's view toggle announces the page), so an
+        // icon would convey nothing — the default "View n" name is the handle.
         JPanel tabPanel = new JPanel(new FlowLayout(FlowLayout.LEFT,
             UIConstants.TAB_PANEL_PADDING, UIConstants.TAB_PANEL_PADDING));
         tabPanel.setOpaque(false);
         JPanel labelPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, UIConstants.TAB_PANEL_PADDING, 0));
         labelPanel.setOpaque(false);
 
-        // One stable icon for every tab: the toolbar's view toggle announces the
-        // page, and a mutating tab icon would make tab identity unstable.
-        FontIcon tabIcon = FontIcon.of(FontAwesomeSolid.CHART_LINE, UIConstants.TAB_ICON_SIZE);
-
         JLabel nameLabel = new JLabel(tabInfo.name);
-        updateNameLabelPadding(nameLabel);
-        JLabel iconLabel = new JLabel(tabIcon);
-
-        labelPanel.add(iconLabel);
         labelPanel.add(nameLabel);
-
         tabPanel.add(labelPanel);
 
         tabbedPane.setTabComponentAt(index, tabPanel);
 
         // Add drag-and-drop support for tab reordering
-        setupTabDragAndDrop(iconLabel, nameLabel, labelPanel);
+        setupTabDragAndDrop(nameLabel, labelPanel);
 
         // Add context menu support
-        setupTabContextMenu(tabPanel, iconLabel, nameLabel, labelPanel);
-        setupTabDoubleClickRename(tabPanel, iconLabel, nameLabel, labelPanel);
+        setupTabContextMenu(tabPanel, nameLabel, labelPanel);
+        setupTabDoubleClickRename(tabPanel, nameLabel, labelPanel);
         tabInfo.registerNameLabel(nameLabel);
     }
 
@@ -828,10 +833,9 @@ public class VisualizationTabManager {
      * Prompts for a new name for the tab whose handle is {@code tabPanel}, from the context
      * menu or a double-click on the handle.
      *
-     * <p>Cancelling leaves the name alone; submitting an empty box <em>clears</em> it. Unnamed
-     * is a legitimate state — it is what every new tab starts as, and {@link #setupTabIcon}
-     * and {@link #updateNameLabelPadding} render it as an icon-only handle — so clearing has
-     * to be reachable, or a tab named once could never be un-named.</p>
+     * <p>Cancelling leaves the name alone; submitting an empty box reverts to the tab's
+     * default name ("View n"). Without tab icons an empty handle would be ungrabbable,
+     * so unnamed is no longer a reachable state — the default is the floor.</p>
      */
     private void triggerTabRename(JPanel tabPanel) {
         int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
@@ -858,6 +862,12 @@ public class VisualizationTabManager {
         }
 
         String trimmed = newName.trim();
+        if (trimmed.isEmpty()) {
+            if (sourceTab.defaultName == null) {
+                sourceTab.defaultName = "View " + nextViewNumber++;
+            }
+            trimmed = sourceTab.defaultName;
+        }
         sourceTab.rename(trimmed);
         tabbedPane.setTitleAt(tabIndex, trimmed);
     }
