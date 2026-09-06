@@ -85,8 +85,8 @@ public final class DataViewPanel extends JPanel {
 
     /**
      * Installs a leading accessory in the status strip — the data-viz mount's
-     * "Plot" toggle lives here, beside the dialect facts, rather than as a
-     * full-width row above the table that would read as a title.
+     * status note (refusals, skipped-row counts) lives here, beside the
+     * dialect facts, rather than as a full-width row that would read as a title.
      */
     public void setStatusAccessory(JComponent accessory) {
         statusBar.add(accessory, BorderLayout.WEST);

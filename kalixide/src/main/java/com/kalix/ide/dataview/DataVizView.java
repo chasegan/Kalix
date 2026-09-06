@@ -15,13 +15,10 @@ import com.kalix.ide.flowviz.style.PlotPaletteManager;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 
-import com.formdev.flatlaf.FlatClientProperties;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.BorderFactory;
-import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -32,7 +29,6 @@ import javax.swing.table.TableCellRenderer;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.FlowLayout;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -48,15 +44,13 @@ import java.util.function.Supplier;
 
 /**
  * A data document's contextual view once it can plot: the FlowViz unit above
- * the virtual table, sharing one screen. The plot region is <b>collapsed by
- * default</b> (divider at the top edge, size 0 — the {@code DocumentSplitView}
- * idiom) behind a slim "Plot" toggle in the table's status strip — a full-width
- * row above the table would read as a title; expanding it lazily builds a full
- * {@link VisualizationTabManager} mount — tabs, plot ⁄ stats toggle, shared
- * aggregation, undo — over a private per-mount {@link DataSet}.
+ * the virtual table, sharing one screen — always present, a full
+ * {@link VisualizationTabManager} mount (tabs, plot ⁄ stats toggle, shared
+ * aggregation, undo) over a private per-mount {@link DataSet}, hosted through
+ * the {@link VizHost} seam with no source context.
  *
  * <h2>Column selection</h2>
- * While the plot is open, clicking a column header toggles that column's
+ * Clicking a column header toggles that column's
  * plotted state on the target tab (the header renders an accent mark), pushed
  * to the tab's history like any other selection change. Series are identified
  * as {@link DatasetSeries}(absolute path, column name) — stable across session
@@ -68,7 +62,7 @@ import java.util.function.Supplier;
  * <h2>Materialisation</h2>
  * Plotting needs whole columns in memory (unlike the virtual table), so every
  * pass is bounded by {@link PreferenceKeys#DATAVIEW_PLOT_MAX_ROWS} and refused
- * honestly — a note beside the toggle, never a dialog. Extraction runs on a
+ * honestly — a note in the table's status strip, never a dialog. Extraction runs on a
  * single coalescing worker (the {@code DataDocument} drain-loop pattern): a
  * burst of triggers costs one streamed re-read via
  * {@link ColumnSeriesExtractor}.
@@ -83,14 +77,10 @@ public final class DataVizView extends JPanel {
 
     private static final Logger logger = LoggerFactory.getLogger(DataVizView.class);
 
-    private static final String COLLAPSED_TEXT = "▸ Plot";
-    private static final String EXPANDED_TEXT = "▾ Plot";
     private static final String PLOTTED_MARK = "● ";
 
     private final DataViewPanel tablePanel;
     private final JSplitPane split;
-    private final int defaultDividerSize;
-    private final JButton toggleButton = new JButton(COLLAPSED_TEXT);
     private final JLabel note = new JLabel(" ");
     private final LongSupplier rowLimit;
     /** The theme's header renderer we wrapped; refreshed by hand on a LaF switch. */
@@ -99,10 +89,10 @@ public final class DataVizView extends JPanel {
     /** Swapped by {@link #onSessionReplaced}; extraction passes snapshot it. */
     private volatile DataViewSession session;
 
-    // Built lazily on first expand — a collapsed region costs nothing.
     private VisualizationTabManager vizManager;
     private DataSet dataSet;
-    private boolean expanded = false;
+    /** First layout lands the divider; before it the heights are unknown. */
+    private boolean initialDividerApplied = false;
     /** First-expand default selection still owed (structure unknown at build time). */
     private boolean defaultSelectionPending = false;
 
@@ -130,37 +120,32 @@ public final class DataVizView extends JPanel {
         this.session = session;
         this.rowLimit = rowLimit;
 
-        // The affordance lives in the table's status strip, beside the dialect
-        // facts, with an honest status note (refusal reasons, skipped-row
-        // counts) — a full-width row above the table read as a title.
-        toggleButton.setFocusable(false);
-        toggleButton.setToolTipText("Show or hide the plot region");
-        toggleButton.putClientProperty(FlatClientProperties.BUTTON_TYPE,
-            FlatClientProperties.BUTTON_TYPE_TOOLBAR_BUTTON);
-        toggleButton.addActionListener(e -> setExpanded(!expanded));
+        // The honest status note (refusal reasons, skipped-row counts) lives in
+        // the table's status strip, beside the dialect facts — never a dialog.
         note.setBorder(BorderFactory.createEmptyBorder(0, 8, 0, 8));
-        JPanel accessory = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        accessory.setOpaque(false);
-        accessory.add(toggleButton);
-        accessory.add(note);
-        tablePanel.setStatusAccessory(accessory);
+        tablePanel.setStatusAccessory(note);
 
-        // The placeholder keeps the split's geometry stable until the viz unit is
-        // built; once built, the unit stays mounted and only the divider moves
-        // (re-parenting on every toggle would trip panel teardown and flicker).
-        JPanel placeholder = new JPanel();
-        placeholder.setMinimumSize(new Dimension(0, 0));
+        buildViz();
         tablePanel.setMinimumSize(new Dimension(0, 0));
-        split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, placeholder, tablePanel);
+        split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, vizManager.getTabbedPane(), tablePanel);
         split.setResizeWeight(0); // the table absorbs window resizes
         split.setContinuousLayout(true);
         split.setBorder(null);
-        this.defaultDividerSize = split.getDividerSize();
-        split.setDividerSize(0);
-        split.setDividerLocation(0);
+        vizManager.getTabbedPane().setMinimumSize(new Dimension(0, 0));
         add(split, BorderLayout.CENTER);
 
         registerSessionListener(session);
+        scheduleExtraction();
+    }
+
+    /** First layout: land the divider so the plot takes ~45% and the table the rest. */
+    @Override
+    public void doLayout() {
+        if (!initialDividerApplied && getHeight() > 0) {
+            initialDividerApplied = true;
+            split.setDividerLocation(Math.max(220, (int) (getHeight() * 0.45)));
+        }
+        super.doLayout();
     }
 
     private void registerSessionListener(DataViewSession target) {
@@ -169,7 +154,7 @@ public final class DataVizView extends JPanel {
             public void onProgress(long rows, long lines, long indexedBytes, long totalBytes, boolean complete) {
                 // Live tail: each completed index pass (initial or append-resume)
                 // is the moment the plotted columns may have grown.
-                if (complete && vizManager != null && expanded) {
+                if (complete && vizManager != null) {
                     scheduleExtraction();
                 }
             }
@@ -211,30 +196,6 @@ public final class DataVizView extends JPanel {
         if (wrappedHeaderBase instanceof JComponent component) {
             component.updateUI();
         }
-    }
-
-    // --- Expand / collapse -------------------------------------------------
-
-    void setExpanded(boolean expand) {
-        if (expanded == expand) {
-            return;
-        }
-        expanded = expand;
-        if (expand) {
-            if (vizManager == null) {
-                buildViz();
-            }
-            split.setDividerSize(defaultDividerSize);
-            split.setDividerLocation(Math.max(220, (int) (getHeight() * 0.45)));
-            scheduleExtraction();
-        } else {
-            split.setDividerSize(0);
-            split.setDividerLocation(0);
-        }
-        toggleButton.setText(expand ? EXPANDED_TEXT : COLLAPSED_TEXT);
-        tablePanel.getTable().getTableHeader().repaint(); // accents show only while open
-        revalidate();
-        repaint();
     }
 
     private void buildViz() {
@@ -284,9 +245,6 @@ public final class DataVizView extends JPanel {
         if (firstColumn != null) {
             pendingZoomFit.add(firstPanel); // fit once the default column's data lands
         }
-
-        split.setTopComponent(vizManager.getTabbedPane());
-        vizManager.getTabbedPane().setMinimumSize(new Dimension(0, 0));
         installHeaderInteractions();
     }
 
@@ -324,7 +282,7 @@ public final class DataVizView extends JPanel {
         header.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
-                if (!SwingUtilities.isLeftMouseButton(e) || !expanded) {
+                if (!SwingUtilities.isLeftMouseButton(e)) {
                     return;
                 }
                 int viewColumn = header.columnAtPoint(e.getPoint());
@@ -334,12 +292,12 @@ public final class DataVizView extends JPanel {
             }
         });
         // Decorate the theme's own renderer rather than replacing it: plotted
-        // columns get an accent mark while the plot region is open.
+        // columns get an accent mark.
         TableCellRenderer base = header.getDefaultRenderer();
         wrappedHeaderBase = base; // see updateUI: refreshed by hand on theme switch
         header.setDefaultRenderer((table, value, isSelected, hasFocus, row, column) -> {
             Component c = base.getTableCellRendererComponent(table, value, isSelected, hasFocus, row, column);
-            if (c instanceof JLabel label && expanded) {
+            if (c instanceof JLabel label) {
                 int modelColumn = table.convertColumnIndexToModel(column);
                 if (modelColumn > 0 && plottedColumnNames().contains(label.getText())) {
                     label.setText(PLOTTED_MARK + label.getText());
@@ -356,7 +314,7 @@ public final class DataVizView extends JPanel {
      * is the date axis and cannot be toggled.
      */
     void toggleColumn(int modelColumn) {
-        if (vizManager == null || !expanded || modelColumn <= 0) {
+        if (vizManager == null || modelColumn <= 0) {
             return;
         }
         DataViewSession current = session;
@@ -593,7 +551,7 @@ public final class DataVizView extends JPanel {
 
     // --- Test seams --------------------------------------------------------
 
-    /** The viz unit, once built ({@code null} while collapsed) — package-private, for tests. */
+    /** The viz unit — package-private, for tests. */
     VisualizationTabManager vizManagerForTests() {
         return vizManager;
     }
@@ -606,11 +564,6 @@ public final class DataVizView extends JPanel {
     /** The header strip's current note — package-private, for tests. */
     String noteText() {
         return note.getText();
-    }
-
-    /** Whether the plot region is currently expanded — package-private, for tests. */
-    boolean isExpanded() {
-        return expanded;
     }
 
     /** Tabs still owing a first-data zoom fit — package-private, for tests. */

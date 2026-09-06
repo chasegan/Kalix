@@ -14,13 +14,13 @@ import java.util.function.LongSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * Pins the plot-above-table mount: collapsed by default (zero cost), the
- * first-column default selection on expand, undoable header-column toggling,
+ * Pins the plot-above-table mount: always present, the first-column default
+ * selection, undoable header-column toggling, per-tab first-data zoom fits,
  * the honest over-limit and non-date refusals, and re-extraction across a
  * session rebuild.
  */
@@ -46,10 +46,6 @@ class DataVizViewTest {
         return new DatasetSeries(session.filePath().toAbsolutePath().toString(), column);
     }
 
-    private static void expand(DataVizView view) throws Exception {
-        SwingUtilities.invokeAndWait(() -> view.setExpanded(true));
-    }
-
     /** Await-what-you-assert, draining the EDT between polls. */
     private static void await(BooleanSupplier condition, String what) throws Exception {
         long deadline = System.currentTimeMillis() + 8000;
@@ -65,11 +61,10 @@ class DataVizViewTest {
     }
 
     @Test
-    void collapsedByDefaultAndCostsNothing() throws Exception {
+    void plotRegionIsAlwaysMounted() throws Exception {
         DataVizView view = openView("date,a\n2020-01-01,1\n", () -> 100);
         try {
-            assertFalse(view.isExpanded());
-            assertNull(view.vizManagerForTests(), "no viz unit is built while collapsed");
+            assertNotNull(view.vizManagerForTests(), "the viz unit exists from birth");
         } finally {
             session.close();
         }
@@ -79,7 +74,6 @@ class DataVizViewTest {
     void expandPlotsTheFirstDataColumnByDefault() throws Exception {
         DataVizView view = openView("date,a,b\n2020-01-01,1,10\n2020-01-02,2,20\n", () -> 100);
         try {
-            expand(view);
             await(() -> view.dataSetForTests() != null && view.dataSetForTests().hasSeries(ref("a")),
                 "first column extracted");
             assertTrue(view.vizManagerForTests().getTargetTabSelectedSeries().contains(ref("a")));
@@ -94,7 +88,6 @@ class DataVizViewTest {
     void headerToggleIsUndoableSelection() throws Exception {
         DataVizView view = openView("date,a,b\n2020-01-01,1,10\n2020-01-02,2,20\n", () -> 100);
         try {
-            expand(view);
             await(() -> view.dataSetForTests() != null && view.dataSetForTests().hasSeries(ref("a")),
                 "default extraction");
             SwingUtilities.invokeAndWait(() -> view.toggleColumn(2));
@@ -116,7 +109,6 @@ class DataVizViewTest {
     void newTabsFirstColumnsGetTheirOwnZoomFit() throws Exception {
         DataVizView view = openView("date,a,b\n2020-01-01,1,10\n2020-01-02,2,20\n", () -> 100);
         try {
-            expand(view);
             await(() -> view.dataSetForTests() != null && view.dataSetForTests().hasSeries(ref("a")),
                 "default extraction");
             SwingUtilities.invokeAndWait(() -> {
@@ -141,7 +133,6 @@ class DataVizViewTest {
     void dateAxisColumnCannotBeToggled() throws Exception {
         DataVizView view = openView("date,a\n2020-01-01,1\n", () -> 100);
         try {
-            expand(view);
             await(() -> view.dataSetForTests() != null && view.dataSetForTests().hasSeries(ref("a")),
                 "default extraction");
             SwingUtilities.invokeAndWait(() -> view.toggleColumn(0));
@@ -155,7 +146,6 @@ class DataVizViewTest {
     void overLimitFilesRefuseHonestly() throws Exception {
         DataVizView view = openView("date,a\n2020-01-01,1\n2020-01-02,2\n2020-01-03,3\n", () -> 2);
         try {
-            expand(view);
             await(() -> view.noteText().contains("exceeds"), "over-limit note");
             assertTrue(view.noteText().contains("2-row limit"));
             assertTrue(view.dataSetForTests().isEmpty(), "nothing is materialised over the limit");
@@ -172,7 +162,6 @@ class DataVizViewTest {
         }
         DataVizView view = openView(csv.toString(), () -> 1000);
         try {
-            expand(view);
             await(() -> view.noteText().contains("does not parse as dates"), "date refusal note");
             assertTrue(view.dataSetForTests().isEmpty());
         } finally {
@@ -185,7 +174,6 @@ class DataVizViewTest {
         DataVizView view = openView("date,a\n2020-01-01,1\n", () -> 100);
         DataViewSession fresh = null;
         try {
-            expand(view);
             await(() -> view.dataSetForTests() != null && view.dataSetForTests().hasSeries(ref("a")),
                 "initial extraction");
             assertEquals(1.0, view.dataSetForTests().getSeries(ref("a")).getValues()[0]);
