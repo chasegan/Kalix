@@ -355,85 +355,54 @@ public final class DataViewSession implements AutoCloseable {
     }
 
     /**
-     * The next row at or after {@code fromRowExclusive + 1} whose raw text
-     * contains {@code needle} (case-insensitive), or -1. One sequential streamed
-     * scan on its own channel — the block caches are untouched. Blocking I/O —
-     * background threads only; a 1GB file takes a few seconds.
+     * What the unified Find is looking for. {@code dateMillis} is non-null when
+     * the query itself parses as a date (via the shared {@link CsvDates}
+     * ladder): date-column cells then also match by <em>parsed</em> date — at
+     * day granularity for a date-only query — so "1/6/2020" finds
+     * "2020-06-01" however the file spells it.
      */
-    public long findNextRow(long fromRowExclusive, String needle) throws IOException {
-        long start = Math.max(0, fromRowExclusive + 1);
-        if (needle == null || needle.isEmpty() || start >= rowIndex.itemCount()) {
-            return -1;
-        }
-        String needleLower = needle.toLowerCase(Locale.ROOT);
-        CheckpointIndex.Checkpoint checkpoint = rowIndex.floorCheckpoint(start);
-        if (checkpoint == null) {
-            return -1;
-        }
-        try (SeekableByteChannel probe = Files.newByteChannel(file, StandardOpenOption.READ)) {
-            probe.position(checkpoint.byteOffset());
-            ByteBuffer buffer = ByteBuffer.allocate(256 * 1024);
-            ByteArrayOutputStream rowBytes = new ByteArrayOutputStream(256);
-            byte quote = (byte) dialect.quote();
-            boolean inQuotes = false;
-            long row = checkpoint.firstItem();
-            while (true) {
-                buffer.clear();
-                int n = probe.read(buffer);
-                if (n < 0) {
-                    break;
-                }
-                buffer.flip();
-                for (int i = 0; i < n; i++) {
-                    byte b = buffer.get(i);
-                    if (b == quote) {
-                        inQuotes = !inQuotes;
-                    }
-                    if (b == '\n' && !inQuotes) {
-                        if (row >= start && rowMatches(rowBytes, needleLower)) {
-                            return row;
-                        }
-                        rowBytes.reset();
-                        row++;
-                    } else if (rowBytes.size() < 1_000_000) {
-                        rowBytes.write(b);
-                    }
-                }
-            }
-            if (rowBytes.size() > 0 && row >= start && rowMatches(rowBytes, needleLower)) {
-                return row; // final row without a trailing newline
-            }
-        }
-        return -1;
+    public record FindSpec(String query, boolean matchCase, boolean wholeCell,
+                           boolean inDates, boolean inValues, Long dateMillis, boolean dateOnly) {
     }
 
-    private boolean rowMatches(ByteArrayOutputStream rowBytes, String needleLower) {
-        return rowBytes.toString(dialect.charset()).toLowerCase(Locale.ROOT).contains(needleLower);
+    /** One matching cell (file row, model column) and its 1-based ordinal among all matches. */
+    public record CellRef(long row, int column, int ordinal) {
     }
 
     /**
-     * The first data row whose first-column date parses to a timestamp at or
-     * after {@code targetMillis} (hydrologic files are chronological), or -1
-     * when none does or the first column is not dates ({@link CsvDates} is the
-     * authority, as everywhere). Same streamed-scan shape as
-     * {@link #findNextRow}: one sequential pass on its own channel, the block
-     * caches untouched. Blocking I/O — background threads only.
+     * Everything one pass can say about a spec's matches: the total, the
+     * boundary matches for navigating from {@code (fromRow, fromColumn)} in
+     * either direction (wrap decisions belong to the caller), and — when the
+     * query is a date — the first row at or after it: the "nearest later
+     * date" fallback landing ({@code -1} when none).
      */
-    public long findDateRow(long targetMillis) throws IOException {
-        if (rowIndex.itemCount() == 0) {
-            return -1;
-        }
+    public record FindScan(int total, CellRef firstOverall, CellRef lastOverall,
+                           CellRef firstAfter, CellRef lastBefore, long nearestDateRow) {
+    }
+
+    /**
+     * Streams the data region once and reports every navigation-relevant match
+     * for the spec — the usual pattern: one sequential pass on its own channel,
+     * the block caches untouched, cell grammar agreeing with the indexer
+     * (quote parity). The header row is never a cell match (the Columns scope
+     * is resolved against {@link #columnNames()} by the caller). Blocking I/O —
+     * background threads only; a 1GB file takes a few seconds.
+     */
+    public FindScan scanForMatches(FindSpec spec, long fromRow, int fromColumn) throws IOException {
+        ScanState state = new ScanState();
         long headerRows = dialect.hasHeaderRow() ? 1 : 0;
+        String needle = spec.matchCase()
+            ? spec.query().trim() : spec.query().trim().toLowerCase(Locale.ROOT);
         try (SeekableByteChannel probe = Files.newByteChannel(file, StandardOpenOption.READ)) {
             probe.position(indexStartOffset);
             ByteBuffer buffer = ByteBuffer.allocate(256 * 1024);
-            ByteArrayOutputStream firstField = new ByteArrayOutputStream(64);
+            ByteArrayOutputStream field = new ByteArrayOutputStream(64);
             byte quote = (byte) dialect.quote();
             byte delimiter = (byte) dialect.delimiter();
             boolean inQuotes = false;
-            boolean fieldDone = false;
+            boolean quotePending = false; // saw a quote while quoted: escape or close?
             long row = 0;
-            CsvDates.Spec spec = null;
+            int column = 0;
             while (true) {
                 buffer.clear();
                 int n = probe.read(buffer);
@@ -443,47 +412,133 @@ public final class DataViewSession implements AutoCloseable {
                 buffer.flip();
                 for (int i = 0; i < n; i++) {
                     byte b = buffer.get(i);
-                    if (b == quote) {
-                        inQuotes = !inQuotes;
-                    } else if (b == '\n' && !inQuotes) {
-                        String text = firstField.toString(dialect.charset()).trim();
-                        if (row >= headerRows && !text.isEmpty()) {
-                            if (spec == null) {
-                                spec = CsvDates.detect(text);
-                            }
-                            if (spec != null) {
-                                long ts = CsvDates.parseMillis(text, spec);
-                                if (ts != CsvDates.INVALID_TS && ts >= targetMillis) {
-                                    return row;
-                                }
-                            }
+                    // RowBlockParser's exact grammar ("" -> a literal quote, \r
+                    // preserved inside quotes), so the scanned text IS the
+                    // displayed text — a cell must be findable by exactly what
+                    // the table shows, escaped quotes included.
+                    if (quotePending) {
+                        quotePending = false;
+                        if (b == quote) {
+                            writeCapped(field, quote);
+                            continue;
                         }
-                        firstField.reset();
-                        fieldDone = false;
+                        inQuotes = false; // the pending quote closed the field
+                    }
+                    if (inQuotes) {
+                        if (b == quote) {
+                            quotePending = true;
+                        } else {
+                            writeCapped(field, b);
+                        }
+                    } else if (b == quote) {
+                        inQuotes = true;
+                    } else if (b == '\n') {
+                        offerCell(state, spec, needle, row, column,
+                            field.toString(dialect.charset()), headerRows, fromRow, fromColumn);
+                        field.reset();
+                        column = 0;
                         row++;
-                    } else if (b == delimiter && !inQuotes) {
-                        fieldDone = true;
-                    } else if (!fieldDone && b != '\r' && firstField.size() < 4096) {
-                        firstField.write(b);
+                    } else if (b == delimiter) {
+                        offerCell(state, spec, needle, row, column,
+                            field.toString(dialect.charset()), headerRows, fromRow, fromColumn);
+                        field.reset();
+                        column++;
+                    } else if (b != '\r') {
+                        writeCapped(field, b);
                     }
                 }
             }
-            // Final row without a trailing newline.
-            String text = firstField.toString(dialect.charset()).trim();
-            if (row >= headerRows && !text.isEmpty()) {
-                if (spec == null) {
-                    spec = CsvDates.detect(text);
-                }
-                if (spec != null) {
-                    long ts = CsvDates.parseMillis(text, spec);
-                    if (ts != CsvDates.INVALID_TS && ts >= targetMillis) {
-                        return row;
+            if (field.size() > 0 || column > 0) {
+                // Final row without a trailing newline.
+                offerCell(state, spec, needle, row, column,
+                    field.toString(dialect.charset()), headerRows, fromRow, fromColumn);
+            }
+        }
+        return new FindScan(state.total, state.firstOverall, state.lastOverall,
+            state.firstAfter, state.lastBefore, state.nearestDateRow);
+    }
+
+    /** Mutable trackers for one {@link #scanForMatches} pass. */
+    private static final class ScanState {
+        int total;
+        CellRef firstOverall;
+        CellRef lastOverall;
+        CellRef firstAfter;
+        CellRef lastBefore;
+        long nearestDateRow = -1;
+        CsvDates.Spec fileDateSpec;
+    }
+
+    /**
+     * Find-scan field cap: a defensive bound against runaway quotes, not a
+     * display-parity guarantee — a cell longer than this scans truncated, so a
+     * whole-cell match on a &gt;4KB cell can miss. Accepted: such cells are
+     * pathological, and the bound keeps a stray quote from accumulating the file.
+     */
+    private static final int MAX_FIND_FIELD_BYTES = 4096;
+
+    private static void writeCapped(ByteArrayOutputStream field, byte b) {
+        if (field.size() < MAX_FIND_FIELD_BYTES) {
+            field.write(b);
+        }
+    }
+
+    /** Evaluates one completed cell against the spec and folds it into the trackers. */
+    private static void offerCell(ScanState state, FindSpec spec, String needle, long row, int column,
+                                  String text, long headerRows, long fromRow, int fromColumn) {
+        if (row < headerRows) {
+            return;
+        }
+        String cell = text.trim();
+        Long parsedDate = null;
+        if (column == 0 && spec.dateMillis() != null && !cell.isEmpty()) {
+            if (state.fileDateSpec == null) {
+                state.fileDateSpec = CsvDates.detect(cell);
+            }
+            if (state.fileDateSpec != null) {
+                long parsed = CsvDates.parseMillis(cell, state.fileDateSpec);
+                if (parsed != CsvDates.INVALID_TS) {
+                    parsedDate = parsed;
+                    if (state.nearestDateRow < 0 && parsed >= spec.dateMillis()) {
+                        state.nearestDateRow = row;
                     }
                 }
             }
         }
-        return -1;
+        if (column == 0 ? !spec.inDates() : !spec.inValues()) {
+            return;
+        }
+        boolean match = false;
+        if (!cell.isEmpty() && !needle.isEmpty()) {
+            String haystack = spec.matchCase() ? cell : cell.toLowerCase(Locale.ROOT);
+            match = spec.wholeCell() ? haystack.equals(needle) : haystack.contains(needle);
+        }
+        if (!match && parsedDate != null) {
+            match = spec.dateOnly()
+                ? Math.floorDiv(parsedDate, 86_400_000L) == Math.floorDiv(spec.dateMillis(), 86_400_000L)
+                : parsedDate.longValue() == spec.dateMillis();
+        }
+        if (!match) {
+            return;
+        }
+        state.total++;
+        CellRef ref = new CellRef(row, column, state.total);
+        if (state.firstOverall == null) {
+            state.firstOverall = ref;
+        }
+        state.lastOverall = ref;
+        if (row > fromRow || (row == fromRow && column > fromColumn)) {
+            if (state.firstAfter == null) {
+                state.firstAfter = ref;
+            }
+        } else if (row < fromRow || column < fromColumn) {
+            state.lastBefore = ref;
+        }
     }
+
+    // (findDateRow and findNextRow were absorbed by scanForMatches: the unified
+    // Find covers text, value and parsed-date matching in one pass, and the old
+    // "first row at or after a date" jump survives as its nearestDateRow.)
 
     public String[] rowIfLoaded(long fileRow) {
         return rowStore.rowIfLoaded(fileRow);

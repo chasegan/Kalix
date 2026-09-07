@@ -2,7 +2,6 @@ package com.kalix.ide.dataview;
 
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.UIConstants;
-import com.kalix.ide.io.CsvDates;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +12,6 @@ import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
@@ -29,10 +27,14 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongConsumer;
 
@@ -58,8 +60,13 @@ public final class DataViewPanel extends JPanel {
     private JMenuItem showInFileItem;
     private JMenuItem copyItem;
 
-    private String lastSearch = "";
-    private String lastDateSearch = "";
+    // Unified Find (dialog lazily created — it needs a display).
+    private DataFindDialog findDialog;
+    /** Column of the last find landing on a header, or null; header positions precede all cells. */
+    private Integer lastHeaderLanding;
+    /** True while find moves the selection itself, so the re-anchor listener ignores it. */
+    private boolean programmaticFindSelection;
+
     /** Receives the data-region physical line for "Show in file" (wired by the host document). */
     private LongConsumer showInFileHandler;
     /** One search / one line-mapping at a time: holding F3 must not stack full-file scans. */
@@ -159,12 +166,8 @@ public final class DataViewPanel extends JPanel {
     private void installInteractions() {
         JPopupMenu menu = new JPopupMenu();
         this.tableMenu = menu;
-        JMenuItem find = new JMenuItem("Find…");
-        find.addActionListener(e -> promptFind());
-        JMenuItem findNext = new JMenuItem("Find next");
-        findNext.addActionListener(e -> findNext());
-        JMenuItem findDate = new JMenuItem("Find date…"); // ellipsis: opens a dialog (§2.4)
-        findDate.addActionListener(e -> promptFindDate());
+        JMenuItem find = new JMenuItem("Find…"); // one Find: dates, values and columns are dialog scopes
+        find.addActionListener(e -> showFindDialog());
         JMenuItem showInFile = new JMenuItem("Show in file"); // sentence case per context-menu-style §2.1
         this.showInFileItem = showInFile;
         showInFile.addActionListener(e -> showSelectedRowInFile());
@@ -178,8 +181,6 @@ public final class DataViewPanel extends JPanel {
             }
         });
         menu.add(find);
-        menu.add(findNext);
-        menu.add(findDate);
         menu.addSeparator();
         menu.add(showInFile);
         menu.addSeparator();
@@ -215,77 +216,176 @@ public final class DataViewPanel extends JPanel {
             .put(KeyStroke.getKeyStroke(KeyEvent.VK_F, AppShortcut.menuMask()), "data-find");
         table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
             .put(KeyStroke.getKeyStroke(KeyEvent.VK_F3, 0), "data-find-next");
+        table.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT)
+            .put(KeyStroke.getKeyStroke(KeyEvent.VK_F3, InputEvent.SHIFT_DOWN_MASK), "data-find-previous");
         table.getActionMap().put("data-find", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                promptFind();
+                showFindDialog();
             }
         });
         table.getActionMap().put("data-find-next", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                findNext();
+                findAgain(true);
             }
         });
+        table.getActionMap().put("data-find-previous", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                findAgain(false);
+            }
+        });
+
+        // A manual selection change repositions the find origin (mirroring the
+        // editor's caret re-anchor) and retires any header landing.
+        javax.swing.event.ListSelectionListener reanchorFind = e -> {
+            if (!programmaticFindSelection) {
+                lastHeaderLanding = null;
+            }
+        };
+        table.getSelectionModel().addListSelectionListener(reanchorFind);
+        table.getColumnModel().getSelectionModel().addListSelectionListener(reanchorFind);
     }
 
-    private void promptFind() {
-        String input = (String) JOptionPane.showInputDialog(this, "Find in data:", "Find",
-            JOptionPane.PLAIN_MESSAGE, null, null, lastSearch);
-        if (input == null || input.isEmpty()) {
+    /** Shows the unified Find dialog, pre-filled from the selected cell. */
+    private void showFindDialog() {
+        if (findDialog == null) {
+            findDialog = new DataFindDialog(this);
+        }
+        String prefill = null;
+        int viewRow = table.getSelectedRow();
+        int viewColumn = table.getSelectedColumn();
+        if (viewRow >= 0 && viewColumn >= 0) {
+            Object value = table.getValueAt(viewRow, viewColumn);
+            prefill = value != null ? value.toString() : null;
+        }
+        findDialog.showOver(prefill);
+    }
+
+    /** F3 / Shift-F3: repeat the last search, or open the dialog when there is none. */
+    private void findAgain(boolean forward) {
+        if (findDialog == null || findDialog.queryText().isBlank()) {
+            showFindDialog();
+        } else {
+            runFind(forward);
+        }
+    }
+
+    /**
+     * One find step: snapshot the spec and origin on the EDT, stream the scan
+     * on a worker, choose the landing (header columns first, then cells — see
+     * {@link DataFindNavigator}) and land it back on the EDT with inline
+     * status, editor-style.
+     */
+    void runFind(boolean forward) {
+        DataViewSession.FindSpec spec = findDialog.spec();
+        if (spec.query().isEmpty()) {
+            findDialog.setStatus(" ", false);
             return;
         }
-        lastSearch = input;
-        runSearch(input);
-    }
-
-    private void findNext() {
-        if (lastSearch.isEmpty()) {
-            promptFind();
-        } else {
-            runSearch(lastSearch);
-        }
-    }
-
-    /** Streams the search on a worker thread; the EDT only receives the landing row. */
-    private void runSearch(String needle) {
         if (!searchInFlight.compareAndSet(false, true)) {
             return; // a scan is already running ("a 1GB file takes a few seconds")
         }
+        List<Integer> headerCols = findDialog.columnsScope() ? matchingColumns(spec) : List.of();
+        boolean wrap = findDialog.wrapEnabled();
         long headerOffset = session.headerRowInData() ? 1 : 0;
-        int selectedView = table.getSelectedRow();
-        long fromExclusive = selectedView >= 0 ? selectedView + headerOffset : headerOffset - 1;
+        long fromRow;
+        int fromColumn;
+        if (lastHeaderLanding != null) {
+            fromRow = -1;
+            fromColumn = lastHeaderLanding;
+        } else if (table.getSelectedRow() >= 0) {
+            fromRow = table.getSelectedRow() + headerOffset;
+            fromColumn = Math.max(0, selectedModelColumn());
+        } else {
+            fromRow = forward ? -2 : Long.MAX_VALUE;
+            fromColumn = 0;
+        }
         DataViewSession target = session;
+        long fromRowFinal = fromRow;
+        int fromColumnFinal = fromColumn;
         Thread searcher = new Thread(() -> {
             try {
-                long found = target.findNextRow(fromExclusive, needle);
+                DataViewSession.FindScan scan = target.scanForMatches(spec, fromRowFinal, fromColumnFinal);
+                // The in-flight flag is released only after the landing applies:
+                // released earlier, an F3 already queued behind the landing could
+                // snapshot its origin from the pre-landing selection and land the
+                // same match twice.
                 SwingUtilities.invokeLater(() -> {
-                    if (target != session) {
-                        return; // the session was swapped mid-search
-                    }
-                    if (found < 0) {
-                        Toolkit.getDefaultToolkit().beep();
-                    } else {
-                        scrollToFileRow(found);
+                    try {
+                        if (target == session) {
+                            applyLanding(
+                                DataFindNavigator.choose(
+                                    scan, headerCols, fromRowFinal, fromColumnFinal, forward, wrap),
+                                scan.total() + headerCols.size());
+                        }
+                    } finally {
+                        searchInFlight.set(false);
                     }
                 });
             } catch (IOException e) {
-                logger.warn("Data search failed: {}", e.getMessage());
-            } finally {
+                logger.warn("Data find failed: {}", e.getMessage());
                 searchInFlight.set(false);
             }
-        }, "kalix-dataview-search");
+        }, "kalix-dataview-find");
         searcher.setDaemon(true);
         searcher.start();
     }
 
-    private void scrollToFileRow(long fileRow) {
-        int viewRow = (int) Math.min(Integer.MAX_VALUE, fileRow - (session.headerRowInData() ? 1 : 0));
-        if (viewRow < 0 || viewRow >= table.getRowCount()) {
+    /** Header model columns whose name matches the spec, ascending. */
+    private List<Integer> matchingColumns(DataViewSession.FindSpec spec) {
+        List<Integer> matches = new ArrayList<>();
+        String needle = spec.matchCase() ? spec.query() : spec.query().toLowerCase(Locale.ROOT);
+        for (int column = 0; column < table.getModel().getColumnCount(); column++) {
+            String name = table.getModel().getColumnName(column);
+            String haystack = spec.matchCase() ? name : name.toLowerCase(Locale.ROOT);
+            if (spec.wholeCell() ? haystack.equals(needle) : haystack.contains(needle)) {
+                matches.add(column);
+            }
+        }
+        return matches;
+    }
+
+    /** Lands one find step: selection, scroll, header bookkeeping, inline status. EDT only. */
+    private void applyLanding(DataFindNavigator.Landing landing, int totalMatches) {
+        if (landing == null) {
+            // Editor parity: zero matches anywhere is "No results"; a directional
+            // dead end with Wrap off is "No more results".
+            findDialog.setStatus(totalMatches == 0 ? "No results" : "No more results", true);
+            if (!findDialog.isShowing()) {
+                Toolkit.getDefaultToolkit().beep(); // F3 with the dialog closed still gets feedback
+            }
             return;
         }
-        table.changeSelection(viewRow, 0, false, false);
-        table.scrollRectToVisible(table.getCellRect(viewRow, 0, true));
+        programmaticFindSelection = true;
+        try {
+            if (landing.row() == -1) {
+                lastHeaderLanding = landing.column();
+                int viewColumn = table.convertColumnIndexToView(landing.column());
+                if (table.getRowCount() > 0 && viewColumn >= 0) {
+                    table.changeSelection(0, viewColumn, false, false);
+                    table.scrollRectToVisible(table.getCellRect(0, viewColumn, true));
+                }
+            } else {
+                lastHeaderLanding = null;
+                long headerOffset = session.headerRowInData() ? 1 : 0;
+                int viewRow = (int) Math.min(Integer.MAX_VALUE, landing.row() - headerOffset);
+                int viewColumn = table.convertColumnIndexToView(Math.max(0, landing.column()));
+                if (viewRow >= 0 && viewRow < table.getRowCount() && viewColumn >= 0) {
+                    table.changeSelection(viewRow, viewColumn, false, false);
+                    table.scrollRectToVisible(table.getCellRect(viewRow, viewColumn, true));
+                }
+            }
+        } finally {
+            programmaticFindSelection = false;
+        }
+        if (landing.nearestDate()) {
+            findDialog.setStatus("No exact match — nearest later date", false);
+        } else {
+            findDialog.setStatus(landing.ordinal() + " of " + landing.total()
+                + (landing.wrapped() ? " (wrapped)" : ""), false);
+        }
     }
 
     /** Maps the selected row to its physical line on a worker, then hands it to the host. */
@@ -313,54 +413,6 @@ public final class DataViewPanel extends JPanel {
         }, "kalix-dataview-line-map");
         mapper.setDaemon(true);
         mapper.start();
-    }
-
-    /**
-     * Prompts for a date and jumps to the first row at or after it. The input
-     * is parsed by the same {@link CsvDates} ladder the file's own dates use,
-     * so anything the viewer can read, the user can type.
-     */
-    private void promptFindDate() {
-        String input = (String) JOptionPane.showInputDialog(this, "Go to date (e.g. 2020-06-01):",
-            "Find date", JOptionPane.PLAIN_MESSAGE, null, null, lastDateSearch);
-        if (input == null || input.isBlank()) {
-            return;
-        }
-        lastDateSearch = input;
-        CsvDates.Spec spec = CsvDates.detect(input.trim());
-        if (spec == null) {
-            Toolkit.getDefaultToolkit().beep(); // not a recognisable date
-            return;
-        }
-        long target = CsvDates.parseMillis(input.trim(), spec);
-        if (!searchInFlight.compareAndSet(false, true)) {
-            return; // a scan is already running
-        }
-        DataViewSession targetSession = session;
-        Thread searcher = new Thread(() -> {
-            try {
-                long found = targetSession.findDateRow(target);
-                SwingUtilities.invokeLater(() -> {
-                    if (targetSession != session) {
-                        return; // the session was swapped mid-search
-                    }
-                    if (found < 0 || found >= targetSession.rowCount()) {
-                        // Miss — or the row exists in the file but isn't indexed
-                        // yet (still loading), so there is nothing to land on:
-                        // either way, say so rather than silently doing nothing.
-                        Toolkit.getDefaultToolkit().beep();
-                    } else {
-                        scrollToFileRow(found);
-                    }
-                });
-            } catch (IOException e) {
-                logger.warn("Date search failed: {}", e.getMessage());
-            } finally {
-                searchInFlight.set(false);
-            }
-        }, "kalix-dataview-date-search");
-        searcher.setDaemon(true);
-        searcher.start();
     }
 
     /** Actions the data-viz mount contributes to the table's context menu. */
