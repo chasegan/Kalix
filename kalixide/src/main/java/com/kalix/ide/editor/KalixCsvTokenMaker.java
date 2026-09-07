@@ -16,10 +16,12 @@ import org.fife.ui.rsyntaxtextarea.TokenTypes;
  * <p>Segmentation comes from {@link CsvLineStylist} (shared with the big-file
  * virtual text view), and the roles map onto the same six token types the
  * Kalix INI grammar uses, so every existing syntax theme works unchanged:
- * delimiters → OPERATOR (dimmed structure), the header row and
- * {@code .res.csv} marker lines → RESERVED_WORD, the date column →
- * LITERAL_STRING_DOUBLE_QUOTE, missing-value markers → COMMENT_EOL (muted:
- * "no data here"), values → IDENTIFIER.
+ * delimiters → WHITESPACE (the slot every theme tunes to recede — a data line
+ * has dozens of delimiters, and the accent OPERATOR slot made them the
+ * loudest thing on screen), the header row and {@code .res.csv} marker lines
+ * → RESERVED_WORD, the date column → LITERAL_STRING_DOUBLE_QUOTE,
+ * missing-value markers → COMMENT_EOL (muted: "no data here"), values →
+ * IDENTIFIER.
  *
  * <p>Per-line by design (a multi-line quoted field colours imperfectly past
  * its first line); the header row is the line at document offset 0.
@@ -72,7 +74,7 @@ public class KalixCsvTokenMaker extends AbstractTokenMaker {
 
     private static int tokenTypeFor(CsvLineStylist.Role role) {
         return switch (role) {
-            case DELIMITER -> Token.OPERATOR;
+            case DELIMITER -> Token.WHITESPACE;
             case HEADER, MARKER -> Token.RESERVED_WORD;
             case DATE_AXIS -> Token.LITERAL_STRING_DOUBLE_QUOTE;
             case MISSING -> Token.COMMENT_EOL;

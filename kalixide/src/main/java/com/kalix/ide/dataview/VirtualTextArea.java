@@ -185,7 +185,7 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
         } catch (Exception e) {
             syntax = SyntaxTheme.Theme.LIGHT;
         }
-        delimiterColor = syntax.getOperatorColor();
+        delimiterColor = syntax.getWhitespaceColor(); // the recede slot: structure, barely there
         headerColor = syntax.getReservedWordColor();
         dateColor = syntax.getStringColor();
         missingColor = syntax.getCommentColor();

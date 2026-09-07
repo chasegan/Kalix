@@ -41,7 +41,7 @@ class KalixCsvTokenMakerTest {
     void headerRowIsReservedWords() {
         KalixCsvTokenMaker maker = new KalixCsvTokenMaker(',', '"', true);
         Token tokens = maker.getTokenList(segment("date,flow"), TokenTypes.NULL, 0);
-        assertEquals(List.of(Token.RESERVED_WORD, Token.OPERATOR, Token.RESERVED_WORD), types(tokens));
+        assertEquals(List.of(Token.RESERVED_WORD, Token.WHITESPACE, Token.RESERVED_WORD), types(tokens));
     }
 
     @Test
@@ -51,9 +51,9 @@ class KalixCsvTokenMakerTest {
         Token tokens = maker.getTokenList(segment("2020-01-01,1.5,na"), TokenTypes.NULL, 10);
         assertEquals(List.of(
             Token.LITERAL_STRING_DOUBLE_QUOTE, // date axis
-            Token.OPERATOR,                    // delimiter
+            Token.WHITESPACE,                  // delimiter (the recede slot)
             Token.IDENTIFIER,                  // value
-            Token.OPERATOR,
+            Token.WHITESPACE,
             Token.COMMENT_EOL),                // missing marker
             types(tokens));
     }
