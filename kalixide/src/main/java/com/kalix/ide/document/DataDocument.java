@@ -1,10 +1,12 @@
 package com.kalix.ide.document;
 
+import com.kalix.ide.dataview.CsvDialect;
 import com.kalix.ide.dataview.DataViewOpener;
 import com.kalix.ide.dataview.DataViewPanel;
 import com.kalix.ide.dataview.DataVizView;
 import com.kalix.ide.dataview.DataViewSession;
 import com.kalix.ide.dataview.VirtualTextArea;
+import com.kalix.ide.editor.KalixCsvTokenMaker;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.slf4j.Logger;
@@ -76,6 +78,15 @@ public class DataDocument extends KalixDocument {
             dataViewPanel.setShowInFileHandler(this::showDataLineInText);
         }
         this.dataVizView = dataViewPanel != null ? new DataVizView(dataViewPanel, session) : null;
+
+        // Per-filetype syntax: the editable text side tokenises as CSV using
+        // the sniffed dialect — the same authority the table, extractor and
+        // plot use. A failed open falls back to the conventional comma dialect.
+        CsvDialect dialect = session != null ? session.dialect() : null;
+        getEditor().useTokenMaker(new KalixCsvTokenMaker(
+            dialect != null ? dialect.delimiter() : ',',
+            dialect != null ? dialect.quote() : '"',
+            dialect == null || dialect.hasHeaderRow()));
         boolean virtualText = largeReadOnly && session != null;
         this.largeTextArea = virtualText ? new VirtualTextArea(session) : null;
         this.largeTextScroller = virtualText ? new JScrollPane(largeTextArea) : null;

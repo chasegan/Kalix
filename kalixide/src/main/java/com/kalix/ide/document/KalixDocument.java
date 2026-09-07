@@ -69,6 +69,13 @@ public abstract class KalixDocument implements OpenModel {
     protected KalixDocument(DocumentKind kind) {
         this.kind = kind;
         this.editor = new EnhancedTextEditor();
+        // Per-filetype syntax: the editor defaults to the Kalix INI grammar
+        // (models). TEXT drops to plain — a .txt file is not a model — and
+        // DataDocument installs the dialect-aware CSV token maker once its
+        // session (the dialect authority) exists.
+        if (kind == DocumentKind.TEXT) {
+            editor.usePlainText();
+        }
         // Re-parse on every text change (coalesced by ModelDocument; a no-op for
         // other kinds). The modification count keys the memoized linter parse
         // handed out by getModelSupplier().

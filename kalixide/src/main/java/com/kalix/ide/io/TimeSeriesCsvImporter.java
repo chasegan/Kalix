@@ -703,9 +703,11 @@ public class TimeSeriesCsvImporter {
     }
 
     /**
-     * Checks if a value string represents a missing value.
+     * Checks if a value string represents a missing value. Package-private:
+     * {@link CsvLineStylist} shares it, so the viewer flags exactly what the
+     * importer would treat as missing.
      */
-    private static boolean isMissingValue(String value) {
+    static boolean isMissingValue(String value) {
         return MISSING_VALUE_PATTERNS.contains(value.toLowerCase().trim());
     }
 
