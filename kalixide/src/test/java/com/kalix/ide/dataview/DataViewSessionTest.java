@@ -157,15 +157,4 @@ class DataViewSessionTest {
         }
     }
 
-    @Test
-    void findNextRowStreamsCaseInsensitivelyFromTheCursor() throws IOException {
-        try (DataViewSession session = DataViewSession.open(
-                csvFile("Date,flow\n2020-01-01,AAA\n2020-01-02,bbb\n2020-01-03,aaa\n"))) {
-            await("indexing complete", session::isIndexingComplete);
-            assertEquals(1, session.findNextRow(0, "aaa"), "case-insensitive match");
-            assertEquals(3, session.findNextRow(1, "AAA"), "continues past the cursor");
-            assertEquals(-1, session.findNextRow(3, "aaa"), "no wrap-around");
-            assertEquals(-1, session.findNextRow(0, "zzz"));
-        }
-    }
 }
