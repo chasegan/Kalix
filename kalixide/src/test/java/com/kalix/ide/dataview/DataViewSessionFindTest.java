@@ -149,6 +149,16 @@ class DataViewSessionFindTest {
     }
 
     @Test
+    void escapedQuotesScanAsTheTableDisplaysThem() throws IOException {
+        try (DataViewSession session = openComplete(
+                "date,msg\n2020-01-01,\"He said \"\"hi\"\"\"\n")) {
+            // The table displays: He said "hi" — the scan must match that text.
+            FindScan scan = session.scanForMatches(text("said \"hi\""), -2, 0);
+            assertEquals(1, scan.total(), "the scanned text must be the displayed text");
+        }
+    }
+
+    @Test
     void finalRowWithoutNewlineIsSearched() throws IOException {
         try (DataViewSession session = openComplete("date,v\n2020-01-01,1\n2020-01-02,zz")) {
             FindScan scan = session.scanForMatches(text("zz"), -2, 0);

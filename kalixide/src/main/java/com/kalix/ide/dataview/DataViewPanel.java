@@ -308,15 +308,24 @@ public final class DataViewPanel extends JPanel {
         Thread searcher = new Thread(() -> {
             try {
                 DataViewSession.FindScan scan = target.scanForMatches(spec, fromRowFinal, fromColumnFinal);
+                // The in-flight flag is released only after the landing applies:
+                // released earlier, an F3 already queued behind the landing could
+                // snapshot its origin from the pre-landing selection and land the
+                // same match twice.
                 SwingUtilities.invokeLater(() -> {
-                    if (target == session) {
-                        applyLanding(DataFindNavigator.choose(
-                            scan, headerCols, fromRowFinal, fromColumnFinal, forward, wrap), wrap);
+                    try {
+                        if (target == session) {
+                            applyLanding(
+                                DataFindNavigator.choose(
+                                    scan, headerCols, fromRowFinal, fromColumnFinal, forward, wrap),
+                                scan.total() + headerCols.size());
+                        }
+                    } finally {
+                        searchInFlight.set(false);
                     }
                 });
             } catch (IOException e) {
                 logger.warn("Data find failed: {}", e.getMessage());
-            } finally {
                 searchInFlight.set(false);
             }
         }, "kalix-dataview-find");
@@ -339,9 +348,11 @@ public final class DataViewPanel extends JPanel {
     }
 
     /** Lands one find step: selection, scroll, header bookkeeping, inline status. EDT only. */
-    private void applyLanding(DataFindNavigator.Landing landing, boolean wrap) {
+    private void applyLanding(DataFindNavigator.Landing landing, int totalMatches) {
         if (landing == null) {
-            findDialog.setStatus(wrap ? "No results" : "No more results", true);
+            // Editor parity: zero matches anywhere is "No results"; a directional
+            // dead end with Wrap off is "No more results".
+            findDialog.setStatus(totalMatches == 0 ? "No results" : "No more results", true);
             if (!findDialog.isShowing()) {
                 Toolkit.getDefaultToolkit().beep(); // F3 with the dialog closed still gets feedback
             }

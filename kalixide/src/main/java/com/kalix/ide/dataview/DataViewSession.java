@@ -400,6 +400,7 @@ public final class DataViewSession implements AutoCloseable {
             byte quote = (byte) dialect.quote();
             byte delimiter = (byte) dialect.delimiter();
             boolean inQuotes = false;
+            boolean quotePending = false; // saw a quote while quoted: escape or close?
             long row = 0;
             int column = 0;
             while (true) {
@@ -411,21 +412,39 @@ public final class DataViewSession implements AutoCloseable {
                 buffer.flip();
                 for (int i = 0; i < n; i++) {
                     byte b = buffer.get(i);
-                    if (b == quote) {
-                        inQuotes = !inQuotes;
-                    } else if (b == '\n' && !inQuotes) {
+                    // RowBlockParser's exact grammar ("" -> a literal quote, \r
+                    // preserved inside quotes), so the scanned text IS the
+                    // displayed text — a cell must be findable by exactly what
+                    // the table shows, escaped quotes included.
+                    if (quotePending) {
+                        quotePending = false;
+                        if (b == quote) {
+                            writeCapped(field, quote);
+                            continue;
+                        }
+                        inQuotes = false; // the pending quote closed the field
+                    }
+                    if (inQuotes) {
+                        if (b == quote) {
+                            quotePending = true;
+                        } else {
+                            writeCapped(field, b);
+                        }
+                    } else if (b == quote) {
+                        inQuotes = true;
+                    } else if (b == '\n') {
                         offerCell(state, spec, needle, row, column,
                             field.toString(dialect.charset()), headerRows, fromRow, fromColumn);
                         field.reset();
                         column = 0;
                         row++;
-                    } else if (b == delimiter && !inQuotes) {
+                    } else if (b == delimiter) {
                         offerCell(state, spec, needle, row, column,
                             field.toString(dialect.charset()), headerRows, fromRow, fromColumn);
                         field.reset();
                         column++;
-                    } else if (b != '\r' && field.size() < 4096) {
-                        field.write(b);
+                    } else if (b != '\r') {
+                        writeCapped(field, b);
                     }
                 }
             }
@@ -448,6 +467,20 @@ public final class DataViewSession implements AutoCloseable {
         CellRef lastBefore;
         long nearestDateRow = -1;
         CsvDates.Spec fileDateSpec;
+    }
+
+    /**
+     * Find-scan field cap: a defensive bound against runaway quotes, not a
+     * display-parity guarantee — a cell longer than this scans truncated, so a
+     * whole-cell match on a &gt;4KB cell can miss. Accepted: such cells are
+     * pathological, and the bound keeps a stray quote from accumulating the file.
+     */
+    private static final int MAX_FIND_FIELD_BYTES = 4096;
+
+    private static void writeCapped(ByteArrayOutputStream field, byte b) {
+        if (field.size() < MAX_FIND_FIELD_BYTES) {
+            field.write(b);
+        }
     }
 
     /** Evaluates one completed cell against the spec and folds it into the trackers. */
