@@ -1,7 +1,10 @@
 package com.kalix.ide.dataview;
 
 import com.kalix.ide.constants.AppShortcut;
+import com.kalix.ide.io.CsvLineStylist;
 import com.kalix.ide.managers.FontManager;
+import com.kalix.ide.themes.SyntaxTheme;
+import com.kalix.ide.themes.ThemePreferences;
 
 import javax.swing.AbstractAction;
 import javax.swing.JComponent;
@@ -27,7 +30,10 @@ import java.util.List;
  * The ground-truth projection of a {@link DataViewSession}: a read-only,
  * virtual text view rendering the file's <em>physical lines</em> exactly as
  * they sit on disk — delimiters, quoting, scientific notation, everything.
- * Nothing is interpreted here; the table beside it is the interpretation.
+ * The glyphs are never altered; the only interpretation is colour, which
+ * declares the sniffed dialect's reading (delimiters, header row, the date
+ * column, missing markers) via the shared {@link CsvLineStylist}, using the
+ * same syntax-theme slots as the editors below the gate.
  *
  * <p>Virtual in the same way as the table: only visible lines are ever held or
  * drawn; an unloaded line paints as blank for a frame while its block is
@@ -61,8 +67,19 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
     private Color selectionBackground;
     private Color selectionForeground;
 
+    // Dialect-aware colouring: same six syntax-theme slots as the RSTA
+    // editors, so above- and below-gate text views match. Values keep the
+    // plain foreground — only the structure is coloured.
+    private CsvLineStylist stylist;
+    private boolean headerOnLineZero;
+    private Color delimiterColor;
+    private Color headerColor;
+    private Color dateColor;
+    private Color missingColor;
+
     public VirtualTextArea(DataViewSession session) {
         this.session = session;
+        adoptDialect(session);
         setFont(FontManager.getMonospaceFont(13));
         setOpaque(true);
         setFocusable(true);
@@ -119,9 +136,16 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
      */
     public void replaceSession(DataViewSession fresh) {
         this.session = fresh;
+        adoptDialect(fresh);
         registerSessionListener();
         revalidate();
         repaint();
+    }
+
+    private void adoptDialect(DataViewSession target) {
+        CsvDialect dialect = target.dialect();
+        stylist = new CsvLineStylist(dialect.delimiter(), dialect.quote());
+        headerOnLineZero = target.headerRowInData();
     }
 
     /** Scrolls the given line into view (with a little context) and selects it. EDT only. */
@@ -154,6 +178,17 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
         foreground = orElse(UIManager.getColor("TextArea.foreground"), Color.BLACK);
         selectionBackground = orElse(UIManager.getColor("TextArea.selectionBackground"), new Color(51, 153, 255));
         selectionForeground = orElse(UIManager.getColor("TextArea.selectionForeground"), Color.WHITE);
+
+        SyntaxTheme.Theme syntax;
+        try {
+            syntax = ThemePreferences.effectiveSyntaxTheme();
+        } catch (Exception e) {
+            syntax = SyntaxTheme.Theme.LIGHT;
+        }
+        delimiterColor = syntax.getWhitespaceColor(); // the recede slot: structure, barely there
+        headerColor = syntax.getReservedWordColor();
+        dateColor = syntax.getStringColor();
+        missingColor = syntax.getCommentColor();
     }
 
     private static Color orElse(Color color, Color fallback) {
@@ -210,10 +245,36 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
                 session.requestLine(line); // blank for a frame; block arrival repaints
                 continue;
             }
-            g.setColor(selected ? selectionForeground : foreground);
-            g.drawString(text, H_PAD, y + fm.getAscent());
+            if (selected) {
+                g.setColor(selectionForeground);
+                g.drawString(text, H_PAD, y + fm.getAscent());
+            } else {
+                paintStyledLine(g, fm, text, line, y);
+            }
             trackLineWidth(fm.stringWidth(text));
         }
+    }
+
+    /** Draws one line span-by-span in the dialect's colours (selection paints flat). */
+    private void paintStyledLine(Graphics g, FontMetrics fm, String text, long line, int y) {
+        int x = H_PAD;
+        int baseline = y + fm.getAscent();
+        for (CsvLineStylist.Span span : stylist.style(text, headerOnLineZero && line == 0)) {
+            String part = text.substring(span.start(), span.endExclusive());
+            g.setColor(colorFor(span.role()));
+            g.drawString(part, x, baseline);
+            x += fm.stringWidth(part);
+        }
+    }
+
+    private Color colorFor(CsvLineStylist.Role role) {
+        return switch (role) {
+            case DELIMITER -> delimiterColor;
+            case HEADER, MARKER -> headerColor;
+            case DATE_AXIS -> dateColor;
+            case MISSING -> missingColor;
+            case VALUE -> foreground; // ground truth stays plain; only structure is coloured
+        };
     }
 
     /** Widens the preferred size as longer lines are seen (coalesced revalidate). */
