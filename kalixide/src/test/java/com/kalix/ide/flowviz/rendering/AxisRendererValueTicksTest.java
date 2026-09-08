@@ -4,9 +4,11 @@ import com.kalix.ide.flowviz.transform.YAxisScale;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -109,6 +111,18 @@ class AxisRendererValueTicksTest {
         List<Double> ticks = logTicks(0, 500, TALL);
         assertTrue(ticks.size() >= 3, ticks.toString());
         ticks.forEach(AxisRendererValueTicksTest::assertRoundMantissa);
+    }
+
+    /** An accumulating loop never advanced once the interval fell under half an ulp: the EDT hung. */
+    @Test
+    void ticksOnASubUlpSpanTerminate() {
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
+            List<Double> ticks = renderer.calculateValueTicks(viewport(1.0, Math.nextUp(1.0), TALL, YAxisScale.LINEAR));
+            assertTrue(ticks.size() <= 4 * 10 + 1, "bounded by the tick budget: " + ticks.size());
+            assertTrue(logTicks(1.0, Math.nextUp(1.0), TALL).size() <= 4 * 10 + 1);
+            assertTrue(renderer.calculateValueTicks(viewport(Double.MIN_VALUE, 3 * Double.MIN_VALUE, TALL, YAxisScale.LINEAR)).isEmpty(),
+                "a span below the doubles' floor yields no interval and no ticks");
+        });
     }
 
     @Test

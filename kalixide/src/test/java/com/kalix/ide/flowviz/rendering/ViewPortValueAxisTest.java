@@ -90,6 +90,52 @@ class ViewPortValueAxisTest {
         assertEquals(1.0, pannedDown.getMaxValue(), REL);
     }
 
+    /** A fixed six-decade floor sat above a tiny maximum, so one wheel notch inverted the axis for good. */
+    @Test
+    void logFallbackMinimumStaysBelowTheMaximum() {
+        ViewPort v = viewport(0, 1e-8, YAxisScale.LOG);
+        assertEquals(-14.0, v.getTransformedMin(), REL, "six decades below the maximum");
+        assertEquals(-8.0, v.getTransformedMax(), REL);
+
+        ViewPort zoomed = withValueBounds(v, v.valueBoundsZoomedAbout(1.1, HEIGHT / 2));
+        assertTrue(zoomed.getMinValue() < zoomed.getMaxValue(), "the step keeps the axis upright: " + zoomed);
+
+        assertEquals(-6.0, viewport(0, 100, YAxisScale.LOG).getTransformedMin(), REL, "the usual floor when the maximum allows it");
+        assertEquals(-6.0, viewport(0, 0, YAxisScale.LOG).getTransformedMin(), REL, "both bounds unusable: 1e-6..1");
+        assertEquals(0.0, viewport(0, 0, YAxisScale.LOG).getTransformedMax(), REL);
+    }
+
+    @Test
+    void stepsThatWouldInvertTheAxisAreRefused() {
+        ViewPort inverted = viewport(10, 1, YAxisScale.LINEAR);   // only reachable internally
+        double[] bounds = inverted.valueBoundsZoomedAbout(2.0, HEIGHT / 2);
+        assertEquals(10.0, bounds[0]);
+        assertEquals(1.0, bounds[1]);
+    }
+
+    @Test
+    void centringIsANoOpForAValueAlreadyOnScreen() {
+        double[] linear = viewport(0, 100, YAxisScale.LINEAR).valueBoundsCentredOn(50);
+        assertEquals(0.0, linear[0]);
+        assertEquals(100.0, linear[1]);
+        double[] log = viewport(1, 100, YAxisScale.LOG).valueBoundsCentredOn(100);
+        assertEquals(1.0, log[0]);
+        assertEquals(100.0, log[1]);
+    }
+
+    /** On LOG with a non-positive stored minimum the axis draws 1e-6..max: judge visibility against that. */
+    @Test
+    void centringJudgesVisibilityAgainstTheAxisAsDrawn() {
+        ViewPort v = viewport(-5, 100, YAxisScale.LOG);   // draws 1e-6..100
+        double[] bounds = v.valueBoundsCentredOn(1e-9);   // above -5 in data space, below the plot on screen
+        assertEquals(1e-13, bounds[0], 1e-13 * REL);
+        assertEquals(1e-5, bounds[1], 1e-5 * REL);
+
+        double[] visible = v.valueBoundsCentredOn(1e-3);
+        assertEquals(-5.0, visible[0]);
+        assertEquals(100.0, visible[1]);
+    }
+
     @Test
     void centringKeepsTheSpanInTransformedSpace() {
         ViewPort log = withValueBounds(viewport(1, 100, YAxisScale.LOG),
