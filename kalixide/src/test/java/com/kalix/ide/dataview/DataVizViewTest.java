@@ -2,6 +2,7 @@ package com.kalix.ide.dataview;
 
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.data.DatasetSeries;
+import com.kalix.ide.flowviz.data.TimeSeriesData;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -9,8 +10,10 @@ import org.junit.jupiter.api.io.TempDir;
 import javax.swing.SwingUtilities;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -42,16 +45,29 @@ class DataVizViewTest {
         return holder[0];
     }
 
+    /** The series as the pool holds it, for failure messages. */
+    private static String describe(TimeSeriesData series) {
+        return series == null ? "no series"
+            : "points=" + series.getPointCount()
+                + " timestamps=" + Arrays.toString(series.getTimestamps())
+                + " values=" + Arrays.toString(series.getValues());
+    }
+
     private DatasetSeries ref(String column) {
         return new DatasetSeries(session.filePath().toAbsolutePath().toString(), column);
     }
 
     /** Await-what-you-assert, draining the EDT between polls. */
     private static void await(BooleanSupplier condition, String what) throws Exception {
+        await(condition, what, () -> "");
+    }
+
+    /** As above; on timeout the message carries what the pool held, so a flake diagnoses itself. */
+    private static void await(BooleanSupplier condition, String what, Supplier<String> observed) throws Exception {
         long deadline = System.currentTimeMillis() + 8000;
         while (!condition.getAsBoolean()) {
             if (System.currentTimeMillis() > deadline) {
-                fail("timed out waiting for " + what);
+                fail("timed out waiting for " + what + "; observed " + observed.get());
             }
             Thread.sleep(20);
             if (!SwingUtilities.isEventDispatchThread()) {
@@ -78,6 +94,10 @@ class DataVizViewTest {
                 "first column extracted");
             assertTrue(view.vizManagerForTests().getTargetTabSelectedSeries().contains(ref("a")));
             assertFalse(view.dataSetForTests().hasSeries(ref("b")), "only the first column is plotted");
+            // The constructor owes the first pass and nothing else runs one: the first
+            // tab's activation used to schedule a second, redundant pass from inside
+            // construction, which is what put a read in flight to be torn by a rewrite.
+            assertEquals(1, view.extractionPassesForTests(), "construction runs exactly one extraction pass");
             assertEquals(2, view.dataSetForTests().getSeries(ref("a")).getPointCount());
         } finally {
             session.close();
@@ -203,10 +223,18 @@ class DataVizViewTest {
             await(() -> freshFinal.isIndexingComplete() && freshFinal.columnCount() > 0, "fresh session");
             SwingUtilities.invokeAndWait(() -> view.onSessionReplaced(freshFinal));
 
-            await(() -> view.dataSetForTests().getSeries(ref("a")) != null
-                && view.dataSetForTests().getSeries(ref("a")).getPointCount() == 2, "re-extraction");
-            assertEquals(42.0, view.dataSetForTests().getSeries(ref("a")).getValues()[0],
-                "the same ref now carries the fresh session's data");
+            // Await what is asserted - the fresh file's values - not a point count a
+            // torn series could satisfy first. The extractor's indexed-extent rule is
+            // what makes such a series impossible; this keeps the test honest about
+            // what it is waiting for and says what it saw if it ever waits in vain.
+            await(() -> {
+                TimeSeriesData series = view.dataSetForTests().getSeries(ref("a"));
+                return series != null && series.getPointCount() == 2 && series.getValues()[0] == 42.0;
+            }, "re-extraction of the fresh session's data",
+                () -> describe(view.dataSetForTests().getSeries(ref("a"))));
+            TimeSeriesData series = view.dataSetForTests().getSeries(ref("a"));
+            assertEquals(43.0, series.getValues()[1],
+                "the same ref now carries the fresh session's data; saw " + describe(series));
         } finally {
             session.close();
             if (fresh != null) {
