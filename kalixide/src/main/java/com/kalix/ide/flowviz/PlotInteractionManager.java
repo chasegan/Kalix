@@ -571,15 +571,10 @@ public class PlotInteractionManager {
         ViewPort currentViewport = viewportSupplier.get();
         YAxisScale yAxisScale = currentViewport != null ? currentViewport.getYAxisScale() : YAxisScale.LINEAR;
 
-        // Exclusive lower bound of the current scale's domain - values at or below it have no
-        // position on the axis. Resolved once here rather than per point: the loop below runs on
-        // every mouse event while panning, so the domain check has to cost one compare, not a
-        // branch on scale. NEGATIVE_INFINITY makes the check vacuously false for scales that
-        // accept every value.
-        double domainFloor = switch (yAxisScale) {
-            case LOG -> 0.0;                                          // log10 needs y > 0
-            case LINEAR, SQRT, SYMLOG -> Double.NEGATIVE_INFINITY;    // defined everywhere
-        };
+        // Values at or below the scale's domain floor have no position on the axis (LOG:
+        // y <= 0). The scale owns the rule; resolved once here so the per-point check in
+        // the loop below stays one compare.
+        double domainFloor = yAxisScale.domainFloor();
 
         double minValue = Double.POSITIVE_INFINITY;
         double maxValue = Double.NEGATIVE_INFINITY;

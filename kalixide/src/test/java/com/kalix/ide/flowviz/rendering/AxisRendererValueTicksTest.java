@@ -152,6 +152,33 @@ class AxisRendererValueTicksTest {
             () -> assertTrue(renderer.calculateAxisInfo(sliver).timeTicks.size() <= 4 * 7 + 1));
     }
 
+    private List<Double> symlogTicks(double min, double max, int plotHeight) {
+        return renderer.calculateValueTicks(viewport(min, max, plotHeight, YAxisScale.SYMLOG));
+    }
+
+    /** The seam at +/-10 is ticked even when the coarse step is two decades. */
+    @Test
+    void symlogTicksAreRoundOnBothSidesAndAlwaysTickTheSeam() {
+        assertTicks(List.of(-1e5, -1e3, -10.0, 0.0, 10.0, 1e3, 1e5), symlogTicks(-1e6, 1e6, TALL));
+    }
+
+    /** Auto-Y on data 0..500: the linear zone gets even steps, the log zone round mantissas. */
+    @Test
+    void symlogTicksSplitTheBudgetBetweenLinearAndLogRegions() {
+        List<Double> ticks = symlogTicks(YAxisScale.SYMLOG.inverseTransform(-0.135), YAxisScale.SYMLOG.inverseTransform(2.834), TALL);
+        assertTicks(List.of(0.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0), ticks);
+    }
+
+    @Test
+    void symlogTicksInsideTheLinearRegionMatchLinear() {
+        assertTicks(List.of(-4.0, -2.0, 0.0, 2.0, 4.0), symlogTicks(-5, 5, TALL));
+    }
+
+    @Test
+    void symlogTicksOnOneSideOnlyStayOnThatSide() {
+        assertTicks(List.of(-1e6, -1e5, -1e4, -1e3, -100.0), symlogTicks(-1e6, -100, TALL));
+    }
+
     @Test
     void linearTicksKeepTheirEvenNiceSteps() {
         List<Double> ticks = renderer.calculateValueTicks(viewport(0, 100, TALL, YAxisScale.LINEAR));

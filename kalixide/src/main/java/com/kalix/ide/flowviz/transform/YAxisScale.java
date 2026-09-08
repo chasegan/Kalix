@@ -18,8 +18,8 @@ public enum YAxisScale {
     /**
      * Symmetric log - linear on [-L, L] and log_10 outside it, with L = 10.
      * Inspired by, but not the same as, matplotlib's symlog. This implementation
-     * keeps log10(10**n) on integral positions so the axis ticks read as 10, 100,
-     * etc.
+     * keeps log10(10**n) on integral positions, and the linear zone on exactly one
+     * decade of transformed space, so the axis reads as -100, -10, 0, 10, 100.
      */
     SYMLOG("Symlog")
     ;
@@ -53,10 +53,27 @@ public enum YAxisScale {
      * region, which is every other scale at present.
      *
      * <p>Exposed so renderers can mark where the axis changes behaviour without holding a
-     * second copy of the constant; this enum stays the sole owner of each scale's parameters.</p>
+     * second copy of the constant; this enum stays the sole owner of each scale's parameters.
+     * An exhaustive switch, so a new scale has to decide here whether it has a region to mark.</p>
      */
     public OptionalDouble linearThreshold() {
-        return this == SYMLOG ? OptionalDouble.of(SYMLOG_THRESHOLD) : OptionalDouble.empty();
+        return switch (this) {
+            case SYMLOG -> OptionalDouble.of(SYMLOG_THRESHOLD);
+            case LINEAR, LOG, SQRT -> OptionalDouble.empty();
+        };
+    }
+
+    /**
+     * Exclusive lower bound of this scale's domain: values at or below it have no position
+     * on the axis, and {@link #transform} returns NaN for them. NEGATIVE_INFINITY for scales
+     * defined everywhere, so {@code value <= domainFloor()} rejects no finite value and a
+     * per-point domain check costs one compare whatever the scale.
+     */
+    public double domainFloor() {
+        return switch (this) {
+            case LOG -> 0.0;                                          // log10 needs y > 0
+            case LINEAR, SQRT, SYMLOG -> Double.NEGATIVE_INFINITY;    // defined everywhere
+        };
     }
 
     /**

@@ -81,8 +81,8 @@ class YAxisScaleTest {
         double previous = Double.NEGATIVE_INFINITY;
         for (double y = -50.0; y <= 50.0; y += 0.0009) {
             double transformed = YAxisScale.SYMLOG.transform(y);
-            assertTrue(transformed > previous,
-                "SYMLOG is not strictly increasing at y=" + y);
+            double at = y;
+            assertTrue(transformed > previous, () -> "SYMLOG is not strictly increasing at y=" + at);
             previous = transformed;
         }
     }
@@ -123,9 +123,19 @@ class YAxisScaleTest {
                 assertTrue(threshold.isEmpty(), scale + " should have no linear region");
             }
         }
+    }
 
-        assertEquals(4, YAxisScale.values().length,
-            "a new scale must decide here whether it has a linear region to mark");
+    @Test
+    void onlyLogRestrictsTheDomain() {
+        // Auto-Y drops values at or below the floor with one compare, so for the scales
+        // defined everywhere the floor must sit below every finite value.
+        assertEquals(0.0, YAxisScale.LOG.domainFloor(), 0.0);
+        for (YAxisScale scale : new YAxisScale[] {YAxisScale.LINEAR, YAxisScale.SQRT, YAxisScale.SYMLOG}) {
+            assertEquals(Double.NEGATIVE_INFINITY, scale.domainFloor(), scale + " is defined everywhere");
+            assertFalse(-Double.MAX_VALUE <= scale.domainFloor(), scale + " must keep the most negative finite value");
+        }
+        assertTrue(0.0 <= YAxisScale.LOG.domainFloor(), "LOG drops zero");
+        assertFalse(Double.MIN_VALUE <= YAxisScale.LOG.domainFloor(), "LOG keeps the smallest positive value");
     }
 
     @Test

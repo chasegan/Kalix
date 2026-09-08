@@ -81,10 +81,11 @@ public class TimeSeriesRenderer {
         // Draw grid
         if (showGrid) {
             axisRenderer.drawGrid(g2d, viewport, axisInfo, colors);
-
-            // Mark where a symmetric-log axis switches from linear to logarithmic.
-            axisRenderer.drawScaleThresholds(g2d, viewport, colors);
         }
+
+        // Mark where a symmetric-log axis switches from linear to logarithmic. Part of the
+        // axis, not the grid: without it 5->10 and 10->100 read as equal steps.
+        axisRenderer.drawScaleThresholds(g2d, viewport, colors);
 
         // Draw axes
         axisRenderer.drawAxes(g2d, viewport, axisInfo, colors);

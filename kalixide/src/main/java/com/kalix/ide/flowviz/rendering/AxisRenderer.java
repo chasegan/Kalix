@@ -42,6 +42,8 @@ public class AxisRenderer {
     private static final double LOG_TICK_EPSILON = 1e-9;
     /** How far the threshold marker is shifted from the grid colour, towards the foreground. */
     private static final int THRESHOLD_CONTRAST_SHIFT = 80;
+    private static final BasicStroke THRESHOLD_STROKE = new BasicStroke(GRID_STROKE_WIDTH,
+        BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, DashStyle.DASHED.dashArray(), 0.0f);
 
     private final TemporalAxisCalculator temporalCalculator;
 
@@ -225,7 +227,8 @@ public class AxisRenderer {
      * <p>LINEAR and SQRT space ticks evenly in transformed space, so they land evenly on
      * screen. LOG places them at values a modeller reads as round (see {@link #logTicks});
      * even spacing in log space would label 10^0.5 as 31.62 whenever the nice interval
-     * fell below one decade -- correct positions, unreadable numbers.</p>
+     * fell below one decade -- correct positions, unreadable numbers. SYMLOG does the same
+     * per region (see {@link #symlogTicks}).</p>
      *
      * @param viewport The current viewport
      * @return List of value tick positions (in data space)
@@ -245,7 +248,8 @@ public class AxisRenderer {
         YAxisScale yAxisScale = viewport.getYAxisScale();
         return switch (yAxisScale) {
             case LINEAR, SQRT -> evenTicks(transformedMin, transformedMax, numTicks, yAxisScale::inverseTransform);
-            case LOG -> logTicks(transformedMin, transformedMax, numTicks);
+            case LOG -> logTicks(transformedMin, transformedMax, numTicks, 0);
+            case SYMLOG -> symlogTicks(transformedMin, transformedMax, numTicks);
         };
     }
 
@@ -279,13 +283,17 @@ public class AxisRenderer {
      * @param transformedMin viewport minimum, in decades
      * @param transformedMax viewport maximum, in decades
      * @param numTicks target tick count for the plot height
+     * @param decadeAnchor the decade the coarse steps count from, so a step of two decades
+     *        still lands there: 0 for LOG (1, 100, 10^4), 1 for SYMLOG's log region
+     *        (10, 1000, 10^5), which keeps the seam at 10 ticked whatever the zoom
      */
-    private List<Double> logTicks(double transformedMin, double transformedMax, int numTicks) {
+    private List<Double> logTicks(double transformedMin, double transformedMax, int numTicks, double decadeAnchor) {
         double decades = transformedMax - transformedMin;
         double decadeInterval = roundToNiceValueInterval(decades / (numTicks - 1));
         if (decadeInterval >= 1) {
             // A whole number of decades per tick: even spacing lands exactly on 10^k
-            return evenTicks(transformedMin, transformedMax, numTicks, t -> Math.pow(10, t));
+            return evenTicks(transformedMin - decadeAnchor, transformedMax - decadeAnchor, numTicks,
+                t -> Math.pow(10, t + decadeAnchor));
         }
 
         // Less than a decade per tick: subdivide each decade with round mantissas, the
@@ -320,14 +328,75 @@ public class AxisRenderer {
         for (int decade = firstDecade; decade <= lastDecade; decade++) {
             double base = Math.pow(10, decade);
             for (double mantissa : mantissas) {
-                double transformed = decade + Math.log10(mantissa);
-                if (transformed >= transformedMin - LOG_TICK_EPSILON
-                        && transformed <= transformedMax + LOG_TICK_EPSILON) {
+                if (inRange(decade + Math.log10(mantissa), transformedMin, transformedMax)) {
                     ticks.add(mantissa * base);
                 }
             }
         }
         return ticks;
+    }
+
+    /**
+     * Ticks for a SYMLOG axis: each log region gets LOG's round placement counted from the
+     * seam, so +/-L is ticked whatever the zoom; the linear region between gets even
+     * data-space steps; and the target count is split between the regions by the share of
+     * the axis each occupies, so density stays comparable with the other scales.
+     */
+    private List<Double> symlogTicks(double transformedMin, double transformedMax, int numTicks) {
+        YAxisScale scale = YAxisScale.SYMLOG;
+        double seam = scale.transform(scale.linearThreshold().orElseThrow());
+        double span = transformedMax - transformedMin;
+        List<Double> ticks = new ArrayList<>();
+
+        // Positive log region, and the negative one as its mirror image
+        double positiveLo = Math.max(seam, transformedMin);
+        if (transformedMax > positiveLo) {
+            int budget = regionBudget(numTicks, (transformedMax - positiveLo) / span);
+            for (double tick : logTicks(positiveLo, transformedMax, budget, seam)) {
+                if (inRange(Math.log10(tick), positiveLo, transformedMax)) ticks.add(tick);
+            }
+        }
+        double negativeLo = Math.max(seam, -transformedMax);
+        double negativeHi = -transformedMin;
+        if (negativeHi > negativeLo) {
+            int budget = regionBudget(numTicks, (negativeHi - negativeLo) / span);
+            for (double tick : logTicks(negativeLo, negativeHi, budget, seam)) {
+                if (inRange(Math.log10(tick), negativeLo, negativeHi)) ticks.add(-tick);
+            }
+        }
+
+        // Linear region, in data space
+        double linearLo = Math.max(-seam, transformedMin);
+        double linearHi = Math.min(seam, transformedMax);
+        if (linearHi > linearLo) {
+            int budget = regionBudget(numTicks, (linearHi - linearLo) / span);
+            double lo = scale.inverseTransform(linearLo);
+            double hi = scale.inverseTransform(linearHi);
+            for (double tick : evenTicks(lo, hi, budget, DoubleUnaryOperator.identity())) {
+                if (inRange(scale.transform(tick), linearLo, linearHi)) ticks.add(tick);
+            }
+        }
+
+        // The seam belongs to two regions; keep one copy
+        ticks.sort(null);
+        List<Double> distinct = new ArrayList<>(ticks.size());
+        for (double tick : ticks) {
+            if (distinct.isEmpty() || !sameTick(distinct.get(distinct.size() - 1), tick)) distinct.add(tick);
+        }
+        return distinct;
+    }
+
+    /** A region's share of the tick budget, never below the two a nice interval needs. */
+    private static int regionBudget(int numTicks, double share) {
+        return Math.max(2, (int) Math.round(numTicks * share));
+    }
+
+    private static boolean inRange(double transformed, double transformedMin, double transformedMax) {
+        return transformed >= transformedMin - LOG_TICK_EPSILON && transformed <= transformedMax + LOG_TICK_EPSILON;
+    }
+
+    private static boolean sameTick(double a, double b) {
+        return Math.abs(a - b) <= LOG_TICK_EPSILON * Math.max(1.0, Math.abs(a));
     }
 
     /**
@@ -355,49 +424,58 @@ public class AxisRenderer {
             }
         }
 
-        // Draw horizontal grid lines aligned with value axis ticks
+        // Draw horizontal grid lines aligned with value axis ticks. A row the scale's
+        // threshold marker owns is left to it, so the dashed cue never sits on a solid line.
+        int[] thresholdRows = thresholdRows(viewport);
         for (Double tickValue : axisInfo.valueTicks) {
             int screenY = viewport.valueToScreenY(tickValue);
-            if (screenY >= plotY && screenY <= plotY + plotHeight) {
-                g2d.drawLine(plotX, screenY, plotX + plotWidth, screenY);
+            if (screenY != thresholdRows[0] && screenY != thresholdRows[1]) {
+                drawHorizontalLine(g2d, viewport, screenY);
             }
         }
     }
 
     /**
-     * Marks the linear-region boundaries of a scale that has one (currently only
-     * {@link YAxisScale#SYMLOG}) with a dashed horizontal line at +/-L.
-     *
-     * <p>Without this the change in axis behaviour at the threshold is invisible: the same
-     * vertical distance means a fixed increment below it and a decade above it. Draws nothing
-     * for scales with no linear region, and each line is clipped away individually once the
-     * viewport is panned past it.</p>
+     * Screen rows of the scale's linear-region thresholds, +L and -L, or two off-plot rows
+     * for a scale without one. Always two entries so callers need no emptiness check.
+     */
+    private int[] thresholdRows(ViewPort viewport) {
+        OptionalDouble threshold = viewport.getYAxisScale().linearThreshold();
+        if (threshold.isEmpty()) {
+            return new int[] {Integer.MIN_VALUE, Integer.MIN_VALUE};
+        }
+        double linearThreshold = threshold.getAsDouble();
+        return new int[] {viewport.valueToScreenY(linearThreshold), viewport.valueToScreenY(-linearThreshold)};
+    }
+
+    /** Draws a plot-wide horizontal line at {@code screenY} if it lies inside the plot area. */
+    private void drawHorizontalLine(Graphics2D g2d, ViewPort viewport, int screenY) {
+        int plotY = viewport.getPlotY();
+        if (screenY >= plotY && screenY <= plotY + viewport.getPlotHeight()) {
+            int plotX = viewport.getPlotX();
+            g2d.drawLine(plotX, screenY, plotX + viewport.getPlotWidth(), screenY);
+        }
+    }
+
+    /**
+     * Marks where the scale changes behaviour: a dashed plot-wide line at +L and -L for a
+     * scale with a linear region (SYMLOG), nothing for the rest. Drawn whether or not the
+     * grid is, and in place of the grid line on its row (see {@link #drawGrid}): without
+     * the cue 5 to 10 and 10 to 100 read as equal steps.
      *
      * @param g2d Graphics context
      * @param viewport Current viewport
      * @param colors The current theme's plot colours (resolved once per paint)
      */
     public void drawScaleThresholds(Graphics2D g2d, ViewPort viewport, PlotColors colors) {
-        OptionalDouble threshold = viewport.getYAxisScale().linearThreshold();
-        if (threshold.isEmpty()) return;
+        if (viewport.getYAxisScale().linearThreshold().isEmpty()) return;
 
         // Derived from the grid role rather than a theme key of its own, so the marker keeps
         // the grid's relationship to the background in every theme while reading as deliberate.
         g2d.setColor(PlotColors.shiftForContrast(colors.grid, colors.background, THRESHOLD_CONTRAST_SHIFT));
-        g2d.setStroke(new BasicStroke(GRID_STROKE_WIDTH, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
-            10.0f, DashStyle.DASHED.dashArray(), 0.0f));
-
-        int plotX = viewport.getPlotX();
-        int plotY = viewport.getPlotY();
-        int plotWidth = viewport.getPlotWidth();
-        int plotHeight = viewport.getPlotHeight();
-
-        double linearThreshold = threshold.getAsDouble();
-        for (double value : new double[]{linearThreshold, -linearThreshold}) {
-            int screenY = viewport.valueToScreenY(value);
-            if (screenY >= plotY && screenY <= plotY + plotHeight) {
-                g2d.drawLine(plotX, screenY, plotX + plotWidth, screenY);
-            }
+        g2d.setStroke(THRESHOLD_STROKE);
+        for (int row : thresholdRows(viewport)) {
+            drawHorizontalLine(g2d, viewport, row);
         }
     }
 
