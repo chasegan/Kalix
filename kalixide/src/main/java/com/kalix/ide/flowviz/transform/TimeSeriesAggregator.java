@@ -45,7 +45,10 @@ public class TimeSeriesAggregator {
      * @param original Original time series data
      * @param period Aggregation period
      * @param method Aggregation method
-     * @return Aggregated time series, or original if period is ORIGINAL
+     * @param seasonalMaskMode Which calendar months to keep; {@link SeasonalMaskMode#DISABLED} keeps all
+     * @return Aggregated (and seasonally masked) time series. For {@link AggregationPeriod#ORIGINAL}
+     *         the original instance is returned unless a mask is in effect, in which case a
+     *         filtered copy is.
      */
     public static TimeSeriesData aggregate(
         TimeSeriesData original,
@@ -204,7 +207,7 @@ public class TimeSeriesAggregator {
                 // sample interval for sub-daily data) applies to the narrowed window too.
                 long tailGapMs = periodEndMs - expectedLastMs;
                 long firstSelectedMs = firstSelectedMonthStartMs(periodStartMs, periodEndMs, selectedMonths);
-                if (firstSelectedMs >= 0) {
+                if (firstSelectedMs != NO_SELECTED_MONTH) {
                     long lastSelectedEndMs = lastSelectedMonthEndMs(periodStartMs, periodEndMs, selectedMonths);
                     // Clamped to the bucket, so daily/monthly periods (never wider than one
                     // month) reduce to exactly the unmasked test.
@@ -230,8 +233,16 @@ public class TimeSeriesAggregator {
     }
 
     /**
+     * Sentinel for "the span contains no selected month". Deliberately not {@code -1}: month
+     * starts are epoch millis, which are negative before 1970, and long hydrological records
+     * routinely begin in the 1880s. A {@code >= 0} test would silently discard every valid
+     * pre-1970 answer and fall back to the unmasked completeness test for those periods.
+     */
+    private static final long NO_SELECTED_MONTH = Long.MIN_VALUE;
+
+    /**
      * Start of the earliest selected month intersecting {@code [fromMs, toExclusiveMs)},
-     * or {@code -1} when the span contains no selected month at all.
+     * or {@link #NO_SELECTED_MONTH} when the span contains no selected month at all.
      */
     private static long firstSelectedMonthStartMs(long fromMs, long toExclusiveMs, Set<Month> months) {
         LocalDate cursor = LocalDate.ofEpochDay(Math.floorDiv(fromMs, DAY_MS)).withDayOfMonth(1);
@@ -241,16 +252,16 @@ public class TimeSeriesAggregator {
             }
             cursor = cursor.plusMonths(1);
         }
-        return -1;
+        return NO_SELECTED_MONTH;
     }
 
     /**
      * Exclusive end of the latest selected month intersecting {@code [fromMs, toExclusiveMs)},
-     * or {@code -1} when the span contains no selected month at all.
+     * or {@link #NO_SELECTED_MONTH} when the span contains no selected month at all.
      */
     private static long lastSelectedMonthEndMs(long fromMs, long toExclusiveMs, Set<Month> months) {
         LocalDate cursor = LocalDate.ofEpochDay(Math.floorDiv(fromMs, DAY_MS)).withDayOfMonth(1);
-        long endMs = -1;
+        long endMs = NO_SELECTED_MONTH;
         while (cursor.toEpochDay() * DAY_MS < toExclusiveMs) {
             if (months.contains(cursor.getMonth())) {
                 endMs = cursor.plusMonths(1).toEpochDay() * DAY_MS;

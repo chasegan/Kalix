@@ -10,7 +10,7 @@ import java.util.LinkedHashMap;
 
 /**
  * The one aggregation orchestration for a selection of series: resolve each ref
- * against the pool, aggregate it, apply seasonal masking, and return an
+ * against the pool, aggregate it (applying the seasonal mask as it goes), and return an
  * order-preserving map. Both the plot's display pipeline and the stats table
  * are fed from this — the same settings applied the same way, so the two views
  * can never disagree about what "Monthly by Mean" means.

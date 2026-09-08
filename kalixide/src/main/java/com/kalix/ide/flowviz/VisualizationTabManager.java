@@ -500,9 +500,8 @@ public class VisualizationTabManager {
             } else if (viewMode == FlowVizView.STATS) {
                 vizPanel.setMaskMode(MaskMode.ALL);
             }
-            if (settings.seasonalMaskMode != null) {
-                vizPanel.setSeasonalMaskMode(settings.seasonalMaskMode);
-            }
+            // The seasonal mask needs no such handling: applyPlotSettings above already
+            // set it (it has no per-view default).
         });
 
         // Populate legend with inherited series (colour resolved at render time)

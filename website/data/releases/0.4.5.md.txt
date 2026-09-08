@@ -35,6 +35,7 @@ pip: "pip install kalix==0.4.5"
     - Tick any combination of months in the drop-down — it stays open while you pick — or "All" to clear the mask.
     - Masking happens inside aggregation, so an annual sum over Jan–Mar totals exactly those months: deselected months are excluded from the total rather than counted as missing data, while a genuinely truncated period still reads as a gap.
     - Shared by a tab's plot and stats pages, carried through duplication, and undoable like every other plotting action.
+    - Months are taken from within each aggregation period: with the default Jan–Dec year, ticking Dec and Jan gives January and December of the *same* year. For a contiguous southern summer, pair the selection with a water year that starts in July (or December).
 - Plotting in the data viewer: every data tab now carries the full plotting tool above its table — the same tabs, plot ⁄ stats toggle, aggregation and undo as the Run Manager.
     - Click a column header to plot or unplot that column (plotted columns get an accent mark, and the full column name shows as a tooltip); the first data column is plotted by default.
     - Right-click a datapoint for `Show in plot` (centres the plot on it, keeping your zoom level) or `Plot "column"` / `Unplot "column"`.
