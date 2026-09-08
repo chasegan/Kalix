@@ -1,6 +1,8 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.components.SeasonalMaskButton;
 import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
 import com.kalix.ide.flowviz.style.LineStyle;
 import com.kalix.ide.flowviz.style.StrokeStyle;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
@@ -12,11 +14,13 @@ import javax.swing.JComboBox;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
+import java.time.Month;
 import java.util.LinkedHashSet;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Pins the merged toolbar's reflection: {@code updateFromState} must move every
@@ -76,6 +80,78 @@ class VizToolbarControllerTest {
         assertEquals(AggregationPeriod.DAILY, panel.getAggregationPeriod(),
             "a fired combo listener would have re-applied the old aggregation");
         assertEquals(AggregationMethod.MEAN, panel.getAggregationMethod());
-        assertFalse(panel.canRedo(), "no history entry was pushed or truncated");
+        // A push would land at the head of the history, so canRedo() is false either way -
+        // the telling check is that undo still steps back onto the entry before this one.
+        assertEquals(previous, panel.undo(),
+            "no history entry was pushed: undo lands on the same state as before");
+    }
+    private static SeasonalMaskButton seasonalButton(Container root) {
+        for (Component component : root.getComponents()) {
+            if (component instanceof SeasonalMaskButton button) {
+                return button;
+            }
+            if (component instanceof Container container) {
+                SeasonalMaskButton found = seasonalButton(container);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static VisualizationTabManager.TabSettings emptySettings() {
+        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
+        settings.selectedSeries = new LinkedHashSet<>();
+        settings.checkedSources = new LinkedHashSet<>();
+        return settings;
+    }
+
+    /**
+     * The seasonal button lives with the always-visible controls, not the plot-only
+     * cluster: the panel owns one selection and both views project from it.
+     */
+    @Test
+    void theSeasonalButtonIsSharedByBothViews() {
+        VisualizationTabManager mgr = manager();
+        mgr.addPlotTabFromSettings(emptySettings());
+        Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
+        SeasonalMaskButton button = seasonalButton(tabRoot);
+        assertNotNull(button, "the merged toolbar carries the seasonal mask button");
+
+        mgr.tabAt(0).vizToolbar.applyViewMode(FlowVizView.STATS);
+        assertTrue(button.isVisible(), "it stays visible in the stats view - the mask is shared");
+    }
+
+    @Test
+    void updateFromStateReflectsTheSeasonalMaskSilently() {
+        VisualizationTabManager mgr = manager();
+        mgr.addPlotTabFromSettings(emptySettings());
+        FlowVizPanel panel = mgr.getTargetVizPanel();
+        Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
+        SeasonalMaskButton button = seasonalButton(tabRoot);
+        assertNotNull(button);
+
+        SeasonalMaskMode winter = SeasonalMaskMode.of(Set.of(Month.JUNE, Month.JULY));
+        panel.setSeasonalMaskMode(winter);
+        // The button is not an observer of the panel: like the combos, it is reconciled
+        // only through updateFromState (undo/redo and reset), and otherwise drives it.
+        mgr.tabAt(0).vizToolbar.getController().updateFromState(panel.currentState());
+        assertEquals(winter, button.getMode(), "reflection moves the button to the state");
+
+        FlowVizState previous = panel.undo();   // back to DISABLED
+        panel.redo();                           // panel is masked again
+        mgr.tabAt(0).vizToolbar.getController().updateFromState(previous);
+
+        // By value, not identity: Disabled is a record, so an equal instance is just as
+        // correct and must not fail this.
+        assertEquals(SeasonalMaskMode.DISABLED, button.getMode(),
+            "the control reflects the given state");
+        assertEquals(winter, panel.getSeasonalMaskMode(),
+            "...but reflecting must not drive the panel back - that would loop the undo");
+        // A push would land at the head of the history, so canRedo() is false either way -
+        // the telling check is that undo still steps back onto the entry before this one.
+        assertEquals(previous, panel.undo(),
+            "no history entry was pushed: undo lands on the same state as before");
     }
 }

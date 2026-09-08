@@ -10,9 +10,11 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.flowviz.stats.MaskMode;
+import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
 import com.kalix.ide.flowviz.transform.AggregationPipeline;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.TimeSeriesAggregator;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -136,6 +138,7 @@ public class VisualizationTabManager {
          * and stops stats duplication silently resetting the mask.
          */
         public MaskMode maskMode = null;
+        public SeasonalMaskMode seasonalMaskMode = SeasonalMaskMode.DISABLED;
 
         /** Which view the created tab shows; duplication copies it (a duplicate looks identical). */
         FlowVizView activeView = FlowVizView.PLOT;
@@ -148,7 +151,7 @@ public class VisualizationTabManager {
         boolean nameIsDefault = false;
 
         // Plot-specific settings (ignored when creating stats tabs)
-        public com.kalix.ide.flowviz.transform.PlotType plotType = com.kalix.ide.flowviz.transform.PlotType.VALUES;
+        public PlotType plotType = PlotType.VALUES;
         public YAxisScale yAxisScale = YAxisScale.LINEAR;
         public boolean autoYMode = true;
         public boolean showCoordinates = false;
@@ -183,6 +186,7 @@ public class VisualizationTabManager {
             settings.aggregationPeriod = vizPanel.getAggregationPeriod();
             settings.aggregationMethod = vizPanel.getAggregationMethod();
             settings.maskMode = vizPanel.getMaskMode();
+            settings.seasonalMaskMode = vizPanel.getSeasonalMaskMode();
             settings.plotType = vizPanel.getPlotType();
             settings.yAxisScale = vizPanel.getYAxisScale();
             settings.autoYMode = vizPanel.isAutoYMode();
@@ -496,6 +500,8 @@ public class VisualizationTabManager {
             } else if (viewMode == FlowVizView.STATS) {
                 vizPanel.setMaskMode(MaskMode.ALL);
             }
+            // The seasonal mask needs no such handling: applyPlotSettings above already
+            // set it (it has no per-view default).
         });
 
         // Populate legend with inherited series (colour resolved at render time)
@@ -919,7 +925,8 @@ public class VisualizationTabManager {
         // One reset path for both views: the panel owns the state, so a stats-view
         // reset is now just as undoable as a plot-view one. Mask semantics per view
         // are preserved: a plot-view reset leaves the mask alone (as it always has),
-        // a stats-view reset restores the stats default (ALL).
+        // a stats-view reset restores the stats default (ALL). The seasonal mask has
+        // no per-view default, so applyPlotSettings clears it for both.
         tab.vizPanel.batchStateChange(() -> {
             tab.vizPanel.setVisibleSeries(new ArrayList<>());
             applyPlotSettings(tab.vizPanel, settings);
@@ -948,6 +955,14 @@ public class VisualizationTabManager {
         vizPanel.setPlotType(settings.plotType);
         vizPanel.setYAxisScale(settings.yAxisScale);
         vizPanel.setAutoYMode(settings.autoYMode);
+        // The seasonal mask is also part of FlowVizState, so on the duplication path
+        // copyHistoryFrom writes it again a moment later. That is deliberate, not an
+        // oversight: the two agree by construction (fromPlotTab reads the same panel
+        // copyHistoryFrom copies), and both writes land inside batchStateChange, where
+        // restoringState makes a setter a bare field assignment - no rebuild, no fit, no
+        // history push. Keeping it here is what lets reset and duplicate share one path.
+        // (maskMode is NOT set here: it carries a per-view default, applied at creation.)
+        vizPanel.setSeasonalMaskMode(settings.seasonalMaskMode);
         vizPanel.setShowCoordinates(settings.showCoordinates);
         // Order matters: setConnectAcrossGaps(true) clears orphan markers and vice versa,
         // so apply connect first — for every valid (mutually exclusive) combination the
@@ -1189,7 +1204,9 @@ public class VisualizationTabManager {
         }
         tab.statsModel.setSeries(AggregationPipeline.aggregate(
             sharedDataSet, tab.selectedSeries,
-            tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod()));
+            tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod(),
+            tab.vizPanel.getSeasonalMaskMode()
+        ));
     }
 
     /**
@@ -1299,7 +1316,10 @@ public class VisualizationTabManager {
             }
             if (tab.viewMode == FlowVizView.STATS) {
                 TimeSeriesData aggregatedData = TimeSeriesAggregator.aggregate(
-                    data, tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod());
+                    data, tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod(),
+                    tab.vizPanel.getSeasonalMaskMode()
+                );
+
                 if (aggregatedData != null) {
                     tab.statsModel.addOrUpdateSeries(ref, aggregatedData);
                 }

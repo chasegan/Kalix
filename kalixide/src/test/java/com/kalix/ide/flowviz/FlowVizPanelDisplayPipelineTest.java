@@ -4,12 +4,17 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
+import java.time.Month;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -78,5 +83,62 @@ class PlotPanelDisplayPipelineTest {
         assertEquals(10.0, other.getValues()[0], 0.0);
         assertEquals(30.0, other.getValues()[1], 0.0);
         assertEquals(timestamps[2], other.getTimestamps()[1], "overlap keeps original timestamps");
+    }
+    /** Daily points from 1 Jan 2020 up to (not including) {@code endExclusive}, all valued 1. */
+    private static TimeSeriesData dailyFrom2020(LocalDate endExclusive) {
+        LocalDate start = LocalDate.of(2020, 1, 1);
+        int days = (int) (endExclusive.toEpochDay() - start.toEpochDay());
+        long[] timestamps = new long[days];
+        double[] values = new double[days];
+        for (int i = 0; i < days; i++) {
+            timestamps[i] = start.plusDays(i).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
+            values[i] = 1;
+        }
+        return new TimeSeriesData(timestamps, values);
+    }
+
+    /**
+     * The seasonal mask must be applied BEFORE aggregation (#235). Aggregating first
+     * stamps every annual point at the period start, which left the mask able only to
+     * keep or drop the whole year.
+     */
+    @Test
+    void seasonalMaskSelectsMonthsWithinAnAnnualAggregate() {
+        DataSet pool = new DataSet();
+        pool.addSeries(REF, dailyFrom2020(LocalDate.of(2021, 1, 1))); // all of 2020, 1/day
+
+        FlowVizPanel panel = new FlowVizPanel();
+        panel.setDataSet(pool);
+        panel.setVisibleSeries(List.of(REF));
+        panel.setAggregation(AggregationPeriod.ANNUAL_JAN_DEC, AggregationMethod.SUM);
+        assertEquals(366.0, panel.displayDataSetForTests().getSeries(REF).getValues()[0], 0.0,
+            "unmasked: all 366 days of 2020 sum into one annual point");
+
+        panel.setSeasonalMaskMode(SeasonalMaskMode.of(Set.of(Month.JANUARY)));
+        TimeSeriesData masked = panel.displayDataSetForTests().getSeries(REF);
+        assertEquals(1, masked.getPointCount(), "still one annual point");
+        assertEquals(31.0, masked.getValues()[0], 0.0,
+            "the annual sum covers January only - not the unmasked 366");
+    }
+
+    /**
+     * The reported symptom: deselecting the month an annual period starts in used to
+     * empty the view, because every aggregated point carried that start month.
+     */
+    @Test
+    void deselectingTheStartMonthDoesNotEmptyAnAnnualAggregate() {
+        DataSet pool = new DataSet();
+        pool.addSeries(REF, dailyFrom2020(LocalDate.of(2021, 1, 1)));
+
+        FlowVizPanel panel = new FlowVizPanel();
+        panel.setDataSet(pool);
+        panel.setVisibleSeries(List.of(REF));
+        panel.setAggregation(AggregationPeriod.ANNUAL_JAN_DEC, AggregationMethod.SUM);
+        panel.setSeasonalMaskMode(SeasonalMaskMode.of(Set.of(Month.FEBRUARY)));
+
+        TimeSeriesData masked = panel.displayDataSetForTests().getSeries(REF);
+        assertNotNull(masked, "excluding the period's start month must not wipe the series");
+        assertEquals(1, masked.getPointCount());
+        assertEquals(29.0, masked.getValues()[0], 0.0, "February 2020 had 29 days");
     }
 }

@@ -6,6 +6,7 @@ import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
+import com.kalix.ide.components.SeasonalMaskButton;
 import com.kalix.ide.components.WrapLayout;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
@@ -65,6 +66,7 @@ class FlowVizToolbarBuilder {
     private JComboBox<String> aggregationPeriodCombo;
     private JComboBox<String> aggregationMethodCombo;
     private JComboBox<String> maskCombo;
+    private SeasonalMaskButton seasonalMaskButton;
     private JComboBox<PlotType> plotTypeCombo;
     private JComboBox<String> ySpaceCombo;
     private JToggleButton autoYToggle;
@@ -120,6 +122,7 @@ class FlowVizToolbarBuilder {
         toolbar.addSeparator();
         addAggregationControls();
         addMaskControls();
+        addSeasonalMaskButton();
 
         // --- Plot-only cluster (hidden in the stats view) ---
         plotOnly(new JToolBar.Separator());
@@ -138,7 +141,7 @@ class FlowVizToolbarBuilder {
 
         controller = new FlowVizToolbarController(
             aggregationPeriodCombo, aggregationMethodCombo, maskCombo,
-            plotTypeCombo, ySpaceCombo, autoYToggle);
+            plotTypeCombo, ySpaceCombo, autoYToggle, seasonalMaskButton);
         applyViewMode(tabInfo.viewMode);
         return toolbar;
     }
@@ -284,6 +287,22 @@ class FlowVizToolbarBuilder {
             }
         });
         toolbar.add(maskCombo);
+    }
+
+    /**
+     * The seasonal (per-month) mask, issue #235. It sits with the mask combo among the
+     * always-visible controls rather than in the plot-only cluster: the panel owns the
+     * selection, so the plot and stats views of one tab share it by construction.
+     */
+    private void addSeasonalMaskButton() {
+        toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
+        seasonalMaskButton = new SeasonalMaskButton(mode -> {
+            tabInfo.vizPanel.setSeasonalMaskMode(mode);
+            applied();
+        }, ToolbarConstants.BUTTON_ICON_SIZE, tabInfo.vizPanel.getSeasonalMaskMode());
+        // The component leaves sizing to its host so it matches whatever toolbar it joins.
+        ToolbarConstants.applyButtonSizing(seasonalMaskButton);
+        toolbar.add(seasonalMaskButton);
     }
 
     private void applyAggregation() {
