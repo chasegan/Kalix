@@ -9,6 +9,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.DoubleUnaryOperator;
 
 import static com.kalix.ide.flowviz.transform.PlotTypeTransformer.PERCENTILE_SCALE;
 
@@ -28,6 +29,15 @@ public class AxisRenderer {
     private static final int TIME_LABEL_OFFSET = 18;
     private static final int VALUE_LABEL_OFFSET = 8;
     private static final int TIME_TITLE_OFFSET = 40;
+
+    /** Round mantissas to place within each decade of a LOG axis, coarsest set first. */
+    private static final double[][] LOG_DECADE_SUBDIVISIONS = {
+        {1},
+        {1, 2, 5},
+        {1, 2, 3, 4, 5, 6, 7, 8, 9},
+    };
+    /** Slack for a tick sitting on a viewport edge, in decades (log10 rounding). */
+    private static final double LOG_TICK_EPSILON = 1e-9;
 
     private final TemporalAxisCalculator temporalCalculator;
 
@@ -213,38 +223,103 @@ public class AxisRenderer {
     }
 
     /**
-     * Calculates optimal value axis tick positions.
-     * Works in transformed space to ensure even distribution on screen.
+     * Calculates the value axis tick positions for the viewport's scale.
+     *
+     * <p>LINEAR and SQRT space ticks evenly in transformed space, so they land evenly on
+     * screen. LOG places them at values a modeller reads as round (see {@link #logTicks});
+     * even spacing in log space would label 10^0.5 as 31.62 whenever the nice interval
+     * fell below one decade -- correct positions, unreadable numbers.</p>
      *
      * @param viewport The current viewport
      * @return List of value tick positions (in data space)
      */
     public List<Double> calculateValueTicks(ViewPort viewport) {
-        List<Double> ticks = new ArrayList<>();
-
-        // Get transformed bounds (viewport handles invalid bounds gracefully)
+        // Transformed bounds (viewport handles invalid bounds gracefully)
         double transformedMin = viewport.getTransformedMin();
         double transformedMax = viewport.getTransformedMax();
+        if (transformedMax - transformedMin <= 0) return new ArrayList<>();
 
-        double transformedRange = transformedMax - transformedMin;
-        if (transformedRange <= 0) return ticks;
-
-        // Calculate appropriate tick interval in transformed space
         int numTicks = Math.max(MIN_TARGET_TICKS, Math.min(10, viewport.getPlotHeight() / VALUE_AXIS_MIN_SPACING));
-        double tickInterval = transformedRange / (numTicks - 1);
-        tickInterval = roundToNiceValueInterval(tickInterval);
-
-        // Generate ticks in transformed space
-        double currentTransformedValue = Math.floor(transformedMin / tickInterval) * tickInterval;
-
         YAxisScale yAxisScale = viewport.getYAxisScale();
-        while (currentTransformedValue <= transformedMax + tickInterval / 2) {
-            // Inverse transform back to data space for storage and display
-            double dataSpaceValue = yAxisScale.inverseTransform(currentTransformedValue);
-            ticks.add(dataSpaceValue);
-            currentTransformedValue += tickInterval;
+        return switch (yAxisScale) {
+            case LINEAR, SQRT -> evenTicks(transformedMin, transformedMax, numTicks, yAxisScale::inverseTransform);
+            case LOG -> logTicks(transformedMin, transformedMax, numTicks);
+        };
+    }
+
+    /**
+     * Ticks at a nice interval (1, 2, 5 x 10^k) evenly spaced over [min, max], mapped to
+     * data space by {@code toData}. Starts at the nice multiple at or below {@code min},
+     * so the first tick may fall just off-plot; the drawing code clips it.
+     */
+    private List<Double> evenTicks(double min, double max, int numTicks, DoubleUnaryOperator toData) {
+        List<Double> ticks = new ArrayList<>();
+        double tickInterval = roundToNiceValueInterval((max - min) / (numTicks - 1));
+        double current = Math.floor(min / tickInterval) * tickInterval;
+        while (current <= max + tickInterval / 2) {
+            ticks.add(toData.applyAsDouble(current));
+            current += tickInterval;
+        }
+        return ticks;
+    }
+
+    /**
+     * Ticks for a LOG axis, at values a modeller reads as round: whole decades when the
+     * view spans many; 1-2-5 or 1..9 within each decade when it spans few; and plain
+     * data-space steps once it spans less than a factor of about two, where those
+     * mantissas run out and log is near enough linear that even spacing reads fine.
+     *
+     * @param transformedMin viewport minimum, in decades
+     * @param transformedMax viewport maximum, in decades
+     * @param numTicks target tick count for the plot height
+     */
+    private List<Double> logTicks(double transformedMin, double transformedMax, int numTicks) {
+        double decades = transformedMax - transformedMin;
+        double decadeInterval = roundToNiceValueInterval(decades / (numTicks - 1));
+        if (decadeInterval >= 1) {
+            // A whole number of decades per tick: even spacing lands exactly on 10^k
+            return evenTicks(transformedMin, transformedMax, numTicks, t -> Math.pow(10, t));
         }
 
+        // Less than a decade per tick: subdivide each decade with round mantissas, the
+        // densest set that still fits the target count (the same budget the even
+        // algorithm works to, so spacing stays comparable across scales)
+        List<Double> ticks = new ArrayList<>();
+        for (double[] mantissas : LOG_DECADE_SUBDIVISIONS) {
+            List<Double> candidate = decadeTicks(transformedMin, transformedMax, mantissas);
+            if (candidate.size() > numTicks + 1) break;
+            ticks = candidate;
+        }
+        if (ticks.size() >= MIN_TARGET_TICKS) return ticks;
+
+        // Under a factor of ~2 end to end even 1..9 gives too few (9.5..19 holds only
+        // 10): even data-space steps do better there, and log is near enough linear
+        // that their spacing reads fine. Keep the round set when the steps do no better
+        // (a tiny budget over a wide span), so a step never lands on 0 or off-plot.
+        double minValue = Math.pow(10, transformedMin);
+        double maxValue = Math.pow(10, transformedMax);
+        List<Double> evenSteps = new ArrayList<>();
+        for (double step : evenTicks(minValue, maxValue, numTicks, DoubleUnaryOperator.identity())) {
+            if (step >= minValue && step <= maxValue) evenSteps.add(step);
+        }
+        return evenSteps.size() > ticks.size() ? evenSteps : ticks;
+    }
+
+    /** Every {@code mantissa x 10^k} within [transformedMin, transformedMax], ascending. */
+    private List<Double> decadeTicks(double transformedMin, double transformedMax, double[] mantissas) {
+        List<Double> ticks = new ArrayList<>();
+        int firstDecade = (int) Math.floor(transformedMin);
+        int lastDecade = (int) Math.ceil(transformedMax);
+        for (int decade = firstDecade; decade <= lastDecade; decade++) {
+            double base = Math.pow(10, decade);
+            for (double mantissa : mantissas) {
+                double transformed = decade + Math.log10(mantissa);
+                if (transformed >= transformedMin - LOG_TICK_EPSILON
+                        && transformed <= transformedMax + LOG_TICK_EPSILON) {
+                    ticks.add(mantissa * base);
+                }
+            }
+        }
         return ticks;
     }
 

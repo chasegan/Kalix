@@ -191,15 +191,68 @@ public class ViewPort {
         double transformedRange = transformedMax - transformedMin;
 
         double newTransformedRange = transformedRange / factor;
-        double newTransformedMin = transformedCenter - newTransformedRange / 2;
-        double newTransformedMax = transformedCenter + newTransformedRange / 2;
+        double[] valueBounds = valueBoundsFor(transformedCenter - newTransformedRange / 2,
+                                              transformedCenter + newTransformedRange / 2);
 
-        // Inverse transform back to data space
-        double newMinValue = yAxisScale.inverseTransform(newTransformedMin);
-        double newMaxValue = yAxisScale.inverseTransform(newTransformedMax);
-
-        return new ViewPort(newStartTime, newEndTime, newMinValue, newMaxValue,
+        return new ViewPort(newStartTime, newEndTime, valueBounds[0], valueBounds[1],
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
+    }
+
+    /**
+     * Value bounds after zooming the value axis by {@code factor} (above 1 zooms in) about
+     * the value under {@code screenY}, which stays put on screen -- the wheel-zoom
+     * contract. Computed in transformed space so the anchor holds on every scale. Returns
+     * the current bounds unchanged when the zoomed span is not showable
+     * (see {@link #valueBoundsFor}).
+     */
+    public double[] valueBoundsZoomedAbout(double factor, int screenY) {
+        double ratio = plotHeight == 0 ? 0.5 : (double) (plotY + plotHeight - screenY) / plotHeight;
+        double transformedMin = getTransformedMin();
+        double transformedMax = getTransformedMax();
+        double anchor = transformedMin + ratio * (transformedMax - transformedMin);
+        double newTransformedRange = (transformedMax - transformedMin) / factor;
+        double newTransformedMin = anchor - newTransformedRange * ratio;
+        return valueBoundsFor(newTransformedMin, newTransformedMin + newTransformedRange);
+    }
+
+    /**
+     * Value bounds re-centred on {@code value}, keeping the span in transformed space so
+     * the zoom level survives on every scale (a log axis keeps its decade count, not its
+     * data-space width). Returns the current bounds unchanged when {@code value} is not
+     * showable on this scale (non-finite, or non-positive on LOG), or the centred span
+     * would not be (see {@link #valueBoundsFor}).
+     */
+    public double[] valueBoundsCentredOn(double value) {
+        double transformedValue = yAxisScale.transform(value);
+        if (!Double.isFinite(transformedValue)) {
+            return new double[] {minValue, maxValue};
+        }
+        double halfSpan = (getTransformedMax() - getTransformedMin()) / 2;
+        return valueBoundsFor(transformedValue - halfSpan, transformedValue + halfSpan);
+    }
+
+    /**
+     * Data-space value bounds for a span given in transformed space, or the current
+     * bounds when that span no longer maps to values the scale can show. LOG's inverse
+     * is {@code 10^t}, which overflows to infinity past ~308 decades and underflows to
+     * zero (invalid for LOG) past ~-323. Installing either blanks the axis and leaves the
+     * viewport stuck, because every later step is computed from the broken bounds
+     * ({@code Inf / 1.1} is still {@code Inf}) and only zoom-to-fit recovers. Refusing
+     * the step keeps the last readable view instead, so a runaway wheel zoom-out simply
+     * stops. Every zoom, pan and recentre of the value axis goes through here.
+     */
+    private double[] valueBoundsFor(double transformedMin, double transformedMax) {
+        double newMinValue = yAxisScale.inverseTransform(transformedMin);
+        double newMaxValue = yAxisScale.inverseTransform(transformedMax);
+        if (!isShowable(newMinValue) || !isShowable(newMaxValue)) {
+            return new double[] {minValue, maxValue};
+        }
+        return new double[] {newMinValue, newMaxValue};
+    }
+
+    /** Finite, and inside the scale's domain (LOG cannot show zero or negatives). */
+    private boolean isShowable(double value) {
+        return Double.isFinite(value) && !Double.isNaN(yAxisScale.transform(value));
     }
 
     /**
@@ -225,14 +278,10 @@ public class ViewPort {
         // Delta in transformed space (positive deltaPixelsY = pan up = increase values)
         double deltaTransformed = deltaPixelsY * transformedRange / (double) plotHeight;
 
-        double newTransformedMin = transformedMin + deltaTransformed;
-        double newTransformedMax = transformedMax + deltaTransformed;
+        double[] valueBounds = valueBoundsFor(transformedMin + deltaTransformed,
+                                              transformedMax + deltaTransformed);
 
-        // Inverse transform back to data space
-        double newMinValue = yAxisScale.inverseTransform(newTransformedMin);
-        double newMaxValue = yAxisScale.inverseTransform(newTransformedMax);
-
-        return new ViewPort(newStartTime, newEndTime, newMinValue, newMaxValue,
+        return new ViewPort(newStartTime, newEndTime, valueBounds[0], valueBounds[1],
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
