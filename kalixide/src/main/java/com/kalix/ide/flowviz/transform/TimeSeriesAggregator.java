@@ -1,9 +1,12 @@
 package com.kalix.ide.flowviz.transform;
 
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
 
 import java.time.LocalDate;
+import java.time.Month;
 import java.util.Arrays;
+import java.util.Set;
 
 /**
  * Aggregates time series data to coarser temporal resolutions.
@@ -45,7 +48,8 @@ public class TimeSeriesAggregator {
     public static TimeSeriesData aggregate(
         TimeSeriesData original,
         AggregationPeriod period,
-        AggregationMethod method
+        AggregationMethod method,
+        SeasonalMaskMode seasonalMaskMode
     ) {
         if (original == null || period == AggregationPeriod.ORIGINAL
                 || original.getPointCount() == 0) {
@@ -53,11 +57,12 @@ public class TimeSeriesAggregator {
         }
 
         if (period == AggregationPeriod.DAILY) {
-            return aggregateBuckets(original, method, new DailyBuckets(original));
+            return aggregateBuckets(original, method, new DailyBuckets(original), seasonalMaskMode);
         } else if (period == AggregationPeriod.MONTHLY) {
-            return aggregateBuckets(original, method, new MonthlyBuckets(original));
+            return aggregateBuckets(original, method, new MonthlyBuckets(original), seasonalMaskMode);
         } else if (period.isAnnual()) {
-            return aggregateBuckets(original, method, new AnnualBuckets(original, period.getStartMonth()));
+            return aggregateBuckets(original, method,
+                new AnnualBuckets(original, period.getStartMonth()), seasonalMaskMode);
         }
 
         return original;
@@ -95,8 +100,11 @@ public class TimeSeriesAggregator {
     private static TimeSeriesData aggregateBuckets(
         TimeSeriesData original,
         AggregationMethod method,
-        Buckets buckets
+        Buckets buckets,
+        SeasonalMaskMode seasonalMaskMode
     ) {
+        Set<Month> selectedMonths = seasonalMaskMode instanceof SeasonalMaskMode.Enabled(Set<Month> months)
+            ? months : null;
         long[] timestamps = original.getTimestamps();
         double[] values = original.getValues();
         boolean[] validPoints = original.getValidPoints();
@@ -116,11 +124,26 @@ public class TimeSeriesAggregator {
         // (inside startMs) runs once per boundary crossed, never per point.
         int b = 0;
         long bucketEndMs = bucketCount > 1 ? buckets.startMs(1) : Long.MAX_VALUE;
+        // Month runs are walked the same way as buckets: one calendar computation per
+        // month crossed, never per point.
+        long monthEndMs = Long.MIN_VALUE;
+        boolean monthSelected = true;
         for (int i = 0; i < n; i++) {
             long t = timestamps[i];
             while (t >= bucketEndMs) {
                 b++;
                 bucketEndMs = b + 1 < bucketCount ? buckets.startMs(b + 1) : Long.MAX_VALUE;
+            }
+
+            if (selectedMonths != null && t >= monthEndMs) {
+                LocalDate day = LocalDate.ofEpochDay(Math.floorDiv(t, DAY_MS));
+                monthEndMs = day.withDayOfMonth(1).plusMonths(1).toEpochDay() * DAY_MS;
+                monthSelected = selectedMonths.contains(day.getMonth());
+            }
+            // A masked-out month is absent on purpose: it is neither counted nor
+            // treated as missing data (which would NaN the whole period).
+            if (!monthSelected) {
+                continue;
             }
 
             if (!validPoints[i]) {
@@ -164,8 +187,27 @@ public class TimeSeriesAggregator {
 
             // NaN when: no valid data (fully-missing interior period), any invalid point,
             // or the period extends beyond the series' temporal bounds (incomplete).
-            boolean incomplete = periodStartMs < seriesStartMs
-                || buckets.lastExpectedSampleMs(bb) > seriesEndMs;
+            // Under a seasonal mask only the SELECTED months are expected, so the window
+            // narrows to them - a Jan-only selection wants January present, not December.
+            // Genuine truncation still NaNs: a series ending mid-January fails the test.
+            long expectedFirstMs = periodStartMs;
+            long expectedLastMs = buckets.lastExpectedSampleMs(bb);
+            if (selectedMonths != null) {
+                long periodEndMs = buckets.startMs(bb + 1);
+                // Whatever the bucket subtracts for its final sample (a day, or the
+                // sample interval for sub-daily data) applies to the narrowed window too.
+                long tailGapMs = periodEndMs - expectedLastMs;
+                long firstSelectedMs = firstSelectedMonthStartMs(periodStartMs, periodEndMs, selectedMonths);
+                if (firstSelectedMs >= 0) {
+                    long lastSelectedEndMs = lastSelectedMonthEndMs(periodStartMs, periodEndMs, selectedMonths);
+                    // Clamped to the bucket, so daily/monthly periods (never wider than one
+                    // month) reduce to exactly the unmasked test.
+                    expectedFirstMs = Math.max(firstSelectedMs, periodStartMs);
+                    expectedLastMs = Math.min(lastSelectedEndMs, periodEndMs) - tailGapMs;
+                }
+            }
+            boolean incomplete = expectedFirstMs < seriesStartMs
+                || expectedLastMs > seriesEndMs;
             if (count[bb] == 0 || hasMissing[bb] || incomplete) {
                 outValues[k] = Double.NaN;
             } else {
@@ -179,6 +221,37 @@ public class TimeSeriesAggregator {
         }
 
         return new TimeSeriesData(outTimestamps, outValues);
+    }
+
+    /**
+     * Start of the earliest selected month intersecting {@code [fromMs, toExclusiveMs)},
+     * or {@code -1} when the span contains no selected month at all.
+     */
+    private static long firstSelectedMonthStartMs(long fromMs, long toExclusiveMs, Set<Month> months) {
+        LocalDate cursor = LocalDate.ofEpochDay(Math.floorDiv(fromMs, DAY_MS)).withDayOfMonth(1);
+        while (cursor.toEpochDay() * DAY_MS < toExclusiveMs) {
+            if (months.contains(cursor.getMonth())) {
+                return cursor.toEpochDay() * DAY_MS;
+            }
+            cursor = cursor.plusMonths(1);
+        }
+        return -1;
+    }
+
+    /**
+     * Exclusive end of the latest selected month intersecting {@code [fromMs, toExclusiveMs)},
+     * or {@code -1} when the span contains no selected month at all.
+     */
+    private static long lastSelectedMonthEndMs(long fromMs, long toExclusiveMs, Set<Month> months) {
+        LocalDate cursor = LocalDate.ofEpochDay(Math.floorDiv(fromMs, DAY_MS)).withDayOfMonth(1);
+        long endMs = -1;
+        while (cursor.toEpochDay() * DAY_MS < toExclusiveMs) {
+            if (months.contains(cursor.getMonth())) {
+                endMs = cursor.plusMonths(1).toEpochDay() * DAY_MS;
+            }
+            cursor = cursor.plusMonths(1);
+        }
+        return endMs;
     }
 
     /**

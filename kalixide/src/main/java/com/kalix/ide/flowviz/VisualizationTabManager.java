@@ -138,6 +138,7 @@ public class VisualizationTabManager {
          * and stops stats duplication silently resetting the mask.
          */
         public MaskMode maskMode = null;
+        public SeasonalMaskMode seasonalMaskMode = SeasonalMaskMode.DISABLED;
 
         /** Which view the created tab shows; duplication copies it (a duplicate looks identical). */
         FlowVizView activeView = FlowVizView.PLOT;
@@ -153,7 +154,6 @@ public class VisualizationTabManager {
         public PlotType plotType = PlotType.VALUES;
         public YAxisScale yAxisScale = YAxisScale.LINEAR;
         public boolean autoYMode = true;
-        public SeasonalMaskMode seasonalMaskMode = SeasonalMaskMode.DISABLED;
         public boolean showCoordinates = false;
         public boolean legendCollapsed = false;
         public boolean legendEnabled = true;
@@ -499,6 +499,9 @@ public class VisualizationTabManager {
                 vizPanel.setMaskMode(settings.maskMode);
             } else if (viewMode == FlowVizView.STATS) {
                 vizPanel.setMaskMode(MaskMode.ALL);
+            }
+            if (settings.seasonalMaskMode != null) {
+                vizPanel.setSeasonalMaskMode(settings.seasonalMaskMode);
             }
         });
 
@@ -1204,7 +1207,9 @@ public class VisualizationTabManager {
         tab.statsModel.setSeasonalMaskMode(tab.vizPanel.getSeasonalMaskMode());
         tab.statsModel.setSeries(AggregationPipeline.aggregate(
             sharedDataSet, tab.selectedSeries,
-            tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod()));
+            tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod(),
+            tab.vizPanel.getSeasonalMaskMode()
+        ));
     }
 
     /**
@@ -1314,7 +1319,10 @@ public class VisualizationTabManager {
             }
             if (tab.viewMode == FlowVizView.STATS) {
                 TimeSeriesData aggregatedData = TimeSeriesAggregator.aggregate(
-                    data, tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod());
+                    data, tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod(),
+                    tab.vizPanel.getSeasonalMaskMode()
+                );
+
                 if (aggregatedData != null) {
                     tab.statsModel.addOrUpdateSeries(ref, aggregatedData);
                 }

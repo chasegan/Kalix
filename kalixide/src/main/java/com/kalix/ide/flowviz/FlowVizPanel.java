@@ -1344,40 +1344,24 @@ public class FlowVizPanel extends JPanel {
         // Display data is changing - clear LOD rendering cache so renderer doesn't draw stale lines
         renderer.clearCache();
 
-        // Step 1: Seasonal masking
-        DataSet maskedSourceDataSet = originalDataSet;
-        if (seasonalMaskMode instanceof SeasonalMaskMode.Enabled enabled) {
-            maskedSourceDataSet = new DataSet();
-
-            // A seasonal mask is a function of a series' timestamps - build once and reuse
-            long[] cachedGrid = null;
-            TimeSeriesMasker.Mask cachedMask = null;
-
-            for (SeriesRef ref : visibleSeries) {
-                TimeSeriesData series = originalDataSet.getSeries(ref);
-                if (series == null) {
-                    continue;
-                }
-                long[] grid = series.getTimestamps();
-
-                if ((cachedMask == null) || !sameTimestampGrid(cachedGrid, grid)) {
-                    cachedMask = TimeSeriesMasker.createSeasonalMask(series, enabled);
-                    cachedGrid = grid;
-                }
-                maskedSourceDataSet.addSeries(ref, cachedMask.apply(series));
-            }
-        }
-
-        // Step 2: Build aggregated dataset (only for visible series, not the full
+        // Step 1: Build aggregated dataset (only for visible series, not the full
         // pool) through the one shared AggregationPipeline - the same orchestration
         // that feeds the stats table, so the two projections can never disagree.
         // The transient aggregatedDataSet is keyed by SeriesRef directly - the
         // pipeline never touches string identity.
+        //
+        // NOTE: Seasonal masking is done as part of this step, as the summary statistics
+        // need to be made aware if data is valid to distinguish genuinely missing/truncated data.
         DataSet aggregatedDataSet = new DataSet();
-        AggregationPipeline.aggregate(maskedSourceDataSet, visibleSeries,
-            aggregationPeriod, aggregationMethod).forEach(aggregatedDataSet::addSeries);
+        AggregationPipeline.aggregate(
+            originalDataSet,
+            visibleSeries,
+            aggregationPeriod,
+            aggregationMethod,
+            seasonalMaskMode
+        ).forEach(aggregatedDataSet::addSeries);
 
-        // Step 3: Validity/overlapping data masking - deliberately AFTER aggregation,
+        // Step 2: Validity/overlapping data masking - deliberately AFTER aggregation,
         // unlike the seasonal mask. It answers "where do the DISPLAYED points overlap?",
         // and the stats table masks its own aggregates the same way, so keeping it here
         // is what makes one shared mask setting mean the same thing in both views.
@@ -1411,7 +1395,7 @@ public class FlowVizPanel extends JPanel {
             aggregatedDataSet = maskedDataSet;
         }
 
-        // Step 4: Apply plot type transformation
+        // Step 3: Apply plot type transformation
         displayDataSet = PlotTypeTransformer.transform(
             aggregatedDataSet,
             plotType,
@@ -1429,22 +1413,4 @@ public class FlowVizPanel extends JPanel {
         lastTransformKey = transformKey;
     }
 
-    /**
-     * Whether two series share an identical timestamp grid, and so can share a seasonal
-     * mask. Point count and the first/last timestamps are the cheap reject; equality is
-     * then confirmed <em>exactly</em> with {@link java.util.Arrays#equals}, so two series
-     * that merely start and end together can never be given each other's mask.
-     */
-    private static boolean sameTimestampGrid(long[] a, long[] b) {
-        if (a == b) {
-            return true;
-        }
-        if (a == null || b == null || a.length != b.length) {
-            return false;
-        }
-        if (a.length > 0 && (a[0] != b[0] || a[a.length - 1] != b[b.length - 1])) {
-            return false;
-        }
-        return java.util.Arrays.equals(a, b);
-    }
 }
