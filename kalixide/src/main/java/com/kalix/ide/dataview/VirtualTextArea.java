@@ -72,6 +72,10 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
     // plain foreground — only the structure is coloured.
     private CsvLineStylist stylist;
     private boolean headerOnLineZero;
+    // Extended-header lines rendered above the indexed data region (empty for
+    // plain CSV): the ground-truth view must show the whole file, and for
+    // .res.csv the indexes deliberately cover only the region past EOH.
+    private List<String> headerLines = List.of();
     private Color delimiterColor;
     private Color headerColor;
     private Color dateColor;
@@ -146,15 +150,21 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
         CsvDialect dialect = target.dialect();
         stylist = new CsvLineStylist(dialect.delimiter(), dialect.quote());
         headerOnLineZero = target.headerRowInData();
+        headerLines = target.headerTextLines();
     }
 
-    /** Scrolls the given line into view (with a little context) and selects it. EDT only. */
+    /** Header lines + indexed data-region lines: the whole file. */
+    private long totalLines() {
+        return headerLines.size() + session.lineCount();
+    }
+
+    /** Scrolls the given DATA-REGION line into view (offset past any header lines) and selects it. EDT only. */
     public void showLine(long line) {
-        long count = session.lineCount();
+        long count = totalLines();
         if (count == 0) {
             return;
         }
-        long target = Math.max(0, Math.min(line, count - 1));
+        long target = Math.max(0, Math.min(line + headerLines.size(), count - 1));
         selectLines(target, target);
         int lineHeight = lineHeight();
         // Clamped like getPreferredSize: past the int-pixel ceiling (~100M+ lines)
@@ -202,7 +212,7 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
     }
 
     long lineAt(int y) {
-        long count = session.lineCount();
+        long count = totalLines();
         if (count == 0) {
             return -1;
         }
@@ -211,7 +221,7 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
 
     @Override
     public Dimension getPreferredSize() {
-        long height = session.lineCount() * lineHeight();
+        long height = totalLines() * lineHeight();
         return new Dimension(
             Math.max(MIN_WIDTH, maxLineWidthPx + 2 * H_PAD),
             (int) Math.min(height, Integer.MAX_VALUE));
@@ -228,7 +238,7 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
         FontMetrics fm = getFontMetrics(getFont());
         int lineHeight = fm.getHeight();
         long first = Math.max(0, clip.y / lineHeight);
-        long last = Math.min(session.lineCount() - 1, (long) (clip.y + clip.height) / lineHeight + 1);
+        long last = Math.min(totalLines() - 1, (long) (clip.y + clip.height) / lineHeight + 1);
         long selStart = selectionStart();
         long selEnd = selectionEndExclusive();
 
@@ -240,9 +250,11 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
                 g.setColor(selectionBackground);
                 g.fillRect(0, y, getWidth(), lineHeight);
             }
-            String text = session.lineIfLoaded(line);
+            String text = line < headerLines.size()
+                ? headerLines.get((int) line)
+                : session.lineIfLoaded(line - headerLines.size());
             if (text == null) {
-                session.requestLine(line); // blank for a frame; block arrival repaints
+                session.requestLine(line - headerLines.size()); // blank for a frame; repaints on arrival
                 continue;
             }
             if (selected) {
@@ -259,7 +271,7 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
     private void paintStyledLine(Graphics g, FontMetrics fm, String text, long line, int y) {
         int x = H_PAD;
         int baseline = y + fm.getAscent();
-        for (CsvLineStylist.Span span : stylist.style(text, headerOnLineZero && line == 0)) {
+        for (CsvLineStylist.Span span : stylist.style(text, headerOnLineZero && line == headerLines.size())) {
             String part = text.substring(span.start(), span.endExclusive());
             g.setColor(colorFor(span.role()));
             g.drawString(part, x, baseline);
@@ -320,7 +332,16 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
         if (start < 0 || end - start > MAX_COPY_LINES) {
             return null;
         }
-        List<String> lines = session.linesBlocking(start, end);
+        // Stitch header lines (in memory) and data-region lines (fetched) so a
+        // selection spanning the boundary copies seamlessly.
+        int headerCount = headerLines.size();
+        List<String> lines = new java.util.ArrayList<>();
+        for (long i = start; i < Math.min(end, headerCount); i++) {
+            lines.add(headerLines.get((int) i));
+        }
+        if (end > headerCount) {
+            lines.addAll(session.linesBlocking(Math.max(0, start - headerCount), end - headerCount));
+        }
         return String.join("\n", lines);
     }
 

@@ -83,6 +83,31 @@ class VirtualTextAreaTest {
     }
 
     @Test
+    void resCsvHeaderLinesRenderAboveTheDataRegion() throws IOException {
+        String resCsv = "File version,3\nEOM\nProject,P\n"
+            + "Field,Units,RunName,Name,Site,ElementName\nEOC\n1\n"
+            + "1,ML,Run,Flow,A,DS,guid,\nDate,1>A>DS\nEOH\n"
+            + "2020-01-01,1.5\n2020-01-02,2.5\n";
+        Path dir = Files.createTempDirectory("kalix-textarea-res");
+        dir.toFile().deleteOnExit();
+        Path file = dir.resolve("x.res.csv");
+        file.toFile().deleteOnExit();
+        Files.writeString(file, resCsv, StandardCharsets.UTF_8);
+        try (DataViewSession s = DataViewOpener.openFor(file.toFile())) {
+            await("indexing complete", s::isIndexingComplete);
+            VirtualTextArea area = new VirtualTextArea(s);
+            int lineHeight = area.getFontMetrics(area.getFont()).getHeight();
+            assertEquals(11L * lineHeight, area.getPreferredSize().height,
+                "9 header lines + 2 data lines: the WHOLE file is visible");
+            area.selectLines(8, 9); // EOH and the first data row
+            assertEquals("EOH\n2020-01-01,1.5", area.selectedTextBlocking(),
+                "selection stitches header and data seamlessly");
+            area.showLine(1); // data-region line 1 lands past the header
+            assertEquals(10, area.selectionStart());
+        }
+    }
+
+    @Test
     void emptySelectionAndOversizeSelectionCopyNothing() throws IOException {
         try (DataViewSession s = session("a\nb\n")) {
             VirtualTextArea area = new VirtualTextArea(s);
