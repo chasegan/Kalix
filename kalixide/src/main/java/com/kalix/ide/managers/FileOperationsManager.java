@@ -119,6 +119,17 @@ public class FileOperationsManager {
      * @param file The file to load
      */
     public void loadModelFile(File file) {
+        // A .pxb is the binary half of a Pixie pair: open it via its .pxt
+        // manifest when one exists (the engine names datasets by the .pxt; the
+        // Python API's read_pixie accepts either half - same courtesy here).
+        if (file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".pxb")) {
+            File manifest = new File(
+                file.getAbsolutePath().substring(0, file.getAbsolutePath().length() - 4) + ".pxt");
+            if (manifest.exists()) {
+                file = manifest;
+            }
+        }
+
         // If the file is already open, just focus its tab.
         KalixDocument existing = documentManager.findByFile(file);
         if (existing != null) {
@@ -130,7 +141,10 @@ public class FileOperationsManager {
         // A large data file never enters an editor buffer — the tab's virtual views
         // read it directly (docs/data-file-viewer.md). Everything else loads as text.
         KalixDocument document;
-        if (DocumentKind.forFile(file) == DocumentKind.DATA && DataDocument.exceedsEditableGate(file)) {
+        boolean pixieBinary = file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".pxb");
+        if (DocumentKind.forFile(file) == DocumentKind.DATA
+                && (pixieBinary || DataDocument.exceedsEditableGate(file))) {
+            // pixieBinary: a manifest-less .pxb must never enter a text buffer.
             document = documentFactory.apply(file); // the DATA ctor takes the backing file
         } else {
             final String content;
