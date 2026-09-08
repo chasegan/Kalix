@@ -87,4 +87,53 @@ class PixieRoundTripTest {
         assertArrayEquals(data.getTimestamps(), reloaded.getTimestamps());
         assertArrayEquals(data.getValues(), reloaded.getValues());
     }
+
+    /**
+     * Long gauge records start well before 1970, where epoch seconds are negative. The
+     * stream carries signed seconds, so this must be nothing special - but every
+     * ms-to-s conversion in the writer has to floor rather than truncate for it to be.
+     */
+    @Test
+    void pre1970TimestampsRoundTripExactly() throws Exception {
+        LocalDateTime[] times = new LocalDateTime[400];
+        double[] values = new double[400];
+        for (int i = 0; i < times.length; i++) {
+            times[i] = LocalDateTime.of(1889, 1, 1, 0, 0).plusDays(i);
+            values[i] = i;
+        }
+        TimeSeriesData data = new TimeSeriesData(times, values);
+        assertTrue(data.getFirstTimestamp() < 0, "fixture sanity: negative epoch millis");
+
+        String base = tempDir.resolve("old").toString();
+        new PixieWriter().writeToFile(base, List.of(new NamedSeries("gauge.flow", data)), true);
+
+        List<NamedSeries> read = new PixieReader().readAllSeries(base);
+        TimeSeriesData reloaded = read.get(0).data();
+        assertArrayEquals(data.getTimestamps(), reloaded.getTimestamps(), "1889 dates reload exactly");
+        assertArrayEquals(data.getValues(), reloaded.getValues(), 0.0);
+
+        // The .pxt metadata goes through the same conversion.
+        PixieReader.SeriesInfo info = new PixieReader().getSeriesInfo(base).get(0);
+        assertEquals(LocalDateTime.of(1889, 1, 1, 0, 0), info.startTime);
+        assertEquals(LocalDateTime.of(1890, 2, 4, 0, 0), info.endTime);
+    }
+
+    /**
+     * Sub-second instants before 1970 must floor to the earlier second. Truncating toward
+     * zero rounds them towards 1970 instead, and here would land two distinct points on
+     * the same second. (Pixie is second-resolution, so losing the fraction is expected;
+     * losing a point is not.)
+     */
+    @Test
+    void pre1970SubSecondInstantsFloorRatherThanTruncate() throws Exception {
+        long[] millis = {-1_500L, -500L, 500L};
+        TimeSeriesData data = new TimeSeriesData(millis, new double[] {1, 2, 3});
+
+        String base = tempDir.resolve("subsec").toString();
+        new PixieWriter().writeToFile(base, List.of(new NamedSeries("s", data)), true);
+
+        TimeSeriesData reloaded = new PixieReader().readAllSeries(base).get(0).data();
+        assertArrayEquals(new long[] {-2_000L, -1_000L, 0L}, reloaded.getTimestamps(),
+            "each instant floors to its own second; truncation would give -1, 0, 0");
+    }
 }

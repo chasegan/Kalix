@@ -96,8 +96,8 @@ public class PixieWriter {
                 SeriesMetadata metadata = new SeriesMetadata();
                 metadata.index = i + 1; // Base-1 indexing
                 metadata.offset = offset;
-                metadata.startTimeSeconds = series.getFirstTimestamp() / 1000L;
-                metadata.endTimeSeconds = series.getLastTimestamp() / 1000L;
+                metadata.startTimeSeconds = Math.floorDiv(series.getFirstTimestamp(), 1000L);
+                metadata.endTimeSeconds = Math.floorDiv(series.getLastTimestamp(), 1000L);
                 metadata.timestepSeconds = timestepSeconds;
                 metadata.length = series.getPointCount();
                 metadata.seriesName = named.name();
@@ -111,8 +111,11 @@ public class PixieWriter {
 
     // The Pixie/Gorilla convention is epoch SECONDS (established by the Rust engine,
     // pixie_io.rs), while TimeSeriesData holds epoch MILLISECONDS. Everything in this
-    // writer past the conversion methods below is in seconds; the /1000 here is the
-    // single ms->s boundary.
+    // writer past the conversion methods below is in seconds; the floorDiv by 1000 here
+    // is the single ms->s boundary. floorDiv, not /: timestamps are signed (negative
+    // before 1970) and plain division truncates toward zero, which would round a
+    // pre-1970 sub-second instant towards 1970 and could collapse two points onto one
+    // second. Same idiom as the aggregator's epoch-day arithmetic.
 
     private List<GorillaCompressor.TimeValueDouble> convertToGorillaDouble(TimeSeriesData series) {
         List<GorillaCompressor.TimeValueDouble> result = new ArrayList<>();
@@ -120,7 +123,7 @@ public class PixieWriter {
         double[] values = series.getValues();
 
         for (int i = 0; i < series.getPointCount(); i++) {
-            result.add(new GorillaCompressor.TimeValueDouble(timestampsMs[i] / 1000L, values[i]));
+            result.add(new GorillaCompressor.TimeValueDouble(Math.floorDiv(timestampsMs[i], 1000L), values[i]));
         }
 
         return result;
@@ -132,7 +135,7 @@ public class PixieWriter {
         double[] values = series.getValues();
 
         for (int i = 0; i < series.getPointCount(); i++) {
-            result.add(new GorillaCompressor.TimeValueFloat(timestampsMs[i] / 1000L, (float) values[i]));
+            result.add(new GorillaCompressor.TimeValueFloat(Math.floorDiv(timestampsMs[i], 1000L), (float) values[i]));
         }
 
         return result;
