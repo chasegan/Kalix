@@ -29,7 +29,7 @@ final class DataFindNavigator {
      *                   = after everything
      * @return the landing, or {@code null} for an honest miss
      */
-    static Landing choose(DataViewSession.FindScan scan, List<Integer> headerCols,
+    static Landing choose(DataFind.Scan scan, List<Integer> headerCols,
                           long fromRow, int fromColumn, boolean forward, boolean wrap) {
         int total = scan.total() + headerCols.size();
 
@@ -86,7 +86,7 @@ final class DataFindNavigator {
         return new Landing(-1, headerCols.get(index), index + 1, total, wrapped, false);
     }
 
-    private static Landing cell(DataViewSession.CellRef ref, int headerCount, int total, boolean wrapped) {
+    private static Landing cell(DataFind.CellRef ref, int headerCount, int total, boolean wrapped) {
         return new Landing(ref.row(), ref.column(), headerCount + ref.ordinal(), total, wrapped, false);
     }
 }

@@ -105,7 +105,13 @@ public abstract class KalixDocument implements OpenModel {
     public static KalixDocument createFor(File file) {
         return switch (DocumentKind.forFile(file)) {
             case MODEL -> new ModelDocument();
-            case DATA -> new DataDocument(file);
+            case DATA -> {
+                // Format dispatch within the kind, like .res.csv's downstream
+                // header dispatch: the Pixie pair gets its decode-based bundle.
+                String name = file.getName().toLowerCase(java.util.Locale.ROOT);
+                yield name.endsWith(".pxt") || name.endsWith(".pxb")
+                    ? new PixieDocument(file) : new DataDocument(file);
+            }
             case TEXT -> new TextDocument();
         };
     }

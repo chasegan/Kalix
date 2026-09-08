@@ -53,7 +53,7 @@ import java.util.function.Consumer;
  * <p>{@link #open(Path)} does blocking I/O (the head read for sniffing) — call
  * it off the EDT.
  */
-public final class DataViewSession implements AutoCloseable {
+public final class DataViewSession implements AutoCloseable, FindableData {
 
     private static final Logger logger = LoggerFactory.getLogger(DataViewSession.class);
 
@@ -367,30 +367,13 @@ public final class DataViewSession implements AutoCloseable {
         return count;
     }
 
-    /**
-     * What the unified Find is looking for. {@code dateMillis} is non-null when
-     * the query itself parses as a date (via the shared {@link CsvDates}
-     * ladder): date-column cells then also match by <em>parsed</em> date — at
-     * day granularity for a date-only query — so "1/6/2020" finds
-     * "2020-06-01" however the file spells it.
-     */
-    public record FindSpec(String query, boolean matchCase, boolean wholeCell,
-                           boolean inDates, boolean inValues, Long dateMillis, boolean dateOnly) {
-    }
+    // (The find contract — Spec/Scan/CellRef and the Collector — lives in
+    // DataFind, shared with every other tabular format via FindableData.)
 
-    /** One matching cell (file row, model column) and its 1-based ordinal among all matches. */
-    public record CellRef(long row, int column, int ordinal) {
-    }
-
-    /**
-     * Everything one pass can say about a spec's matches: the total, the
-     * boundary matches for navigating from {@code (fromRow, fromColumn)} in
-     * either direction (wrap decisions belong to the caller), and — when the
-     * query is a date — the first row at or after it: the "nearest later
-     * date" fallback landing ({@code -1} when none).
-     */
-    public record FindScan(int total, CellRef firstOverall, CellRef lastOverall,
-                           CellRef firstAfter, CellRef lastBefore, long nearestDateRow) {
+    /** Scan rows and view rows differ by the in-data header row, when present. */
+    @Override
+    public long headerRowOffset() {
+        return dialect.hasHeaderRow() ? 1 : 0;
     }
 
     /**
@@ -401,11 +384,12 @@ public final class DataViewSession implements AutoCloseable {
      * is resolved against {@link #columnNames()} by the caller). Blocking I/O —
      * background threads only; a 1GB file takes a few seconds.
      */
-    public FindScan scanForMatches(FindSpec spec, long fromRow, int fromColumn) throws IOException {
-        ScanState state = new ScanState();
-        long headerRows = dialect.hasHeaderRow() ? 1 : 0;
-        String needle = spec.matchCase()
-            ? spec.query().trim() : spec.query().trim().toLowerCase(Locale.ROOT);
+    @Override
+    public DataFind.Scan scanForMatches(DataFind.Spec spec, long fromRow, int fromColumn) throws IOException {
+        DataFind.Collector collector = new DataFind.Collector(fromRow, fromColumn);
+        DateProbe dateProbe = new DateProbe();
+        long headerRows = headerRowOffset();
+        String needle = DataFind.foldNeedle(spec);
         try (SeekableByteChannel probe = Files.newByteChannel(file, StandardOpenOption.READ)) {
             probe.position(indexStartOffset);
             ByteBuffer buffer = ByteBuffer.allocate(256 * 1024);
@@ -446,14 +430,14 @@ public final class DataViewSession implements AutoCloseable {
                     } else if (b == quote) {
                         inQuotes = true;
                     } else if (b == '\n') {
-                        offerCell(state, spec, needle, row, column,
-                            field.toString(dialect.charset()), headerRows, fromRow, fromColumn);
+                        offerCell(collector, dateProbe, spec, needle, row, column,
+                            field.toString(dialect.charset()), headerRows);
                         field.reset();
                         column = 0;
                         row++;
                     } else if (b == delimiter) {
-                        offerCell(state, spec, needle, row, column,
-                            field.toString(dialect.charset()), headerRows, fromRow, fromColumn);
+                        offerCell(collector, dateProbe, spec, needle, row, column,
+                            field.toString(dialect.charset()), headerRows);
                         field.reset();
                         column++;
                     } else if (b != '\r') {
@@ -463,23 +447,16 @@ public final class DataViewSession implements AutoCloseable {
             }
             if (field.size() > 0 || column > 0) {
                 // Final row without a trailing newline.
-                offerCell(state, spec, needle, row, column,
-                    field.toString(dialect.charset()), headerRows, fromRow, fromColumn);
+                offerCell(collector, dateProbe, spec, needle, row, column,
+                    field.toString(dialect.charset()), headerRows);
             }
         }
-        return new FindScan(state.total, state.firstOverall, state.lastOverall,
-            state.firstAfter, state.lastBefore, state.nearestDateRow);
+        return collector.finish();
     }
 
-    /** Mutable trackers for one {@link #scanForMatches} pass. */
-    private static final class ScanState {
-        int total;
-        CellRef firstOverall;
-        CellRef lastOverall;
-        CellRef firstAfter;
-        CellRef lastBefore;
-        long nearestDateRow = -1;
-        CsvDates.Spec fileDateSpec;
+    /** Tracks the lazily detected file date format across one scan. */
+    private static final class DateProbe {
+        CsvDates.Spec spec;
     }
 
     /**
@@ -496,24 +473,24 @@ public final class DataViewSession implements AutoCloseable {
         }
     }
 
-    /** Evaluates one completed cell against the spec and folds it into the trackers. */
-    private static void offerCell(ScanState state, FindSpec spec, String needle, long row, int column,
-                                  String text, long headerRows, long fromRow, int fromColumn) {
+    /** Evaluates one completed cell against the spec, folding matches into the collector. */
+    private static void offerCell(DataFind.Collector collector, DateProbe dateProbe, DataFind.Spec spec,
+                                  String needle, long row, int column, String text, long headerRows) {
         if (row < headerRows) {
             return;
         }
         String cell = text.trim();
         Long parsedDate = null;
         if (column == 0 && spec.dateMillis() != null && !cell.isEmpty()) {
-            if (state.fileDateSpec == null) {
-                state.fileDateSpec = CsvDates.detect(cell);
+            if (dateProbe.spec == null) {
+                dateProbe.spec = CsvDates.detect(cell);
             }
-            if (state.fileDateSpec != null) {
-                long parsed = CsvDates.parseMillis(cell, state.fileDateSpec);
+            if (dateProbe.spec != null) {
+                long parsed = CsvDates.parseMillis(cell, dateProbe.spec);
                 if (parsed != CsvDates.INVALID_TS) {
                     parsedDate = parsed;
-                    if (state.nearestDateRow < 0 && parsed >= spec.dateMillis()) {
-                        state.nearestDateRow = row;
+                    if (parsed >= spec.dateMillis()) {
+                        collector.offerNearestDate(row);
                     }
                 }
             }
@@ -521,31 +498,12 @@ public final class DataViewSession implements AutoCloseable {
         if (column == 0 ? !spec.inDates() : !spec.inValues()) {
             return;
         }
-        boolean match = false;
-        if (!cell.isEmpty() && !needle.isEmpty()) {
-            String haystack = spec.matchCase() ? cell : cell.toLowerCase(Locale.ROOT);
-            match = spec.wholeCell() ? haystack.equals(needle) : haystack.contains(needle);
-        }
+        boolean match = DataFind.textMatches(cell, needle, spec);
         if (!match && parsedDate != null) {
-            match = spec.dateOnly()
-                ? Math.floorDiv(parsedDate, 86_400_000L) == Math.floorDiv(spec.dateMillis(), 86_400_000L)
-                : parsedDate.longValue() == spec.dateMillis();
+            match = DataFind.dateMatches(parsedDate, spec);
         }
-        if (!match) {
-            return;
-        }
-        state.total++;
-        CellRef ref = new CellRef(row, column, state.total);
-        if (state.firstOverall == null) {
-            state.firstOverall = ref;
-        }
-        state.lastOverall = ref;
-        if (row > fromRow || (row == fromRow && column > fromColumn)) {
-            if (state.firstAfter == null) {
-                state.firstAfter = ref;
-            }
-        } else if (row < fromRow || column < fromColumn) {
-            state.lastBefore = ref;
+        if (match) {
+            collector.offer(row, column);
         }
     }
 

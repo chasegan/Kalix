@@ -1,0 +1,343 @@
+package com.kalix.ide.dataview;
+
+import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.io.NamedSeries;
+import com.kalix.ide.io.PixieReader;
+import com.kalix.ide.preferences.PreferenceKeys;
+
+import javax.swing.SwingUtilities;
+import java.io.File;
+import java.io.IOException;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.LongSupplier;
+
+/**
+ * One open Pixie dataset: the decoded, in-memory model behind the pixie table
+ * and plot. Pixie inverts the CSV physics — there is no row text to index
+ * (values exist only after Gorilla decode of the {@code .pxb}), so this is a
+ * <b>decode-once, serve-both-views-from-arrays</b> session: the metadata
+ * ({@code .pxt}) is read first for an honest pre-decode gate (total values vs
+ * {@link PreferenceKeys#DATAVIEW_PLOT_MAX_ROWS}), then the whole pair decodes
+ * on a worker and both views read the arrays.
+ *
+ * <p>Series in one file may disagree on time base; the table serves a
+ * <b>union time index</b> (every timestamp any series has, sorted, deduped)
+ * with an absent cell rendered blank — distinct from a stored {@code NaN},
+ * which renders as {@code NaN}. The whole file, honestly.
+ *
+ * <p>Reloads coalesce on a single drain-loop worker (the
+ * {@code DataDocument.refreshDataViewFromDisk} pattern). The decoded snapshot
+ * is published <em>on the EDT</em>, in the same runnable that notifies
+ * listeners, so a view can never read a new snapshot through stale structure.
+ *
+ * <p>The gate counts <b>rows</b> — the longest series, which bounds the union
+ * index — against {@code DATAVIEW_PLOT_MAX_ROWS}, matching what the preference
+ * names and what the CSV viewer counts, so the same dataset behaves the same
+ * in either format. Unlike CSV (which materialises only the columns you plot),
+ * a pixie load decodes every series, so a file that is both very long and very
+ * wide is heavy at any row count; the status strip always states the series
+ * count and row count so the scale is visible rather than implied.
+ *
+ * <p>Two honest limits of the pre-decode gate, both bounded by the manifest
+ * being the modeller's own inspectable file: it trusts the {@code .pxt}'s
+ * declared point counts (a manifest that understates them is decoded before
+ * the discrepancy could be known), and the metadata is read once for the gate
+ * and again by the decode, so a rewrite landing between them gates one
+ * manifest and decodes another — self-healing on the next coalesced reload.
+ */
+public final class PixieDataSession implements FindableData {
+
+    /** All methods are delivered on the EDT. */
+    public interface Listener {
+        void onLoaded();
+    }
+
+    private static final DateTimeFormatter DATE_ONLY =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter DATE_TIME =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC);
+
+    /** One immutable load result; the volatile hand-off between worker and views. */
+    private static final class Snapshot {
+        static final Snapshot LOADING = new Snapshot(false, null, List.of(), new long[0]);
+
+        final boolean loaded;
+        final String refusal; // non-null: why there is no data to show
+        final List<NamedSeries> series;
+        final long[] unionTimesMillis;
+
+        Snapshot(boolean loaded, String refusal, List<NamedSeries> series, long[] unionTimesMillis) {
+            this.loaded = loaded;
+            this.refusal = refusal;
+            this.series = series;
+            this.unionTimesMillis = unionTimesMillis;
+        }
+
+        static Snapshot refused(String reason) {
+            return new Snapshot(true, reason, List.of(), new long[0]);
+        }
+    }
+
+    private final File pxtFile;
+    private final String basePath;
+    private final LongSupplier rowLimit;
+    private final List<Listener> listeners = new CopyOnWriteArrayList<>();
+
+    private volatile Snapshot snapshot = Snapshot.LOADING;
+    private volatile boolean disposed = false;
+
+    /** Set by every reload request; drained by the single load worker. */
+    private final AtomicBoolean loadRequested = new AtomicBoolean(false);
+    private final AtomicBoolean loadInFlight = new AtomicBoolean(false);
+
+    public PixieDataSession(File pxtFile) {
+        this(pxtFile, () -> PreferenceKeys.DATAVIEW_PLOT_MAX_ROWS.get());
+    }
+
+    /** Test seam: the value limit is injectable so tests need no preference writes. */
+    PixieDataSession(File pxtFile, LongSupplier rowLimit) {
+        this.pxtFile = pxtFile;
+        String path = pxtFile.getAbsolutePath();
+        String lower = path.toLowerCase(Locale.ROOT);
+        // PixieReader takes the extension-less base path and appends .pxt/.pxb itself.
+        this.basePath = lower.endsWith(".pxt") || lower.endsWith(".pxb")
+            ? path.substring(0, path.length() - 4) : path;
+        this.rowLimit = rowLimit;
+        reloadFromDisk();
+    }
+
+    /** The manifest file this session was opened from (identity for series refs). */
+    public File pxtFile() {
+        return pxtFile;
+    }
+
+    /** Requests a (coalesced) re-decode — the file's bytes changed. Safe from any thread. */
+    public void reloadFromDisk() {
+        loadRequested.set(true);
+        maybeStartWorker();
+    }
+
+    private void maybeStartWorker() {
+        if (!loadInFlight.compareAndSet(false, true)) {
+            return; // the running worker drains loadRequested before exiting
+        }
+        Thread loader = new Thread(() -> {
+            try {
+                while (!disposed && loadRequested.getAndSet(false)) {
+                    loadOnce();
+                }
+            } finally {
+                loadInFlight.set(false);
+                if (loadRequested.get() && !disposed) {
+                    maybeStartWorker();
+                }
+            }
+        }, "kalix-pixie-load");
+        loader.setDaemon(true);
+        loader.start();
+    }
+
+    /** One decode: gate from the metadata alone, then the full pair. Worker thread. */
+    private void loadOnce() {
+        Snapshot fresh;
+        try {
+            PixieReader reader = new PixieReader();
+            long longestSeries = 0;
+            for (PixieReader.SeriesInfo info : reader.getSeriesInfo(basePath)) {
+                longestSeries = Math.max(longestSeries, info.pointCount);
+            }
+            long limit = rowLimit.getAsLong();
+            if (longestSeries > limit) {
+                // Refused BEFORE decoding: the gate must never cost the memory
+                // it exists to protect. The measure is ROWS — the longest
+                // series, which bounds the union index — because that is what
+                // the preference names and what the CSV side counts. Summing
+                // values across series instead refused ordinary result files
+                // (145 daily series over 130 years is 47k rows, not 6.9M).
+                fresh = Snapshot.refused(String.format(
+                    "Table and plot disabled: %,d rows exceeds the %,d-row limit"
+                        + " (Preferences → Editor → Load and Save)",
+                    longestSeries, limit));
+            } else {
+                List<NamedSeries> series = reader.readAllSeries(basePath);
+                fresh = new Snapshot(true, null, List.copyOf(series), unionTimestamps(series));
+            }
+        } catch (IOException | RuntimeException e) {
+            fresh = Snapshot.refused("Pixie read failed: " + e.getMessage());
+        }
+        if (disposed) {
+            return;
+        }
+        // The swap happens ON THE EDT, immediately before the notification that
+        // makes views re-read structure. Assigning it here (worker side) opened a
+        // window where a repaint iterated JTable's still-stale column model
+        // against a shorter new snapshot — an index crash on the EDT whenever a
+        // rewrite dropped series.
+        Snapshot published = fresh;
+        SwingUtilities.invokeLater(() -> {
+            if (disposed) {
+                return;
+            }
+            snapshot = published;
+            for (Listener listener : listeners) {
+                listener.onLoaded();
+            }
+        });
+    }
+
+    /** Every timestamp any series has — sorted, deduped: the table's row index. */
+    private static long[] unionTimestamps(List<NamedSeries> series) {
+        int total = 0;
+        for (NamedSeries s : series) {
+            total += s.data().getPointCount();
+        }
+        long[] all = new long[total];
+        int n = 0;
+        for (NamedSeries s : series) {
+            long[] timestamps = s.data().getTimestamps();
+            System.arraycopy(timestamps, 0, all, n, timestamps.length);
+            n += timestamps.length;
+        }
+        Arrays.sort(all);
+        int unique = 0;
+        for (int i = 0; i < all.length; i++) {
+            if (i == 0 || all[i] != all[i - 1]) {
+                all[unique++] = all[i];
+            }
+        }
+        return Arrays.copyOf(all, unique);
+    }
+
+    // --- EDT-safe reads (one volatile snapshot) ---
+
+    /** False only while the first decode is still running. */
+    public boolean isLoaded() {
+        return snapshot.loaded;
+    }
+
+    /** Why there is no data to show, or {@code null}. */
+    public String refusal() {
+        return snapshot.refusal;
+    }
+
+    public int seriesCount() {
+        return snapshot.series.size();
+    }
+
+    /** The whole dotted series name, exactly as the {@code .pxt} spells it. */
+    public String seriesName(int index) {
+        return snapshot.series.get(index).name();
+    }
+
+    public int rowCount() {
+        return snapshot.unionTimesMillis.length;
+    }
+
+    public long timestampAt(int row) {
+        return snapshot.unionTimesMillis[row];
+    }
+
+    /** The date column's text: date-only at midnight, full timestamp otherwise. */
+    public String dateText(int row) {
+        return dateTextFor(snapshot.unionTimesMillis[row]);
+    }
+
+    private static String dateTextFor(long millis) {
+        Instant instant = Instant.ofEpochMilli(millis);
+        return millis % 86_400_000L == 0 ? DATE_ONLY.format(instant) : DATE_TIME.format(instant);
+    }
+
+    /**
+     * The cell text for a series at a union row: blank when the series has no
+     * value at that timestamp (a time-base gap), {@code NaN} when it stored one.
+     */
+    public String cellText(int row, int seriesIndex) {
+        Snapshot current = snapshot;
+        TimeSeriesData data = current.series.get(seriesIndex).data();
+        int index = Arrays.binarySearch(data.getTimestamps(), current.unionTimesMillis[row]);
+        if (index < 0) {
+            return ""; // absent at this timestamp: not data, not NaN
+        }
+        return formatValue(data.getValues()[index]);
+    }
+
+    /** The decoded series (name + data), for the plot mount. Immutable list. */
+    public List<NamedSeries> decodedSeries() {
+        return snapshot.series;
+    }
+
+    /** Scan rows ARE view rows: pixie has no in-data header row. */
+    @Override
+    public long headerRowOffset() {
+        return 0;
+    }
+
+    /**
+     * The in-memory answer to the contract the CSV session answers by streaming
+     * its file: one pass over the union grid, matching cell text exactly as the
+     * table displays it (blank absent cells can never match), plus parsed-date
+     * matching straight off the stored timestamps — pixie needs no format
+     * ladder, it stores epochs. Milliseconds even at millions of rows.
+     */
+    @Override
+    public DataFind.Scan scanForMatches(DataFind.Spec spec, long fromRow, int fromColumn) {
+        Snapshot current = snapshot; // one consistent grid, even mid-reload
+        DataFind.Collector collector = new DataFind.Collector(fromRow, fromColumn);
+        String needle = DataFind.foldNeedle(spec);
+        int seriesCount = current.series.size();
+        for (int row = 0; row < current.unionTimesMillis.length; row++) {
+            long timestamp = current.unionTimesMillis[row];
+            if (spec.dateMillis() != null && timestamp >= spec.dateMillis()) {
+                collector.offerNearestDate(row);
+            }
+            if (spec.inDates()
+                    && (DataFind.textMatches(dateTextFor(timestamp), needle, spec)
+                        || DataFind.dateMatches(timestamp, spec))) {
+                collector.offer(row, 0);
+            }
+            if (!spec.inValues()) {
+                continue;
+            }
+            for (int s = 0; s < seriesCount; s++) {
+                TimeSeriesData data = current.series.get(s).data();
+                int index = Arrays.binarySearch(data.getTimestamps(), timestamp);
+                if (index >= 0
+                        && DataFind.textMatches(formatValue(data.getValues()[index]), needle, spec)) {
+                    collector.offer(row, s + 1);
+                }
+            }
+        }
+        return collector.finish();
+    }
+
+    /** Shortest honest spelling: integers without ".0", everything else as Java spells it. */
+    static String formatValue(double value) {
+        if (Double.isNaN(value)) {
+            return "NaN";
+        }
+        long whole = (long) value;
+        if (value == whole && Math.abs(value) < 1e15) {
+            return String.valueOf(whole);
+        }
+        return Double.toString(value);
+    }
+
+    public void addListener(Listener listener) {
+        if (listener != null) {
+            listeners.add(listener);
+        }
+    }
+
+    /** Stops future loads and notifications; in-flight decodes abandon their result. */
+    public void dispose() {
+        disposed = true;
+        listeners.clear();
+    }
+}

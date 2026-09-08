@@ -37,8 +37,10 @@ public enum DocumentKind {
         if (name.endsWith(AppConstants.INI_EXTENSION)) {
             return MODEL;
         }
-        if (name.endsWith(".csv")) {
-            return DATA; // covers .res.csv too; its header dispatch happens downstream
+        if (name.endsWith(".csv") || name.endsWith(".pxt") || name.endsWith(".pxb")) {
+            // Covers .res.csv (header dispatch downstream) and the Pixie pair
+            // (.pxb redirects to its .pxt manifest at the open path).
+            return DATA;
         }
         return TEXT;
     }

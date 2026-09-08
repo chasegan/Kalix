@@ -60,17 +60,12 @@ public final class DataViewPanel extends JPanel {
     private JMenuItem showInFileItem;
     private JMenuItem copyItem;
 
-    // Unified Find (dialog lazily created — it needs a display).
-    private DataFindDialog findDialog;
-    /** Column of the last find landing on a header, or null; header positions precede all cells. */
-    private Integer lastHeaderLanding;
-    /** True while find moves the selection itself, so the re-anchor listener ignores it. */
-    private boolean programmaticFindSelection;
+    /** The unified Find, shared by every tabular view via {@link FindableData}. */
+    private final DataFindController findController;
 
     /** Receives the data-region physical line for "Show in file" (wired by the host document). */
     private LongConsumer showInFileHandler;
-    /** One search / one line-mapping at a time: holding F3 must not stack full-file scans. */
-    private final AtomicBoolean searchInFlight = new AtomicBoolean(false);
+    /** One line-mapping at a time ("Show in file" walks byte offsets). */
     private final AtomicBoolean lineMapInFlight = new AtomicBoolean(false);
 
     public DataViewPanel(DataViewSession session) {
@@ -89,6 +84,7 @@ public final class DataViewPanel extends JPanel {
         applyGridColor();
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         table.setCellSelectionEnabled(true);
+        this.findController = new DataFindController(table, this, () -> session);
         installInteractions();
         add(new JScrollPane(table), BorderLayout.CENTER);
 
@@ -167,7 +163,7 @@ public final class DataViewPanel extends JPanel {
         JPopupMenu menu = new JPopupMenu();
         this.tableMenu = menu;
         JMenuItem find = new JMenuItem("Find…"); // one Find: dates, values and columns are dialog scopes
-        find.addActionListener(e -> showFindDialog());
+        find.addActionListener(e -> openFind());
         JMenuItem showInFile = new JMenuItem("Show in file"); // sentence case per context-menu-style §2.1
         this.showInFileItem = showInFile;
         showInFile.addActionListener(e -> showSelectedRowInFile());
@@ -221,182 +217,34 @@ public final class DataViewPanel extends JPanel {
         table.getActionMap().put("data-find", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                showFindDialog();
+                openFind();
             }
         });
         table.getActionMap().put("data-find-next", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                findAgain(true);
+                repeatFind(true);
             }
         });
         table.getActionMap().put("data-find-previous", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                findAgain(false);
+                repeatFind(false);
             }
         });
-
-        // A manual selection change repositions the find origin (mirroring the
-        // editor's caret re-anchor) and retires any header landing.
-        javax.swing.event.ListSelectionListener reanchorFind = e -> {
-            if (!programmaticFindSelection) {
-                lastHeaderLanding = null;
-            }
-        };
-        table.getSelectionModel().addListSelectionListener(reanchorFind);
-        table.getColumnModel().getSelectionModel().addListSelectionListener(reanchorFind);
-    }
-
-    /** Shows the unified Find dialog, pre-filled from the selected cell. */
-    private void showFindDialog() {
-        if (findDialog == null) {
-            findDialog = new DataFindDialog(this);
-        }
-        String prefill = null;
-        int viewRow = table.getSelectedRow();
-        int viewColumn = table.getSelectedColumn();
-        if (viewRow >= 0 && viewColumn >= 0) {
-            Object value = table.getValueAt(viewRow, viewColumn);
-            prefill = value != null ? value.toString() : null;
-        }
-        findDialog.showOver(prefill);
     }
 
     /** Opens the unified Find — public: the above-gate text side and menu routing share it. */
     public void openFind() {
-        showFindDialog();
+        findController.openFind();
     }
 
     /** Repeats the last find (F3 semantics), opening the dialog when there is none. */
     public void repeatFind(boolean forward) {
-        findAgain(forward);
+        findController.repeatFind(forward);
     }
 
-    /** F3 / Shift-F3: repeat the last search, or open the dialog when there is none. */
-    private void findAgain(boolean forward) {
-        if (findDialog == null || findDialog.queryText().isBlank()) {
-            showFindDialog();
-        } else {
-            runFind(forward);
-        }
-    }
 
-    /**
-     * One find step: snapshot the spec and origin on the EDT, stream the scan
-     * on a worker, choose the landing (header columns first, then cells — see
-     * {@link DataFindNavigator}) and land it back on the EDT with inline
-     * status, editor-style.
-     */
-    void runFind(boolean forward) {
-        DataViewSession.FindSpec spec = findDialog.spec();
-        if (spec.query().isEmpty()) {
-            findDialog.setStatus(" ", false);
-            return;
-        }
-        if (!searchInFlight.compareAndSet(false, true)) {
-            return; // a scan is already running ("a 1GB file takes a few seconds")
-        }
-        List<Integer> headerCols = findDialog.columnsScope() ? matchingColumns(spec) : List.of();
-        boolean wrap = findDialog.wrapEnabled();
-        long headerOffset = session.headerRowInData() ? 1 : 0;
-        long fromRow;
-        int fromColumn;
-        if (lastHeaderLanding != null) {
-            fromRow = -1;
-            fromColumn = lastHeaderLanding;
-        } else if (table.getSelectedRow() >= 0) {
-            fromRow = table.getSelectedRow() + headerOffset;
-            fromColumn = Math.max(0, selectedModelColumn());
-        } else {
-            fromRow = forward ? -2 : Long.MAX_VALUE;
-            fromColumn = 0;
-        }
-        DataViewSession target = session;
-        long fromRowFinal = fromRow;
-        int fromColumnFinal = fromColumn;
-        Thread searcher = new Thread(() -> {
-            try {
-                DataViewSession.FindScan scan = target.scanForMatches(spec, fromRowFinal, fromColumnFinal);
-                // The in-flight flag is released only after the landing applies:
-                // released earlier, an F3 already queued behind the landing could
-                // snapshot its origin from the pre-landing selection and land the
-                // same match twice.
-                SwingUtilities.invokeLater(() -> {
-                    try {
-                        if (target == session) {
-                            applyLanding(
-                                DataFindNavigator.choose(
-                                    scan, headerCols, fromRowFinal, fromColumnFinal, forward, wrap),
-                                scan.total() + headerCols.size());
-                        }
-                    } finally {
-                        searchInFlight.set(false);
-                    }
-                });
-            } catch (IOException e) {
-                logger.warn("Data find failed: {}", e.getMessage());
-                searchInFlight.set(false);
-            }
-        }, "kalix-dataview-find");
-        searcher.setDaemon(true);
-        searcher.start();
-    }
-
-    /** Header model columns whose name matches the spec, ascending. */
-    private List<Integer> matchingColumns(DataViewSession.FindSpec spec) {
-        List<Integer> matches = new ArrayList<>();
-        String needle = spec.matchCase() ? spec.query() : spec.query().toLowerCase(Locale.ROOT);
-        for (int column = 0; column < table.getModel().getColumnCount(); column++) {
-            String name = table.getModel().getColumnName(column);
-            String haystack = spec.matchCase() ? name : name.toLowerCase(Locale.ROOT);
-            if (spec.wholeCell() ? haystack.equals(needle) : haystack.contains(needle)) {
-                matches.add(column);
-            }
-        }
-        return matches;
-    }
-
-    /** Lands one find step: selection, scroll, header bookkeeping, inline status. EDT only. */
-    private void applyLanding(DataFindNavigator.Landing landing, int totalMatches) {
-        if (landing == null) {
-            // Editor parity: zero matches anywhere is "No results"; a directional
-            // dead end with Wrap off is "No more results".
-            findDialog.setStatus(totalMatches == 0 ? "No results" : "No more results", true);
-            if (!findDialog.isShowing()) {
-                Toolkit.getDefaultToolkit().beep(); // F3 with the dialog closed still gets feedback
-            }
-            return;
-        }
-        programmaticFindSelection = true;
-        try {
-            if (landing.row() == -1) {
-                lastHeaderLanding = landing.column();
-                int viewColumn = table.convertColumnIndexToView(landing.column());
-                if (table.getRowCount() > 0 && viewColumn >= 0) {
-                    table.changeSelection(0, viewColumn, false, false);
-                    table.scrollRectToVisible(table.getCellRect(0, viewColumn, true));
-                }
-            } else {
-                lastHeaderLanding = null;
-                long headerOffset = session.headerRowInData() ? 1 : 0;
-                int viewRow = (int) Math.min(Integer.MAX_VALUE, landing.row() - headerOffset);
-                int viewColumn = table.convertColumnIndexToView(Math.max(0, landing.column()));
-                if (viewRow >= 0 && viewRow < table.getRowCount() && viewColumn >= 0) {
-                    table.changeSelection(viewRow, viewColumn, false, false);
-                    table.scrollRectToVisible(table.getCellRect(viewRow, viewColumn, true));
-                }
-            }
-        } finally {
-            programmaticFindSelection = false;
-        }
-        if (landing.nearestDate()) {
-            findDialog.setStatus("No exact match — nearest later date", false);
-        } else {
-            findDialog.setStatus(landing.ordinal() + " of " + landing.total()
-                + (landing.wrapped() ? " (wrapped)" : ""), false);
-        }
-    }
 
     /** Maps the selected row to its physical line on a worker, then hands it to the host. */
     private void showSelectedRowInFile() {

@@ -1,7 +1,7 @@
 package com.kalix.ide.dataview;
 
-import com.kalix.ide.dataview.DataViewSession.FindScan;
-import com.kalix.ide.dataview.DataViewSession.FindSpec;
+import com.kalix.ide.dataview.DataFind.Scan;
+import com.kalix.ide.dataview.DataFind.Spec;
 
 import org.junit.jupiter.api.Test;
 
@@ -50,8 +50,8 @@ class DataViewSessionFindTest {
         return session;
     }
 
-    private static FindSpec text(String query) {
-        return new FindSpec(query, false, false, true, true, null, false);
+    private static Spec text(String query) {
+        return new Spec(query, false, false, true, true, null, false);
     }
 
     private static long day(int year, int month, int dayOfMonth) {
@@ -62,7 +62,7 @@ class DataViewSessionFindTest {
     void boundariesAndOrdinalsFromOnePass() throws IOException {
         try (DataViewSession session = openComplete(
                 "date,v\n2020-01-01,aaa\n2020-01-02,bAAAb\n2020-01-03,x\n")) {
-            FindScan scan = session.scanForMatches(text("aaa"), 1, Integer.MAX_VALUE);
+            Scan scan = session.scanForMatches(text("aaa"), 1, Integer.MAX_VALUE);
             assertEquals(2, scan.total(), "case-insensitive by default");
             assertEquals(1, scan.firstOverall().row());
             assertEquals(1, scan.firstOverall().ordinal());
@@ -77,10 +77,10 @@ class DataViewSessionFindTest {
     void matchCaseAndWholeCellNarrow() throws IOException {
         try (DataViewSession session = openComplete(
                 "date,v\n2020-01-01,aaa\n2020-01-02,bAAAb\n")) {
-            FindSpec cased = new FindSpec("AAA", true, false, true, true, null, false);
+            Spec cased = new Spec("AAA", true, false, true, true, null, false);
             assertEquals(1, session.scanForMatches(cased, -2, 0).total());
-            FindSpec whole = new FindSpec("aaa", false, true, true, true, null, false);
-            FindScan scan = session.scanForMatches(whole, -2, 0);
+            Spec whole = new Spec("aaa", false, true, true, true, null, false);
+            Scan scan = session.scanForMatches(whole, -2, 0);
             assertEquals(1, scan.total(), "whole cell: bAAAb is not aaa");
             assertEquals(1, scan.firstOverall().row());
         }
@@ -89,9 +89,9 @@ class DataViewSessionFindTest {
     @Test
     void scopesExcludeColumns() throws IOException {
         try (DataViewSession session = openComplete("date,v\n2020-01-01,aaa\n")) {
-            FindSpec noValues = new FindSpec("aaa", false, false, true, false, null, false);
+            Spec noValues = new Spec("aaa", false, false, true, false, null, false);
             assertEquals(0, session.scanForMatches(noValues, -2, 0).total());
-            FindSpec noDates = new FindSpec("2020-01-01", false, false, false, true, null, false);
+            Spec noDates = new Spec("2020-01-01", false, false, false, true, null, false);
             assertEquals(0, session.scanForMatches(noDates, -2, 0).total());
         }
     }
@@ -109,8 +109,8 @@ class DataViewSessionFindTest {
         try (DataViewSession session = openComplete("Date,v\n1/01/2020,1\n5/01/2020,2\n")) {
             // The file spells dates d/M/yyyy; the query is ISO. Text match fails,
             // parsed-date match at day granularity succeeds.
-            FindSpec spec = new FindSpec("2020-01-05", false, false, true, true, day(2020, 1, 5), true);
-            FindScan scan = session.scanForMatches(spec, -2, 0);
+            Spec spec = new Spec("2020-01-05", false, false, true, true, day(2020, 1, 5), true);
+            Scan scan = session.scanForMatches(spec, -2, 0);
             assertEquals(1, scan.total());
             assertEquals(2, scan.firstOverall().row());
             assertEquals(0, scan.firstOverall().column());
@@ -121,8 +121,8 @@ class DataViewSessionFindTest {
     @Test
     void nearestLaterDateSurvivesAsFallback() throws IOException {
         try (DataViewSession session = openComplete("date,v\n2020-01-01,1\n2020-01-05,2\n")) {
-            FindSpec spec = new FindSpec("2020-01-03", false, false, true, true, day(2020, 1, 3), true);
-            FindScan scan = session.scanForMatches(spec, -2, 0);
+            Spec spec = new Spec("2020-01-03", false, false, true, true, day(2020, 1, 3), true);
+            Scan scan = session.scanForMatches(spec, -2, 0);
             assertEquals(0, scan.total(), "no exact match for Jan 3");
             assertEquals(2, scan.nearestDateRow(), "the first row at or after it");
         }
@@ -131,8 +131,8 @@ class DataViewSessionFindTest {
     @Test
     void pastTheEndHasNoNearestDate() throws IOException {
         try (DataViewSession session = openComplete("date,v\n2020-01-01,1\n")) {
-            FindSpec spec = new FindSpec("2021-01-01", false, false, true, true, day(2021, 1, 1), true);
-            FindScan scan = session.scanForMatches(spec, -2, 0);
+            Spec spec = new Spec("2021-01-01", false, false, true, true, day(2021, 1, 1), true);
+            Scan scan = session.scanForMatches(spec, -2, 0);
             assertEquals(0, scan.total());
             assertEquals(-1, scan.nearestDateRow());
             assertNull(scan.firstOverall());
@@ -142,7 +142,7 @@ class DataViewSessionFindTest {
     @Test
     void quotedDelimitersStayInsideTheirCell() throws IOException {
         try (DataViewSession session = openComplete("date,name\n2020-01-01,\"a,b\"\n")) {
-            FindScan scan = session.scanForMatches(text("a,b"), -2, 0);
+            Scan scan = session.scanForMatches(text("a,b"), -2, 0);
             assertEquals(1, scan.total());
             assertEquals(1, scan.firstOverall().column());
         }
@@ -153,7 +153,7 @@ class DataViewSessionFindTest {
         try (DataViewSession session = openComplete(
                 "date,msg\n2020-01-01,\"He said \"\"hi\"\"\"\n")) {
             // The table displays: He said "hi" — the scan must match that text.
-            FindScan scan = session.scanForMatches(text("said \"hi\""), -2, 0);
+            Scan scan = session.scanForMatches(text("said \"hi\""), -2, 0);
             assertEquals(1, scan.total(), "the scanned text must be the displayed text");
         }
     }
@@ -161,7 +161,7 @@ class DataViewSessionFindTest {
     @Test
     void finalRowWithoutNewlineIsSearched() throws IOException {
         try (DataViewSession session = openComplete("date,v\n2020-01-01,1\n2020-01-02,zz")) {
-            FindScan scan = session.scanForMatches(text("zz"), -2, 0);
+            Scan scan = session.scanForMatches(text("zz"), -2, 0);
             assertEquals(1, scan.total());
             assertEquals(2, scan.firstOverall().row());
         }
