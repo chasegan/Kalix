@@ -909,9 +909,10 @@ public class FlowVizPanel extends JPanel {
      * Centres the viewport on a datapoint — the plot-side "Show in plot",
      * mirroring how "Show in file" reveals a row. The time axis re-centres on
      * {@code timeMs} keeping its span; the value axis re-centres on
-     * {@code value} only when it is finite, currently off-screen, and the
-     * scale is linear (log/sqrt spans don't translate symmetrically). Counts
-     * as a user pan: touched flag set, coalesced into undo like a drag.
+     * {@code value} only when it is currently off-screen and showable on the
+     * current scale (finite; positive on log), keeping its span in transformed
+     * space so the zoom level survives whatever the scale. Counts as a user
+     * pan: touched flag set, coalesced into undo like a drag.
      */
     public void centerViewportOn(long timeMs, double value) {
         if (currentViewport == null) {
@@ -926,16 +927,11 @@ public class FlowVizPanel extends JPanel {
         }
         long span = currentViewport.getTimeRangeMs();
         long newStart = timeMs - span / 2;
-        double minValue = currentViewport.getMinValue();
-        double maxValue = currentViewport.getMaxValue();
-        if (!Double.isNaN(value) && !Double.isInfinite(value)
-                && yAxisScale == YAxisScale.LINEAR
-                && (value < minValue || value > maxValue)) {
-            double valueSpan = maxValue - minValue;
-            minValue = value - valueSpan / 2;
-            maxValue = value + valueSpan / 2;
+        double[] valueBounds = {currentViewport.getMinValue(), currentViewport.getMaxValue()};
+        if (value < valueBounds[0] || value > valueBounds[1]) { // NaN compares false: left alone
+            valueBounds = currentViewport.valueBoundsCentredOn(value);
         }
-        currentViewport = new ViewPort(newStart, newStart + span, minValue, maxValue,
+        currentViewport = new ViewPort(newStart, newStart + span, valueBounds[0], valueBounds[1],
             currentViewport.getPlotX(), currentViewport.getPlotY(),
             currentViewport.getPlotWidth(), currentViewport.getPlotHeight(),
             yAxisScale, determineXAxisType());

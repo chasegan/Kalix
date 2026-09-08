@@ -429,40 +429,19 @@ public class PlotInteractionManager {
 
             updateViewportWithFittedY(startTime, endTime);
         } else if (isYAxisOnlyZoom) {
-            // Ctrl/Cmd+Scroll: Y-axis only zoom centered on mouse Y position
-            double mouseValue = currentViewport.screenYToValue(e.getY());
-
-            // Keep time range unchanged
+            // Ctrl/Cmd+Scroll: Y-axis only, the value under the mouse stays put
             long startTime = currentViewport.getStartTimeMs();
             long endTime = currentViewport.getEndTimeMs();
-
-            // Zoom Y-axis in transformed space to keep mouse point stationary
-            double transformedMouseValue = currentViewport.getYAxisScale().transform(mouseValue);
-            double transformedMin = currentViewport.getTransformedMin();
-            double transformedMax = currentViewport.getTransformedMax();
-            double transformedRange = transformedMax - transformedMin;
-
-            // Calculate new transformed range
-            double newTransformedRange = transformedRange / wheelZoomFactor;
-
-            // Center transformed range on mouse position in transformed space
-            double mouseTransformedRatio = (transformedMouseValue - transformedMin) / transformedRange;
-            double newTransformedMin = transformedMouseValue - (newTransformedRange * mouseTransformedRatio);
-            double newTransformedMax = newTransformedMin + newTransformedRange;
-
-            // Inverse transform back to data space
-            double minValue = currentViewport.getYAxisScale().inverseTransform(newTransformedMin);
-            double maxValue = currentViewport.getYAxisScale().inverseTransform(newTransformedMax);
+            double[] valueBounds = currentViewport.valueBoundsZoomedAbout(wheelZoomFactor, e.getY());
 
             Rectangle plotArea = plotAreaSupplier.get();
-            ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
+            ViewPort newViewport = new ViewPort(startTime, endTime, valueBounds[0], valueBounds[1],
                                               plotArea.x, plotArea.y, plotArea.width, plotArea.height,
                                               currentViewport.getYAxisScale(), currentViewport.getXAxisType());
             viewportUpdater.accept(newViewport);
         } else {
-            // Standard zoom: zoom both axes centered on mouse position
+            // Standard zoom: both axes, the point under the mouse stays put
             long mouseTime = currentViewport.screenXToTime(e.getX());
-            double mouseValue = currentViewport.screenYToValue(e.getY());
 
             // Get current ranges (time in data space, as it's always linear)
             long currentStartTime = currentViewport.getStartTimeMs();
@@ -477,26 +456,10 @@ public class PlotInteractionManager {
             long startTime = mouseTime - (long) (newTimeRange * mouseTimeRatio);
             long endTime = startTime + newTimeRange;
 
-            // For Y-axis: work in TRANSFORMED space to keep mouse point stationary
-            double transformedMouseValue = currentViewport.getYAxisScale().transform(mouseValue);
-            double transformedMin = currentViewport.getTransformedMin();
-            double transformedMax = currentViewport.getTransformedMax();
-            double transformedRange = transformedMax - transformedMin;
-
-            // Calculate new transformed range
-            double newTransformedRange = transformedRange / wheelZoomFactor;
-
-            // Center transformed range on mouse position in transformed space
-            double mouseTransformedRatio = (transformedMouseValue - transformedMin) / transformedRange;
-            double newTransformedMin = transformedMouseValue - (newTransformedRange * mouseTransformedRatio);
-            double newTransformedMax = newTransformedMin + newTransformedRange;
-
-            // Inverse transform back to data space
-            double minValue = currentViewport.getYAxisScale().inverseTransform(newTransformedMin);
-            double maxValue = currentViewport.getYAxisScale().inverseTransform(newTransformedMax);
+            double[] valueBounds = currentViewport.valueBoundsZoomedAbout(wheelZoomFactor, e.getY());
 
             Rectangle plotArea = plotAreaSupplier.get();
-            ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
+            ViewPort newViewport = new ViewPort(startTime, endTime, valueBounds[0], valueBounds[1],
                                               plotArea.x, plotArea.y, plotArea.width, plotArea.height,
                                               currentViewport.getYAxisScale(), currentViewport.getXAxisType());
             viewportUpdater.accept(newViewport);
