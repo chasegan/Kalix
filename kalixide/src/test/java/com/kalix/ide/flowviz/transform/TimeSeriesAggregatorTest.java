@@ -447,6 +447,74 @@ class TimeSeriesAggregatorTest {
     }
 
     @Test
+    void monthlyAggregationEmitsGapsForWhollyExcludedMonths() {
+        // Two full years; only January and February selected.
+        TimeSeriesData monthly = TimeSeriesAggregator.aggregate(
+            daily(LocalDate.of(2020, 1, 1), LocalDate.of(2022, 1, 1)), AggregationPeriod.MONTHLY,
+            AggregationMethod.SUM, SeasonalMaskMode.of(Set.of(Month.JANUARY, Month.FEBRUARY)));
+
+        // Leading and trailing excluded months are trimmed (so the output runs Jan 2020 to
+        // Feb 2021); interior ones survive as NaN so the calendar grid stays whole.
+        assertEquals(14, monthly.getPointCount());
+        assertEquals(31.0, monthly.getValues()[0], 0.0);
+        assertEquals(29.0, monthly.getValues()[1], 0.0);
+        for (int i = 2; i < 12; i++) {
+            assertTrue(Double.isNaN(monthly.getValues()[i]),
+                "March-December are excluded outright, so the month has nothing to report");
+        }
+        assertEquals(31.0, monthly.getValues()[12], 0.0);
+        assertEquals(28.0, monthly.getValues()[13], 0.0);
+    }
+
+    @Test
+    void monthlyGapsKeepTheCalendarGridUnbroken() {
+        // The NaN placeholders are load-bearing, not padding: calendar periods carry no
+        // nominal interval, so the renderer's gap heuristic never fires on them and only a
+        // missing point breaks the line. Every month between the first and last output must
+        // be present, or an excluded season would render as a straight bridge instead.
+        TimeSeriesData monthly = TimeSeriesAggregator.aggregate(
+            daily(LocalDate.of(2020, 1, 1), LocalDate.of(2022, 1, 1)), AggregationPeriod.MONTHLY,
+            AggregationMethod.SUM, SeasonalMaskMode.of(Set.of(Month.JUNE, Month.JULY)));
+
+        long[] timestamps = monthly.getTimestamps();
+        LocalDate expected = LocalDate.of(2020, 6, 1);
+        for (long timestamp : timestamps) {
+            assertEquals(expected, LocalDate.ofEpochDay(Math.floorDiv(timestamp, 86_400_000L)),
+                "consecutive calendar months, with no month skipped");
+            expected = expected.plusMonths(1);
+        }
+        assertEquals(LocalDate.of(2021, 8, 1), expected, "trailing excluded months are trimmed");
+    }
+
+    @Test
+    void dailyAggregationTreatsExcludedMonthsTheSameWayAsMonthly() {
+        // A daily bucket cannot straddle a month boundary either, so the same rule applies:
+        // days in an unselected month have nothing to report and come back as NaN.
+        TimeSeriesData daily = TimeSeriesAggregator.aggregate(
+            daily(LocalDate.of(2020, 1, 1), LocalDate.of(2020, 4, 1)), AggregationPeriod.DAILY,
+            AggregationMethod.SUM, SeasonalMaskMode.of(Set.of(Month.JANUARY, Month.MARCH)));
+
+        assertEquals(91, daily.getPointCount(), "1 Jan through 31 Mar, grid intact");
+        assertEquals(1.0, daily.getValues()[0], 0.0);
+        for (int i = 31; i < 60; i++) {
+            assertTrue(Double.isNaN(daily.getValues()[i]), "February is excluded outright");
+        }
+        assertEquals(1.0, daily.getValues()[60], 0.0);
+    }
+
+    /** Daily points valued 1, from {@code start} up to (not including) {@code endExclusive}. */
+    private static TimeSeriesData daily(LocalDate start, LocalDate endExclusive) {
+        int days = (int) (endExclusive.toEpochDay() - start.toEpochDay());
+        long[] timestamps = new long[days];
+        double[] values = new double[days];
+        for (int i = 0; i < days; i++) {
+            timestamps[i] = start.plusDays(i).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
+            values[i] = 1;
+        }
+        return new TimeSeriesData(timestamps, values);
+    }
+
+    @Test
     void truncationIsStillIncompleteUnderASeasonalMask() {
         // Data stops 15 January, so the selected month is only half present.
         TimeSeriesData annual = TimeSeriesAggregator.aggregate(
