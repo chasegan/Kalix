@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz.rendering;
 
+import com.kalix.ide.flowviz.style.DashStyle;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.utils.TimeFormatUtil;
 
@@ -9,6 +10,7 @@ import java.awt.FontMetrics;
 import java.awt.Graphics2D;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.OptionalDouble;
 import java.util.function.DoubleUnaryOperator;
 
 import static com.kalix.ide.flowviz.transform.PlotTypeTransformer.PERCENTILE_SCALE;
@@ -38,6 +40,8 @@ public class AxisRenderer {
     };
     /** Slack for a tick sitting on a viewport edge, in decades (log10 rounding). */
     private static final double LOG_TICK_EPSILON = 1e-9;
+    /** How far the threshold marker is shifted from the grid colour, towards the foreground. */
+    private static final int THRESHOLD_CONTRAST_SHIFT = 80;
 
     private final TemporalAxisCalculator temporalCalculator;
 
@@ -354,6 +358,43 @@ public class AxisRenderer {
         // Draw horizontal grid lines aligned with value axis ticks
         for (Double tickValue : axisInfo.valueTicks) {
             int screenY = viewport.valueToScreenY(tickValue);
+            if (screenY >= plotY && screenY <= plotY + plotHeight) {
+                g2d.drawLine(plotX, screenY, plotX + plotWidth, screenY);
+            }
+        }
+    }
+
+    /**
+     * Marks the linear-region boundaries of a scale that has one (currently only
+     * {@link YAxisScale#SYMLOG}) with a dashed horizontal line at +/-L.
+     *
+     * <p>Without this the change in axis behaviour at the threshold is invisible: the same
+     * vertical distance means a fixed increment below it and a decade above it. Draws nothing
+     * for scales with no linear region, and each line is clipped away individually once the
+     * viewport is panned past it.</p>
+     *
+     * @param g2d Graphics context
+     * @param viewport Current viewport
+     * @param colors The current theme's plot colours (resolved once per paint)
+     */
+    public void drawScaleThresholds(Graphics2D g2d, ViewPort viewport, PlotColors colors) {
+        OptionalDouble threshold = viewport.getYAxisScale().linearThreshold();
+        if (threshold.isEmpty()) return;
+
+        // Derived from the grid role rather than a theme key of its own, so the marker keeps
+        // the grid's relationship to the background in every theme while reading as deliberate.
+        g2d.setColor(PlotColors.shiftForContrast(colors.grid, colors.background, THRESHOLD_CONTRAST_SHIFT));
+        g2d.setStroke(new BasicStroke(GRID_STROKE_WIDTH, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
+            10.0f, DashStyle.DASHED.dashArray(), 0.0f));
+
+        int plotX = viewport.getPlotX();
+        int plotY = viewport.getPlotY();
+        int plotWidth = viewport.getPlotWidth();
+        int plotHeight = viewport.getPlotHeight();
+
+        double linearThreshold = threshold.getAsDouble();
+        for (double value : new double[]{linearThreshold, -linearThreshold}) {
+            int screenY = viewport.valueToScreenY(value);
             if (screenY >= plotY && screenY <= plotY + plotHeight) {
                 g2d.drawLine(plotX, screenY, plotX + plotWidth, screenY);
             }
