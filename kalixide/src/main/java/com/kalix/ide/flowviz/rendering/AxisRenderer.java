@@ -40,6 +40,10 @@ public class AxisRenderer {
     };
     /** Slack for a tick sitting on a viewport edge, in decades (log10 rounding). */
     private static final double LOG_TICK_EPSILON = 1e-9;
+    /** Widest LOG view (in decades, a factor of ~3) on which even data-space steps still read evenly. */
+    private static final double LOG_EVEN_STEPS_MAX_DECADES = 0.5;
+    /** Coarse decade steps, 1-2-5 per decade: 2, 5, 10, 20, 50... so no rung is more than 2.5x the last. */
+    private static final double[] COARSE_DECADE_STEPS = {2, 5, 10};
     /** How far the threshold marker is shifted from the grid colour, towards the foreground. */
     private static final int THRESHOLD_CONTRAST_SHIFT = 80;
     private static final BasicStroke THRESHOLD_STROKE = new BasicStroke(GRID_STROKE_WIDTH,
@@ -301,12 +305,14 @@ public class AxisRenderer {
             }
             denser = candidate;
         }
-        if (ticks.size() >= MIN_TARGET_TICKS) return ticks;
+        double decades = transformedMax - transformedMin;
+        if (ticks.size() >= MIN_TARGET_TICKS || decades >= LOG_EVEN_STEPS_MAX_DECADES) return ticks;
 
         // Under a factor of ~2 end to end even 1..9 gives too few (9.5..19 holds only
         // 10): even data-space steps do better there, and log is near enough linear
-        // that their spacing reads fine. Keep the round set when the steps do no better
-        // (a tiny budget over a wide span), so a step never lands on 0 or off-plot.
+        // that their spacing reads fine. Only there: over a wide view on a short plot the
+        // steps would all crowd into the top decade, so a sparse round pair is kept. Keep
+        // the round set too when the steps do no better, so a step never lands on 0.
         double minValue = Math.pow(10, transformedMin);
         double maxValue = Math.pow(10, transformedMax);
         List<Double> evenSteps = new ArrayList<>();
@@ -322,14 +328,17 @@ public class AxisRenderer {
      * The round-value placements for a LOG axis, densest first: the mantissa sets of
      * {@link #LOG_DECADE_SUBDIVISIONS}, then whole decades every 2, 5, 10, 20, 50...
      * Tick counts never increase with the level, so the first level within budget is the
-     * densest that fits, and some level always fits since the coarse steps grow without bound.
+     * densest that fits, and some level always fits since the coarse steps grow without
+     * bound. No rung is more than 2.5x the one before, which bounds how far over budget
+     * "one placement denser" can land.
      */
     private List<Double> logTickCandidate(int level, double transformedMin, double transformedMax, double decadeAnchor) {
         if (level < LOG_DECADE_SUBDIVISIONS.length) {
             return decadeTicks(transformedMin, transformedMax, LOG_DECADE_SUBDIVISIONS[level]);
         }
         int coarse = level - LOG_DECADE_SUBDIVISIONS.length;
-        double step = (coarse % 2 == 0 ? 2 : 5) * Math.pow(10, coarse / 2);
+        double step = COARSE_DECADE_STEPS[coarse % COARSE_DECADE_STEPS.length]
+            * Math.pow(10, coarse / COARSE_DECADE_STEPS.length);
         return coarseDecadeTicks(transformedMin, transformedMax, step, decadeAnchor);
     }
 
@@ -366,9 +375,24 @@ public class AxisRenderer {
      * data-space steps; and the target count is split between the regions by the share of
      * the axis each occupies, so density stays comparable with the other scales. A region
      * too thin to hold a label is left unticked rather than given two labels on top of
-     * each other.
+     * each other -- unless that leaves the axis with too few labels altogether (a short
+     * plot), when every region is ticked regardless.
      */
     private List<Double> symlogTicks(double transformedMin, double transformedMax, int numTicks, int plotHeight) {
+        List<Double> ticks = symlogRegionTicks(transformedMin, transformedMax, numTicks, plotHeight, VALUE_AXIS_MIN_SPACING);
+        if (ticks.size() < MIN_TARGET_TICKS) {
+            ticks = symlogRegionTicks(transformedMin, transformedMax, numTicks, plotHeight, 0);
+        }
+        return ticks;
+    }
+
+    /**
+     * The SYMLOG regions' ticks, skipping any region under {@code minRegionPixels} tall.
+     * When the linear region is skipped the two seam ticks sit within a label of each
+     * other, so they collapse to a single 0.
+     */
+    private List<Double> symlogRegionTicks(double transformedMin, double transformedMax, int numTicks,
+                                           int plotHeight, int minRegionPixels) {
         YAxisScale scale = YAxisScale.SYMLOG;
         double threshold = scale.linearThreshold().orElseThrow();
         double seam = scale.transform(threshold);
@@ -380,7 +404,7 @@ public class AxisRenderer {
         for (int sign : new int[] {1, -1}) {
             double lo = Math.max(seam, sign > 0 ? transformedMin : -transformedMax);
             double hi = sign > 0 ? transformedMax : -transformedMin;
-            if ((hi - lo) * pixelsPerUnit >= VALUE_AXIS_MIN_SPACING) {
+            if ((hi - lo) * pixelsPerUnit >= minRegionPixels) {
                 int budget = regionBudget(numTicks, (hi - lo) / span);
                 for (double tick : logTicks(lo, hi, budget, seam)) ticks.add(sign * tick);
             }
@@ -389,7 +413,8 @@ public class AxisRenderer {
         // The linear region, in data space
         double linearLo = Math.max(-seam, transformedMin);
         double linearHi = Math.min(seam, transformedMax);
-        if ((linearHi - linearLo) * pixelsPerUnit >= VALUE_AXIS_MIN_SPACING) {
+        boolean linearShown = (linearHi - linearLo) * pixelsPerUnit >= minRegionPixels;
+        if (linearShown) {
             int budget = regionBudget(numTicks, (linearHi - linearLo) / span);
             double lo = scale.inverseTransform(linearLo);
             double hi = scale.inverseTransform(linearHi);
@@ -402,6 +427,10 @@ public class AxisRenderer {
         // the marker's row from a neighbour by value, then keep one copy. Only exact
         // duplicates go: a tolerance would eat neighbouring ticks on a view of tiny values.
         ticks.replaceAll(tick -> isThreshold(tick, threshold) ? Math.copySign(threshold, tick) : tick);
+        if (!linearShown && ticks.contains(threshold) && ticks.contains(-threshold)) {
+            ticks.removeIf(tick -> tick == threshold || tick == -threshold);
+            ticks.add(0.0);
+        }
         ticks.sort(null);
         List<Double> distinct = new ArrayList<>(ticks.size());
         for (double tick : ticks) {

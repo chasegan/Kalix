@@ -112,7 +112,7 @@ class AxisRendererValueTicksTest {
                     int budget = Math.max(3, Math.min(10, height / 40));
                     assertTrue(ticks.size() >= 2, "too few ticks: " + ticks);
                     // One placement over budget is allowed only when the fitting one left a single
-                    // label, which can only happen on a short plot with the 1-2-5 set (six at most)
+                    // label; with no rung more than 2.5x the last that is six ticks at most
                     assertTrue(ticks.size() <= Math.max(budget + 2, 6), "too many ticks for " + height + "px: " + ticks);
                     ticks.forEach(AxisRendererValueTicksTest::assertRoundMantissa);
                 }
@@ -218,6 +218,31 @@ class AxisRendererValueTicksTest {
     void logTicksKeepATickSittingOnTheViewportEdge() {
         assertTicks(List.of(97.0, 98.0, 99.0, 100.0, 101.0, 102.0, 103.0), logTicks(97, 103, TALL));
         assertTicks(List.of(3.2, 3.25, 3.3, 3.35, 3.4), logTicks(3.2, 3.4, TALL));
+    }
+
+    /** Gating every region at 40 px left a short Symlog plot with markers but no labels at all. */
+    @Test
+    void symlogTicksOnAShortPlotStillLabelTheAxis() {
+        assertTicks(List.of(5.0, 10.0, 20.0), symlogTicks(5, 20, 60));
+        assertTicks(List.of(-1000.0, -100.0, -10.0, 0.0, 10.0, 100.0, 1000.0), symlogTicks(-1000, 1000, 100));
+    }
+
+    /** With the linear zone a pixel wide the seam pair would print 10 and -10 on top of each other. */
+    @Test
+    void symlogSeamPairCollapsesToZeroWhenTheLinearZoneIsSkipped() {
+        assertTicks(List.of(-1e101, 0.0, 1e101), symlogTicks(-1e200, 1e200, 120));
+    }
+
+    /** Coarse steps go 2, 5, 10, 20...; a 2-5-20 ladder made "one denser" land four times over budget. */
+    @Test
+    void logCoarseStepsClimbByAtMostTwoAndAHalf() {
+        assertTicks(List.of(1.0, 1e10, 1e20, 1e30), logTicks(1, 1e30, 200));
+    }
+
+    /** Even data steps are for narrow views only; over 15 decades they all crowd into the top one. */
+    @Test
+    void logEvenStepsAreNotTakenOverAWideView() {
+        assertTicks(List.of(1.0, 1e5), logTicks(1.26e-5, 7.9e9, 200));
     }
 
     @Test
