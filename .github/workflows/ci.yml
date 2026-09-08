@@ -58,6 +58,12 @@ jobs:
         working-directory: kalixide
         shell: bash
         run: ./gradlew check --no-daemon
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-test-results-${{ matrix.platform }}
+          path: kalixide/build/test-results/test/*.xml
 
   python-test:
     name: Python ${{ matrix.python-version }} (${{ matrix.platform }})

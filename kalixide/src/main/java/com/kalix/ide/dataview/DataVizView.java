@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
@@ -115,6 +116,8 @@ public final class DataVizView extends JPanel {
     /** Set by every extraction trigger; drained by the single extraction worker. */
     private final AtomicBoolean extractRequested = new AtomicBoolean(false);
     private final AtomicBoolean extractInFlight = new AtomicBoolean(false);
+    /** Passes run so far; a test seam for pinning that construction owes exactly one. */
+    private final AtomicInteger extractionPasses = new AtomicInteger();
     private volatile boolean disposed = false;
 
     public DataVizView(DataViewPanel tablePanel, DataViewSession session) {
@@ -226,10 +229,14 @@ public final class DataVizView extends JPanel {
 
     private void buildViz() {
         dataSet = new DataSet();
-        vizManager = new VisualizationTabManager(dataSet,
+        // Held locally until the first tab exists: the field is what the host
+        // callbacks and the extraction worker key on, and publishing it early let
+        // the first tab's activation schedule a pass from inside construction — a
+        // second, redundant pass the constructor then scheduled again on top.
+        VisualizationTabManager manager = new VisualizationTabManager(dataSet,
             new PaletteSeriesStyleResolver(new SeriesSlotManager(), PlotPaletteManager.getInstance()));
         LabelResolver labels = new DefaultLabelResolver(id -> null); // no runs here: dataset refs only
-        vizManager.setHost(new VizHost() {
+        manager.setHost(new VizHost() {
             @Override
             public LabelResolver labelResolver() {
                 return labels;
@@ -243,6 +250,9 @@ public final class DataVizView extends JPanel {
 
             @Override
             public void onActiveTabChanged() {
+                if (vizManager == null) {
+                    return; // still under construction: the constructor owes the first pass
+                }
                 // The header accents are this mount's "tree": reproject them, and
                 // fetch any selected column (undo/redo can restore one) whose data
                 // the pool doesn't hold yet.
@@ -268,10 +278,11 @@ public final class DataVizView extends JPanel {
         } else {
             defaultSelectionPending = true; // structure not indexed yet; owed on arrival
         }
-        FlowVizPanel firstPanel = vizManager.addPlotTabFromSettings(settings);
+        FlowVizPanel firstPanel = manager.addPlotTabFromSettings(settings);
         if (firstRef != null) {
             pendingZoomFit.put(firstPanel, firstRef); // fit once the default column's data lands
         }
+        vizManager = manager;
         installHeaderInteractions();
     }
 
@@ -425,6 +436,7 @@ public final class DataVizView extends JPanel {
         Thread worker = new Thread(() -> {
             try {
                 while (!disposed && extractRequested.getAndSet(false)) {
+                    extractionPasses.incrementAndGet();
                     extractOnce();
                 }
             } finally {
@@ -496,8 +508,14 @@ public final class DataVizView extends JPanel {
         ColumnSeriesExtractor.Result result = null;
         if (columnIndices.length > 0) {
             try {
+                // A pass is a projection of the session's INDEXED snapshot, so it reads
+                // exactly the bytes the index vouches for. Reading "the file as it is
+                // now" instead let a pass in flight during an in-place rewrite stitch
+                // the old file's rows onto the new one's; anything past the extent is
+                // the next index pass's business, and that pass triggers the next
+                // extraction through onProgress(complete).
                 result = ColumnSeriesExtractor.extract(
-                    target.filePath(), target.dialect(), target.dataStartOffset(),
+                    target.filePath(), target.dialect(), target.dataStartOffset(), target.indexedBytes(),
                     target.headerRowInData(), columnIndices, limit,
                     () -> disposed || session != target);
             } catch (IOException e) {
@@ -506,7 +524,7 @@ public final class DataVizView extends JPanel {
                 return;
             }
             if (result == null) {
-                return; // cancelled (disposed or session swapped): a new pass follows
+                return; // cancelled (disposed, session swapped) or the extent is gone: a new pass follows
             }
             if (result.refused()) {
                 publishRefusal(target, "Plot unavailable: " + result.refusal());
@@ -623,6 +641,10 @@ public final class DataVizView extends JPanel {
     }
 
     /** The private per-mount data pool — package-private, for tests. */
+    int extractionPassesForTests() {
+        return extractionPasses.get();
+    }
+
     DataSet dataSetForTests() {
         return dataSet;
     }

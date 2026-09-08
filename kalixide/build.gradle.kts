@@ -110,6 +110,12 @@ tasks.test {
     // HeadlessException passes on a developer's Mac and fails only after push — which is
     // exactly how DocumentWorkspaceViewTest reached main red.
     systemProperty("java.awt.headless", "true")
+    testLogging {
+        // CI keeps only the console, and "AssertionFailedError at Foo.java:208" cannot
+        // say what was expected or what was seen. Failures print in full.
+        events("failed")
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
 }
 
 tasks.processResources {

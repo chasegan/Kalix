@@ -78,6 +78,17 @@ public final class ColumnSeriesExtractor {
      * @param dialect         its sniffed dialect
      * @param dataStartOffset byte offset where tabular data begins (past any BOM
      *                        or extended format header)
+     * @param dataEndOffset   exclusive end of the region the caller's index vouches
+     *                        for — the session's indexed byte count. The pass reads
+     *                        exactly {@code [dataStartOffset, dataEndOffset)} and never
+     *                        continues into bytes written after that index was built,
+     *                        so a rewrite landing mid-read cannot be stitched onto the
+     *                        old file's rows (a series of one file's row 1 and another's
+     *                        row 2 once reached the plot this way). Bytes past the extent
+     *                        are the next index pass's business, and that pass triggers
+     *                        the next extraction. Counting mirrors the indexer's: a row
+     *                        left unterminated at the extent's end is a row only when
+     *                        the extent is the whole file.
      * @param skipHeaderRow   whether the first data-region row is a header
      * @param columnIndices   0-based column indices to extract (column 0 is the
      *                        date axis, always read — do not request it)
@@ -86,9 +97,10 @@ public final class ColumnSeriesExtractor {
      *                        row-count pre-check can be stale while indexing runs)
      * @param cancelled       polled per data row; a cancelled extraction returns
      *                        {@code null} and its partial work is discarded
-     * @return the result, or {@code null} when cancelled
+     * @return the result; or {@code null} when cancelled, or when the file no longer
+     *         holds the extent (it shrank under us, so the index it came from is stale)
      */
-    public static Result extract(Path file, CsvDialect dialect, long dataStartOffset,
+    public static Result extract(Path file, CsvDialect dialect, long dataStartOffset, long dataEndOffset,
                                  boolean skipHeaderRow, int[] columnIndices, long maxRows,
                                  BooleanSupplier cancelled) throws IOException {
         int maxWanted = 0;
@@ -111,6 +123,12 @@ public final class ColumnSeriesExtractor {
         boolean headerPending = skipHeaderRow;
 
         try (SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.READ)) {
+            long size = channel.size();
+            if (size < dataEndOffset) {
+                return null; // the indexed extent is gone: whoever indexed it is stale
+            }
+            boolean extentIsWholeFile = dataEndOffset == size;
+            long remaining = Math.max(0, dataEndOffset - dataStartOffset);
             channel.position(dataStartOffset);
             ByteBuffer buffer = ByteBuffer.allocate(CHUNK_BYTES);
             byte delimiter = (byte) dialect.delimiter();
@@ -124,7 +142,7 @@ public final class ColumnSeriesExtractor {
             boolean rowHasContent = false;
 
             reading:
-            while (true) {
+            while (remaining > 0) {
                 // Poll per chunk as well as per row: a runaway row (stray quote)
                 // has no row boundaries, and dispose() must still stop the pass.
                 if (cancelled != null && cancelled.getAsBoolean()) {
@@ -135,10 +153,14 @@ public final class ColumnSeriesExtractor {
                         "a field exceeds %,d bytes — likely an unbalanced quote", MAX_FIELD_BYTES));
                 }
                 buffer.clear();
+                if (remaining < buffer.capacity()) {
+                    buffer.limit((int) remaining); // never read past the extent
+                }
                 int n = channel.read(buffer);
                 if (n < 0) {
-                    break;
+                    return null; // shrank mid-read: same verdict as at open
                 }
+                remaining -= n;
                 buffer.flip();
                 for (int i = 0; i < n; i++) {
                     byte b = buffer.get(i);
@@ -195,8 +217,10 @@ public final class ColumnSeriesExtractor {
                 }
             }
 
-            // Final row without a trailing newline.
-            if (rowHasContent && out.size() <= maxRows) {
+            // A final row without a trailing newline is a row only where the file
+            // ends (the indexer's rule too). Cut short by the extent instead, it is a
+            // row the index has not finished; the pass that finishes it re-extracts.
+            if (rowHasContent && extentIsWholeFile && out.size() <= maxRows) {
                 dateText = endField(field, fieldIndex, slotByColumn, staged, dialect, dateText);
                 if (!headerPending && !consumeRow(state, dateText, staged, out)) {
                     return Result.refuse("the first column does not parse as dates");

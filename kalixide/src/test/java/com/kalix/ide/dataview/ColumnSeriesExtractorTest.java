@@ -36,6 +36,14 @@ class ColumnSeriesExtractorTest {
         return file;
     }
 
+    /** Records the file, so a call site that writes inline can still pass its whole extent. */
+    private Path wholeFile;
+
+    private Path whole(Path file) {
+        wholeFile = file;
+        return file;
+    }
+
     private static long day(int year, int month, int dayOfMonth) {
         return LocalDate.of(year, month, dayOfMonth).toEpochDay() * 86_400_000L;
     }
@@ -49,7 +57,7 @@ class ColumnSeriesExtractorTest {
             2020-01-03,na,30,z
             """);
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            file, HEADERED, 0, true, new int[] {2, 1}, Long.MAX_VALUE, null);
+            file, HEADERED, 0, Files.size(file), true, new int[] {2, 1}, Long.MAX_VALUE, null);
         assertNotNull(r);
         assertFalse(r.refused());
         assertEquals(3, r.timestamps().length);
@@ -67,7 +75,7 @@ class ColumnSeriesExtractorTest {
     void nonNumericColumnBecomesNaNs() throws IOException {
         Path file = write("date,label\n2020-01-01,north\n2020-01-02,south\n");
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            file, HEADERED, 0, true, new int[] {1}, Long.MAX_VALUE, null);
+            file, HEADERED, 0, Files.size(file), true, new int[] {1}, Long.MAX_VALUE, null);
         assertFalse(r.refused());
         assertTrue(Double.isNaN(r.columns()[0][0]));
         assertTrue(Double.isNaN(r.columns()[0][1]));
@@ -77,7 +85,7 @@ class ColumnSeriesExtractorTest {
     void quotedThousandsGroupingParsesLikeTheImporter() throws IOException {
         Path file = write("date,flow\n2020-01-01,\"1,234.5\"\n");
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            file, HEADERED, 0, true, new int[] {1}, Long.MAX_VALUE, null);
+            file, HEADERED, 0, Files.size(file), true, new int[] {1}, Long.MAX_VALUE, null);
         assertFalse(r.refused());
         assertEquals(1234.5, r.columns()[0][0]);
     }
@@ -86,7 +94,7 @@ class ColumnSeriesExtractorTest {
     void badDateRowIsSkippedAndCounted() throws IOException {
         Path file = write("date,v\n2020-01-01,1\nnot-a-date,2\n2020-01-03,3\n");
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            file, HEADERED, 0, true, new int[] {1}, Long.MAX_VALUE, null);
+            file, HEADERED, 0, Files.size(file), true, new int[] {1}, Long.MAX_VALUE, null);
         assertFalse(r.refused());
         assertEquals(2, r.timestamps().length);
         assertEquals(1, r.badDateRows());
@@ -97,7 +105,7 @@ class ColumnSeriesExtractorTest {
     void blankLinesAreSkippedSilently() throws IOException {
         Path file = write("date,v\n2020-01-01,1\n\n2020-01-02,2\n");
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            file, HEADERED, 0, true, new int[] {1}, Long.MAX_VALUE, null);
+            file, HEADERED, 0, Files.size(file), true, new int[] {1}, Long.MAX_VALUE, null);
         assertFalse(r.refused());
         assertEquals(2, r.timestamps().length);
         assertEquals(0, r.badDateRows(), "a blank line is not a bad date");
@@ -110,7 +118,7 @@ class ColumnSeriesExtractorTest {
             content.append("row").append(i).append(",1\n");
         }
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            write(content.toString()), HEADERED, 0, true, new int[] {1}, Long.MAX_VALUE, null);
+            whole(write(content.toString())), HEADERED, 0, Files.size(wholeFile), true, new int[] {1}, Long.MAX_VALUE, null);
         assertTrue(r.refused());
         assertNotNull(r.refusal());
     }
@@ -119,7 +127,7 @@ class ColumnSeriesExtractorTest {
     void headerlessFileStartsAtRowZero() throws IOException {
         Path file = write("2020-01-01,1\n2020-01-02,2\n");
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            file, HEADERLESS, 0, false, new int[] {1}, Long.MAX_VALUE, null);
+            file, HEADERLESS, 0, Files.size(file), false, new int[] {1}, Long.MAX_VALUE, null);
         assertFalse(r.refused());
         assertEquals(2, r.timestamps().length);
         assertEquals(1.0, r.columns()[0][0]);
@@ -129,7 +137,7 @@ class ColumnSeriesExtractorTest {
     void finalRowWithoutTrailingNewlineIsIncluded() throws IOException {
         Path file = write("date,v\n2020-01-01,1\n2020-01-02,2");
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            file, HEADERED, 0, true, new int[] {1}, Long.MAX_VALUE, null);
+            file, HEADERED, 0, Files.size(file), true, new int[] {1}, Long.MAX_VALUE, null);
         assertEquals(2, r.timestamps().length);
         assertEquals(2.0, r.columns()[0][1]);
     }
@@ -138,7 +146,7 @@ class ColumnSeriesExtractorTest {
     void exceedingMaxRowsRefusesRatherThanTruncating() throws IOException {
         Path file = write("date,v\n2020-01-01,1\n2020-01-02,2\n2020-01-03,3\n");
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            file, HEADERED, 0, true, new int[] {1}, 2, null);
+            file, HEADERED, 0, Files.size(file), true, new int[] {1}, 2, null);
         assertTrue(r.refused(), "a silent truncation would contradict the caller's pre-check");
         assertTrue(r.refusal().contains("more than 2"));
     }
@@ -147,7 +155,7 @@ class ColumnSeriesExtractorTest {
     void exactlyMaxRowsIsNotARefusal() throws IOException {
         Path file = write("date,v\n2020-01-01,1\n2020-01-02,2\n");
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            file, HEADERED, 0, true, new int[] {1}, 2, null);
+            file, HEADERED, 0, Files.size(file), true, new int[] {1}, 2, null);
         assertFalse(r.refused());
         assertEquals(2, r.timestamps().length);
     }
@@ -156,7 +164,7 @@ class ColumnSeriesExtractorTest {
     void leadingNonDateRowsAreCountedOnceTheFormatIsFound() throws IOException {
         Path file = write("date,v\njunk,9\n2020-01-01,1\n");
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            file, HEADERED, 0, true, new int[] {1}, Long.MAX_VALUE, null);
+            file, HEADERED, 0, Files.size(file), true, new int[] {1}, Long.MAX_VALUE, null);
         assertFalse(r.refused());
         assertEquals(1, r.timestamps().length);
         assertEquals(1, r.badDateRows(), "the failed probe row was a dropped data row");
@@ -167,23 +175,94 @@ class ColumnSeriesExtractorTest {
         StringBuilder content = new StringBuilder("date,v\n2020-01-01,\"");
         content.append("x".repeat(ColumnSeriesExtractor.MAX_FIELD_BYTES + 300_000));
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            write(content.toString()), HEADERED, 0, true, new int[] {1}, Long.MAX_VALUE, null);
+            whole(write(content.toString())), HEADERED, 0, Files.size(wholeFile), true, new int[] {1}, Long.MAX_VALUE, null);
         assertTrue(r.refused());
         assertTrue(r.refusal().contains("quote"));
+    }
+
+    // === The indexed extent: a pass reads what the index vouched for, nothing else ===
+
+    @Test
+    void readsOnlyTheIndexedExtent() throws IOException {
+        // The index vouched for two rows; a third was appended since.
+        Path file = write("date,a\n2020-01-01,1\n2020-01-02,2\n");
+        long extent = Files.size(file);
+        Files.writeString(file, "date,a\n2020-01-01,1\n2020-01-02,2\n2020-01-03,3\n");
+
+        ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
+            file, HEADERED, 0, extent, true, new int[] {1}, Long.MAX_VALUE, null);
+        assertNotNull(r);
+        assertEquals(2, r.timestamps().length, "the appended row is the next index pass's business");
+        assertEquals(2.0, r.columns()[0][1]);
+    }
+
+    /**
+     * The race that made DataVizViewTest flaky: an index built on the 20-byte file,
+     * the file rewritten in place while a pass had read those 20 bytes and was about
+     * to read "the rest". The rest was the NEW file's row 2, and the plot showed a
+     * series of the old file's row 1 and the new file's row 2 ([1, 43]).
+     */
+    @Test
+    void aRewriteUnderTheExtentCannotStitchTwoFiles() throws IOException {
+        Path file = write("date,a\n2020-01-01,1\n");
+        long extent = Files.size(file);
+        Files.writeString(file, "date,a\n2020-01-01,42\n2020-01-02,43\n");
+
+        ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
+            file, HEADERED, 0, extent, true, new int[] {1}, Long.MAX_VALUE, null);
+        assertNotNull(r);
+        assertFalse(r.refused());
+        assertEquals(0, r.timestamps().length,
+            "the extent now ends inside a row; an unfinished row is not a row, and never another file's row 2");
+    }
+
+    @Test
+    void anExtentBeyondTheFileMeansTheIndexIsStale() throws IOException {
+        Path file = write("date,a\n2020-01-01,1\n2020-01-02,2\n");
+        long extent = Files.size(file);
+        Files.writeString(file, "date,a\n2020-01-01,1\n"); // shrank under the index
+
+        assertNull(ColumnSeriesExtractor.extract(
+            file, HEADERED, 0, extent, true, new int[] {1}, Long.MAX_VALUE, null),
+            "same verdict as a cancellation: this pass has nothing true to say");
+    }
+
+    @Test
+    void anUnterminatedRowCountsOnlyWhereTheFileEnds() throws IOException {
+        // Whole-file extent: the indexer counts the unterminated final row, so do we.
+        Path file = write("date,a\n2020-01-01,1\n2020-01-02,2");
+        long whole = Files.size(file);
+        assertEquals(2, ColumnSeriesExtractor.extract(
+            file, HEADERED, 0, whole, true, new int[] {1}, Long.MAX_VALUE, null).timestamps().length);
+
+        // Extent ending one byte short: the same row is now one the index has not
+        // finished, exactly as a mid-pass index would report it.
+        assertEquals(1, ColumnSeriesExtractor.extract(
+            file, HEADERED, 0, whole - 1, true, new int[] {1}, Long.MAX_VALUE, null).timestamps().length);
+    }
+
+    @Test
+    void anExtentBeforeTheDataRegionIsEmptyNotAnError() throws IOException {
+        Path file = write("date,a\n2020-01-01,1\n");
+        ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
+            file, HEADERED, 0, 0, true, new int[] {1}, Long.MAX_VALUE, null);
+        assertNotNull(r);
+        assertFalse(r.refused());
+        assertEquals(0, r.timestamps().length, "nothing indexed yet: nothing to project");
     }
 
     @Test
     void cancelledExtractionReturnsNull() throws IOException {
         Path file = write("date,v\n2020-01-01,1\n2020-01-02,2\n");
         assertNull(ColumnSeriesExtractor.extract(
-            file, HEADERED, 0, true, new int[] {1}, Long.MAX_VALUE, () -> true));
+            file, HEADERED, 0, Files.size(file), true, new int[] {1}, Long.MAX_VALUE, () -> true));
     }
 
     @Test
     void crlfAndQuotedDelimitersFollowTheTableGrammar() throws IOException {
         Path file = write("date,name,v\r\n2020-01-01,\"a,b\",7\r\n");
         ColumnSeriesExtractor.Result r = ColumnSeriesExtractor.extract(
-            file, HEADERED, 0, true, new int[] {2}, Long.MAX_VALUE, null);
+            file, HEADERED, 0, Files.size(file), true, new int[] {2}, Long.MAX_VALUE, null);
         assertFalse(r.refused());
         assertEquals(1, r.timestamps().length);
         assertEquals(7.0, r.columns()[0][0]);
