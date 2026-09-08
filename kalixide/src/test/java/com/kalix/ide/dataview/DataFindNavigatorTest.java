@@ -1,8 +1,8 @@
 package com.kalix.ide.dataview;
 
 import com.kalix.ide.dataview.DataFindNavigator.Landing;
-import com.kalix.ide.dataview.DataViewSession.CellRef;
-import com.kalix.ide.dataview.DataViewSession.FindScan;
+import com.kalix.ide.dataview.DataFind.CellRef;
+import com.kalix.ide.dataview.DataFind.Scan;
 
 import org.junit.jupiter.api.Test;
 
@@ -20,14 +20,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class DataFindNavigatorTest {
 
-    private static FindScan scan(int total, CellRef firstOverall, CellRef lastOverall,
+    private static Scan scan(int total, CellRef firstOverall, CellRef lastOverall,
                                  CellRef firstAfter, CellRef lastBefore, long nearestDateRow) {
-        return new FindScan(total, firstOverall, lastOverall, firstAfter, lastBefore, nearestDateRow);
+        return new Scan(total, firstOverall, lastOverall, firstAfter, lastBefore, nearestDateRow);
     }
 
     private static final CellRef CELL_A = new CellRef(1, 1, 1);
     private static final CellRef CELL_B = new CellRef(5, 2, 2);
-    private static final FindScan TWO_CELLS = scan(2, CELL_A, CELL_B, CELL_A, null, -1);
+    private static final Scan TWO_CELLS = scan(2, CELL_A, CELL_B, CELL_A, null, -1);
 
     @Test
     void forwardVisitsHeadersBeforeCells() {
@@ -52,7 +52,7 @@ class DataFindNavigatorTest {
 
     @Test
     void forwardWrapsToTheFirstHeader() {
-        FindScan noneAfter = scan(2, CELL_A, CELL_B, null, CELL_B, -1);
+        Scan noneAfter = scan(2, CELL_A, CELL_B, null, CELL_B, -1);
         Landing landing = DataFindNavigator.choose(noneAfter, List.of(2), 9, 0, true, true);
         assertEquals(-1, landing.row());
         assertEquals(2, landing.column());
@@ -61,12 +61,12 @@ class DataFindNavigatorTest {
 
     @Test
     void backwardPrefersThePreviousCellThenHeaders() {
-        FindScan beforeExists = scan(2, CELL_A, CELL_B, null, CELL_A, -1);
+        Scan beforeExists = scan(2, CELL_A, CELL_B, null, CELL_A, -1);
         Landing cell = DataFindNavigator.choose(beforeExists, List.of(1), 5, 2, false, true);
         assertEquals(1, cell.row());
         assertFalse(cell.wrapped());
 
-        FindScan nothingBefore = scan(2, CELL_A, CELL_B, CELL_A, null, -1);
+        Scan nothingBefore = scan(2, CELL_A, CELL_B, CELL_A, null, -1);
         Landing header = DataFindNavigator.choose(nothingBefore, List.of(1, 3), 0, 0, false, true);
         assertEquals(-1, header.row(), "before the first cell: back into the headers");
         assertEquals(3, header.column(), "the largest earlier header");
@@ -74,7 +74,7 @@ class DataFindNavigatorTest {
 
     @Test
     void backwardWrapsToTheLastCell() {
-        FindScan scan = scan(2, CELL_A, CELL_B, CELL_A, null, -1);
+        Scan scan = scan(2, CELL_A, CELL_B, CELL_A, null, -1);
         Landing landing = DataFindNavigator.choose(scan, List.of(), -2, 0, false, true);
         assertEquals(5, landing.row(), "wrap backward lands on the last match");
         assertTrue(landing.wrapped());
@@ -82,13 +82,13 @@ class DataFindNavigatorTest {
 
     @Test
     void noWrapMissIsNull() {
-        FindScan noneAfter = scan(2, CELL_A, CELL_B, null, CELL_B, -1);
+        Scan noneAfter = scan(2, CELL_A, CELL_B, null, CELL_B, -1);
         assertNull(DataFindNavigator.choose(noneAfter, List.of(), 9, 0, true, false));
     }
 
     @Test
     void nearestDateFallbackLandsOnTheDateColumn() {
-        FindScan empty = scan(0, null, null, null, null, 7);
+        Scan empty = scan(0, null, null, null, null, 7);
         Landing landing = DataFindNavigator.choose(empty, List.of(), -2, 0, true, true);
         assertEquals(7, landing.row());
         assertEquals(0, landing.column());

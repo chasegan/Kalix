@@ -36,7 +36,7 @@ import java.util.function.LongSupplier;
  * {@code DataDocument.refreshDataViewFromDisk} pattern); listeners hear about
  * completed loads on the EDT. Reads are EDT-safe (one volatile snapshot).
  */
-public final class PixieDataSession {
+public final class PixieDataSession implements FindableData {
 
     /** All methods are delivered on the EDT. */
     public interface Listener {
@@ -219,7 +219,10 @@ public final class PixieDataSession {
 
     /** The date column's text: date-only at midnight, full timestamp otherwise. */
     public String dateText(int row) {
-        long millis = snapshot.unionTimesMillis[row];
+        return dateTextFor(snapshot.unionTimesMillis[row]);
+    }
+
+    private static String dateTextFor(long millis) {
         Instant instant = Instant.ofEpochMilli(millis);
         return millis % 86_400_000L == 0 ? DATE_ONLY.format(instant) : DATE_TIME.format(instant);
     }
@@ -241,6 +244,50 @@ public final class PixieDataSession {
     /** The decoded series (name + data), for the plot mount. Immutable list. */
     public List<NamedSeries> decodedSeries() {
         return snapshot.series;
+    }
+
+    /** Scan rows ARE view rows: pixie has no in-data header row. */
+    @Override
+    public long headerRowOffset() {
+        return 0;
+    }
+
+    /**
+     * The in-memory answer to the contract the CSV session answers by streaming
+     * its file: one pass over the union grid, matching cell text exactly as the
+     * table displays it (blank absent cells can never match), plus parsed-date
+     * matching straight off the stored timestamps — pixie needs no format
+     * ladder, it stores epochs. Milliseconds even at millions of rows.
+     */
+    @Override
+    public DataFind.Scan scanForMatches(DataFind.Spec spec, long fromRow, int fromColumn) {
+        Snapshot current = snapshot; // one consistent grid, even mid-reload
+        DataFind.Collector collector = new DataFind.Collector(fromRow, fromColumn);
+        String needle = DataFind.foldNeedle(spec);
+        int seriesCount = current.series.size();
+        for (int row = 0; row < current.unionTimesMillis.length; row++) {
+            long timestamp = current.unionTimesMillis[row];
+            if (spec.dateMillis() != null && timestamp >= spec.dateMillis()) {
+                collector.offerNearestDate(row);
+            }
+            if (spec.inDates()
+                    && (DataFind.textMatches(dateTextFor(timestamp), needle, spec)
+                        || DataFind.dateMatches(timestamp, spec))) {
+                collector.offer(row, 0);
+            }
+            if (!spec.inValues()) {
+                continue;
+            }
+            for (int s = 0; s < seriesCount; s++) {
+                TimeSeriesData data = current.series.get(s).data();
+                int index = Arrays.binarySearch(data.getTimestamps(), timestamp);
+                if (index >= 0
+                        && DataFind.textMatches(formatValue(data.getValues()[index]), needle, spec)) {
+                    collector.offer(row, s + 1);
+                }
+            }
+        }
+        return collector.finish();
     }
 
     /** Shortest honest spelling: integers without ".0", everything else as Java spells it. */

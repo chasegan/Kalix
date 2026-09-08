@@ -45,7 +45,7 @@ final class DataFindDialog {
     private final JCheckBox wrapAroundCheckBox = new JCheckBox("Wrap around", true);
     private final JLabel statusLabel = new JLabel(" ");
 
-    DataFindDialog(DataViewPanel owner) {
+    DataFindDialog(java.awt.Component owner, DataFindController controller) {
         Window window = SwingUtilities.getWindowAncestor(owner);
         dialog = new JDialog(window instanceof Frame frame ? frame : null, "Find", false);
         dialog.setDefaultCloseOperation(JDialog.HIDE_ON_CLOSE);
@@ -80,11 +80,11 @@ final class DataFindDialog {
 
         JPanel buttonPanel = new JPanel(new FlowLayout());
         JButton findButton = new JButton("Find Next");
-        findButton.addActionListener(e -> owner.runFind(true));
+        findButton.addActionListener(e -> controller.runFind(true));
         buttonPanel.add(findButton);
 
         JButton findPrevButton = new JButton("Find Previous");
-        findPrevButton.addActionListener(e -> owner.runFind(false));
+        findPrevButton.addActionListener(e -> controller.runFind(false));
         buttonPanel.add(findPrevButton);
 
         JButton closeButton = new JButton("Close");
@@ -95,7 +95,7 @@ final class DataFindDialog {
         gbc.fill = GridBagConstraints.HORIZONTAL;
         panel.add(buttonPanel, gbc);
 
-        searchField.addActionListener(e -> owner.runFind(true));
+        searchField.addActionListener(e -> controller.runFind(true));
 
         dialog.getRootPane().registerKeyboardAction(
             e -> dialog.setVisible(false),
@@ -135,7 +135,7 @@ final class DataFindDialog {
     }
 
     /** The current search spec; the date interpretation is derived from the query itself. */
-    DataViewSession.FindSpec spec() {
+    DataFind.Spec spec() {
         String query = searchField.getText().trim();
         Long dateMillis = null;
         boolean dateOnly = false;
@@ -149,7 +149,7 @@ final class DataFindDialog {
                 }
             }
         }
-        return new DataViewSession.FindSpec(query, matchCaseCheckBox.isSelected(),
+        return new DataFind.Spec(query, matchCaseCheckBox.isSelected(),
             wholeCellCheckBox.isSelected(), datesCheckBox.isSelected(), valuesCheckBox.isSelected(),
             dateMillis, dateOnly);
     }
