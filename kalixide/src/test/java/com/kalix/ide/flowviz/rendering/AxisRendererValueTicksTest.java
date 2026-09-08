@@ -34,7 +34,11 @@ class AxisRendererValueTicksTest {
     }
 
     private static void assertTicks(List<Double> expected, List<Double> actual) {
-        assertEquals(expected.size(), actual.size(), "tick count for " + actual);
+        assertTicks(expected, actual, "tick count");
+    }
+
+    private static void assertTicks(List<Double> expected, List<Double> actual, String why) {
+        assertEquals(expected.size(), actual.size(), why + " for " + actual);
         for (int i = 0; i < expected.size(); i++) {
             assertEquals(expected.get(i), actual.get(i), Math.abs(expected.get(i)) * EPS, "tick " + i + " of " + actual);
         }
@@ -88,6 +92,14 @@ class AxisRendererValueTicksTest {
         assertTicks(List.of(10.0, 20.0, 50.0, 100.0), logTicks(10, 100, 200));
     }
 
+    /** Whole decades would leave one label on a short plot over 1.78..56; 1-2-5 is taken over budget. */
+    @Test
+    void logTicksGoOneDenserRatherThanLeaveASingleLabel() {
+        assertTicks(List.of(2.0, 5.0, 10.0, 20.0, 50.0), logTicks(1.78, 56, 120));
+        assertTicks(List.of(1.0, 10.0), logTicks(0.4, 79, 120), "two decade labels fit and suffice");
+        assertTicks(List.of(100.0, 1e4, 1e6), logTicks(3.7, 3.7e6, 120), "coarse steps still count from 1");
+    }
+
     @Test
     void logTicksAreRoundAtEveryZoomAndHeight() {
         double[] starts = {0.0123, 0.5, 1, 3.7, 47, 1e5};
@@ -99,7 +111,9 @@ class AxisRendererValueTicksTest {
                     List<Double> ticks = logTicks(start, start * Math.pow(10, span), height);
                     int budget = Math.max(3, Math.min(10, height / 40));
                     assertTrue(ticks.size() >= 2, "too few ticks: " + ticks);
-                    assertTrue(ticks.size() <= budget + 2, "too many ticks for " + height + "px: " + ticks);
+                    // One placement over budget is allowed only when the fitting one left a single
+                    // label, which can only happen on a short plot with the 1-2-5 set (six at most)
+                    assertTrue(ticks.size() <= Math.max(budget + 2, 6), "too many ticks for " + height + "px: " + ticks);
                     ticks.forEach(AxisRendererValueTicksTest::assertRoundMantissa);
                 }
             }
@@ -172,6 +186,38 @@ class AxisRendererValueTicksTest {
     @Test
     void symlogTicksInsideTheLinearRegionMatchLinear() {
         assertTicks(List.of(-4.0, -2.0, 0.0, 2.0, 4.0), symlogTicks(-5, 5, TALL));
+    }
+
+    /** A bound just past the seam gave the sliver a two-tick budget: 9.5 and 10 drawn on top of each other. */
+    @Test
+    void symlogTicksSkipARegionTooThinForALabel() {
+        List<Double> ticks = symlogTicks(9.5, 1e6, TALL);
+        assertEquals(10.0, ticks.get(0), 0.0, "the seam opens the axis: " + ticks);
+        List<Double> mirrored = symlogTicks(-1e6, 10.5, TALL);
+        assertEquals(10.0, mirrored.get(mirrored.size() - 1), 0.0, "the seam closes the axis: " + mirrored);
+    }
+
+    /** The seam tick is snapped to exactly +/-L whichever region produced it, so the grid can spot it by value. */
+    @Test
+    void symlogSeamTicksAreExact() {
+        List<Double> ticks = symlogTicks(YAxisScale.SYMLOG.inverseTransform(-0.135), YAxisScale.SYMLOG.inverseTransform(2.834), TALL);
+        assertTrue(ticks.contains(10.0), "exactly 10.0, not 9.999999999999998: " + ticks);
+        assertTrue(symlogTicks(-1e6, 1e6, TALL).contains(-10.0));
+    }
+
+    /** Dedup once ate neighbouring ticks within an absolute 1e-9; a view of tiny values must tick like Linear. */
+    @Test
+    void symlogTicksOnTinyValuesMatchLinear() {
+        List<Double> linear = renderer.calculateValueTicks(viewport(0, 5e-9, TALL, YAxisScale.LINEAR));
+        assertEquals(6, linear.size(), linear.toString());
+        assertTicks(linear, symlogTicks(0, 5e-9, TALL));
+    }
+
+    /** pow(10, log10(97)) is not 97; an exact edge compare dropped the edge tick. */
+    @Test
+    void logTicksKeepATickSittingOnTheViewportEdge() {
+        assertTicks(List.of(97.0, 98.0, 99.0, 100.0, 101.0, 102.0, 103.0), logTicks(97, 103, TALL));
+        assertTicks(List.of(3.2, 3.25, 3.3, 3.35, 3.4), logTicks(3.2, 3.4, TALL));
     }
 
     @Test

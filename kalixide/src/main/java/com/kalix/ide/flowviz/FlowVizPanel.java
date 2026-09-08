@@ -345,6 +345,19 @@ public class FlowVizPanel extends JPanel {
             return;
         }
 
+        // The cached global minimum ignores the scale's domain: on LOG it may be zero or
+        // negative, and padding from that gives NaN bounds and a blank view. Fit to the
+        // smallest showable value instead, as auto-Y does, or to the default view when
+        // nothing is showable.
+        double domainFloor = yAxisScale.domainFloor();
+        if (minValue <= domainFloor) {
+            minValue = smallestAbove(displayDataSet, domainFloor);
+            if (minValue == null) {
+                createDefaultViewport();
+                return;
+            }
+        }
+
         // Clamp minimum value for log scale to prevent zooming too far out
         // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
         // This only affects auto-zoom; manual zoom/pan can still access the full range
@@ -375,6 +388,19 @@ public class FlowVizPanel extends JPanel {
         XAxisType xAxisType = determineXAxisType();
         currentViewport = new ViewPort(startTime, endTime, minValue, maxValue,
                                      plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale, xAxisType);
+    }
+
+    /** The smallest valid value above {@code floor} across every series, or null if none. */
+    private static Double smallestAbove(DataSet dataSet, double floor) {
+        double smallest = Double.POSITIVE_INFINITY;
+        for (TimeSeriesData series : dataSet.getAllSeries()) {
+            double[] values = series.getValues();
+            boolean[] validPoints = series.getValidPoints();
+            for (int i = 0; i < series.getPointCount(); i++) {
+                if (validPoints[i] && values[i] > floor && values[i] < smallest) smallest = values[i];
+            }
+        }
+        return smallest == Double.POSITIVE_INFINITY ? null : smallest;
     }
 
     private void createDefaultViewport() {

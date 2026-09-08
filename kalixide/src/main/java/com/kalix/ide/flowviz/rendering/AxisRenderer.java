@@ -32,11 +32,11 @@ public class AxisRenderer {
     private static final int VALUE_LABEL_OFFSET = 8;
     private static final int TIME_TITLE_OFFSET = 40;
 
-    /** Round mantissas to place within each decade of a LOG axis, coarsest set first. */
+    /** Round mantissas to place within each decade of a LOG axis, densest set first. */
     private static final double[][] LOG_DECADE_SUBDIVISIONS = {
-        {1},
-        {1, 2, 5},
         {1, 2, 3, 4, 5, 6, 7, 8, 9},
+        {1, 2, 5},
+        {1},
     };
     /** Slack for a tick sitting on a viewport edge, in decades (log10 rounding). */
     private static final double LOG_TICK_EPSILON = 1e-9;
@@ -249,7 +249,7 @@ public class AxisRenderer {
         return switch (yAxisScale) {
             case LINEAR, SQRT -> evenTicks(transformedMin, transformedMax, numTicks, yAxisScale::inverseTransform);
             case LOG -> logTicks(transformedMin, transformedMax, numTicks, 0);
-            case SYMLOG -> symlogTicks(transformedMin, transformedMax, numTicks);
+            case SYMLOG -> symlogTicks(transformedMin, transformedMax, numTicks, viewport.getPlotHeight());
         };
     }
 
@@ -275,10 +275,13 @@ public class AxisRenderer {
     }
 
     /**
-     * Ticks for a LOG axis, at values a modeller reads as round: whole decades when the
-     * view spans many; 1-2-5 or 1..9 within each decade when it spans few; and plain
-     * data-space steps once it spans less than a factor of about two, where those
-     * mantissas run out and log is near enough linear that even spacing reads fine.
+     * Ticks for a LOG axis, at values a modeller reads as round: the densest round
+     * placement that fits the tick budget, from every integer mantissa within a decade,
+     * through 1-2-5 and whole decades, out to every 2, 5, 10... decades over a wide view.
+     * One placement denser when the fitting one would leave fewer than two labels (a
+     * short plot over a decade or so), and plain data-space steps once the view spans less
+     * than a factor of about two, where those mantissas run out and log is near enough
+     * linear that even spacing reads fine.
      *
      * @param transformedMin viewport minimum, in decades
      * @param transformedMax viewport maximum, in decades
@@ -288,22 +291,15 @@ public class AxisRenderer {
      *        (10, 1000, 10^5), which keeps the seam at 10 ticked whatever the zoom
      */
     private List<Double> logTicks(double transformedMin, double transformedMax, int numTicks, double decadeAnchor) {
-        double decades = transformedMax - transformedMin;
-        double decadeInterval = roundToNiceValueInterval(decades / (numTicks - 1));
-        if (decadeInterval >= 1) {
-            // A whole number of decades per tick: even spacing lands exactly on 10^k
-            return evenTicks(transformedMin - decadeAnchor, transformedMax - decadeAnchor, numTicks,
-                t -> Math.pow(10, t + decadeAnchor));
-        }
-
-        // Less than a decade per tick: subdivide each decade with round mantissas, the
-        // densest set that still fits the target count (the same budget the even
-        // algorithm works to, so spacing stays comparable across scales)
-        List<Double> ticks = new ArrayList<>();
-        for (double[] mantissas : LOG_DECADE_SUBDIVISIONS) {
-            List<Double> candidate = decadeTicks(transformedMin, transformedMax, mantissas);
-            if (candidate.size() > numTicks + 1) break;
-            ticks = candidate;
+        List<Double> denser = null;
+        List<Double> ticks;
+        for (int level = 0; ; level++) {
+            List<Double> candidate = logTickCandidate(level, transformedMin, transformedMax, decadeAnchor);
+            if (candidate.size() <= numTicks + 1) {
+                ticks = candidate.size() < 2 && denser != null ? denser : candidate;
+                break;
+            }
+            denser = candidate;
         }
         if (ticks.size() >= MIN_TARGET_TICKS) return ticks;
 
@@ -315,9 +311,37 @@ public class AxisRenderer {
         double maxValue = Math.pow(10, transformedMax);
         List<Double> evenSteps = new ArrayList<>();
         for (double step : evenTicks(minValue, maxValue, numTicks, DoubleUnaryOperator.identity())) {
-            if (step >= minValue && step <= maxValue) evenSteps.add(step);
+            // Judged in transformed space with the usual slack: pow(10, log10(3.2)) is
+            // 3.2000000000000006, and an exact compare dropped a tick sitting on the edge
+            if (inRange(Math.log10(step), transformedMin, transformedMax)) evenSteps.add(step);
         }
         return evenSteps.size() > ticks.size() ? evenSteps : ticks;
+    }
+
+    /**
+     * The round-value placements for a LOG axis, densest first: the mantissa sets of
+     * {@link #LOG_DECADE_SUBDIVISIONS}, then whole decades every 2, 5, 10, 20, 50...
+     * Tick counts never increase with the level, so the first level within budget is the
+     * densest that fits, and some level always fits since the coarse steps grow without bound.
+     */
+    private List<Double> logTickCandidate(int level, double transformedMin, double transformedMax, double decadeAnchor) {
+        if (level < LOG_DECADE_SUBDIVISIONS.length) {
+            return decadeTicks(transformedMin, transformedMax, LOG_DECADE_SUBDIVISIONS[level]);
+        }
+        int coarse = level - LOG_DECADE_SUBDIVISIONS.length;
+        double step = (coarse % 2 == 0 ? 2 : 5) * Math.pow(10, coarse / 2);
+        return coarseDecadeTicks(transformedMin, transformedMax, step, decadeAnchor);
+    }
+
+    /** Every {@code 10^(anchor + k * step)} within [transformedMin, transformedMax], ascending. */
+    private List<Double> coarseDecadeTicks(double transformedMin, double transformedMax, double step, double decadeAnchor) {
+        List<Double> ticks = new ArrayList<>();
+        long first = (long) Math.ceil((transformedMin - decadeAnchor - LOG_TICK_EPSILON) / step);
+        long last = (long) Math.floor((transformedMax - decadeAnchor + LOG_TICK_EPSILON) / step);
+        for (long k = first; k <= last; k++) {
+            ticks.add(Math.pow(10, decadeAnchor + k * step));
+        }
+        return ticks;
     }
 
     /** Every {@code mantissa x 10^k} within [transformedMin, transformedMax], ascending. */
@@ -340,35 +364,32 @@ public class AxisRenderer {
      * Ticks for a SYMLOG axis: each log region gets LOG's round placement counted from the
      * seam, so +/-L is ticked whatever the zoom; the linear region between gets even
      * data-space steps; and the target count is split between the regions by the share of
-     * the axis each occupies, so density stays comparable with the other scales.
+     * the axis each occupies, so density stays comparable with the other scales. A region
+     * too thin to hold a label is left unticked rather than given two labels on top of
+     * each other.
      */
-    private List<Double> symlogTicks(double transformedMin, double transformedMax, int numTicks) {
+    private List<Double> symlogTicks(double transformedMin, double transformedMax, int numTicks, int plotHeight) {
         YAxisScale scale = YAxisScale.SYMLOG;
-        double seam = scale.transform(scale.linearThreshold().orElseThrow());
+        double threshold = scale.linearThreshold().orElseThrow();
+        double seam = scale.transform(threshold);
         double span = transformedMax - transformedMin;
+        double pixelsPerUnit = plotHeight / span;
         List<Double> ticks = new ArrayList<>();
 
-        // Positive log region, and the negative one as its mirror image
-        double positiveLo = Math.max(seam, transformedMin);
-        if (transformedMax > positiveLo) {
-            int budget = regionBudget(numTicks, (transformedMax - positiveLo) / span);
-            for (double tick : logTicks(positiveLo, transformedMax, budget, seam)) {
-                if (inRange(Math.log10(tick), positiveLo, transformedMax)) ticks.add(tick);
-            }
-        }
-        double negativeLo = Math.max(seam, -transformedMax);
-        double negativeHi = -transformedMin;
-        if (negativeHi > negativeLo) {
-            int budget = regionBudget(numTicks, (negativeHi - negativeLo) / span);
-            for (double tick : logTicks(negativeLo, negativeHi, budget, seam)) {
-                if (inRange(Math.log10(tick), negativeLo, negativeHi)) ticks.add(-tick);
+        // The log regions, the negative one as the positive one's mirror image
+        for (int sign : new int[] {1, -1}) {
+            double lo = Math.max(seam, sign > 0 ? transformedMin : -transformedMax);
+            double hi = sign > 0 ? transformedMax : -transformedMin;
+            if ((hi - lo) * pixelsPerUnit >= VALUE_AXIS_MIN_SPACING) {
+                int budget = regionBudget(numTicks, (hi - lo) / span);
+                for (double tick : logTicks(lo, hi, budget, seam)) ticks.add(sign * tick);
             }
         }
 
-        // Linear region, in data space
+        // The linear region, in data space
         double linearLo = Math.max(-seam, transformedMin);
         double linearHi = Math.min(seam, transformedMax);
-        if (linearHi > linearLo) {
+        if ((linearHi - linearLo) * pixelsPerUnit >= VALUE_AXIS_MIN_SPACING) {
             int budget = regionBudget(numTicks, (linearHi - linearLo) / span);
             double lo = scale.inverseTransform(linearLo);
             double hi = scale.inverseTransform(linearHi);
@@ -377,11 +398,14 @@ public class AxisRenderer {
             }
         }
 
-        // The seam belongs to two regions; keep one copy
+        // The seam belongs to two regions. Snap it to exactly +/-L, so the grid can tell
+        // the marker's row from a neighbour by value, then keep one copy. Only exact
+        // duplicates go: a tolerance would eat neighbouring ticks on a view of tiny values.
+        ticks.replaceAll(tick -> isThreshold(tick, threshold) ? Math.copySign(threshold, tick) : tick);
         ticks.sort(null);
         List<Double> distinct = new ArrayList<>(ticks.size());
         for (double tick : ticks) {
-            if (distinct.isEmpty() || !sameTick(distinct.get(distinct.size() - 1), tick)) distinct.add(tick);
+            if (distinct.isEmpty() || distinct.get(distinct.size() - 1) != tick) distinct.add(tick);
         }
         return distinct;
     }
@@ -395,8 +419,9 @@ public class AxisRenderer {
         return transformed >= transformedMin - LOG_TICK_EPSILON && transformed <= transformedMax + LOG_TICK_EPSILON;
     }
 
-    private static boolean sameTick(double a, double b) {
-        return Math.abs(a - b) <= LOG_TICK_EPSILON * Math.max(1.0, Math.abs(a));
+    /** Whether {@code value} is the linear-region threshold, +L or -L, within tick slack. */
+    private static boolean isThreshold(double value, double threshold) {
+        return Math.abs(Math.abs(value) - threshold) <= LOG_TICK_EPSILON * threshold;
     }
 
     /**
@@ -424,28 +449,14 @@ public class AxisRenderer {
             }
         }
 
-        // Draw horizontal grid lines aligned with value axis ticks. A row the scale's
-        // threshold marker owns is left to it, so the dashed cue never sits on a solid line.
-        int[] thresholdRows = thresholdRows(viewport);
-        for (Double tickValue : axisInfo.valueTicks) {
-            int screenY = viewport.valueToScreenY(tickValue);
-            if (screenY != thresholdRows[0] && screenY != thresholdRows[1]) {
-                drawHorizontalLine(g2d, viewport, screenY);
-            }
-        }
-    }
-
-    /**
-     * Screen rows of the scale's linear-region thresholds, +L and -L, or two off-plot rows
-     * for a scale without one. Always two entries so callers need no emptiness check.
-     */
-    private int[] thresholdRows(ViewPort viewport) {
+        // Draw horizontal grid lines aligned with value axis ticks. The tick at a scale's
+        // threshold (+/-L) is the marker's, decided by value rather than by pixel row so
+        // the dashed cue never sits on, or one pixel off, a solid line.
         OptionalDouble threshold = viewport.getYAxisScale().linearThreshold();
-        if (threshold.isEmpty()) {
-            return new int[] {Integer.MIN_VALUE, Integer.MIN_VALUE};
+        for (Double tickValue : axisInfo.valueTicks) {
+            if (threshold.isPresent() && isThreshold(tickValue, threshold.getAsDouble())) continue;
+            drawHorizontalLine(g2d, viewport, viewport.valueToScreenY(tickValue));
         }
-        double linearThreshold = threshold.getAsDouble();
-        return new int[] {viewport.valueToScreenY(linearThreshold), viewport.valueToScreenY(-linearThreshold)};
     }
 
     /** Draws a plot-wide horizontal line at {@code screenY} if it lies inside the plot area. */
@@ -468,15 +479,16 @@ public class AxisRenderer {
      * @param colors The current theme's plot colours (resolved once per paint)
      */
     public void drawScaleThresholds(Graphics2D g2d, ViewPort viewport, PlotColors colors) {
-        if (viewport.getYAxisScale().linearThreshold().isEmpty()) return;
+        OptionalDouble threshold = viewport.getYAxisScale().linearThreshold();
+        if (threshold.isEmpty()) return;
 
         // Derived from the grid role rather than a theme key of its own, so the marker keeps
         // the grid's relationship to the background in every theme while reading as deliberate.
         g2d.setColor(PlotColors.shiftForContrast(colors.grid, colors.background, THRESHOLD_CONTRAST_SHIFT));
         g2d.setStroke(THRESHOLD_STROKE);
-        for (int row : thresholdRows(viewport)) {
-            drawHorizontalLine(g2d, viewport, row);
-        }
+        double linearThreshold = threshold.getAsDouble();
+        drawHorizontalLine(g2d, viewport, viewport.valueToScreenY(linearThreshold));
+        drawHorizontalLine(g2d, viewport, viewport.valueToScreenY(-linearThreshold));
     }
 
     /**
