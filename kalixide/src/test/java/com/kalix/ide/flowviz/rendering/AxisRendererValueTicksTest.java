@@ -8,6 +8,7 @@ import java.time.Duration;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -123,6 +124,32 @@ class AxisRendererValueTicksTest {
             assertTrue(renderer.calculateValueTicks(viewport(Double.MIN_VALUE, 3 * Double.MIN_VALUE, TALL, YAxisScale.LINEAR)).isEmpty(),
                 "a span below the doubles' floor yields no interval and no ticks");
         });
+    }
+
+    /** Padding can overflow a bound to infinity; the axis goes empty rather than looping to Integer.MAX_VALUE. */
+    @Test
+    void ticksOnANonFiniteBoundAreEmpty() {
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
+            for (YAxisScale scale : YAxisScale.values()) {
+                assertTrue(renderer.calculateValueTicks(viewport(1, Double.POSITIVE_INFINITY, TALL, scale)).isEmpty(), scale.toString());
+            }
+            assertTrue(renderer.calculateValueTicks(viewport(Double.NEGATIVE_INFINITY, 1, TALL, YAxisScale.LINEAR)).isEmpty());
+            // LOG cannot show a negative minimum at all, so -Inf takes the usual six-decade fallback
+            assertFalse(renderer.calculateValueTicks(viewport(Double.NEGATIVE_INFINITY, 1, TALL, YAxisScale.LOG)).isEmpty());
+        });
+    }
+
+    /** The numeric x-axis (double-mass) shares the counted placement, so a sub-ulp span cannot spin it either. */
+    @Test
+    void numericAxisTicksAreNiceAndTerminateOnASubUlpSpan() {
+        long scale = 1_000_000L;   // PlotTypeTransformer.NUMERIC_SCALE
+        ViewPort tenUnits = new ViewPort(0, 10 * scale, 0, 1, 0, 0, 600, TALL, YAxisScale.LINEAR, XAxisType.NUMERIC);
+        assertEquals(List.of(0L, 2 * scale, 4 * scale, 6 * scale, 8 * scale, 10 * scale), renderer.calculateAxisInfo(tenUnits).timeTicks);
+
+        long huge = 5_000_000_000L * scale;   // cumulative volume 5e9, one encoded unit wide
+        ViewPort sliver = new ViewPort(huge, huge + 1, 0, 1, 0, 0, 600, TALL, YAxisScale.LINEAR, XAxisType.NUMERIC);
+        assertTimeoutPreemptively(Duration.ofSeconds(5),
+            () -> assertTrue(renderer.calculateAxisInfo(sliver).timeTicks.size() <= 4 * 7 + 1));
     }
 
     @Test

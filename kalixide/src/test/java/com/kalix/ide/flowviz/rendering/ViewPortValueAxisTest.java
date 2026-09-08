@@ -152,6 +152,19 @@ class ViewPortValueAxisTest {
         assertEquals(100.0, visible[1]);
     }
 
+    /** Switching to LOG used to keep a stored -5 while the axis drew 1e-6, so copy-axis and set-limits lied. */
+    @Test
+    void switchingScaleMaterialisesTheBoundTheAxisDraws() {
+        ViewPort log = viewport(-5, 100, YAxisScale.LINEAR).withYAxisScale(YAxisScale.LOG);
+        assertEquals(1e-6, log.getMinValue(), 1e-6 * REL, "the drawn fallback becomes the stored minimum");
+        assertEquals(100.0, log.getMaxValue(), REL);
+
+        ViewPort sqrt = viewport(-5, 100, YAxisScale.LINEAR).withYAxisScale(YAxisScale.SQRT);
+        assertEquals(-5.0, sqrt.getMinValue(), "a scale that shows the bound keeps it");
+        ViewPort linear = viewport(1, 100, YAxisScale.LOG).withYAxisScale(YAxisScale.LINEAR);
+        assertEquals(1.0, linear.getMinValue());
+    }
+
     @Test
     void centringKeepsTheSpanInTransformedSpace() {
         ViewPort log = withValueBounds(viewport(1, 100, YAxisScale.LOG),

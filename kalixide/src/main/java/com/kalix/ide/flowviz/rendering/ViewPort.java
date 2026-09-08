@@ -284,8 +284,19 @@ public class ViewPort {
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
+    /**
+     * The same view on another scale. A stored bound the new scale cannot show (a
+     * non-positive minimum on LOG) is replaced by the bound the axis will actually draw,
+     * so copy-axis, set-limits, undo and saved state agree with the plot instead of
+     * carrying a value that only becomes real after the next zoom step.
+     */
     public ViewPort withYAxisScale(YAxisScale yAxisScale) {
-        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
+        ViewPort rescaled = new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
+        if (rescaled.isShowable(minValue) && rescaled.isShowable(maxValue)) return rescaled;
+        return new ViewPort(startTimeMs, endTimeMs,
+                          yAxisScale.inverseTransform(rescaled.getTransformedMin()),
+                          yAxisScale.inverseTransform(rescaled.getTransformedMax()),
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
