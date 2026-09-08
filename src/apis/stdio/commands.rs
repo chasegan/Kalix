@@ -485,20 +485,7 @@ impl Command for GetResultCommand {
                 }))
             }
             "pixie" => {
-                use crate::io::compression::gorilla::{GorillaCompressor, TimeValueDouble};
-                use base64::{Engine, engine::general_purpose::STANDARD};
-
-                let series: Vec<TimeValueDouble> = timeseries.values.iter().enumerate()
-                    .map(|(i, &v)| TimeValueDouble {
-                        timestamp: timeseries.start_timestamp + (i as u64 * timeseries.step_size),
-                        value: v,
-                    })
-                    .collect();
-
-                let compressor = GorillaCompressor::new(timeseries.step_size);
-                let compressed = compressor.compress_double(&series)
-                    .map_err(|e| CommandError::ExecutionError(format!("Gorilla compression failed: {}", e)))?;
-                let encoded = STANDARD.encode(&compressed);
+                let encoded = pixie_payload(timeseries)?;
 
                 Ok(serde_json::json!({
                     "series_name": series_name,
@@ -1077,9 +1064,66 @@ impl Command for SaveResultsCommand {
     }
 }
 
+/// Encodes a result series as the `get_result` pixie payload: a Gorilla-compressed
+/// bitstream, base64-encoded.
+///
+/// The bitstream carries plain signed Unix seconds (two's complement, UTC) — byte for
+/// byte the convention of a `.pxb` file, so a consumer decodes both the same way.
+/// `wrap_to_u64`'s 2^63 bias is engine-internal and must not cross this boundary;
+/// this mirrors `pixie_io`'s write path.
+fn pixie_payload(timeseries: &crate::timeseries::Timeseries) -> Result<String, CommandError> {
+    use crate::io::compression::gorilla::{GorillaCompressor, TimeValueDouble};
+    use crate::tid::utils::wrap_to_i64;
+    use base64::{Engine, engine::general_purpose::STANDARD};
+
+    let series: Vec<TimeValueDouble> = timeseries.values.iter().enumerate()
+        .map(|(i, &v)| TimeValueDouble {
+            timestamp: wrap_to_i64(timeseries.start_timestamp + (i as u64 * timeseries.step_size)) as u64,
+            value: v,
+        })
+        .collect();
+
+    let compressor = GorillaCompressor::new(timeseries.step_size);
+    let compressed = compressor.compress_double(&series)
+        .map_err(|e| CommandError::ExecutionError(format!("Gorilla compression failed: {}", e)))?;
+    Ok(STANDARD.encode(&compressed))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The wire carries signed Unix seconds, like a .pxb file — not the engine's
+    /// 2^63-biased internal form. Pinned on a pre-1970 series, where the two forms
+    /// differ in sign and not just in the top bit's meaning.
+    #[test]
+    fn get_result_pixie_payload_carries_signed_unix_seconds() {
+        use crate::io::compression::gorilla::GorillaCompressor;
+        use crate::tid::utils::wrap_to_u64;
+        use crate::timeseries::Timeseries;
+        use base64::{Engine, engine::general_purpose::STANDARD};
+
+        // 1889-01-01T00:00:00Z: negative Unix seconds.
+        let start_unix: i64 = chrono::NaiveDate::from_ymd_opt(1889, 1, 1).unwrap()
+            .and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp();
+        assert!(start_unix < 0, "fixture sanity: pre-1970");
+
+        let mut ts = Timeseries::new_daily();
+        for i in 0..3 {
+            ts.push(wrap_to_u64(start_unix + i * 86_400), i as f64);
+        }
+
+        let encoded = pixie_payload(&ts).unwrap();
+        let bytes = STANDARD.decode(encoded).unwrap();
+        let points = GorillaCompressor::new(86_400).decompress_double(&bytes).unwrap();
+
+        assert_eq!(points.len(), 3);
+        for (i, p) in points.iter().enumerate() {
+            assert_eq!(p.timestamp as i64, start_unix + i as i64 * 86_400,
+                "point {} must decode to the signed Unix seconds a .pxb reader would see", i);
+            assert_eq!(p.value, i as f64);
+        }
+    }
 
     #[test]
     fn test_command_registry() {

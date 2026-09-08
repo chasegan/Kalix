@@ -465,10 +465,18 @@ pub fn u64_to_year_month_day_and_seconds(value: u64) -> (i32, u32, u32, u32) {
 }
 
 
+/// Converts signed Unix seconds to the engine's internal offset-binary form (biased by
+/// 2^63) so timestamps sort and index as unsigned.
+///
+/// This form is ENGINE-INTERNAL. Every boundary — Pixie files, the STDIO `get_result`
+/// bitstream, the Python binding — carries plain two's-complement Unix seconds (UTC),
+/// exactly what `chrono::timestamp()`, POSIX `time_t`, and Java's `Instant.getEpochSecond`
+/// mean. Convert with [`wrap_to_i64`] before writing and [`wrap_to_u64`] after reading.
 pub fn wrap_to_u64(x: i64) -> u64 {
     (x as u64).wrapping_add(u64::MAX/2 + 1)
 }
 
+/// Inverse of [`wrap_to_u64`]: internal offset-binary back to signed Unix seconds.
 pub fn wrap_to_i64(x: u64) -> i64 {
     x.wrapping_sub(u64::MAX/2 + 1) as i64
 }
