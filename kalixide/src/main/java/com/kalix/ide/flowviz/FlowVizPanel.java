@@ -391,13 +391,13 @@ public class FlowVizPanel extends JPanel {
 
     /**
      * Applies padding to Y-axis range in the appropriate transformed space.
-     * Works for all scale types (LINEAR, LOG, SQRT) by applying padding in transformed
+     * Works for every scale in {@link YAxisScale} by applying padding in transformed
      * space and then inverse transforming back to data space. This ensures consistent
      * visual spacing regardless of scale type.
      *
      * @param minValue The minimum Y value before padding
      * @param maxValue The maximum Y value before padding
-     * @param yAxisScale The Y-axis scale type (LINEAR, LOG, or SQRT)
+     * @param yAxisScale The Y-axis scale to pad in
      * @param paddingFraction The fraction of range to use as padding (e.g., 0.05 for 5%)
      * @return Array of [paddedMin, paddedMax]
      */

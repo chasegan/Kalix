@@ -1,5 +1,7 @@
 package com.kalix.ide.flowviz.transform;
 
+import java.util.OptionalDouble;
+
 /**
  * Y-axis scale transformations for plot display.
  */
@@ -11,7 +13,29 @@ public enum YAxisScale {
     LOG("Log"),
 
     /** Square root scale. */
-    SQRT("Sqrt");
+    SQRT("Sqrt"),
+
+    /**
+     * Symmetric log - linear on [-L, L] and log_10 outside it, with L = 10.
+     * Inspired by, but not the same as, matplotlib's symlog. This implementation
+     * keeps log10(10**n) on integral positions so the axis ticks read as 10, 100,
+     * etc.
+     */
+    SYMLOG("Symlog")
+    ;
+
+    /** SYMLOG linear threshold: |y| below this is drawn linearly. */
+    private static final double SYMLOG_THRESHOLD = 10.0;
+
+    /** Transformed position of the threshold - where the two SYMLOG branches meet. */
+    private static final double SYMLOG_LOG_THRESHOLD = Math.log10(SYMLOG_THRESHOLD);
+
+    /**
+     * Slope of the SYMLOG linear branch. Derived, not chosen: continuity at +/-L
+     * requires L * slope == log10(L), so the linear zone occupies exactly one decade
+     * of transformed space either side of zero.
+     */
+    private static final double SYMLOG_LINEAR_SLOPE = SYMLOG_LOG_THRESHOLD / SYMLOG_THRESHOLD;
 
     private final String displayName;
 
@@ -21,6 +45,18 @@ public enum YAxisScale {
 
     public String getDisplayName() {
         return displayName;
+    }
+
+    /**
+     * The linear-region threshold L, for scales that have one - the magnitude below which
+     * values are drawn linearly rather than logarithmically. Empty for scales with no such
+     * region, which is every other scale at present.
+     *
+     * <p>Exposed so renderers can mark where the axis changes behaviour without holding a
+     * second copy of the constant; this enum stays the sole owner of each scale's parameters.</p>
+     */
+    public OptionalDouble linearThreshold() {
+        return this == SYMLOG ? OptionalDouble.of(SYMLOG_THRESHOLD) : OptionalDouble.empty();
     }
 
     /**
@@ -43,6 +79,15 @@ public enum YAxisScale {
                     yield -Math.sqrt(-y);
                 }
             }
+            case SYMLOG -> {
+                if (y >= SYMLOG_THRESHOLD) {
+                    yield Math.log10(y);
+                } else if (y <= -SYMLOG_THRESHOLD) {
+                    yield -Math.log10(-y);
+                } else {
+                    yield y * SYMLOG_LINEAR_SLOPE;
+                }
+            }
         };
     }
 
@@ -62,6 +107,15 @@ public enum YAxisScale {
                     yield transformedY * transformedY;
                 } else {
                     yield -(transformedY * transformedY);
+                }
+            }
+            case SYMLOG -> {
+                if (transformedY >= SYMLOG_LOG_THRESHOLD) {
+                    yield Math.pow(10, transformedY);
+                } else if (transformedY <= -SYMLOG_LOG_THRESHOLD) {
+                    yield -Math.pow(10, -transformedY);
+                } else {
+                    yield transformedY / SYMLOG_LINEAR_SLOPE;
                 }
             }
         };
