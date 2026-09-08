@@ -927,10 +927,7 @@ public class FlowVizPanel extends JPanel {
         }
         long span = currentViewport.getTimeRangeMs();
         long newStart = timeMs - span / 2;
-        double[] valueBounds = {currentViewport.getMinValue(), currentViewport.getMaxValue()};
-        if (value < valueBounds[0] || value > valueBounds[1]) { // NaN compares false: left alone
-            valueBounds = currentViewport.valueBoundsCentredOn(value);
-        }
+        double[] valueBounds = currentViewport.valueBoundsCentredOn(value); // no-op when on screen
         currentViewport = new ViewPort(newStart, newStart + span, valueBounds[0], valueBounds[1],
             currentViewport.getPlotX(), currentViewport.getPlotY(),
             currentViewport.getPlotWidth(), currentViewport.getPlotHeight(),

@@ -96,28 +96,10 @@ public class ViewPort {
     }
 
     /**
-     * Returns a valid minimum transformed value when viewport min is invalid for the scale.
-     * Only LOG scale can produce NaN (for non-positive values).
+     * Decades shown below the maximum (or below 1) when a LOG viewport's minimum is not
+     * positive, so a bound the scale cannot show still gives a readable axis.
      */
-    private double getValidMinForScale(YAxisScale scale) {
-        return switch(scale) {
-            case LOG -> -6.0;  // log10(0.000001) - represents very small positive values
-            case SQRT -> yAxisScale.transform(minValue);  // Signed sqrt handles all values
-            case LINEAR -> minValue; // Should never be NaN
-        };
-    }
-
-    /**
-     * Returns a valid maximum transformed value when viewport max is invalid for the scale.
-     * Only LOG scale can produce NaN (for non-positive values).
-     */
-    private double getValidMaxForScale(YAxisScale scale, double validMin) {
-        return switch(scale) {
-            case LOG -> validMin + 6.0;  // Reasonable range
-            case SQRT -> yAxisScale.transform(maxValue);  // Signed sqrt handles all values
-            case LINEAR -> maxValue; // Should never be NaN
-        };
-    }
+    private static final double FALLBACK_DECADES = 6.0;
 
     /**
      * Gets the transformed min value, clamping to valid range if needed.
@@ -125,10 +107,14 @@ public class ViewPort {
      */
     public double getTransformedMin() {
         double transformedMin = yAxisScale.transform(minValue);
-        if (Double.isNaN(transformedMin)) {
-            return getValidMinForScale(yAxisScale);
-        }
-        return transformedMin;
+        if (!Double.isNaN(transformedMin)) return transformedMin;
+
+        // Only LOG returns NaN (a non-positive minimum). Show six decades below 1, or
+        // below the maximum when that is smaller: a fixed floor above the maximum would
+        // invert the axis, and a zoom or pan step from an inverted view stays inverted.
+        double transformedMax = yAxisScale.transform(maxValue);
+        double ceiling = Double.isNaN(transformedMax) ? 0.0 : Math.min(0.0, transformedMax);
+        return ceiling - FALLBACK_DECADES;
     }
 
     /**
@@ -137,13 +123,10 @@ public class ViewPort {
      */
     public double getTransformedMax() {
         double transformedMax = yAxisScale.transform(maxValue);
-        if (Double.isNaN(transformedMax)) {
-            double validMin = getTransformedMin();
-            return getValidMaxForScale(yAxisScale, validMin);
-        }
-        return transformedMax;
+        if (!Double.isNaN(transformedMax)) return transformedMax;
+        return getTransformedMin() + FALLBACK_DECADES;
     }
-    
+
     public long screenXToTime(int screenX) {
         if (plotWidth == 0) return startTimeMs;
         double ratio = (double)(screenX - plotX) / plotWidth;
@@ -216,18 +199,25 @@ public class ViewPort {
     }
 
     /**
-     * Value bounds re-centred on {@code value}, keeping the span in transformed space so
-     * the zoom level survives on every scale (a log axis keeps its decade count, not its
-     * data-space width). Returns the current bounds unchanged when {@code value} is not
-     * showable on this scale (non-finite, or non-positive on LOG), or the centred span
-     * would not be (see {@link #valueBoundsFor}).
+     * Value bounds re-centred on {@code value} when it is off-screen, keeping the span in
+     * transformed space so the zoom level survives on every scale (a log axis keeps its
+     * decade count, not its data-space width). Returns the current bounds unchanged when
+     * {@code value} is already on screen, is not showable on this scale (non-finite, or
+     * non-positive on LOG), or the centred span would not be (see {@link #valueBoundsFor}).
+     *
+     * <p>"On screen" is judged in transformed space, against the axis as drawn: on LOG with
+     * a non-positive stored minimum the drawn range is the fallback, not the stored bounds,
+     * and a data-space compare would call a point below the plot visible.</p>
      */
     public double[] valueBoundsCentredOn(double value) {
         double transformedValue = yAxisScale.transform(value);
-        if (!Double.isFinite(transformedValue)) {
+        double transformedMin = getTransformedMin();
+        double transformedMax = getTransformedMax();
+        boolean offScreen = transformedValue < transformedMin || transformedValue > transformedMax;
+        if (!offScreen || !Double.isFinite(transformedValue)) {
             return new double[] {minValue, maxValue};
         }
-        double halfSpan = (getTransformedMax() - getTransformedMin()) / 2;
+        double halfSpan = (transformedMax - transformedMin) / 2;
         return valueBoundsFor(transformedValue - halfSpan, transformedValue + halfSpan);
     }
 
@@ -239,12 +229,13 @@ public class ViewPort {
      * viewport stuck, because every later step is computed from the broken bounds
      * ({@code Inf / 1.1} is still {@code Inf}) and only zoom-to-fit recovers. Refusing
      * the step keeps the last readable view instead, so a runaway wheel zoom-out simply
-     * stops. Every zoom, pan and recentre of the value axis goes through here.
+     * stops. An inverted or empty result is refused for the same reason. Every zoom, pan
+     * and recentre of the value axis goes through here.
      */
     private double[] valueBoundsFor(double transformedMin, double transformedMax) {
         double newMinValue = yAxisScale.inverseTransform(transformedMin);
         double newMaxValue = yAxisScale.inverseTransform(transformedMax);
-        if (!isShowable(newMinValue) || !isShowable(newMaxValue)) {
+        if (!isShowable(newMinValue) || !isShowable(newMaxValue) || newMinValue >= newMaxValue) {
             return new double[] {minValue, maxValue};
         }
         return new double[] {newMinValue, newMaxValue};

@@ -255,10 +255,15 @@ public class AxisRenderer {
     private List<Double> evenTicks(double min, double max, int numTicks, DoubleUnaryOperator toData) {
         List<Double> ticks = new ArrayList<>();
         double tickInterval = roundToNiceValueInterval((max - min) / (numTicks - 1));
-        double current = Math.floor(min / tickInterval) * tickInterval;
-        while (current <= max + tickInterval / 2) {
-            ticks.add(toData.applyAsDouble(current));
-            current += tickInterval;
+        if (!(tickInterval > 0) || !Double.isFinite(tickInterval)) return ticks; // span below the doubles' floor
+        double first = Math.floor(min / tickInterval) * tickInterval;
+
+        // Counted, not accumulated: once the interval is under half an ulp of the value
+        // (a view zoomed to [1, 1 + 2e-16]) `current += interval` never advances and an
+        // accumulating loop hangs the EDT on every paint. Coincident ticks are harmless.
+        int count = 1 + (int) Math.min(4L * numTicks, (long) Math.floor((max + tickInterval / 2 - first) / tickInterval));
+        for (int i = 0; i < count; i++) {
+            ticks.add(toData.applyAsDouble(first + i * tickInterval));
         }
         return ticks;
     }
