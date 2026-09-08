@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -69,8 +70,8 @@ class DataDocumentTest {
         try {
             assertFalse(doc.isEditable(),
                 "save paths must refuse: there is no editor buffer to write");
-            assertInstanceOf(JScrollPane.class, doc.getPrimaryView(),
-                "primary content is the virtual text view, not the editor");
+            assertNotSame(doc.getEditor(), doc.getPrimaryView(),
+                "primary content is the bannered virtual text view, not the editor");
             assertInstanceOf(VirtualTextArea.class, doc.getPrimaryFocusComponent());
             assertInstanceOf(DataVizView.class, doc.getContextView());
         } finally {

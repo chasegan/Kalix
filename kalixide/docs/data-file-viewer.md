@@ -113,8 +113,9 @@ the host can refuse honestly.
   rebuild run on a single background refresh worker — never the EDT — whose
   drain loop coalesces bursts of change events without ever losing the
   trailing one. The table never parses stale offsets.
-- **`.res.csv` virtual views show the data region only** (text and table both
-  start past `EOH`). Below the gate the real editor still shows the whole file,
+- **`.res.csv` tables show the data region only** (rows start past `EOH`); the
+  virtual text view renders the extended header above the indexed region, so
+  the whole file stays visible. Below the gate the real editor still shows the whole file,
   extended header included.
 - **The gate applies to DATA files only.** A giant `.txt`/log still loads fully
   into an editor buffer, exactly as before this work; gating TEXT files through

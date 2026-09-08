@@ -5,6 +5,7 @@ import com.kalix.ide.dataview.DataViewOpener;
 import com.kalix.ide.dataview.DataViewPanel;
 import com.kalix.ide.dataview.DataVizView;
 import com.kalix.ide.dataview.DataViewSession;
+import com.kalix.ide.dataview.VirtualLineNumberGutter;
 import com.kalix.ide.dataview.VirtualTextArea;
 import com.kalix.ide.editor.KalixCsvTokenMaker;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -42,6 +43,8 @@ public class DataDocument extends KalixDocument {
     private final DataVizView dataVizView;
     private final VirtualTextArea largeTextArea;
     private final JScrollPane largeTextScroller;
+    /** The scroller under its read-only banner; what the tab actually mounts. */
+    private final JComponent largePrimaryView;
     /** True above the editable-text gate: virtual read-only views. */
     private final boolean largeReadOnly;
 
@@ -90,6 +93,15 @@ public class DataDocument extends KalixDocument {
         boolean virtualText = largeReadOnly && session != null;
         this.largeTextArea = virtualText ? new VirtualTextArea(session) : null;
         this.largeTextScroller = virtualText ? new JScrollPane(largeTextArea) : null;
+        if (virtualText) {
+            // Editor parity: a line-number gutter, and Find routed to the data
+            // views (the editor's Find would search a hidden empty buffer).
+            VirtualLineNumberGutter gutter = new VirtualLineNumberGutter(largeTextArea);
+            largeTextScroller.setRowHeaderView(gutter);
+            largeTextArea.attachGutter(gutter);
+            largeTextArea.setFindHandlers(dataViewPanel::openFind, dataViewPanel::repeatFind);
+        }
+        this.largePrimaryView = virtualText ? withReadOnlyBanner(largeTextScroller) : null;
         // Above the gate the document is read-only EVEN IF the session failed:
         // in that case the editor buffer is empty (the load path never reads the
         // file), and an editable empty buffer over a real file is one Save All
@@ -124,7 +136,39 @@ public class DataDocument extends KalixDocument {
     public JComponent getPrimaryView() {
         // A read-only document whose session failed falls back to its (empty,
         // unsaveable) editor rather than a null component.
-        return largeReadOnly && largeTextScroller != null ? largeTextScroller : getEditor();
+        return largeReadOnly && largePrimaryView != null ? largePrimaryView : getEditor();
+    }
+
+    /**
+     * Wraps the virtual text view under a slim banner announcing WHY the tab is
+     * read-only. Before this, nothing anywhere said so: typing was swallowed
+     * silently, and the word "read-only" first appeared after a failed save.
+     */
+    private static JComponent withReadOnlyBanner(JComponent content) {
+        javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout());
+        javax.swing.JLabel banner = new javax.swing.JLabel(String.format(
+            "Read-only view — file exceeds the %d MB editing gate (Preferences → Editor → Load and Save)",
+            PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.get()));
+        banner.setBorder(javax.swing.BorderFactory.createEmptyBorder(3, 8, 3, 8));
+        banner.setEnabled(false); // muted, theme-following
+        panel.add(banner, java.awt.BorderLayout.NORTH);
+        panel.add(content, java.awt.BorderLayout.CENTER);
+        return panel;
+    }
+
+    /** Whether Edit→Find should target the data views rather than the (hidden, empty) editor. */
+    public boolean routesFindToDataView() {
+        return largeReadOnly && dataViewPanel != null;
+    }
+
+    /** Opens the data views' unified Find (menu routing for read-only tabs). */
+    public void showDataFind() {
+        dataViewPanel.openFind();
+    }
+
+    /** Repeats the data views' last find (menu routing for read-only tabs). */
+    public void repeatDataFind(boolean forward) {
+        dataViewPanel.repeatFind(forward);
     }
 
     @Override

@@ -10,6 +10,7 @@ import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VirtualTextAreaTest {
 
@@ -104,6 +105,40 @@ class VirtualTextAreaTest {
                 "selection stitches header and data seamlessly");
             area.showLine(1); // data-region line 1 lands past the header
             assertEquals(10, area.selectionStart());
+        }
+    }
+
+    @Test
+    void fontSizeFollowsTheEditorPreference() throws IOException {
+        try (DataViewSession s = session("a\n")) {
+            VirtualTextArea area = new VirtualTextArea(s);
+            assertEquals(com.kalix.ide.preferences.PreferenceKeys.EDITOR_FONT_SIZE.get().intValue(),
+                area.getFont().getSize(), "editor parity: the same size preference as every text surface");
+        }
+    }
+
+    @Test
+    void selectAllActionSelectsEveryLine() throws IOException {
+        try (DataViewSession s = session("a\nb\nc\n")) {
+            VirtualTextArea area = new VirtualTextArea(s);
+            area.getActionMap().get("select-all").actionPerformed(null);
+            assertEquals(0, area.selectionStart());
+            assertEquals(3, area.selectionEndExclusive());
+        }
+    }
+
+    @Test
+    void gutterWidthTracksTheDigitCount() throws IOException {
+        try (DataViewSession small = session("a\nb\n")) {
+            int narrow = new VirtualLineNumberGutter(new VirtualTextArea(small)).getPreferredSize().width;
+            StringBuilder big = new StringBuilder();
+            for (int i = 0; i < 12_000; i++) {
+                big.append("x\n");
+            }
+            try (DataViewSession large = session(big.toString())) {
+                int wide = new VirtualLineNumberGutter(new VirtualTextArea(large)).getPreferredSize().width;
+                assertTrue(wide > narrow, "five digits need more room than one");
+            }
         }
     }
 

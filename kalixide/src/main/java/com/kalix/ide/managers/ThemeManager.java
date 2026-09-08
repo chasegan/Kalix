@@ -320,6 +320,7 @@ public class ThemeManager {
         com.kalix.ide.windows.MinimalEditorWindow.updateAllSyntaxThemes(syntaxTheme);
         com.kalix.ide.components.KalixIniTextArea.updateAllSyntaxThemes(syntaxTheme);
         com.kalix.ide.diff.DiffWindow.updateAllSyntaxThemes(syntaxTheme);
+        com.kalix.ide.dataview.VirtualTextArea.updateAllSyntaxThemes(syntaxTheme);
     }
 
     /**
@@ -331,5 +332,6 @@ public class ThemeManager {
         com.kalix.ide.windows.MinimalEditorWindow.updateAllFontSizes(fontSize);
         com.kalix.ide.components.KalixIniTextArea.updateAllFontSizes(fontSize);
         com.kalix.ide.diff.DiffWindow.updateAllFontSizes(fontSize);
+        com.kalix.ide.dataview.VirtualTextArea.updateAllFontSizes(fontSize);
     }
 }
