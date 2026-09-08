@@ -147,7 +147,7 @@ public class DataDocument extends KalixDocument {
     private static JComponent withReadOnlyBanner(JComponent content) {
         javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout());
         javax.swing.JLabel banner = new javax.swing.JLabel(String.format(
-            "Read-only view — file exceeds the %d MB editing gate (Preferences → Editor → Load and Save)",
+            "Read only >%dMB (modify threshold in preferences)",
             PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.get()));
         banner.setBorder(javax.swing.BorderFactory.createEmptyBorder(3, 8, 3, 8));
         banner.setEnabled(false); // muted, theme-following
