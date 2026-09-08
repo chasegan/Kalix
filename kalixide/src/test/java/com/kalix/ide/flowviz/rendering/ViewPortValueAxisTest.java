@@ -72,11 +72,27 @@ class ViewPortValueAxisTest {
         assertEquals(span / 1.1, decades(zoomedIn), REL * span, "zooming back in works from the stopped view");
     }
 
+    /** Zooming about the data-space midpoint slid a LOG view upward on every button press. */
+    @Test
+    void buttonZoomHoldsTheMiddleOfThePlotOnEveryScale() {
+        for (YAxisScale scale : YAxisScale.values()) {
+            ViewPort v = viewport(1, 10_000, scale);
+            double middle = v.screenYToValue(HEIGHT / 2);
+            ViewPort in = v.zoom(2.0);
+            ViewPort out = v.zoom(0.5);
+            assertEquals(middle, in.screenYToValue(HEIGHT / 2), Math.abs(middle) * REL, scale + " zoom in moved the centre");
+            assertEquals(middle, out.screenYToValue(HEIGHT / 2), Math.abs(middle) * REL, scale + " zoom out moved the centre");
+            assertEquals(decades(v) / 2, decades(in), REL * decades(v), scale + " zoom in halves the span");
+            assertEquals(decades(v) * 2, decades(out), REL * decades(v), scale + " zoom out doubles the span");
+            assertEquals(DAY / 2, in.getTimeRangeMs(), 1, scale + " time axis zooms too");
+        }
+    }
+
     @Test
     void zoomAndPanRefuseAStepThatOverflowsTheScale() {
         ViewPort v = viewport(1, 1e300, YAxisScale.LOG);
 
-        ViewPort zoomedOut = v.zoom(1 / 1.1, DAY / 2, 1e150);
+        ViewPort zoomedOut = v.zoom(1 / 1.1);
         assertEquals(1.0, zoomedOut.getMinValue());
         assertEquals(1e300, zoomedOut.getMaxValue());
         assertEquals((long) (DAY * 1.1), zoomedOut.getTimeRangeMs(), 2, "the time axis still zooms");

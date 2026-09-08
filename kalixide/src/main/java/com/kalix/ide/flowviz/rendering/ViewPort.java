@@ -160,24 +160,22 @@ public class ViewPort {
     }
     
     // Viewport manipulation
-    public ViewPort zoom(double factor, long centerTimeMs, double centerValue) {
-        // Time zoom (always linear)
+
+    /**
+     * Zooms both axes by {@code factor} (above 1 zooms in) about the centre of the plot
+     * area: the toolbar and keyboard zoom. The value axis is zoomed in transformed space
+     * about the middle screen row, not about the data-space midpoint -- on LOG or any
+     * other non-linear scale that midpoint sits near the top of the plot, and zooming
+     * about it slid the view upward on every press.
+     */
+    public ViewPort zoom(double factor) {
         long timeRange = endTimeMs - startTimeMs;
+        long centerTimeMs = startTimeMs + timeRange / 2;
         long newTimeRange = (long) (timeRange / factor);
-        long newStartTime = centerTimeMs - newTimeRange / 2;
-        long newEndTime = centerTimeMs + newTimeRange / 2;
+        double[] valueBounds = valueBoundsZoomedAbout(factor, 0.5);
 
-        // Value zoom in transformed space for correct behavior with non-linear scales
-        double transformedCenter = yAxisScale.transform(centerValue);
-        double transformedMin = getTransformedMin();
-        double transformedMax = getTransformedMax();
-        double transformedRange = transformedMax - transformedMin;
-
-        double newTransformedRange = transformedRange / factor;
-        double[] valueBounds = valueBoundsFor(transformedCenter - newTransformedRange / 2,
-                                              transformedCenter + newTransformedRange / 2);
-
-        return new ViewPort(newStartTime, newEndTime, valueBounds[0], valueBounds[1],
+        return new ViewPort(centerTimeMs - newTimeRange / 2, centerTimeMs + newTimeRange / 2,
+                          valueBounds[0], valueBounds[1],
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
@@ -190,6 +188,11 @@ public class ViewPort {
      */
     public double[] valueBoundsZoomedAbout(double factor, int screenY) {
         double ratio = plotHeight == 0 ? 0.5 : (double) (plotY + plotHeight - screenY) / plotHeight;
+        return valueBoundsZoomedAbout(factor, ratio);
+    }
+
+    /** As above, anchored at {@code ratio} of the way up the plot (0 bottom, 1 top). */
+    private double[] valueBoundsZoomedAbout(double factor, double ratio) {
         double transformedMin = getTransformedMin();
         double transformedMax = getTransformedMax();
         double anchor = transformedMin + ratio * (transformedMax - transformedMin);

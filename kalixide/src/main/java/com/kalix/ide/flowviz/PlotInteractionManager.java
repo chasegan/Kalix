@@ -350,12 +350,8 @@ public class PlotInteractionManager {
 
             updateViewportWithFittedY(startTime, endTime);
         } else {
-            // Standard zoom: zoom both axes
-            long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
-            double centerValue = (currentViewport.getMinValue() + currentViewport.getMaxValue()) / 2;
-
-            ViewPort newViewport = currentViewport.zoom(ZOOM_FACTOR, centerTime, centerValue);
-            viewportUpdater.accept(newViewport);
+            // Standard zoom: both axes about the plot centre
+            viewportUpdater.accept(currentViewport.zoom(ZOOM_FACTOR));
         }
         parentComponent.repaint();
     }
@@ -378,12 +374,8 @@ public class PlotInteractionManager {
 
             updateViewportWithFittedY(startTime, endTime);
         } else {
-            // Standard zoom: zoom both axes
-            long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
-            double centerValue = (currentViewport.getMinValue() + currentViewport.getMaxValue()) / 2;
-
-            ViewPort newViewport = currentViewport.zoom(1.0 / ZOOM_FACTOR, centerTime, centerValue);
-            viewportUpdater.accept(newViewport);
+            // Standard zoom: both axes about the plot centre
+            viewportUpdater.accept(currentViewport.zoom(1.0 / ZOOM_FACTOR));
         }
         parentComponent.repaint();
     }
