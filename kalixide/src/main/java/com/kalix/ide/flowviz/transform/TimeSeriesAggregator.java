@@ -2,6 +2,7 @@ package com.kalix.ide.flowviz.transform;
 
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
+import com.kalix.ide.flowviz.stats.TimeSeriesMasker;
 
 import java.time.LocalDate;
 import java.time.Month;
@@ -9,7 +10,8 @@ import java.util.Arrays;
 import java.util.Set;
 
 /**
- * Aggregates time series data to coarser temporal resolutions.
+ * Aggregates time series data to coarser temporal resolutions. Responsible for applying
+ * seasonal masks.
  *
  * <p>The pipeline is fully primitive (per manifestos/performance.md): timestamps stay as
  * UTC epoch millis end to end, points are bucketed in a single pass over primitive arrays,
@@ -38,7 +40,7 @@ public class TimeSeriesAggregator {
     private static final long DAY_MS = 86_400_000L;
 
     /**
-     * Aggregates time series data according to the specified period and method.
+     * Aggregates time series data according to the specified period and method, and applies the seasonal mask.
      *
      * @param original Original time series data
      * @param period Aggregation period
@@ -51,9 +53,13 @@ public class TimeSeriesAggregator {
         AggregationMethod method,
         SeasonalMaskMode seasonalMaskMode
     ) {
-        if (original == null || period == AggregationPeriod.ORIGINAL
-                || original.getPointCount() == 0) {
+        if (original == null || original.getPointCount() == 0) {
             return original;
+        }
+        if (period == AggregationPeriod.ORIGINAL) {
+            return seasonalMaskMode instanceof SeasonalMaskMode.Enabled
+                ? TimeSeriesMasker.createSeasonalMask(original, seasonalMaskMode).apply(original)
+                : original;
         }
 
         if (period == AggregationPeriod.DAILY) {
