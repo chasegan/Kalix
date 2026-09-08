@@ -169,8 +169,14 @@ public class TimeSeriesMasker {
     }
 
     /**
-     * Creates a mask of the timestamps falling in the selected months. This composes with the validity masks.
-     * {@link LocalDate} per month present, not one per point.</p>
+     * Creates a mask of the timestamps falling in the selected months.
+     *
+     * <p>Unlike its siblings this deliberately does <em>not</em> filter on validity: it
+     * composes with a validity mask rather than duplicating one, so the two can be
+     * applied in either order.</p>
+     *
+     * <p>Timestamps are sorted, so points are walked in month runs - one
+     * {@link LocalDate} construction per month present, not one per point.</p>
      */
     public static Mask createSeasonalMask(TimeSeriesData series, SeasonalMaskMode mode) {
         if (series == null) {

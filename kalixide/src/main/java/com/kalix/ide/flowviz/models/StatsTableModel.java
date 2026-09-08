@@ -269,26 +269,28 @@ public class StatsTableModel extends AbstractTableModel {
      * series.</p>
      */
     private void recomputeAllStatistics() {
-        Map<SeriesRef, TimeSeriesData> workingSeries = originalSeriesCache;
-
         TimeSeriesData referenceData = referenceSeries != null
-            ? workingSeries.get(referenceSeries) : null;
+            ? originalSeriesCache.get(referenceSeries) : null;
 
         // In ALL mode both the mask and the masked reference are shared across every
         // series — build each a single time, here, and reuse them for all rows.
         TimeSeriesMasker.Mask allMask = null;
         StatSample sharedReferenceSample = null;
         if (maskMode == MaskMode.ALL) {
-            allMask = TimeSeriesMasker.createAllMask(new ArrayList<>(workingSeries.values()));
+            allMask = TimeSeriesMasker.createAllMask(new ArrayList<>(originalSeriesCache.values()));
             if (referenceData != null) {
                 sharedReferenceSample = new StatSample(allMask.applyToValues(referenceData));
             }
         }
 
-        // Rebuild seriesData from scratch based on the working series
+        // Rebuild seriesData from scratch from the cache. The series held there are
+        // already aggregated AND already seasonally masked - TimeSeriesAggregator applies
+        // the mask while accumulating, the only point at which calendar months are still
+        // distinguishable. Masking again here would filter points stamped at their
+        // period's start and empty the table (#235).
         List<SeriesStats> newSeriesData = new ArrayList<>();
 
-        for (Map.Entry<SeriesRef, TimeSeriesData> entry : workingSeries.entrySet()) {
+        for (Map.Entry<SeriesRef, TimeSeriesData> entry : originalSeriesCache.entrySet()) {
             TimeSeriesData series = entry.getValue();
             if (series != null) {
                 Map<String, String> newValues =

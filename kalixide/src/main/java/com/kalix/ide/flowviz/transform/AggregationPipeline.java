@@ -22,9 +22,11 @@ import java.util.LinkedHashMap;
  * a {@link LinkedHashMap} back. Refs missing from the pool (still loading,
  * removed) are skipped, not errors.
  *
- * <p> This class is made responsible for seasonal masking as the aggregated
- * statistics need to be made aware of the valid months for aggregation to
- * report correctly.</p>
+ * <p>The seasonal mask is threaded through to {@link TimeSeriesAggregator}, which is
+ * where it is actually applied - inside the accumulation, the last point at which
+ * individual calendar months are still distinguishable (#235). This class only carries
+ * the setting, so a caller that reaches the aggregator directly is masked just the same;
+ * do not move the mask up to here.</p>
  */
 public final class AggregationPipeline {
 

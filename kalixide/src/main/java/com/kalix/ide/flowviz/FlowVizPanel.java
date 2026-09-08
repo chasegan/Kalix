@@ -63,9 +63,18 @@ import org.slf4j.LoggerFactory;
  * <h2>Rendering Pipeline</h2>
  * <pre>
  * originalDataSet (shared)
- *   → TimeSeriesAggregator.aggregate()   [aggregation: daily, monthly, etc.]
+ *   → TimeSeriesAggregator.aggregate()   [seasonal mask THEN aggregation: daily, monthly, etc.]
  *   → TimeSeriesMasker (if ALL mode)     [filter to common valid timestamps]
  *   → PlotTypeTransformer.transform()    [plot type: values, cumulative, difference]
+ * </pre>
+ *
+ * The seasonal (per-month) mask is applied <em>inside</em> the aggregation step, not as a
+ * further filter after it. Aggregation is the last point at which individual months are
+ * still distinguishable: afterwards every point carries its period's start timestamp, so
+ * a Jan-Dec year reads as January and a post-aggregation mask would degenerate to "is
+ * January selected?" - inert if yes, empty plot if no (#235). Any further filter
+ * dimension that is calendar-aware belongs there too, not here.
+ * <pre>
  *   → displayDataSet (cached per-panel)
  *   → TimeSeriesRenderer.render()        [with LOD optimization for large datasets]
  * </pre>
@@ -1130,7 +1139,8 @@ public class FlowVizPanel extends JPanel {
     }
 
     /**
-     * Gets the current mask mode.
+     * Gets the seasonal (per-month) mask: which calendar months a view is restricted to.
+     * Orthogonal to {@link #getMaskMode()}, which is the validity/overlap mask.
      */
     public SeasonalMaskMode getSeasonalMaskMode() {
         return seasonalMaskMode;
@@ -1144,7 +1154,8 @@ public class FlowVizPanel extends JPanel {
     }
 
     /**
-     * Sets the seasonal mask mode for this plot.
+     * Sets the seasonal (per-month) mask. The panel owns this for the whole tab, so the
+     * change reaches both the plot and the stats projection.
      */
     public void setSeasonalMaskMode(SeasonalMaskMode mode) {
         // Guard on "no change", not on a particular value - returning early for DISABLED
@@ -1350,8 +1361,13 @@ public class FlowVizPanel extends JPanel {
         // The transient aggregatedDataSet is keyed by SeriesRef directly - the
         // pipeline never touches string identity.
         //
-        // NOTE: Seasonal masking is done as part of this step, as the summary statistics
-        // need to be made aware if data is valid to distinguish genuinely missing/truncated data.
+        // NOTE: Seasonal masking happens as part of this step, not as a later filter. The
+        // aggregator excludes masked-out months from accumulation so they never resemble
+        // missing data, and narrows its completeness window to the months actually asked
+        // for - which leaves a genuinely truncated period free to still read NaN. That
+        // distinction is the whole point: the statistics must be able to tell a month that
+        // was deselected from one whose data is absent. See the pipeline note in the class
+        // docs for why this cannot be done after aggregation (#235).
         DataSet aggregatedDataSet = new DataSet();
         AggregationPipeline.aggregate(
             originalDataSet,

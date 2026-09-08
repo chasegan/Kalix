@@ -19,9 +19,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -82,7 +80,10 @@ class VizToolbarControllerTest {
         assertEquals(AggregationPeriod.DAILY, panel.getAggregationPeriod(),
             "a fired combo listener would have re-applied the old aggregation");
         assertEquals(AggregationMethod.MEAN, panel.getAggregationMethod());
-        assertFalse(panel.canRedo(), "no history entry was pushed or truncated");
+        // A push would land at the head of the history, so canRedo() is false either way -
+        // the telling check is that undo still steps back onto the entry before this one.
+        assertEquals(previous, panel.undo(),
+            "no history entry was pushed: undo lands on the same state as before");
     }
     private static SeasonalMaskButton seasonalButton(Container root) {
         for (Component component : root.getComponents()) {
@@ -142,10 +143,15 @@ class VizToolbarControllerTest {
         panel.redo();                           // panel is masked again
         mgr.tabAt(0).vizToolbar.getController().updateFromState(previous);
 
-        assertSame(SeasonalMaskMode.DISABLED, button.getMode(),
+        // By value, not identity: Disabled is a record, so an equal instance is just as
+        // correct and must not fail this.
+        assertEquals(SeasonalMaskMode.DISABLED, button.getMode(),
             "the control reflects the given state");
         assertEquals(winter, panel.getSeasonalMaskMode(),
             "...but reflecting must not drive the panel back - that would loop the undo");
-        assertFalse(panel.canRedo(), "no history entry was pushed or truncated");
+        // A push would land at the head of the history, so canRedo() is false either way -
+        // the telling check is that undo still steps back onto the entry before this one.
+        assertEquals(previous, panel.undo(),
+            "no history entry was pushed: undo lands on the same state as before");
     }
 }
