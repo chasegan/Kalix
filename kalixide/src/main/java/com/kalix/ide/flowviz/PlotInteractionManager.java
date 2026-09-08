@@ -422,15 +422,9 @@ public class PlotInteractionManager {
             updateViewportWithFittedY(startTime, endTime);
         } else if (isYAxisOnlyZoom) {
             // Ctrl/Cmd+Scroll: Y-axis only, the value under the mouse stays put
-            long startTime = currentViewport.getStartTimeMs();
-            long endTime = currentViewport.getEndTimeMs();
-            double[] valueBounds = currentViewport.valueBoundsZoomedAbout(wheelZoomFactor, e.getY());
-
             Rectangle plotArea = plotAreaSupplier.get();
-            ViewPort newViewport = new ViewPort(startTime, endTime, valueBounds[0], valueBounds[1],
-                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                              currentViewport.getYAxisScale(), currentViewport.getXAxisType());
-            viewportUpdater.accept(newViewport);
+            viewportUpdater.accept(currentViewport.zoomValueAxis(wheelZoomFactor, e.getY())
+                .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height));
         } else {
             // Standard zoom: both axes, the point under the mouse stays put
             long mouseTime = currentViewport.screenXToTime(e.getX());
@@ -448,13 +442,10 @@ public class PlotInteractionManager {
             long startTime = mouseTime - (long) (newTimeRange * mouseTimeRatio);
             long endTime = startTime + newTimeRange;
 
-            double[] valueBounds = currentViewport.valueBoundsZoomedAbout(wheelZoomFactor, e.getY());
-
             Rectangle plotArea = plotAreaSupplier.get();
-            ViewPort newViewport = new ViewPort(startTime, endTime, valueBounds[0], valueBounds[1],
-                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                              currentViewport.getYAxisScale(), currentViewport.getXAxisType());
-            viewportUpdater.accept(newViewport);
+            viewportUpdater.accept(currentViewport.zoomValueAxis(wheelZoomFactor, e.getY())
+                .withTimeRange(startTime, endTime)
+                .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height));
         }
 
         parentComponent.repaint();

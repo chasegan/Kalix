@@ -953,11 +953,8 @@ public class FlowVizPanel extends JPanel {
         }
         long span = currentViewport.getTimeRangeMs();
         long newStart = timeMs - span / 2;
-        double[] valueBounds = currentViewport.valueBoundsCentredOn(value); // no-op when on screen
-        currentViewport = new ViewPort(newStart, newStart + span, valueBounds[0], valueBounds[1],
-            currentViewport.getPlotX(), currentViewport.getPlotY(),
-            currentViewport.getPlotWidth(), currentViewport.getPlotHeight(),
-            yAxisScale, determineXAxisType());
+        currentViewport = currentViewport.centreValueAxisOn(value) // no-op when on screen
+            .withTimeRange(newStart, newStart + span);
         userViewportTouched = true;
         viewportCoalesceTimer.restart(); // one history entry, like a pan
         repaint();

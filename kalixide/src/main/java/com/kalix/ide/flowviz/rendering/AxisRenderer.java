@@ -448,9 +448,13 @@ public class AxisRenderer {
         return transformed >= transformedMin - LOG_TICK_EPSILON && transformed <= transformedMax + LOG_TICK_EPSILON;
     }
 
-    /** Whether {@code value} is the linear-region threshold, +L or -L, within tick slack. */
+    /**
+     * Whether {@code value} is the linear-region threshold, +L or -L, allowing the ulp of
+     * drift an even step accumulates (9.6 + 8 x 0.05 is 10.000000000000002) and no more,
+     * so a real tick a hair from the seam is never mistaken for it.
+     */
     private static boolean isThreshold(double value, double threshold) {
-        return Math.abs(Math.abs(value) - threshold) <= LOG_TICK_EPSILON * threshold;
+        return Math.abs(Math.abs(value) - threshold) <= 4 * Math.ulp(threshold);
     }
 
     /**
@@ -480,10 +484,11 @@ public class AxisRenderer {
 
         // Draw horizontal grid lines aligned with value axis ticks. The tick at a scale's
         // threshold (+/-L) is the marker's, decided by value rather than by pixel row so
-        // the dashed cue never sits on, or one pixel off, a solid line.
+        // the dashed cue never sits on, or one pixel off, a solid line. Exact: the tick
+        // placement snaps the seam tick to exactly +/-L.
         OptionalDouble threshold = viewport.getYAxisScale().linearThreshold();
         for (Double tickValue : axisInfo.valueTicks) {
-            if (threshold.isPresent() && isThreshold(tickValue, threshold.getAsDouble())) continue;
+            if (threshold.isPresent() && Math.abs(tickValue) == threshold.getAsDouble()) continue;
             drawHorizontalLine(g2d, viewport, viewport.valueToScreenY(tickValue));
         }
     }

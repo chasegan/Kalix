@@ -205,6 +205,14 @@ class AxisRendererValueTicksTest {
         assertTrue(symlogTicks(-1e6, 1e6, TALL).contains(-10.0));
     }
 
+    /** The seam snap absorbs an ulp of step drift, not real ticks a hair from 10. */
+    @Test
+    void symlogSeamSnapLeavesTicksNearTheSeamAlone() {
+        List<Double> ticks = symlogTicks(9.99999999, 10.00000001, TALL);
+        assertEquals(1, ticks.stream().filter(t -> t == 10.0).count(), "one exact seam tick: " + ticks);
+        assertTrue(ticks.size() >= 5, "the neighbouring ticks survive: " + ticks);
+    }
+
     /** Dedup once ate neighbouring ticks within an absolute 1e-9; a view of tiny values must tick like Linear. */
     @Test
     void symlogTicksOnTinyValuesMatchLinear() {
