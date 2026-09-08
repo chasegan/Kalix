@@ -1344,17 +1344,43 @@ public class FlowVizPanel extends JPanel {
         // Display data is changing - clear LOD rendering cache so renderer doesn't draw stale lines
         renderer.clearCache();
 
-        // Step 1: Build aggregated dataset (only for visible series, not the full
-        // pool) through the one shared AggregationPipeline — the same orchestration
+        // Step 1: Seasonal masking
+        DataSet maskedSourceDataSet = originalDataSet;
+        if (seasonalMaskMode instanceof SeasonalMaskMode.Enabled enabled) {
+            maskedSourceDataSet = new DataSet();
+
+            // A seasonal mask is a function of a series' timestamps - build once and reuse
+            long[] cachedGrid = null;
+            TimeSeriesMasker.Mask cachedMask = null;
+
+            for (SeriesRef ref : visibleSeries) {
+                TimeSeriesData series = originalDataSet.getSeries(ref);
+                if (series == null) {
+                    continue;
+                }
+                long[] grid = series.getTimestamps();
+
+                if ((cachedMask == null) || !sameTimestampGrid(cachedGrid, grid)) {
+                    cachedMask = TimeSeriesMasker.createSeasonalMask(series, enabled);
+                    cachedGrid = grid;
+                }
+                maskedSourceDataSet.addSeries(ref, cachedMask.apply(series));
+            }
+        }
+
+        // Step 2: Build aggregated dataset (only for visible series, not the full
+        // pool) through the one shared AggregationPipeline - the same orchestration
         // that feeds the stats table, so the two projections can never disagree.
-        // The transient aggregatedDataSet is keyed by SeriesRef directly — the
+        // The transient aggregatedDataSet is keyed by SeriesRef directly - the
         // pipeline never touches string identity.
         DataSet aggregatedDataSet = new DataSet();
-        AggregationPipeline.aggregate(originalDataSet, visibleSeries,
+        AggregationPipeline.aggregate(maskedSourceDataSet, visibleSeries,
             aggregationPeriod, aggregationMethod).forEach(aggregatedDataSet::addSeries);
 
-        // Step 2: Apply masking (if enabled)
-        // Step 2.1: Validity/overlapping data masking
+        // Step 3: Validity/overlapping data masking - deliberately AFTER aggregation,
+        // unlike the seasonal mask. It answers "where do the DISPLAYED points overlap?",
+        // and the stats table masks its own aggregates the same way, so keeping it here
+        // is what makes one shared mask setting mean the same thing in both views.
         if (maskMode == MaskMode.ALL && aggregatedDataSet.getSeriesRefs().size() > 1) {
             java.util.List<TimeSeriesData> allSeries = new java.util.ArrayList<>();
             for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
@@ -1370,8 +1396,8 @@ public class FlowVizPanel extends JPanel {
             aggregatedDataSet = maskedDataSet;
         } else if (maskMode == MaskMode.EACH && aggregatedDataSet.getSeriesRefs().size() > 1) {
             // EACH on the plot: each non-reference series filtered to its pairwise
-            // overlap with the reference — exactly the data its bivariate statistic
-            // uses — while the reference draws on its own valid points. Makes the
+            // overlap with the reference - exactly the data its bivariate statistic
+            // uses - while the reference draws on its own valid points. Makes the
             // shared mask setting mean the same thing in both views.
             java.util.List<SeriesRef> refs = new java.util.ArrayList<>(aggregatedDataSet.getSeriesRefs());
             TimeSeriesData reference = aggregatedDataSet.getSeries(refs.get(0));
@@ -1385,28 +1411,7 @@ public class FlowVizPanel extends JPanel {
             aggregatedDataSet = maskedDataSet;
         }
 
-        // Step 2.2: Seasonal masking
-        if (seasonalMaskMode instanceof SeasonalMaskMode.Enabled enabled) {
-            DataSet maskedDataSet = new DataSet();
-
-            // A seasonal mask is a function of a series' timestamps - build once and reuse
-            long[] cachedGrid = null;
-            TimeSeriesMasker.Mask cachedMask = null;
-
-            for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
-                TimeSeriesData series = aggregatedDataSet.getSeries(ref);
-                long[] grid = (series != null) ? series.getTimestamps() : null;
-
-                if ((cachedMask == null) || !sameTimestampGrid(cachedGrid, grid)) {
-                    cachedMask = TimeSeriesMasker.createSeasonalMask(series, enabled);
-                    cachedGrid = grid;
-                }
-                maskedDataSet.addSeries(ref, cachedMask.apply(series));
-            }
-            aggregatedDataSet = maskedDataSet;
-        }
-
-        // Step 3: Apply plot type transformation
+        // Step 4: Apply plot type transformation
         displayDataSet = PlotTypeTransformer.transform(
             aggregatedDataSet,
             plotType,
