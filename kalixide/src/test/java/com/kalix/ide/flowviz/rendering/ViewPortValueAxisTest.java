@@ -5,6 +5,7 @@ import com.kalix.ide.flowviz.transform.YAxisScale;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -22,11 +23,6 @@ class ViewPortValueAxisTest {
         return new ViewPort(0, DAY, min, max, 0, 0, 600, HEIGHT, scale, XAxisType.TIME);
     }
 
-    private static ViewPort withValueBounds(ViewPort v, double[] bounds) {
-        return new ViewPort(v.getStartTimeMs(), v.getEndTimeMs(), bounds[0], bounds[1],
-            v.getPlotX(), v.getPlotY(), v.getPlotWidth(), v.getPlotHeight(), v.getYAxisScale(), v.getXAxisType());
-    }
-
     private static double decades(ViewPort v) {
         return v.getTransformedMax() - v.getTransformedMin();
     }
@@ -37,7 +33,7 @@ class ViewPortValueAxisTest {
         int screenY = 100;   // three quarters up: value 75
         assertEquals(75.0, v.screenYToValue(screenY), 1e-12);
 
-        ViewPort zoomed = withValueBounds(v, v.valueBoundsZoomedAbout(2.0, screenY));
+        ViewPort zoomed = v.zoomValueAxis(2.0, screenY);
         assertEquals(37.5, zoomed.getMinValue(), 1e-12);
         assertEquals(87.5, zoomed.getMaxValue(), 1e-12);
         assertEquals(75.0, zoomed.screenYToValue(screenY), 1e-12, "the anchor value stays under the cursor");
@@ -49,7 +45,7 @@ class ViewPortValueAxisTest {
         int screenY = 100;   // three quarters up: 10^3
         assertEquals(1000.0, v.screenYToValue(screenY), 1000 * REL);
 
-        ViewPort zoomed = withValueBounds(v, v.valueBoundsZoomedAbout(2.0, screenY));
+        ViewPort zoomed = v.zoomValueAxis(2.0, screenY);
         assertEquals(2.0, decades(zoomed), REL, "the decade span halves");
         assertEquals(1000.0, zoomed.screenYToValue(screenY), 1000 * REL, "the anchor value stays under the cursor");
     }
@@ -59,16 +55,15 @@ class ViewPortValueAxisTest {
     void runawayWheelZoomOutStopsAtTheLastShowableViewAndCanZoomBackIn() {
         ViewPort v = viewport(1, 1e250, YAxisScale.LOG);
         for (int notch = 0; notch < 60; notch++) {
-            double[] bounds = v.valueBoundsZoomedAbout(1 / 1.1, HEIGHT / 2);
-            assertTrue(Double.isFinite(bounds[0]) && Double.isFinite(bounds[1]), "notch " + notch + " installed a non-finite bound");
-            v = withValueBounds(v, bounds);
+            v = v.zoomValueAxis(1 / 1.1, HEIGHT / 2);
+            assertTrue(Double.isFinite(v.getMinValue()) && Double.isFinite(v.getMaxValue()), "notch " + notch + " installed a non-finite bound");
         }
         double span = decades(v);
         assertTrue(span > 250, "the view grew before the overflow step was refused: " + span);
         assertTrue(v.getTransformedMax() < 308.3, "the top never exceeds what 10^t can represent: " + v);
         assertTrue(v.getTransformedMin() > -323.3, "the bottom never underflows to zero: " + v);
 
-        ViewPort zoomedIn = withValueBounds(v, v.valueBoundsZoomedAbout(1.1, HEIGHT / 2));
+        ViewPort zoomedIn = v.zoomValueAxis(1.1, HEIGHT / 2);
         assertEquals(span / 1.1, decades(zoomedIn), REL * span, "zooming back in works from the stopped view");
     }
 
@@ -113,7 +108,7 @@ class ViewPortValueAxisTest {
         assertEquals(-14.0, v.getTransformedMin(), REL, "six decades below the maximum");
         assertEquals(-8.0, v.getTransformedMax(), REL);
 
-        ViewPort zoomed = withValueBounds(v, v.valueBoundsZoomedAbout(1.1, HEIGHT / 2));
+        ViewPort zoomed = v.zoomValueAxis(1.1, HEIGHT / 2);
         assertTrue(zoomed.getMinValue() < zoomed.getMaxValue(), "the step keeps the axis upright: " + zoomed);
 
         assertEquals(-6.0, viewport(0, 100, YAxisScale.LOG).getTransformedMin(), REL, "the usual floor when the maximum allows it");
@@ -124,32 +119,28 @@ class ViewPortValueAxisTest {
     @Test
     void stepsThatWouldInvertTheAxisAreRefused() {
         ViewPort inverted = viewport(10, 1, YAxisScale.LINEAR);   // only reachable internally
-        double[] bounds = inverted.valueBoundsZoomedAbout(2.0, HEIGHT / 2);
-        assertEquals(10.0, bounds[0]);
-        assertEquals(1.0, bounds[1]);
+        ViewPort refused = inverted.zoomValueAxis(2.0, HEIGHT / 2);
+        assertEquals(10.0, refused.getMinValue());
+        assertEquals(1.0, refused.getMaxValue());
     }
 
     @Test
     void centringIsANoOpForAValueAlreadyOnScreen() {
-        double[] linear = viewport(0, 100, YAxisScale.LINEAR).valueBoundsCentredOn(50);
-        assertEquals(0.0, linear[0]);
-        assertEquals(100.0, linear[1]);
-        double[] log = viewport(1, 100, YAxisScale.LOG).valueBoundsCentredOn(100);
-        assertEquals(1.0, log[0]);
-        assertEquals(100.0, log[1]);
+        ViewPort linear = viewport(0, 100, YAxisScale.LINEAR);
+        assertSame(linear, linear.centreValueAxisOn(50));
+        ViewPort log = viewport(1, 100, YAxisScale.LOG);
+        assertSame(log, log.centreValueAxisOn(100));
     }
 
     /** On LOG with a non-positive stored minimum the axis draws 1e-6..max: judge visibility against that. */
     @Test
     void centringJudgesVisibilityAgainstTheAxisAsDrawn() {
         ViewPort v = viewport(-5, 100, YAxisScale.LOG);   // draws 1e-6..100
-        double[] bounds = v.valueBoundsCentredOn(1e-9);   // above -5 in data space, below the plot on screen
-        assertEquals(1e-13, bounds[0], 1e-13 * REL);
-        assertEquals(1e-5, bounds[1], 1e-5 * REL);
+        ViewPort centred = v.centreValueAxisOn(1e-9);   // above -5 in data space, below the plot on screen
+        assertEquals(1e-13, centred.getMinValue(), 1e-13 * REL);
+        assertEquals(1e-5, centred.getMaxValue(), 1e-5 * REL);
 
-        double[] visible = v.valueBoundsCentredOn(1e-3);
-        assertEquals(-5.0, visible[0]);
-        assertEquals(100.0, visible[1]);
+        assertSame(v, v.centreValueAxisOn(1e-3), "already on screen");
     }
 
     /** Switching to LOG used to keep a stored -5 while the axis drew 1e-6, so copy-axis and set-limits lied. */
@@ -167,13 +158,11 @@ class ViewPortValueAxisTest {
 
     @Test
     void centringKeepsTheSpanInTransformedSpace() {
-        ViewPort log = withValueBounds(viewport(1, 100, YAxisScale.LOG),
-            viewport(1, 100, YAxisScale.LOG).valueBoundsCentredOn(5000));
+        ViewPort log = viewport(1, 100, YAxisScale.LOG).centreValueAxisOn(5000);
         assertEquals(500.0, log.getMinValue(), 500 * REL);
         assertEquals(50_000.0, log.getMaxValue(), 50_000 * REL);
 
-        ViewPort linear = withValueBounds(viewport(0, 100, YAxisScale.LINEAR),
-            viewport(0, 100, YAxisScale.LINEAR).valueBoundsCentredOn(5000));
+        ViewPort linear = viewport(0, 100, YAxisScale.LINEAR).centreValueAxisOn(5000);
         assertEquals(4950.0, linear.getMinValue(), 1e-9);
         assertEquals(5050.0, linear.getMaxValue(), 1e-9);
     }
@@ -181,11 +170,11 @@ class ViewPortValueAxisTest {
     @Test
     void centringLeavesTheViewAloneForAValueTheScaleCannotShow() {
         ViewPort log = viewport(1, 100, YAxisScale.LOG);
-        assertEquals(1.0, log.valueBoundsCentredOn(-5)[0]);
-        assertEquals(100.0, log.valueBoundsCentredOn(0)[1]);
+        assertSame(log, log.centreValueAxisOn(-5));
+        assertSame(log, log.centreValueAxisOn(0));
 
         ViewPort linear = viewport(0, 100, YAxisScale.LINEAR);
-        assertEquals(0.0, linear.valueBoundsCentredOn(Double.NaN)[0]);
-        assertEquals(100.0, linear.valueBoundsCentredOn(Double.POSITIVE_INFINITY)[1]);
+        assertSame(linear, linear.centreValueAxisOn(Double.NaN));
+        assertSame(linear, linear.centreValueAxisOn(Double.POSITIVE_INFINITY));
     }
 }

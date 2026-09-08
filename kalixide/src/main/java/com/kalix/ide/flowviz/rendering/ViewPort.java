@@ -172,61 +172,58 @@ public class ViewPort {
         long timeRange = endTimeMs - startTimeMs;
         long centerTimeMs = startTimeMs + timeRange / 2;
         long newTimeRange = (long) (timeRange / factor);
-        double[] valueBounds = valueBoundsZoomedAbout(factor, 0.5);
-
-        return new ViewPort(centerTimeMs - newTimeRange / 2, centerTimeMs + newTimeRange / 2,
-                          valueBounds[0], valueBounds[1],
-                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
+        return zoomValueAxis(factor, 0.5)
+            .withTimeRange(centerTimeMs - newTimeRange / 2, centerTimeMs + newTimeRange / 2);
     }
 
     /**
-     * Value bounds after zooming the value axis by {@code factor} (above 1 zooms in) about
-     * the value under {@code screenY}, which stays put on screen -- the wheel-zoom
-     * contract. Computed in transformed space so the anchor holds on every scale. Returns
-     * the current bounds unchanged when the zoomed span is not showable
-     * (see {@link #valueBoundsFor}).
+     * This view with the value axis zoomed by {@code factor} (above 1 zooms in) about the
+     * value under {@code screenY}, which stays put on screen -- the wheel-zoom contract.
+     * Computed in transformed space so the anchor holds on every scale. Returns this view
+     * unchanged when the zoomed span is not showable (see {@link #withValueBoundsFrom}).
      */
-    public double[] valueBoundsZoomedAbout(double factor, int screenY) {
+    public ViewPort zoomValueAxis(double factor, int screenY) {
         double ratio = plotHeight == 0 ? 0.5 : (double) (plotY + plotHeight - screenY) / plotHeight;
-        return valueBoundsZoomedAbout(factor, ratio);
+        return zoomValueAxis(factor, ratio);
     }
 
     /** As above, anchored at {@code ratio} of the way up the plot (0 bottom, 1 top). */
-    private double[] valueBoundsZoomedAbout(double factor, double ratio) {
+    private ViewPort zoomValueAxis(double factor, double ratio) {
         double transformedMin = getTransformedMin();
         double transformedMax = getTransformedMax();
         double anchor = transformedMin + ratio * (transformedMax - transformedMin);
         double newTransformedRange = (transformedMax - transformedMin) / factor;
         double newTransformedMin = anchor - newTransformedRange * ratio;
-        return valueBoundsFor(newTransformedMin, newTransformedMin + newTransformedRange);
+        return withValueBoundsFrom(newTransformedMin, newTransformedMin + newTransformedRange);
     }
 
     /**
-     * Value bounds re-centred on {@code value} when it is off-screen, keeping the span in
-     * transformed space so the zoom level survives on every scale (a log axis keeps its
-     * decade count, not its data-space width). Returns the current bounds unchanged when
-     * {@code value} is already on screen, is not showable on this scale (non-finite, or
-     * non-positive on LOG), or the centred span would not be (see {@link #valueBoundsFor}).
+     * This view with the value axis re-centred on {@code value} when it is off-screen,
+     * keeping the span in transformed space so the zoom level survives on every scale (a
+     * log axis keeps its decade count, not its data-space width). Returns this view
+     * unchanged when {@code value} is already on screen, is not showable on this scale
+     * (non-finite, or non-positive on LOG), or the centred span would not be
+     * (see {@link #withValueBoundsFrom}).
      *
      * <p>"On screen" is judged in transformed space, against the axis as drawn: on LOG with
      * a non-positive stored minimum the drawn range is the fallback, not the stored bounds,
      * and a data-space compare would call a point below the plot visible.</p>
      */
-    public double[] valueBoundsCentredOn(double value) {
+    public ViewPort centreValueAxisOn(double value) {
         double transformedValue = yAxisScale.transform(value);
         double transformedMin = getTransformedMin();
         double transformedMax = getTransformedMax();
         boolean offScreen = transformedValue < transformedMin || transformedValue > transformedMax;
         if (!offScreen || !Double.isFinite(transformedValue)) {
-            return new double[] {minValue, maxValue};
+            return this;
         }
         double halfSpan = (transformedMax - transformedMin) / 2;
-        return valueBoundsFor(transformedValue - halfSpan, transformedValue + halfSpan);
+        return withValueBoundsFrom(transformedValue - halfSpan, transformedValue + halfSpan);
     }
 
     /**
-     * Data-space value bounds for a span given in transformed space, or the current
-     * bounds when that span no longer maps to values the scale can show. LOG's inverse
+     * This view with value bounds given as a span in transformed space, or this view
+     * unchanged when that span no longer maps to values the scale can show. LOG's inverse
      * is {@code 10^t}, which overflows to infinity past ~308 decades and underflows to
      * zero (invalid for LOG) past ~-323. Installing either blanks the axis and leaves the
      * viewport stuck, because every later step is computed from the broken bounds
@@ -235,18 +232,23 @@ public class ViewPort {
      * stops. An inverted or empty result is refused for the same reason. Every zoom, pan
      * and recentre of the value axis goes through here.
      */
-    private double[] valueBoundsFor(double transformedMin, double transformedMax) {
+    private ViewPort withValueBoundsFrom(double transformedMin, double transformedMax) {
         double newMinValue = yAxisScale.inverseTransform(transformedMin);
         double newMaxValue = yAxisScale.inverseTransform(transformedMax);
         if (!isShowable(newMinValue) || !isShowable(newMaxValue) || newMinValue >= newMaxValue) {
-            return new double[] {minValue, maxValue};
+            return this;
         }
-        return new double[] {newMinValue, newMaxValue};
+        return withValueBounds(newMinValue, newMaxValue);
     }
 
-    /** Finite, and inside the scale's domain (LOG cannot show zero or negatives). */
+    /** Finite, and inside the scale's domain: the one rule, owned by {@link YAxisScale#domainFloor}. */
     private boolean isShowable(double value) {
-        return Double.isFinite(value) && !Double.isNaN(yAxisScale.transform(value));
+        return Double.isFinite(value) && value > yAxisScale.domainFloor();
+    }
+
+    private ViewPort withValueBounds(double minValue, double maxValue) {
+        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
     /**
@@ -272,10 +274,12 @@ public class ViewPort {
         // Delta in transformed space (positive deltaPixelsY = pan up = increase values)
         double deltaTransformed = deltaPixelsY * transformedRange / (double) plotHeight;
 
-        double[] valueBounds = valueBoundsFor(transformedMin + deltaTransformed,
-                                              transformedMax + deltaTransformed);
+        return withValueBoundsFrom(transformedMin + deltaTransformed, transformedMax + deltaTransformed)
+            .withTimeRange(newStartTime, newEndTime);
+    }
 
-        return new ViewPort(newStartTime, newEndTime, valueBounds[0], valueBounds[1],
+    public ViewPort withTimeRange(long startTimeMs, long endTimeMs) {
+        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
@@ -294,10 +298,8 @@ public class ViewPort {
         ViewPort rescaled = new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
         if (rescaled.isShowable(minValue) && rescaled.isShowable(maxValue)) return rescaled;
-        return new ViewPort(startTimeMs, endTimeMs,
-                          yAxisScale.inverseTransform(rescaled.getTransformedMin()),
-                          yAxisScale.inverseTransform(rescaled.getTransformedMax()),
-                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
+        return rescaled.withValueBounds(yAxisScale.inverseTransform(rescaled.getTransformedMin()),
+                                        yAxisScale.inverseTransform(rescaled.getTransformedMax()));
     }
 
     public ViewPort withXAxisType(XAxisType xAxisType) {

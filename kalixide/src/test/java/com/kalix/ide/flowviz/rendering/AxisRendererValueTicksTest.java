@@ -34,7 +34,11 @@ class AxisRendererValueTicksTest {
     }
 
     private static void assertTicks(List<Double> expected, List<Double> actual) {
-        assertEquals(expected.size(), actual.size(), "tick count for " + actual);
+        assertTicks(expected, actual, "tick count");
+    }
+
+    private static void assertTicks(List<Double> expected, List<Double> actual, String why) {
+        assertEquals(expected.size(), actual.size(), why + " for " + actual);
         for (int i = 0; i < expected.size(); i++) {
             assertEquals(expected.get(i), actual.get(i), Math.abs(expected.get(i)) * EPS, "tick " + i + " of " + actual);
         }
@@ -88,6 +92,14 @@ class AxisRendererValueTicksTest {
         assertTicks(List.of(10.0, 20.0, 50.0, 100.0), logTicks(10, 100, 200));
     }
 
+    /** Whole decades would leave one label on a short plot over 1.78..56; 1-2-5 is taken over budget. */
+    @Test
+    void logTicksGoOneDenserRatherThanLeaveASingleLabel() {
+        assertTicks(List.of(2.0, 5.0, 10.0, 20.0, 50.0), logTicks(1.78, 56, 120));
+        assertTicks(List.of(1.0, 10.0), logTicks(0.4, 79, 120), "two decade labels fit and suffice");
+        assertTicks(List.of(100.0, 1e4, 1e6), logTicks(3.7, 3.7e6, 120), "coarse steps still count from 1");
+    }
+
     @Test
     void logTicksAreRoundAtEveryZoomAndHeight() {
         double[] starts = {0.0123, 0.5, 1, 3.7, 47, 1e5};
@@ -99,7 +111,9 @@ class AxisRendererValueTicksTest {
                     List<Double> ticks = logTicks(start, start * Math.pow(10, span), height);
                     int budget = Math.max(3, Math.min(10, height / 40));
                     assertTrue(ticks.size() >= 2, "too few ticks: " + ticks);
-                    assertTrue(ticks.size() <= budget + 2, "too many ticks for " + height + "px: " + ticks);
+                    // One placement over budget is allowed only when the fitting one left a single
+                    // label; with no rung more than 2.5x the last that is six ticks at most
+                    assertTrue(ticks.size() <= Math.max(budget + 2, 6), "too many ticks for " + height + "px: " + ticks);
                     ticks.forEach(AxisRendererValueTicksTest::assertRoundMantissa);
                 }
             }
@@ -150,6 +164,98 @@ class AxisRendererValueTicksTest {
         ViewPort sliver = new ViewPort(huge, huge + 1, 0, 1, 0, 0, 600, TALL, YAxisScale.LINEAR, XAxisType.NUMERIC);
         assertTimeoutPreemptively(Duration.ofSeconds(5),
             () -> assertTrue(renderer.calculateAxisInfo(sliver).timeTicks.size() <= 4 * 7 + 1));
+    }
+
+    private List<Double> symlogTicks(double min, double max, int plotHeight) {
+        return renderer.calculateValueTicks(viewport(min, max, plotHeight, YAxisScale.SYMLOG));
+    }
+
+    /** The seam at +/-10 is ticked even when the coarse step is two decades. */
+    @Test
+    void symlogTicksAreRoundOnBothSidesAndAlwaysTickTheSeam() {
+        assertTicks(List.of(-1e5, -1e3, -10.0, 0.0, 10.0, 1e3, 1e5), symlogTicks(-1e6, 1e6, TALL));
+    }
+
+    /** Auto-Y on data 0..500: the linear zone gets even steps, the log zone round mantissas. */
+    @Test
+    void symlogTicksSplitTheBudgetBetweenLinearAndLogRegions() {
+        List<Double> ticks = symlogTicks(YAxisScale.SYMLOG.inverseTransform(-0.135), YAxisScale.SYMLOG.inverseTransform(2.834), TALL);
+        assertTicks(List.of(0.0, 5.0, 10.0, 20.0, 50.0, 100.0, 200.0, 500.0), ticks);
+    }
+
+    @Test
+    void symlogTicksInsideTheLinearRegionMatchLinear() {
+        assertTicks(List.of(-4.0, -2.0, 0.0, 2.0, 4.0), symlogTicks(-5, 5, TALL));
+    }
+
+    /** A bound just past the seam gave the sliver a two-tick budget: 9.5 and 10 drawn on top of each other. */
+    @Test
+    void symlogTicksSkipARegionTooThinForALabel() {
+        List<Double> ticks = symlogTicks(9.5, 1e6, TALL);
+        assertEquals(10.0, ticks.get(0), 0.0, "the seam opens the axis: " + ticks);
+        List<Double> mirrored = symlogTicks(-1e6, 10.5, TALL);
+        assertEquals(10.0, mirrored.get(mirrored.size() - 1), 0.0, "the seam closes the axis: " + mirrored);
+    }
+
+    /** The seam tick is snapped to exactly +/-L whichever region produced it, so the grid can spot it by value. */
+    @Test
+    void symlogSeamTicksAreExact() {
+        List<Double> ticks = symlogTicks(YAxisScale.SYMLOG.inverseTransform(-0.135), YAxisScale.SYMLOG.inverseTransform(2.834), TALL);
+        assertTrue(ticks.contains(10.0), "exactly 10.0, not 9.999999999999998: " + ticks);
+        assertTrue(symlogTicks(-1e6, 1e6, TALL).contains(-10.0));
+    }
+
+    /** The seam snap absorbs an ulp of step drift, not real ticks a hair from 10. */
+    @Test
+    void symlogSeamSnapLeavesTicksNearTheSeamAlone() {
+        List<Double> ticks = symlogTicks(9.99999999, 10.00000001, TALL);
+        assertEquals(1, ticks.stream().filter(t -> t == 10.0).count(), "one exact seam tick: " + ticks);
+        assertTrue(ticks.size() >= 5, "the neighbouring ticks survive: " + ticks);
+    }
+
+    /** Dedup once ate neighbouring ticks within an absolute 1e-9; a view of tiny values must tick like Linear. */
+    @Test
+    void symlogTicksOnTinyValuesMatchLinear() {
+        List<Double> linear = renderer.calculateValueTicks(viewport(0, 5e-9, TALL, YAxisScale.LINEAR));
+        assertEquals(6, linear.size(), linear.toString());
+        assertTicks(linear, symlogTicks(0, 5e-9, TALL));
+    }
+
+    /** pow(10, log10(97)) is not 97; an exact edge compare dropped the edge tick. */
+    @Test
+    void logTicksKeepATickSittingOnTheViewportEdge() {
+        assertTicks(List.of(97.0, 98.0, 99.0, 100.0, 101.0, 102.0, 103.0), logTicks(97, 103, TALL));
+        assertTicks(List.of(3.2, 3.25, 3.3, 3.35, 3.4), logTicks(3.2, 3.4, TALL));
+    }
+
+    /** Gating every region at 40 px left a short Symlog plot with markers but no labels at all. */
+    @Test
+    void symlogTicksOnAShortPlotStillLabelTheAxis() {
+        assertTicks(List.of(5.0, 10.0, 20.0), symlogTicks(5, 20, 60));
+        assertTicks(List.of(-1000.0, -100.0, -10.0, 0.0, 10.0, 100.0, 1000.0), symlogTicks(-1000, 1000, 100));
+    }
+
+    /** With the linear zone a pixel wide the seam pair would print 10 and -10 on top of each other. */
+    @Test
+    void symlogSeamPairCollapsesToZeroWhenTheLinearZoneIsSkipped() {
+        assertTicks(List.of(-1e101, 0.0, 1e101), symlogTicks(-1e200, 1e200, 120));
+    }
+
+    /** Coarse steps go 2, 5, 10, 20...; a 2-5-20 ladder made "one denser" land four times over budget. */
+    @Test
+    void logCoarseStepsClimbByAtMostTwoAndAHalf() {
+        assertTicks(List.of(1.0, 1e10, 1e20, 1e30), logTicks(1, 1e30, 200));
+    }
+
+    /** Even data steps are for narrow views only; over 15 decades they all crowd into the top one. */
+    @Test
+    void logEvenStepsAreNotTakenOverAWideView() {
+        assertTicks(List.of(1.0, 1e5), logTicks(1.26e-5, 7.9e9, 200));
+    }
+
+    @Test
+    void symlogTicksOnOneSideOnlyStayOnThatSide() {
+        assertTicks(List.of(-1e6, -1e5, -1e4, -1e3, -100.0), symlogTicks(-1e6, -100, TALL));
     }
 
     @Test

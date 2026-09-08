@@ -422,15 +422,9 @@ public class PlotInteractionManager {
             updateViewportWithFittedY(startTime, endTime);
         } else if (isYAxisOnlyZoom) {
             // Ctrl/Cmd+Scroll: Y-axis only, the value under the mouse stays put
-            long startTime = currentViewport.getStartTimeMs();
-            long endTime = currentViewport.getEndTimeMs();
-            double[] valueBounds = currentViewport.valueBoundsZoomedAbout(wheelZoomFactor, e.getY());
-
             Rectangle plotArea = plotAreaSupplier.get();
-            ViewPort newViewport = new ViewPort(startTime, endTime, valueBounds[0], valueBounds[1],
-                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                              currentViewport.getYAxisScale(), currentViewport.getXAxisType());
-            viewportUpdater.accept(newViewport);
+            viewportUpdater.accept(currentViewport.zoomValueAxis(wheelZoomFactor, e.getY())
+                .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height));
         } else {
             // Standard zoom: both axes, the point under the mouse stays put
             long mouseTime = currentViewport.screenXToTime(e.getX());
@@ -448,13 +442,10 @@ public class PlotInteractionManager {
             long startTime = mouseTime - (long) (newTimeRange * mouseTimeRatio);
             long endTime = startTime + newTimeRange;
 
-            double[] valueBounds = currentViewport.valueBoundsZoomedAbout(wheelZoomFactor, e.getY());
-
             Rectangle plotArea = plotAreaSupplier.get();
-            ViewPort newViewport = new ViewPort(startTime, endTime, valueBounds[0], valueBounds[1],
-                                              plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                              currentViewport.getYAxisScale(), currentViewport.getXAxisType());
-            viewportUpdater.accept(newViewport);
+            viewportUpdater.accept(currentViewport.zoomValueAxis(wheelZoomFactor, e.getY())
+                .withTimeRange(startTime, endTime)
+                .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height));
         }
 
         parentComponent.repaint();
@@ -571,6 +562,11 @@ public class PlotInteractionManager {
         ViewPort currentViewport = viewportSupplier.get();
         YAxisScale yAxisScale = currentViewport != null ? currentViewport.getYAxisScale() : YAxisScale.LINEAR;
 
+        // Values at or below the scale's domain floor have no position on the axis (LOG:
+        // y <= 0). The scale owns the rule; resolved once here so the per-point check in
+        // the loop below stays one compare.
+        double domainFloor = yAxisScale.domainFloor();
+
         double minValue = Double.POSITIVE_INFINITY;
         double maxValue = Double.NEGATIVE_INFINITY;
         boolean hasValidData = false;
@@ -594,7 +590,7 @@ public class PlotInteractionManager {
 
                 // Skip NaN and values invalid for current scale
                 if (Double.isNaN(value)) continue;
-                if (yAxisScale == YAxisScale.LOG && value <= 0) continue; // LOG requires positive values
+                if (value <= domainFloor) continue; // Outside the scale's domain
 
                 minValue = Math.min(minValue, value);
                 maxValue = Math.max(maxValue, value);

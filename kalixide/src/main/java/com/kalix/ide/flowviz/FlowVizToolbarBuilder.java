@@ -33,6 +33,7 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -51,7 +52,7 @@ import java.util.function.Consumer;
 class FlowVizToolbarBuilder {
 
     /** Y-axis scale options. */
-    private static final String[] Y_SPACE_OPTIONS = {"Linear", "Log", "Sqrt"};
+    private static final String[] Y_SPACE_OPTIONS = Arrays.stream(YAxisScale.values()).map(YAxisScale::getDisplayName).toArray(String[]::new);
 
     private final JToolBar toolbar;
     private final VisualizationTabManager.TabInfo tabInfo;
