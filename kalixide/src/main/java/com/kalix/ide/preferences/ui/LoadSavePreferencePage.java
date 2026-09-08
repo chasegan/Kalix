@@ -3,7 +3,10 @@ package com.kalix.ide.preferences.ui;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.JCheckBox;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JSpinner;
+import javax.swing.SpinnerNumberModel;
 import java.awt.BorderLayout;
 import java.awt.GridBagConstraints;
 import java.awt.Insets;
@@ -19,6 +22,8 @@ public class LoadSavePreferencePage extends AbstractPreferencePage {
 
     private JCheckBox autoReloadCheckBox;
     private JCheckBox promptSaveOnExitCheckBox;
+    private JSpinner largeFileGateSpinner;
+    private JSpinner plotMaxRowsSpinner;
 
     /**
      * @param onAutoReloadChanged notified with the new value after the auto-reload
@@ -72,6 +77,43 @@ public class LoadSavePreferencePage extends AbstractPreferencePage {
             PreferenceKeys.FILE_PROMPT_SAVE_ON_EXIT.set(enabled);
         });
         formPanel.add(promptSaveOnExitCheckBox, gbc);
+
+        // Large data file gate: above this size, data files open as read-only
+        // virtual views instead of an editable text buffer.
+        gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = 1;
+        gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
+        JLabel gateLabel = new JLabel("Open data files read-only above (MB):");
+        gateLabel.setToolTipText("Data files (.csv) larger than this open as fast read-only views "
+            + "(raw text + table) instead of an editable text buffer. Editing very large files in "
+            + "a text buffer costs several times the file size in memory and makes typing sluggish.");
+        formPanel.add(gateLabel, gbc);
+
+        gbc.gridx = 1; gbc.gridy = 2;
+        largeFileGateSpinner = new JSpinner(new SpinnerNumberModel(
+            (int) PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.get(), 1, 4000, 10));
+        largeFileGateSpinner.setToolTipText(gateLabel.getToolTipText());
+        largeFileGateSpinner.addChangeListener(e ->
+            PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.set((Integer) largeFileGateSpinner.getValue()));
+        formPanel.add(largeFileGateSpinner, gbc);
+
+        // Data-view plot materialisation limit: the table view stays virtual at any
+        // size, but plotting materialises whole columns in memory, so it is bounded
+        // separately (and refuses honestly above the bound).
+        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 1;
+        gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
+        JLabel plotRowsLabel = new JLabel("Plot data files up to (rows):");
+        plotRowsLabel.setToolTipText("Data files with more rows than this open with plotting disabled. "
+            + "The table view stays fast at any size, but plotting loads whole columns into memory "
+            + "(8 bytes per value per plotted series).");
+        formPanel.add(plotRowsLabel, gbc);
+
+        gbc.gridx = 1; gbc.gridy = 3;
+        plotMaxRowsSpinner = new JSpinner(new SpinnerNumberModel(
+            (int) PreferenceKeys.DATAVIEW_PLOT_MAX_ROWS.get(), 1_000, 1_000_000_000, 500_000));
+        plotMaxRowsSpinner.setToolTipText(plotRowsLabel.getToolTipText());
+        plotMaxRowsSpinner.addChangeListener(e ->
+            PreferenceKeys.DATAVIEW_PLOT_MAX_ROWS.set((Integer) plotMaxRowsSpinner.getValue()));
+        formPanel.add(plotMaxRowsSpinner, gbc);
 
         add(formPanel, BorderLayout.NORTH);
     }

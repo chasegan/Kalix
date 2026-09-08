@@ -33,7 +33,8 @@ public final class AppConstants {
     public static final int DEFAULT_WINDOW_WIDTH = 1200;
     public static final int DEFAULT_WINDOW_HEIGHT = 800;
 
-    // Workspace three-region layout (tree | editor | map) default region widths
+    // Workspace layout default widths: the tree region, and the in-tab contextual
+    // view (map) region shared across tabs
     public static final int DEFAULT_TREE_WIDTH = 240;
     public static final int DEFAULT_MAP_WIDTH = 420;
 

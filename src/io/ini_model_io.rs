@@ -221,6 +221,23 @@ mod tests {
         assert!(IniModelIO::read_model_string(model_ini()).is_ok());
     }
 
+    /// Issue #142: a trailing comment on a node header must not swallow the node.
+    #[test]
+    fn read_model_string_accepts_comment_after_section_header() {
+        let ini = model_ini().replace("[node.bh]", "[node.bh]  # the sink");
+        let model = IniModelIO::read_model_string(&ini).expect("header comment is legal");
+        assert_eq!(model.nodes.len(), 1);
+        assert!(model.ini_document.as_ref().unwrap().has_section("node.bh"));
+    }
+
+    /// Inline comments on [outputs] list items are not part of the output name.
+    #[test]
+    fn read_model_string_strips_comment_from_outputs_item() {
+        let ini = format!("{}\n[outputs]\nnode.bh.dsflow   # what leaves\n", model_ini());
+        let model = IniModelIO::read_model_string(&ini).expect("outputs comment is legal");
+        assert_eq!(model.outputs, vec!["node.bh.dsflow".to_string()]);
+    }
+
     /// Write a two-day Pixie pair to a unique temp dir; returns the base path.
     fn write_pixie_fixture(test_name: &str) -> std::path::PathBuf {
         use crate::io::pixie_io;

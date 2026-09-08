@@ -5,7 +5,7 @@ import com.kalix.ide.linter.managers.LinterOrchestrator;
 import com.kalix.ide.linter.model.ValidationIssue;
 import com.kalix.ide.linter.model.ValidationResult;
 import com.kalix.ide.linter.ui.ErrorNavigationManager;
-import com.kalix.ide.linter.ui.LinterTooltipManager;
+import com.kalix.ide.linter.ui.IssueTooltips;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,7 +32,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
     // Delegated responsibilities
     private final LinterOrchestrator orchestrator;
     private ValidationEventManager eventManager;
-    private final LinterTooltipManager tooltipManager;
+    private final IssueTooltips tooltips;
     private final ErrorNavigationManager navigationManager;
     private final LinterHighlighter highlighter;
 
@@ -62,7 +62,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
             SchemaManager schemaManager,
             LinterOrchestrator orchestrator,
             LinterHighlighter highlighter,
-            LinterTooltipManager tooltipManager,
+            IssueTooltips tooltips,
             ErrorNavigationManager navigationManager,
             ConcurrentHashMap<Integer, List<ValidationIssue>> issuesByLine) {
 
@@ -70,7 +70,7 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         this.schemaManager = schemaManager;
         this.orchestrator = orchestrator;
         this.highlighter = highlighter;
-        this.tooltipManager = tooltipManager;
+        this.tooltips = tooltips;
         this.navigationManager = navigationManager;
         this.issuesByLine = issuesByLine;
 
@@ -174,6 +174,11 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
         eventManager.validateNow();
     }
 
+    /** The hover-tip source for this linter's issues, to be attached to the editor's {@code HoverTipSupplier}. */
+    public IssueTooltips getTooltips() {
+        return tooltips;
+    }
+
     /**
      * Get all issues for a specific line number (empty list if none).
      */
@@ -256,7 +261,6 @@ public class LinterManager implements SchemaManager.LintingStateChangeListener,
 
         // Dispose delegated components
         eventManager.dispose();
-        tooltipManager.dispose();
         orchestrator.dispose();
         highlighter.dispose();
 

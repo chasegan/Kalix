@@ -16,7 +16,7 @@ import java.util.function.Function;
  * <h2>Single Source of Truth</h2>
  * In RunManager, one DataSet instance ({@code plotDataSet}) is shared across all visualization tabs.
  * When data is added/removed, all tabs see the change immediately. Tabs then need to call
- * {@link com.kalix.ide.flowviz.PlotPanel#refreshData} to rebuild their display caches.
+ * {@link com.kalix.ide.flowviz.FlowVizPanel#refreshData} to rebuild their display caches.
  *
  * <h2>Identity</h2>
  * Series are keyed by {@link SeriesRef}. The user-visible label is a separate concern,
@@ -26,7 +26,7 @@ import java.util.function.Function;
  * {@link #addSeries} replaces any existing series under the same ref.
  *
  * @see com.kalix.ide.windows.RunManager
- * @see com.kalix.ide.windows.VisualizationTabManager
+ * @see com.kalix.ide.flowviz.VisualizationTabManager
  */
 public class DataSet {
 

@@ -1,5 +1,7 @@
 package com.kalix.ide.model;
 
+import com.kalix.ide.linter.parsing.IniSyntax;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -16,14 +18,16 @@ import java.util.regex.Pattern;
  * <ul>
  *   <li>Lines are trimmed before classification, so indented headers and properties
  *       are recognised exactly as the parser recognises them.</li>
- *   <li>Blank lines and comment lines ({@code #} or {@code ;} first) are inert:
- *       they never open or close a section and never match as properties — a
- *       {@code [} or {@code loc =} inside a comment is just a comment.</li>
- *   <li>A node section opens at a line whose trimmed content is exactly
- *       {@code [node.<name>]} and closes at the next line whose trimmed content
- *       starts with {@code [} (any section header), or at end of text. Trailing
- *       blank/comment lines before the next header belong to the section.</li>
- *   <li>Property matches are line-anchored with inline {@code #}/{@code ;} comments
+ *   <li>Blank lines and comment lines ({@code #} first) are inert: they never
+ *       open or close a section and never match as properties — a {@code [} or
+ *       {@code loc =} inside a comment is just a comment. ({@code ;} is not a
+ *       comment marker; see {@link IniSyntax}.)</li>
+ *   <li>A node section opens at a line whose code is exactly {@code [node.<name>]}
+ *       (a trailing {@code #} comment is allowed) and closes at the next line whose
+ *       trimmed content starts with {@code [} (any section header), or at end of
+ *       text. Trailing blank/comment lines before the next header belong to the
+ *       section.</li>
+ *   <li>Property matches are line-anchored with inline {@code #} comments
  *       stripped, so {@code refloc = ...} or {@code # loc = ...} never match as a
  *       {@code loc} property.</li>
  *   <li>Duplicate node names resolve to the LAST section, matching the parser
@@ -33,7 +37,7 @@ import java.util.regex.Pattern;
  */
 public final class NodeSectionLocator {
 
-    /** Matches a node section header on a trimmed line: {@code [node.<name>]}. */
+    /** Matches a node section header on a line's trimmed code: {@code [node.<name>]}. */
     private static final Pattern NODE_HEADER_PATTERN = Pattern.compile("^\\[node\\.([^\\]]+)\\]$");
 
     /**
@@ -43,11 +47,11 @@ public final class NodeSectionLocator {
      * {@link ModelParser}'s LOC_PATTERN.
      */
     private static final Pattern LOC_LINE_PATTERN = Pattern.compile(
-        "^\\s*loc\\s*=\\s*([0-9.eE+-]+)(\\s*,\\s*)([0-9.eE+-]+)(?:\\s*[#;].*)?\\s*$");
+        "^\\s*loc\\s*=\\s*([0-9.eE+-]+)(\\s*,\\s*)([0-9.eE+-]+)(?:\\s*#.*)?\\s*$");
 
-    /** Matches a downstream-link property on a trimmed line, mirroring ModelParser. */
+    /** Matches a downstream-link property on a line's trimmed code, mirroring ModelParser. */
     private static final Pattern DS_LINE_PATTERN = Pattern.compile(
-        "^ds_(\\d+)\\s*=\\s*(.+?)\\s*(?:[#;].*)?$");
+        "^ds_(\\d+)\\s*=\\s*(.+?)\\s*$");
 
     private NodeSectionLocator() {
     }
@@ -137,18 +141,18 @@ public final class NodeSectionLocator {
 
         LineScanner scanner = new LineScanner(text);
         while (scanner.next()) {
-            String trimmed = scanner.trimmed();
-            if (isBlankOrComment(trimmed)) {
+            String code = IniSyntax.stripComment(scanner.trimmed());
+            if (code.isEmpty()) {
                 // Inert: never opens or closes a section, and never extends its content.
                 continue;
             }
 
-            if (trimmed.charAt(0) == '[') {
+            if (code.charAt(0) == '[') {
                 // Any section header closes the open section, at this line's start.
                 if (openName != null) {
                     sections.add(new NodeSection(openName, openStart, scanner.lineStart, openContentEnd, openLoc));
                 }
-                Matcher header = NODE_HEADER_PATTERN.matcher(trimmed);
+                Matcher header = NODE_HEADER_PATTERN.matcher(code);
                 if (header.matches()) {
                     openName = header.group(1);
                     openStart = scanner.lineStart;
@@ -197,19 +201,19 @@ public final class NodeSectionLocator {
 
         LineScanner scanner = new LineScanner(text);
         while (scanner.next()) {
-            String trimmed = scanner.trimmed();
-            if (isBlankOrComment(trimmed)) {
+            String code = IniSyntax.stripComment(scanner.trimmed());
+            if (code.isEmpty()) {
                 continue;
             }
 
-            if (trimmed.charAt(0) == '[') {
-                Matcher header = NODE_HEADER_PATTERN.matcher(trimmed);
+            if (code.charAt(0) == '[') {
+                Matcher header = NODE_HEADER_PATTERN.matcher(code);
                 currentNode = header.matches() ? header.group(1) : null;
                 continue;
             }
 
             if (currentNode != null) {
-                Matcher ds = DS_LINE_PATTERN.matcher(trimmed);
+                Matcher ds = DS_LINE_PATTERN.matcher(code);
                 if (ds.matches()) {
                     references.add(new DsReference(
                         currentNode, ds.group(2), scanner.lineStart, scanner.nextLineStart));
@@ -218,10 +222,6 @@ public final class NodeSectionLocator {
         }
 
         return references;
-    }
-
-    private static boolean isBlankOrComment(String trimmed) {
-        return trimmed.isEmpty() || trimmed.charAt(0) == '#';
     }
 
     /**

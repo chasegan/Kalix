@@ -3,6 +3,8 @@ package com.kalix.ide.managers;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.document.DataDocument;
+import com.kalix.ide.document.DocumentKind;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -13,6 +15,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -27,7 +30,7 @@ public class FileOperationsManager {
 
     private final Component parentComponent;
     private final DocumentManager documentManager;
-    private final Supplier<KalixDocument> documentFactory;
+    private final Function<File, KalixDocument> documentFactory;
     private final Consumer<String> statusUpdateCallback;
     private final Consumer<String> addRecentFileCallback;
     private final Runnable fileChangedCallback;
@@ -48,7 +51,7 @@ public class FileOperationsManager {
      */
     public FileOperationsManager(Component parentComponent,
                                  DocumentManager documentManager,
-                                 Supplier<KalixDocument> documentFactory,
+                                 Function<File, KalixDocument> documentFactory,
                                  Consumer<String> statusUpdateCallback,
                                  Consumer<String> addRecentFileCallback,
                                  Runnable fileChangedCallback,
@@ -74,7 +77,7 @@ public class FileOperationsManager {
      * Creates a new untitled document in its own tab and makes it active.
      */
     public void newModel() {
-        KalixDocument document = documentFactory.get();
+        KalixDocument document = documentFactory.apply(null); // untitled = model
         document.setText(AppConstants.DEFAULT_MODEL_TEXT);
         document.setFile(null);
 
@@ -108,7 +111,10 @@ public class FileOperationsManager {
     }
 
     /**
-     * Opens a model file in a new tab, or focuses its existing tab if already open.
+     * Opens a file in a new tab — model, data or plain text; the document kind is
+     * decided from the file — or focuses its existing tab if already open. The
+     * name is historic: every open path (menu, tree, drag-drop, session restore)
+     * routes through here.
      *
      * @param file The file to load
      */
@@ -121,19 +127,26 @@ public class FileOperationsManager {
             return;
         }
 
-        final String content;
-        try {
-            content = Files.readString(file.toPath());
-        } catch (IOException e) {
-            showFileOpenError(file, e);
-            return;
-        }
+        // A large data file never enters an editor buffer — the tab's virtual views
+        // read it directly (docs/data-file-viewer.md). Everything else loads as text.
+        KalixDocument document;
+        if (DocumentKind.forFile(file) == DocumentKind.DATA && DataDocument.exceedsEditableGate(file)) {
+            document = documentFactory.apply(file); // the DATA ctor takes the backing file
+        } else {
+            final String content;
+            try {
+                content = Files.readString(file.toPath());
+            } catch (IOException e) {
+                showFileOpenError(file, e);
+                return;
+            }
 
-        // Create the document only after a successful read, so a failed open leaves no
-        // empty tab behind.
-        KalixDocument document = documentFactory.get();
-        document.setText(content);
-        document.setFile(file);
+            // Create the document only after a successful read, so a failed open
+            // leaves no empty tab behind.
+            document = documentFactory.apply(file); // kind decided by file type
+            document.setText(content);
+            document.setFile(file);
+        }
 
         // Add to recent files and remember as last opened for session restoration.
         addRecentFileCallback.accept(file.getAbsolutePath());
@@ -142,9 +155,13 @@ public class FileOperationsManager {
         documentManager.setActiveDocument(document);
         document.parseModelFromText(true);
 
-        String format = getFileFormat(file.getName());
-        statusUpdateCallback.accept(String.format("Opened %s model: %s (%s format)",
-            format, file.getName(), format));
+        if (document.isModel()) {
+            String format = getFileFormat(file.getName());
+            statusUpdateCallback.accept(String.format("Opened %s model: %s (%s format)",
+                format, file.getName(), format));
+        } else {
+            statusUpdateCallback.accept("Opened: " + file.getName());
+        }
     }
 
     /**
@@ -159,10 +176,18 @@ public class FileOperationsManager {
         if (document == null) {
             return; // no open document backs this file; nothing to reload
         }
+        if (!document.isEditable()) {
+            // A read-only data view has no buffer to reload; refresh its virtual
+            // views instead (append-resume "live tail", or a full rebuild).
+            document.refreshDataViewFromDisk();
+            statusUpdateCallback.accept("Data view refreshed: " + file.getName());
+            return;
+        }
         try {
             String content = Files.readString(file.toPath());
             document.setText(content); // setText resets dirty state
             document.parseModelFromText(true);
+            document.refreshDataViewFromDisk(); // data docs: re-index the new bytes
             statusUpdateCallback.accept("File reloaded: " + file.getName());
         } catch (IOException e) {
             statusUpdateCallback.accept("Failed to reload file: " + file.getName());
@@ -182,6 +207,12 @@ public class FileOperationsManager {
         if (document == null) {
             return;
         }
+        if (!document.isEditable()) {
+            // A read-only data view has no editor buffer; writing it out would
+            // replace the file with nothing.
+            statusUpdateCallback.accept("Read-only data view — nothing to save");
+            return;
+        }
         File currentFile = document.getFile();
         if (currentFile == null) {
             // No current file, prompt for save as — for THIS document, not the
@@ -199,6 +230,10 @@ public class FileOperationsManager {
 
             // Reset dirty state
             document.setDirty(false);
+
+            // A data document's virtual table indexes byte offsets this save just
+            // moved; rebuild its views from the new bytes (no-op for other kinds).
+            document.refreshDataViewFromDisk();
 
             // Save as last opened file for session restoration
             PreferenceKeys.LAST_OPENED_FILE.set(currentFile.getAbsolutePath());
@@ -228,6 +263,10 @@ public class FileOperationsManager {
         }
         // If null here, then no document is available
         if (document == null) {
+            return;
+        }
+        if (!document.isEditable()) {
+            statusUpdateCallback.accept("Read-only data view — nothing to save");
             return;
         }
         // The dialog handles default-extension appending and overwrite confirmation.
@@ -267,6 +306,7 @@ public class FileOperationsManager {
             // Update current file and reset dirty state
             document.setFile(selectedFile);
             document.setDirty(false);
+            document.refreshDataViewFromDisk(); // see saveKalixDocument
 
             // Add to recent files
             addRecentFileCallback.accept(selectedFile.getAbsolutePath());

@@ -7,6 +7,8 @@ import com.kalix.ide.document.KalixDocument;
 
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
+import javax.swing.MenuSelectionManager;
+import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Cursor;
@@ -15,15 +17,19 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 /**
- * The centre region: a tab strip with one tab per open {@link KalixDocument},
- * each tab's content being that document's editor. This is the always-present
- * anchor of the work area.
+ * The centre region: a tab strip with one tab per open {@link KalixDocument}.
+ * Each tab's content is the document's editor — or, for a document with a
+ * contextual view (the map for a model), an editor|context
+ * {@link DocumentSplitView} sharing one remembered divider across all tabs.
+ * This is the always-present anchor of the work area.
  *
  * <p>
  * It is a thin view over {@link DocumentManager}: it observes opened / closed /
@@ -43,9 +49,18 @@ public class DocumentTabPane extends JPanel {
     private final Consumer<KalixDocument> closeRequestHandler;
     private final ContextMenuRequestHandler contextMenuRequestHandler;
     private final Supplier<java.io.File> projectDirectorySupplier;
+    private final ContextSplitCoordinator contextSplitCoordinator;
 
     /** Suppresses selection-change feedback while we mutate the tab strip programmatically. */
     private boolean syncing = false;
+
+    /**
+     * The root component each document contributes as its tab's content. Tab↔document
+     * resolution goes through this map, never through {@code getEditor()} directly, so
+     * the root can become a composite (editor | contextual view) without breaking
+     * close buttons, context menus or drag-reorder.
+     */
+    private final Map<KalixDocument, Component> tabRoots = new IdentityHashMap<>();
 
     List<String> tabNames;
 
@@ -59,7 +74,8 @@ public class DocumentTabPane extends JPanel {
         DocumentManager documentManager,
         Consumer<KalixDocument> closeRequestHandler,
         ContextMenuRequestHandler contextMenuRequestHandler,
-        Supplier<java.io.File> projectDirectorySupplier
+        Supplier<java.io.File> projectDirectorySupplier,
+        ContextSplitCoordinator contextSplitCoordinator
     ) {
         super(new BorderLayout());
         this.documentManager = documentManager;
@@ -67,6 +83,7 @@ public class DocumentTabPane extends JPanel {
         this.contextMenuRequestHandler = contextMenuRequestHandler;
         this.tabNames = new ArrayList<>();
         this.projectDirectorySupplier = projectDirectorySupplier;
+        this.contextSplitCoordinator = contextSplitCoordinator;
 
         tabbedPane = new JTabbedPane();
         tabbedPane.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
@@ -220,7 +237,9 @@ public class DocumentTabPane extends JPanel {
         try {
             // May add a conflict
             this.rebuildTabNames();
-            tabbedPane.addTab(tabTitle(document), document.getEditor());
+            Component root = tabRootFor(document);
+            tabRoots.put(document, root);
+            tabbedPane.addTab(tabTitle(document), root);
             int index = indexOf(document);
             tabbedPane.setToolTipTextAt(index, tabTooltip(document));
             this.refreshTabs();
@@ -239,6 +258,7 @@ public class DocumentTabPane extends JPanel {
             // May remove conflict
             this.rebuildTabNames();
             tabbedPane.removeTabAt(index);
+            tabRoots.remove(document);
             this.refreshTabs();
         } finally {
             syncing = false;
@@ -258,6 +278,7 @@ public class DocumentTabPane extends JPanel {
                 syncing = false;
             }
         }
+        focusEditorOf(document);
     }
 
     // --- User-driven tab interactions ---
@@ -285,18 +306,83 @@ public class DocumentTabPane extends JPanel {
 
     // --- Helpers ---
 
-    private int indexOf(KalixDocument document) {
-        return tabbedPane.indexOfComponent(document.getEditor());
+    /**
+     * The component a document's tab shows: the bare editor for a document with no
+     * contextual view, or an editor|context {@link DocumentSplitView} sharing the
+     * one remembered divider for a document that has one (the map for a model).
+     * Built once per document and stored in {@link #tabRoots}; tab↔document
+     * resolution never assumes the root is the editor.
+     */
+    private Component tabRootFor(KalixDocument document) {
+        Component contextView = document.getContextView();
+        if (contextView == null) {
+            return document.getPrimaryView();
+        }
+        return new DocumentSplitView(document.getPrimaryView(), contextView, contextSplitCoordinator);
     }
 
-    private KalixDocument documentAt(int tabIndex) {
+    // --- Contextual view (the region inside each tab) ---
+
+    /**
+     * Collapses or expands the contextual-view region. The shared state changes for
+     * every tab; the active tab's split is re-laid out immediately, hidden tabs
+     * catch up when next shown (see {@link DocumentSplitView}).
+     */
+    public void setContextViewCollapsed(boolean collapsed) {
+        contextSplitCoordinator.setCollapsed(collapsed);
+        Component root = tabRoots.get(documentManager.getActiveDocument());
+        if (root instanceof DocumentSplitView view) {
+            view.applySharedLayout();
+        }
+    }
+
+    public boolean isContextViewCollapsed() {
+        return contextSplitCoordinator.isCollapsed();
+    }
+
+    public void toggleContextView() {
+        setContextViewCollapsed(!isContextViewCollapsed());
+    }
+
+    /**
+     * Puts keyboard focus in the newly active document's editor. With composite tab
+     * content the tab pane would otherwise leave focus on the tab header (or hand it
+     * to the composite's first focusable child), so typing after a tab switch must
+     * be routed explicitly. Deferred so it runs after the selection settles; skipped
+     * if the active document changed again in the meantime.
+     */
+    private void focusEditorOf(KalixDocument document) {
+        SwingUtilities.invokeLater(() -> {
+            // Leave focus alone while a menu is open: the tab context-menu path
+            // activates the document and then shows its popup, so this deferred focus
+            // would otherwise land under the open menu and degrade its keyboard handling.
+            if (MenuSelectionManager.defaultManager().getSelectedPath().length > 0) {
+                return;
+            }
+            if (documentManager.getActiveDocument() == document) {
+                document.getPrimaryFocusComponent().requestFocusInWindow();
+            }
+        });
+    }
+
+    int indexOf(KalixDocument document) {
+        Component root = tabRoots.get(document);
+        return root != null ? tabbedPane.indexOfComponent(root) : -1;
+    }
+
+    KalixDocument documentAt(int tabIndex) {
         Component content = tabbedPane.getComponentAt(tabIndex);
         for (KalixDocument document : documentManager.getDocuments()) {
-            if (document.getEditor() == content) {
+            if (tabRoots.get(document) == content) {
                 return document;
             }
         }
         return null;
+    }
+
+    /** The underlying tab strip — package-private, for tests. */
+    JTabbedPane getTabbedPane() {
+        return tabbedPane;
     }
 
     private String tabTitle(KalixDocument document) {

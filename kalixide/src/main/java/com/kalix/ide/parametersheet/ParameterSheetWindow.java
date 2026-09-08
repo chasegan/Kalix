@@ -1,5 +1,6 @@
 package com.kalix.ide.parametersheet;
 
+import com.kalix.ide.linter.parsing.IniSyntax;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.linter.parsing.INIModelParser;
@@ -52,8 +53,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Non-modal dialog showing all node parameters in a spreadsheet-like table.
@@ -547,21 +546,20 @@ public class ParameterSheetWindow extends JDialog {
         // Reconstruct text
         StringBuilder sb = new StringBuilder();
         String currentSection = null;
-        Pattern sectionPattern = Pattern.compile("^\\s*\\[([^\\]]+)]\\s*$");
 
         for (int i = 0; i < lines.length; i++) {
             if (deleteLines[i]) continue;
 
-            // Track current section
-            Matcher m = sectionPattern.matcher(lines[i]);
-            if (m.matches()) {
+            // Track current section (a header may carry a trailing '#' comment)
+            String sectionName = IniSyntax.sectionName(lines[i]);
+            if (sectionName != null) {
                 // Before moving to next section, flush any insertions for current section
                 if (currentSection != null && insertions.containsKey(currentSection)) {
                     for (String insertion : insertions.remove(currentSection)) {
                         sb.append(insertion).append("\n");
                     }
                 }
-                currentSection = m.group(1).trim();
+                currentSection = sectionName;
             }
 
             sb.append(lines[i]);

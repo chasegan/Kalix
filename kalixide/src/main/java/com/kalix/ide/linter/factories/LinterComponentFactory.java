@@ -7,7 +7,7 @@ import com.kalix.ide.linter.events.ValidationEventManager;
 import com.kalix.ide.linter.managers.LinterOrchestrator;
 import com.kalix.ide.linter.model.ValidationIssue;
 import com.kalix.ide.linter.ui.ErrorNavigationManager;
-import com.kalix.ide.linter.ui.LinterTooltipManager;
+import com.kalix.ide.linter.ui.IssueTooltips;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -28,7 +28,7 @@ public class LinterComponentFactory {
         // Create components
         LinterOrchestrator orchestrator = new LinterOrchestrator(schemaManager);
         LinterHighlighter highlighter = new LinterHighlighter(textArea);
-        LinterTooltipManager tooltipManager = new LinterTooltipManager(textArea, issuesByLine);
+        IssueTooltips tooltips = new IssueTooltips(issuesByLine);
         ErrorNavigationManager navigationManager = new ErrorNavigationManager(textArea);
 
         // Create LinterManager with dependencies
@@ -37,7 +37,7 @@ public class LinterComponentFactory {
             schemaManager,
             orchestrator,
             highlighter,
-            tooltipManager,
+            tooltips,
             navigationManager,
             issuesByLine
         );

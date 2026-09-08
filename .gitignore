@@ -101,3 +101,6 @@ kalix_prefs.json
 src/tests/example_models/1/outputs.csv
 src/tests/example_models/3/outputs.csv
 src/tests/example_models/4/outputs.csv
+
+# Scratch output of test_csv_writer, regenerated on every run
+src/tests/example_data/output_31d6f6b4_EXPORT.csv

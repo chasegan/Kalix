@@ -12,7 +12,7 @@ use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
-use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, split_interleaved, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
+use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, Node};
 use crate::hydrology::rainfall_runoff::gr4j::Gr4Variant;
 use crate::nodes::storage_node::OutletDefinition;
@@ -638,21 +638,22 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.set_k(all_values[0]);
                             n.set_m(all_values[1]);
                         } else if name_lower == "pwl" {
-                            let all_values = csv_string_to_f64_vec(v)
-                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-                            let nvals = all_values.len();
-                            let nrows = nvals / 2;
-                            if all_values.len() % 2 > 0 {
-                                return Err(KalixIoError::Parse(format!("Error on line {}: Pwl table must contain an even number of elements, but found {}",
-                                                   ini_property.line_number, nvals)));
-                            } else if nrows > 32 {
+                            // A two-column table (index flow, travel time), read like every
+                            // other node table so an optional header row is accepted (issue #266:
+                            // the IDE's table editor writes one, and the engine rejected it).
+                            let table = Table::from_csv_string(v, 2, false)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse pwl table for node '{}': {}",
+                                                   ini_property.line_number, node_name, e)))?;
+                            let nrows = table.nrows();
+                            if nrows > 32 {
                                 return Err(KalixIoError::Parse(format!("Error on line {}: Pwl table must contain no more than 32 rows but found {}",
                                                    ini_property.line_number, nrows)));
                             } else if nrows < 1 {
                                 return Err(KalixIoError::Parse(format!("Error on line {}: Pwl table must contain at least one row",
                                                    ini_property.line_number)));
                             }
-                            let (index_flows, index_times) = split_interleaved(&all_values);
+                            let index_flows: Vec<f64> = (0..nrows).map(|r| table.get_value(r, 0)).collect();
+                            let index_times: Vec<f64> = (0..nrows).map(|r| table.get_value(r, 1)).collect();
                             n.set_routing_table(index_flows, index_times);
                         } else if name_lower == "typical_regulated_flow" {
                             n.typical_regulated_flow = v.parse::<f64>()

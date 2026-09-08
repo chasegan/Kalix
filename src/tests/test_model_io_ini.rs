@@ -403,3 +403,36 @@ fn test_changed_unregulated_user_keeps_account() {
     assert!(saved.contains("accounts = myacc, otheracc"),
             "changed unregulated_user must keep its ordered account references, got:\n{}", saved);
 }
+
+/// Issue #266: a `pwl` table with a header row (which KalixIDE's table editor
+/// writes) must load, and load to the same routing table as the bare numbers.
+#[test]
+fn test_routing_pwl_accepts_header_row() {
+    fn routing_table(ini: &str) -> Vec<f64> {
+        let model = IniModelIO::read_model_string(ini).expect("model loads");
+        match &model.nodes[0] {
+            crate::nodes::NodeEnum::RoutingNode(n) => n.get_routing_table_as_vec(),
+            other => panic!("expected a routing node, got {:?}", other.get_name()),
+        }
+    }
+    let bare = "[node.r]\ntype = routing\nloc = 0, 40\nlag = 1\npwl = 0, 2,\n      100, 2,\n      200, 2,\n      1000, 2,\n";
+    let headed = "[node.r]\ntype = routing\nloc = 0, 40\nlag = 1\npwl = Flow [ML], Travel Time [steps], \n      0        , 2, \n      100      , 2, \n      200      , 2, \n      1000     , 2,\n";
+
+    assert_eq!(routing_table(bare), vec![0.0, 2.0, 100.0, 2.0, 200.0, 2.0, 1000.0, 2.0]);
+    assert_eq!(routing_table(headed), routing_table(bare));
+}
+
+/// A bad cell in a node table is a parse error naming the cell, not a panic
+/// (Table::from_csv_string used to `expect` on the number parse).
+#[test]
+fn test_node_table_bad_cell_is_an_error_not_a_panic() {
+    let pwl = "[node.r]\ntype = routing\nloc = 0, 40\npwl = 0, 2,\n      1oo, 2,\n";
+    let err = IniModelIO::read_model_string(pwl).err().expect("must be an error");
+    let msg = format!("{:?}", err);
+    assert!(msg.contains("line 4") && msg.contains("'1oo'") && msg.contains("cell 3"), "{msg}");
+
+    let dims = "[node.s]\ntype = storage\nloc = 0, 0\ndimensions = Level, Volume, Area, Spill,\n             0, 0, 0, x,\n";
+    let err = IniModelIO::read_model_string(dims).err().expect("must be an error");
+    let msg = format!("{:?}", err);
+    assert!(msg.contains("'x'") && msg.contains("cell 8"), "{msg}");
+}

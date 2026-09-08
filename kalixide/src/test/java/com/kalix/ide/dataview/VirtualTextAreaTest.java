@@ -1,0 +1,94 @@
+package com.kalix.ide.dataview;
+
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.function.BooleanSupplier;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+
+class VirtualTextAreaTest {
+
+    private static DataViewSession session(String content) throws IOException {
+        Path file = Files.createTempFile("kalix-textarea-test", ".csv");
+        file.toFile().deleteOnExit();
+        Files.writeString(file, content, StandardCharsets.UTF_8);
+        DataViewSession session = DataViewSession.open(file);
+        await("indexing complete", session::isIndexingComplete);
+        return session;
+    }
+
+    private static void await(String what, BooleanSupplier condition) {
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (!condition.getAsBoolean()) {
+            if (System.currentTimeMillis() > deadline) {
+                throw new AssertionError("Timed out waiting for: " + what);
+            }
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                throw new AssertionError(e);
+            }
+        }
+    }
+
+    @Test
+    void preferredHeightTracksTheLineCount() throws IOException {
+        try (DataViewSession s = session("a,b\nc,d\ne,f\n")) {
+            VirtualTextArea area = new VirtualTextArea(s);
+            int lineHeight = area.getFontMetrics(area.getFont()).getHeight();
+            assertEquals(3L * lineHeight, area.getPreferredSize().height);
+            assertEquals(lineHeight, area.getScrollableUnitIncrement(null, 0, 1));
+        }
+    }
+
+    @Test
+    void lineAtClampsToTheFile() throws IOException {
+        try (DataViewSession s = session("a\nb\n")) {
+            VirtualTextArea area = new VirtualTextArea(s);
+            int lineHeight = area.getFontMetrics(area.getFont()).getHeight();
+            assertEquals(0, area.lineAt(0));
+            assertEquals(1, area.lineAt(lineHeight));
+            assertEquals(1, area.lineAt(lineHeight * 50), "beyond the end clamps to the last line");
+        }
+    }
+
+    @Test
+    void selectionCopiesTheRawLines() throws IOException {
+        try (DataViewSession s = session("Date,flow\n2020-01-01,1.5E+02\n2020-01-02,2.5\n")) {
+            VirtualTextArea area = new VirtualTextArea(s);
+            area.selectLines(0, 1);
+            assertEquals("Date,flow\n2020-01-01,1.5E+02", area.selectedTextBlocking(),
+                "raw bytes, scientific notation intact");
+        }
+    }
+
+    @Test
+    void replaceSessionTracksTheNewFileAndShowLineSelects() throws IOException {
+        try (DataViewSession first = session("a\nb\n")) {
+            VirtualTextArea area = new VirtualTextArea(first);
+            int lineHeight = area.getFontMetrics(area.getFont()).getHeight();
+            try (DataViewSession fresh = session("a\nb\nc\nd\ne\n")) {
+                area.replaceSession(fresh);
+                assertEquals(5L * lineHeight, area.getPreferredSize().height,
+                    "geometry follows the fresh session");
+                area.showLine(4); // unparented: scrolling is a no-op, selection still lands
+                assertEquals(4, area.selectionStart());
+            }
+        }
+    }
+
+    @Test
+    void emptySelectionAndOversizeSelectionCopyNothing() throws IOException {
+        try (DataViewSession s = session("a\nb\n")) {
+            VirtualTextArea area = new VirtualTextArea(s);
+            assertNull(area.selectedTextBlocking(), "no selection");
+            area.selectLines(0, VirtualTextArea.MAX_COPY_LINES + 5L);
+            assertNull(area.selectedTextBlocking(), "over the copy cap");
+        }
+    }
+}

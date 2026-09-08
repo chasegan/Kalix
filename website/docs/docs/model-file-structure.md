@@ -4,7 +4,7 @@ title: "[kalix]"
 
 # [kalix]
 
-Kalix uses an INI format for model definitions. The main model file starts with [kalix] section, which can be used to define global model parameters, followed by sections such as: [input] for defining input datasets, [outputs] for defining output fields, and [node.####] for defining model nodes.
+Kalix uses an INI format for model definitions. The main model file starts with [kalix] section, which can be used to define global model parameters, followed by sections such as: [data] for defining input datasets, [outputs] for defining output fields, and [node.####] for defining model nodes. Comments start with `#` and may appear on any line; see [Conventions](conventions.md#comments) for the full rule, including why `;` is not a comment.
 
 The [kalix] section provides a place to set the version (optional), simulation period (optional), and the execution\_order method (also optional).
 

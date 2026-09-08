@@ -13,8 +13,10 @@ The routing node simulates streamflow routing. Each routing node incorporates a 
 type = routing
 loc = 20, 30
 lag = 2
-pwl = dfd, sdfd,
-      dfd, dfddf,
+pwl = Flow [ML], Travel Time [steps],
+      0,         3,
+      100,       2,
+      500,       1,
 n_divs = 3
 x = 0
 ds_1 = my_other_node
@@ -28,7 +30,7 @@ ds_1 = my_other_node
 | type (compulsory) | The node type, which is “routing” in this case. `type = routing` |
 | loc (compulsory) | The location of the node in cartesian coordinates.  Example: `loc = 20, 30` |
 | lag (optional) | Parameter for lag routing. This is an integer number of [timesteps], and in a daily model the units of this parameter are therefore [days].  Example: `lag = 2` |
-| pwl (optional) | Comma delimited values representing the piecewise linear storage routing relationship. There must be an even number of values, with each consecutive pair representing a flow and a corresponding travel time. Refer to this page to read more about in Kalix. Example: `pwl = 0, 3, 10, 3, 100, 2, 200, 1, 500, 0, 1e8, 0` |
+| pwl (optional) | Comma delimited values representing the piecewise linear storage routing relationship: a two-column table of index flow and travel time, one pair per row, laid out across lines however you like (see [Tables](conventions.md#tables)). An optional header row of two column names may come first, as in the example above; it is ignored by the engine. Up to 32 rows. Example: `pwl = 0, 3, 10, 3, 100, 2, 200, 1, 500, 0, 1e8, 0` |
 | nlm (optional) | Nonlinear Muskingum parameters: k, m. Using these parameters will activate nonlinear Muskingum routing algorithm. Cannot be used in conjunction with piecewise linear on the same reach. Units for k are [meters^(3(1-m)) · s^m]. Following the convention of other platforms, if n\_divs > 1 then k applies per division. Example: `nlm = 183000, 0.75` |
 | n\_divs (optional) | The number of divisions used in the pwl storage routing solver. Default value is 1. Example: `n_divs = 10` |
 | x (optional) | Inflow bias. This sets the bias of the upstream flow (as opposed to the downstream flow) in the index flow term used in the pwl storage routing solver. Default value is 0. Example: `x = 0` |

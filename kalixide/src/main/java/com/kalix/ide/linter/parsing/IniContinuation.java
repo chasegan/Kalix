@@ -47,7 +47,7 @@ public final class IniContinuation {
      * </ul>
      *
      * <p>A "property header" is a non-empty line that does not start with
-     * whitespace, is not a comment ({@code ;} or {@code #}) or section header
+     * whitespace, is not a comment ({@code #}) or section header
      * ({@code [}), and contains an {@code =} in its un-commented portion.</p>
      */
     public static int findOwningPropertyLine(String[] lines, int lineIndex) {
@@ -97,18 +97,10 @@ public final class IniContinuation {
     }
 
     /**
-     * True if the line contains {@code =} before any comment marker.
+     * True if the line contains {@code =} before any comment marker (per
+     * {@link IniSyntax}: a {@code #} inside double quotes is not a marker).
      */
     private static boolean hasEqualsBeforeComment(String line) {
-        for (int i = 0; i < line.length(); i++) {
-            char c = line.charAt(i);
-            if (c == '=') {
-                return true;
-            }
-            if (c == '#') {
-                return false;
-            }
-        }
-        return false;
+        return IniSyntax.stripComment(line).indexOf('=') >= 0;
     }
 }

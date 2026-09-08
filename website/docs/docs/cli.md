@@ -60,7 +60,7 @@ Run a simulation. Alias: `sim`.
 **Options**
 
 `-o`, `--output-file <OUTPUT_FILE>`
-:   File to save the model results to.
+:   File to save the model results to. A `.csv` extension writes CSV; `.pxt` or `.pxb` writes the Pixie pair. CSV values are written at full double precision in the shortest form that reads back to the same number, so very small or very large values appear in exponent notation (`1.5e-7`, `1e20`) rather than as long runs of zeros.
 
 `-p`, `--profile`
 :   Report performance-profiling figures to the console.

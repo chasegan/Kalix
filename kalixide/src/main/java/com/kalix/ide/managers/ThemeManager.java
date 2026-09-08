@@ -5,7 +5,6 @@ import org.slf4j.LoggerFactory;
 import com.formdev.flatlaf.FlatPropertiesLaf;
 import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
 import com.kalix.ide.constants.AppConstants;
-import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.themes.KalixTheme;
 import com.kalix.ide.themes.SyntaxTheme;
@@ -33,7 +32,6 @@ public class ThemeManager {
     private final Component parentComponent;
 
     // Theme-aware components
-    private MapPanel mapPanel;
     private EnhancedTextEditor textEditor;
 
     /**
@@ -179,13 +177,16 @@ public class ThemeManager {
     }
     
     /**
-     * Registers theme-aware components that need custom theme updates.
-     * 
-     * @param mapPanel The MapPanel instance to update
-     * @param textEditor The EnhancedTextEditor instance to update
+     * Registers theme-aware components that need custom theme updates. Maps are not
+     * registered: every document's map is mounted inside its tab, so a theme switch
+     * reaches all of them via {@code updateComponentTreeUI} (MapPanel re-resolves
+     * its colours in {@code updateUI()}). The active-editor registration remains
+     * because RSyntaxTextArea's theme updates go beyond a LaF walk; it could migrate
+     * to the same updateUI pattern later.
+     *
+     * @param textEditor The active EnhancedTextEditor instance to update
      */
-    public void registerThemeAwareComponents(MapPanel mapPanel, EnhancedTextEditor textEditor) {
-        this.mapPanel = mapPanel;
+    public void registerThemeAwareComponents(EnhancedTextEditor textEditor) {
         this.textEditor = textEditor;
     }
     
@@ -228,11 +229,6 @@ public class ThemeManager {
      * Updates custom theme-aware components that need special handling.
      */
     private void updateCustomComponents() {
-        // Update MapPanel background color
-        if (mapPanel != null) {
-            SwingUtilities.invokeLater(() -> mapPanel.updateThemeColors());
-        }
-        
         // Update EnhancedTextEditor theme colors
         if (textEditor != null) {
             SwingUtilities.invokeLater(() -> textEditor.updateThemeColors());

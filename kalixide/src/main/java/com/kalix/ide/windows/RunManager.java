@@ -1,6 +1,8 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.flowviz.VisualizationTabManager;
+import com.kalix.ide.flowviz.VizHost;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DatasetSource;
 import com.kalix.ide.flowviz.data.LabelResolver;
@@ -400,19 +402,26 @@ public class RunManager extends JFrame {
         tabManager = new VisualizationTabManager(plotDataSet,
             new PaletteSeriesStyleResolver(seriesSlotManager, PlotPaletteManager.getInstance()));
 
-        // Wire the label resolver so legends, stats column 0, etc. project SeriesRef
-        // → user-visible label at render time. Must happen *before* the default plot
-        // tab is added so the new PlotPanel picks it up.
-        tabManager.setLabelResolver(labelResolver);
+        // Install this window as the manager's host: label projection for legends
+        // and stats rows, the model directory as the "Save Data" dialog seed, and
+        // tree re-sync when the active tab (or its record) changes. Must happen
+        // *before* the default plot tab is added so the first panel picks it up.
+        tabManager.setHost(new VizHost() {
+            @Override
+            public com.kalix.ide.flowviz.data.LabelResolver labelResolver() {
+                return labelResolver;
+            }
 
-        // Seed each plot tab's "Save Data" dialog with the model directory so it opens
-        // in the same folder as the run tree's "Save results (csv)". Must happen *before*
-        // the default plot tab is added so the first PlotPanel picks it up.
-        tabManager.setBaseDirectorySupplier(
-            () -> baseDirectorySupplier != null ? baseDirectorySupplier.get() : null);
+            @Override
+            public java.io.File baseDirectory() {
+                return baseDirectorySupplier != null ? baseDirectorySupplier.get() : null;
+            }
 
-        // Sync tree selection when user switches tabs
-        tabManager.setOnTabChangedCallback(this::onTabChanged);
+            @Override
+            public void onActiveTabChanged() {
+                onTabChanged();
+            }
+        });
 
         // Add the default tab: one plot tab with "Last run" checked and nothing else.
         // The same factory repopulates the strip when the final tab is closed, so a
@@ -903,6 +912,10 @@ public class RunManager extends JFrame {
         } finally {
             fetchCoordinator.endProgrammaticUpdate();
         }
+
+        // A source tick/untick is an undoable action in its own right. If the
+        // reconcile above already pushed (series were pruned), this dedupes.
+        tabManager.pushTargetTabHistory();
     }
 
     /**
@@ -996,12 +1009,13 @@ public class RunManager extends JFrame {
         }
         datasetSeriesCache.keySet().removeIf(dsRef -> dsRef.datasetId().equals(absPath));
 
-        // Strip them from every tab's selection, legend, visible-series, and stats,
-        // and forget the dataset from every tab's recorded source context.
-        tabManager.removeSeriesFromAllTabs(refs);
-        tabManager.removeSourceFromAllTabs(new DatasetSource(absPath));
-
-        // Remove the tree node — selection changes (if any) refresh the outputs tree.
+        // Remove the tree node FIRST, exactly as run removal does (RunTreeController
+        // removes paths before removeRunData). If the dataset was checked, removePath
+        // fires the tick listener synchronously: its snapshot+reconcile prunes the
+        // dataset's sources AND series from the active tab in ONE history entry.
+        // Running the scrubs first pushed while the record still held the dead
+        // source, and the listener then pushed again without it — two entries
+        // differing only in sources, making the first Undo a visible no-op.
         for (int i = 0; i < loadedDatasetsNode.getChildCount(); i++) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) loadedDatasetsNode.getChildAt(i);
             var path = child.getPath();
@@ -1012,6 +1026,13 @@ public class RunManager extends JFrame {
                 break;
             }
         }
+
+        // Strip them from every tab's selection, legend, visible-series, and stats,
+        // and forget the dataset from every tab's recorded source context. For the
+        // active tab these are no-ops (the listener above already did both, and the
+        // duplicate push dedupes); background tabs are scrubbed silently by design.
+        tabManager.removeSeriesFromAllTabs(refs);
+        tabManager.removeSourceFromAllTabs(new DatasetSource(absPath));
 
         if (statusUpdater != null) {
             statusUpdater.accept("Removed dataset: " + info.fileName);
@@ -1068,6 +1089,12 @@ public class RunManager extends JFrame {
         Set<SourceRef> snapshot = currentCheckedSourceRefs();
         // Build the new set fully before recording it: the recorded set is a live view of
         // the very set the setter replaces.
+        //
+        // Caution: "has a node" is not proof of representability DURING TEARDOWN — a
+        // node mid-removal is still attached when its removePath check-change fires,
+        // so an unguarded removal would see its ref as representable-but-unchecked
+        // and silently drop it here (this stripped LastSource from the active tab
+        // until Last-node removal was guarded; see LastRunTracker.clearLast).
         for (SourceRef ref : recorded) {
             if (pathForSourceRef(ref) == null) {
                 snapshot.add(ref);

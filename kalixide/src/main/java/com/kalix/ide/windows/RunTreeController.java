@@ -3,6 +3,7 @@ package com.kalix.ide.windows;
 import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.RunSeries;
 import com.kalix.ide.flowviz.data.RunSource;
@@ -29,7 +30,8 @@ import java.util.Set;
  * ({@link #renameRun}), and programmatic selection ({@link #selectRun}).
  *
  * <p>Completions are forwarded to {@link LastRunTracker#onRunCompleted}; removals to
- * {@link LastRunTracker#onRunRemoved}. All methods are EDT-only ({@code refreshRuns}
+ * {@link LastRunTracker#rebindLast}/{@link LastRunTracker#clearLast} (the Last
+ * alias self-heals when its run is removed). All methods are EDT-only ({@code refreshRuns}
  * and {@code selectRun} marshal themselves via {@code SwingUtilities.invokeLater}).</p>
  */
 class RunTreeController {
@@ -250,11 +252,27 @@ class RunTreeController {
                 }
 
                 // Clean up tracking maps (single-shot removal via the bookkeeping)
+                boolean lastWasRemoved = false;
                 for (String sessionKey : sessionsToRemove) {
+                    lastWasRemoved |= lastRunTracker.isLastSession(sessionKey);
                     removeRunData(sessions.remove(sessionKey));
+                }
 
-                    // If this was the Last run, clear Last node
-                    lastRunTracker.onRunRemoved(sessionKey);
+                // Last is a standing subscription to "whichever run is newest": if its
+                // run was removed, SELF-HEAL to the most recently completed survivor
+                // (sessions.remove above already cleared the removed runs' timestamps,
+                // so the bookkeeping now holds exactly the survivors). Silent by
+                // design — symmetric with a new run arriving. With no completed
+                // survivor, restore the pre-first-run birth state instead.
+                if (lastWasRemoved) {
+                    String runnerUpKey = sessions.latestCompletedSession();
+                    if (runnerUpKey != null) {
+                        RunInfoImpl runnerUp =
+                            (RunInfoImpl) sessions.node(runnerUpKey).getUserObject();
+                        lastRunTracker.rebindLast(runnerUp, sessions.completionTimestamp(runnerUpKey));
+                    } else {
+                        lastRunTracker.clearLast();
+                    }
                 }
 
                 // Notify tree model of removals. nodesWereRemoved requires ascending

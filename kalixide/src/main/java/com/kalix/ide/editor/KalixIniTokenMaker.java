@@ -1,5 +1,8 @@
 package com.kalix.ide.editor;
 
+import com.kalix.ide.linter.parsing.IniSyntax;
+
+import java.nio.CharBuffer;
 import javax.swing.text.Segment;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMaker;
 import org.fife.ui.rsyntaxtextarea.Token;
@@ -149,16 +152,12 @@ public class KalixIniTokenMaker extends AbstractTokenMaker {
     }
 
     /**
-     * Finds the start position of a comment (#) in the given range.
+     * Finds the start position of a comment (#) in the given range, per
+     * {@link IniSyntax}: a '#' inside double quotes is not a comment.
      * @return comment start position, or -1 if no comment found
      */
     private int findCommentStart(char[] array, int start, int end) {
-        for (int i = start; i < end; i++) {
-            if (array[i] == '#') {
-                return i;
-            }
-        }
-        return -1;
+        return IniSyntax.commentStart(CharBuffer.wrap(array), start, end);
     }
 
     /**

@@ -2,7 +2,8 @@ package com.kalix.ide.windows;
 
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.components.JCheckboxTree;
-import com.kalix.ide.flowviz.PlotPanel;
+import com.kalix.ide.flowviz.VisualizationTabManager;
+import com.kalix.ide.flowviz.FlowVizPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.LastSeries;
@@ -179,8 +180,8 @@ class SeriesFetchCoordinator {
         Set<SeriesRef> seriesToFetch = new HashSet<>(newSelectedSeries);
         seriesToFetch.removeIf(ref -> plotDataSet.getSeries(ref) != null);
 
-        // Capture the target PlotPanel for async callbacks
-        final PlotPanel targetPanel = tabManager.getTargetPlotPanel();
+        // Capture the target FlowVizPanel for async callbacks
+        final FlowVizPanel targetPanel = tabManager.getTargetVizPanel();
 
         // Group new run series needing fetch by data source. Dataset series take their own
         // path below.

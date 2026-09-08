@@ -27,7 +27,16 @@ impl Table {
     }
 
 
-    // TODO: docs
+    /// Parses a comma-separated list of cells into a table of `ncols` columns.
+    ///
+    /// The cells may begin with a header row of `ncols` column names, which is
+    /// detected when the first cell does not start with a digit (or always read
+    /// when `force_read_header` is set); the names are kept in `col_names` and
+    /// play no part in the numbers. Trailing commas and whitespace are ignored.
+    /// This is the one reader for every node table property (storage
+    /// `dimensions`, loss and splitter tables, routing `pwl`), so they all share
+    /// the optional-header convention documented on the website's Conventions
+    /// page under "Tables".
     pub fn from_csv_string(s: &str, ncols: usize, force_read_header: bool) -> Result<Self, String> {
 
         let mut answer = Self::new(ncols);
@@ -56,7 +65,8 @@ impl Table {
         let mut col = 0;
         while i < n_elements {
             //Parse the element at location i
-            let value = ss[i].parse::<f64>().expect("Error parsing number in table");
+            let value = ss[i].parse::<f64>()
+                .map_err(|_| format!("Could not read '{}' (cell {}) as a number", ss[i], i + 1))?;
 
             //Put it into the table
             answer.set_value(row, col, value);

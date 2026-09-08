@@ -75,6 +75,7 @@ public class ModelLinter {
             checkForStandaloneCarriageReturns(content, result);
 
             INIModelParser.ParsedModel model = INIModelParser.parse(content);
+            reportSyntaxIssues(model, schema, result);
 
             // Skip validation for empty models (no sections or content)
             if (isModelEmpty(model)) {
@@ -120,6 +121,8 @@ public class ModelLinter {
         }
 
         try {
+            reportSyntaxIssues(model, schema, result);
+
             // Skip validation for empty models (no sections or content)
             if (isModelEmpty(model)) {
                 return result; // Return empty result - no errors for empty models
@@ -169,6 +172,23 @@ public class ModelLinter {
         }
 
         return !hasContent;
+    }
+
+    /**
+     * Surfaces the parser's lexical findings (a {@code ;} "comment", a malformed
+     * header) under their schema rules, honouring each rule's enabled flag and
+     * severity. Runs before the empty-model short-circuit: a file holding only a
+     * {@code ;} line has no sections, and that line is the thing to report.
+     */
+    private static void reportSyntaxIssues(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
+        for (INIModelParser.SyntaxIssue issue : model.getSyntaxIssues()) {
+            ValidationRule rule = schema.getValidationRule(issue.ruleName());
+            if (rule != null && !rule.isEnabled()) {
+                continue;
+            }
+            ValidationRule.Severity severity = (rule != null) ? rule.getSeverity() : ValidationRule.Severity.ERROR;
+            result.addIssue(issue.lineNumber(), issue.message(), severity, issue.ruleName());
+        }
     }
 
     private void validateModel(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {

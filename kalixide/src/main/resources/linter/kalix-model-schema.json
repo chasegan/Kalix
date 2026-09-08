@@ -821,6 +821,14 @@
     "coordinate_format": {
       "severity": "error",
       "description": "Coordinates must be two comma-separated numbers"
+    },
+    "semicolon_comment": {
+      "severity": "error",
+      "description": "';' does not start a comment; use '#'"
+    },
+    "malformed_section_header": {
+      "severity": "error",
+      "description": "A line starting with '[' must be a complete [section] header"
     }
   },
   "data_types": {

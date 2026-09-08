@@ -234,9 +234,15 @@ public class LinterSchema {
                         paramDef.max = paramNode.path("max").asDouble();
                     }
 
-                    // Parse pattern for custom validation
+                    // Parse pattern for custom validation, compiled once here rather
+                    // than per property per lint pass
                     if (paramNode.has("pattern")) {
                         paramDef.pattern = paramNode.path("pattern").asText();
+                        try {
+                            paramDef.compiledPattern = Pattern.compile(paramDef.pattern);
+                        } catch (java.util.regex.PatternSyntaxException e) {
+                            logger.warn("Invalid regex pattern in schema for parameter {}: {}", paramName, paramDef.pattern);
+                        }
                     }
 
                     nodeType.parameterDefinitions.put(paramName, paramDef);

@@ -1,18 +1,18 @@
 package com.kalix.ide.model;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.kalix.ide.linter.parsing.IniSyntax;
 
-import java.io.BufferedReader;
-import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Parses INI format hydrological model definitions into simplified data model.
  * Focused on extracting nodes and links for visualization purposes.
+ *
+ * <p>Runs on the EDT after every (coalesced) document change, so it is a single
+ * pass of plain string scanning per line via {@link IniSyntax}: no regular
+ * expressions, no reader objects. A node is complete when its section has a
+ * {@code type} and a parseable {@code loc}; {@code ds_N} properties become links.</p>
  */
 public class ModelParser {
 
@@ -28,12 +28,8 @@ public class ModelParser {
             this.isPrimary = isPrimary;
         }
     }
-    private static final Logger logger = LoggerFactory.getLogger(ModelParser.class);
 
-    private static final Pattern NODE_SECTION_PATTERN = Pattern.compile("^\\[node\\.([^\\]]+)\\]$");
-    private static final Pattern TYPE_PATTERN = Pattern.compile("^type\\s*=\\s*(.+?)\\s*(?:[#;].*)?$");
-    private static final Pattern LOC_PATTERN = Pattern.compile("^loc\\s*=\\s*([0-9.eE+-]+)\\s*,\\s*([0-9.eE+-]+)(?:\\s*[#;].*)?$");
-    private static final Pattern DOWNSTREAM_LINK_PATTERN = Pattern.compile("^ds_(\\d+)\\s*=\\s*(.+?)\\s*(?:[#;].*)?$");
+    private static final String NODE_SECTION_PREFIX = "node.";
 
     /**
      * Parse INI model text and extract nodes and links.
@@ -42,97 +38,156 @@ public class ModelParser {
         List<ModelNode> nodes = new ArrayList<>();
         List<ModelLink> links = new ArrayList<>();
 
-        try (BufferedReader reader = new BufferedReader(new StringReader(iniText))) {
-            String line;
-            String currentNodeName = null;
-            String currentNodeType = null;
-            Double currentNodeX = null;
-            Double currentNodeY = null;
-            List<LinkInfo> currentNodeLinks = new ArrayList<>();
+        String currentNodeName = null;
+        String currentNodeType = null;
+        Double currentNodeX = null;
+        Double currentNodeY = null;
+        List<LinkInfo> currentNodeLinks = new ArrayList<>();
 
-            while ((line = reader.readLine()) != null) {
-                line = line.trim();
+        for (String rawLine : IniSyntax.splitLines(iniText)) {
+            // Code only: a trailing '#' comment on any line is not part of it.
+            String line = IniSyntax.stripComment(rawLine).trim();
 
-                // Skip empty lines and comments
-                if (line.isEmpty() || line.startsWith("#")) {
-                    continue;
+            // Skip empty lines and comment-only lines
+            if (line.isEmpty()) {
+                continue;
+            }
+
+            // Any section header closes the current node's scope. This keeps the
+            // grammar aligned with NodeSectionLocator: properties after e.g.
+            // [outputs] must not leak into the preceding node.
+            if (line.charAt(0) == '[') {
+                // Save previous node if complete
+                if (currentNodeName != null && currentNodeType != null
+                        && currentNodeX != null && currentNodeY != null) {
+                    nodes.add(new ModelNode(currentNodeName, currentNodeType, currentNodeX, currentNodeY));
+                    for (LinkInfo linkInfo : currentNodeLinks) {
+                        links.add(new ModelLink(currentNodeName, linkInfo.downstreamNode, linkInfo.isPrimary));
+                    }
                 }
 
-                // Any section header closes the current node's scope. This keeps the
-                // grammar aligned with NodeSectionLocator: properties after e.g.
-                // [outputs] must not leak into the preceding node.
-                if (line.startsWith("[")) {
-                    // Save previous node if complete
-                    if (currentNodeName != null && currentNodeType != null &&
-                        currentNodeX != null && currentNodeY != null) {
-                        nodes.add(new ModelNode(currentNodeName, currentNodeType, currentNodeX, currentNodeY));
+                // Start new node if this is a node header; otherwise leave node scope
+                currentNodeName = nodeName(line);
+                currentNodeType = null;
+                currentNodeX = null;
+                currentNodeY = null;
+                currentNodeLinks.clear();
+                continue;
+            }
 
-                        // Create links for this node
-                        for (LinkInfo linkInfo : currentNodeLinks) {
-                            links.add(new ModelLink(currentNodeName, linkInfo.downstreamNode, linkInfo.isPrimary));
-                        }
+            if (currentNodeName == null) {
+                continue;
+            }
+
+            // Parse node properties: key = value, with a non-empty key and value
+            int equals = line.indexOf('=');
+            if (equals <= 0) {
+                continue;
+            }
+            String key = line.substring(0, equals).trim();
+            String value = line.substring(equals + 1).trim();
+            if (value.isEmpty()) {
+                continue;
+            }
+
+            switch (key) {
+                case "type" -> currentNodeType = value;
+                case "loc" -> {
+                    double[] xy = parseCoordinates(value);
+                    if (xy != null) {
+                        currentNodeX = xy[0];
+                        currentNodeY = xy[1];
                     }
-
-                    // Start new node if this is a node header; otherwise leave node scope
-                    Matcher nodeMatcher = NODE_SECTION_PATTERN.matcher(line);
-                    currentNodeName = nodeMatcher.matches() ? nodeMatcher.group(1) : null;
-                    currentNodeType = null;
-                    currentNodeX = null;
-                    currentNodeY = null;
-                    currentNodeLinks.clear();
-                    continue;
                 }
-
-                // Parse node properties
-                if (currentNodeName != null) {
-                    // Parse type
-                    Matcher typeMatcher = TYPE_PATTERN.matcher(line);
-                    if (typeMatcher.matches()) {
-                        currentNodeType = typeMatcher.group(1).trim();
-                        continue;
-                    }
-
-                    // Parse location
-                    Matcher locMatcher = LOC_PATTERN.matcher(line);
-                    if (locMatcher.matches()) {
-                        try {
-                            currentNodeX = Double.parseDouble(locMatcher.group(1));
-                            currentNodeY = Double.parseDouble(locMatcher.group(2));
-                        } catch (NumberFormatException e) {
-                            // Skip invalid coordinates
-                        }
-                        continue;
-                    }
-
-                    // Parse downstream links (ds_1, ds_2, etc.)
-                    Matcher linkMatcher = DOWNSTREAM_LINK_PATTERN.matcher(line);
-                    if (linkMatcher.matches()) {
-                        String linkNumber = linkMatcher.group(1);
-                        String downstreamNode = linkMatcher.group(2).trim();
-                        boolean isPrimary = "1".equals(linkNumber); // ds_1 is primary, all others are alternative
-                        currentNodeLinks.add(new LinkInfo(downstreamNode, isPrimary));
-                        continue;
+                default -> {
+                    // Downstream links (ds_1, ds_2, ...): ds_1 is primary, all others alternative
+                    String linkNumber = downstreamLinkNumber(key);
+                    if (linkNumber != null) {
+                        currentNodeLinks.add(new LinkInfo(value, "1".equals(linkNumber)));
                     }
                 }
             }
+        }
 
-            // Save final node if complete
-            if (currentNodeName != null && currentNodeType != null &&
-                currentNodeX != null && currentNodeY != null) {
-                nodes.add(new ModelNode(currentNodeName, currentNodeType, currentNodeX, currentNodeY));
-
-                // Create links for the final node
-                for (LinkInfo linkInfo : currentNodeLinks) {
-                    links.add(new ModelLink(currentNodeName, linkInfo.downstreamNode, linkInfo.isPrimary));
-                }
+        // Save final node if complete
+        if (currentNodeName != null && currentNodeType != null
+                && currentNodeX != null && currentNodeY != null) {
+            nodes.add(new ModelNode(currentNodeName, currentNodeType, currentNodeX, currentNodeY));
+            for (LinkInfo linkInfo : currentNodeLinks) {
+                links.add(new ModelLink(currentNodeName, linkInfo.downstreamNode, linkInfo.isPrimary));
             }
-
-        } catch (Exception e) {
-            // For now, return partial results on parse errors
-            logger.error("Error parsing model: {}", e.getMessage());
         }
 
         return new ParseResult(nodes, links);
+    }
+
+    /**
+     * The node name of a {@code [node.<name>]} header line (code only, trimmed),
+     * or {@code null} for any other header.
+     */
+    private static String nodeName(String line) {
+        String sectionName = IniSyntax.sectionName(line);
+        if (sectionName == null || !sectionName.startsWith(NODE_SECTION_PREFIX)
+                || sectionName.length() == NODE_SECTION_PREFIX.length()) {
+            return null;
+        }
+        return sectionName.substring(NODE_SECTION_PREFIX.length());
+    }
+
+    /**
+     * Parses {@code X, Y}: exactly two comma-separated numeric tokens. Tokens are
+     * restricted to the characters of a plain decimal or exponent literal
+     * ({@code 0-9 . e E + -}) so that spellings {@link Double#parseDouble} would
+     * accept but the engine would not ({@code NaN}, {@code 0x1p3}, {@code 1d})
+     * are not read as coordinates. Returns {@code null} when the value is not a
+     * coordinate pair.
+     */
+    private static double[] parseCoordinates(String value) {
+        int comma = value.indexOf(',');
+        if (comma < 0 || value.indexOf(',', comma + 1) >= 0) {
+            return null;
+        }
+        String first = value.substring(0, comma).trim();
+        String second = value.substring(comma + 1).trim();
+        if (!isNumericToken(first) || !isNumericToken(second)) {
+            return null;
+        }
+        try {
+            return new double[]{Double.parseDouble(first), Double.parseDouble(second)};
+        } catch (NumberFormatException e) {
+            return null; // e.g. "1.2.3": right characters, not a number
+        }
+    }
+
+    private static boolean isNumericToken(String token) {
+        if (token.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < token.length(); i++) {
+            char c = token.charAt(i);
+            boolean ok = (c >= '0' && c <= '9') || c == '.' || c == 'e' || c == 'E' || c == '+' || c == '-';
+            if (!ok) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The digits of a {@code ds_N} key ({@code "1"} for {@code ds_1}), or
+     * {@code null} if the key is not a downstream link ({@code ds_1_outlet} is not).
+     */
+    private static String downstreamLinkNumber(String key) {
+        if (key.length() <= 3 || !key.startsWith("ds_")) {
+            return null;
+        }
+        for (int i = 3; i < key.length(); i++) {
+            char c = key.charAt(i);
+            if (c < '0' || c > '9') {
+                return null;
+            }
+        }
+        return key.substring(3);
     }
 
     /**

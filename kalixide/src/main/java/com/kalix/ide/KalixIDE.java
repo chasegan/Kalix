@@ -41,6 +41,8 @@ import com.kalix.ide.preferences.ui.ThemePreferencePage;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.utils.TerminalActions;
 import com.kalix.ide.utils.WindowsIntegration;
+import com.kalix.ide.workspace.ContextSplitCoordinator;
+import com.kalix.ide.workspace.DocumentTabPane;
 import com.kalix.ide.workspace.ProjectTreePanel;
 import com.kalix.ide.workspace.WorkspacePanel;
 import com.kalix.ide.workspace.tree.TreeHost;
@@ -115,8 +117,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private com.kalix.ide.parametersheet.ParameterSheetWindow parameterSheetWindow;
     private WorkspacePanel workspacePanel;
     private ProjectTreePanel projectTreePanel;
-    private com.kalix.ide.workspace.DocumentTabPane documentTabPane;
-    private com.kalix.ide.workspace.ContextViewPanel contextViewPanel;
+    private DocumentTabPane documentTabPane;
     private JLabel statusLabel;
     private AutoHidingProgressBar progressBar;
     private JToolBar toolBar;
@@ -357,8 +358,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Suppliers for auxiliary windows always reflect the active document.
         RunManager.setBaseDirectorySupplier(fileOperations::getCurrentWorkingDirectory);
         RunManager.setEditorTextSupplier(() -> {
+            // Only model documents are runnable; a text tab supplies nothing.
             KalixDocument doc = documentManager.getActiveDocument();
-            return doc != null ? doc.getText() : null;
+            return doc != null && doc.isModel() ? doc.getText() : null;
         });
         MinimalEditorWindow.setBaseDirectorySupplier(fileOperations::getCurrentWorkingDirectory);
 
@@ -469,8 +471,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      *
      * @return the newly created, configured, registered document
      */
-    private KalixDocument createDocument() {
-        KalixDocument document = new KalixDocument();
+    private KalixDocument createDocument(File file) {
+        KalixDocument document = KalixDocument.createFor(file);
         configureDocument(document);
         documentManager.addDocument(document);
         return document;
@@ -483,24 +485,30 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void configureDocument(KalixDocument document) {
         EnhancedTextEditor editor = document.getEditor();
-        MapPanel map = document.getMapPanel();
+        MapPanel map = document.getMapPanel(); // null for non-model kinds
 
-        // Map appearance from saved preferences (follow mode resolves to the
-        // application theme's linked node palette).
-        map.setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
-        map.setShowGridlines(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
-        map.setShowLabels(PreferenceKeys.MAP_SHOW_LABELS.get());
+        if (map != null) {
+            // Map appearance from saved preferences (follow mode resolves to the
+            // application theme's linked node palette).
+            map.setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
+            map.setShowGridlines(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
+            map.setShowLabels(PreferenceKeys.MAP_SHOW_LABELS.get());
+        }
 
-        // Editor features, each bound to this document's own model and working directory.
-        editor.initializeLinter(schemaManager);
-        editor.initializeContextCommands(this, document.getModelSupplier(), document::getFile);
-        editor.initializeAutoComplete(schemaManager, document.getModelSupplier(), document::getWorkingDirectory);
-        editor.initializePropertyTooltips(schemaManager, document.getModelSupplier());
-        editor.setLinterBaseDirectorySupplier(document::getWorkingDirectory);
+        if (document.isModel()) {
+            // Model-editing features, each bound to this document's own model and
+            // working directory. Non-model documents get none of them: an ini
+            // linter or ini auto-complete on a plain text file is noise.
+            editor.initializeLinter(schemaManager);
+            editor.initializeContextCommands(this, document.getModelSupplier(), document::getFile);
+            editor.initializeAutoComplete(schemaManager, document.getModelSupplier(), document::getWorkingDirectory);
+            editor.initializePropertyTooltips(schemaManager, document.getModelSupplier());
+            editor.setLinterBaseDirectorySupplier(document::getWorkingDirectory);
 
-        // Status bar reflects model changes — but only for the active document (the
-        // listener is bound to this document so it can tell whether it is the active one).
-        document.getModel().addChangeListener(event -> onModelChanged(document, event));
+            // Status bar reflects model changes — but only for the active document (the
+            // listener is bound to this document so it can tell whether it is the active one).
+            document.getModel().addChangeListener(event -> onModelChanged(document, event));
+        }
 
         // Dirty state updates the tab marker and (when active) the window title.
         editor.setDirtyStateListener(isDirty -> {
@@ -513,8 +521,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Dropping a file onto this editor opens it in a tab.
         editor.setFileDropHandler(fileOperations::loadModelFile);
 
-        // Ensure this document's map reflects the current theme.
-        SwingUtilities.invokeLater(map::updateThemeColors);
+        // No theme catch-up needed here: MapPanel resolves its theme colours in
+        // updateUI(), which runs at construction and again on every LaF switch.
     }
 
     /**
@@ -530,10 +538,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         mapPanel = document.getMapPanel();
         hydrologicalModel = document.getModel();
 
-        // Theme operations target the active map; refresh it in case the theme changed
-        // while this document was in the background.
-        themeManager.registerThemeAwareComponents(mapPanel, textEditor);
-        SwingUtilities.invokeLater(mapPanel::updateThemeColors);
+        // Theme operations target the active editor. Maps need no per-activation
+        // catch-up any more: every open document's map is mounted inside its tab, so
+        // a theme switch reaches all of them via updateComponentTreeUI (MapPanel
+        // re-resolves its colours in updateUI()).
+        themeManager.registerThemeAwareComponents(textEditor);
 
         titleBarManager.updateTitle(document.isDirty(), document::getFile);
         documentTabPane.refreshTab(document);
@@ -708,8 +717,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Sets up the main application layout: toolbar (north), the three-region work
-     * area (centre), and the status bar (south).
+     * Sets up the main application layout: toolbar (north), the work area (centre),
+     * and the status bar (south).
      */
     private void setupLayout() {
         setLayout(new BorderLayout());
@@ -731,7 +740,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // (deferred because textEditor is created later)
         SwingUtilities.invokeLater(this::setupNavigationStateListener);
 
-        // Build the three-region work area: [ project tree | editor | map ].
+        // Build the work area: [ project tree | document tabs ], the map inside each tab.
         add(buildWorkspacePanel(), BorderLayout.CENTER);
 
         // Add status bar at bottom
@@ -743,10 +752,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Builds the three-region work area: [ project tree | document tabs | contextual view ].
-     * The tab strip and contextual view observe the document manager, so they must be
-     * created (and subscribed) here, before the first document is opened. Restores persisted
-     * region widths and collapsed states and persists any changes.
+     * Builds the work area: [ project tree | document tabs ], where each tab carries its
+     * own editor|contextual-view split (the map for a model). The tab strip observes the
+     * document manager, so it must be created (and subscribed) here, before the first
+     * document is opened. Restores persisted region widths and collapsed states and
+     * persists any changes; the contextual-view width/collapsed state is shared across
+     * tabs via a {@code ContextSplitCoordinator}.
      */
     private WorkspacePanel buildWorkspacePanel() {
         projectTreePanel = new ProjectTreePanel(new TreeHost() {
@@ -788,28 +799,33 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         });
         // Apply the persisted "show hidden files" choice before any folder is restored into the tree.
         projectTreePanel.setShowHidden(isShowHiddenFiles());
-        documentTabPane = new com.kalix.ide.workspace.DocumentTabPane(
+        // The contextual-view region's width and collapsed state are shared across all
+        // tabs (one remembered divider, exactly as when the region was a single shared
+        // panel) and persisted under the same preference keys as before. The keys (and
+        // the "Toggle Map" wording) deliberately keep their map naming for back-compat;
+        // rename them when a second context-view kind (CSV table/plot) exists.
+        ContextSplitCoordinator contextSplitCoordinator = new ContextSplitCoordinator(
+            PreferenceKeys.UI_MAP_WIDTH.get(),
+            PreferenceKeys.UI_MAP_COLLAPSED.get(),
+            (width, collapsed) -> {
+                PreferenceKeys.UI_MAP_WIDTH.set(width);
+                PreferenceKeys.UI_MAP_COLLAPSED.set(collapsed);
+            });
+        documentTabPane = new DocumentTabPane(
             documentManager,
             this::requestCloseDocument,
             this::showTabContextMenu,
-            projectTreePanel::getRootFile
+            projectTreePanel::getRootFile,
+            contextSplitCoordinator
         );
-        contextViewPanel = new com.kalix.ide.workspace.ContextViewPanel(documentManager);
-
-        int treeWidth = PreferenceKeys.UI_TREE_WIDTH.get();
-        int mapWidth = PreferenceKeys.UI_MAP_WIDTH.get();
-        boolean treeCollapsed = computeInitialTreeCollapsed();
-        boolean mapCollapsed = PreferenceKeys.UI_MAP_COLLAPSED.get();
 
         workspacePanel = new WorkspacePanel(
-            projectTreePanel, documentTabPane, contextViewPanel,
-            treeWidth, mapWidth, treeCollapsed, mapCollapsed);
+            projectTreePanel, documentTabPane,
+            PreferenceKeys.UI_TREE_WIDTH.get(), computeInitialTreeCollapsed());
 
-        workspacePanel.setLayoutChangeListener((tw, mw, tc, mc) -> {
-            PreferenceKeys.UI_TREE_WIDTH.set(tw);
-            PreferenceKeys.UI_MAP_WIDTH.set(mw);
-            PreferenceKeys.UI_TREE_COLLAPSED.set(tc);
-            PreferenceKeys.UI_MAP_COLLAPSED.set(mc);
+        workspacePanel.setLayoutChangeListener((treeWidth, treeCollapsed) -> {
+            PreferenceKeys.UI_TREE_WIDTH.set(treeWidth);
+            PreferenceKeys.UI_TREE_COLLAPSED.set(treeCollapsed);
         });
 
         return workspacePanel;
@@ -1075,7 +1091,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private void refreshModelStatus() {
         KalixDocument document = documentManager.getActiveDocument();
         if (document != null) {
-            updateStatus(modelStatusText(document));
+            updateStatus(document.isModel() ? modelStatusText(document) : document.getDisplayName());
         }
     }
 
@@ -1401,24 +1417,28 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void zoomIn() {
+        if (mapPanel == null) return;
         mapPanel.zoomIn();
         updateStatus(AppConstants.STATUS_ZOOMED_IN);
     }
 
     @Override
     public void zoomOut() {
+        if (mapPanel == null) return;
         mapPanel.zoomOut();
         updateStatus(AppConstants.STATUS_ZOOMED_OUT);
     }
 
     @Override
     public void resetZoom() {
+        if (mapPanel == null) return;
         mapPanel.resetZoom();
         updateStatus(AppConstants.STATUS_ZOOM_RESET);
     }
     
     @Override
     public void zoomToFit() {
+        if (mapPanel == null) return;
         mapPanel.zoomToFit();
         updateStatus("Zoomed to fit all nodes");
     }
@@ -1452,9 +1472,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void toggleMap() {
-        if (workspacePanel != null) {
-            workspacePanel.toggleMap();
-            updateStatus(workspacePanel.isMapCollapsed() ? "Map hidden" : "Map shown");
+        if (documentTabPane != null) {
+            documentTabPane.toggleContextView();
+            updateStatus(documentTabPane.isContextViewCollapsed() ? "Map hidden" : "Map shown");
         }
     }
 
@@ -1598,7 +1618,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // palette when following the application theme — persisting that would
         // overwrite the sentinel with a concrete theme.
         for (KalixDocument document : documentManager.getDocuments()) {
-            document.getMapPanel().setNodeTheme(theme);
+            MapPanel map = document.getMapPanel();
+            if (map != null) {
+                map.setNodeTheme(theme);
+            }
         }
     }
     
@@ -1690,6 +1713,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void findNodeOnMap() {
+        if (mapPanel == null) return;
         mapPanel.showFindNodeDialog();
     }
 
@@ -1745,6 +1769,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void runModelFromMemory() {
+        KalixDocument activeDoc = documentManager.getActiveDocument();
+        if (activeDoc == null || !activeDoc.isModel()) {
+            updateStatus("Error: the active tab is not a model");
+            return;
+        }
         String modelText = textEditor.getText();
         if (modelText == null || modelText.trim().isEmpty()) {
             updateStatus("Error: No model content to run");
@@ -1777,7 +1806,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void toggleGridlines(boolean showGridlines) {
         // Apply to every open document's map so background tabs stay consistent.
         for (KalixDocument document : documentManager.getDocuments()) {
-            document.getMapPanel().setShowGridlines(showGridlines);
+            MapPanel map = document.getMapPanel();
+            if (map != null) {
+                map.setShowGridlines(showGridlines);
+            }
         }
         // Save preference
         PreferenceKeys.MAP_SHOW_GRIDLINES.set(showGridlines);
@@ -1787,7 +1819,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     public void toggleLabels(boolean showLabels) {
         // Apply to every open document's map so background tabs stay consistent.
         for (KalixDocument document : documentManager.getDocuments()) {
-            document.getMapPanel().setShowLabels(showLabels);
+            MapPanel map = document.getMapPanel();
+            if (map != null) {
+                map.setShowLabels(showLabels);
+            }
         }
         // Save preference
         PreferenceKeys.MAP_SHOW_LABELS.set(showLabels);

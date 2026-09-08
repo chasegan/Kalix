@@ -35,6 +35,9 @@ import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import com.kalix.ide.components.KalixIniTextArea;
+import org.fife.ui.rsyntaxtextarea.RSyntaxDocument;
+import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
+import org.fife.ui.rsyntaxtextarea.TokenMaker;
 import com.kalix.ide.linter.LinterManager;
 import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.linter.factories.LinterComponentFactory;
@@ -75,7 +78,7 @@ public class EnhancedTextEditor extends JPanel {
     private FileDropManager dropManager;
     private LinterManager linterManager;
     private AutoCompleteManager autoCompleteManager;
-    private com.kalix.ide.linter.ui.PropertyHoverTooltipManager propertyHoverTooltipManager;
+    private com.kalix.ide.linter.ui.HoverTipSupplier hoverTips;
     private com.kalix.ide.editor.commands.ContextCommandManager contextCommandManager;
     private NavigationHistory navigationHistory;
 
@@ -114,6 +117,10 @@ public class EnhancedTextEditor extends JPanel {
         // Enable bracket matching
         textArea.setBracketMatchingEnabled(true);
 
+        // Hover tips (lint issues, property help) via Swing's ToolTipManager; the
+        // sources are attached by initializeLinter / initializePropertyTooltips.
+        hoverTips = com.kalix.ide.linter.ui.HoverTipSupplier.install(textArea);
+
         // Apply theme-aware colors
         updateThemeColors();
 
@@ -135,6 +142,26 @@ public class EnhancedTextEditor extends JPanel {
      */
     public void updateFontSize(int fontSize) {
         textArea.updateFontSize(fontSize);
+    }
+
+    /**
+     * Per-filetype syntax seam: switches this editor to plain text — no
+     * tokenisation, no folding. TEXT documents use this; previously every
+     * kind inherited the Kalix INI grammar.
+     */
+    public void usePlainText() {
+        textArea.setSyntaxEditingStyle(SyntaxConstants.SYNTAX_STYLE_NONE);
+        textArea.setCodeFoldingEnabled(false);
+    }
+
+    /**
+     * Per-filetype syntax seam: installs a parameterised {@link TokenMaker}
+     * (e.g. the dialect-aware CSV maker) directly on the document — the
+     * factory registration route cannot carry constructor arguments.
+     */
+    public void useTokenMaker(TokenMaker tokenMaker) {
+        ((RSyntaxDocument) textArea.getDocument()).setSyntaxStyle(tokenMaker);
+        textArea.setCodeFoldingEnabled(false); // no fold structure in tabular data
     }
 
     /**
@@ -206,6 +233,7 @@ public class EnhancedTextEditor extends JPanel {
             linterManager.dispose();
         }
         linterManager = LinterComponentFactory.createLinterManager(textArea, schemaManager);
+        hoverTips.setIssueSource(linterManager.getTooltips());
     }
 
     /**
@@ -235,14 +263,7 @@ public class EnhancedTextEditor extends JPanel {
      */
     public void initializePropertyTooltips(SchemaManager schemaManager,
                                           java.util.function.Supplier<ParsedModel> modelSupplier) {
-        if (propertyHoverTooltipManager != null) {
-            propertyHoverTooltipManager.dispose();
-        }
-        if (linterManager != null) {
-            propertyHoverTooltipManager = new com.kalix.ide.linter.ui.PropertyHoverTooltipManager(
-                textArea, schemaManager, modelSupplier,
-                line -> !linterManager.getIssuesForLine(line).isEmpty());
-        }
+        hoverTips.setHelpSource(new com.kalix.ide.linter.ui.PropertyTooltips(textArea, schemaManager, modelSupplier));
     }
 
     /**
@@ -861,28 +882,36 @@ public class EnhancedTextEditor extends JPanel {
         textArea.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
-                if (!programmaticUpdate) {
-                    updateDirtyFromContent();
-                    notifyExternalListeners((listener, event) -> listener.insertUpdate(event), e);
-                }
+                onDocumentChange(e, (listener, event) -> listener.insertUpdate(event));
             }
 
             @Override
             public void removeUpdate(DocumentEvent e) {
-                if (!programmaticUpdate) {
-                    updateDirtyFromContent();
-                    notifyExternalListeners((listener, event) -> listener.removeUpdate(event), e);
-                }
+                onDocumentChange(e, (listener, event) -> listener.removeUpdate(event));
             }
 
             @Override
             public void changedUpdate(DocumentEvent e) {
-                if (!programmaticUpdate) {
-                    updateDirtyFromContent();
-                    notifyExternalListeners((listener, event) -> listener.changedUpdate(event), e);
-                }
+                onDocumentChange(e, (listener, event) -> listener.changedUpdate(event));
             }
         });
+    }
+
+    /**
+     * One document change. Dirty tracking is suppressed during a programmatic
+     * replacement ({@link #setText}, line-ending normalisation), whose callers set
+     * the dirty state themselves. External listeners are NOT suppressed: the
+     * document's parse cache, the map, and any open parameter sheet must learn of
+     * every change to the text, whoever made it. Withholding programmatic
+     * replacements from them left the cached parse describing the text from
+     * before an optimiser copy-back, so Table View showed the old values (#388).
+     */
+    private void onDocumentChange(DocumentEvent e,
+                                  java.util.function.BiConsumer<DocumentListener, DocumentEvent> method) {
+        if (!programmaticUpdate) {
+            updateDirtyFromContent();
+        }
+        notifyExternalListeners(method, e);
     }
     
     /**
@@ -1422,9 +1451,8 @@ public class EnhancedTextEditor extends JPanel {
             linterManager.dispose();
             linterManager = null;
         }
-        if (propertyHoverTooltipManager != null) {
-            propertyHoverTooltipManager.dispose();
-            propertyHoverTooltipManager = null;
+        if (hoverTips != null) {
+            hoverTips.uninstall();
         }
         if (searchManager != null) {
             searchManager.dispose();
