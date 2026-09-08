@@ -183,6 +183,16 @@ public class FileOperationsManager {
             statusUpdateCallback.accept("Data view refreshed: " + file.getName());
             return;
         }
+        if (document instanceof com.kalix.ide.document.DataDocument
+                && com.kalix.ide.document.DataDocument.exceedsEditableGate(file)) {
+            // The file grew past the editing gate since it was opened: reloading
+            // would pour it whole into an editable buffer — the exact cost the
+            // gate exists to prevent. Keep the buffer; refresh the virtual views.
+            document.refreshDataViewFromDisk();
+            statusUpdateCallback.accept(file.getName()
+                + " grew past the editing gate — buffer kept; reopen for the read-only view");
+            return;
+        }
         try {
             String content = Files.readString(file.toPath());
             document.setText(content); // setText resets dirty state

@@ -3,11 +3,14 @@ package com.kalix.ide.dataview;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.io.CsvLineStylist;
 import com.kalix.ide.managers.FontManager;
+import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.themes.SyntaxTheme;
 import com.kalix.ide.themes.ThemePreferences;
 
 import javax.swing.AbstractAction;
 import javax.swing.JComponent;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
 import javax.swing.KeyStroke;
 import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
@@ -21,9 +24,14 @@ import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
+import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -72,15 +80,29 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
     // plain foreground — only the structure is coloured.
     private CsvLineStylist stylist;
     private boolean headerOnLineZero;
+    // Extended-header lines rendered above the indexed data region (empty for
+    // plain CSV): the ground-truth view must show the whole file, and for
+    // .res.csv the indexes deliberately cover only the region past EOH.
+    private List<String> headerLines = List.of();
     private Color delimiterColor;
     private Color headerColor;
     private Color dateColor;
     private Color missingColor;
 
+    /** Row header to revalidate when geometry changes (line count, font size). */
+    private JComponent gutter;
+    /** Opens the data views' unified Find (the editor's would search a hidden empty buffer). */
+    private Runnable findHandler;
+    /** Repeats the last find; the Boolean is the direction (true = forward). */
+    private java.util.function.Consumer<Boolean> findAgainHandler;
+
     public VirtualTextArea(DataViewSession session) {
         this.session = session;
         adoptDialect(session);
-        setFont(FontManager.getMonospaceFont(13));
+        // The editor's font-size preference, like every text surface (a hardcoded
+        // 13 made this view visibly larger than the editors it sits beside).
+        setFont(FontManager.getMonospaceFont(PreferenceKeys.EDITOR_FONT_SIZE.get()));
+        registerInstance(this);
         setOpaque(true);
         setFocusable(true);
         resolveColors();
@@ -91,8 +113,13 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
             @Override
             public void mousePressed(MouseEvent e) {
                 requestFocusInWindow();
-                selectionAnchor = lineAt(e.getY());
-                selectionCaret = selectionAnchor;
+                long line = lineAt(e.getY());
+                if (e.isShiftDown() && selectionAnchor >= 0) {
+                    selectionCaret = line; // extend, editor-style — never restart
+                } else {
+                    selectionAnchor = line;
+                    selectionCaret = line;
+                }
                 repaint();
             }
 
@@ -113,14 +140,151 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
                 copySelection();
             }
         });
+        getInputMap(WHEN_FOCUSED).put(
+            KeyStroke.getKeyStroke(KeyEvent.VK_A, AppShortcut.menuMask()), "select-all");
+        getActionMap().put("select-all", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                selectAll();
+            }
+        });
+        // Find belongs to the data views (the editor's Find would search a hidden
+        // empty buffer); WHEN_FOCUSED bindings also outrank the Edit-menu
+        // accelerators while this view has focus.
+        getInputMap(WHEN_FOCUSED).put(
+            KeyStroke.getKeyStroke(KeyEvent.VK_F, AppShortcut.menuMask()), "data-find");
+        getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_F3, 0), "data-find-next");
+        getInputMap(WHEN_FOCUSED).put(
+            KeyStroke.getKeyStroke(KeyEvent.VK_F3, InputEvent.SHIFT_DOWN_MASK), "data-find-previous");
+        getActionMap().put("data-find", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (findHandler != null) {
+                    findHandler.run();
+                }
+            }
+        });
+        getActionMap().put("data-find-next", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (findAgainHandler != null) {
+                    findAgainHandler.accept(true);
+                }
+            }
+        });
+        getActionMap().put("data-find-previous", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (findAgainHandler != null) {
+                    findAgainHandler.accept(false);
+                }
+            }
+        });
+
+        // Read-only is announced, never silently enforced: a plain keystroke beeps.
+        addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyTyped(KeyEvent e) {
+                if ((e.getModifiersEx() & AppShortcut.menuMask()) == 0) {
+                    Toolkit.getDefaultToolkit().beep();
+                }
+            }
+        });
+
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem find = new JMenuItem("Find…");
+        find.addActionListener(e -> {
+            if (findHandler != null) {
+                findHandler.run();
+            }
+        });
+        menu.add(find);
+        menu.addSeparator();
+        JMenuItem copy = new JMenuItem("Copy");
+        copy.addActionListener(e -> copySelection());
+        menu.add(copy);
+        JMenuItem selectAll = new JMenuItem("Select all");
+        selectAll.addActionListener(e -> selectAll());
+        menu.add(selectAll);
+        setComponentPopupMenu(menu);
+    }
+
+    /** Wires the data views' Find into this text side (dialog open + F3 repeats). */
+    public void setFindHandlers(Runnable find, java.util.function.Consumer<Boolean> findAgain) {
+        this.findHandler = find;
+        this.findAgainHandler = findAgain;
+    }
+
+    /** The row header showing line numbers; revalidated when geometry changes. */
+    public void attachGutter(JComponent gutterComponent) {
+        this.gutter = gutterComponent;
+    }
+
+    private void selectAll() {
+        long count = totalLines();
+        if (count > 0) {
+            selectLines(0, count - 1);
+        }
+    }
+
+    /** Applies a new editor font size (the global preference push reaches here too). */
+    public void updateFontSize(int fontSize) {
+        setFont(FontManager.getMonospaceFont(fontSize));
+        maxLineWidthPx = 0; // line widths re-measure under the new font
+        refreshGeometry();
+    }
+
+    private void refreshGeometry() {
+        revalidate();
+        if (gutter != null) {
+            gutter.revalidate();
+            gutter.repaint();
+        }
+        repaint();
+    }
+
+    // --- Global preference pushes (weak registry, like the editor components') ---
+
+    private static final List<WeakReference<VirtualTextArea>> instances = new ArrayList<>();
+
+    private static void registerInstance(VirtualTextArea area) {
+        synchronized (instances) {
+            instances.add(new WeakReference<>(area));
+        }
+    }
+
+    /** Pushes a font-size preference change to every live instance. */
+    public static void updateAllFontSizes(int fontSize) {
+        forEachInstance(area -> area.updateFontSize(fontSize));
+    }
+
+    /** Pushes a syntax-theme preference change (colours re-resolve) to every live instance. */
+    public static void updateAllSyntaxThemes(SyntaxTheme.Theme theme) {
+        forEachInstance(area -> {
+            area.resolveColors();
+            area.repaint();
+        });
+    }
+
+    private static void forEachInstance(java.util.function.Consumer<VirtualTextArea> action) {
+        synchronized (instances) {
+            Iterator<WeakReference<VirtualTextArea>> iterator = instances.iterator();
+            while (iterator.hasNext()) {
+                VirtualTextArea area = iterator.next().get();
+                if (area == null) {
+                    iterator.remove();
+                } else {
+                    action.accept(area);
+                }
+            }
+        }
     }
 
     private void registerSessionListener() {
         session.addListener(new DataViewSession.Listener() {
             @Override
             public void onProgress(long rows, long lines, long indexedBytes, long totalBytes, boolean complete) {
-                revalidate(); // preferred height grew
-                repaint();
+                refreshGeometry(); // preferred height (and the gutter's digit count) grew
             }
 
             @Override
@@ -138,23 +302,28 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
         this.session = fresh;
         adoptDialect(fresh);
         registerSessionListener();
-        revalidate();
-        repaint();
+        refreshGeometry();
     }
 
     private void adoptDialect(DataViewSession target) {
         CsvDialect dialect = target.dialect();
         stylist = new CsvLineStylist(dialect.delimiter(), dialect.quote());
         headerOnLineZero = target.headerRowInData();
+        headerLines = target.headerTextLines();
     }
 
-    /** Scrolls the given line into view (with a little context) and selects it. EDT only. */
+    /** Header lines + indexed data-region lines: the whole file — package-private for the gutter. */
+    long totalLines() {
+        return headerLines.size() + session.lineCount();
+    }
+
+    /** Scrolls the given DATA-REGION line into view (offset past any header lines) and selects it. EDT only. */
     public void showLine(long line) {
-        long count = session.lineCount();
+        long count = totalLines();
         if (count == 0) {
             return;
         }
-        long target = Math.max(0, Math.min(line, count - 1));
+        long target = Math.max(0, Math.min(line + headerLines.size(), count - 1));
         selectLines(target, target);
         int lineHeight = lineHeight();
         // Clamped like getPreferredSize: past the int-pixel ceiling (~100M+ lines)
@@ -197,12 +366,12 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
 
     // --- Geometry ---
 
-    private int lineHeight() {
+    int lineHeight() { // package-private: the gutter shares the row geometry
         return getFontMetrics(getFont()).getHeight();
     }
 
     long lineAt(int y) {
-        long count = session.lineCount();
+        long count = totalLines();
         if (count == 0) {
             return -1;
         }
@@ -211,7 +380,7 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
 
     @Override
     public Dimension getPreferredSize() {
-        long height = session.lineCount() * lineHeight();
+        long height = totalLines() * lineHeight();
         return new Dimension(
             Math.max(MIN_WIDTH, maxLineWidthPx + 2 * H_PAD),
             (int) Math.min(height, Integer.MAX_VALUE));
@@ -228,7 +397,7 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
         FontMetrics fm = getFontMetrics(getFont());
         int lineHeight = fm.getHeight();
         long first = Math.max(0, clip.y / lineHeight);
-        long last = Math.min(session.lineCount() - 1, (long) (clip.y + clip.height) / lineHeight + 1);
+        long last = Math.min(totalLines() - 1, (long) (clip.y + clip.height) / lineHeight + 1);
         long selStart = selectionStart();
         long selEnd = selectionEndExclusive();
 
@@ -240,9 +409,11 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
                 g.setColor(selectionBackground);
                 g.fillRect(0, y, getWidth(), lineHeight);
             }
-            String text = session.lineIfLoaded(line);
+            String text = line < headerLines.size()
+                ? headerLines.get((int) line)
+                : session.lineIfLoaded(line - headerLines.size());
             if (text == null) {
-                session.requestLine(line); // blank for a frame; block arrival repaints
+                session.requestLine(line - headerLines.size()); // blank for a frame; repaints on arrival
                 continue;
             }
             if (selected) {
@@ -259,7 +430,7 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
     private void paintStyledLine(Graphics g, FontMetrics fm, String text, long line, int y) {
         int x = H_PAD;
         int baseline = y + fm.getAscent();
-        for (CsvLineStylist.Span span : stylist.style(text, headerOnLineZero && line == 0)) {
+        for (CsvLineStylist.Span span : stylist.style(text, headerOnLineZero && line == headerLines.size())) {
             String part = text.substring(span.start(), span.endExclusive());
             g.setColor(colorFor(span.role()));
             g.drawString(part, x, baseline);
@@ -320,7 +491,16 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
         if (start < 0 || end - start > MAX_COPY_LINES) {
             return null;
         }
-        List<String> lines = session.linesBlocking(start, end);
+        // Stitch header lines (in memory) and data-region lines (fetched) so a
+        // selection spanning the boundary copies seamlessly.
+        int headerCount = headerLines.size();
+        List<String> lines = new java.util.ArrayList<>();
+        for (long i = start; i < Math.min(end, headerCount); i++) {
+            lines.add(headerLines.get((int) i));
+        }
+        if (end > headerCount) {
+            lines.addAll(session.linesBlocking(Math.max(0, start - headerCount), end - headerCount));
+        }
         return String.join("\n", lines);
     }
 

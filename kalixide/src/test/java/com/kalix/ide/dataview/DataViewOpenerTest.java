@@ -78,6 +78,10 @@ class DataViewOpenerTest {
             assertEquals("level_at_b", columns[2]);
             assertEquals(12, session.headerLinesBeforeData(),
                 "extended header lines, for mapping data lines onto the full-file editor");
+            assertEquals(12, session.headerTextLines().size());
+            assertEquals("File version,3", session.headerTextLines().get(0),
+                "the header text is captured for the virtual text view — transparency");
+            assertEquals("EOH", session.headerTextLines().get(11));
 
             session.requestRow(0);
             await("first data row", () -> session.rowIfLoaded(0) != null);
