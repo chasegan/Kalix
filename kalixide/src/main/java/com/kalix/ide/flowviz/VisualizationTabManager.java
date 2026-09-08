@@ -1203,8 +1203,6 @@ public class VisualizationTabManager {
         if (tab.statsModel.getMaskMode() != tab.vizPanel.getMaskMode()) {
             tab.statsModel.setMaskMode(tab.vizPanel.getMaskMode());
         }
-        // Guards internally on equality, so an unchanged mode is not a recompute.
-        tab.statsModel.setSeasonalMaskMode(tab.vizPanel.getSeasonalMaskMode());
         tab.statsModel.setSeries(AggregationPipeline.aggregate(
             sharedDataSet, tab.selectedSeries,
             tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod(),
