@@ -417,8 +417,13 @@ public class TimeSeriesRequestManager {
 
     /**
      * Decode a base64-encoded Gorilla-compressed timeseries (Pixie wire format) into TimeSeriesData.
-     * The compressed bitstream carries the timestep, count, and per-point timestamps
-     * (Unix seconds), so no additional metadata is needed.
+     * The compressed bitstream carries the timestep, count, and per-point timestamps, so no
+     * additional metadata is needed.
+     *
+     * <p>Timestamps are plain signed Unix seconds (two's complement, UTC) — the same
+     * convention as a {@code .pxb} file, and what {@link PixieReader} decodes. The engine's
+     * internal 2^63-biased form never crosses this boundary (kalixcli-stdio-spec.md,
+     * get_result). Negative values are simply dates before 1970.</p>
      *
      * <p>The {@code seriesName} argument is retained for diagnostic context only — it is
      * not stored on the returned {@link TimeSeriesData}. Identity in the ref-keyed pool
@@ -435,10 +440,7 @@ public class TimeSeriesRequestManager {
         LocalDateTime[] dateTimes = new LocalDateTime[n];
         double[] values = series.values;
         for (int i = 0; i < n; i++) {
-            // Kalix stores timestamps in offset-binary u64: signed = bits ^ 2^63
-            // (mirrors Rust's wrap_to_i64 in src/tid/utils.rs).
-            long signedSeconds = series.timestamps[i] ^ Long.MIN_VALUE;
-            dateTimes[i] = LocalDateTime.ofEpochSecond(signedSeconds, 0, ZoneOffset.UTC);
+            dateTimes[i] = LocalDateTime.ofEpochSecond(series.timestamps[i], 0, ZoneOffset.UTC);
         }
         // If the stream omits missing timesteps, the decoded points have gaps. Materialise the
         // full grid (NaN at missing slots) so run series share one representation and keep the

@@ -7,10 +7,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -62,40 +65,45 @@ public final class DataViewOpener {
         for (int i = 0; i < seriesNames.size(); i++) {
             columns[i + 1] = seriesNames.get(i);
         }
-        return DataViewSession.open(file.toPath(), scan.dataStartOffset(), columns, scan.headerLines());
+        return DataViewSession.open(file.toPath(), scan.dataStartOffset(), columns, scan.headerTextLines());
     }
 
-    /** Where the data region begins, and how many physical lines the header occupies before it. */
-    private record HeaderScan(long dataStartOffset, long headerLines) {
+    /**
+     * Where the data region begins, and the header's physical lines — captured,
+     * not just counted: the virtual text view renders them above the indexed
+     * data region, so the extended header stays visible (transparency: the
+     * whole file, never just the part the table interprets).
+     */
+    private record HeaderScan(long dataStartOffset, List<String> headerTextLines) {
     }
 
-    /** Locates the line following the given marker line ({@code EOH}). */
+    /** Locates the line following the given marker line ({@code EOH}), capturing the header text. */
     private static HeaderScan scanPastMarkerLine(File file, String marker) throws IOException {
         try (InputStream in = new BufferedInputStream(Files.newInputStream(file.toPath()))) {
-            StringBuilder line = new StringBuilder(32);
+            ByteArrayOutputStream line = new ByteArrayOutputStream(64);
+            List<String> lines = new ArrayList<>();
             long position = 0;
-            long lines = 0;
             int b;
             while ((b = in.read()) >= 0) {
                 position++;
                 // Checked every byte, not only on newlines: a marker-less or
                 // CR-only file must never be scanned to EOF (this runs on the
-                // open path).
+                // open path). MAX_HEADER_SCAN_BYTES also bounds the captured text.
                 if (position > MAX_HEADER_SCAN_BYTES) {
                     break;
                 }
                 if (b == '\n') {
-                    lines++;
-                    String text = line.toString();
+                    String text = line.toString(StandardCharsets.UTF_8);
                     if (text.endsWith("\r")) {
                         text = text.substring(0, text.length() - 1);
                     }
+                    lines.add(text);
                     if (text.equals(marker)) {
                         return new HeaderScan(position, lines);
                     }
-                    line.setLength(0);
-                } else if (line.length() < 64) {
-                    line.append((char) b);
+                    line.reset();
+                } else {
+                    line.write(b);
                 }
             }
         }

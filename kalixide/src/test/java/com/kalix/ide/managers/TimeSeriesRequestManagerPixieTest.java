@@ -82,7 +82,8 @@ class TimeSeriesRequestManagerPixieTest {
 
     @Test
     void roundTrip_pre1970Timestamps() throws Exception {
-        // 1889-01-01T00:00:00Z — negative Unix seconds, the case the IDE was getting wrong.
+        // 1889-01-01T00:00:00Z — negative Unix seconds. Signed seconds on the wire mean a
+        // pre-1970 date is just a negative number, decoded with no special handling.
         long startEpochSec = LocalDateTime.of(1889, 1, 1, 0, 0)
             .toEpochSecond(ZoneOffset.UTC);
         double[] vals = {1.0, 2.0, 3.0};
@@ -142,15 +143,15 @@ class TimeSeriesRequestManagerPixieTest {
     private static String encodeAtSteps(int[] stepIndices, double[] values) throws Exception {
         List<TimeValueDouble> series = new ArrayList<>(stepIndices.length);
         for (int i = 0; i < stepIndices.length; i++) {
-            long signed = START_EPOCH_SEC + stepIndices[i] * TIMESTEP_SECONDS;
-            series.add(new TimeValueDouble(signed ^ Long.MIN_VALUE, values[i]));
+            series.add(new TimeValueDouble(START_EPOCH_SEC + stepIndices[i] * TIMESTEP_SECONDS, values[i]));
         }
         GorillaCompressor codec = new GorillaCompressor(TIMESTEP_SECONDS);
         return Base64.getEncoder().encodeToString(codec.compressDouble(series));
     }
 
     /** Encode the given values via Gorilla + base64, mimicking what the CLI sends.
-     *  Timestamps are written in Kalix's offset-binary u64 form (Rust's wrap_to_u64). */
+     *  Timestamps are plain signed Unix seconds, the same convention as a .pxb file; the
+     *  engine's 2^63-biased internal form is un-wrapped before it reaches the wire. */
     private static String encode(double[] values) throws Exception {
         return encode(values, START_EPOCH_SEC);
     }
@@ -158,10 +159,7 @@ class TimeSeriesRequestManagerPixieTest {
     private static String encode(double[] values, long startEpochSec) throws Exception {
         List<TimeValueDouble> series = new ArrayList<>(values.length);
         for (int i = 0; i < values.length; i++) {
-            long signed = startEpochSec + i * TIMESTEP_SECONDS;
-            // Kalix's wrap_to_u64: bits are XOR'd with 2^63, then read back as a Java long.
-            long wrappedBits = signed ^ Long.MIN_VALUE;
-            series.add(new TimeValueDouble(wrappedBits, values[i]));
+            series.add(new TimeValueDouble(startEpochSec + i * TIMESTEP_SECONDS, values[i]));
         }
         GorillaCompressor codec = new GorillaCompressor(TIMESTEP_SECONDS);
         byte[] compressed = codec.compressDouble(series);

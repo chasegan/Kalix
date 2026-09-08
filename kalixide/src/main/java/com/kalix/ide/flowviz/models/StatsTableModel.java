@@ -186,7 +186,10 @@ public class StatsTableModel extends AbstractTableModel {
         } else {
             // For EACH or NONE modes, only this series needs updating (no shared ALL mask
             // or shared reference sample — EACH masks per series, NONE skips bivariate).
-            Map<String, String> statisticValues = computeStatistics(data, null, null);
+            TimeSeriesData referenceData = referenceSeries != null
+                ? originalSeriesCache.get(referenceSeries) : null;
+            Map<String, String> statisticValues =
+                computeStatistics(data, null, null, referenceData);
 
             // Remove existing entry if present
             seriesData.removeIf(stats -> stats.ref.equals(ref));
@@ -266,27 +269,32 @@ public class StatsTableModel extends AbstractTableModel {
      * series.</p>
      */
     private void recomputeAllStatistics() {
+        TimeSeriesData referenceData = referenceSeries != null
+            ? originalSeriesCache.get(referenceSeries) : null;
+
         // In ALL mode both the mask and the masked reference are shared across every
         // series — build each a single time, here, and reuse them for all rows.
         TimeSeriesMasker.Mask allMask = null;
         StatSample sharedReferenceSample = null;
         if (maskMode == MaskMode.ALL) {
             allMask = TimeSeriesMasker.createAllMask(new ArrayList<>(originalSeriesCache.values()));
-            TimeSeriesData referenceData = referenceSeries != null
-                ? originalSeriesCache.get(referenceSeries) : null;
             if (referenceData != null) {
                 sharedReferenceSample = new StatSample(allMask.applyToValues(referenceData));
             }
         }
 
-        // Rebuild seriesData from scratch based on originalSeriesCache
+        // Rebuild seriesData from scratch from the cache. The series held there are
+        // already aggregated AND already seasonally masked - TimeSeriesAggregator applies
+        // the mask while accumulating, the only point at which calendar months are still
+        // distinguishable. Masking again here would filter points stamped at their
+        // period's start and empty the table (#235).
         List<SeriesStats> newSeriesData = new ArrayList<>();
 
         for (Map.Entry<SeriesRef, TimeSeriesData> entry : originalSeriesCache.entrySet()) {
-            TimeSeriesData originalData = entry.getValue();
-            if (originalData != null) {
+            TimeSeriesData series = entry.getValue();
+            if (series != null) {
                 Map<String, String> newValues =
-                    computeStatistics(originalData, allMask, sharedReferenceSample);
+                    computeStatistics(series, allMask, sharedReferenceSample, referenceData);
                 newSeriesData.add(new SeriesStats(entry.getKey(), newValues));
             }
         }
@@ -304,15 +312,15 @@ public class StatsTableModel extends AbstractTableModel {
      *                    ignored otherwise (pass {@code null} for EACH/NONE).
      * @param allRefSample The shared reference {@link StatSample} for ALL mode (the
      *                    reference series masked by {@code allMask}); ignored otherwise.
+     * @param referenceData The reference series, or {@code null} when there is none;
+     *                    used in EACH mode.
      * @return Map of statistic names to computed values
      */
     private Map<String, String> computeStatistics(TimeSeriesData series,
                                                   TimeSeriesMasker.Mask allMask,
-                                                  StatSample allRefSample) {
+                                                  StatSample allRefSample,
+                                                  TimeSeriesData referenceData) {
         Map<String, String> values = new HashMap<>();
-
-        TimeSeriesData referenceData = referenceSeries != null
-            ? originalSeriesCache.get(referenceSeries) : null;
 
         // Build the prepared samples for this series and (where relevant) the reference.
         // Masking with the same mask keeps the two samples index-aligned for bivariate

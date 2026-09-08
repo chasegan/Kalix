@@ -1692,21 +1692,44 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void searchModel() {
+        // A read-only data tab's editor is a hidden empty buffer: its Find would
+        // always report "not found". Route to the data views' unified Find.
+        if (documentManager.getActiveDocument() instanceof com.kalix.ide.document.DataDocument dd
+                && dd.routesFindToDataView()) {
+            dd.showDataFind();
+            return;
+        }
         textEditor.getSearchManager().showFindDialog();
     }
     
     @Override
     public void findNext() {
+        if (documentManager.getActiveDocument() instanceof com.kalix.ide.document.DataDocument dd
+                && dd.routesFindToDataView()) {
+            dd.repeatDataFind(true);
+            return;
+        }
         textEditor.getSearchManager().findAgain(true);
     }
 
     @Override
     public void findPrevious() {
+        if (documentManager.getActiveDocument() instanceof com.kalix.ide.document.DataDocument dd
+                && dd.routesFindToDataView()) {
+            dd.repeatDataFind(false);
+            return;
+        }
         textEditor.getSearchManager().findAgain(false);
     }
 
     @Override
     public void showFindReplaceDialog() {
+        if (documentManager.getActiveDocument() instanceof com.kalix.ide.document.DataDocument dd
+                && dd.routesFindToDataView()) {
+            dd.showDataFind(); // nothing to replace in a read-only view
+            updateStatus("Read-only data view — Find opened (no replacing)");
+            return;
+        }
         textEditor.getSearchManager().showFindReplaceDialog();
         updateStatus("Find and Replace dialog opened");
     }

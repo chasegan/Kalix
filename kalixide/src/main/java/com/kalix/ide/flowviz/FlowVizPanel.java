@@ -8,6 +8,7 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.TimeSeriesRenderer;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
+import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
 import com.kalix.ide.flowviz.style.PaletteSeriesStyleResolver;
 import com.kalix.ide.flowviz.style.PlotPaletteManager;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
@@ -62,9 +63,18 @@ import org.slf4j.LoggerFactory;
  * <h2>Rendering Pipeline</h2>
  * <pre>
  * originalDataSet (shared)
- *   → TimeSeriesAggregator.aggregate()   [aggregation: daily, monthly, etc.]
+ *   → TimeSeriesAggregator.aggregate()   [seasonal mask THEN aggregation: daily, monthly, etc.]
  *   → TimeSeriesMasker (if ALL mode)     [filter to common valid timestamps]
  *   → PlotTypeTransformer.transform()    [plot type: values, cumulative, difference]
+ * </pre>
+ *
+ * The seasonal (per-month) mask is applied <em>inside</em> the aggregation step, not as a
+ * further filter after it. Aggregation is the last point at which individual months are
+ * still distinguishable: afterwards every point carries its period's start timestamp, so
+ * a Jan-Dec year reads as January and a post-aggregation mask would degenerate to "is
+ * January selected?" - inert if yes, empty plot if no (#235). Any further filter
+ * dimension that is calendar-aware belongs there too, not here.
+ * <pre>
  *   → displayDataSet (cached per-panel)
  *   → TimeSeriesRenderer.render()        [with LOD optimization for large datasets]
  * </pre>
@@ -101,6 +111,7 @@ public class FlowVizPanel extends JPanel {
     private PlotType plotType = PlotType.VALUES;
     private YAxisScale yAxisScale = YAxisScale.LINEAR;
     private MaskMode maskMode = MaskMode.NONE;
+    private SeasonalMaskMode seasonalMaskMode = SeasonalMaskMode.DISABLED;
     private XAxisType xAxisTypeOverride = null;  // If set, overrides automatic axis type selection
 
     // Reference series tracking for DIFFERENCE plot types
@@ -126,6 +137,7 @@ public class FlowVizPanel extends JPanel {
     /** Value-equality cache key for the transform pipeline (see rebuildDisplayDataSet). */
     private record TransformKey(AggregationPeriod period, AggregationMethod method,
                                 PlotType plotType, Object referenceKey, MaskMode maskMode,
+                                SeasonalMaskMode seasonalMaskMode,
                                 List<SeriesRef> visibleSeries) {}
 
     // Managers
@@ -1127,10 +1139,44 @@ public class FlowVizPanel extends JPanel {
     }
 
     /**
+     * Gets the seasonal (per-month) mask: which calendar months a view is restricted to.
+     * Orthogonal to {@link #getMaskMode()}, which is the validity/overlap mask.
+     */
+    public SeasonalMaskMode getSeasonalMaskMode() {
+        return seasonalMaskMode;
+    }
+
+    /**
      * Gets the current mask mode.
      */
     public MaskMode getMaskMode() {
         return maskMode;
+    }
+
+    /**
+     * Sets the seasonal (per-month) mask. The panel owns this for the whole tab, so the
+     * change reaches both the plot and the stats projection.
+     */
+    public void setSeasonalMaskMode(SeasonalMaskMode mode) {
+        // Guard on "no change", not on a particular value - returning early for DISABLED
+        // would mean the off state never gets stored and the mask could never be cleared.
+        if (mode == null || mode.equals(this.seasonalMaskMode)) {
+            return;
+        }
+        this.seasonalMaskMode = mode;
+
+        if (restoringState) {
+            return; // restoreState rebuilds once at the end
+        }
+
+        rebuildDisplayDataSet();
+
+        if (autoYMode) {
+            fitYAxis();
+        } else {
+            zoomToFit();
+        }
+        pushState();
     }
 
     // === UNDO/REDO ===
@@ -1166,7 +1212,7 @@ public class FlowVizPanel extends JPanel {
             visibleSeries,
             checkedSourcesSupplier != null ? checkedSourcesSupplier.get() : Set.of(),
             aggregationPeriod, aggregationMethod,
-            plotType, yAxisScale, maskMode, autoYMode, currentViewport);
+            plotType, yAxisScale, maskMode, seasonalMaskMode, autoYMode, currentViewport);
         if (stateHistory.pushIfChanged(state) && onHistoryChanged != null) {
             onHistoryChanged.run();
         }
@@ -1189,6 +1235,7 @@ public class FlowVizPanel extends JPanel {
             setPlotType(state.getPlotType());
             setYAxisScale(state.getYAxisScale());
             setMaskMode(state.getMaskMode());
+            setSeasonalMaskMode(state.getSeasonalMaskMode());
             autoYMode = state.isAutoYMode();
 
             // Apply viewport zoom/pan
@@ -1298,7 +1345,7 @@ public class FlowVizPanel extends JPanel {
         Object referenceKey = plotType.requiresReferenceSeries() && !visibleSeries.isEmpty()
             ? visibleSeries.get(0) : "none";
         TransformKey transformKey = new TransformKey(aggregationPeriod, aggregationMethod,
-            plotType, referenceKey, maskMode, List.copyOf(visibleSeries));
+            plotType, referenceKey, maskMode, seasonalMaskMode, List.copyOf(visibleSeries));
 
         // Check if we can reuse cached result
         if (transformKey.equals(lastTransformKey) && displayDataSet != null) {
@@ -1309,15 +1356,31 @@ public class FlowVizPanel extends JPanel {
         renderer.clearCache();
 
         // Step 1: Build aggregated dataset (only for visible series, not the full
-        // pool) through the one shared AggregationPipeline — the same orchestration
+        // pool) through the one shared AggregationPipeline - the same orchestration
         // that feeds the stats table, so the two projections can never disagree.
-        // The transient aggregatedDataSet is keyed by SeriesRef directly — the
+        // The transient aggregatedDataSet is keyed by SeriesRef directly - the
         // pipeline never touches string identity.
+        //
+        // NOTE: Seasonal masking happens as part of this step, not as a later filter. The
+        // aggregator excludes masked-out months from accumulation so they never resemble
+        // missing data, and narrows its completeness window to the months actually asked
+        // for - which leaves a genuinely truncated period free to still read NaN. That
+        // distinction is the whole point: the statistics must be able to tell a month that
+        // was deselected from one whose data is absent. See the pipeline note in the class
+        // docs for why this cannot be done after aggregation (#235).
         DataSet aggregatedDataSet = new DataSet();
-        AggregationPipeline.aggregate(originalDataSet, visibleSeries,
-            aggregationPeriod, aggregationMethod).forEach(aggregatedDataSet::addSeries);
+        AggregationPipeline.aggregate(
+            originalDataSet,
+            visibleSeries,
+            aggregationPeriod,
+            aggregationMethod,
+            seasonalMaskMode
+        ).forEach(aggregatedDataSet::addSeries);
 
-        // Step 2: Apply masking (if enabled)
+        // Step 2: Validity/overlapping data masking - deliberately AFTER aggregation,
+        // unlike the seasonal mask. It answers "where do the DISPLAYED points overlap?",
+        // and the stats table masks its own aggregates the same way, so keeping it here
+        // is what makes one shared mask setting mean the same thing in both views.
         if (maskMode == MaskMode.ALL && aggregatedDataSet.getSeriesRefs().size() > 1) {
             java.util.List<TimeSeriesData> allSeries = new java.util.ArrayList<>();
             for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
@@ -1333,8 +1396,8 @@ public class FlowVizPanel extends JPanel {
             aggregatedDataSet = maskedDataSet;
         } else if (maskMode == MaskMode.EACH && aggregatedDataSet.getSeriesRefs().size() > 1) {
             // EACH on the plot: each non-reference series filtered to its pairwise
-            // overlap with the reference — exactly the data its bivariate statistic
-            // uses — while the reference draws on its own valid points. Makes the
+            // overlap with the reference - exactly the data its bivariate statistic
+            // uses - while the reference draws on its own valid points. Makes the
             // shared mask setting mean the same thing in both views.
             java.util.List<SeriesRef> refs = new java.util.ArrayList<>(aggregatedDataSet.getSeriesRefs());
             TimeSeriesData reference = aggregatedDataSet.getSeries(refs.get(0));
@@ -1365,4 +1428,5 @@ public class FlowVizPanel extends JPanel {
         // Update cache key
         lastTransformKey = transformKey;
     }
+
 }

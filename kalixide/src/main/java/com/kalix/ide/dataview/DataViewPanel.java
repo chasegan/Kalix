@@ -263,6 +263,16 @@ public final class DataViewPanel extends JPanel {
         findDialog.showOver(prefill);
     }
 
+    /** Opens the unified Find — public: the above-gate text side and menu routing share it. */
+    public void openFind() {
+        showFindDialog();
+    }
+
+    /** Repeats the last find (F3 semantics), opening the dialog when there is none. */
+    public void repeatFind(boolean forward) {
+        findAgain(forward);
+    }
+
     /** F3 / Shift-F3: repeat the last search, or open the dialog when there is none. */
     private void findAgain(boolean forward) {
         if (findDialog == null || findDialog.queryText().isBlank()) {

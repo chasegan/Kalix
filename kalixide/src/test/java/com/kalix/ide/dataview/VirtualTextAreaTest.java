@@ -10,6 +10,7 @@ import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VirtualTextAreaTest {
 
@@ -78,6 +79,65 @@ class VirtualTextAreaTest {
                     "geometry follows the fresh session");
                 area.showLine(4); // unparented: scrolling is a no-op, selection still lands
                 assertEquals(4, area.selectionStart());
+            }
+        }
+    }
+
+    @Test
+    void resCsvHeaderLinesRenderAboveTheDataRegion() throws IOException {
+        String resCsv = "File version,3\nEOM\nProject,P\n"
+            + "Field,Units,RunName,Name,Site,ElementName\nEOC\n1\n"
+            + "1,ML,Run,Flow,A,DS,guid,\nDate,1>A>DS\nEOH\n"
+            + "2020-01-01,1.5\n2020-01-02,2.5\n";
+        Path dir = Files.createTempDirectory("kalix-textarea-res");
+        dir.toFile().deleteOnExit();
+        Path file = dir.resolve("x.res.csv");
+        file.toFile().deleteOnExit();
+        Files.writeString(file, resCsv, StandardCharsets.UTF_8);
+        try (DataViewSession s = DataViewOpener.openFor(file.toFile())) {
+            await("indexing complete", s::isIndexingComplete);
+            VirtualTextArea area = new VirtualTextArea(s);
+            int lineHeight = area.getFontMetrics(area.getFont()).getHeight();
+            assertEquals(11L * lineHeight, area.getPreferredSize().height,
+                "9 header lines + 2 data lines: the WHOLE file is visible");
+            area.selectLines(8, 9); // EOH and the first data row
+            assertEquals("EOH\n2020-01-01,1.5", area.selectedTextBlocking(),
+                "selection stitches header and data seamlessly");
+            area.showLine(1); // data-region line 1 lands past the header
+            assertEquals(10, area.selectionStart());
+        }
+    }
+
+    @Test
+    void fontSizeFollowsTheEditorPreference() throws IOException {
+        try (DataViewSession s = session("a\n")) {
+            VirtualTextArea area = new VirtualTextArea(s);
+            assertEquals(com.kalix.ide.preferences.PreferenceKeys.EDITOR_FONT_SIZE.get().intValue(),
+                area.getFont().getSize(), "editor parity: the same size preference as every text surface");
+        }
+    }
+
+    @Test
+    void selectAllActionSelectsEveryLine() throws IOException {
+        try (DataViewSession s = session("a\nb\nc\n")) {
+            VirtualTextArea area = new VirtualTextArea(s);
+            area.getActionMap().get("select-all").actionPerformed(null);
+            assertEquals(0, area.selectionStart());
+            assertEquals(3, area.selectionEndExclusive());
+        }
+    }
+
+    @Test
+    void gutterWidthTracksTheDigitCount() throws IOException {
+        try (DataViewSession small = session("a\nb\n")) {
+            int narrow = new VirtualLineNumberGutter(new VirtualTextArea(small)).getPreferredSize().width;
+            StringBuilder big = new StringBuilder();
+            for (int i = 0; i < 12_000; i++) {
+                big.append("x\n");
+            }
+            try (DataViewSession large = session(big.toString())) {
+                int wide = new VirtualLineNumberGutter(new VirtualTextArea(large)).getPreferredSize().width;
+                assertTrue(wide > narrow, "five digits need more room than one");
             }
         }
     }

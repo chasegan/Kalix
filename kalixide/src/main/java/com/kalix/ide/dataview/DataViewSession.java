@@ -85,8 +85,12 @@ public final class DataViewSession implements AutoCloseable {
     private final long indexStartOffset;
     /** Externally supplied column names (.res.csv), or {@code null} to use the data's own header. */
     private final String[] presetColumnNames;
-    /** Physical lines occupied by an extended format header before the data region (.res.csv). */
-    private final long headerLinesBeforeData;
+    /**
+     * The extended format header's physical lines before the data region
+     * (empty for plain CSV) — captured at open so the virtual text view can
+     * render the whole file, not just the indexed region past the header.
+     */
+    private final List<String> headerTextLines;
     private final CheckpointIndex rowIndex;
     private final CheckpointIndex lineIndex;
     private final RowStore rowStore;
@@ -115,7 +119,7 @@ public final class DataViewSession implements AutoCloseable {
     private final AtomicBoolean resumeRunning = new AtomicBoolean(false);
 
     private DataViewSession(Path file, CsvDialect dialect, long indexStartOffset,
-                            String[] presetColumnNames, long headerLinesBeforeData,
+                            String[] presetColumnNames, List<String> headerTextLines,
                             CheckpointIndex rowIndex, CheckpointIndex lineIndex,
                             RowStore rowStore, LineStore lineStore,
                             SeekableByteChannel indexerChannel) {
@@ -123,7 +127,7 @@ public final class DataViewSession implements AutoCloseable {
         this.dialect = dialect;
         this.indexStartOffset = indexStartOffset;
         this.presetColumnNames = presetColumnNames;
-        this.headerLinesBeforeData = headerLinesBeforeData;
+        this.headerTextLines = List.copyOf(headerTextLines);
         if (presetColumnNames != null) {
             this.columnCount = presetColumnNames.length;
         }
@@ -146,7 +150,7 @@ public final class DataViewSession implements AutoCloseable {
      * starts the background index pass. Blocking I/O — call off the EDT.
      */
     public static DataViewSession open(Path file) throws IOException {
-        return open(file, 0L, null, 0L);
+        return open(file, 0L, null, List.of());
     }
 
     /**
@@ -157,7 +161,7 @@ public final class DataViewSession implements AutoCloseable {
      * "no header row in the data".
      */
     public static DataViewSession open(Path file, long dataStartOffset, String[] presetColumnNames,
-                                       long headerLinesBeforeData) throws IOException {
+                                       List<String> headerTextLines) throws IOException {
         byte[] head;
         try (SeekableByteChannel headChannel = Files.newByteChannel(file, StandardOpenOption.READ)) {
             headChannel.position(dataStartOffset);
@@ -197,7 +201,7 @@ public final class DataViewSession implements AutoCloseable {
 
         DataViewSession session = new DataViewSession(
             file, dialect, dataStartOffset + dialect.bomLength(), presetColumnNames,
-            headerLinesBeforeData, rowIndex, lineIndex, rowStore, lineStore, indexerChannel);
+            headerTextLines, rowIndex, lineIndex, rowStore, lineStore, indexerChannel);
         session.indexerThread.start();
         return session;
     }
@@ -272,7 +276,16 @@ public final class DataViewSession implements AutoCloseable {
      * that shows the whole file.
      */
     public long headerLinesBeforeData() {
-        return headerLinesBeforeData;
+        return headerTextLines.size();
+    }
+
+    /**
+     * The extended format header's physical lines (empty for plain CSV): the
+     * text before the data region, rendered by the virtual text view above the
+     * indexed lines so the whole file stays visible.
+     */
+    public List<String> headerTextLines() {
+        return headerTextLines;
     }
 
     /**
