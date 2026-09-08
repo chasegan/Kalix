@@ -190,20 +190,13 @@ public class AxisRenderer {
 
         if (range <= 0) return ticks;
 
-        // Use same nice-interval logic as value axis
+        // Same nice, counted placement as the value axis. Counted matters here too: a
+        // double-mass plot encodes cumulative volume x 1e6, and at large volumes zoomed
+        // tight the interval drops under half an ulp, where an accumulating loop spins.
         int targetTicks = Math.max(MIN_TARGET_TICKS, Math.min(10, viewport.getPlotWidth() / 80));
-        double tickInterval = range / (targetTicks - 1);
-        tickInterval = roundToNiceValueInterval(tickInterval);
-
-        // Generate ticks
-        double current = Math.floor(startValue / tickInterval) * tickInterval;
-        while (current <= endValue + tickInterval / 2) {
-            if (current >= startValue - tickInterval / 2) {
-                ticks.add((long) (current * scale));
-            }
-            current += tickInterval;
+        for (double value : evenTicks(startValue, endValue, targetTicks, DoubleUnaryOperator.identity())) {
+            ticks.add((long) (value * scale));
         }
-
         return ticks;
     }
 
@@ -237,7 +230,12 @@ public class AxisRenderer {
         // Transformed bounds (viewport handles invalid bounds gracefully)
         double transformedMin = viewport.getTransformedMin();
         double transformedMax = viewport.getTransformedMax();
-        if (transformedMax - transformedMin <= 0) return new ArrayList<>();
+        // A non-finite bound (padding overflowed past 1e308) gives an empty axis, not a
+        // decade loop to Integer.MAX_VALUE
+        if (!Double.isFinite(transformedMin) || !Double.isFinite(transformedMax)
+                || transformedMax - transformedMin <= 0) {
+            return new ArrayList<>();
+        }
 
         int numTicks = Math.max(MIN_TARGET_TICKS, Math.min(10, viewport.getPlotHeight() / VALUE_AXIS_MIN_SPACING));
         YAxisScale yAxisScale = viewport.getYAxisScale();
