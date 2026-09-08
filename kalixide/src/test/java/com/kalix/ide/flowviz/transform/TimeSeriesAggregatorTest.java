@@ -1,6 +1,10 @@
 package com.kalix.ide.flowviz.transform;
 
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
+import java.util.Set;
+import java.time.Month;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -29,7 +33,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
-            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM);
+            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(2, daily.getPointCount(), "Should produce one row per day");
         assertEquals(300.0, daily.getValues()[0], 1e-9, "Day 1 sum");
@@ -48,7 +52,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
-            hourly, AggregationPeriod.DAILY, AggregationMethod.MEAN);
+            hourly, AggregationPeriod.DAILY, AggregationMethod.MEAN, SeasonalMaskMode.DISABLED);
 
         assertEquals(1, daily.getPointCount());
         assertEquals(12.5, daily.getValues()[0], 1e-9, "Mean of 1..24");
@@ -69,7 +73,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
-            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM);
+            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(2, daily.getPointCount());
         assertTrue(Double.isNaN(daily.getValues()[0]),
@@ -91,7 +95,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData daily = new TimeSeriesData(dates, values);
 
         TimeSeriesData reaggregated = TimeSeriesAggregator.aggregate(
-            daily, AggregationPeriod.DAILY, AggregationMethod.SUM);
+            daily, AggregationPeriod.DAILY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(n, reaggregated.getPointCount());
         for (int i = 0; i < n; i++) {
@@ -114,7 +118,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
-            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM);
+            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(2, daily.getPointCount());
         assertEquals(24.0, daily.getValues()[0], 1e-9, "Full first day should sum to 24");
@@ -136,7 +140,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
-            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM);
+            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(2, daily.getPointCount());
         assertEquals(48.0, daily.getValues()[0], 1e-9);
@@ -156,9 +160,9 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData min = TimeSeriesAggregator.aggregate(
-            hourly, AggregationPeriod.DAILY, AggregationMethod.MIN);
+            hourly, AggregationPeriod.DAILY, AggregationMethod.MIN, SeasonalMaskMode.DISABLED);
         TimeSeriesData max = TimeSeriesAggregator.aggregate(
-            hourly, AggregationPeriod.DAILY, AggregationMethod.MAX);
+            hourly, AggregationPeriod.DAILY, AggregationMethod.MAX, SeasonalMaskMode.DISABLED);
 
         assertEquals(1.0, min.getValues()[0], 1e-9);
         assertEquals(24.0, max.getValues()[0], 1e-9);
@@ -179,7 +183,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
-            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM);
+            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(2, daily.getPointCount());
         assertTrue(Double.isNaN(daily.getValues()[0]), "Day containing a NaN point is NaN");
@@ -201,7 +205,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
-            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM);
+            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(1, daily.getPointCount());
         assertEquals(24.0, daily.getValues()[0], 1e-9);
@@ -220,7 +224,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
-            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM);
+            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         long day0 = start.toInstant(ZoneOffset.UTC).toEpochMilli();
         assertEquals(day0, daily.getTimestamps()[0]);
@@ -242,7 +246,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData dailyData = new TimeSeriesData(dates, values);
 
         TimeSeriesData monthly = TimeSeriesAggregator.aggregate(
-            dailyData, AggregationPeriod.MONTHLY, AggregationMethod.SUM);
+            dailyData, AggregationPeriod.MONTHLY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(3, monthly.getPointCount());
         assertEquals(31.0, monthly.getValues()[0], 1e-9, "January");
@@ -273,7 +277,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData dailyData = new TimeSeriesData(dates, values);
 
         TimeSeriesData monthly = TimeSeriesAggregator.aggregate(
-            dailyData, AggregationPeriod.MONTHLY, AggregationMethod.SUM);
+            dailyData, AggregationPeriod.MONTHLY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(3, monthly.getPointCount());
         assertEquals(31.0, monthly.getValues()[0], 1e-9, "January");
@@ -295,7 +299,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData dailyData = new TimeSeriesData(dates, values);
 
         TimeSeriesData monthly = TimeSeriesAggregator.aggregate(
-            dailyData, AggregationPeriod.MONTHLY, AggregationMethod.SUM);
+            dailyData, AggregationPeriod.MONTHLY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(2, monthly.getPointCount());
         assertTrue(Double.isNaN(monthly.getValues()[0]), "Month containing a NaN day is NaN");
@@ -318,7 +322,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData dailyData = new TimeSeriesData(dates, values);
 
         TimeSeriesData annual = TimeSeriesAggregator.aggregate(
-            dailyData, AggregationPeriod.ANNUAL_JUL_JUN, AggregationMethod.SUM);
+            dailyData, AggregationPeriod.ANNUAL_JUL_JUN, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(1, annual.getPointCount());
         assertEquals(366.0, annual.getValues()[0], 1e-9);
@@ -341,7 +345,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData dailyData = new TimeSeriesData(dates, values);
 
         TimeSeriesData annual = TimeSeriesAggregator.aggregate(
-            dailyData, AggregationPeriod.ANNUAL_JUL_JUN, AggregationMethod.SUM);
+            dailyData, AggregationPeriod.ANNUAL_JUL_JUN, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(2, annual.getPointCount());
         assertEquals(366.0, annual.getValues()[0], 1e-9, "Complete WY2019");
@@ -352,7 +356,7 @@ class TimeSeriesAggregatorTest {
     void emptySeriesReturnsOriginal() {
         TimeSeriesData empty = new TimeSeriesData(new long[0], new double[0]);
         assertSame(empty, TimeSeriesAggregator.aggregate(
-            empty, AggregationPeriod.DAILY, AggregationMethod.SUM));
+            empty, AggregationPeriod.DAILY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED));
     }
 
     @Test
@@ -367,7 +371,7 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
-            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM);
+            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(0, daily.getPointCount());
     }
@@ -390,12 +394,66 @@ class TimeSeriesAggregatorTest {
         TimeSeriesData hourly = new TimeSeriesData(dates, values);
 
         TimeSeriesData daily = TimeSeriesAggregator.aggregate(
-            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM);
+            hourly, AggregationPeriod.DAILY, AggregationMethod.SUM, SeasonalMaskMode.DISABLED);
 
         assertEquals(3, daily.getPointCount(), "missing day 2 is emitted as a gap, not dropped");
         assertTrue(daily.isContiguous(), "the filled daily grid is contiguous");
         assertEquals(24.0, daily.getValues()[0], 1e-9, "day 1 sum");
         assertFalse(daily.getValidPoints()[1], "fully-missing day 2 is a NaN slot");
         assertEquals(48.0, daily.getValues()[2], 1e-9, "day 3 sum");
+    }
+    /** Daily points valued 1, from 1 Jan 2020 up to (not including) {@code endExclusive}. */
+    private static TimeSeriesData daily2020(LocalDate endExclusive) {
+        LocalDate start = LocalDate.of(2020, 1, 1);
+        int days = (int) (endExclusive.toEpochDay() - start.toEpochDay());
+        long[] timestamps = new long[days];
+        double[] values = new double[days];
+        for (int i = 0; i < days; i++) {
+            timestamps[i] = start.plusDays(i).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
+            values[i] = 1;
+        }
+        return new TimeSeriesData(timestamps, values);
+    }
+
+    @Test
+    void annualAggregationUnderSeasonalMaskCoversSelectedMonthsOnly() {
+        TimeSeriesData annual = TimeSeriesAggregator.aggregate(
+            daily2020(LocalDate.of(2021, 1, 1)), AggregationPeriod.ANNUAL_JAN_DEC,
+            AggregationMethod.SUM, SeasonalMaskMode.of(Set.of(Month.JANUARY)));
+
+        assertEquals(1, annual.getPointCount());
+        assertEquals(31.0, annual.getValues()[0], 0.0,
+            "only January's days are summed - the year is not judged incomplete for the rest");
+    }
+
+    @Test
+    void deselectingThePeriodStartMonthStillYieldsAValue() {
+        TimeSeriesData annual = TimeSeriesAggregator.aggregate(
+            daily2020(LocalDate.of(2021, 1, 1)), AggregationPeriod.ANNUAL_JAN_DEC,
+            AggregationMethod.SUM, SeasonalMaskMode.of(Set.of(Month.FEBRUARY)));
+
+        assertEquals(29.0, annual.getValues()[0], 0.0,
+            "the annual point is stamped 1 Jan, but January being deselected must not empty it");
+    }
+
+    @Test
+    void seasonalMaskUnderNativeResolutionFiltersPoints() {
+        TimeSeriesData masked = TimeSeriesAggregator.aggregate(
+            daily2020(LocalDate.of(2020, 3, 1)), AggregationPeriod.ORIGINAL,
+            AggregationMethod.SUM, SeasonalMaskMode.of(Set.of(Month.FEBRUARY)));
+
+        assertEquals(29, masked.getPointCount(),
+            "ORIGINAL aggregates nothing, but the mask still applies");
+    }
+
+    @Test
+    void truncationIsStillIncompleteUnderASeasonalMask() {
+        // Data stops 15 January, so the selected month is only half present.
+        TimeSeriesData annual = TimeSeriesAggregator.aggregate(
+            daily2020(LocalDate.of(2020, 1, 16)), AggregationPeriod.ANNUAL_JAN_DEC,
+            AggregationMethod.SUM, SeasonalMaskMode.of(Set.of(Month.JANUARY)));
+
+        assertTrue(Double.isNaN(annual.getValues()[0]),
+            "a genuinely truncated January must still read NaN, not an under-reported sum");
     }
 }
