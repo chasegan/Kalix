@@ -2,6 +2,7 @@ package com.kalix.ide.document;
 
 import com.kalix.ide.dataview.PixieDataPanel;
 import com.kalix.ide.dataview.PixieDataSession;
+import com.kalix.ide.dataview.PixieVizView;
 
 import java.awt.Component;
 import java.io.File;
@@ -23,6 +24,7 @@ public class PixieDocument extends KalixDocument {
 
     private final PixieDataSession session;
     private final PixieDataPanel dataPanel;
+    private final PixieVizView vizView;
 
     /** Whether the backing file is the editable manifest (vs the binary half). */
     private final boolean manifestBacked;
@@ -36,12 +38,13 @@ public class PixieDocument extends KalixDocument {
         this.manifestBacked = file.getName().toLowerCase(Locale.ROOT).endsWith(".pxt");
         this.session = new PixieDataSession(file);
         this.dataPanel = new PixieDataPanel(session);
+        this.vizView = new PixieVizView(dataPanel, session);
     }
 
-    /** The contextual view is the decoded table (the plot mount arrives with it). */
+    /** The contextual view: the plot mount above the decoded table. */
     @Override
     public Component getContextView() {
-        return dataPanel;
+        return vizView;
     }
 
     @Override
