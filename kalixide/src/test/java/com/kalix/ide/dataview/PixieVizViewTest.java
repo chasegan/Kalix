@@ -32,6 +32,7 @@ class PixieVizViewTest {
     Path tempDir;
 
     private PixieDataSession session;
+    private PixieDataPanel panel;
 
     private static void await(BooleanSupplier condition, String what) throws Exception {
         long deadline = System.currentTimeMillis() + 8000;
@@ -63,8 +64,10 @@ class PixieVizViewTest {
     private PixieVizView openView(File pxt, long limit) throws Exception {
         session = new PixieDataSession(pxt, () -> limit);
         PixieVizView[] holder = new PixieVizView[1];
-        SwingUtilities.invokeAndWait(() ->
-            holder[0] = new PixieVizView(new PixieDataPanel(session), session));
+        SwingUtilities.invokeAndWait(() -> {
+            panel = new PixieDataPanel(session);
+            holder[0] = new PixieVizView(panel, session);
+        });
         return holder[0];
     }
 
@@ -109,11 +112,13 @@ class PixieVizViewTest {
     }
 
     @Test
-    void refusalShowsTheNoteAndWithdrawsData() throws Exception {
+    void refusalShowsInTheStatusStripOnceAndWithdrawsData() throws Exception {
         PixieVizView view = openView(writePixie("big", List.of(
             new NamedSeries("a", daily(1, 2, 3, 4, 5)))), 4);
-        await(() -> view.noteText().contains("exceeds"), "gate note");
+        await(() -> panel.getStatusText().contains("exceeds"), "gate note");
         assertTrue(view.dataSetForTests().isEmpty(), "nothing decoded, nothing plotted");
+        assertEquals(" ", view.noteText(),
+            "the table's strip owns the reason; the viz note must not stutter it");
     }
 
     @Test

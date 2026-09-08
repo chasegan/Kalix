@@ -84,7 +84,7 @@ public final class DataViewPanel extends JPanel {
         applyGridColor();
         table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         table.setCellSelectionEnabled(true);
-        this.findController = new DataFindController(table, () -> session);
+        this.findController = new DataFindController(table, this, () -> session);
         installInteractions();
         add(new JScrollPane(table), BorderLayout.CENTER);
 

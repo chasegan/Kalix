@@ -33,8 +33,19 @@ import java.util.function.LongSupplier;
  * which renders as {@code NaN}. The whole file, honestly.
  *
  * <p>Reloads coalesce on a single drain-loop worker (the
- * {@code DataDocument.refreshDataViewFromDisk} pattern); listeners hear about
- * completed loads on the EDT. Reads are EDT-safe (one volatile snapshot).
+ * {@code DataDocument.refreshDataViewFromDisk} pattern). The decoded snapshot
+ * is published <em>on the EDT</em>, in the same runnable that notifies
+ * listeners, so a view can never read a new snapshot through stale structure.
+ *
+ * <p>Two honest limits of the pre-decode gate, both bounded by the manifest
+ * being the modeller's own inspectable file: it trusts the {@code .pxt}'s
+ * declared point counts (a manifest that understates them is decoded before
+ * the discrepancy could be known), and the metadata is read once for the gate
+ * and again by the decode, so a rewrite landing between them gates one
+ * manifest and decodes another — self-healing on the next coalesced reload.
+ * The limit counts total <em>values</em> across all series against
+ * {@code DATAVIEW_PLOT_MAX_ROWS}, since values are what cost memory: a
+ * ten-series file refuses at a tenth of the row count, and the refusal says so.
  */
 public final class PixieDataSession implements FindableData {
 
@@ -155,12 +166,19 @@ public final class PixieDataSession implements FindableData {
         if (disposed) {
             return;
         }
-        snapshot = fresh;
+        // The swap happens ON THE EDT, immediately before the notification that
+        // makes views re-read structure. Assigning it here (worker side) opened a
+        // window where a repaint iterated JTable's still-stale column model
+        // against a shorter new snapshot — an index crash on the EDT whenever a
+        // rewrite dropped series.
+        Snapshot published = fresh;
         SwingUtilities.invokeLater(() -> {
-            if (!disposed) {
-                for (Listener listener : listeners) {
-                    listener.onLoaded();
-                }
+            if (disposed) {
+                return;
+            }
+            snapshot = published;
+            for (Listener listener : listeners) {
+                listener.onLoaded();
             }
         });
     }

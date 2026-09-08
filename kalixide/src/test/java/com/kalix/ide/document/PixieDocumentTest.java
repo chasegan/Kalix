@@ -53,6 +53,26 @@ class PixieDocumentTest {
     }
 
     @Test
+    void aManifestAboveTheGateIsReadOnly() throws IOException {
+        // Above the editing gate the open path never reads the text, so the
+        // buffer is empty: saving it would truncate the real manifest.
+        File pxt = writePair("huge");
+        int gate = com.kalix.ide.preferences.PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.get();
+        try {
+            com.kalix.ide.preferences.PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.set(0);
+            KalixDocument doc = KalixDocument.createFor(pxt);
+            try {
+                assertFalse(doc.isEditable(),
+                    "an empty buffer over a real manifest must never be saveable");
+            } finally {
+                doc.dispose();
+            }
+        } finally {
+            com.kalix.ide.preferences.PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.set(gate);
+        }
+    }
+
+    @Test
     void pxbBackedDocumentIsReadOnly() throws IOException {
         File pxt = writePair("binaryside");
         File pxb = new File(pxt.getAbsolutePath().replace(".pxt", ".pxb"));

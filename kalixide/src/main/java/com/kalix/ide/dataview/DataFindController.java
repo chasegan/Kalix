@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import javax.swing.JTable;
 import javax.swing.SwingUtilities;
 import javax.swing.event.ListSelectionListener;
+import java.awt.Component;
 import java.awt.Toolkit;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -34,6 +35,12 @@ public final class DataFindController {
 
     private final JTable table;
     private final Supplier<FindableData> data;
+    /**
+     * Where the dialog is centred. Never the table: a virtual table's bounds
+     * are its full virtual extent (millions of pixels tall), so centring on it
+     * pins the dialog to a screen edge.
+     */
+    private final Component placementOwner;
 
     private DataFindDialog findDialog;
     /** Column of the last find landing on a header, or null; header positions precede all cells. */
@@ -43,8 +50,9 @@ public final class DataFindController {
     /** One scan at a time: holding F3 must not stack full-file scans. */
     private final AtomicBoolean searchInFlight = new AtomicBoolean(false);
 
-    public DataFindController(JTable table, Supplier<FindableData> data) {
+    public DataFindController(JTable table, Component placementOwner, Supplier<FindableData> data) {
         this.table = table;
+        this.placementOwner = placementOwner;
         this.data = data;
         // A manual selection change repositions the find origin (mirroring the
         // editor's caret re-anchor) and retires any header landing.
@@ -60,7 +68,7 @@ public final class DataFindController {
     /** Shows the Find dialog (lazily created — it needs a display), pre-filled from the selected cell. */
     public void openFind() {
         if (findDialog == null) {
-            findDialog = new DataFindDialog(table, this);
+            findDialog = new DataFindDialog(placementOwner, this);
         }
         String prefill = null;
         int viewRow = table.getSelectedRow();

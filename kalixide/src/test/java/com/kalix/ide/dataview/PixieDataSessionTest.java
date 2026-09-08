@@ -111,6 +111,37 @@ class PixieDataSessionTest {
     }
 
     @Test
+    void aShrinkingReloadNeverExposesANarrowerSnapshotEarly() throws Exception {
+        // The crash this pins: publishing the new snapshot off-EDT let a repaint
+        // read a shorter series list through JTable's still-stale column model.
+        File pxt = writePixie("shrink", List.of(
+            new NamedSeries("a", daily(LocalDateTime.of(2020, 1, 1, 0, 0), 1.0)),
+            new NamedSeries("b", daily(LocalDateTime.of(2020, 1, 1, 0, 0), 2.0))));
+        PixieDataSession session = openLoaded(pxt, 1000);
+        assertEquals(2, session.seriesCount());
+
+        String base = pxt.getAbsolutePath().substring(0, pxt.getAbsolutePath().length() - 4);
+        new PixieWriter().writeToFile(base, List.of(
+            new NamedSeries("a", daily(LocalDateTime.of(2020, 1, 1, 0, 0), 9.0))), true);
+        session.reloadFromDisk();
+
+        // Off the EDT the visible width must not shrink; the swap is published
+        // on the EDT, in the same runnable that tells views to re-read.
+        long deadline = System.currentTimeMillis() + 8000;
+        while (session.seriesCount() == 2) {
+            assertEquals("2", session.cellText(0, 1), "the old grid stays whole until the swap");
+            if (System.currentTimeMillis() > deadline) {
+                throw new AssertionError("timed out waiting for the EDT swap");
+            }
+            Thread.sleep(5);
+            javax.swing.SwingUtilities.invokeAndWait(() -> { });
+        }
+        assertEquals(1, session.seriesCount());
+        assertEquals("9", session.cellText(0, 0));
+        session.dispose();
+    }
+
+    @Test
     void missingBinaryHalfRefusesHonestly() throws IOException {
         File pxt = writePixie("orphan", List.of(
             new NamedSeries("flow", daily(LocalDateTime.of(2020, 1, 1, 0, 0), 1.0))));

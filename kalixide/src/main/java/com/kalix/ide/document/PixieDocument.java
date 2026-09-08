@@ -29,6 +29,14 @@ public class PixieDocument extends KalixDocument {
     /** Whether the backing file is the editable manifest (vs the binary half). */
     private final boolean manifestBacked;
 
+    /**
+     * True when the manifest's text never entered the editor buffer — a
+     * manifest above the large-file gate takes the no-text open path. Saving
+     * an empty buffer over a real file truncates it, so such a tab is
+     * read-only (the same guard {@code DataDocument} makes above the gate).
+     */
+    private final boolean textUnloaded;
+
     public PixieDocument(File file) {
         super(DocumentKind.DATA);
         if (file == null) {
@@ -36,6 +44,7 @@ public class PixieDocument extends KalixDocument {
         }
         setFile(file);
         this.manifestBacked = file.getName().toLowerCase(Locale.ROOT).endsWith(".pxt");
+        this.textUnloaded = DataDocument.exceedsEditableGate(file);
         this.session = new PixieDataSession(file);
         this.dataPanel = new PixieDataPanel(session);
         this.vizView = new PixieVizView(dataPanel, session);
@@ -49,7 +58,9 @@ public class PixieDocument extends KalixDocument {
 
     @Override
     public boolean isEditable() {
-        return manifestBacked; // the .pxt is the modeller's to edit; a .pxb-backed tab is not
+        // The .pxt is the modeller's to edit; a .pxb-backed tab is not, and
+        // neither is a manifest whose text was never read (see textUnloaded).
+        return manifestBacked && !textUnloaded;
     }
 
     /** The manifest's bytes changed (a save here, or an external write): re-decode. */

@@ -43,6 +43,11 @@ import java.util.Set;
  * accent-marked, full-name tooltips); the first series is plotted by default;
  * a reload replaces data under stable {@link DatasetSeries} refs (pxt path +
  * series name), so plot state survives file rewrites.
+ *
+ * <p>Known limit: two manifest entries sharing a series name produce equal
+ * {@link DatasetSeries} refs, so the table shows both columns while the pool
+ * holds only the last — a malformed-manifest case, left visible rather than
+ * silently renamed.
  */
 public final class PixieVizView extends JPanel {
 
@@ -152,7 +157,9 @@ public final class PixieVizView extends JPanel {
     private void onLoaded() {
         if (session.refusal() != null) {
             // The note and the plot must never contradict: withdraw any data.
-            note.setText(session.refusal());
+            // The reason itself belongs to the table's status strip (which
+            // already shows it) — repeating it here read as a stutter.
+            note.setText(" ");
             List<SeriesRef> removed = new ArrayList<>(dataSet.getSeriesRefs());
             for (SeriesRef r : removed) {
                 dataSet.removeSeries(r);
