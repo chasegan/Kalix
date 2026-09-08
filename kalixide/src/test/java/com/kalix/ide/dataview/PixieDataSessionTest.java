@@ -105,8 +105,25 @@ class PixieDataSessionTest {
         File pxt = writePixie("big", List.of(
             new NamedSeries("flow", daily(LocalDateTime.of(2020, 1, 1, 0, 0), 1, 2, 3, 4, 5))));
         PixieDataSession session = openLoaded(pxt, 4);
-        assertTrue(session.refusal().contains("exceeds"), "5 values over a 4-value limit");
+        assertTrue(session.refusal().contains("5 rows exceeds"), "5 rows over a 4-row limit");
         assertEquals(0, session.rowCount(), "nothing was decoded");
+        session.dispose();
+    }
+
+    @Test
+    void manyShortSeriesAreNotRefusedBySummingThem() throws IOException {
+        // A real results file: many series, each modest. The gate counts ROWS
+        // (the longest series), not the sum — summing refused a 145-series
+        // daily file whose table is only 47k rows.
+        List<NamedSeries> wide = new java.util.ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            wide.add(new NamedSeries("node.n" + i + ".flow",
+                daily(LocalDateTime.of(2020, 1, 1, 0, 0), 1, 2, 3, 4, 5)));
+        }
+        PixieDataSession session = openLoaded(writePixie("wide", wide), 10);
+        assertNull(session.refusal(), "60 values across 12 series is 5 rows, under a 10-row limit");
+        assertEquals(5, session.rowCount());
+        assertEquals(12, session.seriesCount());
         session.dispose();
     }
 

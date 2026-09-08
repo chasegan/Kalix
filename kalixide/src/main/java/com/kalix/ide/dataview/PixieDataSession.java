@@ -37,15 +37,20 @@ import java.util.function.LongSupplier;
  * is published <em>on the EDT</em>, in the same runnable that notifies
  * listeners, so a view can never read a new snapshot through stale structure.
  *
+ * <p>The gate counts <b>rows</b> — the longest series, which bounds the union
+ * index — against {@code DATAVIEW_PLOT_MAX_ROWS}, matching what the preference
+ * names and what the CSV viewer counts, so the same dataset behaves the same
+ * in either format. Unlike CSV (which materialises only the columns you plot),
+ * a pixie load decodes every series, so a file that is both very long and very
+ * wide is heavy at any row count; the status strip always states the series
+ * count and row count so the scale is visible rather than implied.
+ *
  * <p>Two honest limits of the pre-decode gate, both bounded by the manifest
  * being the modeller's own inspectable file: it trusts the {@code .pxt}'s
  * declared point counts (a manifest that understates them is decoded before
  * the discrepancy could be known), and the metadata is read once for the gate
  * and again by the decode, so a rewrite landing between them gates one
  * manifest and decodes another — self-healing on the next coalesced reload.
- * The limit counts total <em>values</em> across all series against
- * {@code DATAVIEW_PLOT_MAX_ROWS}, since values are what cost memory: a
- * ten-series file refuses at a tenth of the row count, and the refusal says so.
  */
 public final class PixieDataSession implements FindableData {
 
@@ -144,18 +149,22 @@ public final class PixieDataSession implements FindableData {
         Snapshot fresh;
         try {
             PixieReader reader = new PixieReader();
-            long totalPoints = 0;
+            long longestSeries = 0;
             for (PixieReader.SeriesInfo info : reader.getSeriesInfo(basePath)) {
-                totalPoints += info.pointCount;
+                longestSeries = Math.max(longestSeries, info.pointCount);
             }
             long limit = rowLimit.getAsLong();
-            if (totalPoints > limit) {
+            if (longestSeries > limit) {
                 // Refused BEFORE decoding: the gate must never cost the memory
-                // it exists to protect.
+                // it exists to protect. The measure is ROWS — the longest
+                // series, which bounds the union index — because that is what
+                // the preference names and what the CSV side counts. Summing
+                // values across series instead refused ordinary result files
+                // (145 daily series over 130 years is 47k rows, not 6.9M).
                 fresh = Snapshot.refused(String.format(
-                    "Table and plot disabled: %,d values exceeds the %,d-row limit"
+                    "Table and plot disabled: %,d rows exceeds the %,d-row limit"
                         + " (Preferences → Editor → Load and Save)",
-                    totalPoints, limit));
+                    longestSeries, limit));
             } else {
                 List<NamedSeries> series = reader.readAllSeries(basePath);
                 fresh = new Snapshot(true, null, List.copyOf(series), unionTimestamps(series));
