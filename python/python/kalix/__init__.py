@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from importlib.metadata import PackageNotFoundError, version as _pkg_version
 
-from kalix.io import read_pixie, write_pixie
+from kalix.io import convert, read_pixie, write_pixie
 from kalix.opt import optimise
 from kalix.sim import simulate
 from kalix.model import Model, load_file, load_string
@@ -26,6 +26,7 @@ from kalix.error import (
 __all__ = [
     "simulate",
     "optimise",
+    "convert",
     "read_pixie",
     "write_pixie",
     "Model",
