@@ -231,8 +231,8 @@ pub struct StorageNode {
     pub outlet_definition: [OutletDefinition; MAX_DS_LINKS],
 
     // True when any outlet has a capacity curve (set during init). When
-    // false the solver takes the plain unconstrained path, bit-identical
-    // with the historical solver.
+    // false the solver takes solve_no_rating, bit-identical with the
+    // historical solver.
     has_mol: bool,
 
     // Canonical capacity-vs-VOLUME curve per outlet, built at init from the
@@ -301,8 +301,7 @@ impl StorageNode {
     // Outlets are capacity-vs-level curves evaluated at the end-of-timestep
     // level, exactly as spill is (docs/storage_outlet_semantics.md). Storages
     // with any outlet curve solve via solve_rating below; storages without
-    // take the plain unconstrained solve, bit-identical with the historical
-    // solver.
+    // take solve_no_rating, bit-identical with the historical solver.
 
     /// Determine whether the release at the outlet should be the forced release optionally
     /// supplied by the user or the order determined by the model.
@@ -732,44 +731,29 @@ impl StorageNode {
         self.rating_attribution(v_hi, row, v_working, net_rain_mm)
     }
 
-    /// Solves the backward Euler equation for equilibrium volume in flow phase.
+    /// The solve for a storage with no outlet curves: find the equilibrium
+    /// volume, then attribute the flows that produced it.
     ///
-    /// One monotone solve: the MOL access constraints are folded into the
-    /// outflow function, so the equilibrium error is continuous in volume and
-    /// a single bracket-and-refine pass finds the solution — no active outlet
-    /// sets, no threshold clamping. The final volume is recomputed from the
-    /// allocated flows so mass balance closes by construction.
-    ///
-    /// PROTOTYPE: storages with MOL outlets route to the rating-semantics
-    /// solver above; storages without stay on the (bit-identical) legacy path.
+    /// Bit-identical with the pre-outlet-redesign solver, expression for
+    /// expression — external users diff outputs against a pinned baseline, so
+    /// the arithmetic here is fixed, not merely conventional. The rating
+    /// solver's outflow function is algebraically the same thing when no curve
+    /// is configured, but not the same in floating point; that is why this
+    /// path exists rather than deferring to it.
     ///
     /// Returns (final_volume, ds_flows[4], spill, table_row, area)
-    fn solve_backward_euler(
-        &mut self,
+    fn solve_no_rating(
+        &self,
         v_initial: f64,
         net_rain_mm: f64,
-        data_cache: &mut DataCache,
+        nrows: usize,
+        start_row: usize,
     ) -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64) {
-        let nrows = self.dimensions.nrows();
-
-        // Compute all release demands once (orders or forced releases)
-        for i in 0..MAX_DS_LINKS {
-            self.ds_release_due[i] = Self::check_forced_release(
-                data_cache,
-                &self.ds_force_release_input[i],
-                self.ds_orders_due[i]
-            );
-        }
-
-        if self.has_mol {
-            return self.solve_rating(v_initial, net_rain_mm, nrows, self.previous_istop);
-        }
-
         // Sanitized dues (NaN / non-positive => 0) — the raw values would
         // poison the equilibrium error or manufacture water.
         let dues = self.sanitized_dues();
         let (v_solved, row, legacy) =
-            self.solve_equilibrium(&dues, v_initial, net_rain_mm, nrows, self.previous_istop);
+            self.solve_equilibrium(&dues, v_initial, net_rain_mm, nrows, start_row);
 
         // Evaluate the solution point and allocate.
         let area = self.dimensions.interpolate_row(row, VOLU, AREA, v_solved);
@@ -823,6 +807,45 @@ impl StorageNode {
         }
 
         (v_final, ds_flows, spill, row, area)
+    }
+
+    /// Solves the backward Euler equation for equilibrium volume in flow phase.
+    ///
+    /// Resolves this timestep's release demands, then dispatches on the outlet
+    /// configuration — decided once at `initialise`, not per evaluation:
+    ///
+    /// - any outlet curve => [`solve_rating`](Self::solve_rating), where the
+    ///   outflow steps at each MOL threshold;
+    /// - no outlet curves => [`solve_no_rating`](Self::solve_no_rating),
+    ///   the plain solve, bit-identical with the pre-outlet solver.
+    ///
+    /// The two keep separate outflow arithmetic on purpose; see
+    /// [`bracket_segment`] for what is shared between them and why nothing
+    /// more can be.
+    ///
+    /// Returns (final_volume, ds_flows[4], spill, table_row, area)
+    fn solve_backward_euler(
+        &mut self,
+        v_initial: f64,
+        net_rain_mm: f64,
+        data_cache: &mut DataCache,
+    ) -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64) {
+        let nrows = self.dimensions.nrows();
+
+        // Compute all release demands once (orders or forced releases)
+        for i in 0..MAX_DS_LINKS {
+            self.ds_release_due[i] = Self::check_forced_release(
+                data_cache,
+                &self.ds_force_release_input[i],
+                self.ds_orders_due[i]
+            );
+        }
+
+        if self.has_mol {
+            self.solve_rating(v_initial, net_rain_mm, nrows, self.previous_istop)
+        } else {
+            self.solve_no_rating(v_initial, net_rain_mm, nrows, self.previous_istop)
+        }
     }
 
     /// Finds the equilibrium volume for a storage with no outlet curves:
