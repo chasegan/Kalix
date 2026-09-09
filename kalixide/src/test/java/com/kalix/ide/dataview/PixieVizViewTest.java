@@ -5,6 +5,7 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.io.NamedSeries;
 import com.kalix.ide.io.PixieWriter;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -34,17 +35,42 @@ class PixieVizViewTest {
     private PixieDataSession session;
     private PixieDataPanel panel;
 
+    @AfterEach
+    void disposeSession() {
+        // Hygiene in the shared suite JVM: no leaked decode workers or stale
+        // listener chains left behind to congest later tests' EDT.
+        if (session != null) {
+            session.dispose();
+        }
+    }
+
+    /**
+     * Polls a condition to become true (async decode pipeline settling). The
+     * condition is evaluated ON THE EDT: the EDT runs one runnable at a time,
+     * so a check can only ever observe between-runnable states — never the
+     * middle of the publish runnable that fills the pool and then applies the
+     * default selection — and each {@code invokeAndWait} hands this thread a
+     * happens-before edge over everything the EDT published. The previous
+     * helper evaluated the condition on the test thread (an unsynchronized
+     * read racing a mid-flight {@code onLoaded}), which was this class's
+     * suite-load flake: "pool filled" was visible before the same runnable's
+     * default selection.
+     */
     private static void await(BooleanSupplier condition, String what) throws Exception {
         long deadline = System.currentTimeMillis() + 8000;
-        while (!condition.getAsBoolean()) {
+        while (!onEdt(condition)) {
             if (System.currentTimeMillis() > deadline) {
                 fail("timed out waiting for " + what);
             }
             Thread.sleep(20);
-            if (!SwingUtilities.isEventDispatchThread()) {
-                SwingUtilities.invokeAndWait(() -> { });
-            }
         }
+    }
+
+    /** Evaluates the condition on the EDT (drain + happens-before, see {@link #await}). */
+    private static boolean onEdt(BooleanSupplier condition) throws Exception {
+        boolean[] value = new boolean[1];
+        SwingUtilities.invokeAndWait(() -> value[0] = condition.getAsBoolean());
+        return value[0];
     }
 
     private static TimeSeriesData daily(double... values) {
@@ -80,7 +106,10 @@ class PixieVizViewTest {
         PixieVizView view = openView(writePixie("two", List.of(
             new NamedSeries("node.a.flow", daily(1, 2, 3)),
             new NamedSeries("node.b.flow", daily(10, 20, 30)))), 1000);
-        await(() -> view.dataSetForTests().hasSeries(ref("node.a.flow")), "pool filled");
+        // Await what is asserted: the default SELECTION, not mere pool
+        // membership (both land in one EDT runnable, selection last).
+        await(() -> view.vizManagerForTests().getTargetTabSelectedSeries().contains(ref("node.a.flow")),
+            "first-series default selection");
         assertTrue(view.vizManagerForTests().getTargetTabSelectedSeries().contains(ref("node.a.flow")));
         assertTrue(view.dataSetForTests().hasSeries(ref("node.b.flow")),
             "the whole file decodes into the pool, selected or not");
@@ -105,7 +134,10 @@ class PixieVizViewTest {
     void dateColumnCannotBeToggled() throws Exception {
         PixieVizView view = openView(writePixie("date", List.of(
             new NamedSeries("a", daily(1)))), 1000);
-        await(() -> view.dataSetForTests().hasSeries(ref("a")), "pool filled");
+        // The baseline must be sampled after the default selection has landed,
+        // or a late-landing default reads as the toggle having added a series.
+        await(() -> view.vizManagerForTests().getTargetTabSelectedSeries().contains(ref("a")),
+            "default selection applied");
         int before = view.vizManagerForTests().getTargetTabSelectedSeries().size();
         SwingUtilities.invokeAndWait(() -> view.toggleSeriesColumn(0));
         assertEquals(before, view.vizManagerForTests().getTargetTabSelectedSeries().size());
