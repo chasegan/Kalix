@@ -48,6 +48,8 @@ pub struct StorageNode {
     pub target_level: DynamicInput,
     pub exists: DynamicInput,
     pub ds_force_release_input: [DynamicInput; MAX_DS_LINKS],
+    pub is_gated: bool,
+    pub spillway_gated_release: DynamicInput,
 
     // Internal state only
     usflow: f64,
@@ -138,6 +140,7 @@ impl StorageNode {
     //
     // Terminology for ds_1 flows:
     // - "ds_1_spill": uncontrolled overflow via the spillway, counts towards ds_1 orders
+    //   or if gated, controlled discharge via the spillway.
     // - "ds_1_outlet": controlled outlet flow, supplements spill to meet ds_1
     //                  orders, or optionally forced by user input
     // - "ds_1" (total): ds_1_spill + ds_1_outlet
@@ -150,6 +153,25 @@ impl StorageNode {
     // with any outlet curve solve via solve_rating below; storages without
     // take the plain unconstrained solve, bit-identical with the historical
     // solver.
+
+    /// Spill at a table row. Gated storages ignore the SPIL column entirely
+    /// and release whatever the gated spillway rule supplies.
+    fn spill_at_row(&self, row: usize, gated_spill: f64) -> f64 {
+        if self.is_gated {
+            gated_spill
+        } else {
+            self.dimensions.get_value(row, SPIL).max(0.0)
+        }
+    }
+
+    /// Spill at an arbitrary volume inside `row`'s segment.
+    fn spill_at_vol(&self, row: usize, v: f64, gated_spill: f64) -> f64 {
+        if self.is_gated {
+            gated_spill
+        } else {
+            self.dimensions.interpolate_row(row, VOLU, SPIL, v).max(0.0)
+        }
+    }
 
     /// Determine whether the release at the outlet should be the forced release optionally
     /// supplied by the user or the order determined by the model.
@@ -300,11 +322,11 @@ impl StorageNode {
 
     /// Attribution at a solved volume v inside (or beyond) segment `row`:
     /// releases from the rating at v, v_final closing the balance exactly.
-    fn rating_attribution(&self, v: f64, row: usize, v_working: f64, net_rain_mm: f64)
+    fn rating_attribution(&self, v: f64, row: usize, v_working: f64, net_rain_mm: f64, gated_spill: f64)
         -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64)
     {
         let area = self.dimensions.interpolate_row(row, VOLU, AREA, v);
-        let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, v).max(0.0);
+        let spill = self.spill_at_vol(row, v, gated_spill);
         let w = v_working + net_rain_mm * area;
         let mut flows = self.rating_releases_at(v, spill);
         let v_final = (w - spill - flows.iter().sum::<f64>()).max(0.0);
@@ -316,11 +338,11 @@ impl StorageNode {
     /// (from-below) releases, and whoever steps up at t shares the residual
     /// in priority order, each capped by its from-above capacity — the
     /// generalized solution of the jump.
-    fn rating_park_at(&self, t: f64, row: usize, v_working: f64, net_rain_mm: f64)
+    fn rating_park_at(&self, t: f64, row: usize, v_working: f64, net_rain_mm: f64, gated_spill: f64)
         -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64)
     {
         let area = self.dimensions.interpolate_row(row, VOLU, AREA, t);
-        let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, t).max(0.0);
+        let spill = self.spill_at_vol(row, t, gated_spill);
         let w = v_working + net_rain_mm * area;
         let mut flows = self.rating_releases_at(t, spill);
         let mut residual = (w - spill - t) - flows.iter().sum::<f64>();
@@ -348,12 +370,12 @@ impl StorageNode {
     /// Demand exceeds everything available: drain to the table floor, and cap
     /// releases by the water actually there, in priority order. Each outlet's
     /// capacity is taken just above the floor (it flowed while draining down).
-    fn rating_floor(&self, v_working: f64, net_rain_mm: f64)
+    fn rating_floor(&self, v_working: f64, net_rain_mm: f64, gated_spill: f64)
         -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64)
     {
         let floor_vol = self.dimensions.get_value(0, VOLU);
         let area = self.dimensions.get_value(0, AREA);
-        let spill = self.dimensions.get_value(0, SPIL).max(0.0);
+        let spill = self.spill_at_row(0, gated_spill);
         let w = v_working + net_rain_mm * area;
         let mut remaining = (w - spill).max(0.0);
         let mut flows = [0.0; MAX_DS_LINKS];
@@ -372,7 +394,7 @@ impl StorageNode {
     /// the (monotone, jumpy) rating error, then walk the segment's threshold
     /// pieces in order — bisecting a continuous piece that crosses zero, or
     /// parking on a threshold whose jump swallows the root.
-    fn solve_rating(&self, v_working: f64, net_rain_mm: f64, nrows: usize, start_row: usize)
+    fn solve_rating(&self, v_working: f64, net_rain_mm: f64, gated_spill: f64, nrows: usize, start_row: usize)
         -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64)
     {
         // Hot-path precompute: sanitized demands, step capacities, and
@@ -397,7 +419,7 @@ impl StorageNode {
         let compute_error = |row: usize| -> f64 {
             let v = self.dimensions.get_value(row, VOLU);
             let area = self.dimensions.get_value(row, AREA);
-            let spill = self.dimensions.get_value(row, SPIL).max(0.0);
+            let spill = self.spill_at_row(row, gated_spill);
             v - (v_working + net_rain_mm * area - outflow_at(v, spill))
         };
 
@@ -447,20 +469,20 @@ impl StorageNode {
         }
         let istop = hi;
         if istop == 0 {
-            return self.rating_floor(v_working, net_rain_mm);
+            return self.rating_floor(v_working, net_rain_mm, gated_spill);
         }
         let row = istop - 1;
         let error_prev = if row == lo { error_lo } else { compute_error(row) };
         if error_prev >= 0.0 {
-            return self.rating_floor(v_working, net_rain_mm);
+            return self.rating_floor(v_working, net_rain_mm, gated_spill);
         }
 
         let v_lo = self.dimensions.get_value(row, VOLU);
         let v_hi = self.dimensions.get_value(istop, VOLU);
         let area_lo = self.dimensions.get_value(row, AREA);
         let area_hi = self.dimensions.get_value(istop, AREA);
-        let spill_lo = self.dimensions.get_value(row, SPIL).max(0.0);
-        let spill_hi = self.dimensions.get_value(istop, SPIL).max(0.0);
+        let spill_lo = self.spill_at_row(row, gated_spill);
+        let spill_hi = self.spill_at_row(istop, gated_spill);
         let lerp = |v: f64| -> (f64, f64) {
             let x = (v - v_lo) / (v_hi - v_lo);
             (area_lo + (area_hi - area_lo) * x, (spill_lo + (spill_hi - spill_lo) * x).max(0.0))
@@ -601,7 +623,7 @@ impl StorageNode {
             if t > pos {
                 let e_left = err_at(t);
                 if e_pos < 0.0 && e_left >= 0.0 {
-                    return self.rating_attribution(solve_piece(pos, t, e_pos, e_left), row, v_working, net_rain_mm);
+                    return self.rating_attribution(solve_piece(pos, t, e_pos, e_left), row, v_working, net_rain_mm, gated_spill);
                 }
                 pos = t;
                 e_pos = e_left;
@@ -610,13 +632,13 @@ impl StorageNode {
                 let (_, spill_t) = lerp(t);
                 let jump = self.rating_jump_at(t, spill_t);
                 if e_pos + jump >= 0.0 {
-                    return self.rating_park_at(t, row, v_working, net_rain_mm);
+                    return self.rating_park_at(t, row, v_working, net_rain_mm, gated_spill);
                 }
                 e_pos += jump;
             }
         }
         if pos < v_hi && e_pos < 0.0 && error_hi >= 0.0 {
-            return self.rating_attribution(solve_piece(pos, v_hi, e_pos, error_hi), row, v_working, net_rain_mm);
+            return self.rating_attribution(solve_piece(pos, v_hi, e_pos, error_hi), row, v_working, net_rain_mm, gated_spill);
         }
 
         // Ceiling case (error still negative at the table top): the region
@@ -629,9 +651,9 @@ impl StorageNode {
         if e_start < 0.0 && e_probe > e_start {
             let x = -e_start / (e_probe - e_start);
             let v = start_v + (v_probe - start_v) * x;
-            return self.rating_attribution(v, row, v_working, net_rain_mm);
+            return self.rating_attribution(v, row, v_working, net_rain_mm, gated_spill);
         }
-        self.rating_attribution(v_hi, row, v_working, net_rain_mm)
+        self.rating_attribution(v_hi, row, v_working, net_rain_mm, gated_spill)
     }
 
     /// Solves the backward Euler equation for equilibrium volume in flow phase.
@@ -650,6 +672,7 @@ impl StorageNode {
         &mut self,
         v_initial: f64,
         net_rain_mm: f64,
+        gated_spill: f64,
         data_cache: &mut DataCache,
     ) -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64) {
         let nrows = self.dimensions.nrows();
@@ -664,18 +687,18 @@ impl StorageNode {
         }
 
         if self.has_mol {
-            return self.solve_rating(v_initial, net_rain_mm, nrows, self.previous_istop);
+            return self.solve_rating(v_initial, net_rain_mm, gated_spill, nrows, self.previous_istop);
         }
 
         // Sanitized dues (NaN / non-positive => 0) — the raw values would
         // poison the equilibrium error or manufacture water.
         let dues = self.sanitized_dues();
         let (v_solved, row, legacy) =
-            self.solve_equilibrium(&dues, v_initial, net_rain_mm, nrows, self.previous_istop);
+            self.solve_equilibrium(&dues, v_initial, net_rain_mm, gated_spill, nrows, self.previous_istop);
 
         // Evaluate the solution point and allocate.
         let area = self.dimensions.interpolate_row(row, VOLU, AREA, v_solved);
-        let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, v_solved).max(0.0);
+        let spill = self.spill_at_vol(row, v_solved, gated_spill);
 
         let mut ds_flows = [0.0; MAX_DS_LINKS];
         let v_final;
@@ -743,6 +766,7 @@ impl StorageNode {
         dues: &[f64; MAX_DS_LINKS],
         v_working: f64,
         net_rain_mm: f64,
+        gated_spill: f64,
         nrows: usize,
         start_row: usize,
     ) -> (f64, usize, bool) {
@@ -752,7 +776,7 @@ impl StorageNode {
                 dues,
                 self.dimensions.get_value(row, VOLU),
                 self.dimensions.get_value(row, AREA),
-                self.dimensions.get_value(row, SPIL).max(0.0),
+                self.spill_at_row(row, gated_spill),
                 v_working,
                 net_rain_mm,
             )
@@ -836,8 +860,8 @@ impl StorageNode {
         let v_hi = self.dimensions.get_value(istop, VOLU);
         let area_lo = self.dimensions.get_value(row, AREA);
         let area_hi = self.dimensions.get_value(istop, AREA);
-        let spill_lo = self.dimensions.get_value(row, SPIL).max(0.0);
-        let spill_hi = self.dimensions.get_value(istop, SPIL).max(0.0);
+        let spill_lo = self.spill_at_row(row, gated_spill);
+        let spill_hi = self.spill_at_row(istop, gated_spill);
 
         // Exact within-segment solve (including the ds_1 spill kink and, in
         // the ceiling case, extrapolation beyond the table top). The
@@ -999,9 +1023,17 @@ impl Node for StorageNode {
         }
         // Spill at the empty row would release water the storage doesn't
         // hold (the solver adds spill to ds_1 uncapped by contents).
-        if self.dimensions.get_value(0, SPIL) > 0_f64 {
+        if !self.is_gated && self.dimensions.get_value(0, SPIL) > 0_f64 {
             let message = format!("Error in node '{}'. Storage dimension table must begin with spill=0.", self.name);
             return Err(message);
+        }
+
+        // Gated storages must have a spillway_gated_release defined, otherwise error
+        if self.is_gated && matches!(self.spillway_gated_release, DynamicInput::None { .. }) {
+            return Err(format!(
+                "Error in node '{}'. Gated storage must have a spillway_gated_release defined.", 
+                self.name
+            ));
         }
 
         // Validate that volumes are strictly increasing (required for solver interpolation)
@@ -1265,9 +1297,18 @@ impl Node for StorageNode {
             
             // Net rainfall rate
             let net_rain_mm = rain_mm - evap_mm - seep_mm;
+
+            // If spillway is gated, get the target release volume and check valid else set to 0.0
+            let gated_spill = if self.is_gated {
+                let g = self.spillway_gated_release.get_value(data_cache);
+                if g.is_nan() || g <= 0.0 { 0.0 } else { g }
+            } else {
+                0.0
+            };
             
             // Solve backward Euler
-            let (v_final, ds_flows, spill, row, solver_area_km2) = self.solve_backward_euler(self.volume, net_rain_mm, data_cache);
+            let (v_final, ds_flows, spill, row, solver_area_km2) = 
+                self.solve_backward_euler(self.volume, net_rain_mm, gated_spill, data_cache);
             area_km2 = solver_area_km2;
             
             // Update warm-start cache for next timestep (expects upper bracket)
