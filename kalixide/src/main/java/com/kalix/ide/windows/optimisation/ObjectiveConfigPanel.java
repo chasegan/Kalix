@@ -250,7 +250,7 @@ public class ObjectiveConfigPanel extends JPanel {
                 .startIn(workingDirectorySupplier != null ? workingDirectorySupplier.get() : null)
                 .filters(
                     FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                    FileDialogFilter.of("Gzipped CSV (*.csv.gz)", "csv.gz"))
+                    FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"))
                 .show();
         if (chosen.isEmpty()) {
             return;

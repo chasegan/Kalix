@@ -30,7 +30,7 @@ print(results.head())
 
 ## Converting data files
 
-`kalix.convert()` mirrors [`kalix convert`](cli.md#kalix-convert) on the commandline — the same engine conversion between date-indexed CSV (plain or gzip-compressed `.csv.gz`) and the Pixie pair, with formats chosen by file extension:
+`kalix.convert()` mirrors [`kalix convert`](cli.md#kalix-convert) on the commandline — the same engine conversion between date-indexed CSV (plain or zip-compressed `.csv.zip`, the one-file-per-archive convention pandas uses) and the Pixie pair, with formats chosen by file extension:
 
 ```python
 kalix.convert("flows.csv", "flows.pxt")   # writes flows.pxt + flows.pxb

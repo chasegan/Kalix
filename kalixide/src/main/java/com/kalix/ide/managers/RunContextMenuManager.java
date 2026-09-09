@@ -654,7 +654,7 @@ public class RunContextMenuManager {
             .suggestedName(baseFilename + ".csv")
             .filters(
                 FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                FileDialogFilter.of("Gzipped CSV (*.csv.gz)", "csv.gz"),
+                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"),
                 FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
             .show();
         if (chosen.isPresent()) {
@@ -664,9 +664,9 @@ public class RunContextMenuManager {
             // The format IS the extension the user settled on. The type combo only ever
             // sets that extension, so there is no second opinion to reconcile against.
             boolean pixie = lowerName.endsWith(".pxt");
-            boolean csvGz = com.kalix.ide.io.CsvGzFormat.isCsvGz(lowerName);
-            String format = pixie ? "pixie" : (csvGz ? "csv.gz" : "csv");
-            String ext = pixie ? ".pxt" : (csvGz ? ".csv.gz" : ".csv");
+            boolean csvGz = com.kalix.ide.io.CsvZipFormat.isCsvZip(lowerName);
+            String format = pixie ? "pixie" : (csvGz ? "csv.zip" : "csv");
+            String ext = pixie ? ".pxt" : (csvGz ? ".csv.zip" : ".csv");
 
             // Append the format's extension unless the user already typed it.
             if (!lowerName.endsWith(ext)) {

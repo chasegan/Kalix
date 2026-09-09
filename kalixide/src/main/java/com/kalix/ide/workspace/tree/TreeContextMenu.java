@@ -1,7 +1,7 @@
 package com.kalix.ide.workspace.tree;
 
 import com.kalix.ide.icons.MenuIcons;
-import com.kalix.ide.io.CsvGzFormat;
+import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.utils.PlatformUtils;
 
 import javax.swing.Icon;
@@ -135,14 +135,14 @@ public class TreeContextMenu {
             List.of(
                 item(
                     "Open",
-                    (sel -> isSingleOpenableFile(sel) && context == BuildContext.FileTree),
+                    (sel -> isSingleNonZipFile(sel) && context == BuildContext.FileTree),
                     sel -> host.openFile(file(sel))
                 )),
             // Context-specific
             List.of(
                 item(
                     "Compare with active editor",
-                    sel -> (isSingleOpenableFile(sel) && context == BuildContext.FileTree),
+                    sel -> (isSingleNonZipFile(sel) && context == BuildContext.FileTree),
                     sel -> host.compareWithActiveEditor(file(sel))
                 ),
                 item(
@@ -150,8 +150,8 @@ public class TreeContextMenu {
                     sel -> host.compareFiles(file(sel, 0), file(sel, 1))
                 ),
                 item(
-                    "Decompress", TreeContextMenu::isSingleCompressed,
-                    sel -> fileOps.decompressFile(file(sel))
+                    "Unzip", TreeContextMenu::isSingleZip,
+                    sel -> fileOps.unzipFile(file(sel))
                 )
             ),
             // External handoff
@@ -203,23 +203,12 @@ public class TreeContextMenu {
                     "Duplicate…", sel -> isSingle(sel) && noneIsRoot(sel),
                     sel -> fileOps.duplicate(file(sel))
                 ),
-                // Derive a new archive from the selection, like Duplicate derives a copy —
-                // placed here so they never surface as a folder's first (= primary-looking)
-                // item. Two formats: zip holds any selection (folders included); gz is a
-                // single-file stream, so its item appears only for one plain file.
-                // Hidden for the empty-space (root) click on purpose: the archive would
-                // land BESIDE the workspace root, outside the tree, and silently appear
-                // to do nothing.
+                // Derives a new archive from the selection, like Duplicate derives a copy —
+                // and keeps it from surfacing as a folder's first (= primary-looking) item.
                 item(
-                    "Compress (zip)",
-                    (sel -> (any(sel) && noneCompressed(sel) && context == BuildContext.FileTree)),
+                    "Zip",
+                    (sel -> (isNotSingleZip(sel) && context == BuildContext.FileTree)),
                     sel -> fileOps.zipFiles(files(sel), tree.getRootFile())
-                ),
-                item(
-                    "Compress (gz)",
-                    (sel -> (isSinglePlainFile(sel) && noneCompressed(sel)
-                        && context == BuildContext.FileTree)),
-                    sel -> fileOps.gzipFile(file(sel))
                 )
             ),
             // Destructive (isolated) — never the root (context-menu-style §4).
@@ -288,53 +277,47 @@ public class TreeContextMenu {
         return sel.size() == 1;
     }
 
-    private static boolean isSingleOpenableFile(List<FileTreeNode> sel) {
-        return sel.size() == 1 && !sel.getFirst().isDirectory() && allOpenable(sel);
+    private static boolean isSingleNonZipFile(List<FileTreeNode> sel) {
+        return sel.size() == 1 && !sel.getFirst().isDirectory() && isNotPlainZip(sel);
     }
 
     private static boolean isTwoFiles(List<FileTreeNode> sel) {
-        return sel.size() == 2 && sel.stream().noneMatch(FileTreeNode::isDirectory) && allOpenable(sel);
+        return sel.size() == 2 && sel.stream().noneMatch(FileTreeNode::isDirectory) && isNotPlainZip(sel);
     }
 
     /**
-     * Whether every selected file is one Open/Compare can honestly act on. The
-     * primary action must match double-click (context-menu-style §1): archives
-     * decompress, so Open is hidden for them — except .csv.gz, whose primary
-     * action IS opening (as a data view).
+     * True if nothing selected is a plain zip archive. A {@code .csv.zip}
+     * counts as data, not archive: Open (and Compare) act on it — matching
+     * double-click, which opens it as a data view — while the Zip item's
+     * {@link #isNotZip} still treats it as an archive not worth re-archiving.
      */
-    private static boolean allOpenable(List<FileTreeNode> sel) {
-        return sel.stream().allMatch(x -> {
-            File f = x.getFile();
-            if (TreeFileOperations.isZip(f)) {
-                return false;
-            }
-            return !TreeFileOperations.isGz(f) || CsvGzFormat.isCsvGz(f.getName());
-        });
+    private static boolean isNotPlainZip(List<FileTreeNode> sel) {
+        return sel.stream().noneMatch(x -> TreeFileOperations.isZip(x.getFile())
+            && !CsvZipFormat.isCsvZip(x.getFile().getName()));
     }
 
     private static boolean hasDirectory(List<FileTreeNode> sel) {
         return sel.stream().anyMatch(FileTreeNode::isDirectory);
     }
 
-    /** One selected non-directory file that Decompress can act on (.zip or .gz). */
-    private static boolean isSingleCompressed(List<FileTreeNode> sel) {
-        return sel.size() == 1 && !sel.getFirst().isDirectory()
-            && TreeFileOperations.isCompressed(file(sel));
-    }
-
-    /** One selected file that is not a directory. */
-    private static boolean isSinglePlainFile(List<FileTreeNode> sel) {
-        return sel.size() == 1 && !sel.getFirst().isDirectory();
-    }
-
-    /** True if nothing selected is already an archive (.zip or .gz) — the Compress gate. */
-    private static boolean noneCompressed(List<FileTreeNode> sel) {
-        return sel.stream().noneMatch(x -> TreeFileOperations.isCompressed(x.getFile()));
+    private static boolean isSingleZip(List<FileTreeNode> sel) {
+        return sel.size() == 1 && TreeFileOperations.isZip(file(sel));
     }
 
     /** True when the selection contains no root node — the empty-space subject. */
     private boolean noneIsRoot(List<FileTreeNode> sel) {
         return sel.stream().noneMatch(tree::isRoot);
+    }
+
+    private static boolean isNotSingleZip(List<FileTreeNode> sel) {
+        return !sel.isEmpty() && any(sel) && isNotZip(sel);
+    }
+
+    /**
+     * Return true if none of {@code sel} are zip files
+     */
+    private static boolean isNotZip(List<FileTreeNode> sel) {
+        return sel.stream().noneMatch((x) -> TreeFileOperations.isZip(x.getFile()));
     }
 
     // --- Selection accessors ---

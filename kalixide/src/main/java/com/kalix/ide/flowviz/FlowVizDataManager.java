@@ -2,7 +2,7 @@ package com.kalix.ide.flowviz;
 
 import com.kalix.ide.io.TimeSeriesCsvImporter;
 import com.kalix.ide.io.SourceResCsvFormat;
-import com.kalix.ide.io.CsvGzFormat;
+import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.io.SourceResCsvImporter;
 import com.kalix.ide.io.PixieReader;
 import com.kalix.ide.io.NamedSeries;
@@ -140,11 +140,11 @@ public class FlowVizDataManager {
             .multiSelect()
             .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
             .filters(
-                FileDialogFilter.of("All Supported (*.csv, *.csv.gz, *.pxt)", "csv", "csv.gz", "pxt"),
+                FileDialogFilter.of("All Supported (*.csv, *.csv.zip, *.pxt)", "csv", "csv.zip", "pxt"),
                 FileDialogFilter.of("CSV Files (*.csv)", "csv"),
                 // Whole-name suffix matching, so the double extensions need no bespoke
                 // filters of their own (JFileChooser could only match after the final dot).
-                FileDialogFilter.of("Gzipped CSV (*.csv.gz)", "csv.gz"),
+                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"),
                 FileDialogFilter.of("Source Result CSV (*.res.csv)", "res.csv"),
                 FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
             .showAll();
@@ -166,16 +166,16 @@ public class FlowVizDataManager {
     public void loadFile(File file) {
         String fileName = file.getName().toLowerCase();
         // ".res.csv" must be tested before ".csv" — the latter would otherwise swallow it.
-        // (".csv.gz" collides with neither; the importer decompresses it by name.)
+        // (".csv.zip" collides with neither; the importer decompresses it by name.)
         if (SourceResCsvFormat.isResCsv(fileName)) {
             loadResCsvFile(file);
-        } else if (fileName.endsWith(".csv") || CsvGzFormat.isCsvGz(fileName)) {
+        } else if (fileName.endsWith(".csv") || CsvZipFormat.isCsvZip(fileName)) {
             loadCsvFile(file);
         } else if (fileName.endsWith(".pxt")) {
             loadPixieFile(file);
         } else {
             JOptionPane.showMessageDialog(parentFrame,
-                "Unsupported file type: " + file.getName() + "\nSupported types: .csv, .csv.gz, .res.csv, .pxt",
+                "Unsupported file type: " + file.getName() + "\nSupported types: .csv, .csv.zip, .res.csv, .pxt",
                 "Load Error",
                 JOptionPane.ERROR_MESSAGE);
         }
@@ -669,11 +669,11 @@ public class FlowVizDataManager {
                         @SuppressWarnings("unchecked")
                         List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
 
-                        // Filter for supported files (CSV, gzipped CSV and Pixie)
+                        // Filter for supported files (CSV, zipped CSV and Pixie)
                         List<File> supportedFiles = files.stream()
                             .filter(file -> {
                                 String name = file.getName().toLowerCase();
-                                return name.endsWith(".csv") || name.endsWith(".csv.gz")
+                                return name.endsWith(".csv") || name.endsWith(".csv.zip")
                                     || name.endsWith(".pxt");
                             })
                             .toList();

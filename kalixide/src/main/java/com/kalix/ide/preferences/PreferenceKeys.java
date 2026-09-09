@@ -131,15 +131,16 @@ public final class PreferenceKeys {
         Pref.fileInt("dataview.plotMaxRows", 5_000_000);
 
     /**
-     * Maximum decompressed size (MB) a {@code .csv.gz} may occupy in memory.
-     * Gzip is not seekable, so the format is served by decompressing the whole
-     * payload into memory (read-only) — this bounds that, enforced while the
-     * stream decompresses (the gzip trailer's size field is only trustworthy
-     * mod 2³², so it is never trusted). Over the bound the tab refuses
-     * honestly with the reason, never a dialog.
+     * Maximum decompressed size (MB) a {@code .csv.zip} may occupy in memory.
+     * The entry's deflate stream is not seekable, so the format is served by
+     * decompressing the whole payload into memory (read-only) — this bounds
+     * that, enforced while the stream decompresses (the entry's advertised
+     * size is metadata a hostile or corrupt archive can lie about, so it is
+     * never trusted). Over the bound the tab refuses honestly with the
+     * reason, never a dialog.
      */
-    public static final Pref<Integer> DATAVIEW_GZIP_MEMORY_LIMIT_MB =
-        Pref.fileInt("dataview.gzipMemoryLimitMb", 1024);
+    public static final Pref<Integer> DATAVIEW_ZIP_MEMORY_LIMIT_MB =
+        Pref.fileInt("dataview.zipMemoryLimitMb", 1024);
 
     /** External editor command template. */
     public static final Pref<String> FILE_EXTERNAL_EDITOR_COMMAND =

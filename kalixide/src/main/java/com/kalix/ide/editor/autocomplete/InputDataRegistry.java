@@ -1,7 +1,7 @@
 package com.kalix.ide.editor.autocomplete;
 
 import com.kalix.ide.io.CsvHeaderReader;
-import com.kalix.ide.io.GzipCsvHeaderReader;
+import com.kalix.ide.io.ZipCsvHeaderReader;
 import com.kalix.ide.io.DataSourceHeaderReader;
 import com.kalix.ide.io.PixieHeaderReader;
 import com.kalix.ide.io.SourceResCsvHeaderReader;
@@ -66,10 +66,10 @@ public class InputDataRegistry {
         this.baseDirectorySupplier = baseDirectorySupplier;
         // SourceResCsvHeaderReader must precede CsvHeaderReader: the latter matches any
         // ".csv", which would otherwise swallow the ".res.csv" double extension.
-        // (".csv.gz" cannot collide with ".csv", but its reader sits with the
+        // (".csv.zip" cannot collide with ".csv", but its reader sits with the
         // uncompressed sibling for the same longest-suffix-first discipline.)
         this.readers = List.of(
-                new SourceResCsvHeaderReader(), new GzipCsvHeaderReader(),
+                new SourceResCsvHeaderReader(), new ZipCsvHeaderReader(),
                 new CsvHeaderReader(), new PixieHeaderReader());
         this.executor = Executors.newSingleThreadExecutor(r -> {
             Thread t = new Thread(r, "InputDataRegistry-reader");

@@ -109,9 +109,9 @@ public class AddInputFileAliasCommand implements EditorCommand {
     static String suggestAlias(String filePath) {
         java.nio.file.Path fileName = java.nio.file.Paths.get(filePath).getFileName();
         String name = fileName != null ? fileName.toString() : filePath;
-        // .csv.gz is one extension, not two: rain.csv.gz suggests "rain", not "rain_csv".
-        if (com.kalix.ide.io.CsvGzFormat.isCsvGz(name)) {
-            name = name.substring(0, name.length() - com.kalix.ide.io.CsvGzFormat.EXTENSION.length());
+        // .csv.zip is one extension, not two: rain.csv.zip suggests "rain", not "rain_csv".
+        if (com.kalix.ide.io.CsvZipFormat.isCsvZip(name)) {
+            name = name.substring(0, name.length() - com.kalix.ide.io.CsvZipFormat.EXTENSION.length());
         } else {
             int dot = name.lastIndexOf('.');
             if (dot > 0) {

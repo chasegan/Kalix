@@ -126,6 +126,6 @@ public class InputFileScanner {
     /** Whether a file name is one {@code [data]} will accept. */
     private static boolean isOfferable(String fileName) {
         String lower = fileName.toLowerCase();
-        return lower.endsWith(".csv") || lower.endsWith(".csv.gz") || lower.endsWith(".pxt");
+        return lower.endsWith(".csv") || lower.endsWith(".csv.zip") || lower.endsWith(".pxt");
     }
 }

@@ -37,9 +37,9 @@ public enum DocumentKind {
         if (name.endsWith(AppConstants.INI_EXTENSION)) {
             return MODEL;
         }
-        if (name.endsWith(".csv") || name.endsWith(".csv.gz")
+        if (name.endsWith(".csv") || name.endsWith(".csv.zip")
                 || name.endsWith(".pxt") || name.endsWith(".pxb")) {
-            // Covers .res.csv (header dispatch downstream), gzip-compressed
+            // Covers .res.csv (header dispatch downstream), zip-compressed
             // CSV, and the Pixie pair (.pxb redirects to its .pxt manifest at
             // the open path).
             return DATA;

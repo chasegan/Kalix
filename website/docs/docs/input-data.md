@@ -128,7 +128,7 @@ Supported data formats are listed below.
 | Extension | Implied format | Details |
 | --- | --- | --- |
 | .csv | Comma separated values. | see below… |
-| .csv.gz | Gzip-compressed CSV. | see below… |
+| .csv.zip | Zip-compressed CSV. | see below… |
 | .pxt + .pxb | Pixie fast lightweight binary format. | see below… |
 
 ### CSV files
@@ -146,11 +146,11 @@ Rules for CSV files are as follows:
 
 - Blank values (or whitespace) are taken to indicate missing data.
 
-### Gzip-compressed CSV files (.csv.gz)
+### Zip-compressed CSV files (.csv.zip)
 
-A `.csv.gz` is an ordinary CSV file (all the rules above apply) compressed with standard [gzip](https://en.wikipedia.org/wiki/Gzip) — the same files pandas reads and writes natively, and any gzip tool can create or unpack one. Kalix reads and writes them everywhere it handles CSV: as model input data, as simulation output (`kalix simulate -o results.csv.gz`), and in [`kalix convert`](cli.md#kalix-convert). In the IDE they open read-only (decompressed into memory, bounded by a preference).
+A `.csv.zip` is an ordinary CSV file (all the rules above apply) inside a standard zip archive holding **exactly one file** — the same convention pandas reads and writes natively (`df.to_csv("flows.csv.zip")`), and any zip tool or OS file manager can create or unpack one. Kalix reads and writes them everywhere it handles CSV: as model input data, as simulation output (`kalix simulate -o results.csv.zip`), and in [`kalix convert`](cli.md#kalix-convert). In the IDE they open read-only (decompressed into memory, bounded by a preference). An archive holding more than one file is refused, exactly as pandas refuses it.
 
-Gzip is a widely recognised compression option; Pixie remains the faster, smaller Kalix-native alternative.
+Zip is the compression option everyone recognises; Pixie remains the faster, smaller Kalix-native alternative.
 
 ### Pixie binary files (.pxt + .pxb)
 

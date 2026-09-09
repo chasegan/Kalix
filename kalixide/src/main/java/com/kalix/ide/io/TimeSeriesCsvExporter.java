@@ -10,9 +10,6 @@ import com.kalix.ide.utils.TimeFormatUtil;
 import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
-import java.util.zip.GZIPOutputStream;
-import java.io.OutputStreamWriter;
-import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -183,17 +180,13 @@ public class TimeSeriesCsvExporter {
      * followed by each time series name. Series names are properly escaped for CSV format.</p>
      */
     /**
-     * UTF-8 writer for the output file; gzip-wrapped when the name says
-     * {@code .csv.gz} — the extension is the single source of truth for the
-     * format. (Java's gzip header carries MTIME 0, matching the engine's pin:
-     * identical content writes identical bytes.)
+     * UTF-8 writer for the output file; a one-entry zip archive when the name
+     * says {@code .csv.zip} — the extension is the single source of truth for
+     * the format. Delegates to {@link CsvZipFormat#newUtf8Writer}, the one
+     * holder of the entry-name and pinned-timestamp conventions.
      */
     private static Writer openWriter(File file) throws IOException {
-        if (CsvGzFormat.isCsvGz(file.getName())) {
-            return new BufferedWriter(new OutputStreamWriter(
-                new GZIPOutputStream(Files.newOutputStream(file.toPath())), StandardCharsets.UTF_8));
-        }
-        return Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8);
+        return CsvZipFormat.newUtf8Writer(file);
     }
 
     private static void writeHeader(Writer writer, List<String> headers, boolean isExceedance)

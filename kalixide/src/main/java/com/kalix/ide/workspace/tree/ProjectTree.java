@@ -1,7 +1,7 @@
 package com.kalix.ide.workspace.tree;
 
-import com.kalix.ide.io.CsvGzFormat;
 import com.kalix.ide.io.FsWatcher;
+import com.kalix.ide.io.CsvZipFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,9 +38,9 @@ import java.util.Set;
  * a native directory watcher (FSEvents on macOS via {@code io.methvin:directory-watcher}).
  *
  * <p>Provides full-width row hover, path tooltips, a right-click context menu (Open, Reveal,
- * New File/Folder, Rename, Delete, Refresh), and open-on-double-click / Enter (archives —
- * zip, and gz other than .csv.gz — are decompressed instead of opened). Files are opened
- * through the supplied consumer (which adds them as editor tabs).
+ * New File/Folder, Rename, Delete, Refresh), and open-on-double-click / Enter (zip archives
+ * are unzipped instead of opened). Files are opened through the supplied consumer (which adds
+ * them as editor tabs).
  *
  * <p>All model mutations happen on the EDT; watcher callbacks marshal onto it.
  */
@@ -267,20 +267,20 @@ public class ProjectTree extends JTree {
                 if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
                     FileTreeNode node = nodeAt(e.getX(), e.getY());
                     if (node != null && node.getFile().isFile()) {
-                        openOrDecompress(node.getFile());
+                        openOrUnzip(node.getFile());
                     }
                 }
             }
         });
 
-        // Enter opens the selected file (or decompresses it, if it's an archive).
+        // Enter opens the selected file (or unzips it, if it's a zip archive).
         getInputMap().put(javax.swing.KeyStroke.getKeyStroke("ENTER"), "openSelected");
         getActionMap().put("openSelected", new javax.swing.AbstractAction() {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent e) {
                 List<FileTreeNode> selection = selectedNodes();
                 if (selection.size() == 1 && !selection.get(0).isDirectory()) {
-                    openOrDecompress(selection.get(0).getFile());
+                    openOrUnzip(selection.get(0).getFile());
                 }
             }
         });
@@ -316,15 +316,14 @@ public class ProjectTree extends JTree {
     }
 
     /**
-     * The double-click (primary) action: archives decompress, everything else opens.
-     * A {@code .csv.gz} is the exception among gz files — it opens as a data view,
-     * so decompressing is left to the context menu's explicit Decompress.
+     * Unzips {@code file} if it's a zip archive, otherwise opens it as an
+     * editor tab. The one carve-out is {@code .csv.zip}: a dataset, not an
+     * archive — its primary action is opening as a data view, and the context
+     * menu's Unzip stays available for deliberately extracting it.
      */
-    private void openOrDecompress(File file) {
-        boolean plainGz = TreeFileOperations.isGz(file)
-            && !CsvGzFormat.isCsvGz(file.getName());
-        if (TreeFileOperations.isZip(file) || plainGz) {
-            fileOps.decompressFile(file);
+    private void openOrUnzip(File file) {
+        if (TreeFileOperations.isZip(file) && !CsvZipFormat.isCsvZip(file.getName())) {
+            fileOps.unzipFile(file);
         } else {
             host.openFile(file);
         }

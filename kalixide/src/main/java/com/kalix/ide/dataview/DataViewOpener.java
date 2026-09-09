@@ -1,6 +1,6 @@
 package com.kalix.ide.dataview;
 
-import com.kalix.ide.io.CsvGzFormat;
+import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.io.SourceResCsvHeaderReader;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -49,9 +49,9 @@ public final class DataViewOpener {
      */
     public static DataViewSession openFor(File file) throws IOException {
         String name = file.getName().toLowerCase(Locale.ROOT);
-        // Longest suffix first — the .res.csv test below cannot see a .csv.gz.
-        if (CsvGzFormat.isCsvGz(name)) {
-            return openGzipCsv(file);
+        // Longest suffix first — the .res.csv test below cannot see a .csv.zip.
+        if (CsvZipFormat.isCsvZip(name)) {
+            return openZipCsv(file);
         }
         if (name.endsWith(".res.csv")) {
             try {
@@ -64,15 +64,15 @@ public final class DataViewOpener {
     }
 
     /**
-     * The {@code .csv.gz} contract (issue #374): decompress the whole payload
+     * The {@code .csv.zip} contract (issue #374): decompress the whole payload
      * to memory — bounded while it runs by the in-memory limit preference,
-     * a cross that throws {@link CsvGzFormat.TooLargeException} with the
+     * a cross that throws {@link CsvZipFormat.TooLargeException} with the
      * honest reason — then serve it through the ordinary session machinery
      * over an in-memory channel.
      */
-    private static DataViewSession openGzipCsv(File file) throws IOException {
-        long limitBytes = PreferenceKeys.DATAVIEW_GZIP_MEMORY_LIMIT_MB.get() * 1024L * 1024L;
-        byte[] text = CsvGzFormat.decompressBounded(file, limitBytes);
+    private static DataViewSession openZipCsv(File file) throws IOException {
+        long limitBytes = PreferenceKeys.DATAVIEW_ZIP_MEMORY_LIMIT_MB.get() * 1024L * 1024L;
+        byte[] text = CsvZipFormat.decompressBounded(file, limitBytes);
         return DataViewSession.open(ByteSource.ofMemory(file.toPath(), text), 0L, null, List.of());
     }
 
