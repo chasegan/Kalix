@@ -1437,7 +1437,7 @@ impl Model {
         let vec_ts = self.collect_output_series();
 
         // Dispatch by extension: .pxb or .pxt → paired Pixie format,
-        // anything else → CSV (gzip-compressed when named .csv.gz —
+        // anything else → CSV (zip-compressed when named .csv.zip —
         // write_ts keys off the same extension test as the reader).
         let lower = filename.to_ascii_lowercase();
         if lower.ends_with(".pxb") || lower.ends_with(".pxt") {

@@ -8,7 +8,7 @@ import java.nio.file.StandardOpenOption;
 
 /**
  * Where a data view's bytes come from: a file on disk, or an in-memory copy
- * (a decompressed {@code .csv.gz}). The whole {@code dataview} engine — the
+ * (a decompressed {@code .csv.zip}). The whole {@code dataview} engine — the
  * indexer, both stores, every probe — reads through independently positioned
  * channels from one of these, so serving a view from memory needs no other
  * change anywhere in the stack.
@@ -24,7 +24,7 @@ public interface ByteSource {
     /**
      * The source's identity for display, logging and neighbouring-file lookups.
      * For an in-memory source this is the file the bytes came from (the
-     * {@code .csv.gz} itself), not where they live now.
+     * {@code .csv.zip} itself), not where they live now.
      */
     Path path();
 

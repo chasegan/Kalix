@@ -6,6 +6,7 @@ import javax.swing.SwingWorker;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -16,7 +17,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntConsumer;
-import java.util.zip.GZIPInputStream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import java.util.regex.Pattern;
 
 /**
@@ -308,11 +310,30 @@ public class TimeSeriesCsvImporter {
         long fileLength = Math.max(1, csvFile.length());
 
         try {
-            // The counter stays on the COMPRESSED stream for a .csv.gz, so byte
-            // progress remains comparable to file.length().
+            // The counter stays on the COMPRESSED stream for a .csv.zip, so
+            // byte progress remains comparable to file.length(). The archive
+            // is pre-checked to hold exactly one file (pandas parity), then
+            // streamed to its first file entry.
+            if (CsvZipFormat.isCsvZip(csvFile.getName())
+                    && CsvZipFormat.fileEntryNames(csvFile).size() != 1) {
+                errors.add("A .csv.zip must hold exactly one file");
+                return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
+            }
             CountingInputStream counter = new CountingInputStream(new FileInputStream(csvFile));
-            InputStream byteStream = CsvGzFormat.isCsvGz(csvFile.getName())
-                ? new GZIPInputStream(counter) : counter;
+            InputStream byteStream = counter;
+            if (CsvZipFormat.isCsvZip(csvFile.getName())) {
+                ZipInputStream zin = new ZipInputStream(counter);
+                try {
+                    ZipEntry entry;
+                    while ((entry = zin.getNextEntry()) != null && entry.isDirectory()) {
+                        // skip directory entries to the single file
+                    }
+                } catch (IOException e) {
+                    zin.close(); // a corrupt archive must not leak the stream
+                    throw e;
+                }
+                byteStream = zin;
+            }
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(byteStream, StandardCharsets.UTF_8))) {
 

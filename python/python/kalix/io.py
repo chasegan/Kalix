@@ -166,7 +166,7 @@ def write_pixie(
 
 
 def convert(input_path: PathLike, output_path: PathLike) -> list[str]:
-    """Convert a timeseries file between formats (CSV, gzipped CSV, Pixie).
+    """Convert a timeseries file between formats (CSV, zipped CSV, Pixie).
 
     Mirrors the CLI's ``kalix convert INPUT OUTPUT`` exactly — both call the
     same engine conversion, so they can never disagree.
@@ -174,8 +174,9 @@ def convert(input_path: PathLike, output_path: PathLike) -> list[str]:
     Parameters
     ----------
     input_path
-        Path to the input file: ``.csv`` (date-indexed CSV), ``.csv.gz``
-        (the same CSV gzip-compressed), or a Pixie ``.pxt``/``.pxb``
+        Path to the input file: ``.csv`` (date-indexed CSV), ``.csv.zip``
+        (the same CSV zip-compressed, one file per archive — the convention
+        pandas reads and writes), or a Pixie ``.pxt``/``.pxb``
         (either half names the dataset).
     output_path
         Path to the output file. A Pixie output always writes both halves

@@ -166,7 +166,7 @@ public final class DataViewSession implements AutoCloseable, FindableData {
     /**
      * The real open: every reader in the session draws its channels from the
      * given {@link ByteSource}, so a session over an in-memory source (a
-     * decompressed {@code .csv.gz}) behaves identically to one over a file —
+     * decompressed {@code .csv.zip}) behaves identically to one over a file —
      * except that a fixed-size source never reports growth, so the live tail
      * never engages.
      */

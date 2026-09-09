@@ -33,7 +33,6 @@ crate-type = ["lib"]
 libm = "0.2.2"
 serde = "1.0.143"
 csv = "1"
-flate2 = "1"
 rand = "0.8.5"
 rayon = "1.10"
 tsz = "0.1.4"
@@ -44,6 +43,7 @@ thiserror = "1.0"
 base64 = "0.22"
 rustc-hash = "2.0"
 indexmap = "2.0"
+zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [dependencies.uuid]
 version = "1.1.2"

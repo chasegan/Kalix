@@ -409,14 +409,15 @@ class FlowVizToolbarBuilder {
             .suggestedName("statistics.csv")
             .filters(
                 FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                FileDialogFilter.of("Gzipped CSV (*.csv.gz)", "csv.gz"))
+                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"))
             .show();
         if (chosen.isPresent()) {
             File file = chosen.get();
 
-            // The extension is the format: a name ending .csv.gz writes gzip
-            // (and either way the text is UTF-8, like the data exporter).
-            try (java.io.Writer writer = com.kalix.ide.io.CsvGzFormat.newUtf8Writer(file)) {
+            // The extension is the format: a name ending .csv.zip writes a
+            // one-entry zip (and either way the text is UTF-8, like the data
+            // exporter).
+            try (java.io.Writer writer = com.kalix.ide.io.CsvZipFormat.newUtf8Writer(file)) {
                 // Write header (dynamic columns from table)
                 for (int col = 0; col < statsTable.getColumnCount(); col++) {
                     if (col > 0) writer.write(",");

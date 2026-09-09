@@ -7,7 +7,7 @@ import java.nio.channels.SeekableByteChannel;
 
 /**
  * A read-only {@link SeekableByteChannel} over a byte array — how a
- * decompressed {@code .csv.gz} is served to the {@code dataview} engine, whose
+ * decompressed {@code .csv.zip} is served to the {@code dataview} engine, whose
  * every reader (indexer, stores, probes) speaks this interface. The backing
  * array is shared, never copied; each channel carries only its own position.
  *
