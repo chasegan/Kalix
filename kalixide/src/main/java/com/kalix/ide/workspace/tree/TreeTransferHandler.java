@@ -13,8 +13,9 @@ import java.util.List;
  *
  * <p>As a drag <em>source</em> it exports the selected files/folders as a JVM-local
  * {@link TreeFileTransferable}. As a drop <em>target</em> it accepts such a drag onto a folder
- * node and moves (or, when the user requests COPY via a modifier key, copies) the dragged entries
- * into that folder after a confirmation; the filesystem watcher then reflects the result.
+ * node — or onto empty space, which targets the open root — and moves (or, when the user requests
+ * COPY via a modifier key, copies) the dragged entries into that folder after a confirmation;
+ * the filesystem watcher then reflects the result.
  *
  * <p>The move/copy cursor and the no-drop cursor are rendered by the DnD subsystem itself, driven
  * by {@link #getSourceActions} and {@link #canImport} — nothing here sets the cursor.
@@ -96,7 +97,10 @@ class TreeTransferHandler extends TransferHandler {
         return fileOps.moveInto(dragged, targetDir, copy);
     }
 
-    /** The folder to drop into: the target node if it is a directory, else its parent. */
+    /**
+     * The folder to drop into: the target node if it is a directory, else its parent; a drop on
+     * empty space targets the open root (context-menu-style §4). Null when no folder is open.
+     */
     private File targetDir(TransferSupport support) {
         if (support.getDropLocation() instanceof JTree.DropLocation loc
                 && loc.getPath() != null
@@ -104,7 +108,7 @@ class TreeTransferHandler extends TransferHandler {
             File f = node.getFile();
             return f.isDirectory() ? f : f.getParentFile();
         }
-        return null;
+        return tree.getRootFile(); // empty space -> the open folder
     }
 
     @SuppressWarnings("unchecked")

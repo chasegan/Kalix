@@ -183,11 +183,11 @@ public class TreeContextMenu {
             // Create
             List.of(
                 item(
-                    "New file…", (sel -> isSingle(sel) && context == BuildContext.FileTree),
+                    "New file…", sel -> isSingle(sel) && inTree(context),
                     sel -> fileOps.createChild(file(sel), false)
                 ),
                 item(
-                    "New folder…", (sel -> isSingle(sel) & context == BuildContext.FileTree),
+                    "New folder…", sel -> isSingle(sel) && inTree(context),
                     sel -> fileOps.createChild(file(sel), true)
                 )
             ),
@@ -227,20 +227,16 @@ public class TreeContextMenu {
                     sel -> directories(sel).forEach(tree::collapseSubtree)
                 ),
                 item(
-                    "Collapse tree",
-                    (sel -> any(sel) && (context == BuildContext.FileTree || context == BuildContext.Root)),
+                    "Collapse tree", sel -> any(sel) && inTree(context),
                     sel -> tree.collapseAll()
                 ),
                 checkbox(
-                    "Show hidden files",
-                    (sel -> any(sel) &&
-                        (context == BuildContext.FileTree || context == BuildContext.Root)),
+                    "Show hidden files", sel -> any(sel) && inTree(context),
                     sel -> host.isShowHiddenFiles(),
                     sel -> host.setShowHiddenFiles(!host.isShowHiddenFiles())
                 ),
                 item(
-                    "Refresh",
-                    (sel -> any(sel) && (context == BuildContext.FileTree || context == BuildContext.Root)),
+                    "Refresh", sel -> any(sel) && inTree(context),
                     sel -> sel.forEach(tree::refresh)
                 )
             )
@@ -265,6 +261,15 @@ public class TreeContextMenu {
 
     private static boolean any(List<FileTreeNode> sel) {
         return !sel.isEmpty();
+    }
+
+    /**
+     * True for the menus raised from the tree itself — on a row, or on empty space where the
+     * subject is the open root (context-menu-style §4). Phrased as an exclusion so an item added
+     * later is offered in both tree menus by default, and only the editor-tab menu has to opt out.
+     */
+    private static boolean inTree(BuildContext context) {
+        return context != BuildContext.EditorTab;
     }
 
     private static boolean isSingle(List<FileTreeNode> sel) {
