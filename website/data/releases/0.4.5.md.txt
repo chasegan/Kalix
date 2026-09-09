@@ -9,9 +9,13 @@ assets:
 pip: "pip install kalix==0.4.5"
 ---
 
-- One comment grammar for model files: `#` starts a comment anywhere, section headers included.
-- Routing `pwl` tables now accept a header row, like every other node table.
-- CSV export writes the shortest exact number spelling, switching to exponent form only for extreme values.
+- Comments: `#` starts a comment on any line, including after a section header (`[node.weir] # gauge site`) and after a `[data]` or `[outputs]` entry. Previously a comment after a header silently swallowed the node. `;` is not a comment character in Kalix — the linter now says so instead of letting the engine misread the line.
+- The linter reports a `[data]` alias defined twice, and reports a repeated output reference or missing input file on every line it appears, not just the last.
+- Linting and the map re-parse are quicker on large models.
+- Hover tips in the editor (lint messages, property help) no longer linger after you minimise the window, switch desktop or close the tab, and they follow the theme's colours.
+- Routing `pwl` tables accept a header row (`Flow [ML], Travel Time [steps]`), as every other node table already did — the IDE's own table editor writes one. A typo in any node table is now a plain error naming the cell, not a crash.
+- Table View shows the current values after the optimiser's `Copy to Main Window`, and after a file reload. It used to show the values from before the copy.
+- Results CSVs write very small and very large values in exponent form (`1.5e-7`) instead of a long run of zeros. Every value reads back to exactly the same number; the files are just smaller.
 - New `kalix convert` CLI command and matching `kalix.convert()` Python function: convert timeseries data files between CSV and Pixie, with formats chosen by file extension (`kalix convert flows.csv flows.pxt`).
 - Full `.csv.zip` support: zip-compressed CSV (one file per archive, the convention pandas reads and writes natively) is now a first-class data format — readable as model input, writable from `kalix simulate -o`, covered by `kalix convert` / `kalix.convert()`, and recognised throughout the IDE (data viewer, plots, drag-and-drop, save dialogs, file tree). Zipped datasets open read-only in the IDE, decompressed into memory behind an adjustable limit; double-clicking a `.csv.zip` in the file tree opens it as a data view (the context menu's Unzip still extracts it).
 - Automatic data masking: selecting a plot type now applies that type's default overlapping-data mask, indicated by badges in the plot-type dropdown.
@@ -20,8 +24,6 @@ pip: "pip install kalix==0.4.5"
 - Run & data tree tick-boxes now stay in sync with the plot through tab reset, undo/redo, and tab duplication.
 - `[Last]` self-heals: deleting the newest run re-points `[Last]` plots to the most recently completed surviving run, or waits (still subscribed) for the next run to arrive.
 - Fixed: unloading a dataset left a do-nothing undo step; a duplicated tab could show a stale mask toggle; re-selecting the current plot type discarded a manual mask override and reset the zoom.
-- Table View no longer goes stale after the optimiser rewrites the model.
-- Editor hover tips now go through Swing's tooltip manager, fixing stale property help and dismiss delays.
 - The model map now lives inside each model's tab (previously one shared panel): every open model keeps its own map, with the region's width and collapsed state shared and remembered across tabs.
 - New data file viewer. Opening a `.csv` (including Source `.res.csv` results) shows a virtual table built for big files — a 1GB file on a network drive opens instantly and stays responsive while it indexes in the background:
     - The status strip declares what the viewer decided — delimiter, quote character, encoding, line endings, row count — so the interpretation is never silent.
