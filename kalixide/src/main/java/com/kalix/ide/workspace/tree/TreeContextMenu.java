@@ -149,8 +149,8 @@ public class TreeContextMenu {
                     sel -> host.compareFiles(file(sel, 0), file(sel, 1))
                 ),
                 item(
-                    "Unzip", TreeContextMenu::isSingleZip,
-                    sel -> fileOps.unzipFile(file(sel))
+                    "Decompress", TreeContextMenu::isSingleCompressed,
+                    sel -> fileOps.decompressFile(file(sel))
                 )
             ),
             // External handoff
@@ -202,12 +202,20 @@ public class TreeContextMenu {
                     "Duplicate…", sel -> isSingle(sel) && noneIsRoot(sel),
                     sel -> fileOps.duplicate(file(sel))
                 ),
-                // Derives a new archive from the selection, like Duplicate derives a copy —
-                // and keeps it from surfacing as a folder's first (= primary-looking) item.
+                // Derive a new archive from the selection, like Duplicate derives a copy —
+                // placed here so they never surface as a folder's first (= primary-looking)
+                // item. Two formats: zip holds any selection (folders included); gz is a
+                // single-file stream, so its item appears only for one plain file.
                 item(
-                    "Zip",
-                    (sel -> (isNotSingleZip(sel) && context == BuildContext.FileTree)),
+                    "Compress (zip)",
+                    (sel -> (any(sel) && noneCompressed(sel) && context == BuildContext.FileTree)),
                     sel -> fileOps.zipFiles(files(sel), tree.getRootFile())
+                ),
+                item(
+                    "Compress (gz)",
+                    (sel -> (isSinglePlainFile(sel) && noneCompressed(sel)
+                        && context == BuildContext.FileTree)),
+                    sel -> fileOps.gzipFile(file(sel))
                 )
             ),
             // Destructive (isolated) — never the root (context-menu-style §4).
@@ -288,17 +296,25 @@ public class TreeContextMenu {
         return sel.stream().anyMatch(FileTreeNode::isDirectory);
     }
 
-    private static boolean isSingleZip(List<FileTreeNode> sel) {
-        return sel.size() == 1 && TreeFileOperations.isZip(file(sel));
+    /** One selected non-directory file that Decompress can act on (.zip or .gz). */
+    private static boolean isSingleCompressed(List<FileTreeNode> sel) {
+        return sel.size() == 1 && !sel.getFirst().isDirectory()
+            && TreeFileOperations.isCompressed(file(sel));
+    }
+
+    /** One selected file that is not a directory. */
+    private static boolean isSinglePlainFile(List<FileTreeNode> sel) {
+        return sel.size() == 1 && !sel.getFirst().isDirectory();
+    }
+
+    /** True if nothing selected is already an archive (.zip or .gz) — the Compress gate. */
+    private static boolean noneCompressed(List<FileTreeNode> sel) {
+        return sel.stream().noneMatch(x -> TreeFileOperations.isCompressed(x.getFile()));
     }
 
     /** True when the selection contains no root node — the empty-space subject. */
     private boolean noneIsRoot(List<FileTreeNode> sel) {
         return sel.stream().noneMatch(tree::isRoot);
-    }
-
-    private static boolean isNotSingleZip(List<FileTreeNode> sel) {
-        return !sel.isEmpty() && any(sel) && isNotZip(sel);
     }
 
     /**

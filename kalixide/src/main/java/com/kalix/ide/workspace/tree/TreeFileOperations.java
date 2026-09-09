@@ -20,6 +20,8 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 import net.lingala.zip4j.ZipFile;
 import net.lingala.zip4j.model.FileHeader;
 
@@ -543,9 +545,47 @@ class TreeFileOperations {
             }
         }, error -> {
             if (error != null) {
-                JOptionPane.showMessageDialog(parent, error, "Zip", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(parent, error, "Compress", JOptionPane.WARNING_MESSAGE);
             }
         });
+    }
+
+    /**
+     * Gzip the chosen file in the file tree, to a `.gz` sibling. Gzip has no
+     * container format (one stream, one file), so unlike {@link #zipFiles} this
+     * takes exactly one plain file — the menu predicate guarantees it.
+     */
+    void gzipFile(File file) {
+        File target = gzipTarget(file);
+        // Compressing a big result file is slow; run it off the EDT. The watcher adds the file.
+        offEdt(() -> gzipTo(file, target), error -> {
+            if (error != null) {
+                JOptionPane.showMessageDialog(parent, error, "Compress", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+    }
+
+    /**
+     * The `.gz` sibling to write, following {@link #getZipFileName}'s collision rule:
+     * append {@code (n)} before the new extension until the name is free.
+     */
+    static File gzipTarget(File file) {
+        String base = file.getAbsolutePath();
+        File target = new File(base + ".gz");
+        int i = 1;
+        while (target.exists()) {
+            target = new File(base + " (" + i + ").gz");
+            i++;
+        }
+        return target;
+    }
+
+    /** Streams {@code src} into {@code target} gzip-compressed. Blocking I/O — worker thread. */
+    static void gzipTo(File src, File target) throws IOException {
+        try (var in = Files.newInputStream(src.toPath());
+             var out = new GZIPOutputStream(Files.newOutputStream(target.toPath()))) {
+            in.transferTo(out);
+        }
     }
 
     /**
@@ -605,6 +645,71 @@ class TreeFileOperations {
         return file.toString().toLowerCase().endsWith(".zip");
     }
 
+    /** Detect a gzip file. Case-insensitive, like {@link #isZip}. */
+    static boolean isGz(File file) {
+        return file.toString().toLowerCase().endsWith(".gz");
+    }
+
+    /** Whether {@code file} is something Decompress can act on (.zip or .gz). */
+    static boolean isCompressed(File file) {
+        return isZip(file) || isGz(file);
+    }
+
+    /**
+     * Decompress the selected archive by type: a zip extracts all entries beside it,
+     * a gz expands to its unsuffixed sibling. One menu item, the format decides.
+     */
+    void decompressFile(File file) {
+        if (isZip(file)) {
+            unzipFile(file);
+        } else if (isGz(file)) {
+            gunzipFile(file);
+        }
+    }
+
+    /**
+     * Expand a `.gz` into the same directory, named by stripping the suffix
+     * ({@code flows.csv.gz} → {@code flows.csv}). Mirrors {@link #unzipFile}'s
+     * shape: an existing file of that name is surfaced in a confirmation prompt
+     * before anything is written.
+     */
+    void gunzipFile(File file) {
+        File target = gunzipTarget(file);
+        if (target.exists() && !confirmOverwrite(List.of(target.getName()))) {
+            return;
+        }
+        offEdt(() -> gunzipTo(file, target), error -> {
+            if (error != null) {
+                JOptionPane.showMessageDialog(parent, error, "Decompress", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+    }
+
+    /**
+     * The sibling a `.gz` expands to: the same name minus the suffix — or, for a
+     * file named nothing but {@code .gz}, a visible fallback rather than "".
+     */
+    static File gunzipTarget(File file) {
+        String name = file.getName();
+        String stripped = name.substring(0, name.length() - 3);
+        if (stripped.isEmpty() || stripped.equals(".")) {
+            stripped = "decompressed";
+        }
+        return new File(file.getParentFile(), stripped);
+    }
+
+    /**
+     * Streams {@code src} gzip-decompressed into {@code target}. Reads every member of a
+     * multi-member gzip (Java's decoder continues past each trailer), matching gunzip and
+     * the engine. Blocking I/O — worker thread.
+     */
+    static void gunzipTo(File src, File target) throws IOException {
+        try (var in = new GZIPInputStream(Files.newInputStream(src.toPath()));
+             var out = Files.newOutputStream(target.toPath())) {
+            in.transferTo(out);
+        }
+    }
+
     /**
      * Unzip the selected zip folder into the same directory. Zip4j extracts by overwriting any
      * existing file of the same name without warning, so entries that would collide with
@@ -619,7 +724,7 @@ class TreeFileOperations {
         try (ZipFile zipFile = new ZipFile(file)) {
             collisions = collidingEntries(zipFile, targetDir);
         } catch (IllegalStateException | IOException ex) {
-            JOptionPane.showMessageDialog(parent, ex.getMessage(), "Unzip", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(parent, ex.getMessage(), "Decompress", JOptionPane.WARNING_MESSAGE);
             return;
         }
         if (!collisions.isEmpty() && !confirmOverwrite(collisions)) {
@@ -631,7 +736,7 @@ class TreeFileOperations {
             }
         }, error -> {
             if (error != null) {
-                JOptionPane.showMessageDialog(parent, error, "Unzip", JOptionPane.WARNING_MESSAGE);
+                JOptionPane.showMessageDialog(parent, error, "Decompress", JOptionPane.WARNING_MESSAGE);
             }
         });
     }
@@ -659,7 +764,7 @@ class TreeFileOperations {
                 + (collisions.size() > 10 ? "\n..." : ""))
             + "\n\nContinue?";
         int choice = JOptionPane.showConfirmDialog(parent, message,
-            "Unzip", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+            "Decompress", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
         return choice == JOptionPane.YES_OPTION;
     }
 }

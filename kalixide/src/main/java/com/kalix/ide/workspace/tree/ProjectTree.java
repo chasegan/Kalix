@@ -266,7 +266,7 @@ public class ProjectTree extends JTree {
                 if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
                     FileTreeNode node = nodeAt(e.getX(), e.getY());
                     if (node != null && node.getFile().isFile()) {
-                        openOrUnzip(node.getFile());
+                        openOrDecompress(node.getFile());
                     }
                 }
             }
@@ -279,7 +279,7 @@ public class ProjectTree extends JTree {
             public void actionPerformed(java.awt.event.ActionEvent e) {
                 List<FileTreeNode> selection = selectedNodes();
                 if (selection.size() == 1 && !selection.get(0).isDirectory()) {
-                    openOrUnzip(selection.get(0).getFile());
+                    openOrDecompress(selection.get(0).getFile());
                 }
             }
         });
@@ -314,10 +314,16 @@ public class ProjectTree extends JTree {
         });
     }
 
-    /** Unzips {@code file} if it's a zip archive, otherwise opens it as an editor tab. */
-    private void openOrUnzip(File file) {
-        if (TreeFileOperations.isZip(file)) {
-            fileOps.unzipFile(file);
+    /**
+     * The double-click (primary) action: archives decompress, everything else opens.
+     * A {@code .csv.gz} is the exception among gz files — it opens as a data view,
+     * so decompressing is left to the context menu's explicit Decompress.
+     */
+    private void openOrDecompress(File file) {
+        boolean plainGz = TreeFileOperations.isGz(file)
+            && !com.kalix.ide.io.CsvGzFormat.isCsvGz(file.getName());
+        if (TreeFileOperations.isZip(file) || plainGz) {
+            fileOps.decompressFile(file);
         } else {
             host.openFile(file);
         }
