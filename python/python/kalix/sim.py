@@ -31,7 +31,8 @@ def simulate(
         Path to the model ``.ini`` file.
     output_file
         If given, path to write the simulation outputs to. Format is inferred
-        from the extension (``.pxb`` for the Pixie pair, ``.csv`` for CSV).
+        from the extension (``.pxb`` for the Pixie pair, ``.csv`` for CSV,
+        ``.csv.gz`` for gzip-compressed CSV).
     mass_balance
         If given, path to write the mass-balance report to (plain text).
 
