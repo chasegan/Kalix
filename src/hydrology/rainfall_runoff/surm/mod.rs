@@ -1,3 +1,46 @@
+// ---------------------------------------------------------------------------
+// REVIEW NOTES (Kalix maintainer review of PR #405) — to be addressed when
+// SURM is wired into a node. The science checked out: the water balance
+// closes (pervious: rain = infex + dSoil + ET + satex + recharge;
+// groundwater: recharge = baseflow + seepage + dGw), stores cannot go
+// negative, seepage is correctly excluded from runoff, and the equations
+// match the published SIMHYD/Chiew-McMahon forms.
+//
+// 1. SHOULD-FIX — the clamping design fights the house's calibration
+//    architecture. Params are indeed written directly to public fields
+//    (see gr4j_node.rs: `self.gr4j_model.x1 = value`), but the per-run_step
+//    re-clamping creates a silent honesty gap: behaviour uses clamped
+//    values while the public fields and get_params_as_vec() report the
+//    unclamped ones — an optimiser could report a "best" parameter set
+//    that is not the one that actually ran, and clamp-flat regions are
+//    gradient-dead zones that confuse calibration silently. Neither GR4J
+//    nor Sacramento clamps; ranges belong to the calibration bounds layer.
+//    Suggest: drop the run_step clamps entirely, keep (or drop) the
+//    set_params clamp, and document the ranges as constants/doc.
+// 2. SHOULD-FIX — daily-only semantics, undeclared to the future wiring.
+//    COEFF is mm/day and the 10*SMS/SMSC ET is a per-day form, but Kalix
+//    timesteps are configurable. GR4J solved exactly this with its
+//    Gr4Variant enum. The doc should state "daily formulation" loudly so
+//    the node wiring cannot misuse it sub-daily.
+// 3. SHOULD-FIX — tests don't touch the science. The 7 tests are good
+//    hygiene but none test the model: no mass-balance test (rain in =
+//    runoff + seep + delta-stores, catchment-weighted) and no
+//    hand-computed multi-step reference sequence (GR4J keeps a Python
+//    cross-check beside it for exactly this). One reference test would
+//    protect the equations forever.
+// 4. NOTE — one clippy warning: this file-header /// comment attaches to
+//    IMP_FRACTION_MIN (blank line between); should be //! module doc.
+// 5. NOTES — seepage uses SFAC*gw pre-baseflow but caps at the
+//    post-baseflow remainder: defensible, worth one comment since SFAC
+//    loses meaning when BFAC+SFAC > 1. Default and set_params_default()
+//    carry duplicate literal sets (one should delegate). NaN inputs
+//    silently become 0 via .max(0.0) (masks data gaps — GR4J doesn't
+//    sanitize at all, so at least document the choice). Two redundant
+//    .max(0.0) on quantities that cannot be negative.
+//    set_params_by_vec(&[f64]) takes a slice where Sacramento takes
+//    Vec<f64> (slice is arguably better — fine).
+// ---------------------------------------------------------------------------
+
 /// Simple Urban Rainfall-Runoff Model (SURM).
 ///
 /// Rainfall, potential evapotranspiration, storage and runoff are expressed
