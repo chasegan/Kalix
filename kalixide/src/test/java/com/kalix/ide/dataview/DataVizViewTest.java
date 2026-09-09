@@ -62,18 +62,28 @@ class DataVizViewTest {
         await(condition, what, () -> "");
     }
 
-    /** As above; on timeout the message carries what the pool held, so a flake diagnoses itself. */
+    /**
+     * As above; on timeout the message carries what the pool held, so a flake diagnoses itself.
+     * The condition is evaluated ON THE EDT: checks can only observe between-runnable states,
+     * and each check hands the test thread a happens-before edge over what the EDT published.
+     * (The prior test-thread evaluation was the same unsynchronized-read flaw that made
+     * PixieVizViewTest flaky under suite load.)
+     */
     private static void await(BooleanSupplier condition, String what, Supplier<String> observed) throws Exception {
         long deadline = System.currentTimeMillis() + 8000;
-        while (!condition.getAsBoolean()) {
+        while (!onEdt(condition)) {
             if (System.currentTimeMillis() > deadline) {
                 fail("timed out waiting for " + what + "; observed " + observed.get());
             }
             Thread.sleep(20);
-            if (!SwingUtilities.isEventDispatchThread()) {
-                SwingUtilities.invokeAndWait(() -> { });
-            }
         }
+    }
+
+    /** Evaluates the condition on the EDT (drain + happens-before, see {@link #await}). */
+    private static boolean onEdt(BooleanSupplier condition) throws Exception {
+        boolean[] value = new boolean[1];
+        SwingUtilities.invokeAndWait(() -> value[0] = condition.getAsBoolean());
+        return value[0];
     }
 
     @Test
