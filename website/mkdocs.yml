@@ -1,7 +1,7 @@
 site_name: Kalix
 site_description: >-
   Kalix — an open-source hydrological and river-management modelling platform.
-site_url: https://kalixproject.org/
+site_url: https://kalix.org/
 site_author: Kalix Project
 
 repo_url: https://github.com/chasegan/Kalix
