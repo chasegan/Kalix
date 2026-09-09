@@ -1,7 +1,9 @@
 package com.kalix.ide.dataview;
 
+import com.kalix.ide.io.CsvGzFormat;
 import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.io.SourceResCsvHeaderReader;
+import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -47,6 +49,10 @@ public final class DataViewOpener {
      */
     public static DataViewSession openFor(File file) throws IOException {
         String name = file.getName().toLowerCase(Locale.ROOT);
+        // Longest suffix first — the .res.csv test below cannot see a .csv.gz.
+        if (CsvGzFormat.isCsvGz(name)) {
+            return openGzipCsv(file);
+        }
         if (name.endsWith(".res.csv")) {
             try {
                 return openSourceResCsv(file);
@@ -55,6 +61,19 @@ public final class DataViewOpener {
             }
         }
         return DataViewSession.open(file.toPath());
+    }
+
+    /**
+     * The {@code .csv.gz} contract (issue #374): decompress the whole payload
+     * to memory — bounded while it runs by the in-memory limit preference,
+     * a cross that throws {@link CsvGzFormat.TooLargeException} with the
+     * honest reason — then serve it through the ordinary session machinery
+     * over an in-memory channel.
+     */
+    private static DataViewSession openGzipCsv(File file) throws IOException {
+        long limitBytes = PreferenceKeys.DATAVIEW_GZIP_MEMORY_LIMIT_MB.get() * 1024L * 1024L;
+        byte[] text = CsvGzFormat.decompressBounded(file, limitBytes);
+        return DataViewSession.open(ByteSource.ofMemory(file.toPath(), text), 0L, null, List.of());
     }
 
     private static DataViewSession openSourceResCsv(File file) throws IOException {

@@ -10,9 +10,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -79,7 +77,7 @@ public final class DataViewSession implements AutoCloseable, FindableData {
         }
     }
 
-    private final Path file;
+    private final ByteSource source;
     private final CsvDialect dialect;
     /** Where the tabular data begins (past any BOM or extended format header). */
     private final long indexStartOffset;
@@ -118,12 +116,12 @@ public final class DataViewSession implements AutoCloseable, FindableData {
     private volatile long tailSampleOffset;
     private final AtomicBoolean resumeRunning = new AtomicBoolean(false);
 
-    private DataViewSession(Path file, CsvDialect dialect, long indexStartOffset,
+    private DataViewSession(ByteSource source, CsvDialect dialect, long indexStartOffset,
                             String[] presetColumnNames, List<String> headerTextLines,
                             CheckpointIndex rowIndex, CheckpointIndex lineIndex,
                             RowStore rowStore, LineStore lineStore,
                             SeekableByteChannel indexerChannel) {
-        this.file = file;
+        this.source = source;
         this.dialect = dialect;
         this.indexStartOffset = indexStartOffset;
         this.presetColumnNames = presetColumnNames;
@@ -150,7 +148,7 @@ public final class DataViewSession implements AutoCloseable, FindableData {
      * starts the background index pass. Blocking I/O — call off the EDT.
      */
     public static DataViewSession open(Path file) throws IOException {
-        return open(file, 0L, null, List.of());
+        return open(ByteSource.ofFile(file), 0L, null, List.of());
     }
 
     /**
@@ -162,8 +160,20 @@ public final class DataViewSession implements AutoCloseable, FindableData {
      */
     public static DataViewSession open(Path file, long dataStartOffset, String[] presetColumnNames,
                                        List<String> headerTextLines) throws IOException {
+        return open(ByteSource.ofFile(file), dataStartOffset, presetColumnNames, headerTextLines);
+    }
+
+    /**
+     * The real open: every reader in the session draws its channels from the
+     * given {@link ByteSource}, so a session over an in-memory source (a
+     * decompressed {@code .csv.gz}) behaves identically to one over a file —
+     * except that a fixed-size source never reports growth, so the live tail
+     * never engages.
+     */
+    public static DataViewSession open(ByteSource byteSource, long dataStartOffset, String[] presetColumnNames,
+                                       List<String> headerTextLines) throws IOException {
         byte[] head;
-        try (SeekableByteChannel headChannel = Files.newByteChannel(file, StandardOpenOption.READ)) {
+        try (SeekableByteChannel headChannel = byteSource.openChannel()) {
             headChannel.position(dataStartOffset);
             ByteBuffer buffer = ByteBuffer.allocate(HEAD_BYTES);
             int n = headChannel.read(buffer);
@@ -184,10 +194,10 @@ public final class DataViewSession implements AutoCloseable, FindableData {
         SeekableByteChannel indexerChannel;
         try {
             rowStore = new RowStore(
-                Files.newByteChannel(file, StandardOpenOption.READ), dialect, rowIndex, MAX_CACHED_BLOCKS);
+                byteSource.openChannel(), dialect, rowIndex, MAX_CACHED_BLOCKS);
             lineStore = new LineStore(
-                Files.newByteChannel(file, StandardOpenOption.READ), dialect, lineIndex, MAX_CACHED_BLOCKS);
-            indexerChannel = Files.newByteChannel(file, StandardOpenOption.READ);
+                byteSource.openChannel(), dialect, lineIndex, MAX_CACHED_BLOCKS);
+            indexerChannel = byteSource.openChannel();
         } catch (IOException e) {
             // A failed open must not leak the channels that did open.
             if (rowStore != null) {
@@ -200,7 +210,7 @@ public final class DataViewSession implements AutoCloseable, FindableData {
         }
 
         DataViewSession session = new DataViewSession(
-            file, dialect, dataStartOffset + dialect.bomLength(), presetColumnNames,
+            byteSource, dialect, dataStartOffset + dialect.bomLength(), presetColumnNames,
             headerTextLines, rowIndex, lineIndex, rowStore, lineStore, indexerChannel);
         session.indexerThread.start();
         return session;
@@ -212,9 +222,14 @@ public final class DataViewSession implements AutoCloseable, FindableData {
         return dialect;
     }
 
-    /** The backing file — package-private, for the column extractor. */
+    /** The backing file's path (identity/display; for an in-memory source, where the bytes came from). */
     Path filePath() {
-        return file;
+        return source.path();
+    }
+
+    /** The session's byte source — package-private, for the column extractor. */
+    ByteSource byteSource() {
+        return source;
     }
 
     /** Byte offset where tabular data begins (past any BOM or extended header) — package-private. */
@@ -300,7 +315,7 @@ public final class DataViewSession implements AutoCloseable, FindableData {
         if (rowCheckpoint == null) {
             return 0;
         }
-        try (SeekableByteChannel probe = Files.newByteChannel(file, StandardOpenOption.READ)) {
+        try (SeekableByteChannel probe = source.openChannel()) {
             long rowStart = rowCheckpoint.byteOffset();
             if (row > rowCheckpoint.firstItem()) {
                 rowStart = scanToRowStart(probe, rowCheckpoint.byteOffset(), row - rowCheckpoint.firstItem());
@@ -390,7 +405,7 @@ public final class DataViewSession implements AutoCloseable, FindableData {
         DateProbe dateProbe = new DateProbe();
         long headerRows = headerRowOffset();
         String needle = DataFind.foldNeedle(spec);
-        try (SeekableByteChannel probe = Files.newByteChannel(file, StandardOpenOption.READ)) {
+        try (SeekableByteChannel probe = source.openChannel()) {
             probe.position(indexStartOffset);
             ByteBuffer buffer = ByteBuffer.allocate(256 * 1024);
             ByteArrayOutputStream field = new ByteArrayOutputStream(64);
@@ -599,7 +614,7 @@ public final class DataViewSession implements AutoCloseable, FindableData {
             }
         } catch (IOException e) {
             if (!closed) {
-                logger.warn("Indexing failed for {}: {}", file, e.getMessage());
+                logger.warn("Indexing failed for {}: {}", source.path(), e.getMessage());
             }
         } finally {
             if (resumePass) {
@@ -614,7 +629,7 @@ public final class DataViewSession implements AutoCloseable, FindableData {
         // indexed, so a simulation's final rows are never silently missed.
         if (!closed && indexingComplete) {
             try {
-                if (Files.size(file) > rowIndex.indexedBytes()) {
+                if (source.size() > rowIndex.indexedBytes()) {
                     tryResumeAppend();
                 }
             } catch (IOException ignored) {
@@ -669,11 +684,12 @@ public final class DataViewSession implements AutoCloseable, FindableData {
         }
         long oldEnd = rowIndex.indexedBytes();
         try {
-            if (Files.size(file) <= oldEnd) {
-                return false; // shrunk or same size: not an append
+            if (source.size() <= oldEnd) {
+                return false; // shrunk or same size (always true of an
+                // in-memory source): not an append — the caller rebuilds
             }
             byte[] current = new byte[tailSample.length];
-            try (SeekableByteChannel probe = Files.newByteChannel(file, StandardOpenOption.READ)) {
+            try (SeekableByteChannel probe = source.openChannel()) {
                 probe.position(tailSampleOffset);
                 ByteBuffer buffer = ByteBuffer.wrap(current);
                 while (buffer.hasRemaining() && probe.read(buffer) >= 0) {
@@ -805,7 +821,7 @@ public final class DataViewSession implements AutoCloseable, FindableData {
                     task.run();
                 } catch (RuntimeException e) {
                     if (!closed) {
-                        logger.warn("Data fetch failed for {}: {}", file, e.getMessage());
+                        logger.warn("Data fetch failed for {}: {}", source.path(), e.getMessage());
                     }
                 }
             });

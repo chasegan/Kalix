@@ -10,6 +10,9 @@ import com.kalix.ide.utils.TimeFormatUtil;
 import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
+import java.util.zip.GZIPOutputStream;
+import java.io.OutputStreamWriter;
+import java.io.BufferedWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -167,7 +170,7 @@ public class TimeSeriesCsvExporter {
         // first regular-interval series; falls back to date-only if none is regular.
         long stepSeconds = CsvExportUtil.inferStepSeconds(allSeries);
 
-        try (Writer writer = Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8)) {
+        try (Writer writer = openWriter(file)) {
             writeHeader(writer, headers, isExceedance);
             writeDataRows(writer, allSeries, isExceedance, stepSeconds);
         }
@@ -179,6 +182,20 @@ public class TimeSeriesCsvExporter {
      * <p>The header includes "Datetime" (or "Percentile" for exceedance) as the first column,
      * followed by each time series name. Series names are properly escaped for CSV format.</p>
      */
+    /**
+     * UTF-8 writer for the output file; gzip-wrapped when the name says
+     * {@code .csv.gz} — the extension is the single source of truth for the
+     * format. (Java's gzip header carries MTIME 0, matching the engine's pin:
+     * identical content writes identical bytes.)
+     */
+    private static Writer openWriter(File file) throws IOException {
+        if (CsvGzFormat.isCsvGz(file.getName())) {
+            return new BufferedWriter(new OutputStreamWriter(
+                new GZIPOutputStream(Files.newOutputStream(file.toPath())), StandardCharsets.UTF_8));
+        }
+        return Files.newBufferedWriter(file.toPath(), StandardCharsets.UTF_8);
+    }
+
     private static void writeHeader(Writer writer, List<String> headers, boolean isExceedance)
             throws IOException {
         writer.write(isExceedance ? "Percentile" : "Datetime");

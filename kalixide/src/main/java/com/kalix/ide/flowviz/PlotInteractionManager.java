@@ -1071,6 +1071,7 @@ public class PlotInteractionManager {
             .suggestedName("timeseries_data.csv")
             .filters(
                 FileDialogFilter.of("CSV Files (*.csv)", "csv"),
+                FileDialogFilter.of("Gzipped CSV (*.csv.gz)", "csv.gz"),
                 FileDialogFilter.of("Source Result CSV (*.res.csv)", "res.csv"),
                 FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
             .show();
@@ -1098,8 +1099,9 @@ public class PlotInteractionManager {
      * Saves data in CSV format.
      */
     private void saveAsCsvFormat(File file) {
-        // Ensure .csv extension
-        if (!file.getName().toLowerCase().endsWith(".csv")) {
+        // Ensure a CSV extension — .csv.gz counts (the exporter gzips by name).
+        String lower = file.getName().toLowerCase();
+        if (!lower.endsWith(".csv") && !lower.endsWith(".csv.gz")) {
             file = new File(file.getAbsolutePath() + ".csv");
         }
 

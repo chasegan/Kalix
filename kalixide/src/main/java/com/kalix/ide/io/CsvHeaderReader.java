@@ -21,24 +21,32 @@ public class CsvHeaderReader implements DataSourceHeaderReader {
 
     @Override
     public List<String> readSeriesNames(File file) throws IOException {
-        List<String> names = new ArrayList<>();
-
         try (BufferedReader reader = new BufferedReader(
                 new FileReader(file, StandardCharsets.UTF_8))) {
-            String headerLine = reader.readLine();
-            if (headerLine == null || headerLine.isBlank()) {
-                return names;
-            }
+            return readSeriesNames(reader);
+        }
+    }
 
-            char delimiter = detectDelimiter(headerLine);
-            String[] columns = headerLine.split(String.valueOf(delimiter == '\t' ? "\\t" : "\\" + delimiter), -1);
+    /**
+     * Reader variant, for content not sitting in a plain file (a decompressed
+     * {@code .csv.gz} — see {@link GzipCsvHeaderReader}). The caller owns the reader.
+     */
+    public List<String> readSeriesNames(BufferedReader reader) throws IOException {
+        List<String> names = new ArrayList<>();
 
-            // Skip the first column (date/timestamp) and cleanse the rest
-            for (int i = 1; i < columns.length; i++) {
-                String cleansed = DataSourceHeaderReader.cleanseName(columns[i]);
-                if (!cleansed.isEmpty()) {
-                    names.add(cleansed);
-                }
+        String headerLine = reader.readLine();
+        if (headerLine == null || headerLine.isBlank()) {
+            return names;
+        }
+
+        char delimiter = detectDelimiter(headerLine);
+        String[] columns = headerLine.split(String.valueOf(delimiter == '\t' ? "\\t" : "\\" + delimiter), -1);
+
+        // Skip the first column (date/timestamp) and cleanse the rest
+        for (int i = 1; i < columns.length; i++) {
+            String cleansed = DataSourceHeaderReader.cleanseName(columns[i]);
+            if (!cleansed.isEmpty()) {
+                names.add(cleansed);
             }
         }
 

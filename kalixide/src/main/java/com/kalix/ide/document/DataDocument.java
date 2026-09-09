@@ -8,6 +8,7 @@ import com.kalix.ide.dataview.DataViewSession;
 import com.kalix.ide.dataview.VirtualLineNumberGutter;
 import com.kalix.ide.dataview.VirtualTextArea;
 import com.kalix.ide.editor.KalixCsvTokenMaker;
+import com.kalix.ide.io.CsvGzFormat;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.slf4j.Logger;
@@ -57,7 +58,9 @@ public class DataDocument extends KalixDocument {
 
     /** Data documents require their backing file at construction (the views read it directly). */
     public DataDocument(File file) {
-        this(file, exceedsEditableGate(file));
+        // A .csv.gz is read-only regardless of size: its bytes on disk are
+        // gzip, so there is no text buffer to honestly edit and save back.
+        this(file, exceedsEditableGate(file) || CsvGzFormat.isCsvGz(file != null ? file.getName() : null));
     }
 
     /** Test seam: the gate decision is injectable so tests need no 50MB files. */
@@ -69,8 +72,14 @@ public class DataDocument extends KalixDocument {
         setFile(file); // the load path may setFile again with the same file; harmless
 
         DataViewSession session = null;
+        String openFailureNote = null;
         try {
             session = DataViewOpener.openFor(file);
+        } catch (CsvGzFormat.TooLargeException e) {
+            // The one refusal with a story the banner must tell: the payload
+            // crossed the in-memory limit, and the user can raise it.
+            openFailureNote = e.getMessage() + " (modify limit in preferences)";
+            logger.warn("Data view unavailable for {}: {}", file, e.getMessage());
         } catch (IOException e) {
             // The tab still opens; only the data views are lost.
             logger.warn("Data view unavailable for {}: {}", file, e.getMessage());
@@ -101,12 +110,31 @@ public class DataDocument extends KalixDocument {
             largeTextArea.attachGutter(gutter);
             largeTextArea.setFindHandlers(dataViewPanel::openFind, dataViewPanel::repeatFind);
         }
-        this.largePrimaryView = virtualText ? withReadOnlyBanner(largeTextScroller) : null;
+        if (virtualText) {
+            this.largePrimaryView = withReadOnlyBanner(largeTextScroller, readOnlyBannerText(file));
+        } else if (largeReadOnly && openFailureNote != null) {
+            // No views to show, but the tab must still say why (a refused
+            // .csv.gz): the banner carries the reason over the empty,
+            // unsaveable editor.
+            this.largePrimaryView = withReadOnlyBanner(getEditor(), openFailureNote);
+        } else {
+            this.largePrimaryView = null;
+        }
         // Above the gate the document is read-only EVEN IF the session failed:
         // in that case the editor buffer is empty (the load path never reads the
         // file), and an editable empty buffer over a real file is one Save All
         // away from truncating it to nothing.
         this.largeReadOnly = largeReadOnly;
+    }
+
+    /** Why this tab is read-only, in the banner's words — gz has its own story. */
+    private static String readOnlyBannerText(File file) {
+        if (CsvGzFormat.isCsvGz(file.getName())) {
+            return "Read only (.csv.gz is viewed decompressed)";
+        }
+        return String.format(
+            "Read only >%dMB (modify threshold in preferences)",
+            PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.get());
     }
 
     /**
@@ -144,11 +172,9 @@ public class DataDocument extends KalixDocument {
      * read-only. Before this, nothing anywhere said so: typing was swallowed
      * silently, and the word "read-only" first appeared after a failed save.
      */
-    private static JComponent withReadOnlyBanner(JComponent content) {
+    private static JComponent withReadOnlyBanner(JComponent content, String text) {
         javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout());
-        javax.swing.JLabel banner = new javax.swing.JLabel(String.format(
-            "Read only >%dMB (modify threshold in preferences)",
-            PreferenceKeys.EDITOR_LARGE_FILE_GATE_MB.get()));
+        javax.swing.JLabel banner = new javax.swing.JLabel(text);
         banner.setBorder(javax.swing.BorderFactory.createEmptyBorder(3, 8, 3, 8));
         banner.setEnabled(false); // muted, theme-following
         panel.add(banner, java.awt.BorderLayout.NORTH);

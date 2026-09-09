@@ -515,7 +515,7 @@ public final class DataVizView extends JPanel {
                 // the next index pass's business, and that pass triggers the next
                 // extraction through onProgress(complete).
                 result = ColumnSeriesExtractor.extract(
-                    target.filePath(), target.dialect(), target.dataStartOffset(), target.indexedBytes(),
+                    target.byteSource(), target.dialect(), target.dataStartOffset(), target.indexedBytes(),
                     target.headerRowInData(), columnIndices, limit,
                     () -> disposed || session != target);
             } catch (IOException e) {

@@ -142,9 +142,12 @@ public class FileOperationsManager {
         // read it directly (docs/data-file-viewer.md). Everything else loads as text.
         KalixDocument document;
         boolean pixieBinary = file.getName().toLowerCase(java.util.Locale.ROOT).endsWith(".pxb");
+        boolean gzipCsv = com.kalix.ide.io.CsvGzFormat.isCsvGz(file.getName());
         if (DocumentKind.forFile(file) == DocumentKind.DATA
-                && (pixieBinary || DataDocument.exceedsEditableGate(file))) {
+                && (pixieBinary || gzipCsv || DataDocument.exceedsEditableGate(file))) {
             // pixieBinary: a manifest-less .pxb must never enter a text buffer.
+            // gzipCsv: nor may gzip bytes — a .csv.gz is read-only, served
+            // decompressed by the DATA document's virtual views.
             document = documentFactory.apply(file); // the DATA ctor takes the backing file
         } else {
             final String content;

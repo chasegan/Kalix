@@ -38,7 +38,8 @@ public enum FileCategory {
         if (lower.endsWith(".res.csv")) {
             return SOURCE_RESULT;
         }
-        if (lower.endsWith(".csv") || lower.endsWith(".pxt") || lower.endsWith(".pxb")) {
+        if (lower.endsWith(".csv") || lower.endsWith(".csv.gz")
+                || lower.endsWith(".pxt") || lower.endsWith(".pxb")) {
             return DATA;
         }
         return OTHER;

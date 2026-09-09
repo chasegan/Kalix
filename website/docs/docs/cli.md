@@ -63,7 +63,7 @@ Run a simulation. Alias: `sim`.
 **Options**
 
 `-o`, `--output-file <OUTPUT_FILE>`
-:   File to save the model results to. A `.csv` extension writes CSV; `.pxt` or `.pxb` writes the Pixie pair. CSV values are written at full double precision in the shortest form that reads back to the same number, so very small or very large values appear in exponent notation (`1.5e-7`, `1e20`) rather than as long runs of zeros.
+:   File to save the model results to. A `.csv` extension writes CSV; `.csv.gz` writes the same CSV gzip-compressed; `.pxt` or `.pxb` writes the Pixie pair. CSV values are written at full double precision in the shortest form that reads back to the same number, so very small or very large values appear in exponent notation (`1.5e-7`, `1e20`) rather than as long runs of zeros.
 
 `-p`, `--profile`
 :   Report performance-profiling figures to the console.
@@ -145,7 +145,7 @@ $ kalix resave my_model.ini --in-place --save-method canonical
 
 ## kalix convert
 
-Convert a timeseries data file between formats. Formats are chosen by file extension: `.csv` for date-indexed CSV, and `.pxt` or `.pxb` for the [Pixie pair](input-data.md#pixie-binary-files-pxt-pxb) — either half names the dataset, and both halves are always written.
+Convert a timeseries data file between formats. Formats are chosen by file extension: `.csv` for date-indexed CSV, `.csv.gz` for the same CSV gzip-compressed, and `.pxt` or `.pxb` for the [Pixie pair](input-data.md#pixie-binary-files-pxt-pxb) — either half names the dataset, and both halves are always written.
 
 Pixie output is written lossless (64-bit values). The input is read completely before the output is written, so converting a file onto itself (to re-encode it) is safe. Source result files (`.res.csv`) are not supported, and a Pixie dataset whose series have different starts or timesteps is refused for CSV output — CSV shares one time column, so it cannot represent that honestly.
 
@@ -154,7 +154,7 @@ Pixie output is written lossless (64-bit values). The input is read completely b
 **Arguments**
 
 `<INPUT_FILE>`
-:   Path to the file to convert (`.csv`, `.pxt` or `.pxb`).
+:   Path to the file to convert (`.csv`, `.csv.gz`, `.pxt` or `.pxb`).
 
 `<OUTPUT_FILE>`
 :   Path to write. A Pixie output writes both halves, whichever one is named.

@@ -7,6 +7,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStreamReader;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntConsumer;
+import java.util.zip.GZIPInputStream;
 import java.util.regex.Pattern;
 
 /**
@@ -306,9 +308,13 @@ public class TimeSeriesCsvImporter {
         long fileLength = Math.max(1, csvFile.length());
 
         try {
+            // The counter stays on the COMPRESSED stream for a .csv.gz, so byte
+            // progress remains comparable to file.length().
             CountingInputStream counter = new CountingInputStream(new FileInputStream(csvFile));
+            InputStream byteStream = CsvGzFormat.isCsvGz(csvFile.getName())
+                ? new GZIPInputStream(counter) : counter;
             try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(counter, StandardCharsets.UTF_8))) {
+                    new InputStreamReader(byteStream, StandardCharsets.UTF_8))) {
 
                 // Sample the leading lines once for delimiter + date-format detection,
                 // then stream the rest — the file is never held in memory whole.
