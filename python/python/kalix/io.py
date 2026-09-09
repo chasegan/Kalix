@@ -1,7 +1,8 @@
 """Pandas-friendly I/O for Kalix data formats.
 
 Currently: read/write of Pixie (`.pxt`/`.pxb`) Gorilla-compressed timeseries
-files. Future readers/writers (CSV, etc.) will live alongside.
+files, and engine-backed file conversion between CSV and Pixie (`convert`).
+Future readers/writers will live alongside.
 """
 from __future__ import annotations
 
@@ -10,10 +11,10 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from kalix._native import _read_pixie_raw, _write_pixie_raw
+from kalix._native import _convert_file_raw, _read_pixie_raw, _write_pixie_raw
 from kalix._util import PathLike, build_time_indexed_df
 
-__all__ = ["read_pixie", "write_pixie"]
+__all__ = ["convert", "read_pixie", "write_pixie"]
 
 
 def read_pixie(path: PathLike) -> pd.DataFrame:
@@ -162,3 +163,35 @@ def write_pixie(
         values_per_series,
         bool(use_64bit_precision),
     )
+
+
+def convert(input_path: PathLike, output_path: PathLike) -> list[str]:
+    """Convert a timeseries file between formats (CSV <-> Pixie).
+
+    Mirrors the CLI's ``kalix convert INPUT OUTPUT`` exactly — both call the
+    same engine conversion, so they can never disagree.
+
+    Parameters
+    ----------
+    input_path
+        Path to the input file: ``.csv`` (date-indexed CSV), or a Pixie
+        ``.pxt``/``.pxb`` (either half names the dataset).
+    output_path
+        Path to the output file. A Pixie output always writes both halves
+        (lossless, 64-bit), whichever one is named. Converting within a
+        format re-encodes.
+
+    Returns
+    -------
+    list of str
+        The files actually written (two entries for a Pixie output).
+
+    Raises
+    ------
+    ValueError
+        Unrecognised extension, an unreadable input, or a failed write.
+        ``.res.csv`` is refused by name (the engine has no reader or writer
+        for it — Source result files are handled on the IDE side only).
+    """
+    _n_series, _n_points, outputs = _convert_file_raw(str(input_path), str(output_path))
+    return list(outputs)

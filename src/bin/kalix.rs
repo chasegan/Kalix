@@ -82,7 +82,9 @@ enum Commands {
     ///
     /// How to save is the caller's choice, not the model's: --save-method selects
     /// it, and a model file has no say (and no record) either way.
-    #[command(visible_alias = "resave")]
+    // (No alias: the derived name is already `resave`, and clap's debug-build
+    // asserts panic on a self-duplicating alias — every debug `kalix` run died
+    // on it, discovered when smoke-testing `convert`.)
     Resave {
         /// Path to the model file to load
         model_file: String,
@@ -95,6 +97,17 @@ enum Commands {
         /// How to write the output
         #[arg(long = "save-method", value_enum, default_value = "standard")]
         save_method: SaveMethodArg,
+    },
+    /// Convert a timeseries file between formats (csv and pixie)
+    ///
+    /// Formats are chosen by extension: .csv for date-indexed CSV, .pxt/.pxb
+    /// for the Pixie pair (either half names the dataset; both halves are
+    /// always written). Example: kalix convert flows.csv flows.pxt
+    Convert {
+        /// Path to the input file (.csv, .pxt or .pxb)
+        input_file: String,
+        /// Path to the output file (.csv, .pxt or .pxb)
+        output_file: String,
     },
 }
 
@@ -517,6 +530,18 @@ fn main() {
                 println!("  Misc:              {:>10.3} ms", misc_time.as_secs_f64() * 1000.0);
                 println!("  ─────────────────────────────────");
                 println!("  Total time:        {:>10.3} ms", total_time.as_secs_f64() * 1000.0);
+            }
+        }
+        Commands::Convert { input_file, output_file } => {
+            match kalix::io::convert::convert_ts_file(&input_file, &output_file) {
+                Ok(summary) => println!(
+                    "Converted {} series ({} points): {} -> {}",
+                    summary.n_series, summary.n_points, input_file, summary.outputs.join(" + ")
+                ),
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
             }
         }
         Commands::GetAPI => {

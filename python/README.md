@@ -136,6 +136,21 @@ Integer and float dtypes are never auto-interpreted as datetimes (this would
 silently misread values as epoch nanoseconds). Set a `DatetimeIndex` explicitly
 in those cases.
 
+#### Convert data files
+
+`kalix.convert()` mirrors `kalix convert` on the commandline — the same engine
+conversion between date-indexed CSV and the Pixie pair, with formats chosen by
+file extension:
+
+```python
+kalix.convert("flows.csv", "flows.pxt")   # writes flows.pxt + flows.pxb
+```
+
+It returns the list of files written (a Pixie output is both halves) and
+raises `ValueError` on an unrecognised extension, an unreadable input, or a
+failed write. Unlike `read_pixie`/`write_pixie`, it moves files without going
+through pandas, so it handles datasets of any size at engine speed.
+
 ### Model API
 
 This section provides a practical overview. Please review docstrings for

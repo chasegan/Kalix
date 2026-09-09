@@ -57,6 +57,7 @@ import kalix
 kalix.simulate(model_file, *, output_file=None, mass_balance=None)
 kalix.read_pixie(path)          # -> pd.DataFrame
 kalix.write_pixie(path, df, use_64bit_precision=True)
+kalix.convert(input_path, output_path)   # added later (issue #11): CSV <-> Pixie
 kalix.__version__
 
 # New

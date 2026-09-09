@@ -1,3 +1,4 @@
+pub mod convert;
 pub mod csv_io;
 pub mod error;
 pub mod ini_model_io;

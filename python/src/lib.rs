@@ -70,6 +70,16 @@ fn strip_ext(path: &str) -> &str {
     pixie_io::strip_pixie_extension(path).unwrap_or(path)
 }
 
+/// Convert a timeseries file between formats (csv <-> pixie), mirroring the
+/// CLI's `kalix convert` — both call the same engine conversion. Returns
+/// (n_series, n_points, files_written).
+#[pyfunction]
+fn _convert_file_raw(input_path: &str, output_path: &str) -> PyResult<(usize, usize, Vec<String>)> {
+    let summary = kalix::io::convert::convert_ts_file(input_path, output_path)
+        .map_err(PyValueError::new_err)?;
+    Ok((summary.n_series, summary.n_points, summary.outputs))
+}
+
 /// Read a Pixie .pxt/.pxb pair into (timestamps_unix_seconds, {series_name: values_array}).
 ///
 /// The Python wrapper assembles this into a pandas DataFrame.
@@ -697,6 +707,7 @@ impl PyModel {
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(_read_pixie_raw, m)?)?;
     m.add_function(wrap_pyfunction!(_write_pixie_raw, m)?)?;
+    m.add_function(wrap_pyfunction!(_convert_file_raw, m)?)?;
     m.add_function(wrap_pyfunction!(_simulate_from_file, m)?)?;
     m.add_function(wrap_pyfunction!(_optimise_from_file, m)?)?;
     m.add_class::<PyModel>()?;

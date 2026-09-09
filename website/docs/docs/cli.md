@@ -24,6 +24,9 @@ title: Commandline
 `resave`
 :   Load a model and write it back out, without simulating — see [`kalix resave`](#kalix-resave).
 
+`convert`
+:   Convert a timeseries data file between formats — see [`kalix convert`](#kalix-convert).
+
 `new-session`
 :   Open an interactive session; the engine communicates two-way over STDIO using a bespoke protocol (used internally by KalixIDE).
 
@@ -35,7 +38,7 @@ title: Commandline
 `-h`, `--help`
 :   Print help.
 
-`-v`, `--version`
+`-V`, `--version`
 :   Print the current kalix version.
 
 **Examples**
@@ -139,3 +142,34 @@ Load a model and write it back out, without simulating. Use it to reformat a mod
 $ kalix resave my_model.ini tidy_model.ini --save-method canonical
 $ kalix resave my_model.ini --in-place --save-method canonical
 ```
+
+## kalix convert
+
+Convert a timeseries data file between formats. Formats are chosen by file extension: `.csv` for date-indexed CSV, and `.pxt` or `.pxb` for the [Pixie pair](input-data.md#pixie-binary-files-pxt-pxb) — either half names the dataset, and both halves are always written.
+
+Pixie output is written lossless (64-bit values). The input is read completely before the output is written, so converting a file onto itself (to re-encode it) is safe. Source result files (`.res.csv`) are not supported, and a Pixie dataset whose series have different starts or timesteps is refused for CSV output — CSV shares one time column, so it cannot represent that honestly.
+
+**Usage** — `kalix convert <INPUT_FILE> <OUTPUT_FILE>`
+
+**Arguments**
+
+`<INPUT_FILE>`
+:   Path to the file to convert (`.csv`, `.pxt` or `.pxb`).
+
+`<OUTPUT_FILE>`
+:   Path to write. A Pixie output writes both halves, whichever one is named.
+
+**Options**
+
+`-h`, `--help`
+:   Print help.
+
+**Examples**
+
+```console
+$ kalix convert flows.csv flows.pxt
+Converted 3 series (32874 points): flows.csv -> flows.pxt + flows.pxb
+$ kalix convert flows.pxt flows_out.csv
+```
+
+The same conversion is available in Python as [`kalix.convert()`](python.md#converting-data-files).
