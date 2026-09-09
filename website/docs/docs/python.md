@@ -28,4 +28,14 @@ results = pd.read_csv("results.csv", parse_dates=[0], index_col=0)
 print(results.head())
 ```
 
+## Converting data files
+
+`kalix.convert()` mirrors [`kalix convert`](cli.md#kalix-convert) on the commandline — the same engine conversion between date-indexed CSV and the Pixie pair, with formats chosen by file extension:
+
+```python
+kalix.convert("flows.csv", "flows.pxt")   # writes flows.pxt + flows.pxb
+```
+
+It returns the list of files written. To work with Pixie data in memory instead, `kalix.read_pixie()` and `kalix.write_pixie()` move whole pandas DataFrames in and out of the format.
+
 For a full walkthrough, see [Running from Python](../tutorials/05-python.md).
