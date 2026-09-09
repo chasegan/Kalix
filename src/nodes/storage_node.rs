@@ -32,6 +32,159 @@ pub enum OutletDefinition {
     OutletWithRatingTable(Vec<(f64, f64)>), // (level, capacity) points
 }
 
+/// Where the equilibrium volume falls in the dimensions table, as located by
+/// [`bracket_segment`].
+///
+/// `Floor` covers both ways the search can bottom out — the bracket collapsing
+/// onto row 0, and a non-negative error at the lower bracket row (a demanded
+/// outflow exceeding everything the storage holds). Both solvers treat the two
+/// identically, so they are one variant.
+enum Bracket {
+    Floor,
+    /// The equilibrium lies in `[row, row + 1]`, or above the table top when
+    /// `error_hi` is still negative — the ceiling case, which the callers
+    /// extrapolate into. `error_prev` is the error at `row`, `error_hi` at
+    /// `row + 1`.
+    Segment { row: usize, error_prev: f64, error_hi: f64 },
+}
+
+/// Locates the table segment holding the root of a monotone error function
+/// over table rows: exponential expansion from the `start_row` warm start,
+/// then bisection down to a single-row bracket.
+///
+/// `compute_error` is supplied by the caller so that each solver keeps its own
+/// outflow arithmetic. That is deliberate, not incidental: the two error
+/// expressions differ in floating-point association and must stay that way
+/// (`solve_equilibrium`'s path is bit-identical with the pre-outlet solver by
+/// design). Only the search is shared — no float expression crosses this
+/// boundary.
+///
+/// `compute_error` must be monotone non-decreasing in the row index: negative
+/// means the root lies above that row, non-negative at or below it.
+#[inline]
+fn bracket_segment(nrows: usize, start_row: usize, compute_error: impl Fn(usize) -> f64) -> Bracket {
+    let start = start_row.min(nrows - 1);
+    let error_start = compute_error(start);
+    let (mut lo, mut hi, mut error_lo, mut error_hi) = if error_start < 0.0 {
+        // Solution is above the start row - expand upward.
+        let mut lo = start;
+        let mut error_lo = error_start;
+        let mut step = 1;
+        let mut hi = (start + step).min(nrows - 1);
+        let mut error_hi = compute_error(hi);
+        while error_hi < 0.0 && hi < nrows - 1 {
+            lo = hi;
+            error_lo = error_hi;
+            step *= 2;
+            hi = (hi + step).min(nrows - 1);
+            error_hi = compute_error(hi);
+        }
+        (lo, hi, error_lo, error_hi)
+    } else {
+        // Solution is at or below the start row - expand downward.
+        let mut hi = start;
+        let mut error_hi = error_start;
+        let mut step = 1;
+        let mut lo = start.saturating_sub(step);
+        let mut error_lo = compute_error(lo);
+        while error_lo >= 0.0 && lo > 0 {
+            hi = lo;
+            error_hi = error_lo;
+            step *= 2;
+            lo = lo.saturating_sub(step);
+            error_lo = compute_error(lo);
+        }
+        (lo, hi, error_lo, error_hi)
+    };
+    // Bisect to the exact bracket, caching error values.
+    while hi - lo > 1 {
+        let mid = lo + (hi - lo) / 2;
+        let error_mid = compute_error(mid);
+        if error_mid < 0.0 {
+            lo = mid;
+            error_lo = error_mid;
+        } else {
+            hi = mid;
+            error_hi = error_mid;
+        }
+    }
+
+    let istop = hi;
+    if istop == 0 {
+        return Bracket::Floor;
+    }
+    // When lo == hi (ceiling case) the cached error_lo sits at the wrong row.
+    let row = istop - 1;
+    let error_prev = if row == lo { error_lo } else { compute_error(row) };
+    // A demanded outflow exceeding everything the storage holds leaves the
+    // error non-negative at the lower bracket row. This also guards degenerate
+    // tables where a row pair satisfies dVol ~= net_rain*dArea (Talgai Weir
+    // rows 0-1 with net rain 0.1 mm), which would otherwise divide by a
+    // difference of two near-equal errors (see test_storage_floor_blowup).
+    if error_prev >= 0.0 {
+        return Bracket::Floor;
+    }
+    Bracket::Segment { row, error_prev, error_hi }
+}
+
+/// The geometry of one dimensions-table segment: volume, area and spill at
+/// rows `row` and `row + 1`. Area and spill are linear across it, which is
+/// what lets both solvers close the equilibrium in closed form.
+struct Segment {
+    v_lo: f64,
+    v_hi: f64,
+    area_lo: f64,
+    area_hi: f64,
+    spill_lo: f64,
+    spill_hi: f64,
+}
+
+impl Segment {
+    /// Reads the segment spanning `row..=row + 1`.
+    #[inline]
+    fn from_row(dimensions: &Table, row: usize) -> Self {
+        Self {
+            v_lo: dimensions.get_value(row, VOLU),
+            v_hi: dimensions.get_value(row + 1, VOLU),
+            area_lo: dimensions.get_value(row, AREA),
+            area_hi: dimensions.get_value(row + 1, AREA),
+            spill_lo: dimensions.get_value(row, SPIL).max(0.0),
+            spill_hi: dimensions.get_value(row + 1, SPIL).max(0.0),
+        }
+    }
+
+    /// Area and spill at volume `v`, interpolated across the segment (or
+    /// extrapolated beyond it, in the ceiling case).
+    #[inline]
+    fn lerp(&self, v: f64) -> (f64, f64) {
+        let x = (v - self.v_lo) / (self.v_hi - self.v_lo);
+        (
+            self.area_lo + (self.area_hi - self.area_lo) * x,
+            (self.spill_lo + (self.spill_hi - self.spill_lo) * x).max(0.0),
+        )
+    }
+}
+
+/// Where a linear error crosses zero between `a` and `b`.
+///
+/// `None` when there is no downhill crossing to find: a non-negative error at
+/// `a` (the root is not above it), or errors that do not converge
+/// (`e_a <= e_b`) — the guard both solvers use to reject a degenerate segment
+/// rather than invent a solution.
+///
+/// Only the crossing is shared, not the construction of `e_a` and `e_b`. The
+/// callers build those themselves because their error expressions differ in
+/// floating-point association on purpose — `x - a - b` is not `x - (a + b)`,
+/// and `solve_segment_unconstrained` must keep the historical form.
+#[inline]
+fn crossing(a: f64, b: f64, e_a: f64, e_b: f64) -> Option<f64> {
+    let d = e_a - e_b;
+    if e_a >= 0.0 || d >= 0.0 {
+        return None;
+    }
+    Some(a + (b - a) * (e_a / d))
+}
+
 #[derive(Default, Clone)]
 pub struct StorageNode {
     pub name: String,
@@ -401,70 +554,16 @@ impl StorageNode {
             v - (v_working + net_rain_mm * area - outflow_at(v, spill))
         };
 
-        // Exponential expansion + bisection over rows (same pattern as the
-        // main solver).
-        let start = start_row.min(nrows - 1);
-        let error_start = compute_error(start);
-        let (mut lo, mut hi, mut error_lo, mut error_hi) = if error_start < 0.0 {
-            let mut lo = start;
-            let mut error_lo = error_start;
-            let mut step = 1;
-            let mut hi = (start + step).min(nrows - 1);
-            let mut error_hi = compute_error(hi);
-            while error_hi < 0.0 && hi < nrows - 1 {
-                lo = hi;
-                error_lo = error_hi;
-                step *= 2;
-                hi = (hi + step).min(nrows - 1);
-                error_hi = compute_error(hi);
-            }
-            (lo, hi, error_lo, error_hi)
-        } else {
-            let mut hi = start;
-            let mut error_hi = error_start;
-            let mut step = 1;
-            let mut lo = start.saturating_sub(step);
-            let mut error_lo = compute_error(lo);
-            while error_lo >= 0.0 && lo > 0 {
-                hi = lo;
-                error_hi = error_lo;
-                step *= 2;
-                lo = lo.saturating_sub(step);
-                error_lo = compute_error(lo);
-            }
-            (lo, hi, error_lo, error_hi)
+        // Bracket the table segment (shared with the legacy solver; see
+        // `bracket_segment`), then walk that segment's threshold pieces below.
+        let (row, error_prev, error_hi) = match bracket_segment(nrows, start_row, compute_error) {
+            Bracket::Floor => return self.rating_floor(v_working, net_rain_mm),
+            Bracket::Segment { row, error_prev, error_hi } => (row, error_prev, error_hi),
         };
-        while hi - lo > 1 {
-            let mid = lo + (hi - lo) / 2;
-            let error_mid = compute_error(mid);
-            if error_mid < 0.0 {
-                lo = mid;
-                error_lo = error_mid;
-            } else {
-                hi = mid;
-                error_hi = error_mid;
-            }
-        }
-        let istop = hi;
-        if istop == 0 {
-            return self.rating_floor(v_working, net_rain_mm);
-        }
-        let row = istop - 1;
-        let error_prev = if row == lo { error_lo } else { compute_error(row) };
-        if error_prev >= 0.0 {
-            return self.rating_floor(v_working, net_rain_mm);
-        }
 
-        let v_lo = self.dimensions.get_value(row, VOLU);
-        let v_hi = self.dimensions.get_value(istop, VOLU);
-        let area_lo = self.dimensions.get_value(row, AREA);
-        let area_hi = self.dimensions.get_value(istop, AREA);
-        let spill_lo = self.dimensions.get_value(row, SPIL).max(0.0);
-        let spill_hi = self.dimensions.get_value(istop, SPIL).max(0.0);
-        let lerp = |v: f64| -> (f64, f64) {
-            let x = (v - v_lo) / (v_hi - v_lo);
-            (area_lo + (area_hi - area_lo) * x, (spill_lo + (spill_hi - spill_lo) * x).max(0.0))
-        };
+        let seg = Segment::from_row(&self.dimensions, row);
+        let Segment { v_lo, v_hi, .. } = seg;
+        let lerp = |v: f64| seg.lerp(v);
         let err_at = |v: f64| -> f64 {
             let (area, spill) = lerp(v);
             v - (v_working + net_rain_mm * area - outflow_at(v, spill))
@@ -516,13 +615,12 @@ impl StorageNode {
             let (area_a, spill_a) = lerp(a);
             let (area_b, spill_b) = lerp(b);
             let solve_lin = |o_a: f64, o_b: f64| -> Option<f64> {
-                let e1 = a - (v_working + net_rain_mm * area_a - o_a);
-                let e2 = b - (v_working + net_rain_mm * area_b - o_b);
-                let dd = e1 - e2;
-                if e1 >= 0.0 || dd >= 0.0 {
-                    return None;
-                }
-                Some(a + (b - a) * (e1 / dd))
+                crossing(
+                    a,
+                    b,
+                    a - (v_working + net_rain_mm * area_a - o_a),
+                    b - (v_working + net_rain_mm * area_b - o_b),
+                )
             };
             // Per-outlet capacity endpoints from the interior side of the
             // piece (from above at a, from below at b).
@@ -758,99 +856,26 @@ impl StorageNode {
             )
         };
 
-        // Exponential expansion from start_row hint
-        let start = start_row.min(nrows - 1);
-        let error_start = compute_error(start);
-
-        let (mut lo, mut hi, mut error_lo) = if error_start < 0.0 {
-            // Solution is above start row - expand upward
-            let mut lo = start;
-            let mut error_lo = error_start;
-            let mut step = 1;
-            let mut hi = (start + step).min(nrows - 1);
-            let mut error_hi = compute_error(hi);
-            while error_hi < 0.0 && hi < nrows - 1 {
-                lo = hi;
-                error_lo = error_hi;
-                step *= 2;
-                hi = (hi + step).min(nrows - 1);
-                error_hi = compute_error(hi);
-            }
-            (lo, hi, error_lo)
-        } else {
-            // Solution is at or below start row - expand downward
-            let mut hi = start;
-            let mut error_hi = error_start;
-            let mut step = 1;
-            let mut lo = start.saturating_sub(step);
-            let mut error_lo = compute_error(lo);
-            while error_lo >= 0.0 && lo > 0 {
-                hi = lo;
-                error_hi = error_lo;
-                step *= 2;
-                lo = lo.saturating_sub(step);
-                error_lo = compute_error(lo);
-            }
-            let _ = error_hi;
-            (lo, hi, error_lo)
+        // Bracket the table segment. Both floor cases (bracket on row 0, or a
+        // non-negative error at the lower bracket row) land in Bracket::Floor;
+        // the ceiling case (error still negative at the table top) falls
+        // through to the segment solve, which extrapolates beyond the table.
+        let row = match bracket_segment(nrows, start_row, compute_error) {
+            Bracket::Floor => return (self.dimensions.get_value(0, VOLU), 0, false),
+            Bracket::Segment { row, .. } => row,
         };
-
-        // Bisect to find exact bracket, caching error values
-        while hi - lo > 1 {
-            let mid = lo + (hi - lo) / 2;
-            let error_mid = compute_error(mid);
-            if error_mid < 0.0 {
-                lo = mid;
-                error_lo = error_mid;
-            } else {
-                hi = mid;
-            }
-        }
-
-        let istop = hi;
-
-        // Handle floor case (solution at or below row 0)
-        if istop == 0 {
-            return (self.dimensions.get_value(0, VOLU), 0, false);
-        }
-        // Ceiling case (error_hi < 0): allow extrapolation beyond table max
-        // by falling through to normal interpolation - x > 1.0 extrapolates
-
-        // Interpolate between rows using cached errors where possible.
-        // When lo == hi (ceiling case: solution beyond table max), row != lo
-        // so the cached error_lo is at the wrong position — recompute it.
-        let row = istop - 1;
-        let error_prev = if row == lo { error_lo } else { compute_error(row) };
-
-        // Solution at or below the table floor: a demanded outflow exceeding
-        // everything the storage holds has a non-negative error at the lower
-        // bracket row. This also guards degenerate tables where a row pair
-        // satisfies dVol ≈ net_rain·dArea (Talgai Weir rows 0-1 with net rain
-        // 0.1 mm), which makes the interpolation below divide by a difference
-        // of two near-equal errors (see test_storage_floor_blowup).
-        if error_prev >= 0.0 {
-            return (self.dimensions.get_value(0, VOLU), 0, false);
-        }
-
-        let v_lo = self.dimensions.get_value(row, VOLU);
-        let v_hi = self.dimensions.get_value(istop, VOLU);
-        let area_lo = self.dimensions.get_value(row, AREA);
-        let area_hi = self.dimensions.get_value(istop, AREA);
-        let spill_lo = self.dimensions.get_value(row, SPIL).max(0.0);
-        let spill_hi = self.dimensions.get_value(istop, SPIL).max(0.0);
+        let seg = Segment::from_row(&self.dimensions, row);
 
         // Exact within-segment solve (including the ds_1 spill kink and, in
         // the ceiling case, extrapolation beyond the table top). The
         // candidate satisfies the mass balance with the full dues released,
         // so the caller attributes flows from the dues directly.
-        if let Some(v) = Self::solve_segment_unconstrained(
-            dues, v_working, net_rain_mm, v_lo, v_hi, area_lo, area_hi, spill_lo, spill_hi,
-        ) {
+        if let Some(v) = Self::solve_segment_unconstrained(dues, v_working, net_rain_mm, &seg) {
             return (v, row, true);
         }
         // Degenerate segment (errors do not converge downhill): clamp to the
         // top row and let the caller cap flows by the available water.
-        (self.dimensions.get_value(istop, VOLU), row, false)
+        (seg.v_hi, row, false)
     }
 
     /// The historical unconstrained within-segment solve, kept expression-for-
@@ -858,18 +883,13 @@ impl StorageNode {
     /// interpolation of the error, with exact handling of the max(spill, ds_1
     /// release due) kink. Returns None when the segment is degenerate (errors
     /// do not converge downhill), mirroring the old floor/ceiling guards.
-    #[allow(clippy::too_many_arguments)]
     fn solve_segment_unconstrained(
         dues: &[f64; MAX_DS_LINKS],
         v_working: f64,
         net_rain_mm: f64,
-        v_lo: f64,
-        v_hi: f64,
-        area_lo: f64,
-        area_hi: f64,
-        spill_lo: f64,
-        spill_hi: f64,
+        seg: &Segment,
     ) -> Option<f64> {
+        let &Segment { v_lo, v_hi, area_lo, area_hi, spill_lo, spill_hi } = seg;
         let ds1_required_flow = dues[0];
         let ds234_orders: f64 = dues[1..].iter().sum();
 
@@ -888,13 +908,12 @@ impl StorageNode {
             // outflow linear between the given endpoint values. None when the
             // branch has no downhill crossing (mirrors the guards above).
             let solve_branch = |outflow_lo: f64, outflow_hi: f64| -> Option<f64> {
-                let e_lo = v_lo - (v_working + net_rain_mm * area_lo - outflow_lo - ds234_orders);
-                let e_hi = v_hi - (v_working + net_rain_mm * area_hi - outflow_hi - ds234_orders);
-                let d = e_lo - e_hi;
-                if e_lo >= 0.0 || d >= 0.0 {
-                    return None;
-                }
-                Some(v_lo + (v_hi - v_lo) * (e_lo / d))
+                crossing(
+                    v_lo,
+                    v_hi,
+                    v_lo - (v_working + net_rain_mm * area_lo - outflow_lo - ds234_orders),
+                    v_hi - (v_working + net_rain_mm * area_hi - outflow_hi - ds234_orders),
+                )
             };
             // Below the crossing the required flow governs: outflow is constant.
             if let Some(v) = solve_branch(ds1_required_flow, ds1_required_flow) {
@@ -940,12 +959,7 @@ impl StorageNode {
         // legitimate only while the errors still converge (error_hi >
         // error_prev). Anything else is degenerate here: the caller falls
         // back to the capped bisection or the top row.
-        let denom = error_prev - error_hi;
-        if error_prev >= 0.0 || denom >= 0.0 {
-            return None;
-        }
-        let x = error_prev / denom;
-        Some(v_lo + (v_hi - v_lo) * x)
+        crossing(v_lo, v_hi, error_prev, error_hi)
     }
 
     /// Sets `self.exists_bool` for this timestep, and records the driving value.
