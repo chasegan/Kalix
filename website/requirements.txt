@@ -1,4 +1,4 @@
-# Kalix website build dependencies (kalixproject.org).
+# Kalix website build dependencies (kalix.org).
 # Install into an isolated venv:  python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 mkdocs-material>=9.5
 mkdocs-macros-plugin>=1.0

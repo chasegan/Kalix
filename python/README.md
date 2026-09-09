@@ -1,6 +1,6 @@
 # kalix (Python)
 
-Python interface for [Kalix](https://kalixproject.org).
+Python interface for [Kalix](https://kalix.org).
 
 Current functionality:
 - run simulations from INI model files (in-process, no separate CLI binary)

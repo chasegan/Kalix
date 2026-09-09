@@ -1,4 +1,4 @@
-# kalixproject.org — website
+# kalix.org — website
 
 Static site for Kalix: a **bespoke HTML landing/contact** plus **MkDocs Material**
 documentation, deployed to GitHub Pages. Light mode only. Built from the design
@@ -62,10 +62,22 @@ scripts/build.sh                  # full build into site/
 ## Deploy
 
 `.github/workflows/deploy-website.yml` builds and deploys to GitHub Pages on
-push to `main` (or via *Run workflow*). To go live, the repo owner must:
+push to `main` (or via *Run workflow*). Source is **Settings → Pages → GitHub
+Actions**.
 
-1. **Settings → Pages → Source: GitHub Actions.**
-2. Add the DNS records for `kalixproject.org` (see the handover / commit notes).
-3. Merge this branch to `main` (or run the workflow manually).
+### Domains
 
-Nothing here pushes, changes settings, or registers a domain.
+The site is served at **`kalix.org`**. Its DNS lives at GoDaddy and points at the
+GitHub Pages addresses (four `A`, four `AAAA`, and `www` as a `CNAME` to
+`chasegan.github.io`).
+
+The custom domain comes from the repository's **Settings → Pages** setting, *not*
+from `docs/CNAME`. A workflow-built site takes the domain from the setting and
+ignores the CNAME file in the uploaded artifact — that file only drives the domain
+on the older branch-based publishing. Keep the two in step regardless, so the
+built site carries the right name.
+
+**`kalixproject.org` is still ours and still works.** Its DNS sits at Cloudflare,
+which `301`s every path to the same path on `kalix.org`. Keep the registration
+renewed and the redirect rule enabled indefinitely: years of existing links,
+bookmarks and release notes still point there.

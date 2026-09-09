@@ -27,7 +27,7 @@ public final class AppConstants {
         }
         return "0.1.0"; // Fallback
     }
-    public static final String APP_WEBSITE_URL = "https://kalixproject.org";
+    public static final String APP_WEBSITE_URL = "https://kalix.org";
     
     // Window properties
     public static final int DEFAULT_WINDOW_WIDTH = 1200;

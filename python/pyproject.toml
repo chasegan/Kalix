@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://kalixproject.org"
+Homepage = "https://kalix.org"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
