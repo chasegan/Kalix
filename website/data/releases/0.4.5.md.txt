@@ -12,6 +12,7 @@ pip: "pip install kalix==0.4.5"
 - One comment grammar for model files: `#` starts a comment anywhere, section headers included.
 - Routing `pwl` tables now accept a header row, like every other node table.
 - CSV export writes the shortest exact number spelling, switching to exponent form only for extreme values.
+- New `kalix convert` CLI command and matching `kalix.convert()` Python function: convert timeseries data files between CSV and Pixie, with formats chosen by file extension (`kalix convert flows.csv flows.pxt`).
 - Automatic data masking: selecting a plot type now applies that type's default overlapping-data mask, indicated by badges in the plot-type dropdown.
 - Plot tab `Reset` now works in place: the tab's name, position and undo history survive, and the reset itself is a single undoable step.
 - Plot undo/redo now restores the complete view: checked sources come back alongside the series, and ticking/unticking a source is an undoable step in its own right.
