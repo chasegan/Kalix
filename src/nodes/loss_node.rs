@@ -3,6 +3,7 @@ use crate::numerical::table::Table;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
+use crate::model_inputs::DynamicInput;
 use crate::numerical::table_discontinuous::TableDiscontinuous;
 
 const MAX_DS_LINKS: usize = 1;
@@ -14,11 +15,13 @@ pub struct LossNode {
     pub mbal: f64,
     pub loss_table: Table,  // Columns: Inflow ML, Loss ML
     pub order_translation_table: TableDiscontinuous,
+    pub rate: DynamicInput,
 
     // Internal state only
     usflow: f64,
     dsflow_primary: f64,
     loss: f64,
+    rate_value: f64,
 
     // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
@@ -30,6 +33,7 @@ pub struct LossNode {
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
     recorder_idx_loss: Option<usize>,
+    recorder_idx_rate: Option<usize>,
 }
 
 impl LossNode {
@@ -52,6 +56,9 @@ impl Node for LossNode {
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.loss = 0.0;
+        // NaN, not zero: with no rate expression there is no rate value, and a
+        // recorded all-NaN series says so honestly.
+        self.rate_value = f64::NAN;
 
         // If the loss table is incomplete, fix it.
         match self.loss_table.nrows() {
@@ -137,6 +144,7 @@ impl Node for LossNode {
         self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
         self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
         self.recorder_idx_loss = recorder(data_cache, &self.name, "loss");
+        self.recorder_idx_rate = recorder(data_cache, &self.name, "rate");
 
         // Return
         Ok(())
@@ -166,9 +174,16 @@ impl Node for LossNode {
             data_cache.add_value_at_index(idx, self.usflow);
         }
 
-        // Calculate loss flow from table (inflow rate -> loss rate)
-        //let attempted_loss = self.loss_table.interpolate(0, 1, self.usflow).min(self.usflow);
-        let attempted_loss = self.loss_table.interpolate_or_extrapolate(0, 1, self.usflow);
+        // Calculate the attempted loss: the rate expression when one is set,
+        // else the loss table (inflow rate -> loss rate). Either way the loss
+        // actually taken is clamped to [0, usflow] below.
+        let attempted_loss = match self.rate {
+            DynamicInput::None { .. } => self.loss_table.interpolate_or_extrapolate(0, 1, self.usflow),
+            _ => {
+                self.rate_value = self.rate.get_value(data_cache);
+                self.rate_value
+            }
+        };
         self.loss = attempted_loss.max(0f64).min(self.usflow);
 
         // Remaining flow after loss goes to ds_1
@@ -190,6 +205,11 @@ impl Node for LossNode {
         }
         if let Some(idx) = self.recorder_idx_loss {
             data_cache.add_value_at_index(idx, self.loss);
+        }
+        if let Some(idx) = self.recorder_idx_rate {
+            // The raw expression value (pre-clamp), like the user nodes'
+            // pump/flow_threshold recorders; all-NaN when no rate is set.
+            data_cache.add_value_at_index(idx, self.rate_value);
         }
 
         // Reset upstream inflow for next timestep

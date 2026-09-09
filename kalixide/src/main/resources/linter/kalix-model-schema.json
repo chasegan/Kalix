@@ -656,14 +656,16 @@
         "dsflow",
         "ds_1",
         "ds_1_order",
-        "loss"
+        "loss",
+        "rate"
       ],
       "required_params": [
         "type",
         "loc"
       ],
       "optional_params": [
-        "table"
+        "table",
+        "rate"
       ],
       "dsnode_params": [
         "ds_1"
@@ -681,6 +683,10 @@
         "table": {
           "type": "string",
           "description": "Table value (optional header row plus numeric rows); not validated"
+        },
+        "rate": {
+          "type": "function_expression",
+          "description": "Loss rate override (data reference, constant, or expression); when set, replaces the loss table for computing loss"
         }
       }
     },
