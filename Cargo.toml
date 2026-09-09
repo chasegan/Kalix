@@ -33,6 +33,7 @@ crate-type = ["lib"]
 libm = "0.2.2"
 serde = "1.0.143"
 csv = "1"
+flate2 = "1"
 rand = "0.8.5"
 rayon = "1.10"
 tsz = "0.1.4"

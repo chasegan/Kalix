@@ -139,8 +139,8 @@ in those cases.
 #### Convert data files
 
 `kalix.convert()` mirrors `kalix convert` on the commandline — the same engine
-conversion between date-indexed CSV and the Pixie pair, with formats chosen by
-file extension:
+conversion between date-indexed CSV (plain or gzip-compressed `.csv.gz`) and
+the Pixie pair, with formats chosen by file extension:
 
 ```python
 kalix.convert("flows.csv", "flows.pxt")   # writes flows.pxt + flows.pxb

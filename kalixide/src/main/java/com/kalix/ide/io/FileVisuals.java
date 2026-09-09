@@ -113,6 +113,10 @@ public final class FileVisuals {
         if (lower.endsWith(".toml") || lower.endsWith(".json")) {
             return FontAwesomeSolid.FILE_CODE;
         }
+        if (lower.endsWith(".csv.gz")) {
+            // Binary on disk, like the Pixie pair — the database glyph, not the CSV one.
+            return FontAwesomeSolid.DATABASE;
+        }
         if (lower.endsWith(".csv")) {
             return FontAwesomeSolid.FILE_CSV;
         }

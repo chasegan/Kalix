@@ -98,15 +98,16 @@ enum Commands {
         #[arg(long = "save-method", value_enum, default_value = "standard")]
         save_method: SaveMethodArg,
     },
-    /// Convert a timeseries file between formats (csv and pixie)
+    /// Convert a timeseries file between formats (csv, csv.gz and pixie)
     ///
-    /// Formats are chosen by extension: .csv for date-indexed CSV, .pxt/.pxb
-    /// for the Pixie pair (either half names the dataset; both halves are
-    /// always written). Example: kalix convert flows.csv flows.pxt
+    /// Formats are chosen by extension: .csv for date-indexed CSV, .csv.gz
+    /// for the same CSV gzip-compressed, .pxt/.pxb for the Pixie pair
+    /// (either half names the dataset; both halves are always written).
+    /// Example: kalix convert flows.csv flows.pxt
     Convert {
-        /// Path to the input file (.csv, .pxt or .pxb)
+        /// Path to the input file (.csv, .csv.gz, .pxt or .pxb)
         input_file: String,
-        /// Path to the output file (.csv, .pxt or .pxb)
+        /// Path to the output file (.csv, .csv.gz, .pxt or .pxb)
         output_file: String,
     },
 }

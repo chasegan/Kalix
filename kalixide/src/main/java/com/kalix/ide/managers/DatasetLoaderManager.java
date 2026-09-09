@@ -4,6 +4,7 @@ import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.io.TimeSeriesCsvImporter;
 import com.kalix.ide.io.SourceResCsvFormat;
+import com.kalix.ide.io.CsvGzFormat;
 import com.kalix.ide.io.SourceResCsvImporter;
 import com.kalix.ide.io.PixieReader;
 import org.slf4j.Logger;
@@ -145,11 +146,12 @@ public class DatasetLoaderManager {
                         @SuppressWarnings("unchecked")
                         List<File> files = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
 
-                        // Filter for supported files (CSV and Pixie)
+                        // Filter for supported files (CSV, gzipped CSV and Pixie)
                         List<File> supportedFiles = files.stream()
                             .filter(file -> {
                                 String name = file.getName().toLowerCase();
-                                return name.endsWith(".csv") || name.endsWith(".pxt") || name.endsWith(".pxb");
+                                return name.endsWith(".csv") || name.endsWith(".csv.gz")
+                                    || name.endsWith(".pxt") || name.endsWith(".pxb");
                             })
                             .toList();
 
@@ -218,9 +220,10 @@ public class DatasetLoaderManager {
         String fileName = file.getName().toLowerCase();
 
         // ".res.csv" must be tested before ".csv" — the latter would otherwise swallow it.
+        // (".csv.gz" collides with neither; the importer decompresses it by name.)
         if (SourceResCsvFormat.isResCsv(fileName)) {
             loadResCsvDataset(file);
-        } else if (fileName.endsWith(".csv")) {
+        } else if (fileName.endsWith(".csv") || CsvGzFormat.isCsvGz(fileName)) {
             loadCsvDataset(file);
         } else if (fileName.endsWith(".pxt") || fileName.endsWith(".pxb")) {
             loadPixieDataset(file);

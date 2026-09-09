@@ -128,6 +128,7 @@ Supported data formats are listed below.
 | Extension | Implied format | Details |
 | --- | --- | --- |
 | .csv | Comma separated values. | see below… |
+| .csv.gz | Gzip-compressed CSV. | see below… |
 | .pxt + .pxb | Pixie fast lightweight binary format. | see below… |
 
 ### CSV files
@@ -144,6 +145,12 @@ Rules for CSV files are as follows:
 - Timesteps in the file must be regular (no missing timestamps), and in temporal order.
 
 - Blank values (or whitespace) are taken to indicate missing data.
+
+### Gzip-compressed CSV files (.csv.gz)
+
+A `.csv.gz` is an ordinary CSV file (all the rules above apply) compressed with standard [gzip](https://en.wikipedia.org/wiki/Gzip) — the same files pandas reads and writes natively, and any gzip tool can create or unpack one. Kalix reads and writes them everywhere it handles CSV: as model input data, as simulation output (`kalix simulate -o results.csv.gz`), and in [`kalix convert`](cli.md#kalix-convert). In the IDE they open read-only (decompressed into memory, bounded by a preference).
+
+Gzip is a widely recognised compression option; Pixie remains the faster, smaller Kalix-native alternative.
 
 ### Pixie binary files (.pxt + .pxb)
 

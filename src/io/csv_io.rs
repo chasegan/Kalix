@@ -23,20 +23,50 @@ impl From<CsvError> for String {
     }
 }
 
+/// True when `filename` names a gzip-compressed CSV (`.csv.gz`). This is the
+/// one extension test both the read and write paths key off, so the two can
+/// never disagree about what counts as compressed.
+pub fn is_gzip_csv(filename: &str) -> bool {
+    filename.to_ascii_lowercase().ends_with(".csv.gz")
+}
+
 pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, KalixIoError> {
+    // A .csv.gz is the same CSV grammar behind a streaming gzip decode — the
+    // parse below never sees the difference (issue #374).
+    let builder = || {
+        let mut b = csv::ReaderBuilder::new();
+        // Flexible record lengths: allows rows with trailing commas (extra
+        // empty fields) without error.
+        b.flexible(true);
+        b
+    };
+    if is_gzip_csv(filename) {
+        let file = fs::File::open(filename)
+            .map_err(|e| KalixIoError::Io(format!("Failed to open file '{}': {}", filename, e)))?;
+        // MultiGzDecoder, not GzDecoder: RFC 1952 allows concatenated members
+        // (cat a.gz b.gz, bgzip) and gunzip/pandas read them all — a
+        // single-member decoder would silently truncate valid input.
+        let decoder = flate2::read::MultiGzDecoder::new(std::io::BufReader::new(file));
+        read_ts_records(builder().from_reader(decoder), filename)
+    } else {
+        let reader = builder().from_path(filename)
+            .map_err(|e| KalixIoError::Io(format!("Failed to open file '{}': {}", filename, e)))?;
+        read_ts_records(reader, filename)
+    }
+}
+
+fn read_ts_records<R: std::io::Read>(
+    mut reader: csv::Reader<R>,
+    filename: &str,
+) -> Result<Vec<Timeseries>, KalixIoError> {
     // Here is where we will construct our result
     let mut answer: Vec<Timeseries> = Vec::new();
 
-    // Create a new csv reader with flexible record lengths
-    // This allows rows with trailing commas (extra empty fields) without error
-    let mut reader = csv::ReaderBuilder::new()
-        .flexible(true)
-        .from_path(filename)
-        .map_err(|e| KalixIoError::Io(format!("Failed to open file '{}': {}", filename, e)))?;
-
-    // Get the first row (what csv crate thinks are headers)
+    // Get the first row (what csv crate thinks are headers). On a .csv.gz
+    // this is also where a corrupt or non-gzip file surfaces, so the
+    // underlying error is worth carrying.
     let first_row = reader.headers()
-        .map_err(|_| KalixIoError::Io(format!("Error reading first row from '{}'", filename)))?;
+        .map_err(|e| KalixIoError::Io(format!("Error reading first row from '{}': {}", filename, e)))?;
 
     // Check if the first cell is actually a date (meaning no header row exists)
     let has_header = match first_row.get(0) {
@@ -259,6 +289,14 @@ pub fn push_f64_compact(buf: &mut String, value: f64) {
 }
 
 pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(), CsvError> {
+    write_ts_opts(filename, timeseries_vector, is_gzip_csv(filename))
+}
+
+/// Like [`write_ts`], but with the gzip decision made by the caller instead
+/// of read off `filename` — for writers that stage output under a temporary
+/// name (the conversion path), where the temp name's extension lies about
+/// the format.
+pub fn write_ts_opts(filename: &str, timeseries_vector: Vec<&Timeseries>, gzip: bool) -> Result<(), CsvError> {
 
     // Check that all timeseries in the vector have the same length
     let data_length = match timeseries_vector.len() {
@@ -301,11 +339,31 @@ pub fn write_ts(filename: &str, timeseries_vector: Vec<&Timeseries>) -> Result<(
         }
     }
 
-    // Write it all to file
+    // Write it all to file. The gzip header's MTIME is pinned to 0 so that
+    // identical content compresses to identical bytes run-to-run: the
+    // cross-platform contract is byte-identical *decompressed* content
+    // (Java and Rust encoders legitimately differ), with reproducible
+    // output within each stack (issue #374).
     let filename_path = Path::new(filename);
-    match fs::write(filename_path, data_string) {
+    let result = if gzip {
+        fs::File::create(filename_path).and_then(|file| {
+            use std::io::Write;
+            let mut encoder = flate2::GzBuilder::new()
+                .mtime(0)
+                .write(std::io::BufWriter::new(file), flate2::Compression::default());
+            encoder.write_all(data_string.as_bytes())?;
+            // finish() writes the gzip trailer into the BufWriter but does not
+            // flush it; letting Drop flush would swallow a disk-full error and
+            // report a truncated file as written.
+            let mut inner = encoder.finish()?;
+            inner.flush()
+        })
+    } else {
+        fs::write(filename_path, data_string)
+    };
+    match result {
         Ok(_) => Ok(()),
-        Err(_) => Err(CsvError::WriteError(format!("Error writing file {filename}.")))
+        Err(e) => Err(CsvError::WriteError(format!("Error writing file {filename}: {e}")))
     }
 }
 

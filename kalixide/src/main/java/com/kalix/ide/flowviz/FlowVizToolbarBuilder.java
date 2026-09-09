@@ -407,12 +407,16 @@ class FlowVizToolbarBuilder {
         java.util.Optional<File> chosen = KalixFileDialog.saveFile(statsTable)
             .title("Save Statistics")
             .suggestedName("statistics.csv")
-            .filters(FileDialogFilter.of("CSV Files (*.csv)", "csv"))
+            .filters(
+                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
+                FileDialogFilter.of("Gzipped CSV (*.csv.gz)", "csv.gz"))
             .show();
         if (chosen.isPresent()) {
             File file = chosen.get();
 
-            try (java.io.FileWriter writer = new java.io.FileWriter(file)) {
+            // The extension is the format: a name ending .csv.gz writes gzip
+            // (and either way the text is UTF-8, like the data exporter).
+            try (java.io.Writer writer = com.kalix.ide.io.CsvGzFormat.newUtf8Writer(file)) {
                 // Write header (dynamic columns from table)
                 for (int col = 0; col < statsTable.getColumnCount(); col++) {
                     if (col > 0) writer.write(",");

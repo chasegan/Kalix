@@ -7,9 +7,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.function.BooleanSupplier;
 
@@ -74,7 +71,7 @@ public final class ColumnSeriesExtractor {
     /**
      * Streams the file once and extracts the requested columns.
      *
-     * @param file            the data file
+     * @param source          the data file's byte source (disk, or a decompressed copy in memory)
      * @param dialect         its sniffed dialect
      * @param dataStartOffset byte offset where tabular data begins (past any BOM
      *                        or extended format header)
@@ -100,7 +97,7 @@ public final class ColumnSeriesExtractor {
      * @return the result; or {@code null} when cancelled, or when the file no longer
      *         holds the extent (it shrank under us, so the index it came from is stale)
      */
-    public static Result extract(Path file, CsvDialect dialect, long dataStartOffset, long dataEndOffset,
+    public static Result extract(ByteSource source, CsvDialect dialect, long dataStartOffset, long dataEndOffset,
                                  boolean skipHeaderRow, int[] columnIndices, long maxRows,
                                  BooleanSupplier cancelled) throws IOException {
         int maxWanted = 0;
@@ -122,7 +119,7 @@ public final class ColumnSeriesExtractor {
         ParseState state = new ParseState();
         boolean headerPending = skipHeaderRow;
 
-        try (SeekableByteChannel channel = Files.newByteChannel(file, StandardOpenOption.READ)) {
+        try (SeekableByteChannel channel = source.openChannel()) {
             long size = channel.size();
             if (size < dataEndOffset) {
                 return null; // the indexed extent is gone: whoever indexed it is stale
