@@ -367,6 +367,14 @@
         "ds_2_order",
         "ds_3_order",
         "ds_4_order",
+        "ds_1_order_due",
+        "ds_2_order_due",
+        "ds_3_order_due",
+        "ds_4_order_due",
+        "ds_1_force_release",
+        "ds_2_force_release",
+        "ds_3_force_release",
+        "ds_4_force_release",
         "ds_1_outlet",
         "ds_2_outlet",
         "ds_3_outlet",
@@ -391,10 +399,10 @@
       ],
       "required_params": [
         "type",
-        "loc"
+        "loc",
+        "dimensions"
       ],
       "optional_params": [
-        "dimensions",
         "rain",
         "evap",
         "seep",
@@ -404,6 +412,10 @@
         "ds_2_outlet",
         "ds_3_outlet",
         "ds_4_outlet",
+        "ds_1_force_release",
+        "ds_2_force_release",
+        "ds_3_force_release",
+        "ds_4_force_release",
         "target_level",
         "order_through",
         "exists"
@@ -451,19 +463,35 @@
         },
         "ds_1_outlet": {
           "type": "number_sequence",
-          "description": "Outlet specification for ds_1 (1 or 2 comma-separated numbers)"
+          "description": "Outlet capacity for ds_1: a MOL level, a MOL and capacity, or a rating table of level, capacity pairs (comma-separated numbers)"
+        },
+        "ds_1_force_release": {
+          "type": "function_expression",
+          "description": "Forced release through the ds_1 outlet, overriding the order-driven release (data reference, constant, or expression)"
         },
         "ds_2_outlet": {
           "type": "number_sequence",
-          "description": "Outlet specification for ds_2 (1 or 2 comma-separated numbers)"
+          "description": "Outlet capacity for ds_2: a MOL level, a MOL and capacity, or a rating table of level, capacity pairs (comma-separated numbers)"
+        },
+        "ds_2_force_release": {
+          "type": "function_expression",
+          "description": "Forced release through the ds_2 outlet, overriding the order-driven release (data reference, constant, or expression)"
         },
         "ds_3_outlet": {
           "type": "number_sequence",
-          "description": "Outlet specification for ds_3 (1 or 2 comma-separated numbers)"
+          "description": "Outlet capacity for ds_3: a MOL level, a MOL and capacity, or a rating table of level, capacity pairs (comma-separated numbers)"
+        },
+        "ds_3_force_release": {
+          "type": "function_expression",
+          "description": "Forced release through the ds_3 outlet, overriding the order-driven release (data reference, constant, or expression)"
         },
         "ds_4_outlet": {
           "type": "number_sequence",
-          "description": "Outlet specification for ds_4 (1 or 2 comma-separated numbers)"
+          "description": "Outlet capacity for ds_4: a MOL level, a MOL and capacity, or a rating table of level, capacity pairs (comma-separated numbers)"
+        },
+        "ds_4_force_release": {
+          "type": "function_expression",
+          "description": "Forced release through the ds_4 outlet, overriding the order-driven release (data reference, constant, or expression)"
         },
         "target_level": {
           "type": "function_expression",
