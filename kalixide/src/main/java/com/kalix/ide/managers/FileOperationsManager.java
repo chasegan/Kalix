@@ -146,7 +146,7 @@ public class FileOperationsManager {
         if (DocumentKind.forFile(file) == DocumentKind.DATA
                 && (pixieBinary || zipCsv || DataDocument.exceedsEditableGate(file))) {
             // pixieBinary: a manifest-less .pxb must never enter a text buffer.
-            // zipCsv: nor may gzip bytes — a .csv.zip is read-only, served
+            // zipCsv: nor may archive bytes — a .csv.zip is read-only, served
             // decompressed by the DATA document's virtual views.
             document = documentFactory.apply(file); // the DATA ctor takes the backing file
         } else {

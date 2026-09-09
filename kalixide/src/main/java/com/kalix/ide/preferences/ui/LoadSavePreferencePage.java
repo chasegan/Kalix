@@ -116,13 +116,14 @@ public class LoadSavePreferencePage extends AbstractPreferencePage {
             PreferenceKeys.DATAVIEW_PLOT_MAX_ROWS.set((Integer) plotMaxRowsSpinner.getValue()));
         formPanel.add(plotMaxRowsSpinner, gbc);
 
-        // Gzipped CSV in-memory limit: gzip is not seekable, so .csv.zip is
-        // served by decompressing the whole payload to memory (read-only);
-        // this bounds that, enforced while the stream decompresses.
+        // Zipped CSV in-memory limit: the entry's deflate stream is not
+        // seekable, so .csv.zip is served by decompressing the whole payload
+        // to memory (read-only); this bounds that, enforced while the stream
+        // decompresses.
         gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 1;
         gbc.weightx = 0; gbc.fill = GridBagConstraints.NONE;
         JLabel zipLimitLabel = new JLabel("Open .csv.zip up to (decompressed MB):");
-        zipLimitLabel.setToolTipText("Gzipped CSV files (.csv.zip) open read-only, decompressed into "
+        zipLimitLabel.setToolTipText("Zipped CSV files (.csv.zip) open read-only, decompressed into "
             + "memory. Files whose decompressed size exceeds this limit are refused with the reason "
             + "shown in the tab.");
         formPanel.add(zipLimitLabel, gbc);

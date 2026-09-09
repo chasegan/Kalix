@@ -352,6 +352,27 @@ class TimeSeriesCsvRoundTripTest {
     // ------------------------------------------------------------ round trip
 
     @Test
+    void exportImportRoundTripThroughCsvZip() throws Exception {
+        // The .csv.zip variant of the round trip: the exporter writes a
+        // one-entry archive by name, the importer streams its single entry
+        // (issue #409) — the data must survive identically to plain CSV.
+        DataSet ds = new DataSet();
+        ds.addSeries(new DatasetSeries("/x", "flow"), daily("2020-01-01", 1.5, 2.5));
+
+        File out = tempDir.resolve("roundtrip.csv.zip").toFile();
+        TimeSeriesCsvExporter.export(ds, out, null, LABELS);
+        assertEquals(java.util.List.of("roundtrip.csv"), CsvZipFormat.fileEntryNames(out),
+            "one entry, named like the archive minus .zip");
+
+        TimeSeriesCsvImporter.CsvImportResult result = parse(out);
+        assertFalse(result.hasErrors(), () -> "errors: " + result.getErrors());
+        assertEquals(1, result.getSeries().size());
+        double[] values = result.getSeries().get(0).data().getValues();
+        assertEquals(1.5, values[0]);
+        assertEquals(2.5, values[1]);
+    }
+
+    @Test
     void exportImportRoundTripPreservesValuesDatesAndMissing() throws Exception {
         DataSet ds = new DataSet();
         ds.addSeries(new DatasetSeries("/x", "flow, A"),

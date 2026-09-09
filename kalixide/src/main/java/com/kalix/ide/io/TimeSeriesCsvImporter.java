@@ -6,6 +6,7 @@ import javax.swing.SwingWorker;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -322,9 +323,14 @@ public class TimeSeriesCsvImporter {
             InputStream byteStream = counter;
             if (CsvZipFormat.isCsvZip(csvFile.getName())) {
                 ZipInputStream zin = new ZipInputStream(counter);
-                ZipEntry entry;
-                while ((entry = zin.getNextEntry()) != null && entry.isDirectory()) {
-                    // skip directory entries to the single file
+                try {
+                    ZipEntry entry;
+                    while ((entry = zin.getNextEntry()) != null && entry.isDirectory()) {
+                        // skip directory entries to the single file
+                    }
+                } catch (IOException e) {
+                    zin.close(); // a corrupt archive must not leak the stream
+                    throw e;
                 }
                 byteStream = zin;
             }

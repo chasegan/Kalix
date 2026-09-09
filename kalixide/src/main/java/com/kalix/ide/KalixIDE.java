@@ -622,6 +622,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     /** Reads a file's text, or shows an error dialog and returns null if it cannot be read. */
     private String readTextOrWarn(File file) {
         try {
+            // A .csv.zip compares by its decompressed text — reading the raw
+            // archive bytes could only produce an encoding error or garbage.
+            // Bounded by the same in-memory limit the data viewer honours.
+            if (com.kalix.ide.io.CsvZipFormat.isCsvZip(file.getName())) {
+                long limit = com.kalix.ide.preferences.PreferenceKeys
+                    .DATAVIEW_ZIP_MEMORY_LIMIT_MB.get() * 1024L * 1024L;
+                return new String(com.kalix.ide.io.CsvZipFormat.decompressBounded(file, limit),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            }
             return java.nio.file.Files.readString(file.toPath());
         } catch (java.io.IOException ex) {
             JOptionPane.showMessageDialog(this,

@@ -272,9 +272,9 @@ mod tests {
             .expect("output is a valid zip archive");
         assert_eq!(archive.len(), 1, "exactly one entry");
         let mut entry = archive.by_index(0).unwrap();
-        assert!(entry.name().ends_with(".csv") && !entry.name().contains("kalix_tmp"),
-            "entry '{}' must be named from the real archive name minus .zip, \
-             never from the temp staging name", entry.name());
+        assert_eq!(entry.name(), csv_io::zip_inner_name(&zipped.0),
+            "the entry is named from the real archive name minus .zip (pandas' \
+             convention), never from the temp staging name");
         let mut decompressed = Vec::new();
         std::io::Read::read_to_end(&mut entry, &mut decompressed).unwrap();
         assert_eq!(decompressed, fs::read(&plain.0).unwrap(),

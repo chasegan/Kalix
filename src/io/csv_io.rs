@@ -31,13 +31,19 @@ pub fn is_zip_csv(filename: &str) -> bool {
 }
 
 /// The archive's single entry name: the file name minus its `.zip` — pandas'
-/// own convention (`flows.csv.zip` holds `flows.csv`).
+/// own convention (`flows.csv.zip` holds `flows.csv`). Total for any input:
+/// a name not ending in `.zip` comes back unchanged (the suffix check keeps
+/// the byte slice on an ASCII boundary, so no multibyte name can panic).
 pub fn zip_inner_name(filename: &str) -> String {
     let name = std::path::Path::new(filename)
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| filename.to_string());
-    name[..name.len().saturating_sub(4)].to_string()
+    if name.to_ascii_lowercase().ends_with(".zip") {
+        name[..name.len() - 4].to_string()
+    } else {
+        name
+    }
 }
 
 pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, KalixIoError> {
@@ -57,9 +63,12 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, KalixIoError> {
             .map_err(|e| KalixIoError::Io(format!("'{}' is not a readable zip archive: {}", filename, e)))?;
         // Pandas parity: a .csv.zip holds exactly one file. Reading "the first
         // of several" would silently guess; pandas refuses too.
+        // by_index_raw classifies without opening the entry, so an archive
+        // holding e.g. an encrypted second entry still gets the clear
+        // "exactly one file" refusal rather than a decryption error.
         let mut file_entries: Vec<usize> = Vec::new();
         for i in 0..archive.len() {
-            let entry = archive.by_index(i)
+            let entry = archive.by_index_raw(i)
                 .map_err(|e| KalixIoError::Io(format!("Reading zip entry {} of '{}': {}", i, filename, e)))?;
             if !entry.is_dir() {
                 file_entries.push(i);

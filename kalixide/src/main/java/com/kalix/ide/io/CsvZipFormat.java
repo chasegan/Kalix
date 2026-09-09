@@ -89,14 +89,20 @@ public final class CsvZipFormat {
         }
         ZipInputStream in = new ZipInputStream(
             new BufferedInputStream(Files.newInputStream(file.toPath())));
-        ZipEntry entry;
-        while ((entry = in.getNextEntry()) != null) {
-            if (!entry.isDirectory()) {
-                return in;
+        try {
+            ZipEntry entry;
+            while ((entry = in.getNextEntry()) != null) {
+                if (!entry.isDirectory()) {
+                    return in;
+                }
             }
+            throw new IOException("'" + file.getName() + "': zip entry vanished between scans");
+        } catch (IOException e) {
+            // The stream is only handed to the caller on success; every throw
+            // path (corrupt local headers included) closes it here.
+            in.close();
+            throw e;
         }
-        in.close();
-        throw new IOException("'" + file.getName() + "': zip entry vanished between scans");
     }
 
     /**

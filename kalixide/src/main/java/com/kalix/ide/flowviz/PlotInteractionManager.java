@@ -1099,7 +1099,7 @@ public class PlotInteractionManager {
      * Saves data in CSV format.
      */
     private void saveAsCsvFormat(File file) {
-        // Ensure a CSV extension — .csv.zip counts (the exporter gzips by name).
+        // Ensure a CSV extension — .csv.zip counts (the exporter zips by name).
         String lower = file.getName().toLowerCase();
         if (!lower.endsWith(".csv") && !lower.endsWith(".csv.zip")) {
             file = new File(file.getAbsolutePath() + ".csv");
