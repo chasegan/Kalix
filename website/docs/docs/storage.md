@@ -39,8 +39,8 @@ ds_1 = my_other_node
 | pond\_demand (optional) | Optional on-pond demand [ML]. Example: `pond_demand = 15.0 * data.patterns_csv.by_name.amenities` |
 | dimensions (compulsory) | A tabulated list of values: level (m), volume (ML), area (km2), spill (ML/timestep). See [Table parameters](parameter-types.md) to find out more about how table parameter types work in Kalix. Example: `dimensions = 90, 0, 0, 0, 91, 100, 1, 0, 91.1, 101, 1, 1e8, 92, 102, 1, 1e8` |
 | ds\_1\_outlet, ds\_2\_outlet, ds\_3\_outlet, ds\_4\_outlet (optional) | The outlet capacity on the corresponding link (ds\_1, ds\_2, etc) as a function of level. Three forms. A minimum operating level (MOL) alone: `ds_1_outlet = 81.1` — capacity is zero at or below 81.1 m and unlimited above it. A MOL and a capacity [ML/timestep]: `ds_1_outlet = 81.1, 120` — zero at or below, 120 above. A rating table of level, capacity pairs: `ds_2_outlet = 80, 0, 81, 0, 81.5, 100, 82, 100` — capacity interpolates linearly in level between points and holds flat beyond the ends; a repeated level is a step. Levels must lie within the dimensions table's level range, and capacities must be non-decreasing. Notes: (1) Orders on ds\_1 may be partly or fully met by unregulated spills. (2) There are no spills on the other links. (3) An undefined outlet is unlimited. |
-| ds\_1\_force\_release, ds\_2\_force\_release, ds\_3\_force\_release, ds\_4\_force\_release (optional) | Forces the release through the corresponding outlet [ML/timestep], overriding the order-driven release. The forced release is still limited by the outlet's capacity curve and the water available, and spill counts toward the forced amount on ds\_1 exactly as it does toward an order. Example: `ds_1_force_release = data.ops_csv.by_name.release` |
-| exists (optional) | Whether the storage exists this timestep: 0 or NaN means it does not; any other value means it does. A storage that does not exist holds no water and passes everything straight through ds\_1, ignoring its outlets — but it still propagates orders exactly as it otherwise would. Default is that the storage always exists. Example: `exists = if(sim.year < 1985, 0, 1)` |
+| ds\_1\_force\_release, ds\_2\_force\_release, ds\_3\_force\_release, ds\_4\_force\_release (optional) | Forces the release through the corresponding outlet [ML/timestep], overriding the order-driven release. The forced release is still limited by the outlet's capacity curve and the water available, and spill counts toward the forced amount on ds\_1 as it does toward an order. Example: `ds_1_force_release = data.ops_csv.by_name.release` |
+| exists (optional) | Whether the storage exists this timestep: 0 or NaN means it does not; any other value means it does. A storage that does not exist ignores its outlets and passes inflows straight through ds\_1, and on the timestep it stops existing any stored water also drains out through ds\_1. It still propagates orders as it otherwise would. Default is that the storage always exists. Example: `exists = if(sim.year < 1985, 0, 1)` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 | ds\_2, ds\_3, ds\_4 (optional) | Additional link used to represent regulated flow pathways separate to the main downstream link. `ds_2 = tws_pipline` |
 
@@ -61,11 +61,11 @@ ds_1 = my_other_node
 | ds\_1, ds\_2, etc | Downstream flow [ML] on link ds\_1 (outlet + spill), ds\_2 (outlet), |
 | ds\_1\_order | Order on link ds\_1 [ML] (also available for other links) |
 | ds\_1\_order\_due | Order due for release today on link ds\_1 [ML], after order travel time (also available for other links) |
-| ds\_1\_force\_release | The applied forced release on link ds\_1 [ML] when `ds_1_force_release` is configured; NaN on order-driven timesteps (also available for other links) |
+| ds\_1\_force\_release | Forced release requested on link ds\_1 [ML], as supplied by `ds_1_force_release` before capacity and availability limits (the released flow is in ds\_1\_outlet); NaN when no forced release is configured (also available for other links) |
 | ds\_1\_spill | Flow over the spillway to ds\_1 [ML] (also available for other links, but = 0) |
 | ds\_1\_outlet | Flow through the outlet to ds\_1 [ML] (also available for other links) |
-| target\_level | The evaluated `target_level` [m], when configured |
-| exists | The evaluated `exists` input, when configured |
+| target\_level | Evaluated `target_level` [m], when configured |
+| exists | Evaluated `exists` input; 1 when not configured |
 | volume | Volume of water in the storage at the end of the timestep [ML] |
 | level | Level of water in the storage at the end of the timestep [m] |
 | area | Area of the water surface at the end of the timestep [km2] |

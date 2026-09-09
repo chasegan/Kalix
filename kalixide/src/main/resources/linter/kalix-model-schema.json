@@ -463,7 +463,7 @@
         },
         "ds_1_outlet": {
           "type": "number_sequence",
-          "description": "Outlet capacity for ds_1: a MOL level, a MOL and capacity, or a rating table of level, capacity pairs (comma-separated numbers)"
+          "description": "Outlet capacity for ds_1: a minimum operating level (MOL), a MOL and capacity, or a rating table of level, capacity pairs (comma-separated numbers)"
         },
         "ds_1_force_release": {
           "type": "function_expression",
@@ -471,7 +471,7 @@
         },
         "ds_2_outlet": {
           "type": "number_sequence",
-          "description": "Outlet capacity for ds_2: a MOL level, a MOL and capacity, or a rating table of level, capacity pairs (comma-separated numbers)"
+          "description": "Outlet capacity for ds_2: a minimum operating level (MOL), a MOL and capacity, or a rating table of level, capacity pairs (comma-separated numbers)"
         },
         "ds_2_force_release": {
           "type": "function_expression",
@@ -479,7 +479,7 @@
         },
         "ds_3_outlet": {
           "type": "number_sequence",
-          "description": "Outlet capacity for ds_3: a MOL level, a MOL and capacity, or a rating table of level, capacity pairs (comma-separated numbers)"
+          "description": "Outlet capacity for ds_3: a minimum operating level (MOL), a MOL and capacity, or a rating table of level, capacity pairs (comma-separated numbers)"
         },
         "ds_3_force_release": {
           "type": "function_expression",
@@ -487,7 +487,7 @@
         },
         "ds_4_outlet": {
           "type": "number_sequence",
-          "description": "Outlet capacity for ds_4: a MOL level, a MOL and capacity, or a rating table of level, capacity pairs (comma-separated numbers)"
+          "description": "Outlet capacity for ds_4: a minimum operating level (MOL), a MOL and capacity, or a rating table of level, capacity pairs (comma-separated numbers)"
         },
         "ds_4_force_release": {
           "type": "function_expression",
