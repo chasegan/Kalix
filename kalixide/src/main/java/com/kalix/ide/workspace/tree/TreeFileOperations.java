@@ -27,7 +27,8 @@ import net.lingala.zip4j.model.FileHeader;
 
 /**
  * The side-effecting file operations behind the project tree's context menu and keyboard
- * shortcuts: reveal-in-OS, create, rename, delete, and copy-path (full / relative / trailhead).
+ * shortcuts: reveal-in-OS, create, rename, delete, compress/decompress (zip and gz), and
+ * copy-path (full / relative / trailhead).
  *
  * <p>Kept separate from {@link ProjectTree} so the tree component stays focused on view, model,
  * and event wiring. Operations are selection-aware where it makes sense (copy and delete accept
@@ -35,7 +36,8 @@ import net.lingala.zip4j.model.FileHeader;
  * none of these methods touch the tree model directly.
  *
  * <p>All methods are invoked on the EDT (from menu/key handlers). Prompts and confirmations
- * happen synchronously there, but the bulk file I/O — recursive copy/delete/move, zip, unzip —
+ * happen synchronously there, but the bulk file I/O — recursive copy/delete/move,
+ * compress, decompress —
  * runs on a background worker via {@link #offEdt}, with any failure dialog marshalled back onto
  * the EDT. A large operation therefore never freezes the UI (same pattern as
  * {@link com.kalix.ide.utils.TerminalActions}).
@@ -580,11 +582,23 @@ class TreeFileOperations {
         return target;
     }
 
-    /** Streams {@code src} into {@code target} gzip-compressed. Blocking I/O — worker thread. */
+    /**
+     * Streams {@code src} into {@code target} gzip-compressed, via a temp sibling
+     * renamed into place — a failure mid-stream leaves no partial file behind.
+     * Blocking I/O — worker thread.
+     */
     static void gzipTo(File src, File target) throws IOException {
-        try (var in = Files.newInputStream(src.toPath());
-             var out = new GZIPOutputStream(Files.newOutputStream(target.toPath()))) {
-            in.transferTo(out);
+        File tmp = new File(target.getPath() + ".kalix_tmp");
+        try {
+            try (var in = Files.newInputStream(src.toPath());
+                 var out = new GZIPOutputStream(Files.newOutputStream(tmp.toPath()))) {
+                in.transferTo(out);
+            }
+            Files.move(tmp.toPath(), target.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            Files.deleteIfExists(tmp.toPath());
+            throw e;
         }
     }
 
@@ -699,14 +713,28 @@ class TreeFileOperations {
     }
 
     /**
-     * Streams {@code src} gzip-decompressed into {@code target}. Reads every member of a
-     * multi-member gzip (Java's decoder continues past each trailer), matching gunzip and
-     * the engine. Blocking I/O — worker thread.
+     * Streams {@code src} gzip-decompressed into {@code target}, via a temp sibling
+     * renamed into place: detection is name-only, so a corrupt ".gz" is a live
+     * possibility, and a mid-stream failure must never have destroyed the existing
+     * file whose overwrite the user just confirmed. Reads every member of a
+     * multi-member gzip (Java's decoder continues past each trailer), matching
+     * gunzip and the engine. Blocking I/O — worker thread.
      */
     static void gunzipTo(File src, File target) throws IOException {
-        try (var in = new GZIPInputStream(Files.newInputStream(src.toPath()));
-             var out = Files.newOutputStream(target.toPath())) {
-            in.transferTo(out);
+        File tmp = new File(target.getPath() + ".kalix_tmp");
+        try {
+            // raw is its own resource: a GZIPInputStream ctor throw (bad magic —
+            // the realistic "not actually gzip" case) must still close it.
+            try (var raw = Files.newInputStream(src.toPath());
+                 var in = new GZIPInputStream(raw);
+                 var out = Files.newOutputStream(tmp.toPath())) {
+                in.transferTo(out);
+            }
+            Files.move(tmp.toPath(), target.toPath(),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            Files.deleteIfExists(tmp.toPath());
+            throw e;
         }
     }
 

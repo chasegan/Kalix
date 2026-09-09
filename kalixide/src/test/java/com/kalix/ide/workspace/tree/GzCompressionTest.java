@@ -89,6 +89,25 @@ class GzCompressionTest {
     }
 
     @Test
+    void aCorruptGzNeverDestroysTheExistingTarget() throws IOException {
+        // Detection is name-only, so "not actually gzip" is a live case; the
+        // user may have just confirmed overwriting a real file. The write goes
+        // to a temp sibling, so failure must leave the original untouched and
+        // no temp debris behind.
+        File corrupt = write("fake.csv.gz", "this is not gzip");
+        File target = write("fake.csv", "precious original");
+        try {
+            TreeFileOperations.gunzipTo(corrupt, target);
+            throw new AssertionError("a corrupt gz must fail, not succeed");
+        } catch (IOException expected) {
+            // the point of the test
+        }
+        assertEquals("precious original", Files.readString(target.toPath(), StandardCharsets.UTF_8),
+            "the confirmed-overwrite file survives a failed decompress");
+        assertFalse(new File(target.getPath() + ".kalix_tmp").exists(), "no temp debris");
+    }
+
+    @Test
     void typeDetectionForTheMenuItems() {
         File dir = tempDir.toFile();
         assertTrue(TreeFileOperations.isGz(new File(dir, "flows.csv.gz")));

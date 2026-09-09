@@ -1,6 +1,7 @@
 package com.kalix.ide.workspace.tree;
 
 import com.kalix.ide.icons.MenuIcons;
+import com.kalix.ide.io.CsvGzFormat;
 import com.kalix.ide.utils.PlatformUtils;
 
 import javax.swing.Icon;
@@ -134,14 +135,14 @@ public class TreeContextMenu {
             List.of(
                 item(
                     "Open",
-                    (sel -> isSingleNonZipFile(sel) && context == BuildContext.FileTree),
+                    (sel -> isSingleOpenableFile(sel) && context == BuildContext.FileTree),
                     sel -> host.openFile(file(sel))
                 )),
             // Context-specific
             List.of(
                 item(
                     "Compare with active editor",
-                    sel -> (isSingleNonZipFile(sel) && context == BuildContext.FileTree),
+                    sel -> (isSingleOpenableFile(sel) && context == BuildContext.FileTree),
                     sel -> host.compareWithActiveEditor(file(sel))
                 ),
                 item(
@@ -206,6 +207,9 @@ public class TreeContextMenu {
                 // placed here so they never surface as a folder's first (= primary-looking)
                 // item. Two formats: zip holds any selection (folders included); gz is a
                 // single-file stream, so its item appears only for one plain file.
+                // Hidden for the empty-space (root) click on purpose: the archive would
+                // land BESIDE the workspace root, outside the tree, and silently appear
+                // to do nothing.
                 item(
                     "Compress (zip)",
                     (sel -> (any(sel) && noneCompressed(sel) && context == BuildContext.FileTree)),
@@ -284,12 +288,28 @@ public class TreeContextMenu {
         return sel.size() == 1;
     }
 
-    private static boolean isSingleNonZipFile(List<FileTreeNode> sel) {
-        return sel.size() == 1 && !sel.getFirst().isDirectory() && isNotZip(sel);
+    private static boolean isSingleOpenableFile(List<FileTreeNode> sel) {
+        return sel.size() == 1 && !sel.getFirst().isDirectory() && allOpenable(sel);
     }
 
     private static boolean isTwoFiles(List<FileTreeNode> sel) {
-        return sel.size() == 2 && sel.stream().noneMatch(FileTreeNode::isDirectory) && isNotZip(sel);
+        return sel.size() == 2 && sel.stream().noneMatch(FileTreeNode::isDirectory) && allOpenable(sel);
+    }
+
+    /**
+     * Whether every selected file is one Open/Compare can honestly act on. The
+     * primary action must match double-click (context-menu-style §1): archives
+     * decompress, so Open is hidden for them — except .csv.gz, whose primary
+     * action IS opening (as a data view).
+     */
+    private static boolean allOpenable(List<FileTreeNode> sel) {
+        return sel.stream().allMatch(x -> {
+            File f = x.getFile();
+            if (TreeFileOperations.isZip(f)) {
+                return false;
+            }
+            return !TreeFileOperations.isGz(f) || CsvGzFormat.isCsvGz(f.getName());
+        });
     }
 
     private static boolean hasDirectory(List<FileTreeNode> sel) {
@@ -315,13 +335,6 @@ public class TreeContextMenu {
     /** True when the selection contains no root node — the empty-space subject. */
     private boolean noneIsRoot(List<FileTreeNode> sel) {
         return sel.stream().noneMatch(tree::isRoot);
-    }
-
-    /**
-     * Return true if none of {@code sel} are zip files
-     */
-    private static boolean isNotZip(List<FileTreeNode> sel) {
-        return sel.stream().noneMatch((x) -> TreeFileOperations.isZip(x.getFile()));
     }
 
     // --- Selection accessors ---
