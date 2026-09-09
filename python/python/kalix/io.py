@@ -177,8 +177,9 @@ def convert(input_path: PathLike, output_path: PathLike) -> list[str]:
         Path to the input file: ``.csv`` (date-indexed CSV), or a Pixie
         ``.pxt``/``.pxb`` (either half names the dataset).
     output_path
-        Path to the output file. A Pixie output always writes both halves,
-        whichever one is named. Converting within a format re-encodes.
+        Path to the output file. A Pixie output always writes both halves
+        (lossless, 64-bit), whichever one is named. Converting within a
+        format re-encodes.
 
     Returns
     -------
@@ -189,7 +190,8 @@ def convert(input_path: PathLike, output_path: PathLike) -> list[str]:
     ------
     ValueError
         Unrecognised extension, an unreadable input, or a failed write.
-        ``.res.csv`` is refused by name (the engine has no writer for it).
+        ``.res.csv`` is refused by name (the engine has no reader or writer
+        for it — Source result files are handled on the IDE side only).
     """
     _n_series, _n_points, outputs = _convert_file_raw(str(input_path), str(output_path))
     return list(outputs)

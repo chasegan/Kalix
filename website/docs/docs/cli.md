@@ -38,7 +38,7 @@ title: Commandline
 `-h`, `--help`
 :   Print help.
 
-`-v`, `--version`
+`-V`, `--version`
 :   Print the current kalix version.
 
 **Examples**
@@ -147,7 +147,7 @@ $ kalix resave my_model.ini --in-place --save-method canonical
 
 Convert a timeseries data file between formats. Formats are chosen by file extension: `.csv` for date-indexed CSV, and `.pxt` or `.pxb` for the [Pixie pair](input-data.md#pixie-binary-files-pxt-pxb) — either half names the dataset, and both halves are always written.
 
-The input is read completely before the output is written, so converting a file onto itself (to re-encode it) is safe. Source result files (`.res.csv`) are not supported.
+Pixie output is written lossless (64-bit values). The input is read completely before the output is written, so converting a file onto itself (to re-encode it) is safe. Source result files (`.res.csv`) are not supported, and a Pixie dataset whose series have different starts or timesteps is refused for CSV output — CSV shares one time column, so it cannot represent that honestly.
 
 **Usage** — `kalix convert <INPUT_FILE> <OUTPUT_FILE>`
 
@@ -172,4 +172,4 @@ Converted 3 series (32874 points): flows.csv -> flows.pxt + flows.pxb
 $ kalix convert flows.pxt flows_out.csv
 ```
 
-The same conversion is available in Python as [`kalix.convert()`](python.md).
+The same conversion is available in Python as [`kalix.convert()`](python.md#converting-data-files).
