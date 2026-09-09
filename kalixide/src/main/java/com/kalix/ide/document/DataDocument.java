@@ -48,6 +48,8 @@ public class DataDocument extends KalixDocument {
     private final JComponent largePrimaryView;
     /** True above the editable-text gate: virtual read-only views. */
     private final boolean largeReadOnly;
+    /** The read-only banner's label, when a banner exists — updatable on refresh. */
+    private javax.swing.JLabel bannerLabel;
 
     /** Set by every refresh request; drained by the single refresh worker. */
     private final AtomicBoolean refreshRequested = new AtomicBoolean(false);
@@ -58,9 +60,7 @@ public class DataDocument extends KalixDocument {
 
     /** Data documents require their backing file at construction (the views read it directly). */
     public DataDocument(File file) {
-        // A .csv.gz is read-only regardless of size: its bytes on disk are
-        // gzip, so there is no text buffer to honestly edit and save back.
-        this(file, exceedsEditableGate(file) || CsvGzFormat.isCsvGz(file != null ? file.getName() : null));
+        this(file, exceedsEditableGate(file));
     }
 
     /** Test seam: the gate decision is injectable so tests need no 50MB files. */
@@ -69,6 +69,11 @@ public class DataDocument extends KalixDocument {
         if (file == null) {
             throw new IllegalArgumentException("DATA documents need a backing file");
         }
+        // A .csv.gz is read-only regardless of the gate: its bytes on disk are
+        // gzip, so there is no text buffer to honestly edit and save back.
+        // Enforced here so no entrance (test seam included) can mint an
+        // editable gz document.
+        largeReadOnly = largeReadOnly || CsvGzFormat.isCsvGz(file.getName());
         setFile(file); // the load path may setFile again with the same file; harmless
 
         DataViewSession session = null;
@@ -77,8 +82,9 @@ public class DataDocument extends KalixDocument {
             session = DataViewOpener.openFor(file);
         } catch (CsvGzFormat.TooLargeException e) {
             // The one refusal with a story the banner must tell: the payload
-            // crossed the in-memory limit, and the user can raise it.
-            openFailureNote = e.getMessage() + " (modify limit in preferences)";
+            // crossed the in-memory limit, and the user can raise it. Reopening
+            // is the recovery: a refused open builds no views to refresh into.
+            openFailureNote = e.getMessage() + " (raise the limit in preferences and reopen)";
             logger.warn("Data view unavailable for {}: {}", file, e.getMessage());
         } catch (IOException e) {
             // The tab still opens; only the data views are lost.
@@ -127,6 +133,13 @@ public class DataDocument extends KalixDocument {
         this.largeReadOnly = largeReadOnly;
     }
 
+    /** Updates the read-only banner's text, when a banner exists. EDT only. */
+    private void setBannerText(String text) {
+        if (bannerLabel != null) {
+            bannerLabel.setText(text);
+        }
+    }
+
     /** Why this tab is read-only, in the banner's words — gz has its own story. */
     private static String readOnlyBannerText(File file) {
         if (CsvGzFormat.isCsvGz(file.getName())) {
@@ -171,14 +184,17 @@ public class DataDocument extends KalixDocument {
      * Wraps the virtual text view under a slim banner announcing WHY the tab is
      * read-only. Before this, nothing anywhere said so: typing was swallowed
      * silently, and the word "read-only" first appeared after a failed save.
+     * The label is kept so a refresh can change the story (see
+     * {@link #refreshOnce()}'s over-limit handling).
      */
-    private static JComponent withReadOnlyBanner(JComponent content, String text) {
+    private JComponent withReadOnlyBanner(JComponent content, String text) {
         javax.swing.JPanel panel = new javax.swing.JPanel(new java.awt.BorderLayout());
         javax.swing.JLabel banner = new javax.swing.JLabel(text);
         banner.setBorder(javax.swing.BorderFactory.createEmptyBorder(3, 8, 3, 8));
         banner.setEnabled(false); // muted, theme-following
         panel.add(banner, java.awt.BorderLayout.NORTH);
         panel.add(content, java.awt.BorderLayout.CENTER);
+        this.bannerLabel = banner;
         return panel;
     }
 
@@ -270,6 +286,7 @@ public class DataDocument extends KalixDocument {
         File target = getFile(); // Save As may have re-pointed the document; read the new bytes
         try {
             DataViewSession fresh = DataViewOpener.openFor(target);
+            SwingUtilities.invokeLater(() -> setBannerText(readOnlyBannerText(target)));
             SwingUtilities.invokeAndWait(() -> {
                 if (disposed) {
                     fresh.close(); // the tab died while we were rebuilding
@@ -288,6 +305,14 @@ public class DataDocument extends KalixDocument {
                     old.close();
                 }
             });
+        } catch (CsvGzFormat.TooLargeException e) {
+            // The file changed and its new payload crosses the in-memory
+            // limit. Keeping the old session is the least-bad option, but it
+            // must never masquerade as current: the banner says what happened.
+            logger.warn("Data view refresh refused for {}: {}", target, e.getMessage());
+            SwingUtilities.invokeLater(() -> setBannerText(
+                "Read only — the file changed and now " + e.getMessage()
+                    + "; showing the PREVIOUS content"));
         } catch (IOException e) {
             logger.warn("Data view refresh failed for {}: {}", target, e.getMessage());
         } catch (InterruptedException | InvocationTargetException e) {

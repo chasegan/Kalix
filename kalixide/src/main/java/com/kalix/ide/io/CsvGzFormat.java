@@ -38,6 +38,21 @@ public final class CsvGzFormat {
         return fileName != null && fileName.toLowerCase(Locale.ROOT).endsWith(EXTENSION);
     }
 
+    /**
+     * A UTF-8 writer for {@code file}, gzip-wrapped when the name says
+     * {@code .csv.gz} — the extension is the single source of truth for the
+     * format, so a .csv.gz name is never written plaintext. (Java's gzip
+     * header carries MTIME 0, matching the engine's reproducibility pin.)
+     */
+    public static java.io.Writer newUtf8Writer(File file) throws IOException {
+        if (isCsvGz(file.getName())) {
+            return new java.io.BufferedWriter(new java.io.OutputStreamWriter(
+                new java.util.zip.GZIPOutputStream(Files.newOutputStream(file.toPath())),
+                java.nio.charset.StandardCharsets.UTF_8));
+        }
+        return Files.newBufferedWriter(file.toPath(), java.nio.charset.StandardCharsets.UTF_8);
+    }
+
     /** The decompressed payload would exceed the in-memory limit. */
     public static final class TooLargeException extends IOException {
         public TooLargeException(String message) {
@@ -47,7 +62,12 @@ public final class CsvGzFormat {
 
     /**
      * Decompresses the whole file into memory, refusing past {@code maxBytes}.
-     * Blocking I/O — never call on the EDT.
+     * Blocking I/O that scales with the payload. The document open path
+     * currently calls it synchronously, like the pre-existing whole-file text
+     * read there — but unbounded by the editable-file gate, so a large gz
+     * stalls the open until data-document opens move off the EDT (known
+     * follow-up). Peak allocation is ~2x the payload (chunks plus the
+     * assembled array coexist briefly).
      *
      * @throws TooLargeException when the payload crosses {@code maxBytes}
      *         (message names both sizes, ready for a status strip or banner)
@@ -72,9 +92,11 @@ public final class CsvGzFormat {
                 }
                 total += filled;
                 if (total > limit) {
+                    // Report the limit actually enforced (maxBytes may exceed
+                    // the VM's array ceiling and be clamped above).
                     throw new TooLargeException(String.format(
                         "'%s' decompresses beyond the %,d MB in-memory limit",
-                        file.getName(), maxBytes / (1024 * 1024)));
+                        file.getName(), limit / (1024 * 1024)));
                 }
                 if (filled > 0) {
                     chunks.add(filled == chunk.length ? chunk : java.util.Arrays.copyOf(chunk, filled));

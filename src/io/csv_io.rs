@@ -43,7 +43,10 @@ pub fn read_ts(filename: &str) -> Result<Vec<Timeseries>, KalixIoError> {
     if is_gzip_csv(filename) {
         let file = fs::File::open(filename)
             .map_err(|e| KalixIoError::Io(format!("Failed to open file '{}': {}", filename, e)))?;
-        let decoder = flate2::read::GzDecoder::new(std::io::BufReader::new(file));
+        // MultiGzDecoder, not GzDecoder: RFC 1952 allows concatenated members
+        // (cat a.gz b.gz, bgzip) and gunzip/pandas read them all — a
+        // single-member decoder would silently truncate valid input.
+        let decoder = flate2::read::MultiGzDecoder::new(std::io::BufReader::new(file));
         read_ts_records(builder().from_reader(decoder), filename)
     } else {
         let reader = builder().from_path(filename)
@@ -349,14 +352,18 @@ pub fn write_ts_opts(filename: &str, timeseries_vector: Vec<&Timeseries>, gzip: 
                 .mtime(0)
                 .write(std::io::BufWriter::new(file), flate2::Compression::default());
             encoder.write_all(data_string.as_bytes())?;
-            encoder.finish().map(|_| ())
+            // finish() writes the gzip trailer into the BufWriter but does not
+            // flush it; letting Drop flush would swallow a disk-full error and
+            // report a truncated file as written.
+            let mut inner = encoder.finish()?;
+            inner.flush()
         })
     } else {
         fs::write(filename_path, data_string)
     };
     match result {
         Ok(_) => Ok(()),
-        Err(_) => Err(CsvError::WriteError(format!("Error writing file {filename}.")))
+        Err(e) => Err(CsvError::WriteError(format!("Error writing file {filename}: {e}")))
     }
 }
 

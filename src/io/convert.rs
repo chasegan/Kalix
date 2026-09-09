@@ -44,7 +44,7 @@ pub fn detect_ts_format(path: &str) -> Result<TsFileFormat, String> {
     let lower = path.to_lowercase();
     if lower.ends_with(".res.csv") || lower.ends_with(".res.csv.gz") {
         Err(format!(
-            "'{path}': .res.csv is not supported yet — the engine converts csv and pixie only"
+            "'{path}': .res.csv is not supported yet — the engine converts csv, csv.gz and pixie only"
         ))
     } else if lower.ends_with(".csv.gz") {
         Ok(TsFileFormat::CsvGz)
@@ -282,7 +282,9 @@ mod tests {
     #[test]
     fn csv_gz_output_is_byte_reproducible() {
         // MTIME is pinned to 0, so identical content gzips to identical
-        // bytes — rewriting a result must not churn the file.
+        // bytes — rewriting a result must not churn the file. (Within one
+        // build only: a flate2 upgrade may legitimately change the encoding;
+        // the cross-version contract is decompressed content, not bytes.)
         let src = Scratch::new("repro.csv");
         fs::write(&src.0, "Date,q\n2020-01-01,1.0\n2020-01-02,2.0\n").unwrap();
         let a = Scratch::new("repro_a.csv.gz");
@@ -290,6 +292,24 @@ mod tests {
         convert_ts_file(&src.0, &a.0).unwrap();
         convert_ts_file(&src.0, &b.0).unwrap();
         assert_eq!(fs::read(&a.0).unwrap(), fs::read(&b.0).unwrap());
+    }
+
+    #[test]
+    fn multi_member_gzip_reads_every_member() {
+        // RFC 1952: cat a.gz b.gz is one valid gzip file; gunzip and pandas
+        // read all members, so a single-member decode would silently drop data.
+        use std::io::Write;
+        let gz = Scratch::new("multi.csv.gz");
+        let mut bytes = Vec::new();
+        for part in ["Date,q\n2020-01-01,1.0\n", "2020-01-02,2.0\n"] {
+            let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+            enc.write_all(part.as_bytes()).unwrap();
+            bytes.extend(enc.finish().unwrap());
+        }
+        fs::write(&gz.0, bytes).unwrap();
+
+        let reread = csv_io::read_ts(&gz.0).expect("read the multi-member gz");
+        assert_eq!(reread[0].values, vec![1.0, 2.0], "both members' rows arrive");
     }
 
     #[test]

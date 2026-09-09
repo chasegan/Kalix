@@ -18,7 +18,8 @@ final class InMemoryByteChannel implements SeekableByteChannel {
 
     private final byte[] bytes;
     private long position;
-    private boolean open = true;
+    /** Volatile: close() may come from another thread (session teardown), like a file channel's. */
+    private volatile boolean open = true;
 
     InMemoryByteChannel(byte[] bytes) {
         this.bytes = bytes;
