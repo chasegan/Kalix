@@ -173,6 +173,13 @@ impl StorageNode {
         }
     }
 
+    /// Cap the spill at the water actually available. Only gated storages need
+    /// this: table spill is zero at the empty row and rises with volume, so it
+    /// can never exceed contents, whereas a gated release is set independently.
+    fn cap_spill(&self, spill: f64, w: f64) -> f64 {
+        if self.is_gated { spill.min(w.max(0.0)) } else { spill }
+    }
+
     /// Determine whether the release at the outlet should be the forced release optionally
     /// supplied by the user or the order determined by the model.
     fn check_forced_release(
@@ -326,8 +333,8 @@ impl StorageNode {
         -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64)
     {
         let area = self.dimensions.interpolate_row(row, VOLU, AREA, v);
-        let spill = self.spill_at_vol(row, v, gated_spill);
         let w = v_working + net_rain_mm * area;
+        let spill = self.cap_spill(self.spill_at_vol(row, v, gated_spill), w);
         let mut flows = self.rating_releases_at(v, spill);
         let v_final = (w - spill - flows.iter().sum::<f64>()).max(0.0);
         flows[0] += spill;
@@ -342,8 +349,8 @@ impl StorageNode {
         -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64)
     {
         let area = self.dimensions.interpolate_row(row, VOLU, AREA, t);
-        let spill = self.spill_at_vol(row, t, gated_spill);
         let w = v_working + net_rain_mm * area;
+        let spill = self.cap_spill(self.spill_at_vol(row, t, gated_spill), w);
         let mut flows = self.rating_releases_at(t, spill);
         let mut residual = (w - spill - t) - flows.iter().sum::<f64>();
         for (i, flow) in flows.iter_mut().enumerate() {
@@ -375,8 +382,8 @@ impl StorageNode {
     {
         let floor_vol = self.dimensions.get_value(0, VOLU);
         let area = self.dimensions.get_value(0, AREA);
-        let spill = self.spill_at_row(0, gated_spill);
         let w = v_working + net_rain_mm * area;
+        let spill = self.cap_spill(self.spill_at_row(0, gated_spill), w);
         let mut remaining = (w - spill).max(0.0);
         let mut flows = [0.0; MAX_DS_LINKS];
         for (i, f) in flows.iter_mut().enumerate() {
@@ -698,7 +705,8 @@ impl StorageNode {
 
         // Evaluate the solution point and allocate.
         let area = self.dimensions.interpolate_row(row, VOLU, AREA, v_solved);
-        let spill = self.spill_at_vol(row, v_solved, gated_spill);
+        let w = v_initial + net_rain_mm * area;
+        let spill = self.cap_spill(self.spill_at_vol(row, v_solved, gated_spill), w);
 
         let mut ds_flows = [0.0; MAX_DS_LINKS];
         let v_final;
@@ -735,6 +743,7 @@ impl StorageNode {
             // v_final = W - spill - sum(granted) so volume and flows
             // reconcile exactly — mass balance closes by construction.
             let w = v_initial + net_rain_mm * area;
+            let spill = self.cap_spill(self.spill_at_vol(row, v_solved, gated_spill), w);
             let mut remaining = (w - spill).max(0.0);
             let d1 = (dues[0] - spill).max(0.0);
             for (flow, due) in ds_flows.iter_mut().zip([d1, dues[1], dues[2], dues[3]].iter()) {
