@@ -532,10 +532,7 @@ impl StorageNode {
         // is unconditionally true for them). The fused outflow closure is
         // then a handful of compares and mins — no enum matching, no array
         // building, per error evaluation.
-        let mut d = [0.0f64; MAX_DS_LINKS];
-        for (di, due) in d.iter_mut().zip(self.ds_release_due.iter()) {
-            *di = if due.is_nan() || *due <= 0.0 { 0.0 } else { *due };
-        }
+        let d = self.sanitized_dues();
         let curves = &self.cap_curves;
         let outflow_at = |v: f64, spill: f64| -> f64 {
             let d1 = (d[0] - spill).max(0.0);
