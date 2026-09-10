@@ -1346,12 +1346,21 @@ impl Node for StorageNode {
         let seep_mm = self.seep_mm_input.get_value(data_cache);
         let pond_demand = self.pond_demand_input.get_value(data_cache);
 
-        let forced_level = self.forced_level_input.get_value(data_cache);
+        // forced_level_configured is fixed at initialise, so the input is only
+        // evaluated on storages that actually have one — an unconfigured
+        // storage pays nothing here per timestep (performance §3.1, §3.5).
+        // Unconfigured reads as NaN rather than DynamicInput::None's 0.0,
+        // which would report the storage as forced to 0 m.
+        self.was_forcing_level = self.is_forcing_level;
+        let forced_level = if self.forced_level_configured {
+            self.forced_level_input.get_value(data_cache)
+        } else {
+            f64::NAN
+        };
         if let Some(idx) = self.recorder_idx_forced_level {
             data_cache.add_value_at_index(idx, forced_level);
         }
-        self.was_forcing_level = self.is_forcing_level; 
-        self.is_forcing_level = self.forced_level_configured && forced_level.is_finite();
+        self.is_forcing_level = forced_level.is_finite();
 
         let mut area_km2 = 0.0; // will be computed by solver if storage exists
 
