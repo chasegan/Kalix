@@ -32,6 +32,159 @@ pub enum OutletDefinition {
     OutletWithRatingTable(Vec<(f64, f64)>), // (level, capacity) points
 }
 
+/// Where the equilibrium volume falls in the dimensions table, as located by
+/// [`bracket_segment`].
+///
+/// `Floor` covers both ways the search can bottom out — the bracket collapsing
+/// onto row 0, and a non-negative error at the lower bracket row (a demanded
+/// outflow exceeding everything the storage holds). Both solvers treat the two
+/// identically, so they are one variant.
+enum Bracket {
+    Floor,
+    /// The equilibrium lies in `[row, row + 1]`, or above the table top when
+    /// `error_hi` is still negative — the ceiling case, which the callers
+    /// extrapolate into. `error_prev` is the error at `row`, `error_hi` at
+    /// `row + 1`.
+    Segment { row: usize, error_prev: f64, error_hi: f64 },
+}
+
+/// Locates the table segment holding the root of a monotone error function
+/// over table rows: exponential expansion from the `start_row` warm start,
+/// then bisection down to a single-row bracket.
+///
+/// `compute_error` is supplied by the caller so that each solver keeps its own
+/// outflow arithmetic. That is deliberate, not incidental: the two error
+/// expressions differ in floating-point association and must stay that way
+/// (`solve_equilibrium`'s path is bit-identical with the pre-outlet solver by
+/// design). Only the search is shared — no float expression crosses this
+/// boundary.
+///
+/// `compute_error` must be monotone non-decreasing in the row index: negative
+/// means the root lies above that row, non-negative at or below it.
+#[inline]
+fn bracket_segment(nrows: usize, start_row: usize, compute_error: impl Fn(usize) -> f64) -> Bracket {
+    let start = start_row.min(nrows - 1);
+    let error_start = compute_error(start);
+    let (mut lo, mut hi, mut error_lo, mut error_hi) = if error_start < 0.0 {
+        // Solution is above the start row - expand upward.
+        let mut lo = start;
+        let mut error_lo = error_start;
+        let mut step = 1;
+        let mut hi = (start + step).min(nrows - 1);
+        let mut error_hi = compute_error(hi);
+        while error_hi < 0.0 && hi < nrows - 1 {
+            lo = hi;
+            error_lo = error_hi;
+            step *= 2;
+            hi = (hi + step).min(nrows - 1);
+            error_hi = compute_error(hi);
+        }
+        (lo, hi, error_lo, error_hi)
+    } else {
+        // Solution is at or below the start row - expand downward.
+        let mut hi = start;
+        let mut error_hi = error_start;
+        let mut step = 1;
+        let mut lo = start.saturating_sub(step);
+        let mut error_lo = compute_error(lo);
+        while error_lo >= 0.0 && lo > 0 {
+            hi = lo;
+            error_hi = error_lo;
+            step *= 2;
+            lo = lo.saturating_sub(step);
+            error_lo = compute_error(lo);
+        }
+        (lo, hi, error_lo, error_hi)
+    };
+    // Bisect to the exact bracket, caching error values.
+    while hi - lo > 1 {
+        let mid = lo + (hi - lo) / 2;
+        let error_mid = compute_error(mid);
+        if error_mid < 0.0 {
+            lo = mid;
+            error_lo = error_mid;
+        } else {
+            hi = mid;
+            error_hi = error_mid;
+        }
+    }
+
+    let istop = hi;
+    if istop == 0 {
+        return Bracket::Floor;
+    }
+    // When lo == hi (ceiling case) the cached error_lo sits at the wrong row.
+    let row = istop - 1;
+    let error_prev = if row == lo { error_lo } else { compute_error(row) };
+    // A demanded outflow exceeding everything the storage holds leaves the
+    // error non-negative at the lower bracket row. This also guards degenerate
+    // tables where a row pair satisfies dVol ~= net_rain*dArea (Talgai Weir
+    // rows 0-1 with net rain 0.1 mm), which would otherwise divide by a
+    // difference of two near-equal errors (see test_storage_floor_blowup).
+    if error_prev >= 0.0 {
+        return Bracket::Floor;
+    }
+    Bracket::Segment { row, error_prev, error_hi }
+}
+
+/// The geometry of one dimensions-table segment: volume, area and spill at
+/// rows `row` and `row + 1`. Area and spill are linear across it, which is
+/// what lets both solvers close the equilibrium in closed form.
+struct Segment {
+    v_lo: f64,
+    v_hi: f64,
+    area_lo: f64,
+    area_hi: f64,
+    spill_lo: f64,
+    spill_hi: f64,
+}
+
+impl Segment {
+    /// Reads the segment spanning `row..=row + 1`.
+    #[inline]
+    fn from_row(dimensions: &Table, row: usize) -> Self {
+        Self {
+            v_lo: dimensions.get_value(row, VOLU),
+            v_hi: dimensions.get_value(row + 1, VOLU),
+            area_lo: dimensions.get_value(row, AREA),
+            area_hi: dimensions.get_value(row + 1, AREA),
+            spill_lo: dimensions.get_value(row, SPIL).max(0.0),
+            spill_hi: dimensions.get_value(row + 1, SPIL).max(0.0),
+        }
+    }
+
+    /// Area and spill at volume `v`, interpolated across the segment (or
+    /// extrapolated beyond it, in the ceiling case).
+    #[inline]
+    fn lerp(&self, v: f64) -> (f64, f64) {
+        let x = (v - self.v_lo) / (self.v_hi - self.v_lo);
+        (
+            self.area_lo + (self.area_hi - self.area_lo) * x,
+            (self.spill_lo + (self.spill_hi - self.spill_lo) * x).max(0.0),
+        )
+    }
+}
+
+/// Where a linear error crosses zero between `a` and `b`.
+///
+/// `None` when there is no downhill crossing to find: a non-negative error at
+/// `a` (the root is not above it), or errors that do not converge
+/// (`e_a <= e_b`) — the guard both solvers use to reject a degenerate segment
+/// rather than invent a solution.
+///
+/// Only the crossing is shared, not the construction of `e_a` and `e_b`. The
+/// callers build those themselves because their error expressions differ in
+/// floating-point association on purpose — `x - a - b` is not `x - (a + b)`,
+/// and `solve_segment_unconstrained` must keep the historical form.
+#[inline]
+fn crossing(a: f64, b: f64, e_a: f64, e_b: f64) -> Option<f64> {
+    let d = e_a - e_b;
+    if e_a >= 0.0 || d >= 0.0 {
+        return None;
+    }
+    Some(a + (b - a) * (e_a / d))
+}
+
 #[derive(Default, Clone)]
 pub struct StorageNode {
     pub name: String,
@@ -47,6 +200,7 @@ pub struct StorageNode {
     pub pond_demand_input: DynamicInput,
     pub target_level: DynamicInput,
     pub exists: DynamicInput,
+    pub forced_level_input: DynamicInput,
     pub ds_force_release_input: [DynamicInput; MAX_DS_LINKS],
 
     // Internal state only
@@ -61,7 +215,11 @@ pub struct StorageNode {
     pond_diversion: f64, //pond diversion
     spill: f64,
     exists_configured: bool,
+    forced_level_configured: bool,
     exists_bool: bool,
+    sid_adjustment_volume: f64,
+    is_forcing_level: bool,
+    was_forcing_level: bool,
 
     // Cached state for search optimization
     previous_istop: usize,  // Remember previous solution row for warm start
@@ -78,8 +236,8 @@ pub struct StorageNode {
     pub outlet_definition: [OutletDefinition; MAX_DS_LINKS],
 
     // True when any outlet has a capacity curve (set during init). When
-    // false the solver takes the plain unconstrained path, bit-identical
-    // with the historical solver.
+    // false the solver takes solve_no_rating, bit-identical with the
+    // historical solver.
     has_mol: bool,
 
     // Canonical capacity-vs-VOLUME curve per outlet, built at init from the
@@ -109,6 +267,9 @@ pub struct StorageNode {
     recorder_idx_pond_demand: Option<usize>,
     recorder_idx_pond_diversion: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
+    recorder_idx_forced_level: Option<usize>,
+    recorder_idx_adjustment_volume: Option<usize>,
+    recorder_idx_sid_flux: Option<usize>,
     // Per-outlet recorder indices, one slot per ds link (ds_1 = index 0).
     recorder_idx_ds: [Option<usize>; MAX_DS_LINKS],
     recorder_idx_ds_order: [Option<usize>; MAX_DS_LINKS],
@@ -148,8 +309,7 @@ impl StorageNode {
     // Outlets are capacity-vs-level curves evaluated at the end-of-timestep
     // level, exactly as spill is (docs/storage_outlet_semantics.md). Storages
     // with any outlet curve solve via solve_rating below; storages without
-    // take the plain unconstrained solve, bit-identical with the historical
-    // solver.
+    // take solve_no_rating, bit-identical with the historical solver.
 
     /// Determine whether the release at the outlet should be the forced release optionally
     /// supplied by the user or the order determined by the model.
@@ -380,10 +540,7 @@ impl StorageNode {
         // is unconditionally true for them). The fused outflow closure is
         // then a handful of compares and mins — no enum matching, no array
         // building, per error evaluation.
-        let mut d = [0.0f64; MAX_DS_LINKS];
-        for (di, due) in d.iter_mut().zip(self.ds_release_due.iter()) {
-            *di = if due.is_nan() || *due <= 0.0 { 0.0 } else { *due };
-        }
+        let d = self.sanitized_dues();
         let curves = &self.cap_curves;
         let outflow_at = |v: f64, spill: f64| -> f64 {
             let d1 = (d[0] - spill).max(0.0);
@@ -401,70 +558,16 @@ impl StorageNode {
             v - (v_working + net_rain_mm * area - outflow_at(v, spill))
         };
 
-        // Exponential expansion + bisection over rows (same pattern as the
-        // main solver).
-        let start = start_row.min(nrows - 1);
-        let error_start = compute_error(start);
-        let (mut lo, mut hi, mut error_lo, mut error_hi) = if error_start < 0.0 {
-            let mut lo = start;
-            let mut error_lo = error_start;
-            let mut step = 1;
-            let mut hi = (start + step).min(nrows - 1);
-            let mut error_hi = compute_error(hi);
-            while error_hi < 0.0 && hi < nrows - 1 {
-                lo = hi;
-                error_lo = error_hi;
-                step *= 2;
-                hi = (hi + step).min(nrows - 1);
-                error_hi = compute_error(hi);
-            }
-            (lo, hi, error_lo, error_hi)
-        } else {
-            let mut hi = start;
-            let mut error_hi = error_start;
-            let mut step = 1;
-            let mut lo = start.saturating_sub(step);
-            let mut error_lo = compute_error(lo);
-            while error_lo >= 0.0 && lo > 0 {
-                hi = lo;
-                error_hi = error_lo;
-                step *= 2;
-                lo = lo.saturating_sub(step);
-                error_lo = compute_error(lo);
-            }
-            (lo, hi, error_lo, error_hi)
+        // Bracket the table segment (shared with the legacy solver; see
+        // `bracket_segment`), then walk that segment's threshold pieces below.
+        let (row, error_prev, error_hi) = match bracket_segment(nrows, start_row, compute_error) {
+            Bracket::Floor => return self.rating_floor(v_working, net_rain_mm),
+            Bracket::Segment { row, error_prev, error_hi } => (row, error_prev, error_hi),
         };
-        while hi - lo > 1 {
-            let mid = lo + (hi - lo) / 2;
-            let error_mid = compute_error(mid);
-            if error_mid < 0.0 {
-                lo = mid;
-                error_lo = error_mid;
-            } else {
-                hi = mid;
-                error_hi = error_mid;
-            }
-        }
-        let istop = hi;
-        if istop == 0 {
-            return self.rating_floor(v_working, net_rain_mm);
-        }
-        let row = istop - 1;
-        let error_prev = if row == lo { error_lo } else { compute_error(row) };
-        if error_prev >= 0.0 {
-            return self.rating_floor(v_working, net_rain_mm);
-        }
 
-        let v_lo = self.dimensions.get_value(row, VOLU);
-        let v_hi = self.dimensions.get_value(istop, VOLU);
-        let area_lo = self.dimensions.get_value(row, AREA);
-        let area_hi = self.dimensions.get_value(istop, AREA);
-        let spill_lo = self.dimensions.get_value(row, SPIL).max(0.0);
-        let spill_hi = self.dimensions.get_value(istop, SPIL).max(0.0);
-        let lerp = |v: f64| -> (f64, f64) {
-            let x = (v - v_lo) / (v_hi - v_lo);
-            (area_lo + (area_hi - area_lo) * x, (spill_lo + (spill_hi - spill_lo) * x).max(0.0))
-        };
+        let seg = Segment::from_row(&self.dimensions, row);
+        let Segment { v_lo, v_hi, .. } = seg;
+        let lerp = |v: f64| seg.lerp(v);
         let err_at = |v: f64| -> f64 {
             let (area, spill) = lerp(v);
             v - (v_working + net_rain_mm * area - outflow_at(v, spill))
@@ -516,13 +619,12 @@ impl StorageNode {
             let (area_a, spill_a) = lerp(a);
             let (area_b, spill_b) = lerp(b);
             let solve_lin = |o_a: f64, o_b: f64| -> Option<f64> {
-                let e1 = a - (v_working + net_rain_mm * area_a - o_a);
-                let e2 = b - (v_working + net_rain_mm * area_b - o_b);
-                let dd = e1 - e2;
-                if e1 >= 0.0 || dd >= 0.0 {
-                    return None;
-                }
-                Some(a + (b - a) * (e1 / dd))
+                crossing(
+                    a,
+                    b,
+                    a - (v_working + net_rain_mm * area_a - o_a),
+                    b - (v_working + net_rain_mm * area_b - o_b),
+                )
             };
             // Per-outlet capacity endpoints from the interior side of the
             // piece (from above at a, from below at b).
@@ -634,44 +736,29 @@ impl StorageNode {
         self.rating_attribution(v_hi, row, v_working, net_rain_mm)
     }
 
-    /// Solves the backward Euler equation for equilibrium volume in flow phase.
+    /// The solve for a storage with no outlet curves: find the equilibrium
+    /// volume, then attribute the flows that produced it.
     ///
-    /// One monotone solve: the MOL access constraints are folded into the
-    /// outflow function, so the equilibrium error is continuous in volume and
-    /// a single bracket-and-refine pass finds the solution — no active outlet
-    /// sets, no threshold clamping. The final volume is recomputed from the
-    /// allocated flows so mass balance closes by construction.
-    ///
-    /// PROTOTYPE: storages with MOL outlets route to the rating-semantics
-    /// solver above; storages without stay on the (bit-identical) legacy path.
+    /// Bit-identical with the pre-outlet-redesign solver, expression for
+    /// expression — external users diff outputs against a pinned baseline, so
+    /// the arithmetic here is fixed, not merely conventional. The rating
+    /// solver's outflow function is algebraically the same thing when no curve
+    /// is configured, but not the same in floating point; that is why this
+    /// path exists rather than deferring to it.
     ///
     /// Returns (final_volume, ds_flows[4], spill, table_row, area)
-    fn solve_backward_euler(
-        &mut self,
+    fn solve_no_rating(
+        &self,
         v_initial: f64,
         net_rain_mm: f64,
-        data_cache: &mut DataCache,
+        nrows: usize,
+        start_row: usize,
     ) -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64) {
-        let nrows = self.dimensions.nrows();
-
-        // Compute all release demands once (orders or forced releases)
-        for i in 0..MAX_DS_LINKS {
-            self.ds_release_due[i] = Self::check_forced_release(
-                data_cache,
-                &self.ds_force_release_input[i],
-                self.ds_orders_due[i]
-            );
-        }
-
-        if self.has_mol {
-            return self.solve_rating(v_initial, net_rain_mm, nrows, self.previous_istop);
-        }
-
         // Sanitized dues (NaN / non-positive => 0) — the raw values would
         // poison the equilibrium error or manufacture water.
         let dues = self.sanitized_dues();
         let (v_solved, row, legacy) =
-            self.solve_equilibrium(&dues, v_initial, net_rain_mm, nrows, self.previous_istop);
+            self.solve_equilibrium(&dues, v_initial, net_rain_mm, nrows, start_row);
 
         // Evaluate the solution point and allocate.
         let area = self.dimensions.interpolate_row(row, VOLU, AREA, v_solved);
@@ -727,6 +814,111 @@ impl StorageNode {
         (v_final, ds_flows, spill, row, area)
     }
 
+    /// Solves the backward Euler equation for equilibrium volume in flow phase.
+    ///
+    /// Resolves this timestep's release demands, then dispatches on the outlet
+    /// configuration — decided once at `initialise`, not per evaluation:
+    ///
+    /// - any outlet curve => [`solve_rating`](Self::solve_rating), where the
+    ///   outflow steps at each MOL threshold;
+    /// - no outlet curves => [`solve_no_rating`](Self::solve_no_rating),
+    ///   the plain solve, bit-identical with the pre-outlet solver.
+    ///
+    /// The two keep separate outflow arithmetic on purpose; see
+    /// [`bracket_segment`] for what is shared between them and why nothing
+    /// more can be.
+    ///
+    /// Returns (final_volume, ds_flows[4], spill, table_row, area)
+    fn solve_backward_euler(
+        &mut self,
+        v_initial: f64,
+        net_rain_mm: f64,
+        data_cache: &mut DataCache,
+    ) -> (f64, [f64; MAX_DS_LINKS], f64, usize, f64) {
+        let nrows = self.dimensions.nrows();
+
+        // Compute all release demands once (orders or forced releases)
+        for i in 0..MAX_DS_LINKS {
+            self.ds_release_due[i] = Self::check_forced_release(
+                data_cache,
+                &self.ds_force_release_input[i],
+                self.ds_orders_due[i]
+            );
+        }
+
+        if self.has_mol {
+            self.solve_rating(v_initial, net_rain_mm, nrows, self.previous_istop)
+        } else {
+            self.solve_no_rating(v_initial, net_rain_mm, nrows, self.previous_istop)
+        }
+    }
+
+    /// Solves the flow phase for a timestep whose level is forced to a supplied
+    /// value.
+    ///
+    /// There is no equilibrium to search for: the backward Euler solve exists
+    /// to find the end-of-step volume, and forcing the level supplies it, so
+    /// this evaluates rather than solves. Spill and area are read AT the forced
+    /// volume — the same end-of-step semantics
+    /// [`solve_rating`](Self::solve_rating) uses so that every flux reported
+    /// belongs to the level actually reported.
+    ///
+    /// Releases are capped by outlet capacity but not by the water available.
+    /// Once the end-of-day volume is given, it is an artefact of the forcing
+    /// rather than a physical fact, and capping against it would fold a data
+    /// problem quietly into the adjustment instead of showing it.
+    ///
+    /// Returns (adjustment_volume, ds_flows[4], spill, area), where
+    /// adjustment_volume is the volume the storage is adjusted BY — positive
+    /// when forcing had to create water.
+    fn solve_forced_level(
+        &mut self,
+        forced_vol: f64,
+        row: usize,
+        net_rain_mm: f64,
+        data_cache: &mut DataCache,
+    ) -> (f64, [f64; MAX_DS_LINKS], f64, f64) {
+        // Compute all release demands once (orders or forced releases)
+        for i in 0..MAX_DS_LINKS {
+            self.ds_release_due[i] = Self::check_forced_release(
+                data_cache,
+                &self.ds_force_release_input[i],
+                self.ds_orders_due[i]
+            );
+        }
+
+        // Sanitized dues (NaN / non-positive => 0) — the raw values would
+        // poison the balance or manufacture water.
+        let dues = self.sanitized_dues();
+
+        let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, forced_vol).max(0.0);
+        let area = self.dimensions.interpolate_row(row, VOLU, AREA, forced_vol);
+
+        // ----------------
+        // Respect the MOLs
+        // ----------------
+
+        // Cap to outlet maximum at this level
+        let cap = |i: usize| -> f64 { Self::cap_right(&self.cap_curves[i], forced_vol) };
+
+        // ds_1 carries the spill and its outlet tops that up towards the due;
+        // ds_2..4 release their dues alone.
+        let mut ds_flows = [0.0; MAX_DS_LINKS];
+        ds_flows[0] = spill + (dues[0] - spill).max(0.0).min(cap(0));
+        for i in 1..MAX_DS_LINKS {
+            ds_flows[i] = dues[i].min(cap(i));
+        }
+
+        // Where the volume would have landed had the level not been forced.
+        let total_outflow: f64 = ds_flows.iter().sum();
+        let unforced_vol = self.volume + net_rain_mm * area - total_outflow;
+
+        // Positive = water created, negative = water destroyed
+        let adjustment_vol = forced_vol - unforced_vol;
+
+        (adjustment_vol, ds_flows, spill, area)
+    }
+
     /// Finds the equilibrium volume for a storage with no outlet curves:
     /// v = W(v) - O(v), with W the available water (v_working +
     /// net_rain*area(v)) and O the unconstrained outflow.
@@ -758,99 +950,26 @@ impl StorageNode {
             )
         };
 
-        // Exponential expansion from start_row hint
-        let start = start_row.min(nrows - 1);
-        let error_start = compute_error(start);
-
-        let (mut lo, mut hi, mut error_lo) = if error_start < 0.0 {
-            // Solution is above start row - expand upward
-            let mut lo = start;
-            let mut error_lo = error_start;
-            let mut step = 1;
-            let mut hi = (start + step).min(nrows - 1);
-            let mut error_hi = compute_error(hi);
-            while error_hi < 0.0 && hi < nrows - 1 {
-                lo = hi;
-                error_lo = error_hi;
-                step *= 2;
-                hi = (hi + step).min(nrows - 1);
-                error_hi = compute_error(hi);
-            }
-            (lo, hi, error_lo)
-        } else {
-            // Solution is at or below start row - expand downward
-            let mut hi = start;
-            let mut error_hi = error_start;
-            let mut step = 1;
-            let mut lo = start.saturating_sub(step);
-            let mut error_lo = compute_error(lo);
-            while error_lo >= 0.0 && lo > 0 {
-                hi = lo;
-                error_hi = error_lo;
-                step *= 2;
-                lo = lo.saturating_sub(step);
-                error_lo = compute_error(lo);
-            }
-            let _ = error_hi;
-            (lo, hi, error_lo)
+        // Bracket the table segment. Both floor cases (bracket on row 0, or a
+        // non-negative error at the lower bracket row) land in Bracket::Floor;
+        // the ceiling case (error still negative at the table top) falls
+        // through to the segment solve, which extrapolates beyond the table.
+        let row = match bracket_segment(nrows, start_row, compute_error) {
+            Bracket::Floor => return (self.dimensions.get_value(0, VOLU), 0, false),
+            Bracket::Segment { row, .. } => row,
         };
-
-        // Bisect to find exact bracket, caching error values
-        while hi - lo > 1 {
-            let mid = lo + (hi - lo) / 2;
-            let error_mid = compute_error(mid);
-            if error_mid < 0.0 {
-                lo = mid;
-                error_lo = error_mid;
-            } else {
-                hi = mid;
-            }
-        }
-
-        let istop = hi;
-
-        // Handle floor case (solution at or below row 0)
-        if istop == 0 {
-            return (self.dimensions.get_value(0, VOLU), 0, false);
-        }
-        // Ceiling case (error_hi < 0): allow extrapolation beyond table max
-        // by falling through to normal interpolation - x > 1.0 extrapolates
-
-        // Interpolate between rows using cached errors where possible.
-        // When lo == hi (ceiling case: solution beyond table max), row != lo
-        // so the cached error_lo is at the wrong position — recompute it.
-        let row = istop - 1;
-        let error_prev = if row == lo { error_lo } else { compute_error(row) };
-
-        // Solution at or below the table floor: a demanded outflow exceeding
-        // everything the storage holds has a non-negative error at the lower
-        // bracket row. This also guards degenerate tables where a row pair
-        // satisfies dVol ≈ net_rain·dArea (Talgai Weir rows 0-1 with net rain
-        // 0.1 mm), which makes the interpolation below divide by a difference
-        // of two near-equal errors (see test_storage_floor_blowup).
-        if error_prev >= 0.0 {
-            return (self.dimensions.get_value(0, VOLU), 0, false);
-        }
-
-        let v_lo = self.dimensions.get_value(row, VOLU);
-        let v_hi = self.dimensions.get_value(istop, VOLU);
-        let area_lo = self.dimensions.get_value(row, AREA);
-        let area_hi = self.dimensions.get_value(istop, AREA);
-        let spill_lo = self.dimensions.get_value(row, SPIL).max(0.0);
-        let spill_hi = self.dimensions.get_value(istop, SPIL).max(0.0);
+        let seg = Segment::from_row(&self.dimensions, row);
 
         // Exact within-segment solve (including the ds_1 spill kink and, in
         // the ceiling case, extrapolation beyond the table top). The
         // candidate satisfies the mass balance with the full dues released,
         // so the caller attributes flows from the dues directly.
-        if let Some(v) = Self::solve_segment_unconstrained(
-            dues, v_working, net_rain_mm, v_lo, v_hi, area_lo, area_hi, spill_lo, spill_hi,
-        ) {
+        if let Some(v) = Self::solve_segment_unconstrained(dues, v_working, net_rain_mm, &seg) {
             return (v, row, true);
         }
         // Degenerate segment (errors do not converge downhill): clamp to the
         // top row and let the caller cap flows by the available water.
-        (self.dimensions.get_value(istop, VOLU), row, false)
+        (seg.v_hi, row, false)
     }
 
     /// The historical unconstrained within-segment solve, kept expression-for-
@@ -858,18 +977,13 @@ impl StorageNode {
     /// interpolation of the error, with exact handling of the max(spill, ds_1
     /// release due) kink. Returns None when the segment is degenerate (errors
     /// do not converge downhill), mirroring the old floor/ceiling guards.
-    #[allow(clippy::too_many_arguments)]
     fn solve_segment_unconstrained(
         dues: &[f64; MAX_DS_LINKS],
         v_working: f64,
         net_rain_mm: f64,
-        v_lo: f64,
-        v_hi: f64,
-        area_lo: f64,
-        area_hi: f64,
-        spill_lo: f64,
-        spill_hi: f64,
+        seg: &Segment,
     ) -> Option<f64> {
+        let &Segment { v_lo, v_hi, area_lo, area_hi, spill_lo, spill_hi } = seg;
         let ds1_required_flow = dues[0];
         let ds234_orders: f64 = dues[1..].iter().sum();
 
@@ -888,13 +1002,12 @@ impl StorageNode {
             // outflow linear between the given endpoint values. None when the
             // branch has no downhill crossing (mirrors the guards above).
             let solve_branch = |outflow_lo: f64, outflow_hi: f64| -> Option<f64> {
-                let e_lo = v_lo - (v_working + net_rain_mm * area_lo - outflow_lo - ds234_orders);
-                let e_hi = v_hi - (v_working + net_rain_mm * area_hi - outflow_hi - ds234_orders);
-                let d = e_lo - e_hi;
-                if e_lo >= 0.0 || d >= 0.0 {
-                    return None;
-                }
-                Some(v_lo + (v_hi - v_lo) * (e_lo / d))
+                crossing(
+                    v_lo,
+                    v_hi,
+                    v_lo - (v_working + net_rain_mm * area_lo - outflow_lo - ds234_orders),
+                    v_hi - (v_working + net_rain_mm * area_hi - outflow_hi - ds234_orders),
+                )
             };
             // Below the crossing the required flow governs: outflow is constant.
             if let Some(v) = solve_branch(ds1_required_flow, ds1_required_flow) {
@@ -940,12 +1053,7 @@ impl StorageNode {
         // legitimate only while the errors still converge (error_hi >
         // error_prev). Anything else is degenerate here: the caller falls
         // back to the capped bisection or the top row.
-        let denom = error_prev - error_hi;
-        if error_prev >= 0.0 || denom >= 0.0 {
-            return None;
-        }
-        let x = error_prev / denom;
-        Some(v_lo + (v_hi - v_lo) * x)
+        crossing(v_lo, v_hi, error_prev, error_hi)
     }
 
     /// Sets `self.exists_bool` for this timestep, and records the driving value.
@@ -983,6 +1091,9 @@ impl Node for StorageNode {
         self.spill = 0.0;
         self.previous_istop = 0;
         self.exists_bool = true;
+        self.is_forcing_level  = false; 
+        self.was_forcing_level = false; 
+        self.sid_adjustment_volume = 0.0;
 
         // Checks
         if self.dimensions.nrows() < 2 {
@@ -1129,6 +1240,8 @@ impl Node for StorageNode {
 
         // Check once whether an "exists" input was configured (default: storage always exists)
         self.exists_configured = !matches!(&self.exists, DynamicInput::None { .. });
+        self.forced_level_configured =
+            !matches!(&self.forced_level_input, DynamicInput::None { .. });
 
         // Initialize result recorders
         self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
@@ -1145,6 +1258,9 @@ impl Node for StorageNode {
         self.recorder_idx_pond_diversion = recorder(data_cache, &self.name, "pond_diversion");
         self.recorder_idx_pond_demand = recorder(data_cache, &self.name, "pond_demand");
         self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
+        self.recorder_idx_forced_level = recorder(data_cache, &self.name, "forced_level");
+        self.recorder_idx_sid_flux = recorder(data_cache, &self.name, "sid_flux");
+        self.recorder_idx_adjustment_volume = recorder(data_cache, &self.name, "adjustment_volume");
         for i in 0..MAX_DS_LINKS {
             let n = i + 1;
             self.recorder_idx_ds[i] = recorder(data_cache, &self.name, &format!("ds_{n}"));
@@ -1230,6 +1346,22 @@ impl Node for StorageNode {
         let seep_mm = self.seep_mm_input.get_value(data_cache);
         let pond_demand = self.pond_demand_input.get_value(data_cache);
 
+        // forced_level_configured is fixed at initialise, so the input is only
+        // evaluated on storages that actually have one — an unconfigured
+        // storage pays nothing here per timestep (performance §3.1, §3.5).
+        // Unconfigured reads as NaN rather than DynamicInput::None's 0.0,
+        // which would report the storage as forced to 0 m.
+        self.was_forcing_level = self.is_forcing_level;
+        let forced_level = if self.forced_level_configured {
+            self.forced_level_input.get_value(data_cache)
+        } else {
+            f64::NAN
+        };
+        if let Some(idx) = self.recorder_idx_forced_level {
+            data_cache.add_value_at_index(idx, forced_level);
+        }
+        self.is_forcing_level = forced_level.is_finite();
+
         let mut area_km2 = 0.0; // will be computed by solver if storage exists
 
         self.check_if_exists(data_cache);
@@ -1253,6 +1385,8 @@ impl Node for StorageNode {
             // step; without this the ds_N_force_release recorders would keep reporting
             // the last step on which the storage existed.
             self.ds_release_due = [0.0; MAX_DS_LINKS];
+            self.sid_adjustment_volume = 0.0;
+            self.is_forcing_level = false;
             self.dsflow = self.ds_flows.iter().sum();
         } else {
             // Add upstream inflows
@@ -1265,21 +1399,58 @@ impl Node for StorageNode {
             
             // Net rainfall rate
             let net_rain_mm = rain_mm - evap_mm - seep_mm;
-            
-            // Solve backward Euler
-            let (v_final, ds_flows, spill, row, solver_area_km2) = self.solve_backward_euler(self.volume, net_rain_mm, data_cache);
-            area_km2 = solver_area_km2;
-            
-            // Update warm-start cache for next timestep (expects upper bracket)
-            self.previous_istop = row + 1;
-            
-            // Update state from solution (area already computed by solver)
-            self.volume = v_final;
-            self.level = self.dimensions.interpolate_row(row, VOLU, LEVL, v_final);
-            self.spill = spill;
-            self.ds_flows = ds_flows;
-            self.dsflow = self.ds_flows.iter().sum();
-            
+
+            if self.is_forcing_level {
+                // Clamp to minimum volume - unphysical.
+                let floor_vol = self.dimensions.get_value(0, VOLU);
+                let requested_vol =
+                    self.dimensions.interpolate_or_extrapolate(LEVL, VOLU, forced_level);
+                let (applied_vol, applied_level) = if requested_vol < floor_vol {
+                    (floor_vol, self.dimensions.get_value(0, LEVL))
+                } else {
+                    (requested_vol, forced_level)
+                };
+                // Bracket on volume instead of level: every flux below is read from
+                // this row against the volume columns
+                let row = self
+                    .dimensions
+                    .find_row_for_interpolation_or_extrapolation(VOLU, applied_vol);
+
+                let (solver_adjustment_volume, ds_flows, spill, solver_area_km2) =
+                    self.solve_forced_level(applied_vol, row, net_rain_mm, data_cache); 
+                area_km2 = solver_area_km2;
+
+                // Update warm-start cache for next timestep (expects upper bracket)
+                self.previous_istop = row + 1;
+                
+                // Update state from solution (area already computed by solver)
+                self.volume = applied_vol;
+                self.level = applied_level;
+                self.spill = spill;
+                self.ds_flows = ds_flows;
+                self.dsflow = self.ds_flows.iter().sum();
+                self.sid_adjustment_volume = solver_adjustment_volume;
+
+                // Update mass balance - opposite convention (ds flow = positive)
+                self.mbal -= self.sid_adjustment_volume;
+                // Also updated below.
+            } else {
+                // Solve backward Euler
+                let (v_final, ds_flows, spill, row, solver_area_km2) = 
+                    self.solve_backward_euler(self.volume, net_rain_mm, data_cache);
+                area_km2 = solver_area_km2;
+                
+                // Update warm-start cache for next timestep (expects upper bracket)
+                self.previous_istop = row + 1;
+                
+                // Update state from solution (area already computed by solver)
+                self.volume = v_final;
+                self.level = self.dimensions.interpolate_row(row, VOLU, LEVL, v_final);
+                self.spill = spill;
+                self.ds_flows = ds_flows;
+                self.dsflow = self.ds_flows.iter().sum();
+                self.sid_adjustment_volume = 0.0;
+            }
             // Compute climate volumes using solved area
             self.rain_vol = rain_mm * area_km2;
             self.evap_vol = evap_mm * area_km2;
@@ -1325,6 +1496,16 @@ impl Node for StorageNode {
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow);
+        }
+        if let Some(idx) = self.recorder_idx_sid_flux {
+            data_cache.add_value_at_index(idx, 
+                // if interior of forced_level provided data
+                if self.was_forcing_level && self.is_forcing_level
+                     { self.sid_adjustment_volume } 
+                else { f64::NAN });
+        }
+        if let Some(idx) = self.recorder_idx_adjustment_volume {
+            data_cache.add_value_at_index(idx, self.sid_adjustment_volume);
         }
         // Per-outlet records. Outlet 0 (ds_1) carries the spill: its outlet
         // component is flow minus spill; the other outlets never spill.

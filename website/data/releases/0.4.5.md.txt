@@ -44,3 +44,7 @@ pip: "pip install kalix==0.4.5"
     - Click a column header to plot or unplot that column (plotted columns get an accent mark, and the full column name shows as a tooltip); the first data column is plotted by default.
     - Right-click a datapoint for `Show in plot` (centres the plot on it, keeping your zoom level) or `Plot "column"` / `Unplot "column"`.
     - Plotting loads whole columns into memory, so it is bounded by a new row-count preference (default 5,000,000; Preferences → Editor → Load and Save). Over-limit or non-date files say why in the status strip — never a dialog, never a silent failure.
+- New `forced_level` on storage nodes: pin a storage to supplied end-of-timestep levels and report the adjustment volume (flux/residual inflow) to reconcile the balance. Storage characteristics are read at the forced level, releases are met subject to outlet capacity.
+    - Output `adjustment_volume` indicates all changes to volume due to forcing: positive for created water and negative for destroyed. `sid_flux` reports the adjustment volume on the interior of the supplied data (i.e. excluding re-initialisation on the first day of provided levels).
+    - NaNs are read as "not forced" for the timestep.
+    - A level below the storage dimensions is clamped to the bottom (negative volumes are unphysical), and above the storage dimensions is extrapolated.

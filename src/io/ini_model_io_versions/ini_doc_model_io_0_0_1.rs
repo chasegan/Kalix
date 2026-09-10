@@ -852,8 +852,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "exists" {
                             n.exists = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-                        }
-                        else {
+                        } else if name_lower == "forced_level" {
+                            n.forced_level_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                               ini_property.line_number, name, node_name)));
                         }
@@ -1450,6 +1452,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.pond_demand_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "target_level", &n.target_level.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "exists", &n.exists.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "forced_level", &n.forced_level_input.to_string());
                 for (i, ds_force_release) in n.ds_force_release_input.iter().enumerate() {
                     let property_name = format!("ds_{}_force_release", i + 1);
                     set_property_if_not_empty(&mut ini_doc, section_name.as_str(), &property_name, &ds_force_release.to_string());
