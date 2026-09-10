@@ -1,0 +1,21 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 3
+  Timesteps: 12
+  Stepsize (s): 86400
+  Period: 2024-01-01T00:00:00.000Z, 2024-01-12T00:00:00.000Z
+  Note: units are ML/timestep
+
+INFLOW NODES
+  inflow1, 50
+
+STORAGE NODES
+  forced_storage, -20.833333333333332
+
+BLACKHOLE NODES
+  bh1, -25
+
+----------------------------------
+TOTAL = 4.166666666666671
+----------------------------------
