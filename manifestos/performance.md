@@ -56,7 +56,10 @@ below are not a licence to mangle cold code (§5).
    which is set by its largest variant. If you need declaration order to be
    memory order, say `#[repr(C)]` and accept its padding; otherwise you do not
    control it. Measure instead: `size_of`, `offset_of`, and a benchmark model
-   shaped like the workload that showed the effect (`regression_tests/speed/`).
+   shaped like the workload that showed the effect (`regression_tests/speed/`)
+   — plus, for any layout-suspicious delta, a control binary that separates
+   layout from behaviour: the same baseline padded to the same size, doing
+   nothing new.
 
    *Retracted, 2026-08: this clause previously prescribed "cold configuration
    goes at the tail of hot structs", citing two ~3% regressions from field
@@ -81,6 +84,24 @@ below are not a licence to mangle cold code (§5).
    RoutingNode diet — its fourteen inline `[f64; 32]` arrays are 3,584 of
    its 3,880 bytes — buys nothing today and stays deferred until a
    cache-spilling benchmark (thousands of nodes) exists to justify it.*
+
+   *Fourth data point, 2026-09: an intra-struct size change is NOT flat, even
+   where stride is. Adding the forced-level fields grew `StorageNode` from
+   2,616 to 2,800 bytes with `NodeEnum`'s stride untouched at 3,880
+   (`RoutingNode` still sets it), and both storage-bearing speed tests moved
+   −6.1%. Splitting the cause with a third binary — the same baseline plus
+   `[u64; 23]` of dead padding, reaching 2,800 bytes with no behaviour change
+   — decomposed it in opposite directions: test 4 took +1.1% (noise) from the
+   padding and −4.5% from the code; test 5 took −4.2% from the padding and
+   −0.9% (noise) from the code. The storage-free control was flat throughout.
+   Same net number, opposite mechanisms, on two models differing only in
+   composition. Two things follow. A multi-percent swing in
+   `regression_tests/speed/` can be produced by bytes that do nothing, so a
+   delta is not a result without a control binary beside it; and a speedup
+   whose attribution flips between models is layout luck rather than an
+   improvement, and must not be banked as a property of whatever change
+   happened to carry it. One machine, one CPU — like the notes above, and not
+   yet checked on another.*
 
 5. **Do each piece of work at the coldest place it can live.** Resolution,
    validation, allocation, and branch decisions belong at setup / `initialise` time,
