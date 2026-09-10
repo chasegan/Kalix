@@ -200,6 +200,7 @@ pub struct StorageNode {
     pub pond_demand_input: DynamicInput,
     pub target_level: DynamicInput,
     pub exists: DynamicInput,
+    pub forced_level_input: DynamicInput,
     pub ds_force_release_input: [DynamicInput; MAX_DS_LINKS],
 
     // Internal state only
@@ -214,7 +215,11 @@ pub struct StorageNode {
     pond_diversion: f64, //pond diversion
     spill: f64,
     exists_configured: bool,
+    forced_level_configured: bool,
     exists_bool: bool,
+    sid_adjustment_volume: f64,
+    is_forcing_level: bool,
+    was_forcing_level: bool,
 
     // Cached state for search optimization
     previous_istop: usize,  // Remember previous solution row for warm start
@@ -262,6 +267,9 @@ pub struct StorageNode {
     recorder_idx_pond_demand: Option<usize>,
     recorder_idx_pond_diversion: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
+    recorder_idx_forced_level: Option<usize>,
+    recorder_idx_adjustment_volume: Option<usize>,
+    recorder_idx_sid_flux: Option<usize>,
     // Per-outlet recorder indices, one slot per ds link (ds_1 = index 0).
     recorder_idx_ds: [Option<usize>; MAX_DS_LINKS],
     recorder_idx_ds_order: [Option<usize>; MAX_DS_LINKS],
@@ -845,6 +853,72 @@ impl StorageNode {
         }
     }
 
+    /// Solves the flow phase for a timestep whose level is forced to a supplied
+    /// value.
+    ///
+    /// There is no equilibrium to search for: the backward Euler solve exists
+    /// to find the end-of-step volume, and forcing the level supplies it, so
+    /// this evaluates rather than solves. Spill and area are read AT the forced
+    /// volume — the same end-of-step semantics
+    /// [`solve_rating`](Self::solve_rating) uses so that every flux reported
+    /// belongs to the level actually reported.
+    ///
+    /// Releases are capped by outlet capacity but not by the water available.
+    /// Once the end-of-day volume is given, it is an artefact of the forcing
+    /// rather than a physical fact, and capping against it would fold a data
+    /// problem quietly into the adjustment instead of showing it.
+    ///
+    /// Returns (adjustment_volume, ds_flows[4], spill, area), where
+    /// adjustment_volume is the volume the storage is adjusted BY — positive
+    /// when forcing had to create water.
+    fn solve_forced_level(
+        &mut self,
+        forced_vol: f64,
+        row: usize,
+        net_rain_mm: f64,
+        data_cache: &mut DataCache,
+    ) -> (f64, [f64; MAX_DS_LINKS], f64, f64) {
+        // Compute all release demands once (orders or forced releases)
+        for i in 0..MAX_DS_LINKS {
+            self.ds_release_due[i] = Self::check_forced_release(
+                data_cache,
+                &self.ds_force_release_input[i],
+                self.ds_orders_due[i]
+            );
+        }
+
+        // Sanitized dues (NaN / non-positive => 0) — the raw values would
+        // poison the balance or manufacture water.
+        let dues = self.sanitized_dues();
+
+        let spill = self.dimensions.interpolate_row(row, VOLU, SPIL, forced_vol).max(0.0);
+        let area = self.dimensions.interpolate_row(row, VOLU, AREA, forced_vol);
+
+        // ----------------
+        // Respect the MOLs
+        // ----------------
+
+        // Cap to outlet maximum at this level
+        let cap = |i: usize| -> f64 { Self::cap_right(&self.cap_curves[i], forced_vol) };
+
+        // ds_1 carries the spill and its outlet tops that up towards the due;
+        // ds_2..4 release their dues alone.
+        let mut ds_flows = [0.0; MAX_DS_LINKS];
+        ds_flows[0] = spill + (dues[0] - spill).max(0.0).min(cap(0));
+        for i in 1..MAX_DS_LINKS {
+            ds_flows[i] = dues[i].min(cap(i));
+        }
+
+        // Where the volume would have landed had the level not been forced.
+        let total_outflow: f64 = ds_flows.iter().sum();
+        let unforced_vol = self.volume + net_rain_mm * area - total_outflow;
+
+        // Positive = water created, negative = water destroyed
+        let adjustment_vol = forced_vol - unforced_vol;
+
+        (adjustment_vol, ds_flows, spill, area)
+    }
+
     /// Finds the equilibrium volume for a storage with no outlet curves:
     /// v = W(v) - O(v), with W the available water (v_working +
     /// net_rain*area(v)) and O the unconstrained outflow.
@@ -1017,6 +1091,9 @@ impl Node for StorageNode {
         self.spill = 0.0;
         self.previous_istop = 0;
         self.exists_bool = true;
+        self.is_forcing_level  = false; 
+        self.was_forcing_level = false; 
+        self.sid_adjustment_volume = 0.0;
 
         // Checks
         if self.dimensions.nrows() < 2 {
@@ -1163,6 +1240,8 @@ impl Node for StorageNode {
 
         // Check once whether an "exists" input was configured (default: storage always exists)
         self.exists_configured = !matches!(&self.exists, DynamicInput::None { .. });
+        self.forced_level_configured =
+            !matches!(&self.forced_level_input, DynamicInput::None { .. });
 
         // Initialize result recorders
         self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
@@ -1179,6 +1258,9 @@ impl Node for StorageNode {
         self.recorder_idx_pond_diversion = recorder(data_cache, &self.name, "pond_diversion");
         self.recorder_idx_pond_demand = recorder(data_cache, &self.name, "pond_demand");
         self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
+        self.recorder_idx_forced_level = recorder(data_cache, &self.name, "forced_level");
+        self.recorder_idx_sid_flux = recorder(data_cache, &self.name, "sid_flux");
+        self.recorder_idx_adjustment_volume = recorder(data_cache, &self.name, "adjustment_volume");
         for i in 0..MAX_DS_LINKS {
             let n = i + 1;
             self.recorder_idx_ds[i] = recorder(data_cache, &self.name, &format!("ds_{n}"));
@@ -1264,6 +1346,13 @@ impl Node for StorageNode {
         let seep_mm = self.seep_mm_input.get_value(data_cache);
         let pond_demand = self.pond_demand_input.get_value(data_cache);
 
+        let forced_level = self.forced_level_input.get_value(data_cache);
+        if let Some(idx) = self.recorder_idx_forced_level {
+            data_cache.add_value_at_index(idx, forced_level);
+        }
+        self.was_forcing_level = self.is_forcing_level; 
+        self.is_forcing_level = self.forced_level_configured && forced_level.is_finite();
+
         let mut area_km2 = 0.0; // will be computed by solver if storage exists
 
         self.check_if_exists(data_cache);
@@ -1287,6 +1376,8 @@ impl Node for StorageNode {
             // step; without this the ds_N_force_release recorders would keep reporting
             // the last step on which the storage existed.
             self.ds_release_due = [0.0; MAX_DS_LINKS];
+            self.sid_adjustment_volume = 0.0;
+            self.is_forcing_level = false;
             self.dsflow = self.ds_flows.iter().sum();
         } else {
             // Add upstream inflows
@@ -1299,21 +1390,58 @@ impl Node for StorageNode {
             
             // Net rainfall rate
             let net_rain_mm = rain_mm - evap_mm - seep_mm;
-            
-            // Solve backward Euler
-            let (v_final, ds_flows, spill, row, solver_area_km2) = self.solve_backward_euler(self.volume, net_rain_mm, data_cache);
-            area_km2 = solver_area_km2;
-            
-            // Update warm-start cache for next timestep (expects upper bracket)
-            self.previous_istop = row + 1;
-            
-            // Update state from solution (area already computed by solver)
-            self.volume = v_final;
-            self.level = self.dimensions.interpolate_row(row, VOLU, LEVL, v_final);
-            self.spill = spill;
-            self.ds_flows = ds_flows;
-            self.dsflow = self.ds_flows.iter().sum();
-            
+
+            if self.is_forcing_level {
+                // Clamp to minimum volume - unphysical.
+                let floor_vol = self.dimensions.get_value(0, VOLU);
+                let requested_vol =
+                    self.dimensions.interpolate_or_extrapolate(LEVL, VOLU, forced_level);
+                let (applied_vol, applied_level) = if requested_vol < floor_vol {
+                    (floor_vol, self.dimensions.get_value(0, LEVL))
+                } else {
+                    (requested_vol, forced_level)
+                };
+                // Bracket on volume instead of level: every flux below is read from
+                // this row against the volume columns
+                let row = self
+                    .dimensions
+                    .find_row_for_interpolation_or_extrapolation(VOLU, applied_vol);
+
+                let (solver_adjustment_volume, ds_flows, spill, solver_area_km2) =
+                    self.solve_forced_level(applied_vol, row, net_rain_mm, data_cache); 
+                area_km2 = solver_area_km2;
+
+                // Update warm-start cache for next timestep (expects upper bracket)
+                self.previous_istop = row + 1;
+                
+                // Update state from solution (area already computed by solver)
+                self.volume = applied_vol;
+                self.level = applied_level;
+                self.spill = spill;
+                self.ds_flows = ds_flows;
+                self.dsflow = self.ds_flows.iter().sum();
+                self.sid_adjustment_volume = solver_adjustment_volume;
+
+                // Update mass balance - opposite convention (ds flow = positive)
+                self.mbal -= self.sid_adjustment_volume;
+                // Also updated below.
+            } else {
+                // Solve backward Euler
+                let (v_final, ds_flows, spill, row, solver_area_km2) = 
+                    self.solve_backward_euler(self.volume, net_rain_mm, data_cache);
+                area_km2 = solver_area_km2;
+                
+                // Update warm-start cache for next timestep (expects upper bracket)
+                self.previous_istop = row + 1;
+                
+                // Update state from solution (area already computed by solver)
+                self.volume = v_final;
+                self.level = self.dimensions.interpolate_row(row, VOLU, LEVL, v_final);
+                self.spill = spill;
+                self.ds_flows = ds_flows;
+                self.dsflow = self.ds_flows.iter().sum();
+                self.sid_adjustment_volume = 0.0;
+            }
             // Compute climate volumes using solved area
             self.rain_vol = rain_mm * area_km2;
             self.evap_vol = evap_mm * area_km2;
@@ -1359,6 +1487,16 @@ impl Node for StorageNode {
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow);
+        }
+        if let Some(idx) = self.recorder_idx_sid_flux {
+            data_cache.add_value_at_index(idx, 
+                // if interior of forced_level provided data
+                if self.was_forcing_level && self.is_forcing_level
+                     { self.sid_adjustment_volume } 
+                else { f64::NAN });
+        }
+        if let Some(idx) = self.recorder_idx_adjustment_volume {
+            data_cache.add_value_at_index(idx, self.sid_adjustment_volume);
         }
         // Per-outlet records. Outlet 0 (ds_1) carries the spill: its outlet
         // component is flow minus spill; the other outlets never spill.
