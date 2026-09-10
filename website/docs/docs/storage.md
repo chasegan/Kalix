@@ -41,6 +41,7 @@ ds_1 = my_other_node
 | ds\_1\_outlet, ds\_2\_outlet, ds\_3\_outlet, ds\_4\_outlet (optional) | The outlet capacity on the corresponding link (ds\_1, ds\_2, etc) as a function of level. Three forms. A minimum operating level (MOL) alone: `ds_1_outlet = 81.1` — capacity is zero at or below 81.1 m and unlimited above it. A MOL and a capacity [ML/timestep]: `ds_1_outlet = 81.1, 120` — zero at or below, 120 above. A rating table of level, capacity pairs: `ds_2_outlet = 80, 0, 81, 0, 81.5, 100, 82, 100` — capacity interpolates linearly in level between points and holds flat beyond the ends; a repeated level is a step. Levels must lie within the dimensions table's level range, and capacities must be non-decreasing. Notes: (1) Orders on ds\_1 may be partly or fully met by unregulated spills. (2) There are no spills on the other links. (3) An undefined outlet is unlimited. |
 | ds\_1\_force\_release, ds\_2\_force\_release, ds\_3\_force\_release, ds\_4\_force\_release (optional) | Forces the release through the corresponding outlet [ML/timestep], overriding the order-driven release. The forced release is still limited by the outlet's capacity curve and the water available, and spill counts toward the forced amount on ds\_1 as it does toward an order. Example: `ds_1_force_release = data.ops_csv.by_name.release` |
 | exists (optional) | Whether the storage exists this timestep: 0 or NaN means it does not; any other value means it does. A storage that does not exist ignores its outlets and passes inflows straight through ds\_1, and on the timestep it stops existing any stored water also drains out through ds\_1. It still propagates orders as it otherwise would. Default is that the storage always exists. Example: `exists = if(sim.year < 1985, 0, 1)` |
+| forced\_level (optional) | Optional level [m] to force the storage to at the end of the timestep, for reconciling a model against observed storage levels. On a timestep where it evaluates to a finite number, the storage is pinned to that level instead of being simulated: spill, area and outlet capacity are all read at the forced level, releases are met subject to outlet capacity, and the water this creates or destroys is reported as `adjustment_volume`. NaN means "not forced on this timestep". Example: `forced_level = data.obs_csv.by_name.level` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 | ds\_2, ds\_3, ds\_4 (optional) | Additional link used to represent regulated flow pathways separate to the main downstream link. `ds_2 = tws_pipline` |
 
@@ -68,6 +69,9 @@ ds_1 = my_other_node
 | exists | Evaluated `exists` input; 1 when not configured |
 | volume | Volume of water in the storage at the end of the timestep [ML] |
 | level | Level of water in the storage at the end of the timestep [m] |
+| forced\_level | Evaluated `forced_level` input [m], exactly as supplied. |
+| adjustment\_volume | Water that forcing the level created (positive) or destroyed (negative) this timestep [ML]. |
+| sid\_flux | SID result [ML]: `adjustment_volume` restricted to the interior of a forced run, and NaN elsewhere. |
 | area | Area of the water surface at the end of the timestep [km2] |
 | initial\_volume | The declared `initial_volume` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
 
