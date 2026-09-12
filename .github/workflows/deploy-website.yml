@@ -46,6 +46,7 @@ jobs:
         run: |
           python scripts/gen_health.py
           python scripts/gen_speed_plot.py
+          python scripts/gen_corpus.py
 
       - name: Build site
         working-directory: website

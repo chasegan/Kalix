@@ -104,3 +104,6 @@ src/tests/example_models/4/outputs.csv
 
 # Scratch output of test_csv_writer, regenerated on every run
 src/tests/example_data/output_31d6f6b4_EXPORT.csv
+
+# Help-assistant corpus, generated at build time by gen_corpus.py
+website/docs/llm/

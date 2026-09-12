@@ -97,10 +97,12 @@ markdown_extensions:
 extra_css:
   - stylesheets/tokens.css
   - stylesheets/extra.css
+  - stylesheets/kx-chat.css
 
 extra_javascript:
   - javascripts/mathjax.js
   - javascripts/cf-email.js
+  - javascripts/kx-chat.js
   - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 extra:
@@ -192,6 +194,7 @@ nav:
           - Running notebooks with uv: docs/notebooks-uv.md
       - Glossary: docs/glossary.md
   - Downloads: downloads.md
+  - Help: help.md
   - Code:
       - code/index.md
       - Start developing: code/start-developing.md
