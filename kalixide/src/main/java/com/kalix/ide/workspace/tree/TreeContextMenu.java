@@ -126,7 +126,7 @@ public class TreeContextMenu {
     // --- Entry definitions ---
 
     private List<List<Entry>> buildEntries(BuildContext context) {
-        // Groups follow the context-menu skeleton (manifestos/context-menu-style.md
+        // Groups follow the context-menu skeleton (ADR-0002
         // §1):
         // primary -> context-specific -> external handoff -> clipboard -> create ->
         // modify -> destructive (isolated) -> view/state. Labels are sentence case.
@@ -193,7 +193,7 @@ public class TreeContextMenu {
                 )
             ),
             // Modify — identity-changing verbs never apply to the root the user is
-            // standing in (context-menu-style §4), which empty-space clicks select.
+            // standing in (ADR-0002 §4), which empty-space clicks select.
             List.of(
                 item(
                     "Rename…", sel -> isSingle(sel) && noneIsRoot(sel),
@@ -211,7 +211,7 @@ public class TreeContextMenu {
                     sel -> fileOps.zipFiles(files(sel), tree.getRootFile())
                 )
             ),
-            // Destructive (isolated) — never the root (context-menu-style §4).
+            // Destructive (isolated) — never the root (ADR-0002 §4).
             List.of(
                 item(
                     "Delete", sel -> any(sel) && noneIsRoot(sel),
@@ -247,7 +247,7 @@ public class TreeContextMenu {
     /**
      * The "reveal this file in the OS file manager" label, in each platform's own
      * idiom
-     * (manifesto §2.6): native feel outranks cross-platform verb parallelism here.
+     * (ADR-0002 §2.6): native feel outranks cross-platform verb parallelism here.
      */
     private static String revealLabel() {
         return switch (PlatformUtils.getCurrentPlatform()) {
@@ -266,7 +266,7 @@ public class TreeContextMenu {
 
     /**
      * True for the menus raised from the tree itself — on a row, or on empty space where the
-     * subject is the open root (context-menu-style §4). Phrased as an exclusion so an item added
+     * subject is the open root (ADR-0002 §4). Phrased as an exclusion so an item added
      * later is offered in both tree menus by default, and only the editor-tab menu has to opt out.
      */
     private static boolean inTree(BuildContext context) {
@@ -344,7 +344,7 @@ public class TreeContextMenu {
     }
 
     /**
-     * A plain item carrying a sparse landmark icon (manifesto §3); {@code icon} is
+     * A plain item carrying a sparse landmark icon (ADR-0002 §3); {@code icon} is
      * lazy so it
      * picks up the current theme each time the menu is built.
      */

@@ -58,4 +58,4 @@ Reading the numbers
   drift across months - including drift from compiler upgrades (rustc_version)
   and releases (kalix_version). Rows with commit_dirty=true are development
   noise; filter them for drift analysis. Re-run the suite whenever you touch
-  the hot path (per manifestos/performance.md §4).
+  the hot path (per ADR-0004 §4).

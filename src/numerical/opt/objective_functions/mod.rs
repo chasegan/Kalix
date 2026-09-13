@@ -39,7 +39,7 @@ pub trait Objective {
     /// speed win worth having: mismatched lengths silently truncate the
     /// assessment window (`seed_validity_mask` zips), scoring the candidate over
     /// whatever prefix overlaps — a wrong number with no signal, which
-    /// `performance §6.2` forbids.
+    /// `ADR-0004 §6.2` forbids.
     fn calculate(&self, observed: &[f64], simulated: &[f64]) -> Result<f64, String> {
         if observed.len() != simulated.len() {
             return Err(format!(

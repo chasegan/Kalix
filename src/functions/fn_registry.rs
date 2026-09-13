@@ -2,7 +2,7 @@
 ///
 /// Functions are declared signature-as-key (`net_demand(pop, doy) = body`)
 /// — the name appears exactly once — and called as `fn.net_demand(...)`
-/// (namespaced, never bare, per expression-naming §2.5). Bodies are parsed
+/// (namespaced, never bare, per ADR-0006 §2.5). Bodies are parsed
 /// once here at model load; every call site is then inlined at lowering
 /// (function semantics, macro implementation — see
 /// `crate::functions::inline`), so nothing downstream of inlining knows

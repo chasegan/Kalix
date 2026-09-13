@@ -38,7 +38,7 @@ import java.util.function.ToIntFunction;
  * names. Labels are projected at render time by {@link DocumentLabels}, which qualifies
  * duplicate basenames with their folder — so two open {@code model.ini} files stay
  * distinguishable without the label ever becoming the identity
- * (see {@code manifestos/identity-and-labels.md} §2).</p>
+ * (see ADR-0003 §2).</p>
  */
 public class ModelSelectorPanel extends JPanel {
 

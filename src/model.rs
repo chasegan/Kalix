@@ -130,7 +130,7 @@ pub struct Model {
     /// Interleaved execution layout: nodes and var blocks in definition order.
     /// Built as sections are added (add_node / add_var_block), so file order
     /// IS execution order for var blocks exactly as it is for nodes
-    /// (node-definition-order §1 extended to calculations). Only consulted
+    /// (ADR-0005 §1 extended to calculations). Only consulted
     /// when var_blocks is non-empty; the plain node loop uses execution_order.
     ///
     /// Populated: alongside `nodes`/`var_blocks`, via `add_node()`/`add_var_block()`.
@@ -930,7 +930,7 @@ impl Model {
 
         // Execute nodes and var blocks with flow phase, interleaved in
         // definition order (file position IS execution position for var
-        // blocks, per node-definition-order §1 extended to calculations).
+        // blocks, per ADR-0005 §1 extended to calculations).
         set_context_phase(SimPhase::Flow);
         // Two loop shapes, chosen once per timestep: models without var
         // blocks — the overwhelmingly common case — run the original plain
@@ -995,7 +995,7 @@ impl Model {
     }
 
     pub fn initialize_network(&mut self) -> Result<(), String> {
-        // Partition the var blocks by phase (performance §3.5: decided here,
+        // Partition the var blocks by phase (ADR-0004 §3.5: decided here,
         // never per step): ras-phase blocks run in the ras slot at the top of
         // the step; the flow pass interleaves the rest at file position,
         // falling back to the plain node loop when none remain.
@@ -1102,7 +1102,7 @@ impl Model {
 
     /// Check execution order.
     ///
-    /// Definition order IS execution order (per node-definition-order §2):
+    /// Definition order IS execution order (per ADR-0005 §2):
     /// the engine validates that every link points down the file and refuses
     /// otherwise. It deliberately does NOT topologically sort - the model
     /// file must remain a faithful, readable account of what runs.

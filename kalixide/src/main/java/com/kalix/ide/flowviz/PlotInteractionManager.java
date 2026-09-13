@@ -673,7 +673,7 @@ public class PlotInteractionManager {
 
     /**
      * Whether the clipboard currently holds text the paste items could read. Per
-     * context-menu-style 4, Paste with an empty clipboard is shown disabled rather than
+     * ADR-0002 §4, Paste with an empty clipboard is shown disabled rather than
      * hidden: the user should know the command exists. A clipboard held by another
      * application counts as empty.
      */
@@ -691,7 +691,7 @@ public class PlotInteractionManager {
     private void setupContextMenu() {
         contextMenu = new JPopupMenu();
 
-        // Primary block (context-menu-style 1, block 1): the default action, which on a plot
+        // Primary block (ADR-0002 §1, block 1): the default action, which on a plot
         // is what double-click does (see the mouse listener). The skeleton's table lists
         // "Zoom to fit" under block 7 for panels where it is merely a view command; here
         // it is the primary one, so it leads.

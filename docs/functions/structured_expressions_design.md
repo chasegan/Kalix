@@ -11,8 +11,8 @@ core (`;`, blocks, locals, `assert`, `clamp`), stateful builtins
 execution in branches), and `[var.*]` blocks (flow phase at file position;
 `phase = order` rejected pending its ordering-system interleave). Phase 5
 (IDE lockstep — linter grammar/functions/sections, autocomplete) July 2026.** This document records the decisions and their
-reasons. A manifesto will be harvested after implementation proves the
-calls out (per `on-manifestos §4`).
+reasons. An ADR will be harvested after implementation proves the
+calls out (per `ADR-0001 §2`).
 
 ---
 
@@ -37,7 +37,7 @@ percentiles, fn-internal observability.
 
 Everything rests on the engine's existing contract: *parse once, lower once,
 evaluate every timestep, infallible and allocation-free on the hot path*
-(`performance §3`). The structured language must preserve it, so:
+(`ADR-0004 §3`). The structured language must preserve it, so:
 
 > **Every program's execution cost is bounded and known at model load.**
 
@@ -95,13 +95,13 @@ Rules:
 - Locals are **bare identifiers**. This is available because bare names have
   no other meaning as values: everything real is namespaced (`data.*`,
   `node.*`, `const.*`, `sim.*`, `table.*`, `var.*`, `fn.*`, `this.`), per
-  `expression-naming §1.3`.
+  `ADR-0006 §1.3`.
 - A local may **not shadow a builtin function name** — load error, with the
-  usual did-you-mean diagnostic (`expression-naming §2.4`).
+  usual did-you-mean diagnostic (`ADR-0006 §2.4`).
 - Locals are private scratch: invisible outside their block, no series, no
   cost beyond a slot in a pre-sized frame (§11).
 - Repeated subexpressions should be named as locals; a named local evaluates
-  once (`performance §6` — never leave speed on the table).
+  once (`ADR-0004 §6` — never leave speed on the table).
 
 ## 4. `assert(cond)`
 
@@ -114,7 +114,7 @@ Rules:
 - An assert is an ordinary statement inside a block (it is the reason blocks
   need statements at all). Cost is one predictable branch per evaluation,
   which the modeller opted into; the failure semantics are required by
-  `performance §6.2` — a fast silence where a signal was needed is the
+  `ADR-0004 §6.2` — a fast silence where a signal was needed is the
   expensive option.
 
 ## 5. Windowed functions: `moving_*`
@@ -136,7 +136,7 @@ Rules:
   call sits in an untaken `if` branch. `moving_mean(data.flow, 30, 0)`
   *reads* as a property of the series, so its value must never depend on
   which branches past evaluations happened to take. What you read is what
-  runs (`node-definition-order §1`, applied to time instead of space).
+  runs (`ADR-0005 §1`, applied to time instead of space).
 - Implementation is incremental and O(1) per step: ring buffer plus running
   sum for `sum`/`mean`; monotonic deque for `min`/`max` (amortised O(1)).
   Per-instance state is fixed-size, allocated at load (§11).
@@ -319,7 +319,7 @@ new_wy() = sim.new_month && sim.month == 7
   legal (`new_wy()` above is the motivating idiom).
 - **Duplicate names are a load error**, even at different arities.
 - Calls are namespaced — `fn.net_demand(...)` — never bare
-  (`expression-naming §2.5`, same forward-compatibility argument as
+  (`ADR-0006 §2.5`, same forward-compatibility argument as
   `table.*`).
 - **Definitions may live anywhere in the file**, including after use.
   Functions are *passive* — they have no execution time of their own — and
@@ -344,7 +344,7 @@ new_wy() = sim.new_month && sim.month == 7
 - **Implementation is inline expansion at lowering time.** Every call site
   gets the body inlined (arguments pre-bound to slots), so after lowering a
   model using a function at fifty nodes is indistinguishable from fifty
-  pasted copies — zero call overhead, per `performance §3.5`. Stateful
+  pasted copies — zero call overhead, per `ADR-0004 §3.5`. Stateful
   builtins inside a body therefore get **per-call-site state** (three nodes
   using `fn.baseflow` containing a `moving_mean` = three independent ring
   buffers), which is the only semantics a modeller would expect.
@@ -383,7 +383,7 @@ way. A var *executes*: it reads node outputs computed earlier in the same
 timestep, so its position relative to the nodes is part of its meaning.
 
 Therefore `[var.*]` blocks interleave with `[node.*]` sections and execute
-in **file position within their phase** (`node-definition-order §1` extended
+in **file position within their phase** (`ADR-0005 §1` extended
 to calculations). `phase` selects which of the engine's two per-timestep
 passes evaluates the block: `order` or `flow` (default `flow`).
 
@@ -391,7 +391,7 @@ Reading a value that does not exist yet (e.g. a downstream node's
 this-timestep output) is caught by the existing step-0 validation walk —
 first step, every run, deterministically. No additional phase rules needed.
 
-## 10. Naming decisions (per `expression-naming`)
+## 10. Naming decisions (per `ADR-0006`)
 
 - `fn.` — the call prefix and section name (terse; typed constantly).
 - `moving_*`, not `running_*` — "running" conventionally means
@@ -403,7 +403,7 @@ first step, every run, deterministically. No additional phase rules needed.
 - `clamp(x, lo, hi)` joins the pure builtins (the clearer spelling of
   `min(max(x, lo), hi)`).
 - One spelling each, no aliases, lowercase; rejected spellings get
-  did-you-mean diagnostics (`expression-naming §2.1, §2.4`).
+  did-you-mean diagnostics (`ADR-0006 §2.1, §2.4`).
 
 ## 11. Implementation sketch
 
@@ -413,7 +413,7 @@ first step, every run, deterministically. No additional phase rules needed.
   reserved (array indexing, deferred §12) — a parse error for now.
 - **Locals** lower to integer slots in a per-input, pre-sized value frame —
   the same resolve-names-to-indices-at-load move the data cache already
-  uses. No hash lookups, no allocation per step (`performance §3`).
+  uses. No hash lookups, no allocation per step (`ADR-0004 §3`).
 - **Window/`*_since` state** lives in a pre-sized state arena, one region
   per stateful call instance (post-inlining), allocated at load and reset at
   run start. The hot-path signature grows a `&mut` state argument (or the
@@ -427,12 +427,12 @@ first step, every run, deterministically. No additional phase rules needed.
 - **`[var.*]`**: each key becomes a scheduled evaluation writing to its
   data-cache series; blocks slot into the model's execution list at their
   file position, tagged with their phase.
-- **IDE (lockstep, per `expression-naming` enforcement)**: highlighting for
+- **IDE (lockstep, per `ADR-0006` enforcement)**: highlighting for
   `{}`/`;`/locals, linter awareness of `[fn]` signatures and `var.*`
   references, go-to-definition keyed on parsed names, `KNOWN_FUNCTIONS`
   extended to mirror the engine exactly.
 - Benchmarks re-run before/after: the lowering touches
-  `OptimizedExpressionNode` (`performance §4`).
+  `OptimizedExpressionNode` (`ADR-0004 §4`).
 
 ## 12. Exclusions from v1 — each with its reason
 
@@ -549,4 +549,4 @@ var.accounting.headroom
 5. **IDE wave** — highlighting, linter, autocomplete, go-to-definition,
    in lockstep per phase where practical.
 
-Each phase lands with regression tests and a benchmark run (`performance §4`).
+Each phase lands with regression tests and a benchmark run (`ADR-0004 §4`).

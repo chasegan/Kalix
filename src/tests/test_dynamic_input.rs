@@ -1618,7 +1618,7 @@ fn test_infill_substitutes_for_nan_and_passes_through_otherwise() {
 /// over [10, NaN, 20, 30] the mean of the non-missing values is 20, but
 /// infilling 0 gives 15, because the 0 is one of the four values averaged.
 /// Any name promising to *skip* the gap would make that a trap; `infill`
-/// names the substitution honestly (expression-naming 1.1).
+/// names the substitution honestly (ADR-0006 §1.1).
 #[test]
 fn test_infill_is_substitution_not_exclusion() {
     let values = [10.0, f64::NAN, 20.0, 30.0];

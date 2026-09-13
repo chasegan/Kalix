@@ -892,7 +892,7 @@ public class MapPanel extends JPanel {
     // independent copies of it accumulated previously.
     //
     // Scalar rather than Point2D-returning: hit testing and rectangle selection call
-    // these once per node per gesture, and per performance §"no allocation in the
+    // these once per node per gesture, and per ADR-0004 §3.3 "no allocation in the
     // inner loop" there is no reason to allocate to move two doubles.
 
     /** Converts a screen X coordinate to world space. */

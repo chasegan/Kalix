@@ -149,7 +149,7 @@ public class MapContextMenuManager {
 
         menu.addSeparator();
 
-        // Create block, per context-menu-style §1 block ④. Verb-first per §2.2: the
+        // Create block, per ADR-0002 §1 block ④. Verb-first per §2.2: the
         // children are the objects of the verb, not values to pick among, so this is a
         // menu item that happens to have a submenu — not a category title under §6.
         JMenu insertNodeTemplateMenu = new JMenu("Insert node");
@@ -229,7 +229,7 @@ public class MapContextMenuManager {
         });
         menu.add(copyLocationItem);
 
-        // Find - the map is the menu's own context, so no "on Map" needed (manifesto §2.3)
+        // Find - the map is the menu's own context, so no "on Map" needed (ADR-0002 §2.3)
         JMenuItem findNodeItem = new JMenuItem("Find…");
         findNodeItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, shortcutMask));
         findNodeItem.setEnabled(mapSearchManager != null);

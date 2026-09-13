@@ -330,7 +330,7 @@ public class ProjectTree extends JTree {
     }
 
     /** Whether this node is the (hidden) root — package-private for the context menu's
-     *  root guards (per context-menu-style §4: rename/duplicate/delete never apply). */
+     *  root guards (per ADR-0002 §4: rename/duplicate/delete never apply). */
     boolean isRoot(FileTreeNode node) {
         return model != null && node == model.getRoot();
     }
@@ -351,7 +351,7 @@ public class ProjectTree extends JTree {
         JPopupMenu menu;
         if (row < 0) {
             // Empty space is not subject-less: the click acts on the open folder itself
-            // (context-menu-style §4) — so New file…/New folder… etc. work at the root.
+            // (ADR-0002 §4) — so New file…/New folder… etc. work at the root.
             clearSelection();
             menu = model == null ? null : contextMenu.buildFromRoot((FileTreeNode) model.getRoot());
         } else {
@@ -659,7 +659,7 @@ public class ProjectTree extends JTree {
     }
 
     /**
-     * Shows the same root context menu as a right-click on empty tree space (context-menu-style
+     * Shows the same root context menu as a right-click on empty tree space (ADR-0002
      * §4: New file…/New folder… etc. act on the open folder), as if invoked from elsewhere in
      * the panel — e.g. the header showing the folder's name. Clears the tree's selection, since
      * the menu acts on the root rather than any selected entry. A no-op if no folder is open.

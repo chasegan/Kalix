@@ -56,7 +56,7 @@ features = [
 [dev-dependencies]
 approx = "0.5"
 
-# Release-profile tuning, per manifestos/performance.md §1: take the fast
+# Release-profile tuning, per ADR-0004 §1: take the fast
 # configuration by default. LTO + single codegen unit let the optimiser inline
 # across crate boundaries (measured on the speed suite - see
 # regression_tests/speed/speed_log.txt). Do NOT add `panic = "abort"`:

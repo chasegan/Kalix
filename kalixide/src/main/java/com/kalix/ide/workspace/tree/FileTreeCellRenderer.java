@@ -9,7 +9,7 @@ import java.awt.Component;
 
 /**
  * Renders project-tree rows in the Kalix file visual language (doctrine:
- * {@code manifestos/file-tree-colour.md}): recognised rows — model files, data files,
+ * ADR-0007): recognised rows — model files, data files,
  * Source result exports, model folders — carry accent icons and full-strength text, while
  * model-less folders step down to the muted tier and unrecognised files a notch fainter.
  * All glyph and colour selection is delegated to {@link FileVisuals}, the shared mapping
@@ -34,7 +34,7 @@ public class FileTreeCellRenderer extends DefaultTreeCellRenderer {
                 tier = FileVisuals.fileTier(name);
             }
             // FULL-tier rows keep the foreground super() just set; the rest step down.
-            // Selected rows always keep the selection foreground (file-tree-colour §2.6).
+            // Selected rows always keep the selection foreground (ADR-0007 §2.6).
             if (!selected) {
                 Color faded = FileVisuals.tierColor(tier);
                 if (faded != null) {

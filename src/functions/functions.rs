@@ -19,7 +19,7 @@
 ///
 /// [`reserved_name_kind`] answers "is this name the language's?" for every
 /// consumer: the program parser's local-assignment guard, `[fn]` name/param
-/// validation, and anything added later. Per expression-naming §1.3, the
+/// validation, and anything added later. Per ADR-0006 §1.3, the
 /// language owns the bare names — a user-definable name must never collide
 /// with any tier, including tiers added in the future.
 ///
@@ -35,7 +35,7 @@
 ///    (the linter, section validators, and autocomplete all consume it).
 /// 3. Add the name to the engine-drift pins in the IDE's
 ///    `FunctionExpressionValidatorTest`, and the rejected-spelling suggestions
-///    if the new name has a common wrong spelling (expression-naming §2.4).
+///    if the new name has a common wrong spelling (ADR-0006 §2.4).
 /// 4. Document it in docs/functions/FUNCTIONS_DOCUMENTATION.md (function
 ///    table + a section if it carries semantics worth explaining).
 
@@ -57,7 +57,7 @@ pub const STATEFUL_FUNCTIONS: [&str; 19] = [
 /// Grammar keywords: names with statement-level meaning that are neither
 /// builtins nor stateful functions. `this` is the enclosing definition;
 /// `self` is the per-target binding of [ras.*] action arguments
-/// (expression-naming §2.8) — reserved everywhere so a local or [fn] name
+/// (ADR-0006 §2.8) — reserved everywhere so a local or [fn] name
 /// can never shadow either.
 pub const RESERVED_WORDS: [&str; 3] = ["assert", "this", "self"];
 
@@ -307,7 +307,7 @@ pub fn is_leap_year_f(year: f64) -> f64 {
 /// `moving_mean(infill(x, 0), 4, 0)` over [10, NaN, 20, 30] is 15, not 20,
 /// because the infilled 0 is still one of the four elements averaged. A name
 /// promising to "skip" the gap would make that reading a trap
-/// (`expression-naming §1.1`).
+/// (`ADR-0006 §1.1`).
 ///
 /// The fill value is the modeller's to state rather than a hardcoded 0, for
 /// the same reason a moving window's `default` and a latch's `init` are:

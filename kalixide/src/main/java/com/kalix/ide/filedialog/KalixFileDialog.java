@@ -42,7 +42,7 @@ import java.util.Optional;
  * enumeration ({@link DirectoryLister}), rendered with zero per-entry I/O — so network
  * drives behave like local ones instead of crawling through N+1 stats. <b>Language:</b>
  * entries render in the Kalix file visual language ({@code FileVisuals},
- * {@code manifestos/file-tree-colour.md}), so model files are as recognisable in the dialog
+ * ADR-0007), so model files are as recognisable in the dialog
  * as they are in the project tree.
  *
  * <p>Layout: sidebar (pins / places / volumes / recents) on the left; a breadcrumb bar with
@@ -370,7 +370,7 @@ public final class KalixFileDialog implements FileViewHost {
 
     @Override
     public void showEntryContextMenu(FsEntry entry, java.awt.Component invoker, int x, int y) {
-        // Same grammar as the project tree's menu (context-menu-style §1 skeleton: create,
+        // Same grammar as the project tree's menu (ADR-0002 §1 skeleton: create,
         // then modify, then the destructive item isolated with its landmark icon), scoped
         // to what makes sense mid-dialog.
         javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
@@ -404,7 +404,7 @@ public final class KalixFileDialog implements FileViewHost {
 
     @Override
     public void showContainerContextMenu(Path dir, java.awt.Component invoker, int x, int y) {
-        // Empty space acts on the containing folder (context-menu-style §4): the create
+        // Empty space acts on the containing folder (ADR-0002 §4): the create
         // verb, then the view group. Identity-changing/destructive verbs never appear for
         // the container the user is standing in.
         javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();

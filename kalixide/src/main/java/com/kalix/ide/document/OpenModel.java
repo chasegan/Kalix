@@ -12,7 +12,7 @@ import java.io.File;
  * editor, map panel or dirty state — a window that only needs to <em>read</em> a model
  * should not be able to mutate the document graph.</p>
  *
- * <p><b>Identity vs label</b> (per {@code manifestos/identity-and-labels.md}): the
+ * <p><b>Identity vs label</b> (per ADR-0003): the
  * implementing object reference <em>is</em> the identity token — opaque, typed, and
  * stable across rename and Save-As. Never key a collection by
  * {@link #getDisplayName()}; it is a projection, and

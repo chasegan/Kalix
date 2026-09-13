@@ -6,8 +6,8 @@ implementing agent/developer: where the design doc says **what**, this says
 **how**, at the junctures where a plausible-looking alternative would be
 slower or less idiomatic.*
 
-Read first: `/CLAUDE.md`, `manifestos/performance.md`,
-`manifestos/expression-naming.md`, `docs/functions/structured_expressions_design.md`.
+Read first: `/CLAUDE.md`, `ADR-0004`,
+`ADR-0006`, `docs/functions/structured_expressions_design.md`.
 
 ---
 
@@ -54,7 +54,7 @@ only tests need touching. The rejected alternatives:
 - *State inline in AST nodes via `Cell`* — works (models are `Send` per
   optimiser thread, never `Sync`-shared), but locals slots are written by
   one node and read by others, forcing `Rc<Cell<...>>` sharing — a pointer
-  chase per local access (`performance §3.4`) and interior mutability
+  chase per local access (`ADR-0004 §3.4`) and interior mutability
   where a `&mut` would have been compiler-checked.
 - *State owned by each `DynamicInput`* — forces `get_value(&mut self)`,
   scatters reset logic across every owner (nodes, vars, fn call sites),
@@ -313,11 +313,11 @@ compute flags per-expression; they are per-step facts.
   `DynamicInput::from_string` variant selection.
 - **Round-trip serialisation**: `original_string()` returns the exact text
   including braces; blocks are never reformatted on save.
-- **Benchmarks** (`performance §4`): run `benchmarks/` before phase 1 and
+- **Benchmarks** (`ADR-0004 §4`): run `benchmarks/` before phase 1 and
   after every phase. Add one benchmark: a model with a block +
   `moving_mean` + two `*_since` per node across ~100 nodes, so the arena
   and guard costs are visible, not asserted.
-- **IDE lockstep** (`expression-naming` enforcement): `KNOWN_FUNCTIONS`
+- **IDE lockstep** (`ADR-0006` enforcement): `KNOWN_FUNCTIONS`
   mirrors the engine's new builtins in the same PR wave; the drift test
   pins rejected spellings (`running_mean`, `days_since`, `avg`, `log`).
 

@@ -50,7 +50,7 @@ the matching `NodeTheme` / `SyntaxTheme` palettes; change them in step.
 One scoped exception: the `Kalix.tree.*` keys post-date the mocks and have no
 roles there. Their accent values are chosen per theme, and the two grey tiers
 are *derived* from each theme's `Tree.background`/`Tree.foreground` (see
-`manifestos/file-tree-colour.md` §2.3) — do not look for them in the guides.
+`ADR-0007` §2.3) — do not look for them in the guides.
 
 ## Editing and adding themes
 

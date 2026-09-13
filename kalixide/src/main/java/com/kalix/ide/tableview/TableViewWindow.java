@@ -210,7 +210,7 @@ public class TableViewWindow extends JDialog {
             });
             popupMenu.add(insertBelowItem);
 
-            // Destructive — isolated in its own block (manifesto §1)
+            // Destructive — isolated in its own block (ADR-0002 §1)
             popupMenu.addSeparator();
 
             JMenuItem deleteRowsItem = new JMenuItem("Delete selected rows");

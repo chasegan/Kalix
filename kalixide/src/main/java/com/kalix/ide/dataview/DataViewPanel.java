@@ -164,7 +164,7 @@ public final class DataViewPanel extends JPanel {
         this.tableMenu = menu;
         JMenuItem find = new JMenuItem("Find…"); // one Find: dates, values and columns are dialog scopes
         find.addActionListener(e -> openFind());
-        JMenuItem showInFile = new JMenuItem("Show in file"); // sentence case per context-menu-style §2.1
+        JMenuItem showInFile = new JMenuItem("Show in file"); // sentence case per ADR-0002 §2.1
         this.showInFileItem = showInFile;
         showInFile.addActionListener(e -> showSelectedRowInFile());
         JMenuItem copy = new JMenuItem("Copy");
@@ -287,7 +287,7 @@ public final class DataViewPanel extends JPanel {
      * Installs the viz mount's context-menu items: "Show in plot" beside
      * "Show in file", and the dynamic Plot ⁄ Unplot toggle for the selected
      * column. Items that cannot apply to the current selection are hidden,
-     * not greyed (context-menu-style §4); the toggle quotes its target (§5).
+     * not greyed (ADR-0002 §4); the toggle quotes its target (§5).
      */
     public void installPlotActions(PlotActions actions) {
         JMenuItem showInPlot = new JMenuItem("Show in plot");

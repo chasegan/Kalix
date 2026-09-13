@@ -33,7 +33,7 @@ public class OptimisationInfo {
     /**
      * The target's backing file, captured at binding time.
      *
-     * <p>Identity data, not a label — per {@code manifestos/identity-and-labels.md} §1 a
+     * <p>Identity data, not a label — per ADR-0003 §1 a
      * display string is never stored. This survives the document being closed (when the
      * live reference goes stale) and reopened (when a new document object replaces it),
      * so it is what both the fallback lookup and the fallback label are derived from.</p>

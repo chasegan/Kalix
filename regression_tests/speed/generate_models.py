@@ -392,8 +392,8 @@ def build_model_4():
 # confluences (all in legacy bare mode) and about half the nodes, so it can
 # see neither the per-confluence ordering cost nor the cache pressure that a
 # large NodeEnum array puts on per-node struct size -- the effect behind the
-# 2026-08 ConfluenceNode field-order regression (manifestos/performance.md
-# 3.4). All three confluence ordering modes appear here: bare/legacy, a
+# 2026-08 ConfluenceNode field-order regression (ADR-0004
+# §3.4 and its Amendments). All three confluence ordering modes appear here: bare/legacy, a
 # single `regulated` name (all orders up one pathway), and two `regulated`
 # names split by harmony_fraction, which no other speed model exercises.
 #

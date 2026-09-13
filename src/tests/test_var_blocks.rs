@@ -643,7 +643,7 @@ var.multi.c
 }
 
 // ============================================================================
-// 8. `this` self-reference (expression-naming §2.8: the enclosing definition)
+// 8. `this` self-reference (ADR-0006 §2.8: the enclosing definition)
 // ============================================================================
 
 /// `this[-1, 0]` is the var's own series: the counter/hold idiom without

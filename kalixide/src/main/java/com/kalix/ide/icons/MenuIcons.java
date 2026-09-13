@@ -11,7 +11,7 @@ import java.awt.Color;
 /**
  * Theme-aware icons for context-menu items.
  *
- * <p>Per the context-menu style manifesto ({@code manifestos/context-menu-style.md}, §3),
+ * <p>Per ADR-0002 §3,
  * icons are reserved for the universally-recognised clipboard and destructive
  * actions — Cut, Copy, Paste and Delete — and nowhere else. Funnelling every menu
  * icon through this one helper is what enforces "sparse icons only": there is no
@@ -19,7 +19,7 @@ import java.awt.Color;
  *
  * <p>Note the deliberate absence of an icon for "Remove": only true destruction
  * (Delete) earns the trash glyph, which reinforces the Delete-vs-Remove distinction
- * visually (manifesto §2.5).
+ * visually (ADR-0002 §2.5).
  */
 public final class MenuIcons {
 

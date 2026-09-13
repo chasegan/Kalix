@@ -31,7 +31,7 @@ public class FileTreeNode extends DefaultMutableTreeNode {
      * ("." happening to sort before letters): it pins dotfiles to the conventional top slot
      * regardless of the natural sort's digits-before-letters rule (so {@code .git} sits above
      * {@code 2024_runs}). Position follows convention; de-emphasis is the colour tiers' job
-     * (per file-tree-colour §2.7).
+     * (per ADR-0007 §2.7).
      */
     static final Comparator<File> FILE_ORDER = (a, b) -> {
         boolean ad = a.isDirectory();

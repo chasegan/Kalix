@@ -35,12 +35,18 @@ Larger ones, in roughly ascending order of ceremony:
 - **New features and behavioural changes** begin as an issue describing the
   problem and the proposed approach. A core team member agrees the approach
   before code is written.
-- **Design decisions** that shape the architecture are recorded as
-  [Architecture Decision Records](https://kalix.org/code/design/adrs/). An ADR
-  is accepted by the lead.
-- **Scope**, meaning what Kalix is and is not, is set by the
-  [manifesto](https://kalix.org/code/design/manifesto/). Changes to the
-  manifesto are made by the lead and are rare.
+- **Significant decisions** are recorded as
+  [Architecture Decision Records](https://kalix.org/code/design/adrs/). That
+  covers decisions that shape the architecture, and any other decision the
+  core team has deliberately considered and does not want reopened without
+  new information — including ideas that were considered and rejected.
+  Anyone may propose an ADR; the core team considers it; the lead accepts
+  it.
+- **Mission, values and scope** — what Kalix is for, what it holds to, and
+  what it is not — are set by the
+  [Manifesto](https://kalix.org/code/design/manifesto/). ADRs cite it as
+  the basis for their decisions. Changes to the Manifesto are made by the
+  lead and are rare.
 
 There is no vote. The lead listens, decides, and explains. Disagreement is
 welcome in the issue or ADR; once a decision is made, the discussion moves on.
@@ -48,7 +54,7 @@ welcome in the issue or ADR; once a decision is made, the discussion moves on.
 ## Funding and priority
 
 Organisations that fund development buy the lead's time to work on things
-within the roadmap and the manifesto. Funding sets priority among acceptable
+within the roadmap and the Manifesto. Funding sets priority among acceptable
 work; it does not extend what is acceptable, and it does not confer a veto.
 Funders are told this before money changes hands, so that no one is
 surprised later.

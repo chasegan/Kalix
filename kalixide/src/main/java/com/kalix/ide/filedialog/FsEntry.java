@@ -23,7 +23,7 @@ public record FsEntry(Path path, String name, boolean directory, long size, long
     /**
      * Directories first, then files; hidden entries first within each group; then natural
      * (number-aware) name order — the same deliberate ordering as the project tree
-     * (file-tree-colour §2.7, {@code FileTreeNode.FILE_ORDER}).
+     * (ADR-0007 §2.7, {@code FileTreeNode.FILE_ORDER}).
      */
     public static final Comparator<FsEntry> ENTRY_ORDER = (a, b) -> {
         if (a.directory != b.directory) {

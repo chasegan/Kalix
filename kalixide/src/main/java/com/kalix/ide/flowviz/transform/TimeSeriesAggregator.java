@@ -13,7 +13,7 @@ import java.util.Set;
  * Aggregates time series data to coarser temporal resolutions. Responsible for applying
  * seasonal masks.
  *
- * <p>The pipeline is fully primitive (per manifestos/performance.md): timestamps stay as
+ * <p>The pipeline is fully primitive (per ADR-0004): timestamps stay as
  * UTC epoch millis end to end, points are bucketed in a single pass over primitive arrays,
  * and calendar math happens only at bucket <em>boundaries</em> (daily buckets need none at
  * all — a UTC day is just {@code floorDiv(timestampMs, 86_400_000)}).</p>

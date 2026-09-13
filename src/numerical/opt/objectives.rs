@@ -61,7 +61,7 @@ pub enum ObjectiveFunction {
 impl ObjectiveFunction {
     /// The underlying objective, viewed through the shared trait. Dispatches
     /// dynamically, so it is for the cold path only — scoring goes through the
-    /// `match` in [`Objective::evaluate`] instead (`performance §6`).
+    /// `match` in [`Objective::evaluate`] instead (`ADR-0004 §6`).
     fn inner(&self) -> &dyn Objective {
         match self {
             Self::OneMinusNse(o) => o,
@@ -134,7 +134,7 @@ mod tests {
     /// the `Objective` trait once skipped them: a shorter simulated series
     /// silently truncated the assessment window (`seed_validity_mask` zips) and
     /// the candidate scored a perfect 0.0 on the overlapping prefix — a wrong
-    /// number with no signal (`performance §6.2`).
+    /// number with no signal (`ADR-0004 §6.2`).
     #[test]
     fn test_bare_objective_enforces_length_precondition() {
         let obs = [1.0, 2.0, 3.0, 4.0];

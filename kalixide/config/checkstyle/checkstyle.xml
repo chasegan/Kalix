@@ -8,7 +8,7 @@
 
   Deliberately minimal: one rule, enforced as an error. This is not a style regime and
   is not the place to accumulate opinions — anything added here has to earn the build
-  failures it will cause. Doctrine belongs in manifestos/; this file is only for rules
+  failures it will cause. Doctrine belongs in the ADRs (website/docs/code/design/adrs/); this file is only for rules
   a machine can decide unambiguously.
 -->
 <module name="Checker">

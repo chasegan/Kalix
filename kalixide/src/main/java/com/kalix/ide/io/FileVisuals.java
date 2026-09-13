@@ -14,7 +14,7 @@ import java.util.Map;
 /**
  * The single home of the Kalix file visual language: which glyph and colour a file or folder
  * gets, wherever files are rendered (the project tree, the file dialogs). Doctrine in
- * {@code manifestos/file-tree-colour.md}: recognised entries carry accent icons and
+ * ADR-0007: recognised entries carry accent icons and
  * full-strength text; everything else steps down through the muted and faint grey tiers
  * (§1.1, §2.1–2.4). Keeping the mapping here means the tree and the dialogs cannot drift
  * apart.
@@ -29,7 +29,7 @@ public final class FileVisuals {
     /** Icon size used everywhere files are listed (tree rows, dialog rows). */
     public static final int ICON_SIZE = 14;
 
-    /** Text/icon strength tiers, strongest first (file-tree-colour §2.1). */
+    /** Text/icon strength tiers, strongest first (ADR-0007 §2.1). */
     public enum Tier {FULL, MUTED, FAINT}
 
     private static final Map<String, Icon> ICON_CACHE = new HashMap<>();

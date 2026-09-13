@@ -82,7 +82,7 @@ pub struct DataCache {
     // Each is true when this step's calendar field differs from the previous step's,
     // and at step 0 (run start counts as a boundary). Recomputed once per step in
     // update_current_timestamp so expressions never recompute a calendar fact
-    // (performance §3.5).
+    // (ADR-0004 §3.5).
     new_day: bool,
     new_month: bool,
     new_year: bool,

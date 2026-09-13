@@ -13,7 +13,7 @@ import java.util.List;
  * sorted) timestamp arrays of every series, visiting each distinct timestamp exactly
  * once in chronological order with that row's values. It runs in O(total points ×
  * series count) with no per-row allocation — replacing the previous
- * TreeSet-of-boxed-Longs union plus per-cell lookup (per manifestos/performance.md §1,
+ * TreeSet-of-boxed-Longs union plus per-cell lookup (per ADR-0004 §1,
  * fast by default).</p>
  */
 final class CsvExportUtil {

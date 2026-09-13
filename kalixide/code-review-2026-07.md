@@ -458,7 +458,7 @@ Phased rescue (each independently shippable):
   `ParameterSheetWindow` renderers, SessionManagerWindow tree renderer all
   hard-code light colors). Deliberate "plots are paper" or theme-aware —
   either way, centralize the constants and state the decision.
-- **EDT policy manifesto clause**: what may run on the EDT; how background
+- **EDT policy ADR**: what may run on the EDT; how background
   results come back; `updateStatus` marshals internally. Three subsystems each
   violate it differently today.
 - **Prompt-on-close preference** (`FILE_PROMPT_SAVE_ON_EXIT=false` silently
@@ -495,7 +495,7 @@ Phased rescue (each independently shippable):
   `getMessage()`; `@author Claude Code Assistant` tags; fully-qualified type
   spam in `EnhancedTextEditor`/`KalixIDE`; wildcard imports in builders;
   platform mask via `getMenuShortcutKeyMaskEx()` everywhere; context-menu label
-  casing per `manifestos/context-menu-style.md`; three copies of the
+  casing per `ADR-0002`; three copies of the
   384-luminance dark check while `UIConstants.Theme.LIGHT_THEME_RGB_THRESHOLD`
   sits unused; `Platform` enum instead of raw `os.name` checks
   (`FileManagerLauncher`, `KeyboardShortcutManager`).
@@ -549,7 +549,7 @@ Phased rescue (each independently shippable):
    perf/optimiser), teardown symmetry, shutdown hook.
 3. **Wave 3 — interaction performance** (P2 #61–65): auto-Y, LOD, monitor
    sleeps, result-path JSON, convergence plot. Measured before/after, per the
-   performance manifesto.
+   ADR-0004.
 4. **Wave 4 — theme Phase 0–2** + preference hardening (P0 #5 done in wave 1;
    typed keys here).
 5. **Wave 5 — consolidations & decomposition** (P3), interleaved with the P4

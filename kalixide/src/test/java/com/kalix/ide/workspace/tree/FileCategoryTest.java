@@ -85,7 +85,7 @@ class FileCategoryTest {
             .map(java.io.File::getName).toList();
 
         // Directories before files; hidden first within each group (deliberately, even
-        // above digit-led names, per file-tree-colour §2.7); then natural number-aware order.
+        // above digit-led names, per ADR-0007 §2.7); then natural number-aware order.
         assertEquals(java.util.List.of(
             ".git", "2024_runs", "archive",
             ".gitignore", "model2.ini", "model10.ini"), names);

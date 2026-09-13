@@ -82,7 +82,7 @@ Loaded names carry no `file.<filename>` prefix, so they collate with runs by nam
   incremental sorted batches to the EDT, cancellable handles) and zero per-entry I/O at
   render time — this is the anti-`JFileChooser`, built for network drives.
 - **Visual language**: entries render via `io.FileVisuals`, the shared glyph/colour mapping
-  also used by the project tree (per `manifestos/file-tree-colour.md`).
+  also used by the project tree (per `ADR-0007`).
 - **Views**: list (table) and macOS-style Miller columns, user-switchable, persisted.
 - **Sidebar**: pinned folders (file-based prefs — team-shareable), places, volumes
   (path-derived names only; no shell display-name calls), recents (OS prefs).
@@ -200,7 +200,7 @@ every use site.
 
 The Checkstyle config is the build's only static analysis and deliberately holds one
 rule at error severity. Adding to it means adding build failures, so a new check has
-to earn its place; opinionated doctrine belongs in `manifestos/`, not here.
+to earn its place; opinionated doctrine belongs in the ADRs (`website/docs/code/design/adrs/`), not here.
 
 ### Display Capability & Headless Tests (August 2026)
 **A display is a capability, queried in one place — not a condition guarded wherever a

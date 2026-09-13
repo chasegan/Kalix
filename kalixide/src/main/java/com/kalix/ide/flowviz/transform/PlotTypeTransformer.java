@@ -14,7 +14,7 @@ import java.util.List;
  * Transformations are applied after aggregation but before Y-axis scaling.
  *
  * <p>All transforms work in primitive {@code long[]}/{@code double[]} space
- * (per manifestos/performance.md): output series are built via the primitive
+ * (per ADR-0004): output series are built via the primitive
  * {@link TimeSeriesData#TimeSeriesData(long[], double[])} constructor, and
  * reference-series alignment uses a linear two-pointer merge over the sorted
  * timestamp arrays (the same pattern as

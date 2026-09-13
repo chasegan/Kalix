@@ -183,7 +183,7 @@ public class FunctionExpressionValidator {
     /**
      * Validate a [var.*] definition value: exactly {@link #validate(String,
      * ValidationContext)} plus the one reference only a var definition has —
-     * bare {@code this[offset]}, the var's own series (expression-naming
+     * bare {@code this[offset]}, the var's own series (ADR-0006
      * §2.8). Offset-less {@code this} and dotted {@code this.x} get targeted
      * errors mirroring the engine's.
      */
@@ -1555,7 +1555,7 @@ public class FunctionExpressionValidator {
             // Strip optional square brackets for validation
             String refWithoutBrackets = thisRef.replaceFirst("\\[.*?\\]$", "");
 
-            // Bare 'this' — the var-definition self-reference (expression-naming
+            // Bare 'this' — the var-definition self-reference (ADR-0006
             // §2.8: the enclosing definition). Valid only in a var definition,
             // and only with an offset: the var's current value is unwritten.
             if (refWithoutBrackets.equals("this")) {

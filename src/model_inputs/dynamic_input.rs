@@ -71,7 +71,7 @@ fn expand_this(expression: &str, self_context: &str) -> String {
 }
 
 /// Expand bare `this` in a [var.*] definition to the var's own series name:
-/// `this[-1, 0]` becomes `var.<block>.<key>[-1, 0]`. Per expression-naming
+/// `this[-1, 0]` becomes `var.<block>.<key>[-1, 0]`. Per ADR-0006
 /// §2.8, `this` names the enclosing definition — for a var that is the
 /// series itself, so it takes no field (`this.x` is an error) and, because
 /// a var can never read its own not-yet-written value, it must carry an

@@ -198,7 +198,7 @@ action  = scale(0.95)
 
 - **Exactly one `trigger` and one `action` per section.** Related steps are
   consecutive sections; RAS sections execute in **file order** within their
-  timestep slot (`node-definition-order` §1 extended to policy), which is also
+  timestep slot (`ADR-0005` §1 extended to policy), which is also
   how priority tiers chain (§3.4). No second intra-section ordering rule.
 - `targets` lists one or more `acc.*` group references. Multiple targets are
   valid for stencilled actions; distributive actions take exactly one target
@@ -559,7 +559,7 @@ recorder series + example models.
   requirement, `model.rs:83`).
 - All policies compile to `DynamicInput` trees at load: zero allocation, no
   string lookups, no branching beyond the expression itself (per
-  `manifestos/performance.md`).
+  `ADR-0004`).
 - Triggers are one compiled-expression evaluation per account-event per step;
   calendar triggers stay the current cheap timestamp checks. Allocation groups
   do O(members) work only when their trigger fires (announcements are rare);

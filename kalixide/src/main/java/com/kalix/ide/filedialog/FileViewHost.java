@@ -45,7 +45,7 @@ interface FileViewHost {
 
     /**
      * Right-click on empty space: the subject is the containing folder being viewed
-     * (context-menu-style §4) — the current directory, or a specific column's directory.
+     * (ADR-0002 §4) — the current directory, or a specific column's directory.
      */
     void showContainerContextMenu(java.nio.file.Path dir, java.awt.Component invoker, int x, int y);
 }

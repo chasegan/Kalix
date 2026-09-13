@@ -722,7 +722,7 @@ public class VisualizationTabManager {
     private void setupTabContextMenu(JPanel tabPanel, Component... labelComponents) {
         JPopupMenu contextMenu = new JPopupMenu();
 
-        // Primary block (context-menu-style §1 ①): the default action, which on a tab is
+        // Primary block (ADR-0002 §1 ①): the default action, which on a tab is
         // what double-click does (setupTabDoubleClickRename). Ellipsis: opens a dialog (§2.4).
         JMenuItem renameItem = new JMenuItem("Rename…");
         renameItem.addActionListener(e -> triggerTabRename(tabPanel));

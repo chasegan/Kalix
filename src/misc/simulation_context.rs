@@ -31,7 +31,7 @@ impl SimPhase {
 // Two independent Cells rather than a RefCell<struct>: the setters run per
 // node per timestep (hundreds of millions of times on a big run) and a Cell
 // store is a plain write - no borrow-flag check, no branch, nothing to poison
-// (per manifestos/performance.md §3.5: the context is written hot, read only
+// (per ADR-0004 §3.5: the context is written hot, read only
 // on the cold panic path).
 thread_local! {
     static SIM_PHASE: Cell<SimPhase> = const { Cell::new(SimPhase::Unknown) };

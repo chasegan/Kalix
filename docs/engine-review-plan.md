@@ -26,7 +26,7 @@ branch with tests → verification → merge to main. No PRs; merge directly.
 | 12 | Fast CSV + pixie IO (hand-rolled date parse/format, reused record, no per-cell alloc, byte-chunked Gorilla) | **Done** (perf/io-fast) |
 | 13 | Node boilerplate: dispatch macro, recorder helper, storage ds arrays, dead-code sweep | **Done** (lean/nodes) |
 | 14 | Data-driven INI model IO (design discussion first) | Pending |
-| 15 | File-order rule made doctrine: `manifestos/node-definition-order.md` | **Done** (on main) |
+| 15 | File-order rule made doctrine: `ADR-0005` | **Done** (on main) |
 
 ## Step 1 record — Gorilla codec (done 2026-07-02)
 
@@ -165,7 +165,7 @@ models, each emphasising a hot-path subsystem, generated deterministically by
 `run_speed_tests.py` runs each N times (bench.json) with `kalix sim -p`,
 reports min/median/sd per phase, and appends history (commit, machine) to
 `speed_log.txt`. Compare MIN values, same machine only. Run it whenever the
-hot path changes (performance §4).
+hot path changes (ADR-0004 §4).
 
 First customer: `[profile.release] lto codegen-units=1`. Measured fat vs thin
 LTO on the suite; **thin won or tied everywhere** and was adopted. Sim time vs
@@ -428,6 +428,6 @@ Full detail lives in the conversation record of 2026-07-02; the essentials:
   matches (parse + render); dead code (commented RoutingNode optimiser block,
   legacy Optimiser trait, unused `storage` fields).
 - **Open decisions**: both settled. F1 (step 15): definition-order-as-topology
-  is doctrine — see `manifestos/node-definition-order.md`; the engine validates
+  is doctrine — see `ADR-0005`; the engine validates
   and never sorts. F2 (step 7): regular grids platform-wide, per-point
   timestamps removed.

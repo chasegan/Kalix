@@ -105,7 +105,7 @@ pub fn starts_with_numeric_char(s: &str) -> bool {
 /// parameters, [var.*] block and key names: lowercase-alphabetic first
 /// character, then lowercase letters, digits, and underscores. No dots (dots
 /// are namespace separators), no uppercase (definitions are written
-/// lowercase, per expression-naming §2.6; call-site MATCHING stays
+/// lowercase, per ADR-0006 §2.6; call-site MATCHING stays
 /// case-insensitive), no leading underscore (owner decision, July 2026:
 /// one strict rule for every definition name in the file).
 ///

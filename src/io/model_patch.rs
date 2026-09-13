@@ -382,7 +382,7 @@ mod tests {
     fn patch_replace_preserves_section_position() {
         // node.bh is upstream-linked from node.g; overriding it must not move
         // it below node.g in the file, or execution order would break -
-        // per manifestos/node-definition-order.md
+        // per ADR-0005
         let model = IniModelIO::read_model_string(model_ini()).expect("model should parse");
 
         let patched = patch_replace(&model, "[node.bh]\ntype = blackhole\nloc = 9, 9\n")

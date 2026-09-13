@@ -99,7 +99,7 @@ class TreeTransferHandler extends TransferHandler {
 
     /**
      * The folder to drop into: the target node if it is a directory, else its parent; a drop on
-     * empty space targets the open root (context-menu-style §4). Null when no folder is open.
+     * empty space targets the open root (ADR-0002 §4). Null when no folder is open.
      */
     private File targetDir(TransferSupport support) {
         if (support.getDropLocation() instanceof JTree.DropLocation loc

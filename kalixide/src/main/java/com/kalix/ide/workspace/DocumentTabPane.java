@@ -407,7 +407,7 @@ public class DocumentTabPane extends JPanel {
      * delegated to {@link DocumentLabels}, the single resolver every surface that names a
      * model goes through. Keeping the algorithm here as well would let the tab strip and
      * the Optimiser's model selector drift into labelling the same two files differently
-     * (see {@code manifestos/identity-and-labels.md} §2.3).</p>
+     * (see ADR-0003 §2.3).</p>
      */
     private void rebuildTabNames() {
         this.tabNames = DocumentLabels.labelsFor(

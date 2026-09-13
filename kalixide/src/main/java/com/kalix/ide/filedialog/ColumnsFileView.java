@@ -54,7 +54,7 @@ final class ColumnsFileView {
         aligner.setBackground(UIManager.getColor("List.background"));
         aligner.add(trail, java.awt.BorderLayout.WEST);
         // The open area right of the last column belongs to the deepest folder on the
-        // trail (context-menu-style §4: empty space acts on the containing folder).
+        // trail (ADR-0002 §4: empty space acts on the containing folder).
         aligner.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -283,7 +283,7 @@ final class ColumnsFileView {
                     int index = list.locationToIndex(e.getPoint());
                     if (index < 0 || !list.getCellBounds(index, index).contains(e.getPoint())) {
                         // Empty space in a column acts on that column's own folder
-                        // (context-menu-style §4) — each column knows its subject.
+                        // (ADR-0002 §4) — each column knows its subject.
                         host.showContainerContextMenu(directory, list, e.getX(), e.getY());
                         return;
                     }

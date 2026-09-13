@@ -201,7 +201,16 @@ nav:
       - Platform design:
           - Manifesto: code/design/manifesto.md
           - The dev stack: code/design/dev-stack.md
-          - ADRs: code/design/adrs.md
+          - ADRs:
+              - code/design/adrs/index.md
+              - Template: code/design/adrs/0000-template.md
+              - "0001 Record decisions in ADRs": code/design/adrs/0001-record-decisions-in-adrs.md
+              - "0002 Context-menu style": code/design/adrs/0002-context-menu-style.md
+              - "0003 Separate identity from labels": code/design/adrs/0003-identity-and-labels.md
+              - "0004 Performance on the hot path": code/design/adrs/0004-performance-on-the-hot-path.md
+              - "0005 Node definition order": code/design/adrs/0005-node-definition-order.md
+              - "0006 Expression naming": code/design/adrs/0006-expression-naming.md
+              - "0007 File-tree colour": code/design/adrs/0007-file-tree-colour.md
           - Website:
               - code/design/website/index.md
               - Todo: code/design/website/todo.md

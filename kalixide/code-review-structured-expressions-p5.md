@@ -211,7 +211,7 @@ duplicated as `startsWith("{")` at two call sites plus `validateFnBody`).
   `addCompletion` re-sorts the whole list after every add, so the 41 static builtin/sim
   completions cost 41 sorts + 41 allocations per completion request. Build the
   `List<Completion>` once in the constructor and re-add via `addCompletions(List)`
-  (one sort). Per `manifestos/performance.md`, don't leave this on the table.
+  (one sort). Per `ADR-0004`, don't leave this on the table.
 - **`validateVarReference`** (~:1177): hoist `segments[2].toLowerCase()` out of the
   per-key lambda; a plain loop matches the file's style.
 - **`VarSectionValidator`** (~:68): the ValidationContext is identical for every

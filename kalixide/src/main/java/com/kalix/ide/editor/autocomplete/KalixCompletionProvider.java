@@ -36,7 +36,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
     private final InputFileScanner inputFileScanner;
 
     // The model-independent value completions — builtin functions and sim.*
-    // variables (41 entries) — built once. Per manifestos/performance.md, this
+    // variables (41 entries) — built once. Per ADR-0004, this
     // avoids the library re-sorting the whole list after each per-request add:
     // a single addCompletions(List) sorts once.
     private final List<Completion> staticValueCompletions;

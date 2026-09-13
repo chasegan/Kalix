@@ -975,7 +975,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // Phase: 'flow' (default) runs at file position in the flow pass;
             // 'ras' runs in the assessment slot at the top of the step, before
             // the [ras.*] sections, and must precede the first node — the file
-            // then reads exactly as the timestep runs (node-definition-order §1
+            // then reads exactly as the timestep runs (ADR-0005 §1
             // extended to the whole step). 'order' is designed (order phase
             // walks bottom-up) but its interleave with the ordering system is
             // not yet implemented — rejected rather than approximated (owner
@@ -1032,7 +1032,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 // offset resolves to the same series.
                 let series_idx = model.data_cache.get_or_add_new_series(&series_name, false);
 
-                // `this[-1, 0]` is the var's own series (expression-naming
+                // `this[-1, 0]` is the var's own series (ADR-0006
                 // §2.8): expanded textually in the definition's own text, so
                 // the state idiom survives a rename without editing its
                 // internal self-references.

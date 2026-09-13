@@ -596,7 +596,7 @@ impl FunctionParser {
                     }
                 };
                 let lower = name.to_lowercase();
-                // The language owns the bare names (expression-naming §1.3):
+                // The language owns the bare names (ADR-0006 §1.3):
                 // a local may not shadow ANY reserved tier — builtin,
                 // stateful builtin, or keyword — including tiers the
                 // language grows later. One registry answers for all of

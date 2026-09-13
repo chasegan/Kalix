@@ -516,7 +516,7 @@ public class EnhancedTextEditor extends JPanel {
                 if (autoCompleteManager != null) {
                     menu.addSeparator();
                     JMenuItem suggestionsItem = new JMenuItem("Show suggestions");
-                    // Shortcut hint belongs in the accelerator slot, not the label (manifesto §2.7).
+                    // Shortcut hint belongs in the accelerator slot, not the label (ADR-0002 §2.7).
                     // Ctrl+Space on all platforms (Cmd+Space is Spotlight on macOS).
                     suggestionsItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, InputEvent.CTRL_DOWN_MASK));
                     suggestionsItem.addActionListener(ae -> {
@@ -633,7 +633,7 @@ public class EnhancedTextEditor extends JPanel {
                 return item;
             }
 
-            /** As {@link #createMenuItem(String, Action)} but with a sparse landmark icon (manifesto §3). */
+            /** As {@link #createMenuItem(String, Action)} but with a sparse landmark icon (ADR-0002 §3). */
             private JMenuItem createMenuItem(String name, Action action, Icon icon) {
                 JMenuItem item = createMenuItem(name, action);
                 item.setIcon(icon);

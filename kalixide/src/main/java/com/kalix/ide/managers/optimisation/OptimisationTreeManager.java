@@ -175,7 +175,7 @@ public class OptimisationTreeManager {
      * a second call would attach a duplicate mouse listener.
      */
     private void setupContextMenu() {
-        // Skeleton order (manifestos/context-menu-style.md §1): view actions first, then export,
+        // Skeleton order (ADR-0002 §1): view actions first, then export,
         // the run control, navigation, and finally modify + the destructive "Remove".
         JPopupMenu contextMenu = new JPopupMenu();
 

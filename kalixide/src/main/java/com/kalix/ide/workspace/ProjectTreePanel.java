@@ -42,7 +42,7 @@ public class ProjectTreePanel extends JPanel {
         tree = new ProjectTree(host);
 
         // Right-clicking the header acts on the open folder itself — the same root context menu
-        // as right-clicking empty tree space (context-menu-style §4).
+        // as right-clicking empty tree space (ADR-0002 §4).
         header.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {

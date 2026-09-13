@@ -9,7 +9,7 @@ import java.util.Map;
 /**
  * The single resolver that projects a {@link OpenModel} to the string shown for it.
  *
- * <p>Per {@code manifestos/identity-and-labels.md} §2.3, display strings come only from
+ * <p>Per ADR-0003 §2.3, display strings come only from
  * here — never hand-built at a call site. Every surface that names an open model (the
  * editor tab strip, the Optimiser's target selector) goes through this, so the same two
  * files can never be told apart one way in one place and another way somewhere else.</p>
