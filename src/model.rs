@@ -1186,6 +1186,7 @@ impl Model {
             "order_control",
             "loss",
             "storage",
+            "storage_gated",
             "routing",
             "splitter",
             "confluence",

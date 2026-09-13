@@ -57,7 +57,7 @@ impl NodeEnum {
             NodeEnum::InflowNode(_) => "inflow",
             NodeEnum::RoutingNode(_) => "routing",
             NodeEnum::SacramentoNode(_) => "sacramento",
-            NodeEnum::StorageNode(_) => "storage",
+            NodeEnum::StorageNode(n) => { if n.is_gated { "storage_gated" } else { "storage" } },
             NodeEnum::OrderControlNode(_) => "order_control",
         };
         name.to_string()

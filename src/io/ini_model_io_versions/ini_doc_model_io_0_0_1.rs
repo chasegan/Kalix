@@ -54,6 +54,7 @@ pub(crate) const NODE_STATIC_F64_PROPERTIES: &[(&str, &str)] = &[
     ("routing", "x"),
     ("routing", "typical_regulated_flow"),
     ("storage", "initial_volume"),
+    ("storage_gated", "initial_volume")
 ];
 
 pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, KalixIoError> {
@@ -733,9 +734,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     }
                     NodeEnum::SplitterNode(n)
                 }
-                "storage" => {
+                type_str @ ("storage" | "storage_gated") => {
                     let mut n = StorageNode::new();
                     n.name = node_name.to_string();
+                    n.is_gated = type_str == "storage_gated";
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
                         let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
@@ -837,6 +839,13 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "target_level" {
                             n.target_level = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "spillway_gated_release" {
+                            if !n.is_gated {
+                                return Err(KalixIoError::Validate(format!("Error on line {}: 'spillway_gated_release' is only valid for 'storage_gated' nodes (node ('{})'",
+                                    ini_property.line_number, node_name)));
+                            }
+                            n.spillway_gated_release = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "dimensions" {
                             n.dimensions = Table::from_csv_string(v, 4, false)
@@ -1443,12 +1452,13 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
             NodeEnum::StorageNode(n) => {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
-                ini_doc.set_property(section_name.as_str(), "type", "storage");
+                ini_doc.set_property(section_name.as_str(), "type", if n.is_gated { "storage_gated" } else { "storage" });
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "seep", &n.seep_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.pond_demand_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "target_level", &n.target_level.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "spillway_gated_release", &n.spillway_gated_release.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "exists", &n.exists.to_string());
                 for (i, ds_force_release) in n.ds_force_release_input.iter().enumerate() {
                     let property_name = format!("ds_{}_force_release", i + 1);
