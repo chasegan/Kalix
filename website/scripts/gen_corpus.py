@@ -15,9 +15,16 @@ WEBSITE = Path(__file__).resolve().parent.parent
 DOCS = WEBSITE / "docs"
 OUT = DOCS / "llm" / "corpus.txt"
 
-# Sections worth answering questions from. Everything else (landing page,
-# contact, downloads, internal notes) is excluded.
+# Sections worth answering questions from. The landing page and internal notes
+# are excluded.
 INCLUDE = ("docs", "tutorials", "code")
+
+# Top-level pages that are not documentation but that users ask the assistant
+# about. Without these the assistant still answers "where do I download Kalix?"
+# and "how do I get support?" — but, having no <page url> to anchor on, it
+# invents the address from the .md source links in the docs body and emits a
+# 404 (kalix.org/downloads.md). Including them supplies the real URL.
+INCLUDE_PAGES = ("contact.md", "downloads.md")
 
 FRONT_MATTER = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
 
@@ -34,6 +41,7 @@ def main() -> None:
     pages = sorted(
         md for section in INCLUDE for md in (DOCS / section).rglob("*.md")
     )
+    pages += [DOCS / name for name in INCLUDE_PAGES if (DOCS / name).is_file()]
     parts = []
     for md in pages:
         body = FRONT_MATTER.sub("", md.read_text(encoding="utf-8")).strip()
