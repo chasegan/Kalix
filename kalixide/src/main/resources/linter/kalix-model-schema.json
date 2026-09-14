@@ -265,7 +265,8 @@
         "diversion_regulated",
         "diversion_opportunistic",
         "opportunistic_demand",
-        "pump"
+        "pump",
+        "order_factor"
       ],
       "required_params": [
         "type",
@@ -276,7 +277,8 @@
         "pump",
         "opportunistic_demand",
         "accounts",
-        "order_accounts"
+        "order_accounts",
+        "order_factor"
       ],
       "dsnode_params": [
         "ds_1"
@@ -312,6 +314,11 @@
           "type": "string",
           "pattern": "^[a-z][a-z0-9_]*(\\s*,\\s*[a-z][a-z0-9_]*)*$",
           "description": "Order-authorisation accounts (debit-on-order): extend the order cap; the excess of each approved order over the regular accounts balance is debited from them at order time; invisible to the flow phase"
+        },
+        "order_factor": {
+          "type": "number",
+          "min": 0,
+          "description": "Factor applied to this node's order as it is sent upstream (default 1): the network sees order_factor * order, while order, order_due and the delivery are unchanged"
         }
       }
     },

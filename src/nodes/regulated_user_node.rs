@@ -40,6 +40,11 @@ pub struct RegulatedUserNode {
     // Internal state only
     pub dsorders: [f64; MAX_DS_LINKS],
     order_due: f64,
+    /// Factor applied to this node's own order as it is sent upstream:
+    /// the network sees order_factor * order, while `order`, `order_due` and
+    /// the delivery use the order as placed. 1 (the default) is a no-op:
+    /// 1.0 * x is x bit for bit, so there is no branch to skip the multiply.
+    pub order_factor: f64,
     usflow: f64,
     dsflow_primary: f64,
     diversion: f64,
@@ -71,6 +76,7 @@ impl RegulatedUserNode {
             order_input: DynamicInput::default(),
             opportunistic_demand: DynamicInput::default(),
             order_buffer: FifoBuffer::default(),
+            order_factor: 1.0,
             ..Default::default()
         }
     }
@@ -110,7 +116,9 @@ impl Node for RegulatedUserNode {
         self.pump_capacity_value = f64::INFINITY;
 
         // Checks
-        // None
+        if !(self.order_factor >= 0.0 && self.order_factor.is_finite()) {
+            return Err(format!("Error in node '{}'. order_factor must be a finite, non-negative factor, got {}.", self.name, self.order_factor));
+        }
 
         // DynamicInput is already initialized during parsing
 

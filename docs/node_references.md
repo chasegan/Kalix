@@ -55,6 +55,7 @@ These read the same way, as `node.<name>.<property>`:
 | `typical_regulated_flow` | Routing | Representative regulated flow [ML] used to estimate travel time for order propagation |
 | `dead_storage` | Routing | Water the reach holds at zero flow [ML] — the declared value |
 | `initial_volume` | Storage | Initial storage volume [ML] |
+| `order_factor` | Regulated user | Factor applied to the node's order as it is sent upstream — the declared value |
 
 Because these never change during a run, they don't support the offset syntax
 below — there is no history to look back into, the same restriction as
