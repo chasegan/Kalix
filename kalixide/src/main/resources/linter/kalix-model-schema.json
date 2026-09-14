@@ -40,9 +40,7 @@
         "expected_inflow"
       ],
       "dsnode_params": [
-        "ds_1",
-        "ds_2",
-        "ds_3"
+        "ds_1"
       ],
       "parameters": {
         "type": {
@@ -73,7 +71,11 @@
         "dsflow",
         "ds_1",
         "ds_1_order",
-        "area"
+        "area",
+        "rain",
+        "evap",
+        "production_store",
+        "routing_store"
       ],
       "required_params": [
         "type",
@@ -87,9 +89,7 @@
         "variant"
       ],
       "dsnode_params": [
-        "ds_1",
-        "ds_2",
-        "ds_3"
+        "ds_1"
       ],
       "parameters": {
         "type": {
@@ -121,44 +121,6 @@
           "type": "number_sequence",
           "count": 4,
           "description": "GR4J parameters: X1, X2, X3, X4"
-        }
-      }
-    },
-    "routing_node": {
-      "description": "Routing node with optional lag parameter for flow delay",
-      "allowed_outputs": [
-        "dsflow",
-        "usflow",
-        "volume",
-        "ds_1",
-        "ds_1_order"
-      ],
-      "required_params": [
-        "type",
-        "loc"
-      ],
-      "optional_params": [
-        "lag"
-      ],
-      "dsnode_params": [
-        "ds_1",
-        "ds_2",
-        "ds_3"
-      ],
-      "parameters": {
-        "type": {
-          "type": "literal",
-          "value": "routing_node"
-        },
-        "loc": {
-          "type": "coordinates",
-          "format": "float,float",
-          "description": "X,Y coordinates"
-        },
-        "lag": {
-          "type": "integer",
-          "min": 0,
-          "description": "Time lag in time steps (integer >= 0)"
         }
       }
     },

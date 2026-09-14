@@ -150,6 +150,7 @@ mod test_opportunistic_demand;
 mod test_confluence_order_routing;
 mod test_output_casing;
 mod test_static_properties;
+mod test_linter_schema;
 
 // Loss node: the optional `rate` expression overriding the loss table
 mod test_loss_rate;
