@@ -395,7 +395,10 @@
         "evap_vol",
         "pond_demand",
         "exists",
-        "initial_volume"
+        "initial_volume",
+        "forced_level",
+        "adjustment_volume",
+        "sid_flux"
       ],
       "required_params": [
         "type",
@@ -418,7 +421,8 @@
         "ds_4_force_release",
         "target_level",
         "order_through",
-        "exists"
+        "exists",
+        "forced_level"
       ],
       "dsnode_params": [
         "ds_1",
@@ -504,6 +508,10 @@
         "exists": {
           "type": "function_expression",
           "description": "Whether the storage exists (data reference, constant, or expression)"
+        },
+        "forced_level": {
+          "type": "function_expression",
+          "description": "Forced storage level (data reference, constant, or expression). Reports adjustment volumes."
         }
       }
     },

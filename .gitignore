@@ -83,6 +83,9 @@ Thumbs.db
 *.war
 *.ear
 *.zip
+# .csv.zip is a Kalix data format (a zip-compressed CSV, one entry, as pandas
+# reads it); fixtures may store inputs that way. Keep those tracked.
+!*.csv.zip
 *.tar.gz
 
 # Other temporary or user-specific files
