@@ -206,6 +206,7 @@ impl RoutingNode {
     /// Per-division storage under the routing law at reference flow `q`: the
     /// PWL segment integral (saturating above the table top), `k*q^m` for NLM,
     /// and zero for a lag-only reach.
+    #[inline]
     fn division_storage_at(&self, q: f64) -> f64 {
         match self.routing_method {
             StorageRoutingMethod::LagPlusNLM => self.nlm_k_working_units * q.powf(self.nlm_m),
@@ -230,7 +231,12 @@ impl RoutingNode {
     #[inline]
     fn division_loss(&self, requested: f64, vi: f64, qin: f64) -> f64 {
         let qr_at_zero_outflow = if self.x_is_unity { qin } else { self.x * qin };
-        let bound = (vi + qin - self.division_storage_at(qr_at_zero_outflow)).max(0.0);
+        // V(0) is exactly zero under both routing laws (the PWL integral starts
+        // at zero; k*0^m = 0), so with x = 0 - the default - or a dry division
+        // the bound is simply everything present. Skipping the lookup changes
+        // no result and removes a call from every configured reach's step.
+        let v_at_zero_outflow = if qr_at_zero_outflow == 0.0 { 0.0 } else { self.division_storage_at(qr_at_zero_outflow) };
+        let bound = (vi + qin - v_at_zero_outflow).max(0.0);
         requested.min(bound)
     }
 
