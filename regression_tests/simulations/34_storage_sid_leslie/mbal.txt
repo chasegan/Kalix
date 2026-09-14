@@ -1,0 +1,27 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 7
+  Timesteps: 49854
+  Stepsize (s): 86400
+  Period: 1889-01-01T00:00:00.000Z, 2025-06-30T00:00:00.000Z
+  Note: units are ML/timestep
+
+INFLOW NODES
+  0202_UC_Reach_3_Sandy_Ck_inflow_at_Leslie_Dam, 40.929849608857594
+  inflow_1, 43.182029419905405
+
+REGULATED_USER NODES
+  0207_UC_HP_Warwick_TWS_WA1142_5001_and_5002_UCS_01, -8.862889637742935
+  0209_UC_SP_Risk_B_Irr_UCS_01_WA1149_and_1153, -0.09276224873813463
+  0211_UC_SP_MP_UCS_01_WA1138_1141_1143_1148_1150_1152_1154_and_1170, -0.9511818510051251
+
+STORAGE NODES
+  0205_UC_Leslie_Dam_106_200_ML_Sandy_Ck_at_8_4km_1965, 53.02339747647246
+
+GAUGE NODES
+  0208_Leslie_Dam_TW_Gauge_422395B, 0
+
+----------------------------------
+TOTAL = 127.22844276774924
+----------------------------------
