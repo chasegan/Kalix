@@ -55,6 +55,7 @@ pub(crate) const NODE_STATIC_F64_PROPERTIES: &[(&str, &str)] = &[
     ("routing", "typical_regulated_flow"),
     ("routing", "dead_storage"),
     ("storage", "initial_volume"),
+    ("regulated_user", "order_factor"),
 ];
 
 pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, KalixIoError> {
@@ -937,6 +938,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "opportunistic_demand" {
                             n.opportunistic_demand = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "order_factor" {
+                            n.order_factor = v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: order_factor must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
                         } else if name_lower == "accounts" {
                             let account_idxs = resolve_account_references(v, &model.account_manager)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
@@ -1525,6 +1529,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "order", &n.order_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pump", &n.pump_capacity.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "opportunistic_demand", &n.opportunistic_demand.to_string());
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "order_factor", &n.order_factor.to_string(), "1");
                 if !n.account_idxs.is_empty() {
                     let names: Vec<&str> = n.account_idxs.iter()
                         .filter_map(|&idx| model.account_manager.get_account(idx).map(|a| a.name.as_str()))

@@ -68,7 +68,7 @@ Inflows on unregulated tributaries are not accounted for by the ordering system.
 
 #### Directing Orders
 
-Orders propagate in an upstream direction, from users to the supply storage(s).
+Orders propagate in an upstream direction, from users to the supply storage(s). A regulated user sends its own order plus whatever arrived from downstream; its optional `order_factor` scales its own part on the way up (see [Regulated user](regulated-user.md#order-factor)).
 
 At loss nodes and inflow nodes the orders are adjusted as discussed above.
 

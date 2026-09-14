@@ -26,6 +26,7 @@ mod test_node_storage;
 mod test_storage_exists;
 mod test_storage_forced_level;
 mod test_order_accounts;
+mod test_regulated_user_order_factor;
 mod test_storage_floor_blowup;
 mod test_storage_spill_order_kink;
 mod test_storage_mol;

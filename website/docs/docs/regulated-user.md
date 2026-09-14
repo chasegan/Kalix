@@ -28,6 +28,7 @@ ds_1 = my_other_node
 | opportunistic\_demand (optional) | Demand for water above the arriving order, evaluated at flow time — for access that is announced on conditions rather than ordered ahead, such as off-allocation. The opportunistic take is supplied from whatever availability the regulated delivery leaves behind, shares the pump limit, and is debited to the same accounts. Example: `opportunistic_demand = if(fn.oa_open(), 309.5, 0)` |
 | accounts (optional) | Names of the [accounts](accounts.md) this user draws on, comma-separated in order of use. Orders are capped by the accounts' combined balance and deliveries are debited from them, so an [allocation system](allocation-systems.md) can constrain the user. Example: `accounts = smith_carryover, smith_annual` |
 | order\_accounts (optional) | Names of order-authorisation accounts (debit-on-order), comma-separated in order of use. They extend the order cap beyond the regular `accounts` balance, and the excess portion of each approved order is debited from them immediately at order time. They are invisible to the flow phase. See "Order accounts" below. Example: `order_accounts = wy_bridge` |
+| order\_factor (optional) | Factor applied to this node's order as it is sent upstream. The network sees `order_factor × order`, while `order`, `order_due` and the delivery are unchanged. A number; default 1. See [Order factor](#order-factor). Example: `order_factor = 1.1` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
 ## Results associated with this node
@@ -46,6 +47,7 @@ ds_1 = my_other_node
 | diversion\_opportunistic | The part of the diversion taken under opportunistic\_demand [ML] |
 | opportunistic\_demand | Today's opportunistic\_demand value [ML] (zero when the property is not set) |
 | pump | Pump capacity value [ML] which may vary due to functions |
+| order\_factor | The declared `order_factor` (a static property; 1 when not set) |
 
 ## How the node works
 
@@ -81,6 +83,17 @@ Both takes share the pump limit, and both are debited to the node's accounts —
 with the regulated delivery drawing on the balance first. The two parts are
 recorded separately (`diversion_regulated`, `diversion_opportunistic`) so a
 resource assessment can count regulated usage only.
+
+#### Order factor
+
+`order_factor` scales the order the node sends up the network without changing
+the order it places. With `order_factor = 1.1`, the upstream node receives
+`downstream orders + 1.1 × order`; the node's own `order` and `order_due`
+outputs, the account cap and debits, and the delivery at flow time all use the
+order as placed, so the extra water ordered passes downstream. Use it for a
+deliberate margin — transmission losses the loss tables do not describe, or an
+operating rule that orders ahead of demand. Orders arriving from downstream
+pass through unscaled.
 
 #### Accounts
 

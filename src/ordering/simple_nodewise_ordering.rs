@@ -443,7 +443,7 @@ impl SimpleNodewiseOrderingSystem {
                     node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream
                     for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0] + node.order_value);
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0] + node.order_factor * node.order_value);
                         n_orders += 1;
                     }
                 }
