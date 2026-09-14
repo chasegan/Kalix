@@ -10,7 +10,7 @@ hide:
 
 # Help
 
-<p class="kx-help-lead">The assistant is here to make the Kalix documentation more accessible. Consider whether its advice suits your modelling application. To talk to a person, see the <a href="/contact/">contact page</a>.</p>
+<p class="kx-help-lead">The assistant is here to make the Kalix documentation more accessible. Consider whether its advice suits your modelling application.</p>
 
 <div id="kx-chat-page"></div>
 
