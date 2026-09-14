@@ -662,6 +662,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.typical_regulated_flow = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
+                        } else if name_lower == "loss_rate" {
+                            n.loss_rate = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                               ini_property.line_number, name, node_name)));
@@ -1421,6 +1424,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                     }
                 }
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "typical_regulated_flow", &n.typical_regulated_flow.to_string(), "0");
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "loss_rate", &n.loss_rate.to_string());
             }
             NodeEnum::SacramentoNode(n) => {
                 let section_name = format!("node.{}", n.name);

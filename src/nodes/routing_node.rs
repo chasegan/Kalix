@@ -2,6 +2,7 @@ use super::{recorder, single_outlet_node_impls, Node};
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
+use crate::model_inputs::DynamicInput;
 use crate::numerical::mathfn::quadratic_plus;
 use crate::numerical::interpolation::lerp;
 use crate::numerical::opt::optimisable_component::OptimisableComponent;
@@ -80,12 +81,19 @@ pub struct RoutingNode {
     pub typical_regulated_flow: f64,
     pub dsorders: [f64; MAX_DS_LINKS],
 
+    // Optional loss along the reach: a dynamic expression evaluated each
+    // timestep. Plumbing only for now - the value is evaluated and recorded,
+    // not yet applied to the flow.
+    pub loss_rate: DynamicInput,
+    loss_rate_value: f64,
+
     //Recorders
     recorder_idx_usflow: Option<usize>,
     recorder_idx_volume: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
+    recorder_idx_loss_rate: Option<usize>,
 }
 
 impl RoutingNode {
@@ -94,6 +102,8 @@ impl RoutingNode {
     pub fn new() -> RoutingNode {
         RoutingNode {
             name: "".to_string(),
+            loss_rate: DynamicInput::default(),
+            loss_rate_value: f64::NAN,
             routing_method: StorageRoutingMethod::LagPlusPWL,
             n_divs: 1,
             x: 0.0,
@@ -214,6 +224,9 @@ impl Node for RoutingNode {
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
         self.storage_volume = 0.0;
+        // NaN, not zero: with no loss_rate expression there is no rate value,
+        // and a recorded all-NaN series says so (as on the loss node).
+        self.loss_rate_value = f64::NAN;
         self.x_is_unity = self.x > 0.999999;
 
         // Validate array bounds
@@ -370,6 +383,7 @@ impl Node for RoutingNode {
         self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
         self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
         self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
+        self.recorder_idx_loss_rate = recorder(data_cache, &self.name, "loss_rate");
 
         //Return
         Ok(())
@@ -393,6 +407,13 @@ impl Node for RoutingNode {
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
             data_cache.add_value_at_index(idx, self.usflow);
+        }
+
+        // Evaluate the reach loss rate when one is configured. Not yet applied
+        // to the flow - recorded only, so the plumbing can be exercised before
+        // the semantics are settled.
+        if !matches!(self.loss_rate, DynamicInput::None { .. }) {
+            self.loss_rate_value = self.loss_rate.get_value(data_cache);
         }
 
         // Lag routing first
@@ -563,6 +584,10 @@ impl Node for RoutingNode {
         }
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
+        }
+        if let Some(idx) = self.recorder_idx_loss_rate {
+            // The raw expression value; all-NaN when no loss_rate is set.
+            data_cache.add_value_at_index(idx, self.loss_rate_value);
         }
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;

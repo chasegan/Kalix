@@ -153,3 +153,4 @@ mod test_static_properties;
 
 // Loss node: the optional `rate` expression overriding the loss table
 mod test_loss_rate;
+mod test_routing_loss_rate;
