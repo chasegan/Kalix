@@ -596,8 +596,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.loss_table = Table::from_csv_string(v, 2, false)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse loss table for node '{}': {}",
                                                                          ini_property.line_number, node_name, e)))?;
-                        } else if name_lower == "rate" {
-                            n.rate = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                        } else if name_lower == "loss_rate" {
+                            n.loss_rate = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
@@ -1397,7 +1397,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 let loss_table_str = format_vec_as_multiline_table(&loss_table_values, n.loss_table.ncols(), 4);
                 //ini_doc.set_property (section_name.as_str(), "table", loss_table_str.as_str());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "table", loss_table_str.as_str());
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rate", &n.rate.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "loss_rate", &n.loss_rate.to_string());
             }
             NodeEnum::RoutingNode(n) => {
                 let section_name = format!("node.{}", n.name);
