@@ -17,21 +17,21 @@ hide:
     <div class="kx-people">
       <div>
         <div class="kx-person-tags"><span class="kx-person-name">Chas Egan</span><span class="kx-tag kx-tag-lead">Project lead</span><span class="kx-tag kx-tag-hydro">Senior hydrologist</span><span class="kx-tag kx-tag-dev">Developer</span></div>
-        <a href="#" class="kx-email"><span class="__cf_email__" data-cfemail="2d4e454c5e6d42494554495f4241424a54034e4240">[email&#160;protected]</span></a>
+        <a href="mailto:chas@odhydrology.com" class="kx-email">chas@odhydrology.com</a>
       </div>
       <div>
         <div class="kx-person-tags"><span class="kx-person-name">Sanne Voogt</span><span class="kx-tag kx-tag-sme">SME</span><span class="kx-tag kx-tag-hydro">Senior hydrologist</span></div>
-        <a href="#" class="kx-email"><span class="__cf_email__" data-cfemail="1063717e7e75507f74786974627f7c7f77693e737f7d">[email&#160;protected]</span></a>
+        <a href="mailto:sanne@odhydrology.com" class="kx-email">sanne@odhydrology.com</a>
       </div>
       <div>
         <div class="kx-person-tags"><span class="kx-person-name">Ciaran Komarakul-Greene</span><span class="kx-tag kx-tag-dev">Developer</span></div>
-        <a href="#" class="kx-email"><span class="__cf_email__" data-cfemail="6f0c060e1d0e012f000b07160b1d0003000816410c0002">[email&#160;protected]</span></a>
+        <a href="mailto:ciaran@odhydrology.com" class="kx-email">ciaran@odhydrology.com</a>
       </div>
     </div>
   </div>
   <div class="kx-contact-card kx-contact-card--soft">
     <p class="kx-contact-eyebrow">General enquiries</p>
-    <a href="#" class="kx-email kx-email--block"><span class="__cf_email__" data-cfemail="5b282e2b2b34292f1b343f33223f293437343c2275383436">[email&#160;protected]</span></a>
+    <a href="mailto:support@odhydrology.com" class="kx-email kx-email--block">support@odhydrology.com</a>
     <a href="https://odhydrology.com/" class="kx-email kx-email--block">odhydrology.com ↗</a>
     <p class="kx-contact-aside">Reaches us when Chas is diving.</p>
   </div>
@@ -59,7 +59,7 @@ hide:
       <p>Work within the core team.</p>
     </div>
   </div>
-  <p class="kx-contact-note">Start a conversation: <a href="#" class="kx-inline-link"><span class="__cf_email__" data-cfemail="96f5fef7e5d6f9f2feeff2e4f9faf9f1efb8f5f9fb">[email&#160;protected]</span></a></p>
+  <p class="kx-contact-note">Start a conversation: <a href="mailto:chas@odhydrology.com" class="kx-inline-link">chas@odhydrology.com</a></p>
 </div>
 
 </div>
