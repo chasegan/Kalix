@@ -62,6 +62,9 @@ public final class PixieDataPanel extends JPanel {
 
         // Registered AFTER the model's listener, so the columns exist when this runs.
         session.addListener(this::onLoaded);
+        if (session.isLoaded()) {
+            onLoaded(); // the decode may have finished before this panel existed
+        }
     }
 
     /** Context menu + keyboard: the unified Find (same grammar as the CSV table) and Copy. */

@@ -154,6 +154,22 @@ class PixieVizViewTest {
     }
 
     @Test
+    void refusalReachesAPanelConstructedAfterThePublish() throws Exception {
+        // The suite flake, made deterministic: the refusal path reads only the
+        // .pxt manifest, so its publish can land on the EDT before the panel
+        // exists — a notification into an empty listener list. Wait the publish
+        // out, THEN mount the panel: it must read the already-published
+        // snapshot at construction instead of holding "Decoding pixie…" for a
+        // notification that has already been and gone.
+        File pxt = writePixie("late", List.of(new NamedSeries("a", daily(1, 2, 3, 4, 5))));
+        session = new PixieDataSession(pxt, () -> 4);
+        await(() -> session.isLoaded(), "refusal published with no listeners registered");
+        SwingUtilities.invokeAndWait(() -> panel = new PixieDataPanel(session));
+        assertTrue(panel.getStatusText().contains("exceeds"),
+            "a panel that lost the construction race must still show the refusal");
+    }
+
+    @Test
     void reloadReplacesDataUnderTheSameRefs() throws Exception {
         File pxt = writePixie("reload", List.of(new NamedSeries("a", daily(1))));
         PixieVizView view = openView(pxt, 1000);
