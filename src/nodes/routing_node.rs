@@ -81,11 +81,15 @@ pub struct RoutingNode {
     pub typical_regulated_flow: f64,
     pub dsorders: [f64; MAX_DS_LINKS],
 
-    // Optional loss along the reach: a dynamic expression evaluated each
-    // timestep. Plumbing only for now - the value is evaluated and recorded,
-    // not yet applied to the flow.
+    // Optional loss along the reach [ML/timestep]: a dynamic expression
+    // evaluated each timestep, split equally across the divisions and taken
+    // inside each division's backward Euler balance (run_flow_phase).
+    // loss_rate_configured is fixed at initialise, so an unconfigured reach
+    // never enters that branch and its arithmetic is untouched.
     pub loss_rate: DynamicInput,
     loss_rate_value: f64,
+    loss_rate_configured: bool,
+    loss: f64,               // actual reach loss this timestep: per-division losses after clamping, summed
 
     //Recorders
     recorder_idx_usflow: Option<usize>,
@@ -94,6 +98,7 @@ pub struct RoutingNode {
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
     recorder_idx_loss_rate: Option<usize>,
+    recorder_idx_loss: Option<usize>,
 }
 
 impl RoutingNode {
@@ -104,6 +109,8 @@ impl RoutingNode {
             name: "".to_string(),
             loss_rate: DynamicInput::default(),
             loss_rate_value: f64::NAN,
+            loss_rate_configured: false,
+            loss: 0.0,
             routing_method: StorageRoutingMethod::LagPlusPWL,
             n_divs: 1,
             x: 0.0,
@@ -196,6 +203,37 @@ impl RoutingNode {
 
     /// Calculate the node storage by adding up all water volumes in the
     /// lag array and pwl arrays.
+    /// Per-division storage under the routing law at reference flow `q`: the
+    /// PWL segment integral (saturating above the table top), `k*q^m` for NLM,
+    /// and zero for a lag-only reach.
+    fn division_storage_at(&self, q: f64) -> f64 {
+        match self.routing_method {
+            StorageRoutingMethod::LagPlusNLM => self.nlm_k_working_units * q.powf(self.nlm_m),
+            StorageRoutingMethod::LagPlusPWL => {
+                for j in 0..self.pwl_segs {
+                    if q >= self.seg_par_q1[j] && q <= self.seg_par_q2[j] {
+                        return self.seg_par_aa[j] * q * q + self.seg_par_bb[j] * q + self.seg_par_cc[j];
+                    }
+                }
+                if self.pwl_segs > 0 && q > self.pwl_q_max { self.pwl_v_max } else { 0.0 }
+            }
+        }
+    }
+
+    /// The loss one division takes this step: its share of the reach's
+    /// loss_rate, bounded so that the division's outflow cannot go negative.
+    /// Outflow falls as the loss rises and reaches zero when the reference
+    /// flow is x*qin, so the bound is `vi + qin - V(x*qin)`: closed form, no
+    /// re-solve. A negative bound means the balance was short before any loss;
+    /// the loss is then zero and the shortfall stays visible rather than being
+    /// clamped away.
+    #[inline]
+    fn division_loss(&self, requested: f64, vi: f64, qin: f64) -> f64 {
+        let qr_at_zero_outflow = if self.x_is_unity { qin } else { self.x * qin };
+        let bound = (vi + qin - self.division_storage_at(qr_at_zero_outflow)).max(0.0);
+        requested.min(bound)
+    }
+
     fn calculate_storage(&mut self) -> f64 {
         let mut total_storage = 0.0;
 
@@ -227,6 +265,8 @@ impl Node for RoutingNode {
         // NaN, not zero: with no loss_rate expression there is no rate value,
         // and a recorded all-NaN series says so (as on the loss node).
         self.loss_rate_value = f64::NAN;
+        self.loss = 0.0;
+        self.loss_rate_configured = !matches!(self.loss_rate, DynamicInput::None { .. });
         self.x_is_unity = self.x > 0.999999;
 
         // Validate array bounds
@@ -384,6 +424,7 @@ impl Node for RoutingNode {
         self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
         self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
         self.recorder_idx_loss_rate = recorder(data_cache, &self.name, "loss_rate");
+        self.recorder_idx_loss = recorder(data_cache, &self.name, "loss");
 
         //Return
         Ok(())
@@ -409,12 +450,17 @@ impl Node for RoutingNode {
             data_cache.add_value_at_index(idx, self.usflow);
         }
 
-        // Evaluate the reach loss rate when one is configured. Not yet applied
-        // to the flow - recorded only, so the plumbing can be exercised before
-        // the semantics are settled.
-        if !matches!(self.loss_rate, DynamicInput::None { .. }) {
+        // Reach loss: loss_rate is the reach total [ML/timestep], split equally
+        // across the divisions and taken inside each division's balance below.
+        // NaN or negative loses nothing, as on the loss node. An unconfigured
+        // reach never enters the branch, so its arithmetic is exactly as before.
+        self.loss = 0.0;
+        let loss_per_div = if self.loss_rate_configured {
             self.loss_rate_value = self.loss_rate.get_value(data_cache);
-        }
+            (self.loss_rate_value / self.n_divs as f64).max(0.0)
+        } else {
+            0.0
+        };
 
         // Lag routing first
         // Put the new inflow into the lag array
@@ -439,8 +485,12 @@ impl Node for RoutingNode {
                         let qin = qout;
                         let vi = self.div_sto_array[i];
                         let vf_unclamped = k * qin.powf(m);
+                        let l = if self.loss_rate_configured { self.division_loss(loss_per_div, vi, qin) } else { 0.0 };
+                        self.loss += l;
                         let (new_qout, vf) = if qin + vi - vf_unclamped < 0.0 {
                             (0.0, vi + qin)
+                        } else if self.loss_rate_configured {
+                            (qin + vi - vf_unclamped - l, vf_unclamped)
                         } else {
                             (qin + vi - vf_unclamped, vf_unclamped)
                         };
@@ -461,7 +511,9 @@ impl Node for RoutingNode {
                     for i in 0..self.n_divs {
                         let qin = qout;
                         let vi = self.div_sto_array[i];
-                        let b = one_minus_x * vi + qin;
+                        let l = if self.loss_rate_configured { self.division_loss(loss_per_div, vi, qin) } else { 0.0 };
+                        self.loss += l;
+                        let b = if self.loss_rate_configured { one_minus_x * (vi - l) + qin } else { one_minus_x * vi + qin };
 
                         if b <= 0.0 {
                             // Empty division with no inflow; nothing to solve.
@@ -495,7 +547,9 @@ impl Node for RoutingNode {
                         let new_qout_raw = (y - x * qin) * inv_one_minus_x;
                         let (new_qout, vf) = if new_qout_raw < 0.0 {
                             // No upstream flow allowed; absorb inflow into storage.
-                            (0.0, vi + qin)
+                            if self.loss_rate_configured { (0.0, vi + qin - l) } else { (0.0, vi + qin) }
+                        } else if self.loss_rate_configured {
+                            (new_qout_raw, vi + qin - l - new_qout_raw)
                         } else {
                             (new_qout_raw, vi + qin - new_qout_raw)
                         };
@@ -513,6 +567,8 @@ impl Node for RoutingNode {
                     let qin = qout;                   //inflow to this division
                     let vi = self.div_sto_array[i];   //initial storage volume for this division
                     let mut vf = 0.0;                 //variable to hold final storage volume
+                    let l = if self.loss_rate_configured { self.division_loss(loss_per_div, vi, qin) } else { 0.0 };
+                    self.loss += l;
                     'segments: {
                         if self.x_is_unity {
                             //For x=1, reference flow "qr" equals inflow.
@@ -520,7 +576,7 @@ impl Node for RoutingNode {
                             for j in 0..self.pwl_segs {
                                 if (qr >= self.seg_par_q1[j]) && (qr <= self.seg_par_q2[j]) {
                                     vf = self.seg_par_aa[j] * qr * qr + self.seg_par_bb[j] * qr + self.seg_par_cc[j];
-                                    qout = vi + qin - vf;
+                                    qout = if self.loss_rate_configured { vi + qin - vf - l } else { vi + qin - vf };
                                     break 'segments;
                                 }
                             }
@@ -530,13 +586,13 @@ impl Node for RoutingNode {
                             for j in 0..self.pwl_segs {
                                 let a = self.seg_par_aa[j];
                                 let b = self.seg_par_bb[j] + inv_one_minus_x;
-                                let c = self.seg_par_cc[j] - vi - qin * inv_one_minus_x;
+                                let c = if self.loss_rate_configured { self.seg_par_cc[j] - vi - qin * inv_one_minus_x + l } else { self.seg_par_cc[j] - vi - qin * inv_one_minus_x };
                                 let qr = quadratic_plus(a, b, c);
 
                                 //Check if qr is within the segment and if so finalise solution
                                 if (!qr.is_nan()) && (qr >= self.seg_par_q1[j] && qr <= self.seg_par_q2[j]) {
                                     qout = (qr - qin * self.x) * inv_one_minus_x;
-                                    vf = vi + qin - qout;
+                                    vf = if self.loss_rate_configured { vi + qin - l - qout } else { vi + qin - qout };
                                     break 'segments;
                                 }
                             }
@@ -553,7 +609,7 @@ impl Node for RoutingNode {
                             self.name, qin, vi
                         );
                         vf = self.pwl_v_max;
-                        qout = vi + qin - vf;
+                        qout = if self.loss_rate_configured { vi + qin - vf - l } else { vi + qin - vf };
                     }
 
                     //Do not allow water to flow upstream.
@@ -588,6 +644,9 @@ impl Node for RoutingNode {
         if let Some(idx) = self.recorder_idx_loss_rate {
             // The raw expression value; all-NaN when no loss_rate is set.
             data_cache.add_value_at_index(idx, self.loss_rate_value);
+        }
+        if let Some(idx) = self.recorder_idx_loss {
+            data_cache.add_value_at_index(idx, self.loss);
         }
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;

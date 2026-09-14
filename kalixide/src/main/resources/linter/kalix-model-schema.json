@@ -553,7 +553,8 @@
         "ds_1_order",
         "x",
         "typical_regulated_flow",
-        "loss_rate"
+        "loss_rate",
+        "loss"
       ],
       "required_params": [
         "type",
@@ -612,7 +613,7 @@
         },
         "loss_rate": {
           "type": "function_expression",
-          "description": "Reach loss rate (data reference, constant, or expression). Evaluated and recorded each timestep."
+          "description": "Reach loss [ML/timestep] (data reference, constant, or expression), split equally across the divisions and taken inside the routing balance; bounded so outflow cannot go negative"
         }
       }
     },
