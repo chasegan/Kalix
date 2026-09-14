@@ -1,0 +1,22 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 4
+  Timesteps: 8
+  Stepsize (s): 86400
+  Period: 2024-01-01T00:00:00.000Z, 2024-01-08T00:00:00.000Z
+  Note: units are ML/timestep
+
+INFLOW NODES
+  inflow1, 100
+
+ROUTING NODES
+  reach_lag, -47.5
+  reach_pwl, -20.8772545334691
+
+BLACKHOLE NODES
+  bh1, -31.6227454665309
+
+----------------------------------
+TOTAL = 0
+----------------------------------

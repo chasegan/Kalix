@@ -514,7 +514,9 @@
         "ds_1",
         "ds_1_order",
         "x",
-        "typical_regulated_flow"
+        "typical_regulated_flow",
+        "loss_rate",
+        "loss"
       ],
       "required_params": [
         "type",
@@ -526,7 +528,8 @@
         "n_divs",
         "x",
         "typical_regulated_flow",
-        "nlm"
+        "nlm",
+        "loss_rate"
       ],
       "dsnode_params": [
         "ds_1"
@@ -569,6 +572,10 @@
           "type": "number_sequence",
           "count": 2,
           "description": "Nonlinear muskingum parameters: two comma-separated numbers"
+        },
+        "loss_rate": {
+          "type": "function_expression",
+          "description": "Reach loss [ML/timestep] (data reference, constant, or expression), split equally across the divisions and taken inside the routing balance; bounded so outflow cannot go negative"
         }
       }
     },

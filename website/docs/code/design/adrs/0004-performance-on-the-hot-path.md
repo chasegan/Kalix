@@ -100,8 +100,11 @@ write a line; §3 is not a licence to mangle cold code (§5).
    the real change and the padded one is yours; the rest is layout, and
    layout moves benchmarks by several percent on its own. Print `offset_of`
    for the hot fields in each build, because padding a `repr(Rust)` struct
-   reorders it. The padded build is a throwaway for attribution; the register
-   records only real builds. This clause claims only what is measured:
+   reorders it. Build every arm in one worktree with the source swapped
+   between builds, and check each binary by content - a symbol only the
+   change has, a size, a hash - before timing it. The padded build is a
+   throwaway for attribution; the register records only real builds. This
+   clause claims only what is measured:
    layout matters, and the mechanism is rarely the one you would guess. (See
    Amendments for the history of this clause.)
 5. **Do each piece of work at the coldest place it can live.** Resolution,
@@ -249,3 +252,27 @@ citing them when a trade is proposed.
   banked as a property of whatever change happened to carry it. One machine,
   one CPU, one session for the split — like the notes above, and not yet
   checked on another. Source: `0f45ef5` on `feat/SID`.
+- *2026-09-14* — fifth data point for §3.4, and a rule for building the
+  arms. Adding an optional `loss_rate` to `RoutingNode` grew it from 3,880
+  to 4,056 bytes and moved every hot array 160 bytes down the struct;
+  `4_regulated_system` went +7.4% and `5_ordering_confluences` +2.5%. Four
+  builds in one worktree - the baseline, the baseline padded to 4,056 bytes
+  with its offsets unchanged, the baseline carrying the new fields unused so
+  that only its offsets moved, and the feature - split it: size −0.6%,
+  layout +0.6%, code +8.1% (and −1.2%, +0.4%, +2.7% on test 5). The cost was
+  runtime `if configured` selects carried through the PWL segment loop on
+  the path every unconfigured reach runs: about 10% more instructions, more
+  branches, and more stack reloads. Monomorphising the division routing on
+  `const LOSS: bool` - one dispatch per step, the `false` instantiation
+  identical to the pre-feature loop instruction for instruction - brought
+  it to +0.6% and −0.2%, at the 0.9% noise floor, with a routing-free model
+  moving by the same amount. Two things follow. A branch nobody takes is not
+  free inside a hot loop; §3.5 says to decide at the coldest place, and for
+  a per-node option that place is compile time. And a build-hygiene rule
+  learned the hard way: a shared target directory silently reused one binary
+  for all four arms and produced a flat decomposition that was fiction,
+  twice, before a content check caught it - hence the wording in §3.4 above.
+  Separately, the same source at three checkout paths gave three different
+  binaries with the hot function the same size: a fact about bytes, not yet
+  shown to move a benchmark. One machine, one CPU (Apple M5). Source:
+  `c55325d1` on `feat/routing-loss-rate`.
