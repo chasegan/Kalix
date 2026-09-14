@@ -49,6 +49,8 @@ The attempted loss is determined by interpolating the provided loss table agains
 
 `ds1=usflow−loss`
 
+A routing node can also lose water along its reach, with the same `loss_rate` property taken from inside the reach's storage: see [Reach losses](routing.md#reach-losses). A loss node is the choice when the loss belongs at a point, or should scale with flow through a table.
+
 Note on ordering: upstream orders are translated through the loss **table** in both cases. A `loss_rate` expression overrides how much water is actually lost, but ordering has no way to foresee an arbitrary expression's value, so it keeps using the table — supply a representative table alongside `loss_rate` if downstream orders should account for expected losses (with no table, ordering assumes zero loss).
 
 ## References
