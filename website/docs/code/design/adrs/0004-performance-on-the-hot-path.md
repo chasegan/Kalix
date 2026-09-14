@@ -94,7 +94,14 @@ write a line; §3 is not a licence to mangle cold code (§5).
    declaration order to be memory order, say `#[repr(C)]` and accept its
    padding; otherwise you do not control it. Measure instead: `size_of`,
    `offset_of`, and a benchmark model shaped like the workload
-   (`regression_tests/speed/`). This clause claims only what is measured:
+   (`regression_tests/speed/`). If a struct on the hot path changes size and
+   the benchmark moves, build a third binary: the old code plus dead padding
+   to the new size, doing nothing else. Run all three. Only the gap between
+   the real change and the padded one is yours; the rest is layout, and
+   layout moves benchmarks by several percent on its own. Print `offset_of`
+   for the hot fields in each build, because padding a `repr(Rust)` struct
+   reorders it. The padded build is a throwaway for attribution; the register
+   records only real builds. This clause claims only what is measured:
    layout matters, and the mechanism is rarely the one you would guess. (See
    Amendments for the history of this clause.)
 5. **Do each piece of work at the coldest place it can live.** Resolution,
@@ -222,3 +229,23 @@ citing them when a trade is proposed.
   arrays are 3,584 of its 3,880 bytes — buys nothing today and stays
   deferred until a cache-spilling benchmark (thousands of nodes) exists to
   justify it.
+- *2026-09-10* — fourth data point for §3.4, and the padded-build
+  rule above: an intra-struct size change is NOT flat, even where
+  stride is. Adding the forced-level fields grew `StorageNode` from 2,616 to
+  2,800 bytes with `NodeEnum`'s stride untouched at 3,880 (`RoutingNode`
+  still sets it), and both storage-bearing speed tests (4, ten storages; 5,
+  five) moved −6.1% against a flat storage-free control (2), by interleaved
+  A/B, 12 reps. A third binary — the same baseline plus `[u64; 23]` of dead
+  padding, reaching 2,800 bytes with no behaviour change — split the effect
+  in opposite directions: test 4 took +1.1% (noise) from the padding and
+  −4.5% from the code; test 5 took −4.2% from the padding and −0.9% (noise)
+  from the code. The storage-free control was flat throughout. (The two legs
+  do not compose to −6.1% — they imply ≈ −3.4% and ≈ −5.1% — so the split
+  and the headline are recorded as measured, not reconciled.) Two things
+  follow. A multi-percent swing in `regression_tests/speed/` can be produced
+  by bytes that do nothing, so a delta, in either direction, is not a result
+  without the padded build beside it; and a speedup whose attribution flips
+  between models is layout luck rather than an improvement, and must not be
+  banked as a property of whatever change happened to carry it. One machine,
+  one CPU, one session for the split — like the notes above, and not yet
+  checked on another. Source: `0f45ef5` on `feat/SID`.
