@@ -155,3 +155,4 @@ mod test_linter_schema;
 // Loss node: the optional `rate` expression overriding the loss table
 mod test_loss_rate;
 mod test_routing_loss_rate;
+mod test_routing_dead_storage;
