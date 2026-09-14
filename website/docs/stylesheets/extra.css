@@ -348,6 +348,19 @@
 .md-typeset .kx-tree a { text-decoration: none; }
 .md-typeset .kx-tree a:hover { text-decoration: underline; }
 
+/* ---- Help page ------------------------------------------------------------ *
+ * Centered single column at the shared 820px measure (nav + toc hidden in the
+ * page front matter, matching Downloads and Contact). Without this the chat
+ * mount spans the full content width and the page reads wider than the rest of
+ * the site.
+ * ------------------------------------------------------------------------- */
+.kx-help { max-width: 820px; margin: 0 auto; }
+.md-typeset .kx-help > h1 { margin: 0 0 var(--kx-space-3); }
+.md-typeset .kx-help-lead {
+  font-size: var(--kx-text-lg); line-height: var(--kx-leading-normal);
+  color: var(--kx-text-muted); max-width: 60ch; margin: 0 0 var(--kx-space-7);
+}
+
 /* ---- Contact page --------------------------------------------------------- *
  * Ported from the former bespoke docs/contact/index.html. The page now runs in
  * the Material framework (front matter hides both sidebars), so it inherits the
