@@ -49,7 +49,7 @@ The routing parameters — the `nlm` pair, or the travel times of the `pwl` tabl
 | usflow | Upstream flow [ML] |
 | ds\_1 | Downstream flow on link ds\_1 [ML] |
 | ds\_1\_order | Orders on the link ds\_1 [ML] |
-| volume | Volume of water in the reach storage [ML] |
+| volume | Volume of water in the reach storage [ML], dead water included |
 | x | The declared `x` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
 | typical\_regulated\_flow | The declared `typical_regulated_flow` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
 | dead\_storage | The declared `dead_storage` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
@@ -76,7 +76,7 @@ and mass balance requires that
 
 With `loss_rate` set, the reach loses that much water each timestep, in ML. The amount is split equally across the `n_divs` divisions and taken inside each division's backward Euler balance, `V(q) = V₀ + inflow − loss − outflow`, so the loss comes out of the water in the reach - not off the inflow before routing, and not off the outflow after it.
 
-Each division's loss is bounded so its outflow cannot go negative. The bound has a closed form: outflow reaches zero when the reference flow is `x·qin`, so a division can lose at most `V₀ + qin − V(x·qin)`. A dry reach with no inflow therefore loses nothing, and a reach that is short of water before any loss is applied is left short rather than patched; the `loss` output reports what was actually taken. A NaN or negative `loss_rate` loses nothing.
+Each division's loss is bounded so its outflow cannot go negative. The bound has a closed form: outflow reaches zero when the reference flow is `x·qin`, so a division can pass at most `V₀ + qin − V(x·qin)` to the loss before its outflow stops. Once it has, the rest of the request comes out of what the division holds, so a loss can empty a stagnant reach; nothing is ever invented, and a dry reach with no inflow loses nothing. The `loss` output reports what was actually taken. A NaN or negative `loss_rate` loses nothing.
 
 Note on ordering: upstream orders pass through a routing node unchanged, and a `loss_rate` expression does not alter that - ordering has no way to foresee an arbitrary expression's value, so it assumes zero loss along the reach, as it does for a loss node with no table.
 

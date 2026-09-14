@@ -53,6 +53,7 @@ These read the same way, as `node.<name>.<property>`:
 | `area` | GR4J, Sacramento | Catchment area [km2] — the declared `area` value |
 | `x` | Routing | Inflow bias used by the storage routing solver |
 | `typical_regulated_flow` | Routing | Representative regulated flow [ML] used to estimate travel time for order propagation |
+| `dead_storage` | Routing | Water the reach holds at zero flow [ML] — the declared value |
 | `initial_volume` | Storage | Initial storage volume [ML] |
 
 Because these never change during a run, they don't support the offset syntax

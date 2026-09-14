@@ -114,6 +114,14 @@ fn a_dry_reach_loses_nothing() {
 }
 
 #[test]
+fn nan_loss_rate_loses_nothing() {
+    // A gap in a loss series arrives as NaN; the reach treats it as no loss.
+    let model = run_model(&model_ini("100", "loss_rate = 0 / 0", 3));
+    assert_eq!(series(&model, "node.reach.loss"), vec![0.0; 3]);
+    assert_eq!(series(&model, "node.reach.dsflow"), vec![100.0; 3]);
+}
+
+#[test]
 fn negative_loss_rate_loses_nothing() {
     let model = run_model(&model_ini("100", "loss_rate = 0 - 5", 3));
     assert_eq!(series(&model, "node.reach.loss"), vec![0.0; 3]);

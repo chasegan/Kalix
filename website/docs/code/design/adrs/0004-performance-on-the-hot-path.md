@@ -290,9 +290,13 @@ citing them when a trade is proposed.
   layout - the opposite of the 2026-09-14 finding, where 176 bytes were
   flat. Keeping one field (`dead_storage`, the share derived where used;
   4,064 bytes) and the routine out of line gave +0.5%, +0.8%, +0.9%, −0.2%
-  on tests 2-5, at the noise floor. Two things follow. A const generic keeps
-  the callee's arithmetic but not the caller's size: each instantiation the
-  dispatch names is inlined, and a hot function that grows with every option
-  should be pinned out of line and measured. And the layout sensitivity of
-  a struct is a fact about this struct at this size, not a rule to reason
-  from: measure the fields-only arm every time.
+  on tests 2-5, at the noise floor. The two flags were then folded into
+  one, `route_divisions::<LOSS_OR_DEAD>`: losses and dead storage are used
+  together, the arithmetic with a zero loss or a zero dead level is the
+  plain arithmetic, and one configured copy leaves no branch to get right
+  for one property and wrong for the other. Two things follow. A const
+  generic keeps the callee's arithmetic but not the caller's size: each
+  instantiation the dispatch names is inlined, and a hot function that
+  grows with every option should be pinned out of line and measured. And
+  the layout sensitivity of a struct is a fact about this struct at this
+  size, not a rule to reason from: measure the fields-only arm every time.

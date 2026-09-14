@@ -156,3 +156,4 @@ mod test_linter_schema;
 mod test_loss_rate;
 mod test_routing_loss_rate;
 mod test_routing_dead_storage;
+mod test_routing_closure;
