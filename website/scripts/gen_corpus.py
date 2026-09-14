@@ -28,6 +28,37 @@ INCLUDE_PAGES = ("contact.md", "downloads.md")
 
 FRONT_MATTER = re.compile(r"\A---\n.*?\n---\n", re.DOTALL)
 
+# Email addresses are obfuscated in the page source so they never appear in the
+# raw HTML; docs/javascripts/cf-email.js decodes them in the browser. The
+# assistant has no browser, so decode them here too — otherwise it sees only
+# "[email protected]" placeholders and invents an address when asked how to
+# reach the team. Same XOR scheme as cf-email.js: the first hex byte is the key.
+CF_EMAIL_LINK = re.compile(
+    r'<a href="#"((?: [a-z-]+="[^"]*")*)>'
+    r'<span class="__cf_email__" data-cfemail="([0-9a-f]+)">'
+    r'\[email(?:&#160;|&nbsp;| )protected\]</span></a>'
+)
+CF_EMAIL_SPAN = re.compile(
+    r'<span class="__cf_email__" data-cfemail="([0-9a-f]+)">.*?</span>'
+)
+
+
+def cf_decode(hex_str: str) -> str:
+    """Reverse cf-email.js's obfuscation: XOR every byte with the first."""
+    raw = bytes.fromhex(hex_str)
+    key = raw[0]
+    return "".join(chr(b ^ key) for b in raw[1:])
+
+
+def reveal_emails(body: str) -> str:
+    """Replace obfuscated address markup with the plain address."""
+    body = CF_EMAIL_LINK.sub(
+        lambda m: f'<a href="mailto:{cf_decode(m.group(2))}"{m.group(1)}>'
+                  f'{cf_decode(m.group(2))}</a>',
+        body,
+    )
+    return CF_EMAIL_SPAN.sub(lambda m: cf_decode(m.group(1)), body)
+
 
 def page_url(md: Path) -> str:
     """Site URL for a Markdown source file, following MkDocs' directory URLs."""
@@ -45,6 +76,7 @@ def main() -> None:
     parts = []
     for md in pages:
         body = FRONT_MATTER.sub("", md.read_text(encoding="utf-8")).strip()
+        body = reveal_emails(body)
         if body:
             parts.append(f"<page url=\"{page_url(md)}\">\n{body}\n</page>")
 
