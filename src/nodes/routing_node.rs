@@ -91,6 +91,15 @@ pub struct RoutingNode {
     loss_rate_configured: bool,
     loss: f64,               // actual reach loss this timestep: per-division losses after clamping, summed
 
+    // Dead storage [ML] across the reach: the water it holds at zero flow,
+    // split equally across the divisions (dead_per_div()) and baked into each
+    // division's storage law as V'(q) = dead_per_div + V(q). Below the dead
+    // level nothing routes: the pool fills, or drains to a loss. One field,
+    // derived where needed: caching the share and a configured flag here
+    // grew the node by 16 bytes and measured +3% on tests 3-5 from layout
+    // alone (ADR-0004 s3.4, 2026-09-15).
+    pub dead_storage: f64,
+
     //Recorders
     recorder_idx_usflow: Option<usize>,
     recorder_idx_volume: Option<usize>,
@@ -111,6 +120,7 @@ impl RoutingNode {
             loss_rate_value: f64::NAN,
             loss_rate_configured: false,
             loss: 0.0,
+            dead_storage: 0.0,
             routing_method: StorageRoutingMethod::LagPlusPWL,
             n_divs: 1,
             x: 0.0,
@@ -201,22 +211,24 @@ impl RoutingNode {
         answer
     }
 
-    /// Calculate the node storage by adding up all water volumes in the
-    /// lag array and pwl arrays.
-    /// Per-division storage under the routing law at reference flow `q`: the
-    /// PWL segment integral (saturating above the table top), `k*q^m` for NLM,
-    /// and zero for a lag-only reach.
+    /// Each division's equal share of the reach's dead storage (zero when unset).
+    #[inline]
+    fn dead_per_div(&self) -> f64 { self.dead_storage / self.n_divs.max(1) as f64 }
+
+    /// Per-division storage under the routing law at reference flow `q`,
+    /// dead storage included: the PWL segment integral (saturating above the
+    /// table top), `k*q^m` for NLM, and just the dead storage for a lag-only reach.
     #[inline]
     fn division_storage_at(&self, q: f64) -> f64 {
         match self.routing_method {
-            StorageRoutingMethod::LagPlusNLM => self.nlm_k_working_units * q.powf(self.nlm_m),
+            StorageRoutingMethod::LagPlusNLM => self.nlm_k_working_units * q.powf(self.nlm_m) + self.dead_per_div(),
             StorageRoutingMethod::LagPlusPWL => {
                 for j in 0..self.pwl_segs {
                     if q >= self.seg_par_q1[j] && q <= self.seg_par_q2[j] {
                         return self.seg_par_aa[j] * q * q + self.seg_par_bb[j] * q + self.seg_par_cc[j];
                     }
                 }
-                if self.pwl_segs > 0 && q > self.pwl_q_max { self.pwl_v_max } else { 0.0 }
+                if self.pwl_segs > 0 && q > self.pwl_q_max { self.pwl_v_max } else { self.dead_per_div() }
             }
         }
     }
@@ -225,27 +237,57 @@ impl RoutingNode {
     /// loss_rate, bounded so that the division's outflow cannot go negative.
     /// Outflow falls as the loss rises and reaches zero when the reference
     /// flow is x*qin, so the bound is `vi + qin - V(x*qin)`: closed form, no
-    /// re-solve. A negative bound means the balance was short before any loss;
-    /// the loss is then zero and the shortfall stays visible rather than being
-    /// clamped away.
+    /// re-solve. A negative bound means the balance was short before any loss
+    /// - a filling division - so nothing leaves through the outflow; the
+    /// request then comes out of the storage instead (drain_pool).
     #[inline]
     fn division_loss(&self, requested: f64, vi: f64, qin: f64) -> f64 {
         let qr_at_zero_outflow = if self.x_is_unity { qin } else { self.x * qin };
-        // V(0) is exactly zero under both routing laws (the PWL integral starts
-        // at zero; k*0^m = 0), so with x = 0 - the default - or a dry division
-        // the bound is simply everything present. Skipping the lookup changes
-        // no result and removes a call from every configured reach's step.
-        let v_at_zero_outflow = if qr_at_zero_outflow == 0.0 { 0.0 } else { self.division_storage_at(qr_at_zero_outflow) };
+        // V(0) is exactly the dead storage under both routing laws (the PWL
+        // integral starts at zero; k*0^m = 0), so with x = 0 - the default - or
+        // a dry division the bound is everything above the dead level. Skipping
+        // the lookup changes no result and removes a call from every configured
+        // reach's step. Once outflow is zero the loss continues into the pool
+        // (see drain_pool), so the bound protects outflow, not the dead water.
+        let v_at_zero_outflow = if qr_at_zero_outflow == 0.0 { self.dead_per_div() } else { self.division_storage_at(qr_at_zero_outflow) };
         let bound = (vi + qin - v_at_zero_outflow).max(0.0);
         requested.min(bound)
     }
 
-    /// Storage routing through the divisions (PWL or NLM), taking the reach
-    /// loss inside each division's balance when LOSS is set. Generic over a
-    /// const bool: with LOSS = false every loss branch below is a compile-time
-    /// constant and the instantiation is the routing arithmetic exactly as it
-    /// was before loss_rate existed.
-    fn route_divisions<const LOSS: bool>(&mut self, flow_out_of_lag_reach: f64, loss_per_div: f64) {
+    /// Once a division's outflow has been driven to zero by the bounded loss,
+    /// the rest of the request comes out of whatever the division still holds,
+    /// dead or live: evaporation empties a stagnant reach. Returns the final
+    /// storage. A request the bound did not cut short changes nothing.
+    #[inline]
+    fn drain_pool(&mut self, requested: f64, taken: f64, vf: f64) -> f64 {
+        if taken < requested {
+            let extra = (requested - taken).min(vf).max(0.0);
+            self.loss += extra;
+            vf - extra
+        } else {
+            vf
+        }
+    }
+
+    /// Storage routing through the divisions (PWL or NLM). Generic over one
+    /// const bool. With LOSS_OR_DEAD = false every loss and dead-storage
+    /// branch below is a compile-time constant and the instantiation is the
+    /// routing arithmetic exactly as it was before either property existed.
+    /// With LOSS_OR_DEAD = true the loss is taken inside each division's
+    /// balance, the dead level is honoured, and whichever of the two the reach
+    /// does not set is simply zero - the arithmetic with a zero loss or a zero
+    /// dead level is the plain arithmetic, so no flag is tested per step.
+    /// One configured copy, not one per combination: losses and dead storage
+    /// travel together, and a branch that is right for one and wrong for the
+    /// other cannot happen when there is only one.
+    ///
+    /// Kept out of line on purpose. Copies of this loop inlined into the flow
+    /// phase measured up to +5% on 4_regulated_system with the arithmetic
+    /// unchanged; one call per reach per step costs nothing measurable
+    /// (ADR-0004 s3.4).
+    #[inline(never)]
+    fn route_divisions<const LOSS_OR_DEAD: bool>(&mut self, flow_out_of_lag_reach: f64, loss_per_div: f64) {
+        let dead_per_div = if LOSS_OR_DEAD { self.dead_per_div() } else { 0.0 };
         match self.routing_method {
             StorageRoutingMethod::LagPlusNLM => {
                 let mut qout = flow_out_of_lag_reach; //ingested into the first division
@@ -258,16 +300,17 @@ impl RoutingNode {
                     for i in 0..self.n_divs {
                         let qin = qout;
                         let vi = self.div_sto_array[i];
-                        let vf_unclamped = k * qin.powf(m);
-                        let l = if LOSS { self.division_loss(loss_per_div, vi, qin) } else { 0.0 };
-                        if LOSS { self.loss += l; }
-                        let (new_qout, vf) = if qin + vi - vf_unclamped < 0.0 {
-                            (0.0, vi + qin)
-                        } else if LOSS {
+                        let vf_unclamped = if LOSS_OR_DEAD { k * qin.powf(m) + dead_per_div } else { k * qin.powf(m) };
+                        let l = if LOSS_OR_DEAD { self.division_loss(loss_per_div, vi, qin) } else { 0.0 };
+                        if LOSS_OR_DEAD { self.loss += l; }
+                        let (new_qout, mut vf) = if qin + vi - vf_unclamped < 0.0 {
+                            (0.0, vi + qin) // the law's storage exceeds what is present: filling
+                        } else if LOSS_OR_DEAD {
                             (qin + vi - vf_unclamped - l, vf_unclamped)
                         } else {
                             (qin + vi - vf_unclamped, vf_unclamped)
                         };
+                        if LOSS_OR_DEAD { vf = self.drain_pool(loss_per_div, l, vf); }
                         self.div_sto_array[i] = vf;
                         qout = new_qout;
                     }
@@ -281,17 +324,33 @@ impl RoutingNode {
                     const NLM_TOL_ABS: f64 = 1.0e-12;
                     const NLM_TOL_REL: f64 = 1.0e-10;
                     const NLM_MAX_ITER: usize = 8;
+                    const NLM_MAX_ITER_BRACKETED: usize = 50;
 
                     for i in 0..self.n_divs {
                         let qin = qout;
                         let vi = self.div_sto_array[i];
-                        let l = if LOSS { self.division_loss(loss_per_div, vi, qin) } else { 0.0 };
-                        if LOSS { self.loss += l; }
-                        let b = if LOSS { one_minus_x * (vi - l) + qin } else { one_minus_x * vi + qin };
+                        if LOSS_OR_DEAD && vi + qin < dead_per_div {
+                            // Below the dead level nothing routes: the pool fills, or drains to a loss.
+                            let l = loss_per_div.min(vi + qin).max(0.0);
+                            self.loss += l;
+                            self.div_sto_array[i] = vi + qin - l;
+                            self.nlm_qref_array[i] = 0.0;
+                            qout = 0.0;
+                            continue;
+                        }
+                        let l = if LOSS_OR_DEAD { self.division_loss(loss_per_div, vi, qin) } else { 0.0 };
+                        if LOSS_OR_DEAD { self.loss += l; }
+                        let vi_live = if LOSS_OR_DEAD { vi - dead_per_div } else { vi };
+                        let b = if LOSS_OR_DEAD { one_minus_x * (vi_live - l) + qin } else { one_minus_x * vi_live + qin };
 
                         if b <= 0.0 {
-                            // Empty division with no inflow; nothing to solve.
-                            self.div_sto_array[i] = 0.0;
+                            // No reference flow to solve for: an empty division with no inflow,
+                            // or the bound at work - the loss took all the live water - so the
+                            // storage keeps what is left, dead water included, and drain_pool
+                            // may take the rest of the request from it.
+                            let mut vf = if LOSS_OR_DEAD { vi + qin - l } else { 0.0 };
+                            if LOSS_OR_DEAD { vf = self.drain_pool(loss_per_div, l, vf); }
+                            self.div_sto_array[i] = vf;
                             self.nlm_qref_array[i] = 0.0;
                             qout = 0.0;
                             continue;
@@ -305,28 +364,45 @@ impl RoutingNode {
                         // Newton iteration. f is strictly monotonic on y > 0, so
                         // convergence is robust from any positive start; warm-start
                         // typically gets us within ~1% of the root in 2-3 iterations.
-                        for _ in 0..NLM_MAX_ITER {
+                        //
+                        // That holds without a loss, where b never falls far below last
+                        // step's q_ref. A loss can take nearly all the live water and leave
+                        // b tiny; then Newton from the right of the concave f overshoots
+                        // negative, and eight halvings of the warm start do not reach the
+                        // root. So in the configured copy the start is capped at b - the
+                        // root is in (0, b], since a*y^m >= 0 - and a bracket the iterate
+                        // cannot leave falls back to bisection when a step lands outside it.
+                        if LOSS_OR_DEAD { y = y.min(b); }
+                        let (mut lo, mut hi) = (0.0_f64, b);
+                        let max_iter = if LOSS_OR_DEAD { NLM_MAX_ITER_BRACKETED } else { NLM_MAX_ITER };
+                        for _ in 0..max_iter {
                             let ym1 = y.powf(m_minus_1);   // y^(m-1)  -- the one powf in the loop
                             let ym = y * ym1;              // y^m  via one extra multiply
                             let f = a * ym + y - b;
                             let fp = a * m * ym1 + 1.0;
                             let dy = f / fp;
                             let y_new = y - dy;
-                            // Safeguarded update: never let y go non-positive (would NaN the next powf for m<1).
-                            y = if y_new > 0.0 { y_new } else { 0.5 * y };
+                            if LOSS_OR_DEAD {
+                                if f > 0.0 { hi = y; } else { lo = y; }
+                                y = if y_new > lo && y_new < hi { y_new } else { 0.5 * (lo + hi) };
+                            } else {
+                                // Safeguarded update: never let y go non-positive (would NaN the next powf for m<1).
+                                y = if y_new > 0.0 { y_new } else { 0.5 * y };
+                            }
                             if dy.abs() < NLM_TOL_ABS + NLM_TOL_REL * y { break; }
                         }
 
                         self.nlm_qref_array[i] = y;
                         let new_qout_raw = (y - x * qin) * inv_one_minus_x;
-                        let (new_qout, vf) = if new_qout_raw < 0.0 {
+                        let (new_qout, mut vf) = if new_qout_raw < 0.0 {
                             // No upstream flow allowed; absorb inflow into storage.
-                            if LOSS { (0.0, vi + qin - l) } else { (0.0, vi + qin) }
-                        } else if LOSS {
+                            if LOSS_OR_DEAD { (0.0, vi + qin - l) } else { (0.0, vi + qin) }
+                        } else if LOSS_OR_DEAD {
                             (new_qout_raw, vi + qin - l - new_qout_raw)
                         } else {
                             (new_qout_raw, vi + qin - new_qout_raw)
                         };
+                        if LOSS_OR_DEAD { vf = self.drain_pool(loss_per_div, l, vf); }
                         self.div_sto_array[i] = vf;
                         qout = new_qout;
                     }
@@ -341,8 +417,16 @@ impl RoutingNode {
                     let qin = qout;                   //inflow to this division
                     let vi = self.div_sto_array[i];   //initial storage volume for this division
                     let mut vf = 0.0;                 //variable to hold final storage volume
-                    let l = if LOSS { self.division_loss(loss_per_div, vi, qin) } else { 0.0 };
-                    if LOSS { self.loss += l; }
+                    if LOSS_OR_DEAD && vi + qin < dead_per_div {
+                        // Below the dead level nothing routes: the pool fills, or drains to a loss.
+                        let l = loss_per_div.min(vi + qin).max(0.0);
+                        self.loss += l;
+                        self.div_sto_array[i] = vi + qin - l;
+                        qout = 0.0;
+                        continue;
+                    }
+                    let l = if LOSS_OR_DEAD { self.division_loss(loss_per_div, vi, qin) } else { 0.0 };
+                    if LOSS_OR_DEAD { self.loss += l; }
                     'segments: {
                         if self.x_is_unity {
                             //For x=1, reference flow "qr" equals inflow.
@@ -350,7 +434,7 @@ impl RoutingNode {
                             for j in 0..self.pwl_segs {
                                 if (qr >= self.seg_par_q1[j]) && (qr <= self.seg_par_q2[j]) {
                                     vf = self.seg_par_aa[j] * qr * qr + self.seg_par_bb[j] * qr + self.seg_par_cc[j];
-                                    qout = if LOSS { vi + qin - vf - l } else { vi + qin - vf };
+                                    qout = if LOSS_OR_DEAD { vi + qin - vf - l } else { vi + qin - vf };
                                     break 'segments;
                                 }
                             }
@@ -360,13 +444,13 @@ impl RoutingNode {
                             for j in 0..self.pwl_segs {
                                 let a = self.seg_par_aa[j];
                                 let b = self.seg_par_bb[j] + inv_one_minus_x;
-                                let c = if LOSS { self.seg_par_cc[j] - vi - qin * inv_one_minus_x + l } else { self.seg_par_cc[j] - vi - qin * inv_one_minus_x };
+                                let c = if LOSS_OR_DEAD { self.seg_par_cc[j] - vi - qin * inv_one_minus_x + l } else { self.seg_par_cc[j] - vi - qin * inv_one_minus_x };
                                 let qr = quadratic_plus(a, b, c);
 
                                 //Check if qr is within the segment and if so finalise solution
                                 if (!qr.is_nan()) && (qr >= self.seg_par_q1[j] && qr <= self.seg_par_q2[j]) {
                                     qout = (qr - qin * self.x) * inv_one_minus_x;
-                                    vf = if LOSS { vi + qin - l - qout } else { vi + qin - qout };
+                                    vf = if LOSS_OR_DEAD { vi + qin - l - qout } else { vi + qin - qout };
                                     break 'segments;
                                 }
                             }
@@ -383,16 +467,21 @@ impl RoutingNode {
                             self.name, qin, vi
                         );
                         vf = self.pwl_v_max;
-                        qout = if LOSS { vi + qin - vf - l } else { vi + qin - vf };
+                        qout = if LOSS_OR_DEAD { vi + qin - vf - l } else { vi + qin - vf };
                     }
 
-                    //Do not allow water to flow upstream.
+                    //Do not allow water to flow upstream. The bound keeps a loss from
+                    //driving outflow below zero, so with a loss this only catches
+                    //rounding at qout = 0; the loss is already booked and stays out of
+                    //the storage. (l is zero whenever the balance was short before any
+                    //loss, so the no-loss meaning is unchanged.)
                     if qout < 0.0 {
                         qout = 0.0;
-                        vf = vi + qin;
+                        vf = if LOSS_OR_DEAD { vi + qin - l } else { vi + qin };
                     }
 
                     //The new storage volume for this division is vf.
+                    if LOSS_OR_DEAD { vf = self.drain_pool(loss_per_div, l, vf); }
                     self.div_sto_array[i] = vf;
                 }
 
@@ -435,6 +524,9 @@ impl Node for RoutingNode {
         self.loss_rate_value = f64::NAN;
         self.loss = 0.0;
         self.loss_rate_configured = !matches!(self.loss_rate, DynamicInput::None { .. });
+        if !(self.dead_storage >= 0.0 && self.dead_storage.is_finite()) {
+            return Err(format!("Error in node '{}'. dead_storage must be a finite, non-negative volume [ML], got {}.", self.name, self.dead_storage));
+        }
         self.x_is_unity = self.x > 0.999999;
 
         // Validate array bounds
@@ -580,10 +672,24 @@ impl Node for RoutingNode {
                 self.pwl_q_max = 0.0;
                 self.pwl_v_max = 0.0;
             }
+            // Dead storage enters the law as an offset: every segment's constant
+            // term and the saturation volume carry it, so the per-step solve
+            // needs no new arithmetic. The segment parameters are recomputed
+            // from scratch on every initialise, so the offset is never added twice.
+            if self.dead_storage > 0.0 {
+                for i in 0..self.pwl_segs {
+                    self.seg_par_cc[i] += self.dead_per_div();
+                    self.seg_par_v1[i] += self.dead_per_div();
+                    self.seg_par_v2[i] += self.dead_per_div();
+                }
+                self.pwl_v_max += self.dead_per_div();
+            }
         }
 
-        // Init PWL and NLM storage array
-        self.div_sto_array.fill(0.0);
+        // Init PWL and NLM storage array: a reach starts at its dead level, as
+        // its pools would at the start of a simulation (0 without dead storage).
+        let dead_per_div = self.dead_per_div();
+        self.div_sto_array.fill(dead_per_div);
 
         // Initialize result recorders
         self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
@@ -640,12 +746,13 @@ impl Node for RoutingNode {
         self.lag_iter_index=oldest_index;
 
         // PWL or NLM routing second
-        // Monomorphised on whether a loss is configured. The LOSS = false
-        // instantiation folds every loss branch away at compile time, so an
-        // unconfigured reach runs the original routing code rather than a
-        // version carrying dead selects through the segment loop - which
-        // measured +8% on 4_regulated_system (ADR-0004 s3.4 padded build).
-        if self.loss_rate_configured {
+        // Monomorphised on whether a loss or a dead storage is configured.
+        // The <false> instantiation folds every loss and dead-storage branch
+        // away at compile time, so an unconfigured reach runs the original
+        // routing code rather than a version carrying dead selects through
+        // the segment loop - which measured +8% on 4_regulated_system
+        // (ADR-0004 s3.4 padded build).
+        if self.loss_rate_configured || self.dead_storage > 0.0 {
             self.route_divisions::<true>(flow_out_of_lag_reach, loss_per_div);
         } else {
             self.route_divisions::<false>(flow_out_of_lag_reach, 0.0);

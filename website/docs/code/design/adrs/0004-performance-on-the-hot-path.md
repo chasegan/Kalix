@@ -276,3 +276,27 @@ citing them when a trade is proposed.
   binaries with the hot function the same size: a fact about bytes, not yet
   shown to move a benchmark. One machine, one CPU (Apple M5). Source:
   `c55325d1` on `feat/routing-loss-rate`.
+- *2026-09-15* — sixth data point for §3.4. Adding `dead_storage` to
+  `RoutingNode` behind a second const generic, `route_divisions::<LOSS,
+  DEAD>`, left the unconfigured arithmetic byte-identical (35 fixtures) and
+  still cost +8.0% on `4_regulated_system`, +6.2% on `5_ordering_confluences`
+  and +2.6% to +4.4% on tests 2 and 3, six of six rounds. Five arms in one
+  worktree split it. The three new fields alone (16 bytes, stride 4,056 to
+  4,072, no code change) cost +2.4% to +3.7% on tests 3-5; head with only
+  the two `DEAD = false` instantiations emitted was flat on test 4; head
+  with `route_divisions` marked `#[inline(never)]` was +1.2% on test 4. So
+  test 4 paid about +5% for four copies of the routing loop inlined into
+  the flow phase, and every routing model paid about +3% for 16 bytes of
+  layout - the opposite of the 2026-09-14 finding, where 176 bytes were
+  flat. Keeping one field (`dead_storage`, the share derived where used;
+  4,064 bytes) and the routine out of line gave +0.5%, +0.8%, +0.9%, −0.2%
+  on tests 2-5, at the noise floor. The two flags were then folded into
+  one, `route_divisions::<LOSS_OR_DEAD>`: losses and dead storage are used
+  together, the arithmetic with a zero loss or a zero dead level is the
+  plain arithmetic, and one configured copy leaves no branch to get right
+  for one property and wrong for the other. Two things follow. A const
+  generic keeps the callee's arithmetic but not the caller's size: each
+  instantiation the dispatch names is inlined, and a hot function that
+  grows with every option should be pinned out of line and measured. And
+  the layout sensitivity of a struct is a fact about this struct at this
+  size, not a rule to reason from: measure the fields-only arm every time.

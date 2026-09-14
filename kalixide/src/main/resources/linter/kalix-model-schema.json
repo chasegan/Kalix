@@ -516,7 +516,8 @@
         "x",
         "typical_regulated_flow",
         "loss_rate",
-        "loss"
+        "loss",
+        "dead_storage"
       ],
       "required_params": [
         "type",
@@ -529,7 +530,8 @@
         "x",
         "typical_regulated_flow",
         "nlm",
-        "loss_rate"
+        "loss_rate",
+        "dead_storage"
       ],
       "dsnode_params": [
         "ds_1"
@@ -576,6 +578,11 @@
         "loss_rate": {
           "type": "function_expression",
           "description": "Reach loss [ML/timestep] (data reference, constant, or expression), split equally across the divisions and taken inside the routing balance; bounded so outflow cannot go negative"
+        },
+        "dead_storage": {
+          "type": "number",
+          "min": 0,
+          "description": "Dead storage [ML]: the water the reach holds at zero flow, split equally across the divisions; fills before any outflow and drains to a loss"
         }
       }
     },
