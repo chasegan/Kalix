@@ -19,13 +19,12 @@
 
   const FAILURES = {
     budget:
-      "The Kalix project has used up this month's AI helper budget. Ask in " +
-      "<a href=\"https://github.com/chasegan/Kalix/discussions\">GitHub Discussions</a> " +
-      "and a person will answer.",
+      "The Kalix project has used up this month's AI helper budget. The " +
+      "<a href=\"/contact/\">contact page</a> reaches a person.",
     busy: "The helper is busy. Try again in a minute.",
     rate_limited: "That's a lot of questions at once. Wait a minute and try again.",
-    unavailable: "The helper is not available right now. The docs and " +
-      "<a href=\"https://github.com/chasegan/Kalix/discussions\">GitHub Discussions</a> still are.",
+    unavailable: "The helper is not available right now. The docs still are, and the " +
+      "<a href=\"/contact/\">contact page</a> reaches a person.",
   };
 
   const load = () => {
