@@ -11,11 +11,11 @@ INFLOW NODES
   inflow1, 50
 
 STORAGE NODES
-  forced_storage, -20.833333333333332
+  forced_storage, -29.166666666666668
 
 BLACKHOLE NODES
   bh1, -25
 
 ----------------------------------
-TOTAL = 4.166666666666671
+TOTAL = -4.166666666666671
 ----------------------------------

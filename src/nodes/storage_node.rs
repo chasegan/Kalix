@@ -1431,9 +1431,11 @@ impl Node for StorageNode {
                 self.dsflow = self.ds_flows.iter().sum();
                 self.sid_adjustment_volume = solver_adjustment_volume;
 
-                // Update mass balance - opposite convention (ds flow = positive)
-                self.mbal -= self.sid_adjustment_volume;
-                // Also updated below.
+                // Update mass balance. mbal is emitted minus received, so water
+                // that forcing created counts like an inflow node's (positive)
+                // and water it destroyed like a blackhole's (negative).
+                self.mbal += self.sid_adjustment_volume;
+                // The through-flow term is added below, as on every step.
             } else {
                 // Solve backward Euler
                 let (v_final, ds_flows, spill, row, solver_area_km2) = 
