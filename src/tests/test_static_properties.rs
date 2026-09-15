@@ -391,6 +391,11 @@ fn static_properties_are_disjoint_from_optimisable_params() {
         ("gr4j", crate::nodes::gr4j_node::Gr4jNode::new().list_params()),
         ("sacramento", crate::nodes::sacramento_node::SacramentoNode::new().list_params()),
         ("awbm", crate::nodes::awbm_node::AwbmNode::new().list_params()),
+        ("awbm", {
+            let mut two_tap = crate::nodes::awbm_node::AwbmNode::new();
+            two_tap.awbm_model.variant = crate::hydrology::rainfall_runoff::awbm::AwbmVariant::TwoTap;
+            two_tap.list_params()
+        }),
         ("surm", crate::nodes::surm_node::SurmNode::new().list_params()),
         ("routing", nlm_routing.list_params()),
         ("routing", pwl_routing.list_params()),
@@ -414,4 +419,25 @@ fn static_properties_are_disjoint_from_optimisable_params() {
     // Sanity: the lists are actually populated, so this test cannot pass vacuously.
     assert!(optimisable.iter().all(|(_, p)| !p.is_empty()), "expected optimisable params to enumerate");
     assert!(!NODE_STATIC_F64_PROPERTIES.is_empty());
+}
+
+/// The AWBM node reports the parameter names of its variant to the optimiser
+/// and rejects the other variant's names, so a calibration file written for
+/// one formulation cannot silently drive the other.
+#[test]
+fn awbm_optimisable_params_follow_the_variant() {
+    use crate::hydrology::rainfall_runoff::awbm::AwbmVariant;
+    use crate::numerical::opt::optimisable_component::OptimisableComponent;
+
+    let mut node = crate::nodes::awbm_node::AwbmNode::new();
+    assert_eq!(node.list_params(), ["a1", "a2", "c1", "c2", "c3", "bfi", "k_base", "k_surf"]);
+    assert!(node.set_param("k_surf", 0.4).is_ok());
+    assert!(node.set_param("k2", 0.9).unwrap_err().contains("Unknown AWBM parameter"));
+
+    node.awbm_model.variant = AwbmVariant::TwoTap;
+    assert_eq!(node.list_params(), ["a1", "a2", "c1", "c2", "c3", "inf_base", "gw_sat", "gw_max", "k_base", "k2", "h_gw"]);
+    assert!(node.set_param("k2", 0.9).is_ok());
+    assert_eq!(node.get_param("k2").unwrap(), 0.9);
+    assert!(node.set_param("k_surf", 0.4).unwrap_err().contains("Unknown AWBM parameter"));
+    assert!(node.set_param("bfi", 0.4).unwrap_err().contains("Unknown AWBM parameter"));
 }
