@@ -194,9 +194,9 @@
         "type": {"type": "literal", "value": "awbm"},
         "loc": {"type": "coordinates", "format": "float,float"},
         "area": {"type": "number", "min": 0, "description": "Catchment area"},
-        "rain": {"type": "function_expression", "description": "Rainfall input"},
-        "evap": {"type": "function_expression", "description": "Evaporation input"},
-        "params": {"type": "number_sequence", "count": 8, "description": "AWBM parameters: A1, A2, C1, C2, C3, BFI, KBase, KSurf"}
+        "rain": {"type": "function_expression", "description": "Rainfall input (data reference, constant, or expression)"},
+        "evap": {"type": "function_expression", "description": "Evaporation input (data reference, constant, or expression)"},
+        "params": {"type": "number_sequence", "count": 8, "description": "AWBM parameters: a1, a2, c1, c2, c3, bfi, k_base, k_surf"}
       }
     },
     "surm": {
@@ -211,9 +211,9 @@
         "type": {"type": "literal", "value": "surm"},
         "loc": {"type": "coordinates", "format": "float,float"},
         "area": {"type": "number", "min": 0, "description": "Catchment area"},
-        "rain": {"type": "function_expression", "description": "Rainfall input"},
-        "evap": {"type": "function_expression", "description": "Evaporation input"},
-        "params": {"type": "number_sequence", "count": 9, "description": "SURM parameters: ImpFraction, IMPSC, SMSC, COEFF, SQ, FC, RFAC, BFAC, SFAC"}
+        "rain": {"type": "function_expression", "description": "Rainfall input (data reference, constant, or expression)"},
+        "evap": {"type": "function_expression", "description": "Evaporation input (data reference, constant, or expression)"},
+        "params": {"type": "number_sequence", "count": 9, "description": "SURM parameters: imp_fraction, impsc, smsc, coeff, sq, fc, rfac, bfac, sfac"}
       }
     },
     "unregulated_user": {
