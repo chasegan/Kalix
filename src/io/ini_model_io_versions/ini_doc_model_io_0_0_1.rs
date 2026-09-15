@@ -60,105 +60,6 @@ pub(crate) const NODE_STATIC_F64_PROPERTIES: &[(&str, &str)] = &[
     ("regulated_user", "order_factor"),
 ];
 
-fn parse_awbm_node(
-    node_name: &str,
-    ini_section: IniSection,
-    model: &mut Model,
-    self_ctx: Option<&str>,
-    vec_link_defs: &mut Vec<LinkHelper>,
-) -> Result<AwbmNode, KalixIoError> {
-    let mut n = AwbmNode::new();
-    n.name = node_name.to_string();
-    for (name, ini_property) in ini_section.properties {
-        let name_lower = name.to_lowercase();
-        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)
-            .map_err(KalixIoError::Validate)?;
-        if name_lower == "loc" {
-            n.location = Location::from_str(v).map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-        } else if name_lower == "type" {
-        } else if name_lower == "ds_1" {
-            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET));
-        } else if name_lower == "evap" {
-            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-        } else if name_lower == "rain" {
-            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-        } else if name_lower == "area" {
-            n.area_km2 = v.parse::<f64>().map_err(|_| KalixIoError::Parse(format!(
-                "Error on line {}: Invalid '{}' value for node '{}': not a valid number",
-                ini_property.line_number, name, node_name
-            )))?;
-        } else if name_lower == "params" {
-            let params = csv_string_to_f64_vec(v)
-                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-            if params.len() != 8 {
-                return Err(KalixIoError::Parse(format!(
-                    "Error on line {}: {} params must have {} values, got {}",
-                    ini_property.line_number, "AWBM", 8, params.len()
-                )));
-            }
-            n.awbm_model.set_params_by_vec(&params);
-        } else {
-            return Err(KalixIoError::Validate(format!(
-                "Error on line {}: Unexpected parameter '{}' for node '{}'",
-                ini_property.line_number, name, node_name
-            )));
-        }
-    }
-    Ok(n)
-}
-
-fn parse_surm_node(
-    node_name: &str,
-    ini_section: IniSection,
-    model: &mut Model,
-    self_ctx: Option<&str>,
-    vec_link_defs: &mut Vec<LinkHelper>,
-) -> Result<SurmNode, KalixIoError> {
-    let mut n = SurmNode::new();
-    n.name = node_name.to_string();
-    for (name, ini_property) in ini_section.properties {
-        let name_lower = name.to_lowercase();
-        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)
-            .map_err(KalixIoError::Validate)?;
-        if name_lower == "loc" {
-            n.location = Location::from_str(v)
-                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-        } else if name_lower == "type" {
-        } else if name_lower == "ds_1" {
-            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET));
-        } else if name_lower == "evap" {
-            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-        } else if name_lower == "rain" {
-            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-        } else if name_lower == "area" {
-            n.area_km2 = v.parse::<f64>().map_err(|_| KalixIoError::Parse(format!(
-                "Error on line {}: Invalid '{}' value for node '{}': not a valid number",
-                ini_property.line_number, name, node_name
-            )))?;
-        } else if name_lower == "params" {
-            let params = csv_string_to_f64_vec(v)
-                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-            if params.len() != 9 {
-                return Err(KalixIoError::Parse(format!(
-                    "Error on line {}: SURM params must have 9 values, got {}",
-                    ini_property.line_number, params.len()
-                )));
-            }
-            n.surm_model.set_params_by_vec(&params);
-        } else {
-            return Err(KalixIoError::Validate(format!(
-                "Error on line {}: Unexpected parameter '{}' for node '{}'",
-                ini_property.line_number, name, node_name
-            )));
-        }
-    }
-    Ok(n)
-}
-
 pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, KalixIoError> {
 
     // Create a new model
@@ -657,14 +558,90 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     NodeEnum::Gr4jNode(n)
                 }
                 "awbm" => {
-                    NodeEnum::AwbmNode(parse_awbm_node(
-                        node_name, ini_section, &mut model, self_ctx, &mut vec_link_defs
-                    )?)
+                    let mut n = AwbmNode::new();
+                    n.name = node_name.to_string();
+                    for (name, ini_property) in ini_section.properties {
+                        let name_lower = name.to_lowercase();
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)
+                            .map_err(KalixIoError::Validate)?;
+                        if name_lower == "loc" {
+                            n.location = Location::from_str(v)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "type" {
+                        } else if name_lower == "ds_1" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET));
+                        } else if name_lower == "evap" {
+                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "rain" {
+                            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "area" {
+                            n.area_km2 = v.parse::<f64>().map_err(|_| KalixIoError::Parse(format!(
+                                "Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                ini_property.line_number, name, node_name
+                            )))?;
+                        } else if name_lower == "params" {
+                            let params = csv_string_to_f64_vec(v)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                            if params.len() != 8 {
+                                return Err(KalixIoError::Parse(format!(
+                                    "Error on line {}: AWBM params must have 8 values, got {}",
+                                    ini_property.line_number, params.len()
+                                )));
+                            }
+                            n.awbm_model.set_params_by_vec(&params);
+                        } else {
+                            return Err(KalixIoError::Validate(format!(
+                                "Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                ini_property.line_number, name, node_name
+                            )));
+                        }
+                    }
+                    NodeEnum::AwbmNode(n)
                 }
                 "surm" => {
-                    NodeEnum::SurmNode(parse_surm_node(
-                        node_name, ini_section, &mut model, self_ctx, &mut vec_link_defs
-                    )?)
+                    let mut n = SurmNode::new();
+                    n.name = node_name.to_string();
+                    for (name, ini_property) in ini_section.properties {
+                        let name_lower = name.to_lowercase();
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)
+                            .map_err(KalixIoError::Validate)?;
+                        if name_lower == "loc" {
+                            n.location = Location::from_str(v)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "type" {
+                        } else if name_lower == "ds_1" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET));
+                        } else if name_lower == "evap" {
+                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "rain" {
+                            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "area" {
+                            n.area_km2 = v.parse::<f64>().map_err(|_| KalixIoError::Parse(format!(
+                                "Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                ini_property.line_number, name, node_name
+                            )))?;
+                        } else if name_lower == "params" {
+                            let params = csv_string_to_f64_vec(v)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                            if params.len() != 9 {
+                                return Err(KalixIoError::Parse(format!(
+                                    "Error on line {}: SURM params must have 9 values, got {}",
+                                    ini_property.line_number, params.len()
+                                )));
+                            }
+                            n.surm_model.set_params_by_vec(&params);
+                        } else {
+                            return Err(KalixIoError::Validate(format!(
+                                "Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                ini_property.line_number, name, node_name
+                            )));
+                        }
+                    }
+                    NodeEnum::SurmNode(n)
                 }
                 "inflow" => {
                     let mut n = InflowNode::new();
