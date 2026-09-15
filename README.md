@@ -42,6 +42,8 @@ https://github.com/users/chasegan/projects/1
 
 ## Basic development instructions
 
+See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 0) Setting up dev environment
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
