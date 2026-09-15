@@ -46,6 +46,28 @@
         "params = 0,45,60,0.01,0.01,150,0,0.11,1.5,0,0.2,0.01,25,0.2,47,15,0.1"
       ]
     },
+    "awbm": {
+      "label": "AWBM",
+      "lines": [
+        "type = awbm",
+        "loc = %%X%%,%%Y%%",
+        "area = 200 #km2",
+        "rain = 0 #expression",
+        "evap = 0 #expression",
+        "params = 0.134, 0.433, 70, 70, 150, 0.35, 0.95, 0.35"
+      ]
+    },
+    "surm": {
+      "label": "SURM",
+      "lines": [
+        "type = surm",
+        "loc = %%X%%,%%Y%%",
+        "area = 200 #km2",
+        "rain = 0 #expression",
+        "evap = 0 #expression",
+        "params = 0, 1, 97, 360, 0.5, 79, 1, 0.5, 0"
+      ]
+    },
     "unregulated_user": {
       "label": "Unregulated user",
       "lines": [

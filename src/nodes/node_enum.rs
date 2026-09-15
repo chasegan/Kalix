@@ -1,6 +1,6 @@
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
-use crate::nodes::{Node, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, unregulated_user_node::UnregulatedUserNode, regulated_user_node::RegulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode};
+use crate::nodes::{Node, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, unregulated_user_node::UnregulatedUserNode, regulated_user_node::RegulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode};
 
 #[derive(Clone)]
 pub enum NodeEnum {
@@ -17,10 +17,12 @@ pub enum NodeEnum {
     SacramentoNode(SacramentoNode),
     StorageNode(StorageNode),
     OrderControlNode(OrderControlNode),
+    AwbmNode(AwbmNode),
+    SurmNode(SurmNode),
 }
 
 /// Dispatch a method call to whichever node variant this is. Expands to the
-/// exact 13-arm match that was previously hand-written per method (same
+/// exact per-node-arm match that was previously hand-written per method (same
 /// static dispatch, same codegen); adding a node type now means adding one
 /// enum variant and one line here instead of editing seven matches.
 macro_rules! dispatch {
@@ -39,6 +41,8 @@ macro_rules! dispatch {
             NodeEnum::SacramentoNode($node) => $call,
             NodeEnum::StorageNode($node) => $call,
             NodeEnum::OrderControlNode($node) => $call,
+            NodeEnum::AwbmNode($node) => $call,
+            NodeEnum::SurmNode($node) => $call,
         }
     };
 }
@@ -59,6 +63,8 @@ impl NodeEnum {
             NodeEnum::SacramentoNode(_) => "sacramento",
             NodeEnum::StorageNode(_) => "storage",
             NodeEnum::OrderControlNode(_) => "order_control",
+            NodeEnum::AwbmNode(_) => "awbm",
+            NodeEnum::SurmNode(_) => "surm",
         };
         name.to_string()
     }

@@ -926,6 +926,16 @@ impl Command for GetOptimisableParamsCommand {
                         params.push(format!("node.{}.{}", node_name, param));
                     }
                 }
+                NodeEnum::AwbmNode(node) => {
+                    for param in node.list_params() {
+                        params.push(format!("node.{}.{}", node_name, param));
+                    }
+                }
+                NodeEnum::SurmNode(node) => {
+                    for param in node.list_params() {
+                        params.push(format!("node.{}.{}", node_name, param));
+                    }
+                }
                 NodeEnum::RoutingNode(node) => {
                     for param in node.list_params() {
                         params.push(format!("node.{}.{}", node_name, param));

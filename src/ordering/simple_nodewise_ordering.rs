@@ -479,6 +479,20 @@ impl SimpleNodewiseOrderingSystem {
                         n_orders += 1;
                     }
                 }
+                NodeEnum::AwbmNode(node) => {
+                    node.run_order_phase(data_cache, account_manager);
+                    for il in incoming {
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
+                        n_orders += 1;
+                    }
+                }
+                NodeEnum::SurmNode(node) => {
+                    node.run_order_phase(data_cache, account_manager);
+                    for il in incoming {
+                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
+                        n_orders += 1;
+                    }
+                }
                 NodeEnum::RoutingNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
                     // Propagate orders upstream.

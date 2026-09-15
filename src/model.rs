@@ -1181,6 +1181,8 @@ impl Model {
             "inflow",
             "sacramento",
             "gr4j",
+            "awbm",
+            "surm",
             "regulated_user",
             "unregulated_user",
             "order_control",

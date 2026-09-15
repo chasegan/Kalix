@@ -18,6 +18,7 @@ fn test_model_1_io_ini_read() {
             if let Some(col) = v.input_columns().next() {
                 col.print();
             }
+
             v
         },
         Err(s) => {

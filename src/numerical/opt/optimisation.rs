@@ -144,7 +144,7 @@ impl OptimisationProblem {
                 let node_idx = self.model.get_node_idx(node_name)
                     .ok_or_else(|| format!("Node not found: {}", node_name))?;
                 match &self.model.nodes[node_idx] {
-                    NodeEnum::SacramentoNode(_) | NodeEnum::Gr4jNode(_) | NodeEnum::RoutingNode(_) => {}
+                    NodeEnum::SacramentoNode(_) | NodeEnum::Gr4jNode(_) | NodeEnum::AwbmNode(_) | NodeEnum::SurmNode(_) | NodeEnum::RoutingNode(_) => {}
                     other => {
                         return Err(format!(
                             "Node '{}' (type: {}) does not support parameter optimisation",
@@ -182,6 +182,8 @@ impl OptimisationProblem {
                     match &mut self.model.nodes[*node_idx] {
                         NodeEnum::SacramentoNode(node) => node.set_param(param_name, value),
                         NodeEnum::Gr4jNode(node) => node.set_param(param_name, value),
+                        NodeEnum::AwbmNode(node) => node.set_param(param_name, value),
+                        NodeEnum::SurmNode(node) => node.set_param(param_name, value),
                         NodeEnum::RoutingNode(node) => node.set_param(param_name, value),
                         _ => unreachable!("checked during target resolution"),
                     }

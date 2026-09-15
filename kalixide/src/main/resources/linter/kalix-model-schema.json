@@ -182,6 +182,40 @@
         }
       }
     },
+    "awbm": {
+      "description": "Australian Water Balance Model",
+      "allowed_outputs": [
+        "usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1", "ds_1_order", "rain", "evap", "area"
+      ],
+      "required_params": ["type", "loc", "area", "rain", "evap", "params"],
+      "optional_params": [],
+      "dsnode_params": ["ds_1"],
+      "parameters": {
+        "type": {"type": "literal", "value": "awbm"},
+        "loc": {"type": "coordinates", "format": "float,float"},
+        "area": {"type": "number", "min": 0, "description": "Catchment area"},
+        "rain": {"type": "function_expression", "description": "Rainfall input"},
+        "evap": {"type": "function_expression", "description": "Evaporation input"},
+        "params": {"type": "number_sequence", "count": 8, "description": "AWBM parameters: A1, A2, C1, C2, C3, BFI, KBase, KSurf"}
+      }
+    },
+    "surm": {
+      "description": "Simple Urban Rainfall-Runoff Model",
+      "allowed_outputs": [
+        "usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1", "ds_1_order", "rain", "evap", "area"
+      ],
+      "required_params": ["type", "loc", "area", "rain", "evap", "params"],
+      "optional_params": [],
+      "dsnode_params": ["ds_1"],
+      "parameters": {
+        "type": {"type": "literal", "value": "surm"},
+        "loc": {"type": "coordinates", "format": "float,float"},
+        "area": {"type": "number", "min": 0, "description": "Catchment area"},
+        "rain": {"type": "function_expression", "description": "Rainfall input"},
+        "evap": {"type": "function_expression", "description": "Evaporation input"},
+        "params": {"type": "number_sequence", "count": 9, "description": "SURM parameters: ImpFraction, IMPSC, SMSC, COEFF, SQ, FC, RFAC, BFAC, SFAC"}
+      }
+    },
     "unregulated_user": {
       "description": "Unregulated user node representing water demand",
       "allowed_outputs": [

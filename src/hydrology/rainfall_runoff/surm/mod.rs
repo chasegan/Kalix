@@ -1,89 +1,27 @@
-// ---------------------------------------------------------------------------
-// REVIEW NOTES (Kalix maintainer review of PR #405) — to be addressed when
-// SURM is wired into a node. The science checked out: the water balance
-// closes (pervious: rain = infex + dSoil + ET + satex + recharge;
-// groundwater: recharge = baseflow + seepage + dGw), stores cannot go
-// negative, seepage is correctly excluded from runoff, and the equations
-// match the published SIMHYD/Chiew-McMahon forms.
-//
-// 1. SHOULD-FIX — the clamping design fights the house's calibration
-//    architecture. Params are indeed written directly to public fields
-//    (see gr4j_node.rs: `self.gr4j_model.x1 = value`), but the per-run_step
-//    re-clamping creates a silent honesty gap: behaviour uses clamped
-//    values while the public fields and get_params_as_vec() report the
-//    unclamped ones — an optimiser could report a "best" parameter set
-//    that is not the one that actually ran, and clamp-flat regions are
-//    gradient-dead zones that confuse calibration silently. Neither GR4J
-//    nor Sacramento clamps; ranges belong to the calibration bounds layer.
-//    Suggest: drop the run_step clamps entirely, keep (or drop) the
-//    set_params clamp, and document the ranges as constants/doc.
-// 2. SHOULD-FIX — daily-only semantics, undeclared to the future wiring.
-//    COEFF is mm/day and the 10*SMS/SMSC ET is a per-day form, but Kalix
-//    timesteps are configurable. GR4J solved exactly this with its
-//    Gr4Variant enum. The doc should state "daily formulation" loudly so
-//    the node wiring cannot misuse it sub-daily.
-// 3. SHOULD-FIX — tests don't touch the science. The 7 tests are good
-//    hygiene but none test the model: no mass-balance test (rain in =
-//    runoff + seep + delta-stores, catchment-weighted) and no
-//    hand-computed multi-step reference sequence (GR4J keeps a Python
-//    cross-check beside it for exactly this). One reference test would
-//    protect the equations forever.
-// 4. NOTE — one clippy warning: this file-header /// comment attaches to
-//    IMP_FRACTION_MIN (blank line between); should be //! module doc.
-// 5. NOTES — seepage uses SFAC*gw pre-baseflow but caps at the
-//    post-baseflow remainder: defensible, worth one comment since SFAC
-//    loses meaning when BFAC+SFAC > 1. Default and set_params_default()
-//    carry duplicate literal sets (one should delegate). NaN inputs
-//    silently become 0 via .max(0.0) (masks data gaps — GR4J doesn't
-//    sanitize at all, so at least document the choice). Two redundant
-//    .max(0.0) on quantities that cannot be negative.
-//    set_params_by_vec(&[f64]) takes a slice where Sacramento takes
-//    Vec<f64> (slice is arguably better — fine).
-// ---------------------------------------------------------------------------
-
-/// Simple Urban Rainfall-Runoff Model (SURM).
-///
-/// Rainfall, potential evapotranspiration, storage and runoff are expressed
-/// in millimetres per daily model timestep.
-///
-/// Soil and groundwater stores are expressed as depths over the pervious area.
-///
-/// Reported runoff components are converted to equivalent depths over the
-/// whole catchment using:
-///
-/// - impervious contribution = impervious runoff depth * imp_fraction
-/// - pervious contribution = pervious runoff depth * (1 - imp_fraction)
-
-// -----------------------------------------------------------------------------
-// Parameter limits
-// -----------------------------------------------------------------------------
-
-const IMP_FRACTION_MIN: f64 = 0.0;
-const IMP_FRACTION_MAX: f64 = 1.0;
-
-const IMPSC_MIN: f64 = 0.0;
-const IMPSC_MAX: f64 = 5.0;
-
-const SMSC_MIN: f64 = 1.0;
-const SMSC_MAX: f64 = 500.0;
-
-const COEFF_MIN: f64 = 0.0;
-const COEFF_MAX: f64 = 400.0;
-
-const SQ_MIN: f64 = 0.0;
-const SQ_MAX: f64 = 10.0;
-
-const FC_MIN: f64 = 0.0;
-const FC_MAX: f64 = 500.0;
-
-const RFAC_MIN: f64 = 0.0;
-const RFAC_MAX: f64 = 1.0;
-
-const BFAC_MIN: f64 = 0.0;
-const BFAC_MAX: f64 = 1.0;
-
-const SFAC_MIN: f64 = 0.0;
-const SFAC_MAX: f64 = 1.0;
+//! Simple Urban Rainfall-Runoff Model (SURM).
+//!
+//! This implementation is a daily formulation. `coeff` is expressed in
+//! mm/day, and the evapotranspiration equation is calibrated for daily
+//! timesteps. Sub-daily use requires recalibration.
+//!
+//! Rainfall, potential evapotranspiration, storage, and runoff are expressed
+//! in millimetres. Soil and groundwater stores are depths over the pervious
+//! area.
+//!
+//! Runoff components generated over the impervious and pervious areas are
+//! converted to equivalent whole-catchment depths using `imp_fraction`.
+//! Deep seepage is tracked separately and is not included in reported runoff.
+//!
+//! Parameters are stored and used exactly as supplied. Parameter bounds and
+//! validity checks belong to the calibration layer. Rainfall and potential
+//! evapotranspiration inputs must be finite and non-negative.
+//!
+//! Groundwater baseflow is calculated before seepage. Seepage uses the
+//! pre-baseflow groundwater store but is limited to the storage remaining
+//! after baseflow, preventing the store from becoming negative when the
+//! combined coefficients exceed the available groundwater.
+//!
+//! The model equations and water balance are covered by the tests below.
 
 const PARAMETER_COUNT: usize = 9;
 
@@ -104,6 +42,7 @@ pub struct Surm {
     satex: f64,
     bas: f64,
     seep: f64,
+    evapotranspiration: f64,
 
     // Stores
     soil_store: f64,
@@ -134,6 +73,7 @@ impl Default for Surm {
             satex: 0.0,
             bas: 0.0,
             seep: 0.0,
+            evapotranspiration: 0.0,
 
             soil_store: 0.0,
             groundwater_store: 0.0,
@@ -161,20 +101,13 @@ impl Surm {
 
     /// Restores the default parameter set.
     pub fn set_params_default(&mut self) -> &mut Self {
-        self.set_params(
-            0.0,   // IMP_FRACTION
-            1.0,   // IMPSC
-            97.0,  // SMSC
-            360.0, // COEFF
-            0.5,   // SQ
-            79.0,  // FC
-            1.0,   // RFAC
-            0.5,   // BFAC
-            0.0,   // SFAC
-        )
+        *self = Self::default();
+        self
     }
 
-    /// Sets the complete SURM parameter set (and clamps)
+    /// Sets the complete SURM parameter set without clamping.
+    ///
+    /// Parameter bounds belong to the calibration layer.
     #[allow(clippy::too_many_arguments)]
     pub fn set_params(
         &mut self,
@@ -188,16 +121,15 @@ impl Surm {
         bfac: f64,
         sfac: f64,
     ) -> &mut Self {
-        self.imp_fraction = imp_fraction.clamp(IMP_FRACTION_MIN, IMP_FRACTION_MAX);
-        self.impsc = impsc.clamp(IMPSC_MIN, IMPSC_MAX);
-        self.smsc = smsc.clamp(SMSC_MIN, SMSC_MAX);
-        self.coeff = coeff.clamp(COEFF_MIN, COEFF_MAX);
-        self.sq = sq.clamp(SQ_MIN, SQ_MAX);
-        self.fc = fc.clamp(FC_MIN, FC_MAX);
-        self.rfac = rfac.clamp(RFAC_MIN, RFAC_MAX);
-        self.bfac = bfac.clamp(BFAC_MIN, BFAC_MAX);
-        self.sfac = sfac.clamp(SFAC_MIN, SFAC_MAX);
-
+        self.imp_fraction = imp_fraction;
+        self.impsc = impsc;
+        self.smsc = smsc;
+        self.coeff = coeff;
+        self.sq = sq;
+        self.fc = fc;
+        self.rfac = rfac;
+        self.bfac = bfac;
+        self.sfac = sfac;
         self
     }
 
@@ -210,8 +142,7 @@ impl Surm {
             "SURM requires exactly {PARAMETER_COUNT} parameters"
         );
 
-        // Use set_params so parameters supplied by an optimiser are clamped
-        // to the documented ranges.
+        // Parameters are stored exactly as supplied.
         self.set_params(
             vec_params[0],
             vec_params[1],
@@ -252,7 +183,7 @@ impl Surm {
         self.satex = 0.0;
         self.bas = 0.0;
         self.seep = 0.0;
-
+        self.evapotranspiration = 0.0;
         self.soil_store = 0.0;
         self.groundwater_store = 0.0;
 
@@ -276,34 +207,32 @@ impl Surm {
     /// Rainfall depth is applied to both surface types. Runoff generated from
     /// each surface is then weighted by its corresponding area fraction.
     pub fn run_step(&mut self, rainfall: f64, pet: f64) -> f64 {
-        self.rainfall = rainfall.max(0.0);
-        self.pet = pet.max(0.0);
+        assert!(
+            rainfall.is_finite() && rainfall >= 0.0,
+            "SURM rainfall must be finite and non-negative"
+        );
+        assert!(
+            pet.is_finite() && pet >= 0.0,
+            "SURM PET must be finite and non-negative"
+        );
 
-        // Defensive clamping because parameters remain public.
-        let imp_fraction = self.imp_fraction.clamp(IMP_FRACTION_MIN, IMP_FRACTION_MAX);
+        self.rainfall = rainfall;
+        self.pet = pet;
 
+        let imp_fraction = self.imp_fraction;
         let pervious_fraction = 1.0 - imp_fraction;
 
-        let impsc = self.impsc.clamp(IMPSC_MIN, IMPSC_MAX);
-        let smsc = self.smsc.clamp(SMSC_MIN, SMSC_MAX);
-        let coeff = self.coeff.clamp(COEFF_MIN, COEFF_MAX);
-        let sq = self.sq.clamp(SQ_MIN, SQ_MAX);
-        let fc = self.fc.clamp(FC_MIN, FC_MAX);
-        let rfac = self.rfac.clamp(RFAC_MIN, RFAC_MAX);
-        let bfac = self.bfac.clamp(BFAC_MIN, BFAC_MAX);
-        let sfac = self.sfac.clamp(SFAC_MIN, SFAC_MAX);
-
         // Impervious runoff
-        let impervious_runoff_depth = (self.rainfall - impsc).max(0.0);
+        let impervious_runoff_depth = (self.rainfall - self.impsc).max(0.0);
 
         // Convert runoff depths from contributing-area depths
         // to equivalent depths over the whole catchment.
         self.imp = imp_fraction * impervious_runoff_depth;
 
         // Pervious-area infiltration
-        let infiltration_capacity = coeff * (-sq * self.soil_store / smsc).exp();
+        let infiltration_capacity = self.coeff * (-self.sq * self.soil_store / self.smsc).exp();
 
-        let infiltration = infiltration_capacity.max(0.0).min(self.rainfall);
+        let infiltration = infiltration_capacity.min(self.rainfall);
 
         // Infiltration-excess runoff
         let infiltration_excess_depth = (self.rainfall - infiltration).max(0.0);
@@ -314,21 +243,22 @@ impl Surm {
         self.soil_store += infiltration;
 
         // Evapotranspiration
-        let evaporation_capacity = (10.0 * self.soil_store / smsc).max(0.0);
+        let evaporation_capacity = 10.0 * self.soil_store / self.smsc;
 
         let evaporation = evaporation_capacity.min(self.pet).min(self.soil_store);
 
+        self.evapotranspiration = pervious_fraction * evaporation;
         self.soil_store -= evaporation;
 
         // Saturation-excess runoff
-        let saturation_excess_depth = (self.soil_store - smsc).max(0.0);
+        let saturation_excess_depth = (self.soil_store - self.smsc).max(0.0);
 
         self.soil_store -= saturation_excess_depth;
 
         self.satex = pervious_fraction * saturation_excess_depth;
 
         // Groundwater recharge
-        let recharge = (rfac * (self.soil_store - fc))
+        let recharge = (self.rfac * (self.soil_store - self.fc))
             .max(0.0)
             .min(self.soil_store);
 
@@ -336,22 +266,18 @@ impl Surm {
         self.groundwater_store += recharge;
 
         // Baseflow
-        let baseflow_depth = (bfac * self.groundwater_store)
-            .max(0.0)
-            .min(self.groundwater_store);
+        let baseflow_depth = (self.bfac * self.groundwater_store).min(self.groundwater_store);
 
         self.bas = pervious_fraction * baseflow_depth;
 
         // Deep seepage
-        let groundwater_after_baseflow = (self.groundwater_store - baseflow_depth).max(0.0);
+        let groundwater_after_baseflow = self.groundwater_store - baseflow_depth;
 
-        let seepage_depth = (sfac * self.groundwater_store)
-            .max(0.0)
-            .min(groundwater_after_baseflow);
+        let seepage_depth = (self.sfac * self.groundwater_store).min(groundwater_after_baseflow);
 
         self.seep = pervious_fraction * seepage_depth;
 
-        self.groundwater_store = (self.groundwater_store - baseflow_depth - seepage_depth).max(0.0);
+        self.groundwater_store -= baseflow_depth + seepage_depth;
 
         // Total catchment runoff
         self.runoff = self.imp + self.infex + self.satex + self.bas;
@@ -371,6 +297,10 @@ impl Surm {
 
     pub fn pet(&self) -> f64 {
         self.pet
+    }
+
+    pub fn evapotranspiration(&self) -> f64 {
+        self.evapotranspiration
     }
 
     /// Soil moisture depth over the pervious area.
@@ -490,5 +420,57 @@ mod tests {
 
         assert_eq!(model.soil_store(), 30.0);
         assert_eq!(model.groundwater_store(), 10.0);
+    }
+
+    #[test]
+    fn parameters_are_not_silently_clamped() {
+        let mut model = Surm::new();
+
+        model.set_params(0.25, 2.0, 120.0, 200.0, 0.75, 80.0, 0.8, 0.4, 0.1);
+
+        assert_eq!(model.imp_fraction, 0.25);
+        assert_eq!(model.impsc, 2.0);
+        assert_eq!(model.sq, 0.75);
+    }
+
+    #[test]
+    fn water_balance_closes_for_pervious_catchment() {
+        let mut model = Surm::new();
+        model.set_params(0.0, 0.0, 10.0, 100.0, 0.0, 5.0, 1.0, 0.25, 0.1);
+
+        let mut previous_soil = model.soil_store();
+        let mut previous_groundwater = model.groundwater_store();
+        let mut balance_error = 0.0;
+
+        for (rainfall, pet) in [(12.0, 0.0), (0.0, 2.0), (8.0, 1.0)] {
+            let runoff = model.run_step(rainfall, pet);
+            let storage_change = (model.soil_store() - previous_soil)
+                + (model.groundwater_store() - previous_groundwater);
+
+            balance_error += rainfall
+                - runoff
+                - model.deep_seepage()
+                - model.evapotranspiration()
+                - storage_change;
+
+            previous_soil = model.soil_store();
+            previous_groundwater = model.groundwater_store();
+        }
+
+        assert!(balance_error.abs() < 1e-10);
+    }
+
+    #[test]
+    fn daily_reference_sequence_is_stable() {
+        let mut model = Surm::new();
+        model.set_params(0.0, 0.0, 10.0, 100.0, 0.0, 5.0, 1.0, 0.0, 0.0);
+
+        let runoff = [
+            model.run_step(12.0, 0.0),
+            model.run_step(0.0, 0.0),
+            model.run_step(0.0, 2.0),
+        ];
+
+        assert_eq!(runoff, [2.0, 0.0, 0.0]);
     }
 }
