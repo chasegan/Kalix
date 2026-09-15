@@ -96,7 +96,7 @@ Account state is published as ordinary series — readable in any
 | `acc.<name>.closing_balance` | Balance at the end of the step. |
 | `acc.<name>.debits` | Water taken by users this step (not policy changes). |
 | `acc.<name>.allocation` | Allocation to date: balance plus use since the last reset (see [Allocation systems](allocation-systems.md)). |
-| `acc.<name>.allocation_pct` | Allocation as a percentage (nominally 0-100) of the account size. `NaN` for a zero-size account. The allocation percentage may be >100% — the allocation (balance + use) is not clamped to the account `size`. |
+| `acc.<name>.allocation_pct` | Allocation as a percentage (nominally 0-100) of the account size. `NaN` for a zero-size account (and NaN counts as true in a [condition](dynamic-expressions.md), so a bare `acc.<name>.allocation_pct` trigger on such an account fires every step). The allocation percentage may be >100% — the allocations are not clamped to the account `size`. |
 | `acc.<name>.use` | Water taken since the last `reset_allocation` — the use term of the allocation. Fed only by user takes, like `debits`. |
 | `acc.<name>.size` | Account size, as declared. |
 | `acc.<name>.initial` | Opening balance at the start of the run, as declared (defaults to 0 if omitted). |
