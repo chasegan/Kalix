@@ -12,7 +12,7 @@ const PARAMETER_COUNT: usize = 8;
 /// Default AWBM parameters.
 pub const DEFAULT_A1: f64 = 0.134;
 pub const DEFAULT_A2: f64 = 0.433;
-pub const DEFAULT_C1: f64 = 70.0;
+pub const DEFAULT_C1: f64 = 7.0;
 pub const DEFAULT_C2: f64 = 70.0;
 pub const DEFAULT_C3: f64 = 150.0;
 pub const DEFAULT_BFI: f64 = 0.35;
@@ -411,7 +411,7 @@ mod tests {
         assert_eq!(model.a1, 0.134);
         assert_eq!(model.a2, 0.433);
         assert_eq!(model.area3(), 0.433);
-        assert_eq!(model.c1, 70.0);
+        assert_eq!(model.c1, 7.0);
         assert_eq!(model.c2, 70.0);
         assert_eq!(model.c3, 150.0);
         assert_eq!(model.bfi, 0.35);
