@@ -230,6 +230,8 @@ public class NodeTheme {
                     map.put("unregulated_user", "B8860B"); // Dark Goldenrod (index 1)
                     map.put("sacramento", "32CD32");     // Lime Green (index 10)
                     map.put("gr4j", "32CD32");           // Lime Green (index 10)
+                    map.put("awbm", "32CD32");           // Lime Green - same as gr4j
+                    map.put("surm", "32CD32");           // Lime Green - same as gr4j
                     map.put("blackhole", "2F4F4F");      // Dark Slate Gray (index 2)
                     map.put("inflow", "2E8B57");         // Sea Green (index 14)
                     map.put("routing", "DAA520");        // Goldenrod (index 3)
@@ -246,6 +248,8 @@ public class NodeTheme {
                     map.put("unregulated_user", "008B8B"); // Dark Cyan (index 7)
                     map.put("sacramento", "20B2AA");     // Light Sea Green (index 6) - river/flow
                     map.put("gr4j", "20B2AA");           // Light Sea Green (index 6) - river/flow
+                    map.put("awbm", "20B2AA");           // Light Sea Green - same as gr4j
+                    map.put("surm", "20B2AA");           // Light Sea Green - same as gr4j
                     map.put("blackhole", "191970");      // Midnight Blue (index 0) - void/dark
                     map.put("inflow", "4169E1");         // Royal Blue (index 1) - main flow
                     map.put("routing", "6495ED");        // Cornflower Blue (index 2)
@@ -262,6 +266,8 @@ public class NodeTheme {
                     map.put("unregulated_user", "4ECDC4"); // Teal (from palette index 4)
                     map.put("sacramento", "228B22");     // Forest Green
                     map.put("gr4j", "556B2F");           // Dark Olive Green
+                    map.put("awbm", "556B2F");           // Dark Olive Green - same as gr4j
+                    map.put("surm", "556B2F");           // Dark Olive Green - same as gr4j
                     map.put("blackhole", "FF8C00");      // Dark Orange (swapped from routing)
                     map.put("routing", "2F4F4F");        // Dark Slate Gray (swapped from blackhole)
                     map.put("inflow", "4682B4");         // Steel Blue
@@ -278,6 +284,8 @@ public class NodeTheme {
                     map.put("unregulated_user", "F9844A"); // Light orange (index 3)
                     map.put("sacramento", "90BE6D");     // Green (index 5) - river/flow
                     map.put("gr4j", "90BE6D");           // Green (index 5) - river/flow
+                    map.put("awbm", "90BE6D");           // Green - same as gr4j
+                    map.put("surm", "90BE6D");           // Green - same as gr4j
                     map.put("blackhole", "577590");      // Blue-gray (index 8) - blackhole
                     map.put("routing", "F9C74F");        // Yellow (index 4) - routing
                     map.put("inflow", "4D908E");         // Blue-green (index 7) - main flow
@@ -294,13 +302,15 @@ public class NodeTheme {
                 case KALIX_DARK:
                     // Designer-mock palettes (docs/design_guides): the colours array
                     // is role-ordered, so types map by index. Functional siblings
-                    // share a colour: sacramento/gr4j (--node-rr), routing/loss
+                    // share a colour: sacramento/gr4j/awbm/surm (--node-rr), routing/loss
                     // (--node-routing), splitter/confluence (--node-splitter).
                     map.put("storage", colors[0]);
                     map.put("inflow", colors[1]);
                     map.put("gauge", colors[2]);
                     map.put("sacramento", colors[3]);
                     map.put("gr4j", colors[3]);
+                    map.put("awbm", colors[3]);
+                    map.put("surm", colors[3]);
                     map.put("routing", colors[4]);
                     map.put("loss", colors[4]);
                     map.put("splitter", colors[5]);
@@ -340,6 +350,8 @@ public class NodeTheme {
         Map.entry("gr4j", new ShapeTextMapping(NodeShape.WATER_DROP, "G4")),
         Map.entry("routing", new ShapeTextMapping(NodeShape.DIAMOND, "Rt")),
         Map.entry("sacramento", new ShapeTextMapping(NodeShape.WATER_DROP, "Sc")),
+        Map.entry("awbm", new ShapeTextMapping(NodeShape.WATER_DROP, "Aw")),
+        Map.entry("surm", new ShapeTextMapping(NodeShape.WATER_DROP, "Su")),
         Map.entry("unregulated_user", new ShapeTextMapping(NodeShape.PODIUM, "UU")),
         Map.entry("regulated_user", new ShapeTextMapping(NodeShape.PODIUM, "RU")),
         Map.entry("storage", new ShapeTextMapping(NodeShape.TRIANGLE_UP, "St")),

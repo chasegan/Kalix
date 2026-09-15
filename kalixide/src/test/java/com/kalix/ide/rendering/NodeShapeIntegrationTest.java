@@ -52,7 +52,7 @@ public class NodeShapeIntegrationTest {
     @Test
     public void testAllNodeTypesHaveValidMappings() {
         NodeTheme theme = new NodeTheme();
-        String[] nodeTypes = {"inflow", "gr4j", "routing_node", "sacramento", "user", "storage", "blackhole"};
+        String[] nodeTypes = {"inflow", "gr4j", "routing_node", "sacramento", "awbm", "surm", "user", "storage", "blackhole"};
 
         for (String nodeType : nodeTypes) {
             // Verify each node type has valid shape and text mappings
