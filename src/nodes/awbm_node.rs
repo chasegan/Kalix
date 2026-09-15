@@ -9,9 +9,6 @@ use crate::numerical::opt::optimisable_component::OptimisableComponent;
 
 const MAX_DS_LINKS: usize = 1;
 
-/// Optimisable parameter names, in the order used by `Awbm::set_params_by_vec`.
-const PARAM_NAMES: [&str; 8] = ["a1", "a2", "c1", "c2", "c3", "bfi", "k_base", "k_surf"];
-
 #[derive(Clone)]
 pub struct AwbmNode {
     pub name: String,
@@ -19,12 +16,16 @@ pub struct AwbmNode {
     pub mbal: f64,
     pub rain_mm_input: DynamicInput,
     pub evap_mm_input: DynamicInput,
+    /// Optional multiplier on the three store capacities, evaluated each step
+    /// (a seasonal CapAve profile). Absent means 1.
+    pub cap_ave_input: DynamicInput,
     pub area_km2: f64,
     pub awbm_model: Awbm,
 
     // Internal state only
     usflow: f64,
     dsflow_primary: f64,
+    has_cap_ave: bool,
 
     // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
@@ -48,10 +49,12 @@ impl Default for AwbmNode {
             mbal: 0.0,
             rain_mm_input: DynamicInput::default(),
             evap_mm_input: DynamicInput::default(),
+            cap_ave_input: DynamicInput::default(),
             area_km2: 1.0,
             awbm_model: Awbm::new(),
             usflow: 0.0,
             dsflow_primary: 0.0,
+            has_cap_ave: false,
             dsorders: [0.0; MAX_DS_LINKS],
             recorder_idx_usflow: None,
             recorder_idx_runoff_volume_megs: None,
@@ -84,6 +87,10 @@ impl Node for AwbmNode {
 
         // Initialize the AWBM model
         self.awbm_model.reset();
+        self.has_cap_ave = !matches!(self.cap_ave_input, DynamicInput::None { .. });
+        if !self.has_cap_ave {
+            self.awbm_model.set_capacity_scale(1.0);
+        }
 
         // DynamicInput fields are already initialized during parsing
 
@@ -134,6 +141,9 @@ impl Node for AwbmNode {
         let pet = self.evap_mm_input.get_value(data_cache);
 
         // Run AWBM model to get runoff
+        if self.has_cap_ave {
+            self.awbm_model.set_capacity_scale(self.cap_ave_input.get_value(data_cache));
+        }
         let runoff_depth_mm = self.awbm_model.run_step(rain, pet);
         let runoff_volume_megs = runoff_depth_mm * self.area_km2;
         self.dsflow_primary = self.usflow + runoff_volume_megs;
@@ -179,7 +189,7 @@ impl OptimisableComponent for AwbmNode {
         }
 
         // Standard AWBM parameters
-        match PARAM_NAMES.iter().position(|&n| n == name) {
+        match self.awbm_model.variant.parameter_names().iter().position(|&n| n == name) {
             Some(i) => {
                 let mut params = self.awbm_model.get_params_as_vec();
                 params[i] = value;
@@ -197,14 +207,14 @@ impl OptimisableComponent for AwbmNode {
         }
 
         // Standard AWBM parameters
-        match PARAM_NAMES.iter().position(|&n| n == name) {
+        match self.awbm_model.variant.parameter_names().iter().position(|&n| n == name) {
             Some(i) => Ok(self.awbm_model.get_params_as_vec()[i]),
             None => Err(format!("Unknown AWBM parameter: {}", name)),
         }
     }
 
     fn list_params(&self) -> Vec<String> {
-        let mut params = PARAM_NAMES
+        let mut params = self.awbm_model.variant.parameter_names()
             .iter()
             .map(|s| s.to_string())
             .collect::<Vec<_>>();

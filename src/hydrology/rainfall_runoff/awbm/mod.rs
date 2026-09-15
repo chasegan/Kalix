@@ -11,8 +11,75 @@
 //! checked once, by `validate_params`, which the node calls from `initialise`
 //! before every run so that an invalid set is reported with the node name
 //! rather than discovered mid-simulation. `run_step` does no checking.
+//!
+//! # Two-tap variant
+//!
+//! `AwbmVariant::TwoTap` is the "AWBM Two Tap" of Hydro Tasmania (Parkyn and
+//! Wilson, 1997), as used in Hydstra and TascatchSIM. The surface stores are
+//! unchanged. The excess is split by a recharge fraction `inf` that equals
+//! `inf_base` while the groundwater store is below `gw_sat` and falls
+//! linearly to zero at `gw_max`. Recharge goes to the groundwater store; the
+//! rest is direct runoff, unrouted. The groundwater store drains through two
+//! taps applied simultaneously to the start-of-step contents: a lower tap
+//! releasing `(1 - k_base)` of the store, and an upper tap at depth `h_gw`
+//! releasing `(1 - k2)` of the depth above it. The taps are computed before
+//! the step's recharge is added and `inf` is evaluated on the drained store.
+//! There is no surface routing store in this variant.
+//!
+//! Both variants accept a per-step capacity scale (`set_capacity_scale`),
+//! which the node drives from its optional `cap_ave` expression so that the
+//! three capacities can follow a seasonal profile: the effective capacity of
+//! store i is `c_i * cap_ave`.
 
 const PARAMETER_COUNT: usize = 8;
+const TWO_TAP_PARAMETER_COUNT: usize = 11;
+
+const STANDARD_PARAM_NAMES: [&str; PARAMETER_COUNT] =
+    ["a1", "a2", "c1", "c2", "c3", "bfi", "k_base", "k_surf"];
+const TWO_TAP_PARAM_NAMES: [&str; TWO_TAP_PARAMETER_COUNT] =
+    ["a1", "a2", "c1", "c2", "c3", "inf_base", "gw_sat", "gw_max", "k_base", "k2", "h_gw"];
+
+/// Selects the model formulation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum AwbmVariant {
+    /// Boughton's daily AWBM: BFI split, one baseflow tap, surface routing store.
+    #[default]
+    Standard,
+    /// Hydro Tasmania's two-tap groundwater store with saturation-limited recharge.
+    TwoTap,
+}
+
+impl AwbmVariant {
+    /// The name written to and read from the model file.
+    pub fn as_name(self) -> &'static str {
+        match self {
+            AwbmVariant::Standard => "awbm",
+            AwbmVariant::TwoTap => "two_tap",
+        }
+    }
+
+    /// Parses a model-file name; `None` for anything unrecognised.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name.to_lowercase().as_str() {
+            "awbm" | "standard" => Some(AwbmVariant::Standard),
+            "two_tap" | "twotap" | "two-tap" => Some(AwbmVariant::TwoTap),
+            _ => None,
+        }
+    }
+
+    /// Number of values on the `params` line.
+    pub fn parameter_count(self) -> usize {
+        self.parameter_names().len()
+    }
+
+    /// Parameter names in `params` order; also the optimisable names.
+    pub fn parameter_names(self) -> &'static [&'static str] {
+        match self {
+            AwbmVariant::Standard => &STANDARD_PARAM_NAMES,
+            AwbmVariant::TwoTap => &TWO_TAP_PARAM_NAMES,
+        }
+    }
+}
 
 /// Default AWBM parameters.
 pub const DEFAULT_A1: f64 = 0.134;
@@ -23,6 +90,13 @@ pub const DEFAULT_C3: f64 = 150.0;
 pub const DEFAULT_BFI: f64 = 0.35;
 pub const DEFAULT_K_BASE: f64 = 0.95;
 pub const DEFAULT_K_SURF: f64 = 0.35;
+
+/// Default two-tap groundwater parameters: the Musselroe calibration
+/// (Hydro Tasmania, 2007), the only complete published set.
+pub const DEFAULT_GW_SAT: f64 = 90.0;
+pub const DEFAULT_GW_MAX: f64 = 100.0;
+pub const DEFAULT_K2: f64 = 0.80;
+pub const DEFAULT_H_GW: f64 = 22.0;
 
 #[derive(Clone, Debug)]
 pub struct Awbm {
@@ -68,7 +142,23 @@ pub struct Awbm {
     /// Fraction of baseflow-store water remaining after each timestep.
     pub k_base: f64,
     /// Fraction of surface-runoff-store water remaining after each timestep.
+    /// Unused by the two-tap variant.
     pub k_surf: f64,
+
+    /// Model formulation.
+    pub variant: AwbmVariant,
+    /// Two-tap: groundwater depth above which the recharge fraction starts to fall, in mm.
+    pub gw_sat: f64,
+    /// Two-tap: groundwater depth at which the recharge fraction reaches zero, in mm.
+    pub gw_max: f64,
+    /// Two-tap: fraction of the depth above `h_gw` retained by the upper tap each timestep.
+    pub k2: f64,
+    /// Two-tap: depth of the upper tap, in mm.
+    pub h_gw: f64,
+
+    /// Multiplier applied to the three capacities this step (1 unless the node
+    /// supplies a `cap_ave` expression).
+    cap_scale: f64,
 }
 
 impl Default for Awbm {
@@ -101,6 +191,14 @@ impl Default for Awbm {
             bfi: DEFAULT_BFI,
             k_base: DEFAULT_K_BASE,
             k_surf: DEFAULT_K_SURF,
+
+            variant: AwbmVariant::Standard,
+            gw_sat: DEFAULT_GW_SAT,
+            gw_max: DEFAULT_GW_MAX,
+            k2: DEFAULT_K2,
+            h_gw: DEFAULT_H_GW,
+
+            cap_scale: 1.0,
         }
     }
 }
@@ -152,31 +250,58 @@ impl Awbm {
         self
     }
 
-    /// Parameter order: A1, A2, C1, C2, C3, BFI, KBase, KSurf.
+    /// Sets parameters from a vector in the order given by
+    /// `AwbmVariant::parameter_names` for the current variant:
+    /// standard `a1, a2, c1, c2, c3, bfi, k_base, k_surf`;
+    /// two-tap `a1, a2, c1, c2, c3, inf_base, gw_sat, gw_max, k_base, k2, h_gw`.
     pub fn set_params_by_vec(&mut self, params: &[f64]) {
         assert_eq!(
             params.len(),
-            PARAMETER_COUNT,
-            "AWBM requires exactly {PARAMETER_COUNT} parameters"
+            self.variant.parameter_count(),
+            "AWBM ({}) requires exactly {} parameters",
+            self.variant.as_name(),
+            self.variant.parameter_count()
         );
 
-        self.set_params(
-            params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7],
-        );
+        match self.variant {
+            AwbmVariant::Standard => {
+                self.set_params(
+                    params[0], params[1], params[2], params[3], params[4], params[5], params[6], params[7],
+                );
+            }
+            AwbmVariant::TwoTap => {
+                self.a1 = params[0];
+                self.a2 = params[1];
+                self.c1 = params[2];
+                self.c2 = params[3];
+                self.c3 = params[4];
+                self.bfi = params[5]; // inf_base
+                self.gw_sat = params[6];
+                self.gw_max = params[7];
+                self.k_base = params[8];
+                self.k2 = params[9];
+                self.h_gw = params[10];
+            }
+        }
     }
 
     /// Returns parameters in the order used by `set_params_by_vec`.
     pub fn get_params_as_vec(&self) -> Vec<f64> {
-        vec![
-            self.a1,
-            self.a2,
-            self.c1,
-            self.c2,
-            self.c3,
-            self.bfi,
-            self.k_base,
-            self.k_surf,
-        ]
+        match self.variant {
+            AwbmVariant::Standard => vec![
+                self.a1, self.a2, self.c1, self.c2, self.c3, self.bfi, self.k_base, self.k_surf,
+            ],
+            AwbmVariant::TwoTap => vec![
+                self.a1, self.a2, self.c1, self.c2, self.c3, self.bfi, self.gw_sat, self.gw_max,
+                self.k_base, self.k2, self.h_gw,
+            ],
+        }
+    }
+
+    /// Sets the multiplier applied to the three store capacities on the next
+    /// step. The node calls this each step from its `cap_ave` expression.
+    pub fn set_capacity_scale(&mut self, scale: f64) {
+        self.cap_scale = scale;
     }
 
     /// Checks that the parameter set is physically valid.
@@ -199,14 +324,36 @@ impl Awbm {
                 self.c1, self.c2, self.c3
             ));
         }
+        let bfi_name = match self.variant {
+            AwbmVariant::Standard => "bfi",
+            AwbmVariant::TwoTap => "inf_base",
+        };
         if !unit(self.bfi) {
-            return Err(format!("AWBM bfi must be between 0 and 1, but was {}.", self.bfi));
+            return Err(format!("AWBM {} must be between 0 and 1, but was {}.", bfi_name, self.bfi));
         }
         if !unit(self.k_base) {
             return Err(format!("AWBM k_base must be between 0 and 1, but was {}.", self.k_base));
         }
-        if !unit(self.k_surf) {
-            return Err(format!("AWBM k_surf must be between 0 and 1, but was {}.", self.k_surf));
+        match self.variant {
+            AwbmVariant::Standard => {
+                if !unit(self.k_surf) {
+                    return Err(format!("AWBM k_surf must be between 0 and 1, but was {}.", self.k_surf));
+                }
+            }
+            AwbmVariant::TwoTap => {
+                if !(non_negative(self.gw_sat) && self.gw_max.is_finite() && self.gw_max > self.gw_sat) {
+                    return Err(format!(
+                        "AWBM two-tap requires 0 <= gw_sat < gw_max, but gw_sat = {} and gw_max = {}.",
+                        self.gw_sat, self.gw_max
+                    ));
+                }
+                if !unit(self.k2) {
+                    return Err(format!("AWBM k2 must be between 0 and 1, but was {}.", self.k2));
+                }
+                if !non_negative(self.h_gw) {
+                    return Err(format!("AWBM h_gw must be finite and non-negative, but was {}.", self.h_gw));
+                }
+            }
         }
         Ok(())
     }
@@ -224,6 +371,7 @@ impl Awbm {
         self.pet = pet;
 
         let (a1, a2, a3) = self.areas();
+        let cap_scale = self.cap_scale;
 
         let update_store = |store: &mut f64, capacity: f64| -> (f64, f64) {
             *store += rainfall;
@@ -237,25 +385,45 @@ impl Awbm {
             (excess, actual_et)
         };
 
-        let (e1, et1) = update_store(&mut self.s1, self.c1);
-        let (e2, et2) = update_store(&mut self.s2, self.c2);
-        let (e3, et3) = update_store(&mut self.s3, self.c3);
+        let (e1, et1) = update_store(&mut self.s1, self.c1 * cap_scale);
+        let (e2, et2) = update_store(&mut self.s2, self.c2 * cap_scale);
+        let (e3, et3) = update_store(&mut self.s3, self.c3 * cap_scale);
 
         self.excess = a1 * e1 + a2 * e2 + a3 * e3;
         self.partial_excess = self.excess;
         self.evapotranspiration = a1 * et1 + a2 * et2 + a3 * et3;
         self.effective_rainfall = rainfall - self.evapotranspiration;
 
-        self.baseflow_recharge = self.bfi * self.excess;
-        self.surface_runoff = (1.0 - self.bfi) * self.excess;
+        match self.variant {
+            AwbmVariant::Standard => {
+                self.baseflow_recharge = self.bfi * self.excess;
+                self.surface_runoff = (1.0 - self.bfi) * self.excess;
 
-        self.baseflow_store += self.baseflow_recharge;
-        self.baseflow = (1.0 - self.k_base) * self.baseflow_store;
-        self.baseflow_store -= self.baseflow;
+                self.baseflow_store += self.baseflow_recharge;
+                self.baseflow = (1.0 - self.k_base) * self.baseflow_store;
+                self.baseflow_store -= self.baseflow;
 
-        self.surface_store += self.surface_runoff;
-        self.routed_surface_runoff = (1.0 - self.k_surf) * self.surface_store;
-        self.surface_store -= self.routed_surface_runoff;
+                self.surface_store += self.surface_runoff;
+                self.routed_surface_runoff = (1.0 - self.k_surf) * self.surface_store;
+                self.surface_store -= self.routed_surface_runoff;
+            }
+            AwbmVariant::TwoTap => {
+                // Both taps drain the start-of-step store.
+                let lower_tap = (1.0 - self.k_base) * self.baseflow_store;
+                let upper_tap = (1.0 - self.k2) * (self.baseflow_store - self.h_gw).max(0.0);
+                self.baseflow_store -= lower_tap + upper_tap;
+                self.baseflow = lower_tap + upper_tap;
+
+                // Recharge fraction tapers from inf_base at gw_sat to zero at gw_max.
+                let taper = ((self.gw_max - self.baseflow_store) / (self.gw_max - self.gw_sat)).clamp(0.0, 1.0);
+                self.baseflow_recharge = self.bfi * taper * self.excess;
+                self.baseflow_store += self.baseflow_recharge;
+
+                // Direct runoff leaves unrouted.
+                self.surface_runoff = self.excess - self.baseflow_recharge;
+                self.routed_surface_runoff = self.surface_runoff;
+            }
+        }
 
         self.runoff = self.baseflow + self.routed_surface_runoff;
         self.runoff
@@ -408,6 +576,14 @@ mod tests {
     }
 
     #[test]
+    fn variant_names_round_trip() {
+        assert_eq!(AwbmVariant::from_name("two_tap"), Some(AwbmVariant::TwoTap));
+        assert_eq!(AwbmVariant::from_name("AWBM"), Some(AwbmVariant::Standard));
+        assert_eq!(AwbmVariant::from_name("gr4j"), None);
+        assert_eq!(AwbmVariant::TwoTap.as_name(), "two_tap");
+    }
+
+    #[test]
     fn default_parameters_are_valid() {
         assert_eq!(Awbm::new().validate_params(), Ok(()));
     }
@@ -484,6 +660,108 @@ mod tests {
         assert!((model.run_step(0.0, 0.0) - 1.25).abs() < 1e-12);
         assert!((model.baseflow_store() - 0.625).abs() < 1e-12);
         assert!((model.surface_store() - 0.625).abs() < 1e-12);
+    }
+
+    fn two_tap() -> Awbm {
+        let mut model = Awbm::new();
+        model.variant = AwbmVariant::TwoTap;
+        // Musselroe 2007: inf_base 0.76, gw_sat 90, gw_max 100, K1 0.98, K2 0.80, H_GW 22
+        model.set_params_by_vec(&[0.134, 0.433, 7.0, 70.0, 150.0, 0.76, 90.0, 100.0, 0.98, 0.80, 22.0]);
+        model
+    }
+
+    #[test]
+    fn two_tap_parameter_vector_round_trips() {
+        let model = two_tap();
+        assert_eq!(model.get_params_as_vec(), vec![0.134, 0.433, 7.0, 70.0, 150.0, 0.76, 90.0, 100.0, 0.98, 0.80, 22.0]);
+        assert_eq!(AwbmVariant::TwoTap.parameter_names().len(), 11);
+        assert_eq!(model.validate_params(), Ok(()));
+    }
+
+    #[test]
+    fn two_tap_recession_is_0_78_above_the_upper_tap_and_0_98_below() {
+        // Flow ratio between dry days: 1 - (1 - k_base) - (1 - k2) = 0.78 while the
+        // store is above h_gw, then k_base = 0.98 once it has drained below.
+        let mut model = two_tap();
+        model.set_initial_stores(0.0, 0.0, 0.0, 60.0, 0.0).unwrap();
+        let mut previous = model.run_step(0.0, 0.0);
+        for _ in 0..3 {
+            let flow = model.run_step(0.0, 0.0);
+            assert!((flow / previous - 0.78).abs() < 1e-12, "{}", flow / previous);
+            previous = flow;
+        }
+        model.set_initial_stores(0.0, 0.0, 0.0, 10.0, 0.0).unwrap();
+        let first = model.run_step(0.0, 0.0);
+        let second = model.run_step(0.0, 0.0);
+        assert!((second / first - 0.98).abs() < 1e-12);
+        assert!((first - 0.02 * 10.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn two_tap_upper_tap_is_continuous_at_its_depth() {
+        let mut just_below = two_tap();
+        just_below.set_initial_stores(0.0, 0.0, 0.0, 22.0, 0.0).unwrap();
+        let mut just_above = two_tap();
+        just_above.set_initial_stores(0.0, 0.0, 0.0, 22.0 + 1e-9, 0.0).unwrap();
+        assert!((just_below.run_step(0.0, 0.0) - just_above.run_step(0.0, 0.0)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn two_tap_recharge_tapers_to_zero_at_gw_max() {
+        // Zero-capacity stores turn all rain into excess; the store starts at
+        // gw_max, so after the taps it is drained to a known depth and the
+        // taper can be checked exactly.
+        let mut model = two_tap();
+        model.set_params_by_vec(&[0.134, 0.433, 0.0, 0.0, 0.0, 0.76, 90.0, 100.0, 1.0, 1.0, 1000.0]);
+        model.set_initial_stores(0.0, 0.0, 0.0, 100.0, 0.0).unwrap();
+        let runoff = model.run_step(10.0, 0.0);
+        assert_eq!(model.baseflow_recharge(), 0.0);
+        assert!((runoff - 10.0).abs() < 1e-12);
+
+        model.set_initial_stores(0.0, 0.0, 0.0, 95.0, 0.0).unwrap();
+        model.run_step(10.0, 0.0);
+        assert!((model.baseflow_recharge() - 0.76 * 0.5 * 10.0).abs() < 1e-12);
+
+        model.set_initial_stores(0.0, 0.0, 0.0, 50.0, 0.0).unwrap();
+        model.run_step(10.0, 0.0);
+        assert!((model.baseflow_recharge() - 7.6).abs() < 1e-12);
+    }
+
+    #[test]
+    fn two_tap_conserves_water() {
+        let mut model = two_tap();
+        let rain = [12.0, 0.0, 30.0, 45.0, 0.0, 0.0, 3.0, 80.0, 0.0, 0.0, 0.0, 20.0];
+        let pet = [2.0, 3.0, 1.0, 1.0, 4.0, 4.0, 3.0, 1.0, 2.0, 5.0, 5.0, 2.0];
+        let stored = |m: &Awbm| 0.134 * m.s1() + 0.433 * m.s2() + 0.433 * m.s3() + m.baseflow_store();
+        let mut balance = 0.0;
+        for (p, e) in rain.iter().zip(pet.iter()) {
+            let before = stored(&model);
+            let runoff = model.run_step(*p, *e);
+            balance += p - model.evapotranspiration() - runoff - (stored(&model) - before);
+        }
+        assert!(balance.abs() < 1e-12, "{balance}");
+    }
+
+    #[test]
+    fn two_tap_rejects_inverted_thresholds() {
+        let mut model = two_tap();
+        model.gw_max = 90.0; // equal to gw_sat
+        assert!(model.validate_params().unwrap_err().contains("gw_sat < gw_max"));
+        let mut model = two_tap();
+        model.k2 = 1.2;
+        assert!(model.validate_params().unwrap_err().contains("k2"));
+    }
+
+    #[test]
+    fn capacity_scale_multiplies_the_three_capacities() {
+        let mut model = Awbm::new();
+        model.set_params(1.0, 0.0, 10.0, 100.0, 100.0, 0.0, 1.0, 0.0);
+        model.set_capacity_scale(0.5);
+        // c1 is effectively 5 mm: 15 mm of rain overflows 10 mm.
+        assert!((model.run_step(15.0, 0.0) - 10.0).abs() < 1e-12);
+        model.set_capacity_scale(1.0);
+        model.set_initial_stores(0.0, 0.0, 0.0, 0.0, 0.0).unwrap();
+        assert!((model.run_step(15.0, 0.0) - 5.0).abs() < 1e-12);
     }
 
     #[test]

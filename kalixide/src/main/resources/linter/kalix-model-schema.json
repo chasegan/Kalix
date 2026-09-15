@@ -188,15 +188,17 @@
         "usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1", "ds_1_order", "rain", "evap", "area"
       ],
       "required_params": ["type", "loc", "area", "rain", "evap", "params"],
-      "optional_params": [],
+      "optional_params": ["variant", "cap_ave"],
       "dsnode_params": ["ds_1"],
       "parameters": {
         "type": {"type": "literal", "value": "awbm"},
+        "variant": {"type": "string", "description": "Model formulation: 'awbm' (Boughton daily, default) or 'two_tap' (Hydro Tasmania two-tap groundwater store, 11 params). No validation on value."},
+        "cap_ave": {"type": "function_expression", "description": "Optional multiplier on the three store capacities, evaluated each timestep (e.g. a seasonal CapAve profile from a table). Absent means 1."},
         "loc": {"type": "coordinates", "format": "float,float"},
         "area": {"type": "number", "min": 0, "description": "Catchment area"},
         "rain": {"type": "function_expression", "description": "Rainfall input (data reference, constant, or expression)"},
         "evap": {"type": "function_expression", "description": "Evaporation input (data reference, constant, or expression)"},
-        "params": {"type": "number_sequence", "count": 8, "description": "AWBM parameters: a1, a2, c1, c2, c3, bfi, k_base, k_surf"}
+        "params": {"type": "number_sequence", "description": "AWBM parameters: a1, a2, c1, c2, c3, bfi, k_base, k_surf (8 values); with variant = two_tap: a1, a2, c1, c2, c3, inf_base, gw_sat, gw_max, k_base, k2, h_gw (11 values)"}
       }
     },
     "surm": {
