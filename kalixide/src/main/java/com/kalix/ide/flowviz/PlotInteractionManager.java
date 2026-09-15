@@ -803,7 +803,8 @@ public class PlotInteractionManager {
         }
         contextMenu.add(yAxisScaleMenu);
 
-        // Line shape submenu. Radio items keyed by enum, so sync never depends on label text.
+        // Line shape submenu: a category noun with value children (6). Radio items are keyed
+        // by enum, so sync never reads identity back out of label text (ADR-0003 §2.2).
         JMenu lineShapeMenu = new JMenu("Line shape");
         ButtonGroup lineShapeGroup = new ButtonGroup();
         for (LineShape shape : LineShape.values()) {
