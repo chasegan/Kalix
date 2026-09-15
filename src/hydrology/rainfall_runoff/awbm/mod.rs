@@ -6,6 +6,11 @@
 //!
 //! Rainfall, potential evapotranspiration, storage, and runoff are expressed
 //! as depths in millimetres per timestep.
+//!
+//! Parameters are stored exactly as supplied and are never clamped. They are
+//! checked once, by `validate_params`, which the node calls from `initialise`
+//! before every run so that an invalid set is reported with the node name
+//! rather than discovered mid-simulation. `run_step` does no checking.
 
 const PARAMETER_COUNT: usize = 8;
 
@@ -122,8 +127,8 @@ impl Awbm {
 
     /// Sets the complete parameter set without clamping.
     ///
-    /// Calibration bounds belong in the calibration layer. Values are
-    /// validated when the model is run.
+    /// Calibration bounds belong in the calibration layer. Validity is
+    /// checked by `validate_params` before a run.
     #[allow(clippy::too_many_arguments)]
     pub fn set_params(
         &mut self,
@@ -174,43 +179,36 @@ impl Awbm {
         ]
     }
 
-    fn validate(&self, rainfall: f64, pet: f64) {
-        assert!(
-            rainfall.is_finite() && rainfall >= 0.0,
-            "AWBM rainfall must be finite and non-negative"
-        );
-        assert!(
-            pet.is_finite() && pet >= 0.0,
-            "AWBM PET must be finite and non-negative"
-        );
-        assert!(
-            self.a1.is_finite()
-                && self.a2.is_finite()
-                && self.a1 >= 0.0
-                && self.a2 >= 0.0
-                && self.a1 + self.a2 <= 1.0,
-            "AWBM requires finite, non-negative areas with A1 + A2 <= 1"
-        );
-        assert!(
-            self.c1.is_finite()
-                && self.c2.is_finite()
-                && self.c3.is_finite()
-                && self.c1 >= 0.0
-                && self.c2 >= 0.0
-                && self.c3 >= 0.0,
-            "AWBM capacities must be finite and non-negative"
-        );
-        assert!(
-            self.bfi.is_finite() && (0.0..=1.0).contains(&self.bfi),
-            "AWBM BFI must be finite and between 0 and 1"
-        );
-        assert!(
-            self.k_base.is_finite()
-                && self.k_surf.is_finite()
-                && (0.0..=1.0).contains(&self.k_base)
-                && (0.0..=1.0).contains(&self.k_surf),
-            "AWBM recession constants must be finite and between 0 and 1"
-        );
+    /// Checks that the parameter set is physically valid.
+    ///
+    /// Returns a message naming the offending parameter(s) and their values.
+    /// Call once before a run; the node does this from `initialise`.
+    pub fn validate_params(&self) -> Result<(), String> {
+        let unit = |v: f64| v.is_finite() && (0.0..=1.0).contains(&v);
+        let non_negative = |v: f64| v.is_finite() && v >= 0.0;
+
+        if !(non_negative(self.a1) && non_negative(self.a2) && self.a1 + self.a2 <= 1.0) {
+            return Err(format!(
+                "AWBM partial areas must be finite and non-negative with a1 + a2 <= 1, but a1 = {} and a2 = {}.",
+                self.a1, self.a2
+            ));
+        }
+        if !(non_negative(self.c1) && non_negative(self.c2) && non_negative(self.c3)) {
+            return Err(format!(
+                "AWBM store capacities must be finite and non-negative, but c1 = {}, c2 = {} and c3 = {}.",
+                self.c1, self.c2, self.c3
+            ));
+        }
+        if !unit(self.bfi) {
+            return Err(format!("AWBM bfi must be between 0 and 1, but was {}.", self.bfi));
+        }
+        if !unit(self.k_base) {
+            return Err(format!("AWBM k_base must be between 0 and 1, but was {}.", self.k_base));
+        }
+        if !unit(self.k_surf) {
+            return Err(format!("AWBM k_surf must be between 0 and 1, but was {}.", self.k_surf));
+        }
+        Ok(())
     }
 
     fn areas(&self) -> (f64, f64, f64) {
@@ -218,9 +216,10 @@ impl Awbm {
     }
 
     /// Runs one timestep and returns total runoff.
+    ///
+    /// Parameters are assumed valid (see `validate_params`). Inputs are used
+    /// as given, as in GR4J: a non-finite input produces non-finite output.
     pub fn run_step(&mut self, rainfall: f64, pet: f64) -> f64 {
-        self.validate(rainfall, pet);
-
         self.rainfall = rainfall;
         self.pet = pet;
 
@@ -296,42 +295,31 @@ impl Awbm {
         s3: f64,
         baseflow_store: f64,
         surface_store: f64,
-    ) -> &mut Self {
-        assert!(
-            s1.is_finite()
-                && s2.is_finite()
-                && s3.is_finite()
-                && baseflow_store.is_finite()
-                && surface_store.is_finite()
-                && s1 >= 0.0
-                && s2 >= 0.0
-                && s3 >= 0.0
-                && baseflow_store >= 0.0
-                && surface_store >= 0.0
-                && s1 <= self.c1
-                && s2 <= self.c2
-                && s3 <= self.c3,
-            "AWBM initial stores must be finite, non-negative, and within capacity"
-        );
+    ) -> Result<&mut Self, String> {
+        let stores = [s1, s2, s3, baseflow_store, surface_store];
+        if !stores.iter().all(|v| v.is_finite() && *v >= 0.0) {
+            return Err(format!(
+                "AWBM initial stores must be finite and non-negative, but were {:?}.",
+                stores
+            ));
+        }
+        if s1 > self.c1 || s2 > self.c2 || s3 > self.c3 {
+            return Err(format!(
+                "AWBM initial surface stores ({}, {}, {}) cannot exceed their capacities ({}, {}, {}).",
+                s1, s2, s3, self.c1, self.c2, self.c3
+            ));
+        }
 
         self.s1 = s1;
         self.s2 = s2;
         self.s3 = s3;
         self.baseflow_store = baseflow_store;
         self.surface_store = surface_store;
-        self
+        Ok(self)
     }
 
+    /// Partial area of surface store 3, derived from `a1` and `a2`.
     pub fn area3(&self) -> f64 {
-        assert!(
-            self.a1.is_finite()
-                && self.a2.is_finite()
-                && self.a1 >= 0.0
-                && self.a2 >= 0.0
-                && self.a1 + self.a2 <= 1.0,
-            "AWBM requires finite, non-negative areas with A1 + A2 <= 1"
-        );
-
         1.0 - self.a1 - self.a2
     }
 
@@ -420,15 +408,37 @@ mod tests {
     }
 
     #[test]
+    fn default_parameters_are_valid() {
+        assert_eq!(Awbm::new().validate_params(), Ok(()));
+    }
+
+    #[test]
     fn rejects_invalid_area_fractions() {
         let mut model = Awbm::new();
         model.a1 = 0.7;
         model.a2 = 0.4;
 
-        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            model.run_step(1.0, 0.0);
-        }))
-        .is_err());
+        let message = model.validate_params().unwrap_err();
+        assert!(message.contains("a1 + a2 <= 1"), "{message}");
+        assert!(message.contains("0.7") && message.contains("0.4"), "{message}");
+    }
+
+    #[test]
+    fn rejects_out_of_range_parameters() {
+        let cases: [(fn(&mut Awbm), &str); 5] = [
+            (|m| m.a1 = -0.1, "partial areas"),
+            (|m| m.c2 = -1.0, "capacities"),
+            (|m| m.bfi = 1.5, "bfi"),
+            (|m| m.k_base = f64::NAN, "k_base"),
+            (|m| m.k_surf = -0.2, "k_surf"),
+        ];
+
+        for (mutate, expected) in cases {
+            let mut model = Awbm::new();
+            mutate(&mut model);
+            let message = model.validate_params().unwrap_err();
+            assert!(message.contains(expected), "expected '{expected}' in '{message}'");
+        }
     }
 
     #[test]
@@ -457,10 +467,9 @@ mod tests {
     fn initial_stores_cannot_exceed_capacity() {
         let mut model = Awbm::new();
 
-        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            model.set_initial_stores(71.0, 0.0, 0.0, 0.0, 0.0);
-        }))
-        .is_err());
+        assert!(model.set_initial_stores(8.0, 0.0, 0.0, 0.0, 0.0).is_err());
+        assert!(model.set_initial_stores(7.0, 70.0, 150.0, 5.0, 5.0).is_ok());
+        assert_eq!(model.s1(), 7.0);
     }
 
     #[test]

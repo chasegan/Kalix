@@ -12,9 +12,11 @@
 //! converted to equivalent whole-catchment depths using `imp_fraction`.
 //! Deep seepage is tracked separately and is not included in reported runoff.
 //!
-//! Parameters are stored and used exactly as supplied. Parameter bounds and
-//! validity checks belong to the calibration layer. Rainfall and potential
-//! evapotranspiration inputs must be finite and non-negative.
+//! Parameters are stored and used exactly as supplied and are never clamped.
+//! Calibration bounds belong to the calibration layer; physical validity is
+//! checked once, by `validate_params`, which the node calls from `initialise`
+//! before every run. `run_step` does no checking and uses its inputs as
+//! given, as GR4J does.
 //!
 //! Groundwater baseflow is calculated before seepage. Seepage uses the
 //! pre-baseflow groundwater store but is limited to the storage remaining
@@ -107,7 +109,8 @@ impl Surm {
 
     /// Sets the complete SURM parameter set without clamping.
     ///
-    /// Parameter bounds belong to the calibration layer.
+    /// Calibration bounds belong to the calibration layer. Validity is
+    /// checked by `validate_params` before a run.
     #[allow(clippy::too_many_arguments)]
     pub fn set_params(
         &mut self,
@@ -172,6 +175,47 @@ impl Surm {
         ]
     }
 
+    /// Checks that the parameter set is physically valid.
+    ///
+    /// Fractions and factors must lie in [0, 1]; depths and the infiltration
+    /// coefficient and exponent must be non-negative; `smsc` must be positive
+    /// because the infiltration and evaporation equations divide by it.
+    /// Returns a message naming the offending parameter and its value. Call
+    /// once before a run; the node does this from `initialise`.
+    pub fn validate_params(&self) -> Result<(), String> {
+        let unit = |v: f64| v.is_finite() && (0.0..=1.0).contains(&v);
+        let non_negative = |v: f64| v.is_finite() && v >= 0.0;
+
+        let unit_params = [
+            ("imp_fraction", self.imp_fraction),
+            ("rfac", self.rfac),
+            ("bfac", self.bfac),
+            ("sfac", self.sfac),
+        ];
+        for (name, value) in unit_params {
+            if !unit(value) {
+                return Err(format!("SURM {} must be between 0 and 1, but was {}.", name, value));
+            }
+        }
+
+        let non_negative_params = [
+            ("impsc", self.impsc),
+            ("coeff", self.coeff),
+            ("sq", self.sq),
+            ("fc", self.fc),
+        ];
+        for (name, value) in non_negative_params {
+            if !non_negative(value) {
+                return Err(format!("SURM {} must be finite and non-negative, but was {}.", name, value));
+            }
+        }
+
+        if !(self.smsc.is_finite() && self.smsc > 0.0) {
+            return Err(format!("SURM smsc must be finite and positive, but was {}.", self.smsc));
+        }
+        Ok(())
+    }
+
     /// Resets the model inputs, outputs, flow components and stores.
     pub fn initialize_state_empty(&mut self) -> &mut Self {
         self.rainfall = 0.0;
@@ -206,16 +250,9 @@ impl Surm {
     ///
     /// Rainfall depth is applied to both surface types. Runoff generated from
     /// each surface is then weighted by its corresponding area fraction.
+    ///
+    /// Parameters are assumed valid (see `validate_params`).
     pub fn run_step(&mut self, rainfall: f64, pet: f64) -> f64 {
-        assert!(
-            rainfall.is_finite() && rainfall >= 0.0,
-            "SURM rainfall must be finite and non-negative"
-        );
-        assert!(
-            pet.is_finite() && pet >= 0.0,
-            "SURM PET must be finite and non-negative"
-        );
-
         self.rainfall = rainfall;
         self.pet = pet;
 
@@ -420,6 +457,29 @@ mod tests {
 
         assert_eq!(model.soil_store(), 30.0);
         assert_eq!(model.groundwater_store(), 10.0);
+    }
+
+    #[test]
+    fn default_parameters_are_valid() {
+        assert_eq!(Surm::new().validate_params(), Ok(()));
+    }
+
+    #[test]
+    fn rejects_out_of_range_parameters() {
+        let cases: [(fn(&mut Surm), &str); 5] = [
+            (|m| m.imp_fraction = 1.2, "imp_fraction"),
+            (|m| m.coeff = -50.0, "coeff"),
+            (|m| m.bfac = -0.5, "bfac"),
+            (|m| m.smsc = 0.0, "smsc"),
+            (|m| m.fc = f64::NAN, "fc"),
+        ];
+
+        for (mutate, expected) in cases {
+            let mut model = Surm::new();
+            mutate(&mut model);
+            let message = model.validate_params().unwrap_err();
+            assert!(message.contains(expected), "expected '{expected}' in '{message}'");
+        }
     }
 
     #[test]

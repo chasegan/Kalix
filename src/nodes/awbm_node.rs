@@ -92,6 +92,9 @@ impl Node for AwbmNode {
             let message = format!("Error in node '{}'. Catchment area cannot be negative, but was {}.", self.name, self.area_km2);
             return Err(message);
         }
+        if let Err(message) = self.awbm_model.validate_params() {
+            return Err(format!("Error in node '{}'. {}", self.name, message));
+        }
 
         // Initialize result recorders
         self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
