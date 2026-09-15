@@ -1348,7 +1348,7 @@ impl Node for StorageNode {
 
         // forced_level_configured is fixed at initialise, so the input is only
         // evaluated on storages that actually have one — an unconfigured
-        // storage pays nothing here per timestep (performance §3.1, §3.5).
+        // storage pays nothing here per timestep (ADR-0004 §3.1, §3.5).
         // Unconfigured reads as NaN rather than DynamicInput::None's 0.0,
         // which would report the storage as forced to 0 m.
         self.was_forcing_level = self.is_forcing_level;
