@@ -5,6 +5,7 @@ import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.rendering.LineShape;
 import com.kalix.ide.flowviz.rendering.PlotColors;
 import com.kalix.ide.flowviz.rendering.SeriesRenderMode;
 import com.kalix.ide.flowviz.rendering.TimeSeriesRenderer;
@@ -793,6 +794,22 @@ public class FlowVizPanel extends JPanel {
 
     public boolean isShowOrphanMarkers() {
         return renderer != null && renderer.isShowOrphanMarkers();
+    }
+
+    /**
+     * The shape of line series: straight segments, or steps (each value held flat from its own
+     * timestamp to the start of the next time step). STRAIGHT by default. A pure render toggle,
+     * like connect-across-gaps.
+     */
+    public void setLineShape(LineShape shape) {
+        if (renderer != null) {
+            renderer.setLineShape(shape);
+            repaint();
+        }
+    }
+
+    public LineShape getLineShape() {
+        return renderer != null ? renderer.getLineShape() : LineShape.STRAIGHT;
     }
 
     /**

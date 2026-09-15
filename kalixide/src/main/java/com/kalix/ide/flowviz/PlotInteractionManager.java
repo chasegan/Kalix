@@ -3,6 +3,7 @@ package com.kalix.ide.flowviz;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.rendering.AxisLimitCodec;
+import com.kalix.ide.flowviz.rendering.LineShape;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
@@ -51,7 +52,9 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.io.File;
 import java.io.IOException;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -86,6 +89,7 @@ public class PlotInteractionManager {
     private JMenuItem pasteYAxisItem;
     private JCheckBoxMenuItem connectGapsMenuItem;
     private JCheckBoxMenuItem orphanMarkersMenuItem;
+    private final Map<LineShape, JRadioButtonMenuItem> lineShapeMenuItems = new EnumMap<>(LineShape.class);
     private JMenu yAxisScaleMenu;
 
     // Zoom rectangle selection state
@@ -799,6 +803,22 @@ public class PlotInteractionManager {
         }
         contextMenu.add(yAxisScaleMenu);
 
+        // Line shape submenu. Radio items keyed by enum, so sync never depends on label text.
+        JMenu lineShapeMenu = new JMenu("Line shape");
+        ButtonGroup lineShapeGroup = new ButtonGroup();
+        for (LineShape shape : LineShape.values()) {
+            JRadioButtonMenuItem shapeItem = new JRadioButtonMenuItem(shape.getDisplayName());
+            shapeItem.addActionListener(e -> {
+                if (parentComponent instanceof FlowVizPanel vizPanel) {
+                    vizPanel.setLineShape(shape);
+                }
+            });
+            lineShapeGroup.add(shapeItem);
+            lineShapeMenu.add(shapeItem);
+            lineShapeMenuItems.put(shape, shapeItem);
+        }
+        contextMenu.add(lineShapeMenu);
+
         // Missing Data submenu. "Draw across gaps" and "Mark orphan points" are mutually
         // exclusive — drawing a continuous line removes the gaps that orphan points would mark —
         // but either may be off. They are checkboxes (mutual exclusion enforced in FlowVizPanel)
@@ -848,6 +868,9 @@ public class PlotInteractionManager {
                 if (parentComponent instanceof FlowVizPanel vizPanel) {
                     // Get the current auto-Y state from the FlowVizPanel
                     autoYMenuItem.setSelected(vizPanel.isAutoYMode());
+
+                    // Sync line shape
+                    lineShapeMenuItems.get(vizPanel.getLineShape()).setSelected(true);
 
                     // Sync gap-handling toggles
                     connectGapsMenuItem.setSelected(vizPanel.isConnectAcrossGaps());

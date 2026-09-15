@@ -9,6 +9,7 @@ import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.flowviz.models.StatsTableModel;
+import com.kalix.ide.flowviz.rendering.LineShape;
 import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
 import com.kalix.ide.flowviz.transform.AggregationPipeline;
@@ -161,6 +162,8 @@ public class VisualizationTabManager {
         // false = default "break at gaps".
         public boolean connectAcrossGaps = false;
         public boolean showOrphanMarkers = false;
+        // Shape of line series (context menu > Line shape).
+        public LineShape lineShape = LineShape.STRAIGHT;
 
         // Series selection from source tab (null = inherit from active tab)
         public Set<SeriesRef> selectedSeries = null;
@@ -195,6 +198,7 @@ public class VisualizationTabManager {
             settings.legendEnabled = vizPanel.isLegendEnabled();
             settings.connectAcrossGaps = vizPanel.isConnectAcrossGaps();
             settings.showOrphanMarkers = vizPanel.isShowOrphanMarkers();
+            settings.lineShape = vizPanel.getLineShape();
             settings.selectedSeries = new LinkedHashSet<>(tabInfo.selectedSeries);
             settings.checkedSources = new LinkedHashSet<>(tabInfo.checkedSources);
             settings.sourceVizPanel = vizPanel;
@@ -969,6 +973,7 @@ public class VisualizationTabManager {
         // net result matches the source tab.
         vizPanel.setConnectAcrossGaps(settings.connectAcrossGaps);
         vizPanel.setShowOrphanMarkers(settings.showOrphanMarkers);
+        vizPanel.setLineShape(settings.lineShape);
         // Unconditional: the new legend manager starts from the global preference, which
         // may disagree with this tab's settings in either direction.
         vizPanel.setLegendCollapsed(settings.legendCollapsed);
