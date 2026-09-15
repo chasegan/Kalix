@@ -41,6 +41,10 @@ class ParameterExpressionLibraryTest {
     private static final List<String> AWBM_PARAMS = List.of(
             "a1", "a2", "c1", "c2", "c3", "bfi", "k_base", "k_surf");
 
+    /** {@code src/nodes/awbm_node.rs} with {@code variant = two_tap}. */
+    private static final List<String> AWBM_TWO_TAP_PARAMS = List.of(
+            "a1", "a2", "c1", "c2", "c3", "inf_base", "gw_sat", "gw_max", "k_base", "k2", "h_gw");
+
     /** {@code src/nodes/surm_node.rs} — SURM's fixed parameters. */
     private static final List<String> SURM_PARAMS = List.of(
             "imp_fraction", "impsc", "smsc", "coeff", "sq", "fc", "rfac", "bfac", "sfac");
@@ -67,6 +71,7 @@ class ParameterExpressionLibraryTest {
         for (String p : GR4J_PARAMS) names.add("node.mygr4j." + p);
         for (String p : SACRAMENTO_PARAMS) names.add("node.mysac." + p);
         for (String p : AWBM_PARAMS) names.add("node.myawbm." + p);
+        for (String p : AWBM_TWO_TAP_PARAMS) names.add("node.mytwotap." + p);
         for (String p : SURM_PARAMS) names.add("node.mysurm." + p);
         for (String p : RAINFALL_PARAMS) names.add("node.mygr4j." + p);
         for (String p : RAINFALL_PARAMS) names.add("node.mysac." + p);

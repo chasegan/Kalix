@@ -64,6 +64,13 @@ public class ParameterExpressionLibrary {
         Map.entry("k_base", "lin_range(g(#),0,1)"),
         Map.entry("k_surf", "lin_range(g(#),0,1)"),
 
+        // AWBM two-tap variant (variant = two_tap): recharge taper and the upper tap
+        Map.entry("inf_base", "lin_range(g(#),0,1)"),
+        Map.entry("gw_sat", "lin_range(g(#),0,300)"),
+        Map.entry("gw_max", "lin_range(g(#),10,500)"),
+        Map.entry("k2", "lin_range(g(#),0,1)"),
+        Map.entry("h_gw", "lin_range(g(#),0,200)"),
+
         // SURM parameters (ranges follow the Source SRG table for SURM)
         Map.entry("imp_fraction", "lin_range(g(#),0,1)"),
         Map.entry("impsc", "lin_range(g(#),0,5)"),

@@ -34,6 +34,19 @@ class RainfallRunoffParamsDefinitionTest {
     }
 
     @Test
+    void awbmTwoTapParamsAreChosenByValueCount() {
+        String value = "0.134, 0.433, 0.075, 0.762, 1.524, 0.76, 90, 100, 0.98, 0.80, 22";
+        TablePropertyDefinition def = TablePropertyRegistry.getInstance()
+                .findHandler("awbm", "params", value);
+        assertNotNull(def, "no params table view registered for awbm two_tap");
+        assertArrayEquals(new String[] {
+                "a1", "a2", "c1", "c2", "c3", "inf_base", "gw_sat", "gw_max", "k_base", "k2", "h_gw"},
+                def.getRowNames());
+        assertEquals(11, def.getValuesPerLine());
+        assertEquals("22", def.parseValues(value)[10][0]);
+    }
+
+    @Test
     void surmParamsAreRegisteredInEngineOrder() {
         String value = "0, 1, 97, 360, 0.5, 79, 1, 0.5, 0";
         TablePropertyDefinition def = TablePropertyRegistry.getInstance()

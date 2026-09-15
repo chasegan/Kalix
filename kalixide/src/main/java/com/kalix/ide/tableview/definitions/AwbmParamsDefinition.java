@@ -45,4 +45,10 @@ public class AwbmParamsDefinition extends AbstractVerticalParamsDefinition {
     public String getWindowTitle() {
         return "AWBM Parameters";
     }
+
+    /** Eight values is the standard variant; eleven belongs to the two-tap definition. */
+    @Override
+    public boolean canHandleValue(String value) {
+        return parseNumericValues(value).length != AwbmTwoTapParamsDefinition.PARAMETER_COUNT;
+    }
 }

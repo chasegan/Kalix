@@ -1,6 +1,7 @@
 package com.kalix.ide.tableview;
 
 import com.kalix.ide.tableview.definitions.AwbmParamsDefinition;
+import com.kalix.ide.tableview.definitions.AwbmTwoTapParamsDefinition;
 import com.kalix.ide.tableview.definitions.Gr4jParamsDefinition;
 import com.kalix.ide.tableview.definitions.LinearCombinationDataRefDefinition;
 import com.kalix.ide.tableview.definitions.LossTableDefinition;
@@ -47,6 +48,7 @@ public class TablePropertyRegistry {
     private void registerBuiltInDefinitions() {
         register(new SacramentoParamsDefinition());
         register(new Gr4jParamsDefinition());
+        register(new AwbmTwoTapParamsDefinition()); // eleven values (variant = two_tap); registered first, see class doc
         register(new AwbmParamsDefinition());
         register(new SurmParamsDefinition());
         register(new StorageDimensionsDefinition());
