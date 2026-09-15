@@ -81,6 +81,47 @@ class TimeSeriesRendererGapTest {
     }
 
     @Test
+    void stepRunsToNextSlotWhenContiguousOrMissingInArray() {
+        // 1, NaN, 3: the step at 0 ends where the missing slot begins, leaving that slot blank.
+        TimeSeriesData s = new TimeSeriesData(new long[]{0, DAY, 2 * DAY}, new double[]{1, NaN, 3});
+        long thr = TimeSeriesRenderer.gapThresholdFor(s, false);
+
+        assertEquals(DAY, TimeSeriesRenderer.stepEnd(s, 0, thr, s.getNominalIntervalMillis()));
+    }
+
+    @Test
+    void stepIsOneCadenceWideAtTimeJumpAndArrayEnd() {
+        TimeSeriesData s = new TimeSeriesData(
+            new long[]{0, DAY, 2 * DAY, 10 * DAY, 11 * DAY}, new double[]{1, 2, 3, 4, 5});
+        long thr = TimeSeriesRenderer.gapThresholdFor(s, false);
+        long nominal = s.getNominalIntervalMillis();
+
+        assertEquals(3 * DAY, TimeSeriesRenderer.stepEnd(s, 2, thr, nominal), "time jump: one cadence wide");
+        assertEquals(12 * DAY, TimeSeriesRenderer.stepEnd(s, 4, thr, nominal), "array end: one cadence wide");
+    }
+
+    @Test
+    void bridgedStepOnlyClosesAtArrayEnd() {
+        TimeSeriesData s = new TimeSeriesData(
+            new long[]{0, DAY, 2 * DAY, 10 * DAY, 11 * DAY}, new double[]{1, 2, 3, 4, 5});
+        long thr = TimeSeriesRenderer.gapThresholdFor(s, true);
+
+        assertEquals(10 * DAY, TimeSeriesRenderer.stepEnd(s, 2, thr, s.getNominalIntervalMillis()),
+            "bridging never treats a jump as a gap");
+    }
+
+    @Test
+    void irregularLastStepHasZeroWidth() {
+        long h = 60L * 60 * 1000;
+        long[] ts = {0, h, 7 * h, 50 * h, 51 * h, 200 * h, 333 * h, 334 * h};
+        TimeSeriesData s = new TimeSeriesData(ts, new double[ts.length]);
+        long thr = TimeSeriesRenderer.gapThresholdFor(s, false);
+
+        assertEquals(50 * h, TimeSeriesRenderer.stepEnd(s, 2, thr, 0), "irregular step runs to the next point");
+        assertEquals(334 * h, TimeSeriesRenderer.stepEnd(s, 7, thr, 0), "no cadence: last step is zero-width");
+    }
+
+    @Test
     void contiguousSeriesHasNoOrphans() {
         TimeSeriesData s = new TimeSeriesData(new long[]{0, DAY, 2 * DAY}, new double[]{1, 2, 3});
         long thr = TimeSeriesRenderer.gapThresholdFor(s, false);
