@@ -15,6 +15,9 @@ pip: "pip install kalix==0.4.5"
     - Plot and data table appear on the right hand side.
     - Right-click `Find` menu allows searching by value or date.
     - Big files are openned as read-only (default threshold = 50MB, Preferences → Editor → Load and Save).
+    - Pixie (`.pxt`) files open the same way: manifest in the editor, decoded series in the table and plot.
+    - Data files get CSV syntax highlighting.
+    - `.res.csv` results show their extended header in the read-only view.
 - New optional `forced_level` property for storage nodes allows modeller to force end-of-timestep level.
     - Output `adjustment_volume` indicates all changes to volume due to forcing, and `sid_flux` (storage inflow derivation) reports the adjustment volume on the interior of the supplied data.
     - NaNs are read as "not forced" for the timestep.
@@ -28,12 +31,18 @@ pip: "pip install kalix==0.4.5"
 - New (ALPHA IMPLEMENTATION) dead storage and evap loss features in routing nodes:
     - `dead_storage` allows modeller to define a dead storage volume.
     - `loss_rate` property defines the loss in ML/step using an expression and is distributed equally across all reach divisions.
+    - Output `loss` reports the loss actually taken (it is bounded so outflow cannot go negative).
 - New optional `order_factor` for regulated user nodes. This is a factor applied to the node's order as it is sent upstream. 
     - The node's own `order`, `order_due`, and account debits and delivery logic are unchanged.
+    - Available as a static output (`node.<user>.order_factor`).
 - New `kalix convert` CLI command for data file conversions:
     - convert timeseries data files between known file types (e.g. `kalix convert flows.csv flows.pxt`).
     - matching `kalix.convert()` Python function.
+- File tree enhancements:
+    - Right-click `Zip` and `Unzip`.
+    - `New file/folder...` on the root folder, and drag-and-drop onto empty space targets the root.
 - Plotting / run manager enhancements:
+    - New histogram-style line shape -> `stepped`. Daily values report at the start of interval (standard) and line extends across interval.
     - Every tab now carries plot & stats.
     - New seasonal mask filters data to chosen months of the year, using the calendar button in the plot toolbar.
     - Automatic data masking: selecting a plot type now applies that type's default overlapping-data mask. Badges in the plot-type dropdown show whether a mask will apply.
@@ -41,12 +50,15 @@ pip: "pip install kalix==0.4.5"
     - Plot tab `Reset` now preserves tab's name, position and undo history.
     - Run & data tree tick-boxes now stay in sync with the plot through tab reset, undo/redo, and tab duplication.
     - Plot source `[Last]` self-heals upon deleting the newest run, and re-points to the next most recent run.
+    - New `Symlog` plot type: linear between -10 and 10, log10 outside.
+    - Better minor ticks for Log axes.
+    - Plot undo history extended to 1000 steps (was 50).
 - Minor fixes:
     - Comments: `#` starts a comment on any line, including after a section header (`[node.weir] # gauge site`) and after a `[data]` or `[outputs]` entry. Previously a comment after a header silently swallowed the node. `;` is not a comment character in Kalix — the linter now says so instead of letting the engine misread the line.
     - Hover tips in the editor no longer linger after you minimise the window or close the tab, and they follow the theme's colours.
     - Routing `pwl` tables accept a header row (`Flow [ML], Travel Time [steps]`).
     - Table View was previously not refreshing on optimiser's `Copy to Main Window` or after a file reload. Fixed.
+    - Storage `ds_N_force_release` and `exists` are now documented and known to the linter (it warned "Unknown parameter" on valid syntax).
 - Performance:
     - Linting and the map re-parse are quicker on large models.
     - Results CSVs now use scientific notation for very small and very large values (e.g. `1.5e-7`). Precision is retained - but the files are now smaller.
-    
