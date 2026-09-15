@@ -40,6 +40,8 @@ public class TimeSeriesRenderer {
     private boolean connectAcrossGaps = false;
     private boolean showOrphanMarkers = false;
 
+    private LineShape lineShape = LineShape.STRAIGHT;
+
     // A time gap wider than nominalInterval * GAP_FACTOR is treated as missing data, not a sample.
     private static final double GAP_FACTOR = 1.5;
 
@@ -127,7 +129,12 @@ public class TimeSeriesRenderer {
             // (full-res only runs below the LOD density).
             boolean pointsDrawn = renderMode == SeriesRenderMode.POINTS
                 || renderMode == SeriesRenderMode.LINE_AND_POINTS || showDataPoints;
-            if (showOrphanMarkers && !connectAcrossGaps && !pointsDrawn) {
+            // A stepped series draws an isolated point as a horizontal line one cadence wide, so it
+            // is already visible - unless the series is irregular and that line has zero width.
+            // (If points aren't drawn, the mode is LINE, so the series is a line.)
+            boolean isolatedStepVisible = lineShape == LineShape.STEPPED
+                && series.getNominalIntervalMillis() > 0;
+            if (showOrphanMarkers && !connectAcrossGaps && !pointsDrawn && !isolatedStepVisible) {
                 drawLineOrphans(g2d, series, viewport, strategy.indexRange, gapThreshold, style);
             }
         } else {
@@ -179,6 +186,19 @@ public class TimeSeriesRenderer {
         return leftBreak && rightBreak;
     }
 
+    /** Where the step beginning at valid point {@code p} ends (ms), for a path that breaks after
+     *  {@code p}. If the next array slot is within the gap threshold the step runs to it — so a
+     *  missing value stored in the array leaves exactly its own slot blank. Otherwise (a time
+     *  jump, or the end of the array) the step is one nominal interval wide; zero-width when the
+     *  series is irregular and has no cadence. */
+    static long stepEnd(TimeSeriesData series, int p, long gapThreshold, long nominal) {
+        long[] ts = series.getTimestamps();
+        if (p + 1 < ts.length && (ts[p + 1] - ts[p]) <= gapThreshold) {
+            return ts[p + 1];
+        }
+        return ts[p] + nominal;
+    }
+
     private void renderFullResolution(Graphics2D g2d, TimeSeriesData series, ViewPort viewport,
                                     TimeSeriesData.IndexRange indexRange, SeriesRenderMode renderMode,
                                     long gapThreshold, boolean connectAcrossGaps) {
@@ -199,8 +219,14 @@ public class TimeSeriesRenderer {
         int extendedEndIndex = Math.min(timestamps.length, indexRange.endIndex + 1);
 
         // Determine if we should draw lines and/or points
-        boolean drawLines = (renderMode == SeriesRenderMode.LINE || renderMode == SeriesRenderMode.LINE_AND_POINTS);
-        boolean drawPoints = (renderMode == SeriesRenderMode.POINTS || renderMode == SeriesRenderMode.LINE_AND_POINTS || showDataPoints);
+        boolean drawLines = renderMode == SeriesRenderMode.LINE
+                            || renderMode == SeriesRenderMode.LINE_AND_POINTS;
+        boolean drawPoints = renderMode == SeriesRenderMode.POINTS
+                             || renderMode == SeriesRenderMode.LINE_AND_POINTS
+                             || showDataPoints;
+        boolean drawStepped = drawLines && lineShape == LineShape.STEPPED;
+        // Step width at a break; gapThreshold is MAX when bridging, so read the cadence directly.
+        long nominal = series.getNominalIntervalMillis();
 
         Path2D.Double path = null;
         if (drawLines) {
@@ -209,12 +235,18 @@ public class TimeSeriesRenderer {
         boolean pathStarted = false;
         int prevScreenX = 0, prevScreenY = 0;
         long prevTimestamp = 0;
+        int prevIndex = -1;
 
         for (int i = extendedStartIndex; i < extendedEndIndex; i++) {
             if (!validPoints[i]) {
                 // Missing value - break the path, unless we're bridging across all gaps (then we
-                // simply skip the point and let the next valid point continue the line).
+                // simply skip the point and let the next valid point continue the line; for a
+                // stepped series that holds the last value until the next valid point).
                 if (!connectAcrossGaps) {
+                    if (drawStepped && pathStarted) {
+                        closeStep(path, series, viewport, prevIndex, prevScreenX, prevScreenY,
+                                  gapThreshold, nominal, clipLeft, clipRight, clipTop, clipBottom);
+                    }
                     pathStarted = false;
                 }
                 continue;
@@ -231,7 +263,26 @@ public class TimeSeriesRenderer {
                 // that span is missing data and should read as a hole, not a straight bridge.
                 // (Missing/NaN points already broke the path via the validPoints check above.)
                 boolean gapBreak = pathStarted && (timestamp - prevTimestamp) > gapThreshold;
-                if (!pathStarted || gapBreak) {
+
+                if (drawStepped) {
+                    // Each value holds from its own timestamp to the start of the next step.
+                    // The horizontal line's end and the vertical join both use the next point's
+                    // timestamp-derived screen X, so rounding can't open a gap between them.
+                    if (pathStarted && !gapBreak) {
+                        // Extend from previous step horizontally, then the vertical connection.
+                        drawClippedLine(path, prevScreenX, prevScreenY, screenX, prevScreenY,
+                                        clipLeft, clipRight, clipTop, clipBottom);
+                        drawClippedLine(path, screenX, prevScreenY, screenX, screenY,
+                                        clipLeft, clipRight, clipTop, clipBottom);
+                    } else {
+                        if (gapBreak) {
+                            closeStep(path, series, viewport, prevIndex, prevScreenX, prevScreenY,
+                                      gapThreshold, nominal, clipLeft, clipRight, clipTop, clipBottom);
+                        }
+                        path.moveTo(screenX, screenY);
+                        pathStarted = true;
+                    }
+                } else if (!pathStarted || gapBreak) {
                     // Start new path segment
                     // Always start the path, even if the point is outside bounds
                     // The clipping will handle drawing only the visible portion
@@ -240,13 +291,14 @@ public class TimeSeriesRenderer {
                 } else {
                     // Draw line from previous point to current point with clipping
                     drawClippedLine(path, prevScreenX, prevScreenY, screenX, screenY,
-                                  clipLeft, clipRight, clipTop, clipBottom);
+                                    clipLeft, clipRight, clipTop, clipBottom);
                 }
             }
 
             prevScreenX = screenX;
             prevScreenY = screenY;
             prevTimestamp = timestamp;
+            prevIndex = i;
 
             // Draw data points if enabled and point is visible (only for original range)
             if (drawPoints &&
@@ -259,9 +311,28 @@ public class TimeSeriesRenderer {
             }
         }
 
+        // Final step - extend horizontally to end
+        if (drawStepped && pathStarted) {
+            closeStep(path, series, viewport, prevIndex, prevScreenX, prevScreenY,
+                      gapThreshold, nominal, clipLeft, clipRight, clipTop, clipBottom);
+        }
+
         if (drawLines && path != null) {
             g2d.draw(path);
         }
+    }
+
+    /** Draws the horizontal line of the step starting at valid point {@code p}, where the path breaks
+     *  after it. See {@link #stepEnd}. */
+    private void closeStep(Path2D.Double path, TimeSeriesData series, ViewPort viewport, int p,
+                           int screenX, int screenY, long gapThreshold, long nominal,
+                           int clipLeft, int clipRight, int clipTop, int clipBottom) {
+        long end = stepEnd(series, p, gapThreshold, nominal);
+        if (end <= series.getTimestamps()[p]) {
+            return;
+        }
+        int endX = viewport.timeToScreenX(end);
+        drawClippedLine(path, screenX, screenY, endX, screenY, clipLeft, clipRight, clipTop, clipBottom);
     }
 
     private boolean isPointInBounds(int x, int y, int left, int right, int top, int bottom) {
@@ -566,6 +637,8 @@ public class TimeSeriesRenderer {
     public boolean isConnectAcrossGaps() { return connectAcrossGaps; }
     public void setShowOrphanMarkers(boolean show) { this.showOrphanMarkers = show; }
     public boolean isShowOrphanMarkers() { return showOrphanMarkers; }
+    public void setLineShape(LineShape shape) { this.lineShape = shape; }
+    public LineShape getLineShape() { return lineShape; }
 
     // Series render mode management
     public void setSeriesRenderMode(SeriesRef seriesRef, SeriesRenderMode renderMode) {

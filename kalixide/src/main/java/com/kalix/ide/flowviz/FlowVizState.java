@@ -2,6 +2,7 @@ package com.kalix.ide.flowviz;
 
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.SourceRef;
+import com.kalix.ide.flowviz.rendering.LineShape;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.stats.MaskMode;
 import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
@@ -40,6 +41,7 @@ public final class FlowVizState {
     private final AggregationMethod aggregationMethod;
     private final PlotType plotType;
     private final YAxisScale yAxisScale;
+    private final LineShape lineShape;
     private final MaskMode maskMode;
     private final SeasonalMaskMode seasonalMaskMode;
     private final boolean autoYMode;
@@ -56,6 +58,7 @@ public final class FlowVizState {
                      AggregationMethod aggregationMethod,
                      PlotType plotType,
                      YAxisScale yAxisScale,
+                     LineShape lineShape,
                      MaskMode maskMode,
                      SeasonalMaskMode seasonalMaskMode,
                      boolean autoYMode,
@@ -72,6 +75,7 @@ public final class FlowVizState {
         this.aggregationMethod = aggregationMethod;
         this.plotType = plotType;
         this.yAxisScale = yAxisScale;
+        this.lineShape = lineShape;
         this.maskMode = maskMode;
         this.seasonalMaskMode = seasonalMaskMode;
         this.autoYMode = autoYMode;
@@ -90,6 +94,7 @@ public final class FlowVizState {
                                     AggregationMethod aggregationMethod,
                                     PlotType plotType,
                                     YAxisScale yAxisScale,
+                                    LineShape lineShape,
                                     MaskMode maskMode,
                                     SeasonalMaskMode seasonalMaskMode,
                                     boolean autoYMode,
@@ -100,7 +105,7 @@ public final class FlowVizState {
         double max = viewport != null ? viewport.getMaxValue() : 0;
 
         return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod,
-            aggregationMethod, plotType, yAxisScale, maskMode, seasonalMaskMode, autoYMode,
+            aggregationMethod, plotType, yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode,
             startTime, endTime, min, max);
     }
 
@@ -110,6 +115,7 @@ public final class FlowVizState {
     public AggregationMethod getAggregationMethod() { return aggregationMethod; }
     public PlotType getPlotType() { return plotType; }
     public YAxisScale getYAxisScale() { return yAxisScale; }
+    public LineShape getLineShape() { return lineShape; }
     public MaskMode getMaskMode() { return maskMode; }
     public SeasonalMaskMode getSeasonalMaskMode() { return seasonalMaskMode; }
     public boolean isAutoYMode() { return autoYMode; }
@@ -133,6 +139,7 @@ public final class FlowVizState {
             && aggregationMethod == s.aggregationMethod
             && plotType == s.plotType
             && yAxisScale == s.yAxisScale
+            && lineShape == s.lineShape
             && maskMode == s.maskMode
             && Objects.equals(seasonalMaskMode, s.seasonalMaskMode);
     }
@@ -140,7 +147,7 @@ public final class FlowVizState {
     @Override
     public int hashCode() {
         return Objects.hash(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod,
-            plotType, yAxisScale, maskMode, seasonalMaskMode, autoYMode,
+            plotType, yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode,
             startTimeMs, endTimeMs, minValue, maxValue);
     }
 }
