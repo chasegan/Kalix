@@ -1,0 +1,15 @@
+---
+version: "0.4.6"
+date: TBD
+prerelease: false
+assets:
+  Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.6/KalixIDE-Windows-0.4.6-Portable.zip"
+  macOS: "https://github.com/chasegan/Kalix/releases/download/v0.4.6/KalixIDE-macOS-0.4.6-Portable.zip"
+  Linux: "https://github.com/chasegan/Kalix/releases/download/v0.4.6/KalixIDE-Linux-0.4.6-Portable.zip"
+pip: "pip install kalix==0.4.6"
+---
+
+- New `allocation_pct` output for accounts and account groups: allocation as a percentage of size (100 = full entitlement; can exceed 100).
+    - `acc.<account>.allocation_pct` for each account, and `acc.<group>.allocation_pct` for the group as a whole (total allocation over total size).
+    - Reports the allocation actually held, which can differ from the percentage an `allocate` action announced (`ras.<name>.pct`).
+    - Reads `NaN` for a zero-size account or group.
