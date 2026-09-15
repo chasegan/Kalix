@@ -5,6 +5,8 @@ import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.rendering.PlotColors;
+import com.kalix.ide.flowviz.rendering.SeriesRenderMode;
 import com.kalix.ide.flowviz.rendering.TimeSeriesRenderer;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
@@ -164,7 +166,7 @@ public class FlowVizPanel extends JPanel {
 
     public FlowVizPanel() {
         // Background is theme-driven; set here and re-resolved in updateUI() on theme switch.
-        setBackground(com.kalix.ide.flowviz.rendering.PlotColors.fromUIManager().background);
+        setBackground(PlotColors.fromUIManager().background);
 
         // Initialize data structures
         visibleSeries = new java.util.ArrayList<>();
@@ -216,7 +218,7 @@ public class FlowVizPanel extends JPanel {
         super.updateUI();
         // Re-resolve the theme's plot background after a LaF/theme switch (ThemeManager
         // runs SwingUtilities.updateComponentTreeUI over open FlowViz windows).
-        setBackground(com.kalix.ide.flowviz.rendering.PlotColors.fromUIManager().background);
+        setBackground(PlotColors.fromUIManager().background);
     }
 
     @Override
@@ -575,7 +577,7 @@ public class FlowVizPanel extends JPanel {
             renderer.render(g2d, displayDataSet, currentViewport);
         } else {
             // Fallback to empty state
-            g2d.setColor(com.kalix.ide.flowviz.rendering.PlotColors.fromUIManager().emptyForeground);
+            g2d.setColor(PlotColors.fromUIManager().emptyForeground);
             g2d.setFont(new Font("Arial", Font.PLAIN, 16));
 
             String message = "No data loaded";
@@ -737,7 +739,7 @@ public class FlowVizPanel extends JPanel {
     /**
      * Sets the render mode for a specific series (LINE, POINTS, or LINE_AND_POINTS).
      */
-    public void setSeriesRenderMode(SeriesRef ref, com.kalix.ide.flowviz.rendering.SeriesRenderMode renderMode) {
+    public void setSeriesRenderMode(SeriesRef ref, SeriesRenderMode renderMode) {
         if (renderer != null) {
             renderer.setSeriesRenderMode(ref, renderMode);
             repaint();
@@ -747,11 +749,11 @@ public class FlowVizPanel extends JPanel {
     /**
      * Gets the render mode for a specific series.
      */
-    public com.kalix.ide.flowviz.rendering.SeriesRenderMode getSeriesRenderMode(SeriesRef ref) {
+    public SeriesRenderMode getSeriesRenderMode(SeriesRef ref) {
         if (renderer != null) {
             return renderer.getSeriesRenderMode(ref);
         }
-        return com.kalix.ide.flowviz.rendering.SeriesRenderMode.LINE;
+        return SeriesRenderMode.LINE;
     }
 
     /**
@@ -1256,7 +1258,7 @@ public class FlowVizPanel extends JPanel {
 
             // Apply viewport zoom/pan
             if (currentViewport != null) {
-                currentViewport = new com.kalix.ide.flowviz.rendering.ViewPort(
+                currentViewport = new ViewPort(
                     state.getStartTimeMs(), state.getEndTimeMs(),
                     state.getMinValue(), state.getMaxValue(),
                     currentViewport.getPlotX(), currentViewport.getPlotY(),

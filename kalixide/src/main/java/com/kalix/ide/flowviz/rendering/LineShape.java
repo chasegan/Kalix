@@ -6,10 +6,10 @@ package com.kalix.ide.flowviz.rendering;
  * does not affect {@link SeriesRenderMode#POINTS} render mode.
  */
 public enum LineShape {
-    /// Straight segments from each value to the next (default).
+    /** Straight segments from each value to the next (default). */
     STRAIGHT("Straight"),
 
-    /// Each value held flat from its own timestamp to the start of the next time step.
+    /** Each value held flat from its own timestamp to the start of the next time step. */
     STEPPED("Stepped");
 
     private final String displayName;

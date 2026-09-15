@@ -5,12 +5,12 @@ package com.kalix.ide.flowviz.rendering;
  * render. The shape of any line drawn is a separate, plot-wide setting: {@link LineShape}.
  */
 public enum SeriesRenderMode {
-    /// Draw lines connecting data points (default).
+    /** Draw lines connecting data points (default). */
     LINE,
 
-    /// Draw only individual data points without connecting lines.
+    /** Draw only individual data points without connecting lines. */
     POINTS,
 
-    /// Draw both lines and points.
+    /** Draw both lines and points. */
     LINE_AND_POINTS
 }
