@@ -108,6 +108,19 @@ node.my_awbm.a1 = lin_range(g(1), 0, 1)
 node.my_awbm.a2 = lin_range(g(2), 0, 1) * (1 - lin_range(g(1), 0, 1))
 ```
 
+An AWBM node with `variant = two_tap` reports eleven parameters instead: the same `a1`, `a2`, `c1`, `c2`, `c3`, then the groundwater parameters below. See [the two-tap variant](awbm.md#the-two-tap-variant) for what each means. `k_surf` and `bfi` do not exist in this variant.
+
+| Parameter | Description | Common search range |
+| --- | --- | --- |
+| `inf_base` | Recharge fraction below `gw_sat` | 0 – 1, linear |
+| `gw_sat` | Groundwater depth where recharge starts to fall (mm) | 0 – 300, linear |
+| `gw_max` | Groundwater depth where recharge reaches zero (mm) | 10 – 500, linear; must exceed `gw_sat` |
+| `k_base` | Lower-tap retention (slow) | 0 – 1, linear |
+| `k2` | Upper-tap retention (fast) | 0 – 1, linear |
+| `h_gw` | Depth of the upper tap (mm) | 0 – 200, linear |
+
+A candidate with `gw_max` at or below `gw_sat` is infeasible. When the capacities are written as factors of a `cap_ave` expression, calibrate the average capacity by tying `c1`, `c2` and `c3` to one gene, since `cap_ave` itself is not a parameter.
+
 AWBM nodes whose rainfall input is a linear combination of stations also expose the [rainfall input parameters](#rainfall-input-parameters-rf_bias-rf_di) below.
 
 ## SURM nodes (`type = surm`)
