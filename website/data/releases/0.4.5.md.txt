@@ -9,6 +9,7 @@ assets:
 pip: "pip install kalix==0.4.5"
 ---
 
+- New online help tool at <kalix.org/help/>
 - New data view (instead of map) when you open a data file!
     - The model map & new data view area now live inside each model's tab. This gives more horizontal space for tab names. 
     - The raw text visible in the text editor. 
