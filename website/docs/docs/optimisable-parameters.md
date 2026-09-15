@@ -22,7 +22,7 @@ There are two families of address:
 | Address | Meaning |
 | --- | --- |
 | `const.<name>` | A model constant from the `[const]` section |
-| `node.<name>.<param>` | A parameter of a named node. Supported by `gr4j`, `sacramento` and `routing` nodes |
+| `node.<name>.<param>` | A parameter of a named node. Supported by `gr4j`, `sacramento`, `awbm`, `surm` and `routing` nodes |
 
 KalixIDE lists every valid address for the loaded model (via the engine's `get_optimisable_params` command), which is the quickest way to discover what a given model exposes.
 
@@ -85,6 +85,49 @@ All seventeen Sacramento parameters are optimisable. The ranges below are typica
 
 Sacramento nodes whose rainfall input is a linear combination of stations also expose the [rainfall input parameters](#rainfall-input-parameters-rf_bias-rf_di) below.
 
+## AWBM nodes (`type = awbm`)
+
+All eight AWBM parameters are optimisable; see the [AWBM node page](awbm.md) for what each means.
+
+| Parameter | Description | Common search range |
+| --- | --- | --- |
+| `a1` | Partial area of surface store 1 | 0 – 0.5, linear (see note) |
+| `a2` | Partial area of surface store 2 | 0 – 0.5, linear (see note) |
+| `c1` | Capacity of surface store 1 (mm) | 0 – 50, linear |
+| `c2` | Capacity of surface store 2 (mm) | 0 – 200, linear |
+| `c3` | Capacity of surface store 3 (mm) | 0 – 500, linear |
+| `bfi` | Baseflow index | 0 – 1, linear |
+| `k_base` | Baseflow recession constant | 0 – 1, linear |
+| `k_surf` | Surface recession constant | 0 – 1, linear |
+
+The third partial area is `1 − a1 − a2`, so a candidate with `a1 + a2 > 1` is infeasible and scores infinity. Independent bounds of 0 – 1 on both would waste roughly a third of evaluations on such candidates; bounding each at 0.5 avoids that and still covers the usual values. To search the full triangle instead, tie the two parameters through one gene:
+
+```ini
+[parameters]
+node.my_awbm.a1 = lin_range(g(1), 0, 1)
+node.my_awbm.a2 = lin_range(g(2), 0, 1) * (1 - lin_range(g(1), 0, 1))
+```
+
+AWBM nodes whose rainfall input is a linear combination of stations also expose the [rainfall input parameters](#rainfall-input-parameters-rf_bias-rf_di) below.
+
+## SURM nodes (`type = surm`)
+
+All nine SURM parameters are optimisable. The ranges below are the calibration bounds given in the Source scientific reference guide for SURM; see the [SURM node page](surm.md) for what each parameter means.
+
+| Parameter | Description | Common search range |
+| --- | --- | --- |
+| `imp_fraction` | Impervious fraction | 0 – 1, linear (usually fixed from land use rather than calibrated) |
+| `impsc` | Impervious initial loss (mm) | 0 – 5, linear |
+| `smsc` | Soil moisture store capacity (mm) | 1 – 500, linear |
+| `coeff` | Maximum infiltration rate (mm/day) | 0 – 400, linear |
+| `sq` | Infiltration exponent | 0 – 10, linear |
+| `fc` | Field capacity (mm) | 0 – 500, linear |
+| `rfac` | Recharge factor | 0 – 1, linear |
+| `bfac` | Baseflow factor | 0 – 1, linear |
+| `sfac` | Deep-seepage factor | 0 – 1, linear |
+
+SURM nodes whose rainfall input is a linear combination of stations also expose the [rainfall input parameters](#rainfall-input-parameters-rf_bias-rf_di) below.
+
 ## Routing nodes (`type = routing`)
 
 A routing node exposes whichever parameter family matches how it is configured — never both:
@@ -117,7 +160,7 @@ node.reach_4.pwl_tt_3 = lin_range(g(4), 0, 10)
 
 ## Rainfall input parameters (`rf_bias`, `rf_d<i>`)
 
-When a GR4J or Sacramento node's `rain` input is a **linear combination of stations** (`rain = w1 * data.a + w2 * data.b + ...`), two derived parameter families become available on the node:
+When a rainfall-runoff node's (GR4J, Sacramento, AWBM or SURM) `rain` input is a **linear combination of stations** (`rain = w1 * data.a + w2 * data.b + ...`), two derived parameter families become available on the node:
 
 | Parameter | Meaning | Common search range |
 | --- | --- | --- |
@@ -143,7 +186,7 @@ it does not expose the coefficients to the optimiser directly. Instead the n coe
 
 This split exists for two reasons. First, total input volume is the dominant sensitivity in a calibration, while the mix between nearby stations is second-order; factoring the sum out as its own parameter aligns the search axes with that structure instead of entangling the two. Second, Kalix optimisers search a box (each gene in `[0, 1]`), but "shares that are non-negative and sum to one" is not a box — the distribution parameters exist to map a box onto that constraint so the optimiser never has to see it.
 
-The section is written in terms of the rainfall parameters because that is where the scheme currently surfaces (the `rain` input of `gr4j` and `sacramento` nodes), but the parameterisation itself applies to any linear combination of input data — it is about weighted sums, not about rainfall specifically.
+The section is written in terms of the rainfall parameters because that is where the scheme currently surfaces (the `rain` input of the rainfall-runoff nodes), but the parameterisation itself applies to any linear combination of input data — it is about weighted sums, not about rainfall specifically.
 
 ### From parameters to weights
 

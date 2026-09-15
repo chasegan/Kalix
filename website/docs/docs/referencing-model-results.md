@@ -101,7 +101,7 @@ timestep. They read the same way, as `node.<name>.<property>`:
 
 | Property | Node types | Description |
 | --- | --- | --- |
-| `area` | GR4J, Sacramento | Catchment area [km2] |
+| `area` | GR4J, Sacramento, AWBM, SURM | Catchment area [km2] |
 | `x` | Routing | Inflow bias used by the storage routing solver |
 | `typical_regulated_flow` | Routing | Representative regulated flow [ML] used to estimate travel time through the reach for order propagation (see [Ordering](ordering.md)) |
 | `dead_storage` | Routing | Water the reach holds at zero flow [ML] — the declared value |

@@ -10,6 +10,8 @@ Nodes are the active elements of a Kalix model — lumped river processes that m
 | --- | --- |
 | [GR4J](gr4j.md) | |
 | [Sacramento](sacramento.md) | |
+| [AWBM](awbm.md) | |
+| [SURM](surm.md) | |
 | [Inflow](inflow.md) | |
 | [Storage](storage.md) | |
 | [Confluence](confluence.md) | |
