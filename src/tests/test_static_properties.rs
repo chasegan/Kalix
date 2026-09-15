@@ -366,8 +366,9 @@ var.calc.v
 
 /// Static properties are captured once, from the INI text, and never
 /// refreshed. The optimiser sets node parameters directly (`node.<n>.<param>`
-/// addresses, supported by gr4j/sacramento/routing — the same node types this
-/// list draws from), so a property that were both static AND optimisable would
+/// addresses, supported by gr4j/sacramento/awbm/surm/routing — the same node
+/// types this list draws from), so a property that were both static AND
+/// optimisable would
 /// report its declared value while the run used the candidate value: a wrong
 /// number with no signal, which `performance.md §6.1-6.2` rules out.
 ///
@@ -389,6 +390,8 @@ fn static_properties_are_disjoint_from_optimisable_params() {
     let optimisable: Vec<(&str, Vec<String>)> = vec![
         ("gr4j", crate::nodes::gr4j_node::Gr4jNode::new().list_params()),
         ("sacramento", crate::nodes::sacramento_node::SacramentoNode::new().list_params()),
+        ("awbm", crate::nodes::awbm_node::AwbmNode::new().list_params()),
+        ("surm", crate::nodes::surm_node::SurmNode::new().list_params()),
         ("routing", nlm_routing.list_params()),
         ("routing", pwl_routing.list_params()),
     ];
