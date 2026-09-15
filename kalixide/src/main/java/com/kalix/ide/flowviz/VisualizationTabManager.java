@@ -973,6 +973,7 @@ public class VisualizationTabManager {
         // net result matches the source tab.
         vizPanel.setConnectAcrossGaps(settings.connectAcrossGaps);
         vizPanel.setShowOrphanMarkers(settings.showOrphanMarkers);
+        // Line shape is part of FlowVizState too, so the note on the seasonal mask applies.
         vizPanel.setLineShape(settings.lineShape);
         // Unconditional: the new legend manager starts from the global preference, which
         // may disagree with this tab's settings in either direction.

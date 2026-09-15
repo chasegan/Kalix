@@ -798,14 +798,22 @@ public class FlowVizPanel extends JPanel {
 
     /**
      * The shape of line series: straight segments, or steps (each value held flat from its own
-     * timestamp to the start of the next time step). STRAIGHT by default. A pure render toggle,
-     * like connect-across-gaps.
+     * timestamp to the start of the next time step). STRAIGHT by default. Part of the undoable
+     * plot state ({@link FlowVizState}), but render-only: no rebuild or re-fit, a repaint suffices.
      */
     public void setLineShape(LineShape shape) {
-        if (renderer != null) {
-            renderer.setLineShape(shape);
-            repaint();
+        // Guard on "no change" so re-picking the current shape pushes no history entry.
+        if (renderer == null || shape == null || shape == renderer.getLineShape()) {
+            return;
         }
+        renderer.setLineShape(shape);
+
+        if (restoringState) {
+            return; // restoreState / batchStateChange repaint and push once at the end
+        }
+
+        repaint();
+        pushState();
     }
 
     public LineShape getLineShape() {
@@ -1247,7 +1255,7 @@ public class FlowVizPanel extends JPanel {
             visibleSeries,
             checkedSourcesSupplier != null ? checkedSourcesSupplier.get() : Set.of(),
             aggregationPeriod, aggregationMethod,
-            plotType, yAxisScale, maskMode, seasonalMaskMode, autoYMode, currentViewport);
+            plotType, yAxisScale, getLineShape(), maskMode, seasonalMaskMode, autoYMode, currentViewport);
         if (stateHistory.pushIfChanged(state) && onHistoryChanged != null) {
             onHistoryChanged.run();
         }
@@ -1269,6 +1277,7 @@ public class FlowVizPanel extends JPanel {
             setAggregation(state.getAggregationPeriod(), state.getAggregationMethod());
             setPlotType(state.getPlotType());
             setYAxisScale(state.getYAxisScale());
+            setLineShape(state.getLineShape());
             setMaskMode(state.getMaskMode());
             setSeasonalMaskMode(state.getSeasonalMaskMode());
             autoYMode = state.isAutoYMode();
