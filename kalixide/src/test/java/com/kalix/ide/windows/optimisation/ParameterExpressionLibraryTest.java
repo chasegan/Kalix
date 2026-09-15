@@ -37,9 +37,18 @@ class ParameterExpressionLibraryTest {
             "pctim", "pfree", "rexp", "sarva", "side",
             "ssout", "uzfwm", "uzk", "uztwm", "zperc", "laguh");
 
+    /** {@code src/nodes/awbm_node.rs} — AWBM's fixed parameters. */
+    private static final List<String> AWBM_PARAMS = List.of(
+            "a1", "a2", "c1", "c2", "c3", "bfi", "k_base", "k_surf");
+
+    /** {@code src/nodes/surm_node.rs} — SURM's fixed parameters. */
+    private static final List<String> SURM_PARAMS = List.of(
+            "imp_fraction", "impsc", "smsc", "coeff", "sq", "fc", "rfac", "bfac", "sfac");
+
     /**
-     * {@code src/nodes/rainfall_weights.rs} — appended to GR4J and Sacramento when
-     * the rain input is a LinearCombination: a bias plus n-1 distribution params.
+     * {@code src/nodes/rainfall_weights.rs} — appended to the rainfall-runoff
+     * nodes (GR4J, Sacramento, AWBM, SURM) when the rain input is a
+     * LinearCombination: a bias plus n-1 distribution params.
      */
     private static final List<String> RAINFALL_PARAMS = List.of(
             "rf_bias", "rf_d0", "rf_d1", "rf_d2");
@@ -57,8 +66,12 @@ class ParameterExpressionLibraryTest {
         List<String> names = new ArrayList<>();
         for (String p : GR4J_PARAMS) names.add("node.mygr4j." + p);
         for (String p : SACRAMENTO_PARAMS) names.add("node.mysac." + p);
+        for (String p : AWBM_PARAMS) names.add("node.myawbm." + p);
+        for (String p : SURM_PARAMS) names.add("node.mysurm." + p);
         for (String p : RAINFALL_PARAMS) names.add("node.mygr4j." + p);
         for (String p : RAINFALL_PARAMS) names.add("node.mysac." + p);
+        for (String p : RAINFALL_PARAMS) names.add("node.myawbm." + p);
+        for (String p : RAINFALL_PARAMS) names.add("node.mysurm." + p);
         for (String p : ROUTING_NLM_PARAMS) names.add("node.myrouting." + p);
         for (String p : ROUTING_PWL_PARAMS) names.add("node.myrouting." + p);
         return names;
@@ -117,6 +130,18 @@ class ParameterExpressionLibraryTest {
                 ParameterExpressionLibrary.generateExpression("node.r1.pwl_tt_1", 2));
         assertEquals("lin_range(g(3),0,5)",
                 ParameterExpressionLibrary.generateExpression("node.r1.pwl_tt_47", 3));
+    }
+
+    // ==================== AWBM parameters ====================
+
+    @Test
+    @DisplayName("AWBM partial areas are bounded so every candidate satisfies a1 + a2 <= 1")
+    void testAwbmAreaExpressionsCannotSumAboveOne() throws Exception {
+        Range a1 = parse(ParameterExpressionLibrary.generateExpression("node.c.a1", 1), "a1");
+        Range a2 = parse(ParameterExpressionLibrary.generateExpression("node.c.a2", 2), "a2");
+        assertTrue(a1.min >= 0 && a2.min >= 0, "areas must be non-negative");
+        assertTrue(a1.max + a2.max <= 1.0,
+                "the engine rejects a1 + a2 > 1 as infeasible, so the defaults must not reach it");
     }
 
     // ==================== Type detection ====================
