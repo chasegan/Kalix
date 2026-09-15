@@ -1,7 +1,7 @@
 Backend: CLI (/Users/chas/github/Kalix/target/release/kalix)
 Searching for model files in: /Users/chas/github/Kalix/regression_tests/simulations
 ================================================================================
-Found 32 model file(s)
+Found 36 model file(s)
 
 Verifying: 10_different_data_periods/model_with_different_data_periods.ini
   [PASS] VERIFIED!
@@ -128,6 +128,26 @@ Verifying: 32_model_with_ras/model.ini
   [PASS] VERIFIED! (no-op save is byte-identical)
   [PASS] VERIFIED! (canonical resave round-trip)
 
+Verifying: 33_storage_forced_level/model.ini
+  [PASS] VERIFIED!
+  [PASS] VERIFIED! (no-op save is byte-identical)
+  [PASS] VERIFIED! (canonical resave round-trip)
+
+Verifying: 34_storage_sid_leslie/leslie.ini
+  [PASS] VERIFIED!
+  [PASS] VERIFIED! (no-op save is byte-identical)
+  [PASS] VERIFIED! (canonical resave round-trip)
+
+Verifying: 35_routing_loss_rate/model.ini
+  [PASS] VERIFIED!
+  [PASS] VERIFIED! (no-op save is byte-identical)
+  [PASS] VERIFIED! (canonical resave round-trip)
+
+Verifying: 36_routing_dead_storage/model.ini
+  [PASS] VERIFIED!
+  [PASS] VERIFIED! (no-op save is byte-identical)
+  [PASS] VERIFIED! (canonical resave round-trip)
+
 Verifying: 3_calibrate_constants/model.ini
   [PASS] VERIFIED!
   [PASS] VERIFIED! (no-op save is byte-identical)
@@ -166,9 +186,9 @@ Verifying: 9_hundred_sacr/kalix.ini
 ================================================================================
 SUMMARY
 ================================================================================
-Timestamp: 2026-09-04T19:45:16.392483
-Total: 96
-Passed: 96
+Timestamp: 2026-09-15T10:43:51.679172
+Total: 108
+Passed: 108
 Failed: 0
 
 [PASS] All models verified successfully!
