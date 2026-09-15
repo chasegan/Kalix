@@ -13,8 +13,9 @@ use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
 use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
-use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, Node};
+use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode, Node};
 use crate::hydrology::rainfall_runoff::gr4j::Gr4Variant;
+use crate::hydrology::rainfall_runoff::awbm::AwbmVariant;
 use crate::nodes::storage_node::OutletDefinition;
 use crate::nodes::storage_node::OutletDefinition::{OutletWithMOLAndCapacity, OutletWithMOL};
 
@@ -51,6 +52,8 @@ const DS_4_OUTLET: u8 = 3; //ds_4 is outlet 3
 pub(crate) const NODE_STATIC_F64_PROPERTIES: &[(&str, &str)] = &[
     ("gr4j", "area"),
     ("sacramento", "area"),
+    ("awbm", "area"),
+    ("surm", "area"),
     ("routing", "x"),
     ("routing", "typical_regulated_flow"),
     ("routing", "dead_storage"),
@@ -554,6 +557,108 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         }
                     }
                     NodeEnum::Gr4jNode(n)
+                }
+                "awbm" => {
+                    let mut n = AwbmNode::new();
+                    n.name = node_name.to_string();
+                    // `params` is applied after the loop because its length depends on `variant`,
+                    // and the two properties may appear in either order.
+                    let mut awbm_params: Option<(Vec<f64>, usize)> = None;
+                    for (name, ini_property) in ini_section.properties {
+                        let name_lower = name.to_lowercase();
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)
+                            .map_err(KalixIoError::Validate)?;
+                        if name_lower == "loc" {
+                            n.location = Location::from_str(v)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "type" {
+                        } else if name_lower == "ds_1" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET));
+                        } else if name_lower == "evap" {
+                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "rain" {
+                            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "area" {
+                            n.area_km2 = v.parse::<f64>().map_err(|_| KalixIoError::Parse(format!(
+                                "Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                ini_property.line_number, name, node_name
+                            )))?;
+                        } else if name_lower == "variant" {
+                            // Model formulation. Absent/"awbm" => Boughton's daily AWBM; "two_tap" => Hydro Tasmania's two-tap groundwater store.
+                            n.awbm_model.variant = AwbmVariant::from_name(v).ok_or_else(|| KalixIoError::Parse(format!(
+                                "Error on line {}: Unknown awbm variant '{}' for node '{}' (expected 'awbm' or 'two_tap')",
+                                ini_property.line_number, v, node_name
+                            )))?;
+                        } else if name_lower == "cap_ave" {
+                            n.cap_ave_input = DynamicInput::from_string(v, &mut model.data_cache, false, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "params" {
+                            let params = csv_string_to_f64_vec(v)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                            awbm_params = Some((params, ini_property.line_number));
+                        } else {
+                            return Err(KalixIoError::Validate(format!(
+                                "Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                ini_property.line_number, name, node_name
+                            )));
+                        }
+                    }
+                    if let Some((params, line_number)) = awbm_params {
+                        let expected = n.awbm_model.variant.parameter_count();
+                        if params.len() != expected {
+                            return Err(KalixIoError::Parse(format!(
+                                "Error on line {}: AWBM ({}) params must have {} values, got {}",
+                                line_number, n.awbm_model.variant.as_name(), expected, params.len()
+                            )));
+                        }
+                        n.awbm_model.set_params_by_vec(&params);
+                    }
+                    NodeEnum::AwbmNode(n)
+                }
+                "surm" => {
+                    let mut n = SurmNode::new();
+                    n.name = node_name.to_string();
+                    for (name, ini_property) in ini_section.properties {
+                        let name_lower = name.to_lowercase();
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number)
+                            .map_err(KalixIoError::Validate)?;
+                        if name_lower == "loc" {
+                            n.location = Location::from_str(v)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "type" {
+                        } else if name_lower == "ds_1" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET));
+                        } else if name_lower == "evap" {
+                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "rain" {
+                            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "area" {
+                            n.area_km2 = v.parse::<f64>().map_err(|_| KalixIoError::Parse(format!(
+                                "Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                ini_property.line_number, name, node_name
+                            )))?;
+                        } else if name_lower == "params" {
+                            let params = csv_string_to_f64_vec(v)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                            if params.len() != 9 {
+                                return Err(KalixIoError::Parse(format!(
+                                    "Error on line {}: SURM params must have 9 values, got {}",
+                                    ini_property.line_number, params.len()
+                                )));
+                            }
+                            n.surm_model.set_params_by_vec(&params);
+                        } else {
+                            return Err(KalixIoError::Validate(format!(
+                                "Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                ini_property.line_number, name, node_name
+                            )));
+                        }
+                    }
+                    NodeEnum::SurmNode(n)
                 }
                 "inflow" => {
                     let mut n = InflowNode::new();
@@ -1393,6 +1498,30 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 ini_doc.set_property(section_name.as_str(), "area", n.area_km2.to_string().as_str());
                 let params_str = format!("{}, {}, {}, {}", n.gr4j_model.x1, n.gr4j_model.x2, n.gr4j_model.x3, n.gr4j_model.x4);
                 ini_doc.set_property(section_name.as_str(), "params", params_str.as_str());
+            }
+            NodeEnum::AwbmNode(n) => {
+                let section_name = format!("node.{}", n.name);
+                ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
+                ini_doc.set_property(section_name.as_str(), "type", "awbm");
+                // Only emit the variant line when non-default, to keep standard AWBM models diff-clean.
+                if let AwbmVariant::TwoTap = n.awbm_model.variant {
+                    ini_doc.set_property(section_name.as_str(), "variant", "two_tap");
+                }
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "cap_ave", &n.cap_ave_input.to_string());
+                ini_doc.set_property(section_name.as_str(), "area", n.area_km2.to_string().as_str());
+                let count = n.awbm_model.variant.parameter_count();
+                ini_doc.set_property(section_name.as_str(), "params", &format_vec_as_multiline_table(&n.awbm_model.get_params_as_vec(), count, 4));
+            }
+            NodeEnum::SurmNode(n) => {
+                let section_name = format!("node.{}", n.name);
+                ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
+                ini_doc.set_property(section_name.as_str(), "type", "surm");
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
+                ini_doc.set_property(section_name.as_str(), "area", n.area_km2.to_string().as_str());
+                ini_doc.set_property(section_name.as_str(), "params", &format_vec_as_multiline_table(&n.surm_model.get_params_as_vec(), 9, 4));
             }
             NodeEnum::InflowNode(n) => {
                 let section_name = format!("node.{}", n.name);

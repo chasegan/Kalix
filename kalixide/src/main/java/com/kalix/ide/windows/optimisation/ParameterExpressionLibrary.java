@@ -50,7 +50,37 @@ public class ParameterExpressionLibrary {
         Map.entry("uzk", "log_range(g(#),0.1,1)"),
         Map.entry("uztwm", "log_range(g(#),12,180)"),
         Map.entry("zperc", "log_range(g(#),1,600)"),
-        Map.entry("laguh", "lin_range(g(#),0,3)")
+        Map.entry("laguh", "lin_range(g(#),0,3)"),
+
+        // AWBM parameters. a1 and a2 are searched over [0, 0.5] each so that
+        // a1 + a2 <= 1 holds for every candidate; the engine rejects a set
+        // that breaks it as infeasible, which would waste evaluations.
+        Map.entry("a1", "lin_range(g(#),0,0.5)"),
+        Map.entry("a2", "lin_range(g(#),0,0.5)"),
+        Map.entry("c1", "lin_range(g(#),0,50)"),
+        Map.entry("c2", "lin_range(g(#),0,200)"),
+        Map.entry("c3", "lin_range(g(#),0,500)"),
+        Map.entry("bfi", "lin_range(g(#),0,1)"),
+        Map.entry("k_base", "lin_range(g(#),0,1)"),
+        Map.entry("k_surf", "lin_range(g(#),0,1)"),
+
+        // AWBM two-tap variant (variant = two_tap): recharge taper and the upper tap
+        Map.entry("inf_base", "lin_range(g(#),0,1)"),
+        Map.entry("gw_sat", "lin_range(g(#),0,300)"),
+        Map.entry("gw_max", "lin_range(g(#),10,500)"),
+        Map.entry("k2", "lin_range(g(#),0,1)"),
+        Map.entry("h_gw", "lin_range(g(#),0,200)"),
+
+        // SURM parameters (ranges follow the Source SRG table for SURM)
+        Map.entry("imp_fraction", "lin_range(g(#),0,1)"),
+        Map.entry("impsc", "lin_range(g(#),0,5)"),
+        Map.entry("smsc", "lin_range(g(#),1,500)"),
+        Map.entry("coeff", "lin_range(g(#),0,400)"),
+        Map.entry("sq", "lin_range(g(#),0,10)"),
+        Map.entry("fc", "lin_range(g(#),0,500)"),
+        Map.entry("rfac", "lin_range(g(#),0,1)"),
+        Map.entry("bfac", "lin_range(g(#),0,1)"),
+        Map.entry("sfac", "lin_range(g(#),0,1)")
     );
 
     /**

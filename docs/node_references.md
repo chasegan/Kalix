@@ -33,7 +33,7 @@ Most nodes produce a subset of these outputs:
 | `demand` | Water demand |
 | `loss` | Losses (e.g., seepage, evaporation) |
 
-### Rainfall-Runoff Nodes (GR4J, Sacramento)
+### Rainfall-Runoff Nodes (GR4J, Sacramento, AWBM, SURM)
 
 | Variable | Description |
 |----------|-------------|
@@ -50,7 +50,7 @@ These read the same way, as `node.<name>.<property>`:
 
 | Property | Node types | Description |
 |----------|-------------|-------------|
-| `area` | GR4J, Sacramento | Catchment area [km2] — the declared `area` value |
+| `area` | GR4J, Sacramento, AWBM, SURM | Catchment area [km2] — the declared `area` value |
 | `x` | Routing | Inflow bias used by the storage routing solver |
 | `typical_regulated_flow` | Routing | Representative regulated flow [ML] used to estimate travel time for order propagation |
 | `dead_storage` | Routing | Water the reach holds at zero flow [ML] — the declared value |

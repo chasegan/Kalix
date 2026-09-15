@@ -25,6 +25,7 @@ const SCHEMA_SRC: &str = include_str!("../../kalixide/src/main/resources/linter/
 
 /// Each node type's source, so its recorder registrations can be read.
 const NODE_SOURCES: &[(&str, &str)] = &[
+    ("awbm", include_str!("../nodes/awbm_node.rs")),
     ("blackhole", include_str!("../nodes/blackhole_node.rs")),
     ("confluence", include_str!("../nodes/confluence_node.rs")),
     ("gauge", include_str!("../nodes/gauge_node.rs")),
@@ -37,6 +38,7 @@ const NODE_SOURCES: &[(&str, &str)] = &[
     ("sacramento", include_str!("../nodes/sacramento_node.rs")),
     ("splitter", include_str!("../nodes/splitter_node.rs")),
     ("storage", include_str!("../nodes/storage_node.rs")),
+    ("surm", include_str!("../nodes/surm_node.rs")),
     ("unregulated_user", include_str!("../nodes/unregulated_user_node.rs")),
 ];
 

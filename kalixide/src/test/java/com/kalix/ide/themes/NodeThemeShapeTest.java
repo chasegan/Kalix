@@ -20,6 +20,8 @@ public class NodeThemeShapeTest {
         assertEquals(NodeTheme.NodeShape.WATER_DROP, theme.getShapeForNodeType("gr4j"));
         assertEquals(NodeTheme.NodeShape.DIAMOND, theme.getShapeForNodeType("routing"));
         assertEquals(NodeTheme.NodeShape.WATER_DROP, theme.getShapeForNodeType("sacramento"));
+        assertEquals(NodeTheme.NodeShape.WATER_DROP, theme.getShapeForNodeType("awbm"));
+        assertEquals(NodeTheme.NodeShape.WATER_DROP, theme.getShapeForNodeType("surm"));
         assertEquals(NodeTheme.NodeShape.PODIUM, theme.getShapeForNodeType("regulated_user"));
         assertEquals(NodeTheme.NodeShape.PODIUM, theme.getShapeForNodeType("unregulated_user"));
         assertEquals(NodeTheme.NodeShape.TRIANGLE_UP, theme.getShapeForNodeType("storage"));
@@ -66,6 +68,8 @@ public class NodeThemeShapeTest {
         assertEquals("G4", theme.getShapeTextForNodeType("gr4j"));
         assertEquals("Rt", theme.getShapeTextForNodeType("routing"));
         assertEquals("Sc", theme.getShapeTextForNodeType("sacramento"));
+        assertEquals("Aw", theme.getShapeTextForNodeType("awbm"));
+        assertEquals("Su", theme.getShapeTextForNodeType("surm"));
         assertEquals("RU", theme.getShapeTextForNodeType("regulated_user"));
         assertEquals("UU", theme.getShapeTextForNodeType("unregulated_user"));
         assertEquals("St", theme.getShapeTextForNodeType("storage"));

@@ -14,6 +14,8 @@ pub mod storage_node;
 pub mod regulated_user_node;
 pub mod routing_node;
 pub mod sacramento_node;
+pub mod awbm_node;
+pub mod surm_node;
 pub mod node_enum;
 pub mod node_trait;
 pub mod link;

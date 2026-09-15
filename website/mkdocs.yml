@@ -143,6 +143,7 @@ nav:
           - "[var.*]": docs/vars.md
           - "[node.*]":
               - docs/nodes.md
+              - AWBM: docs/awbm.md
               - Blackhole: docs/blackhole.md
               - Confluence: docs/confluence.md
               - Gauge: docs/gauge.md
@@ -157,6 +158,7 @@ nav:
               - Storage:
                   - docs/storage.md
                   - Storage tables: docs/storage-tables.md
+              - SURM: docs/surm.md
               - Unregulated user: docs/unregulated-user.md
           - "[table.*]": docs/tables.md
           - "[acc.*]": docs/accounts.md
