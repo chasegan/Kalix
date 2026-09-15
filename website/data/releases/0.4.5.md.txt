@@ -9,46 +9,44 @@ assets:
 pip: "pip install kalix==0.4.5"
 ---
 
-- Comments: `#` starts a comment on any line, including after a section header (`[node.weir] # gauge site`) and after a `[data]` or `[outputs]` entry. Previously a comment after a header silently swallowed the node. `;` is not a comment character in Kalix — the linter now says so instead of letting the engine misread the line.
-- The linter reports a `[data]` alias defined twice, and reports a repeated output reference or missing input file on every line it appears, not just the last.
-- Linting and the map re-parse are quicker on large models.
-- Hover tips in the editor (lint messages, property help) no longer linger after you minimise the window, switch desktop or close the tab, and they follow the theme's colours.
-- Routing `pwl` tables accept a header row (`Flow [ML], Travel Time [steps]`), as every other node table already did — the IDE's own table editor writes one. A typo in any node table is now a plain error naming the cell, not a crash.
-- Loss nodes take an optional `loss_rate`: a data reference, constant or expression that sets the loss each timestep instead of the loss table. The table, if also present, still shapes upstream ordering. The evaluated value is reported as the `loss_rate` output.
-- Routing nodes take `loss_rate` too: a reach loss in ML per timestep, split equally across the divisions and taken inside each division's routing balance, so water is lost from the reach rather than from its inflow or outflow. The loss is bounded so a division's outflow can never go negative - a dry reach loses only what it holds. `loss_rate` reports the expression's value and `loss` the water actually lost.
-- Routing nodes take `dead_storage`: the volume a reach holds at zero flow, in ML, split across its divisions and built into the routing law at no per-step cost. A reach starts at dead level, passes nothing until its pools are full, and a `loss_rate` can drain them.
-- Regulated user nodes take `order_factor`: a factor applied to the node's order as it is sent upstream (`order_factor = 1.1` asks the network for 10% more than the user will take). The node's own `order`, `order_due`, account debits and delivery are unchanged; the extra passes downstream. Available as a static output.
-- Table View shows the current values after the optimiser's `Copy to Main Window`, and after a file reload. It used to show the values from before the copy.
-- Results CSVs write very small and very large values in exponent form (`1.5e-7`) instead of a long run of zeros. Every value reads back to exactly the same number; the files are just smaller.
-- New `kalix convert` CLI command and matching `kalix.convert()` Python function: convert timeseries data files between CSV and Pixie, with formats chosen by file extension (`kalix convert flows.csv flows.pxt`).
-- Full `.csv.zip` support: zip-compressed CSV (one file per archive, the convention pandas reads and writes natively) is now a first-class data format — readable as model input, writable from `kalix simulate -o`, covered by `kalix convert` / `kalix.convert()`, and recognised throughout the IDE (data viewer, plots, drag-and-drop, save dialogs, file tree). Zipped datasets open read-only in the IDE, decompressed into memory behind an adjustable limit; double-clicking a `.csv.zip` in the file tree opens it as a data view (the context menu's Unzip still extracts it).
-- Automatic data masking: selecting a plot type now applies that type's default overlapping-data mask, indicated by badges in the plot-type dropdown.
-- Plot tab `Reset` now works in place: the tab's name, position and undo history survive, and the reset itself is a single undoable step.
-- Plot undo/redo now restores the complete view: checked sources come back alongside the series, and ticking/unticking a source is an undoable step in its own right.
-- Run & data tree tick-boxes now stay in sync with the plot through tab reset, undo/redo, and tab duplication.
-- `[Last]` self-heals: deleting the newest run re-points `[Last]` plots to the most recently completed surviving run, or waits (still subscribed) for the next run to arrive.
-- Fixed: unloading a dataset left a do-nothing undo step; a duplicated tab could show a stale mask toggle; re-selecting the current plot type discarded a manual mask override and reset the zoom.
-- The model map now lives inside each model's tab (previously one shared panel): every open model keeps its own map, with the region's width and collapsed state shared and remembered across tabs.
-- New data file viewer. Opening a `.csv` (including Source `.res.csv` results) shows a virtual table built for big files — a 1GB file on a network drive opens instantly and stays responsive while it indexes in the background:
-    - The status strip declares what the viewer decided — delimiter, quote character, encoding, line endings, row count — so the interpretation is never silent.
-    - The raw text stays alongside the table. Above a size threshold (default 50MB, Preferences → Editor → Load and Save) data files open as fast read-only views instead of an editable text buffer.
-    - Live tail: a running simulation appending results simply grows the views in place.
-    - Right-click: `Find…`, `Find next`, `Find date…` (jumps to the first row at or after a typed date), `Show in file`, and `Copy`.
-- Plot and stats tabs are now one unified tab: every tab has a plot page and a stats page over the same series, aggregation and mask, switched with a toolbar toggle — the two views can never disagree.
-    - One merged toolbar: shared save/undo/aggregation/mask controls plus the plot-only cluster; controls flow onto a second row when the plot area is narrow.
-    - Undo/redo now works in the stats view too (both pages walk one shared history), and `Duplicate` plus the view toggle replaces the old "new plot tab" / "new stats tab" gestures.
-    - Overlapping-data masking is the same three-way control everywhere (`Mask All` / `Mask Each` / `Mask None`), and `Mask Each` now has a plot rendering.
-    - Tabs start with default names (`View 1`, `View 2`, …) instead of an icon; renaming works as before.
-- New seasonal mask: restrict a view to chosen months of the year, from the calendar button beside the overlapping-data mask.
-    - Tick any combination of months in the drop-down — it stays open while you pick — or "All" to clear the mask.
-    - Masking happens inside aggregation, so an annual sum over Jan–Mar totals exactly those months: deselected months are excluded from the total rather than counted as missing data, while a genuinely truncated period still reads as a gap.
-    - Shared by a tab's plot and stats pages, carried through duplication, and undoable like every other plotting action.
-    - Months are taken from within each aggregation period: with the default Jan–Dec year, ticking Dec and Jan gives January and December of the *same* year. For a contiguous southern summer, pair the selection with a water year that starts in July (or December).
-- Plotting in the data viewer: every data tab now carries the full plotting tool above its table — the same tabs, plot ⁄ stats toggle, aggregation and undo as the Run Manager.
-    - Click a column header to plot or unplot that column (plotted columns get an accent mark, and the full column name shows as a tooltip); the first data column is plotted by default.
-    - Right-click a datapoint for `Show in plot` (centres the plot on it, keeping your zoom level) or `Plot "column"` / `Unplot "column"`.
-    - Plotting loads whole columns into memory, so it is bounded by a new row-count preference (default 5,000,000; Preferences → Editor → Load and Save). Over-limit or non-date files say why in the status strip — never a dialog, never a silent failure.
-- New `forced_level` on storage nodes: pin a storage to supplied end-of-timestep levels and report the adjustment volume (flux/residual inflow) to reconcile the balance. Storage characteristics are read at the forced level, releases are met subject to outlet capacity.
-    - Output `adjustment_volume` indicates all changes to volume due to forcing: positive for created water and negative for destroyed. `sid_flux` (storage inflow derivation) reports the adjustment volume on the interior of the supplied data (i.e. excluding re-initialisation on the first day of provided levels).
+- New data view (instead of map) when you open a data file!
+    - The model map & new data view area now live inside each model's tab. This gives more horizontal space for tab names. 
+    - The raw text visible in the text editor. 
+    - Plot and data table appear on the right hand side.
+    - Right-click `Find` menu allows searching by value or date.
+    - Big files are openned as read-only (default threshold = 50MB, Preferences → Editor → Load and Save).
+- New optional `forced_level` property for storage nodes allows modeller to force end-of-timestep level.
+    - Output `adjustment_volume` indicates all changes to volume due to forcing, and `sid_flux` (storage inflow derivation) reports the adjustment volume on the interior of the supplied data.
     - NaNs are read as "not forced" for the timestep.
-    - A level below the storage dimensions is clamped to the bottom (negative volumes are unphysical), and above the storage dimensions is extrapolated.
+- New optional `loss_rate` property for loss nodes allows modeller to set loss rate using an expression (instead of the loss table). 
+    - This will be valuable in representing antecedent losses.
+    - The table still shapes upstream ordering.
+- New support for `.csv.zip` file format!
+    - The convention is one file per zip. 
+    - This is a convention pandas reads and writes natively, is now a first-class data format in Kalix.
+    — Reference .csv.zip files directly in the model, write them using `kalix simulate -o`, and use them throughout KalixIDE.
+- New (ALPHA IMPLEMENTATION) dead storage and evap loss features in routing nodes:
+    - `dead_storage` allows modeller to define a dead storage volume.
+    - `loss_rate` property defines the loss in ML/step using an expression and is distributed equally across all reach divisions.
+- New optional `order_factor` for regulated user nodes. This is a factor applied to the node's order as it is sent upstream. 
+    - The node's own `order`, `order_due`, and account debits and delivery logic are unchanged.
+- New `kalix convert` CLI command for data file conversions:
+    - convert timeseries data files between known file types (e.g. `kalix convert flows.csv flows.pxt`).
+    - matching `kalix.convert()` Python function.
+- Plotting / run manager enhancements:
+    - Every tab now carries plot & stats.
+    - New seasonal mask filters data to chosen months of the year, using the calendar button in the plot toolbar.
+    - Automatic data masking: selecting a plot type now applies that type's default overlapping-data mask. Badges in the plot-type dropdown show whether a mask will apply.
+    - Plot undo/redo now restores source selection.
+    - Plot tab `Reset` now preserves tab's name, position and undo history.
+    - Run & data tree tick-boxes now stay in sync with the plot through tab reset, undo/redo, and tab duplication.
+    - Plot source `[Last]` self-heals upon deleting the newest run, and re-points to the next most recent run.
+- Minor fixes:
+    - Comments: `#` starts a comment on any line, including after a section header (`[node.weir] # gauge site`) and after a `[data]` or `[outputs]` entry. Previously a comment after a header silently swallowed the node. `;` is not a comment character in Kalix — the linter now says so instead of letting the engine misread the line.
+    - Hover tips in the editor no longer linger after you minimise the window or close the tab, and they follow the theme's colours.
+    - Routing `pwl` tables accept a header row (`Flow [ML], Travel Time [steps]`).
+    - Table View was previously not refreshing on optimiser's `Copy to Main Window` or after a file reload. Fixed.
+- Performance:
+    - Linting and the map re-parse are quicker on large models.
+    - Results CSVs now use scientific notation for very small and very large values (e.g. `1.5e-7`). Precision is retained - but the files are now smaller.
+    
