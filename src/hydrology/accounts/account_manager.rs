@@ -51,6 +51,9 @@ pub struct AccountManager {
     recorder_grp_debits: Vec<(usize, usize)>,
     recorder_grp_allocation: Vec<(usize, usize)>,
     recorder_grp_use: Vec<(usize, usize)>,
+    // Triples (group_idx, series_idx, group size): the size is summed once in
+    // initialize, which relies on account sizes being fixed after load.
+    recorder_grp_allocation_pct: Vec<(usize, usize, f64)>,
 }
 
 /// Fields an `acc.<name>.<field>` reference may use. Closed set: anything
@@ -62,8 +65,19 @@ pub struct AccountManager {
 /// recorder.
 pub const ACCOUNT_SERIES_FIELDS: [&str; 7] = ["opening_balance", "closing_balance", "debits", "allocation", "use", "size", "initial"];
 
-/// Of those, the fields a *group* aggregate publishes (summed over members).
-pub const GROUP_SERIES_FIELDS: [&str; 7] = ["opening_balance", "closing_balance", "debits", "allocation", "use", "size", "initial"];
+/// The fields a *group* aggregate publishes: the same set, each summed over
+/// members except `allocation_pct`, which is the group allocation over the
+/// group size (a size-weighted mean of the members' percentages).
+pub const GROUP_SERIES_FIELDS: [&str; 8] = [
+    "opening_balance",
+    "closing_balance",
+    "debits",
+    "allocation",
+    "allocation_pct",
+    "use",
+    "size",
+    "initial"
+];
 
 impl AccountManager {
 
@@ -87,6 +101,7 @@ impl AccountManager {
             recorder_grp_debits: Vec::new(),
             recorder_grp_allocation: Vec::new(),
             recorder_grp_use: Vec::new(),
+            recorder_grp_allocation_pct: Vec::new(),
         }
     }
 
@@ -176,6 +191,7 @@ impl AccountManager {
         self.recorder_grp_debits.clear();
         self.recorder_grp_allocation.clear();
         self.recorder_grp_use.clear();
+        self.recorder_grp_allocation_pct.clear();
 
         for account_idx in 0..self.accounts.len() {
             let name = self.accounts[account_idx].name.clone();
@@ -213,6 +229,14 @@ impl AccountManager {
             register("debits", &mut self.recorder_grp_debits, &mut any);
             register("allocation", &mut self.recorder_grp_allocation, &mut any);
             register("use", &mut self.recorder_grp_use, &mut any);
+            if let Some(series_idx) = data_cache.get_series_idx(
+                make_acc_result_name(&name, "allocation_pct").as_str(), false
+            ) {
+                let group_size = self.group_sum(group_idx, |a| a.size);
+                let target = &mut self.recorder_grp_allocation_pct;
+                target.push((group_idx, series_idx, group_size));
+                any = true;
+            }
             self.has_recorders |= any;
         }
 
@@ -277,6 +301,14 @@ impl AccountManager {
         for &(group_idx, series_idx) in &self.recorder_grp_use {
             let total = self.group_sum(group_idx, |a| a.debits_since_reset);
             data_cache.add_value_at_index(series_idx, total);
+        }
+        for &(group_idx, series_idx, group_size) in &self.recorder_grp_allocation_pct {
+            if group_size == 0.0 {
+                data_cache.add_value_at_index(series_idx, f64::NAN);
+                continue;
+            }
+            let total_alloc = self.group_sum(group_idx, |a| a.allocation());
+            data_cache.add_value_at_index(series_idx, total_alloc / group_size * 100.0);
         }
     }
 
