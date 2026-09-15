@@ -100,6 +100,18 @@ All eight AWBM parameters are optimisable; see the [AWBM node page](awbm.md) for
 | `k_base` | Baseflow recession constant | 0 – 1, linear |
 | `k_surf` | Surface recession constant | 0 – 1, linear |
 
+For the [four-parameter form](awbm.md#the-four-parameter-average-capacity-form), fix `a1` and `a2` and tie the three capacities to one gene through Boughton and Chiew's factors:
+
+```ini
+[parameters]
+node.my_awbm.c1 = 0.075 * lin_range(g(1), 10, 400)
+node.my_awbm.c2 = 0.762 * lin_range(g(1), 10, 400)
+node.my_awbm.c3 = 1.524 * lin_range(g(1), 10, 400)
+node.my_awbm.bfi = lin_range(g(2), 0, 1)
+node.my_awbm.k_base = lin_range(g(3), 0, 1)
+node.my_awbm.k_surf = lin_range(g(4), 0, 1)
+```
+
 The third partial area is `1 − a1 − a2`, so a candidate with `a1 + a2 > 1` is infeasible and scores infinity. Independent bounds of 0 – 1 on both would waste roughly a third of evaluations on such candidates; bounding each at 0.5 avoids that and still covers the usual values. To search the full triangle instead, tie the two parameters through one gene:
 
 ```ini

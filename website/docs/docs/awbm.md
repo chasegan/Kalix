@@ -146,6 +146,35 @@ params = 0.134, 0.433, 0.075, 0.762, 1.524, 0.35, 0.95, 0.35
 
 When the capacities fall during a step, water above the new capacity spills as excess in that step. The `cap_ave` value is not a parameter and is not optimisable; to calibrate an average capacity, tie `c1`, `c2` and `c3` to one gene in the optimisation file instead (for example `c1 = 0.075 * lin_range(g(1), 10, 300)` and likewise for `c2` and `c3`).
 
+### The four-parameter (average capacity) form
+
+Boughton and Chiew's ungauged-catchment form of the model, also called the revised AWBM, is the standard node with the partial areas fixed at 0.134, 0.433, 0.433 and the capacities tied to one average capacity through the factors 0.075, 0.762, 1.524. That leaves four parameters to calibrate: the average capacity, `bfi`, `k_base` and `k_surf`. It is the form used by Boughton's own UGAWBM program, by the Rainfall Runoff Library's average-capacity calibration, and by many Australian catchment models. Write the factors on the `params` line and the average in `cap_ave`:
+
+```ini
+[node.my_catchment]
+type = awbm
+loc = 20, 30
+area = 165
+rain = data.climate_csv.by_name.rain
+evap = data.climate_csv.by_name.evap
+cap_ave = 96
+params = 0.134, 0.433, 0.075, 0.762, 1.524, 0.35, 0.95, 0.35
+```
+
+With `cap_ave = 96` this is exactly Boughton's default set (capacities of 7.2, 73 and 146 mm). To calibrate it, leave `a1` and `a2` alone and tie the three capacity factors to one gene, so the optimiser searches the average capacity while the spread stays fixed. `cap_ave` is not a parameter, so the gene goes into the factors:
+
+```ini
+[parameters]
+node.my_catchment.c1 = 0.075 * lin_range(g(1), 10, 400)
+node.my_catchment.c2 = 0.762 * lin_range(g(1), 10, 400)
+node.my_catchment.c3 = 1.524 * lin_range(g(1), 10, 400)
+node.my_catchment.bfi = lin_range(g(2), 0, 1)
+node.my_catchment.k_base = lin_range(g(3), 0, 1)
+node.my_catchment.k_surf = lin_range(g(4), 0, 1)
+```
+
+Here `cap_ave` is left at 1 in the model file (or omitted) so that the calibrated `c` values are the capacities themselves. Keep `cap_ave` for the seasonal case: a monthly profile in a table, with the factors on the `params` line and the average capacity of the profile calibrated by scaling the table's values, or by tying the factors to a gene exactly as above.
+
 ### Timestep length
 
 This is the daily formulation. The recession constants `k_base` and `k_surf` are per-day fractions, so the model is intended for models running on a daily timestep. Using it at another timestep requires recalibrating those two constants; the node does not adjust them.
