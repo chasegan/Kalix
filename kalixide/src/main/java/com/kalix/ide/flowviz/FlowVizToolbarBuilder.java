@@ -24,6 +24,7 @@ import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JTable;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
@@ -42,7 +43,7 @@ import java.util.function.Consumer;
  * (leading), the always-visible shared controls (save, undo/redo, aggregation,
  * mask — one set of controls over the one shared state, so the two views can
  * never disagree), and the plot-only cluster (palette, plot type, y-scale,
- * auto-Y, coordinates, legend) shown only in the plot view.
+ * auto-Y, coordinates, legend, line shape) shown only in the plot view.
  *
  * <p>All controls drive the tab's state-owning {@link FlowVizPanel}; the mask is
  * the ternary combo everywhere (the plot's old binary toggle is gone — EACH now
@@ -137,6 +138,7 @@ class FlowVizToolbarBuilder {
         addAutoYToggle(initialAutoY);
         addCoordinatesToggle(initialShowCoordinates);
         addLegendToggle(vizPanel.isLegendEnabled());
+        addLineShapeButton();
         plotOnly(createIconButton(FontAwesomeSolid.PALETTE,
             "Plot Palettes…", PlotPaletteWindow::showWindow));
 
@@ -385,6 +387,26 @@ class FlowVizToolbarBuilder {
         button.addActionListener(e -> tabInfo.vizPanel.setLegendEnabled(button.isSelected()));
         tabInfo.vizPanel.getLegendManager().setOnEnabledChanged(() ->
             button.setSelected(tabInfo.vizPanel.isLegendEnabled()));
+        plotOnly(button);
+    }
+
+    /**
+     * Opens the same line shape choices as the plot's context menu ({@link LineShapeMenu}).
+     * The popup is built on each click and ticks the panel's current shape, so it can't go
+     * stale after an undo or a change made from the context menu.
+     */
+    private void addLineShapeButton() {
+        JButton button = new JButton(FontIcon.of(FontAwesomeSolid.PEN_NIB, ToolbarConstants.BUTTON_ICON_SIZE));
+        button.setToolTipText("Line shape");
+        button.setFocusable(false);
+        ToolbarConstants.applyButtonSizing(button);
+        // Built here rather than via createIconButton: the action needs the button to anchor the popup.
+        button.addActionListener(e -> {
+            JPopupMenu menu = new JPopupMenu();
+            LineShapeMenu.addItems(menu, tabInfo.vizPanel::setLineShape)
+                .get(tabInfo.vizPanel.getLineShape()).setSelected(true);
+            menu.show(button, 0, button.getHeight());
+        });
         plotOnly(button);
     }
 

@@ -803,21 +803,15 @@ public class PlotInteractionManager {
         }
         contextMenu.add(yAxisScaleMenu);
 
-        // Line shape submenu: a category noun with value children (6). Radio items are keyed
-        // by enum, so sync never reads identity back out of label text (ADR-0003 §2.2).
+        // Line shape submenu: a category noun with value children (6). The items are shared
+        // with the toolbar's line shape button (LineShapeMenu) and keyed by enum, so sync
+        // never reads identity back out of label text (ADR-0003 §2.2).
         JMenu lineShapeMenu = new JMenu("Line shape");
-        ButtonGroup lineShapeGroup = new ButtonGroup();
-        for (LineShape shape : LineShape.values()) {
-            JRadioButtonMenuItem shapeItem = new JRadioButtonMenuItem(shape.getDisplayName());
-            shapeItem.addActionListener(e -> {
-                if (parentComponent instanceof FlowVizPanel vizPanel) {
-                    vizPanel.setLineShape(shape);
-                }
-            });
-            lineShapeGroup.add(shapeItem);
-            lineShapeMenu.add(shapeItem);
-            lineShapeMenuItems.put(shape, shapeItem);
-        }
+        lineShapeMenuItems.putAll(LineShapeMenu.addItems(lineShapeMenu, shape -> {
+            if (parentComponent instanceof FlowVizPanel vizPanel) {
+                vizPanel.setLineShape(shape);
+            }
+        }));
         contextMenu.add(lineShapeMenu);
 
         // Missing Data submenu. "Draw across gaps" and "Mark orphan points" are mutually
