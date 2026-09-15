@@ -65,6 +65,8 @@ class AccountingGrammarLintTest {
             acc.n0031.closing_balance
             acc.n0031.debits
             acc.avl.closing_balance
+            acc.n0031.allocation_pct
+            acc.avl.allocation_pct
             ras.avl_reset.fired
             """;
 
