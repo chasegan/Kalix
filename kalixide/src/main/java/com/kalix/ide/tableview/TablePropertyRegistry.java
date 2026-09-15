@@ -1,5 +1,6 @@
 package com.kalix.ide.tableview;
 
+import com.kalix.ide.tableview.definitions.AwbmParamsDefinition;
 import com.kalix.ide.tableview.definitions.Gr4jParamsDefinition;
 import com.kalix.ide.tableview.definitions.LinearCombinationDataRefDefinition;
 import com.kalix.ide.tableview.definitions.LossTableDefinition;
@@ -7,6 +8,7 @@ import com.kalix.ide.tableview.definitions.RoutingPwlDefinition;
 import com.kalix.ide.tableview.definitions.SacramentoParamsDefinition;
 import com.kalix.ide.tableview.definitions.SplitterTableDefinition;
 import com.kalix.ide.tableview.definitions.StorageDimensionsDefinition;
+import com.kalix.ide.tableview.definitions.SurmParamsDefinition;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -45,15 +47,19 @@ public class TablePropertyRegistry {
     private void registerBuiltInDefinitions() {
         register(new SacramentoParamsDefinition());
         register(new Gr4jParamsDefinition());
+        register(new AwbmParamsDefinition());
+        register(new SurmParamsDefinition());
         register(new StorageDimensionsDefinition());
         register(new RoutingPwlDefinition());
         register(new SplitterTableDefinition());
         register(new LossTableDefinition());
 
         // Rainfall-runoff nodes accept a linear combination of data references
-        // as the "rain" input; one definition class covers both node types.
+        // as the "rain" input; one definition class covers all four node types.
         register(new LinearCombinationDataRefDefinition("sacramento", "rain"));
         register(new LinearCombinationDataRefDefinition("gr4j", "rain"));
+        register(new LinearCombinationDataRefDefinition("awbm", "rain"));
+        register(new LinearCombinationDataRefDefinition("surm", "rain"));
     }
 
     /**
