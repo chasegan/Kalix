@@ -138,27 +138,35 @@ public class DocumentTabPane extends JPanel {
         // Add context menu support
         tabbedPane.addMouseListener(new MouseAdapter() {
             @Override
+            public void mousePressed(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    showTabContextMenu(e);
+                }
+            }
+
+            @Override
             public void mouseReleased(MouseEvent e) {
-                // Right click
-                if (e.getButton() == MouseEvent.BUTTON3) {
-                    int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
+                if (e.isPopupTrigger()) {
+                    showTabContextMenu(e);
+                }
+            }
 
-                    // Check if click is actually on the tab header area, not just in content area
-                    Rectangle tabBounds = tabIndex >= 0 ? tabbedPane.getBoundsAt(tabIndex) : null;
-                    boolean clickOnTabHeader = tabBounds != null && tabBounds.contains(e.getX(), e.getY());
+            private void showTabContextMenu(MouseEvent e) {
+                int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
 
-                    if (clickOnTabHeader) {
-                        if (e.getID() == MouseEvent.MOUSE_RELEASED) {
-                            KalixDocument document = documentAt(tabIndex);
-                            if (document == null) {
-                                return;
-                            }
-                            File file = document.getFile();
-                            // Show context menu
-                            if (file != null) { // unsaved documents have no tree entry to show a menu for
-                                contextMenuRequestHandler.showContextMenu(file, tabbedPane, e.getX(), e.getY());
-                            }
-                        }
+                // Check if click is actually on the tab header area, not just in content area
+                Rectangle tabBounds = tabIndex >= 0 ? tabbedPane.getBoundsAt(tabIndex) : null;
+                boolean clickOnTabHeader = tabBounds != null && tabBounds.contains(e.getX(), e.getY());
+
+                if (clickOnTabHeader) {
+                    KalixDocument document = documentAt(tabIndex);
+                    if (document == null) {
+                        return;
+                    }
+                    File file = document.getFile();
+                    // Show context menu
+                    if (file != null) { // unsaved documents have no tree entry to show a menu for
+                        contextMenuRequestHandler.showContextMenu(file, tabbedPane, e.getX(), e.getY());
                     }
                 }
             }
