@@ -154,8 +154,6 @@ public class DocumentTabPane extends JPanel {
                                 return;
                             }
                             File file = document.getFile();
-                            // QOL: Change active document
-                            documentManager.setActiveDocument(document);
                             // Show context menu
                             if (file != null) { // unsaved documents have no tree entry to show a menu for
                                 contextMenuRequestHandler.showContextMenu(file, tabbedPane, e.getX(), e.getY());
