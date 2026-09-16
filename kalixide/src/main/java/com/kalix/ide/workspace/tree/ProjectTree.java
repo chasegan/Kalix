@@ -676,16 +676,19 @@ public class ProjectTree extends JTree {
     }
 
     /**
-     * Shows the right-click context menu for the given files (e.g. from an editor tab), as if
-     * they were right-clicked in the tree, without changing the tree's own selection. Files
-     * outside the open folder (or if no folder is open) are silently dropped.
+     * Shows the right-click context menu for {@code file} (the file associated to a tab)
+     * as if it were right-clicked in the tree, without changing the tree's own selection.
+     * If the file is outside the open folder (or no folder is open), a standalone node
+     * is built for it instead.
      */
-    public void showContextMenuForFiles(List<File> files, Component invoker, int x, int y) {
-        List<FileTreeNode> nodes = files.stream()
-                .map(this::materializeNode)
-                .filter(java.util.Objects::nonNull)
-                .toList();
-        JPopupMenu menu = contextMenu.buildFromEditorTab(nodes);
+    public void showTabContextMenu(File file, Component invoker, int x, int y) {
+        // If `file` is in the tree, use that FileTreeNode, else construct a dummy.
+        FileTreeNode node = materializeNode(file);
+        if (node == null) {
+            // showHidden is meaningless when not in a tree
+            node = new FileTreeNode(file, () -> true);
+        }
+        JPopupMenu menu = contextMenu.buildFromEditorTab(node);
         if (menu != null) {
             menu.show(invoker, x, y);
         }

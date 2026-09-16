@@ -68,7 +68,8 @@ public class TreeContextMenu {
      * Builds the popup for the given selection in row order, or returns null if it is empty.
      * Used to build from editor tab right click context menu.
      */
-    JPopupMenu buildFromEditorTab(List<FileTreeNode> selection) {
+    JPopupMenu buildFromEditorTab(FileTreeNode node) {
+        List<FileTreeNode> selection = List.of(node);
         return build(selection, BuildContext.EditorTab);
     }
 

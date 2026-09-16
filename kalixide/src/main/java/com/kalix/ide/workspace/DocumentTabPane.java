@@ -67,7 +67,7 @@ public class DocumentTabPane extends JPanel {
     /** Requests the tree's right-click context menu be shown for the given files. */
     @FunctionalInterface
     public interface ContextMenuRequestHandler {
-        void showContextMenu(List<File> files, Component invoker, int x, int y);
+        void showContextMenu(File file, Component invoker, int x, int y);
     }
 
     public DocumentTabPane(
@@ -158,8 +158,7 @@ public class DocumentTabPane extends JPanel {
                             documentManager.setActiveDocument(document);
                             // Show context menu
                             if (file != null) { // unsaved documents have no tree entry to show a menu for
-                                contextMenuRequestHandler.showContextMenu(
-                                    List.of(file), tabbedPane, e.getX(), e.getY());
+                                contextMenuRequestHandler.showContextMenu(file, tabbedPane, e.getX(), e.getY());
                             }
                         }
                     }
