@@ -60,9 +60,9 @@ public final class PixieDataSession implements FindableData {
     }
 
     private static final DateTimeFormatter DATE_ONLY =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneOffset.UTC);
+        DateTimeFormatter.ofPattern("uuuu-MM-dd").withZone(ZoneOffset.UTC);
     private static final DateTimeFormatter DATE_TIME =
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC);
+        DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss").withZone(ZoneOffset.UTC);
 
     /** One immutable load result; the volatile hand-off between worker and views. */
     private static final class Snapshot {

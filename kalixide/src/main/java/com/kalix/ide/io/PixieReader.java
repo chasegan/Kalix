@@ -191,10 +191,10 @@ public class PixieReader {
 
         if (timestampStr.contains("T")) {
             // Full timestamp with time component
-            dateTime = LocalDateTime.parse(timestampStr, DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
+            dateTime = LocalDateTime.parse(timestampStr, DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss"));
         } else {
             // Date only (midnight)
-            dateTime = LocalDateTime.parse(timestampStr + "T00:00:00", DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"));
+            dateTime = LocalDateTime.parse(timestampStr + "T00:00:00", DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss"));
         }
 
         return dateTime.toInstant(ZoneOffset.UTC).getEpochSecond();

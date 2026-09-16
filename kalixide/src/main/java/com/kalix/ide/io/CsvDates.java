@@ -42,20 +42,20 @@ public final class CsvDates {
      * requiring exactly two digits, which rejects single-digit days.</p>
      */
     private static final DateTimeFormatter[] DATE_FORMATTERS = {
-        DateTimeFormatter.ofPattern("yyyy-M-d HH:mm:ss"),
-        DateTimeFormatter.ofPattern("yyyy-M-d HH:mm"),
-        DateTimeFormatter.ofPattern("yyyy-M-d"),
-        DateTimeFormatter.ofPattern("yyyy/M/d HH:mm:ss"),
-        DateTimeFormatter.ofPattern("yyyy/M/d HH:mm"),
-        DateTimeFormatter.ofPattern("yyyy/M/d"),
-        DateTimeFormatter.ofPattern("d/M/yyyy HH:mm:ss"),
-        DateTimeFormatter.ofPattern("d/M/yyyy HH:mm"),
-        DateTimeFormatter.ofPattern("d/M/yyyy"),
+        DateTimeFormatter.ofPattern("uuuu-M-d HH:mm:ss"),
+        DateTimeFormatter.ofPattern("uuuu-M-d HH:mm"),
+        DateTimeFormatter.ofPattern("uuuu-M-d"),
+        DateTimeFormatter.ofPattern("uuuu/M/d HH:mm:ss"),
+        DateTimeFormatter.ofPattern("uuuu/M/d HH:mm"),
+        DateTimeFormatter.ofPattern("uuuu/M/d"),
+        DateTimeFormatter.ofPattern("d/M/uuuu HH:mm:ss"),
+        DateTimeFormatter.ofPattern("d/M/uuuu HH:mm"),
+        DateTimeFormatter.ofPattern("d/M/uuuu"),
         DateTimeFormatter.ISO_LOCAL_DATE_TIME,
         DateTimeFormatter.ISO_LOCAL_DATE,
-        DateTimeFormatter.ofPattern("M/d/yyyy HH:mm:ss"),
-        DateTimeFormatter.ofPattern("M/d/yyyy HH:mm"),
-        DateTimeFormatter.ofPattern("M/d/yyyy")
+        DateTimeFormatter.ofPattern("M/d/uuuu HH:mm:ss"),
+        DateTimeFormatter.ofPattern("M/d/uuuu HH:mm"),
+        DateTimeFormatter.ofPattern("M/d/uuuu")
     };
 
     private CsvDates() {

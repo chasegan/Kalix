@@ -75,4 +75,35 @@ class CsvDatesTest {
         assertNull(CsvDates.detect(""));
         assertNull(CsvDates.detect(null));
     }
+    /**
+     * Stochastic engine output spans proleptic year 0000. {@code yyyy} is year-of-era,
+     * which has no year 0: the dashed date-only form only worked by falling through to
+     * the ISO formatter, and the engine's sub-daily "0000-01-01 00:00:00" matched
+     * nothing at all. Every rung now uses the proleptic year, {@code uuuu}.
+     */
+    @Test
+    void year0000ParsesInEveryLadderForm() {
+        long year0 = LocalDate.of(0, 1, 1).toEpochDay() * 86_400_000L;
+        for (String text : new String[] {"0000-01-01", "0000/01/01", "01/01/0000", "1/1/0000"}) {
+            CsvDates.Spec spec = CsvDates.detect(text);
+            assertNotNull(spec, text);
+            assertTrue(spec.dateOnly(), text);
+            assertEquals(year0, CsvDates.parseMillis(text, spec), text);
+        }
+        for (String text : new String[] {"0000-01-01 00:00:00", "0000-01-01 00:00", "0000-01-01T00:00:00"}) {
+            CsvDates.Spec spec = CsvDates.detect(text);
+            assertNotNull(spec, text);
+            assertFalse(spec.dateOnly(), text);
+            assertEquals(year0, CsvDates.parseMillis(text, spec), text);
+        }
+    }
+
+    /** A 0000..9999 file detects on its first row and must keep parsing to the last. */
+    @Test
+    void specDetectedOnYear0000RowParsesYear9999Row() {
+        CsvDates.Spec spec = CsvDates.detect("0000-01-01 06:00:00");
+        assertNotNull(spec);
+        assertEquals(LocalDateTime.of(9999, 12, 31, 6, 0).toInstant(ZoneOffset.UTC).toEpochMilli(),
+            CsvDates.parseMillis("9999-12-31 06:00:00", spec));
+    }
 }

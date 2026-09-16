@@ -32,7 +32,7 @@ public final class TimeFormatUtil {
     private static final long MS_PER_HOUR = 3_600_000L;
     private static final long MS_PER_MINUTE = 60_000L;
 
-    private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    private static final DateTimeFormatter DATE_ONLY = DateTimeFormatter.ofPattern("uuuu-MM-dd");
 
     /**
      * Second-resolution ISO datetime. Deliberately not {@code DateTimeFormatter.ISO_DATE_TIME}:
@@ -43,7 +43,7 @@ public final class TimeFormatUtil {
      * touched. Second is the finest resolution this class renders, so the truncation costs
      * nothing visible.
      */
-    private static final DateTimeFormatter ISO_DATETIME = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+    private static final DateTimeFormatter ISO_DATETIME = DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss");
     private static final DateTimeFormatter MMDD_HHMM = DateTimeFormatter.ofPattern("MM-dd HH:mm");
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
     private static final DateTimeFormatter HH_MM_SS = DateTimeFormatter.ofPattern("HH:mm:ss");

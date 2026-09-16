@@ -136,4 +136,50 @@ class PixieRoundTripTest {
         assertArrayEquals(new long[] {-2_000L, -1_000L, 0L}, reloaded.getTimestamps(),
             "each instant floors to its own second; truncation would give -1, 0, 0");
     }
+    /**
+     * Stochastic runs from the engine span proleptic year 0000 to 9999, so the .pxt
+     * carries "0000-01-01". java.time's {@code yyyy} is year-of-era, which has no year
+     * 0 (it refuses to parse it and prints proleptic year 0 as "0001"); the reader and
+     * writer must use the proleptic year, {@code uuuu}, which is what chrono's %Y in
+     * the Rust engine writes.
+     */
+    @Test
+    void year0000RoundTripsExactly() throws Exception {
+        LocalDateTime[] times = new LocalDateTime[3];
+        double[] values = {1.0, 2.0, 3.0};
+        for (int i = 0; i < times.length; i++) {
+            times[i] = LocalDateTime.of(0, 1, 1, 0, 0).plusDays(i);
+        }
+        TimeSeriesData data = new TimeSeriesData(times, values);
+
+        String base = tempDir.resolve("year0").toString();
+        new PixieWriter().writeToFile(base, List.of(new NamedSeries("node.x.dsflow", data)), true);
+
+        String pxt = Files.readString(Path.of(base + ".pxt"));
+        assertTrue(pxt.contains("0000-01-01"), "writer must emit proleptic year 0, got:\n" + pxt);
+
+        TimeSeriesData reloaded = new PixieReader().readAllSeries(base).get(0).data();
+        assertArrayEquals(data.getTimestamps(), reloaded.getTimestamps(), "year-0 dates reload exactly");
+        assertArrayEquals(data.getValues(), reloaded.getValues(), 0.0);
+
+        PixieReader.SeriesInfo info = new PixieReader().getSeriesInfo(base).get(0);
+        assertEquals(LocalDateTime.of(0, 1, 1, 0, 0), info.startTime);
+        assertEquals(LocalDateTime.of(0, 1, 3, 0, 0), info.endTime);
+    }
+
+    /** The exact metadata shape the Rust engine writes for a 0000..9999 stochastic run. */
+    @Test
+    void readsEngineWrittenMetadataSpanningYear0000To9999() throws Exception {
+        Path pxt = tempDir.resolve("stoch.pxt");
+        Files.writeString(pxt,
+            "index,offset,start_time,end_time,timestep,length,series_name\n"
+            + "1,0,0000-01-01,9999-12-31,86400,3652425,node.9999_EOS.usflow\n");
+
+        PixieReader.SeriesInfo info = new PixieReader()
+            .getSeriesInfo(tempDir.resolve("stoch").toString()).get(0);
+        assertEquals(LocalDateTime.of(0, 1, 1, 0, 0), info.startTime);
+        assertEquals(LocalDateTime.of(9999, 12, 31, 0, 0), info.endTime);
+        assertEquals(3652425, info.pointCount);
+        assertEquals(86400L, info.timestepSeconds);
+    }
 }

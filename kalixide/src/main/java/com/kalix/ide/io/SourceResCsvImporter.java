@@ -38,13 +38,13 @@ public final class SourceResCsvImporter {
      * for the whole file. ISO date-only is the common case for Source daily results.
      */
     private static final DateTimeFormatter[] DATE_FORMATTERS = {
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
-        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"),
-        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"),
-        DateTimeFormatter.ofPattern("yyyy-MM-dd"),
-        DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"),
-        DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm"),
-        DateTimeFormatter.ofPattern("dd/MM/yyyy"),
+        DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm:ss"),
+        DateTimeFormatter.ofPattern("uuuu-MM-dd'T'HH:mm:ss"),
+        DateTimeFormatter.ofPattern("uuuu-MM-dd HH:mm"),
+        DateTimeFormatter.ofPattern("uuuu-MM-dd"),
+        DateTimeFormatter.ofPattern("dd/MM/uuuu HH:mm:ss"),
+        DateTimeFormatter.ofPattern("dd/MM/uuuu HH:mm"),
+        DateTimeFormatter.ofPattern("dd/MM/uuuu"),
         DateTimeFormatter.ISO_LOCAL_DATE_TIME,
         DateTimeFormatter.ISO_LOCAL_DATE
     };

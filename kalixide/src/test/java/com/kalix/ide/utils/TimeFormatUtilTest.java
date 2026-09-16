@@ -168,4 +168,23 @@ class TimeFormatUtilTest {
         assertThrows(DateTimeParseException.class,
             () -> TimeFormatUtil.parseFlexible("2024-01-15T14:30:00.123"));
     }
+    // ---- proleptic year 0000 (stochastic engine runs span 0000..9999) ----
+
+    private static final long MS_YEAR_0000 =
+        LocalDateTime.of(0, 1, 1, 0, 0, 0).toEpochSecond(ZoneOffset.UTC) * 1000L;
+
+    /** {@code yyyy} would print proleptic year 0 as "0001"; the formatters use {@code uuuu}. */
+    @Test
+    void formatsProlepticYear0000AsFourZeros() {
+        assertEquals("0000-01-01", TimeFormatUtil.formatForStepSize(MS_YEAR_0000, 86400L));
+        assertEquals("0000-01-01T00:00:00", TimeFormatUtil.formatForStepSize(MS_YEAR_0000, 3600L));
+        assertEquals("0000-01-01", TimeFormatUtil.formatForTickInterval(MS_YEAR_0000, 86_400_000L));
+    }
+
+    @Test
+    void parseFlexibleAcceptsYear0000() {
+        assertEquals(MS_YEAR_0000, TimeFormatUtil.parseFlexible("0000-01-01"));
+        assertEquals(MS_YEAR_0000, TimeFormatUtil.parseFlexible("0000-01-01T00:00:00"));
+        assertEquals(MS_YEAR_0000, TimeFormatUtil.parseFlexible("01/01/0000"));
+    }
 }

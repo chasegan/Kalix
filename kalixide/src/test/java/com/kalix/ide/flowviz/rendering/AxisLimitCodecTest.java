@@ -219,4 +219,15 @@ class AxisLimitCodecTest {
             0, 0, 100, 100, YAxisScale.LINEAR, XAxisType.PERCENTILE);
         assertEquals("0%, 100%", AxisLimitCodec.formatXLimits(percentile));
     }
+    /** Stochastic runs span proleptic year 0000..9999; axis bounds must round-trip at both ends. */
+    @Test
+    void timeRoundTripsYear0000AndYear9999() {
+        long year0 = utc(0, 1, 1, 0, 0, 0);
+        long year9999 = utc(9999, 12, 31, 14, 30, 0);
+        assertEquals("0000-01-01", AxisLimitCodec.formatX(year0, XAxisType.TIME));
+        assertEquals("9999-12-31T14:30:00", AxisLimitCodec.formatX(year9999, XAxisType.TIME));
+        for (long value : new long[]{ year0, year9999 }) {
+            assertEquals(value, AxisLimitCodec.parseX(AxisLimitCodec.formatX(value, XAxisType.TIME), XAxisType.TIME));
+        }
+    }
 }

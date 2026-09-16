@@ -180,4 +180,25 @@ class SourceResCsvImporterTest {
         // non-[a-z0-9_] -> underscore) like the other header readers; see EngineNames.
         assertEquals(List.of("flow_at_a", "level_at_b"), names);
     }
+    /**
+     * Source results exported for a stochastic run can start at proleptic year 0000.
+     * The importer's formatter ladder must read that year rather than fall over on it.
+     */
+    @Test
+    void parsesYear0000Timestamps() throws IOException {
+        String stoch = SAMPLE
+            .replace("Simulation time,2020-01-01 - 2020-01-03", "Simulation time,0000-01-01 - 0000-01-03")
+            .replace("2020-01-01,1.5,10.0", "0000-01-01 00:00:00,1.5,10.0")
+            .replace("2020-01-02,-9999,", "0000-01-02 00:00:00,-9999,")
+            .replace("2020-01-03, 3.5 ,12.5", "0000-01-03 00:00:00, 3.5 ,12.5");
+
+        SourceResCsvImporter.ResCsvImportResult result =
+            SourceResCsvImporter.parse(write("stoch.res.csv", stoch));
+        assertFalse(result.hasErrors(), () -> "errors: " + result.getErrors());
+
+        TimeSeriesData flow = result.getSeries().get(0).data();
+        assertEquals(3, flow.getPointCount());
+        assertEquals(epochMillis("0000-01-01"), flow.getFirstTimestamp());
+        assertEquals(epochMillis("0000-01-03"), flow.getLastTimestamp());
+    }
 }
