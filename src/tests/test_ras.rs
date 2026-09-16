@@ -593,6 +593,12 @@ node.src.dsflow
     // The field set is closed for groups too (size and use ARE aggregates now)
     let err = load_err(&base("acc.g1.sizes"));
     assert!(err.contains("Unknown field 'sizes'"), "unexpected: {}", err);
+
+    // allocation_pct is in the closed set for accounts and groups alike
+    let err = load_err(&base("acc.a1.allocation_pcts"));
+    assert!(err.contains("Unknown field 'allocation_pcts'"), "unexpected: {}", err);
+    load(&base("acc.a1.allocation_pct[-1, 0]"));
+    load(&base("acc.g1.allocation_pct[-1, 0]"));
 }
 
 /// acc.<x>.size (account and group-sum) is published at the very top of the
@@ -999,6 +1005,88 @@ acc.g1.allocation
     assert_eq!(pct, vec![60.0, 60.0], "announced percentage recorded");
     let grp = series(&mut model, "acc.g1.allocation");
     assert_eq!(grp, vec![60.0, 60.0], "group allocation aggregate");
+}
+
+fn assert_close(actual: &[f64], expected: &[f64], what: &str) {
+    assert_eq!(actual.len(), expected.len(), "{}: length", what);
+    for (a, e) in actual.iter().zip(expected) {
+        assert!((a - e).abs() < 1e-9, "{}: got {:?}, expected {:?}", what, actual, expected);
+    }
+}
+
+/// allocation_pct is allocation (balance + use) as a percentage of size, for
+/// each account and for the group (sum of allocations over sum of sizes — a
+/// size-weighted mean of the members, not the announced percentage).
+///   a1 (size 100, initial 50): allocate(30) never lowers -> 50%.
+///   a2 (size 300): allocate(30) -> 90; the user takes 10/day from it, which
+///     moves water from balance to use and leaves the allocation at 30%.
+///   group: (50 + 90) / 400 = 35%, while ras.announce.pct reads 30.
+#[test]
+fn test_allocation_pct_account_and_group() {
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size, initial,
+           a1, 100, 50,
+           a2, 300, 0,
+
+[ras.announce]
+targets = acc.g1
+trigger = every_step
+action  = allocate(30)
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 50
+ds_1 = u1
+
+[node.u1]
+type = unregulated_user
+loc = 0, 10
+demand = 10
+accounts = a2
+
+[outputs]
+ras.announce.pct
+acc.a2.use
+acc.a1.allocation_pct
+acc.a2.allocation_pct
+acc.g1.allocation_pct
+"#;
+    let mut model = run(ini);
+    assert_eq!(series(&mut model, "acc.a2.use"), vec![10.0, 20.0], "the user did take from a2");
+    assert_eq!(series(&mut model, "ras.announce.pct"), vec![30.0, 30.0], "announced");
+    assert_close(&series(&mut model, "acc.a1.allocation_pct"), &[50.0, 50.0], "a1 held above the announcement");
+    assert_close(&series(&mut model, "acc.a2.allocation_pct"), &[30.0, 30.0], "a2 use does not reduce allocation");
+    assert_close(&series(&mut model, "acc.g1.allocation_pct"), &[35.0, 35.0], "group is the size-weighted mean");
+}
+
+/// A zero-size account or group has no meaningful percentage: NaN, not 0.
+#[test]
+fn test_allocation_pct_zero_size_is_nan() {
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.empty]
+accounts = name, size,
+           z1, 0,
+
+[ras.announce]
+targets = acc.empty
+trigger = every_step
+action  = allocate(50)
+{TAIL}acc.z1.allocation_pct
+acc.empty.allocation_pct
+"#);
+    let mut model = run(&ini);
+    assert!(series(&mut model, "acc.z1.allocation_pct").iter().all(|v| v.is_nan()), "account");
+    assert!(series(&mut model, "acc.empty.allocation_pct").iter().all(|v| v.is_nan()), "group");
 }
 
 // ============================================================================

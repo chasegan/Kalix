@@ -63,6 +63,12 @@ inflow = if(data.raw_flows.by_index.0 < 0, 0, data.raw_flows.by_index.0)
 
 Comparison operators: `>`, `<`, `>=`, `<=`, `==`, `!=`
 
+Wherever a value is used as a condition — `if`, `&&`, `||`, a
+[RAS trigger](ras.md#triggers) — any non-zero value is true, and **NaN counts
+as non-zero**, so a bare NaN condition is true. Every comparison involving
+NaN is false — `!=` included — so `x > 50` is false when `x` is NaN. To make
+a missing value read as false, wrap it: `infill(x, 0)`.
+
 ### Common Functions
 
 You can also use common mathematical functions.
