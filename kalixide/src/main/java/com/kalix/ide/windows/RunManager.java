@@ -551,7 +551,10 @@ public class RunManager extends JFrame {
         // most-recent run's session, so removing it removes that one run (same as its "Remove").
         runContextMenuManager.setRemovableCategories(
             lastRunNode, currentRunsNode, libraryNode, loadedDatasetsNode);
-        runContextMenuManager.setupOutputsTreeContextMenu(this::expandAllFromSelected, this::collapseAllFromSelected);
+        runContextMenuManager.setupOutputsTreeContextMenu(this::expandAllFromSelected,
+                                                          this::collapseAllFromSelected,
+                                                          this::showSelected
+        );
     }
 
     /**
@@ -729,6 +732,14 @@ public class RunManager extends JFrame {
                 collapseAllChildren(path);
             }
         }
+    }
+
+    private void showSelected() {
+        // Captured first: collapsing a node replaces any selected descendants with the node itself.
+        TreePath[] selectedPaths = timeseriesTree.getSelectionPaths();
+        collapseAllChildren(new TreePath(timeseriesTreeModel.getRoot()));
+        // Restoring the selection also reveals it: JTree expands selected paths by default.
+        timeseriesTree.setSelectionPaths(selectedPaths);
     }
 
     /**

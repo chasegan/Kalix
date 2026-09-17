@@ -266,7 +266,9 @@ public class RunContextMenuManager {
      * Sets up the context menu for the outputs tree with expand/collapse operations.
      * These methods delegate to the caller for tree expansion operations.
      */
-    public void setupOutputsTreeContextMenu(Runnable expandAllCallback, Runnable collapseAllCallback) {
+    public void setupOutputsTreeContextMenu(Runnable expandAllCallback,
+                                            Runnable collapseAllCallback,
+                                            Runnable showSelectedCallback) {
         JPopupMenu contextMenu = new JPopupMenu();
 
         JMenuItem expandAllItem = new JMenuItem("Expand all");
@@ -276,6 +278,11 @@ public class RunContextMenuManager {
         JMenuItem collapseAllItem = new JMenuItem("Collapse all");
         collapseAllItem.addActionListener(e -> collapseAllCallback.run());
         contextMenu.add(collapseAllItem);
+
+        JMenuItem showSelectedItem = new JMenuItem("Show selected");
+        showSelectedItem.addActionListener(e -> showSelectedCallback.run());
+        contextMenu.add(showSelectedItem);
+
 
         // Add mouse listener for right-click
         outputsTree.addMouseListener(new MouseAdapter() {
