@@ -8,8 +8,6 @@ import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.swing.JFrame;
 import javax.swing.JMenuItem;
@@ -20,6 +18,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -295,18 +294,18 @@ public class RunContextMenuManager {
             }
 
             private void showContextMenu(MouseEvent e, JPopupMenu menu) {
-                // Get the path at the mouse location
-                TreePath path = outputsTree.getPathForLocation(e.getX(), e.getY());
-                if (path != null) {
-                    // Select the node that was right-clicked if not already selected
-                    if (!outputsTree.isPathSelected(path)) {
-                        outputsTree.setSelectionPath(path);
-                    }
-                    menu.show(outputsTree, e.getX(), e.getY());
-                } else {
-                    // Right-clicked on empty space - still show menu (applies to root)
-                    menu.show(outputsTree, e.getX(), e.getY());
+                // Get the path at the mouse location (full-width hit test)
+                int row = outputsTree.getClosestRowForLocation(0, e.getY());
+                Rectangle bounds = row < 0 ? null : outputsTree.getRowBounds(row);
+                boolean onRow = bounds != null
+                    && e.getY() >= bounds.y && e.getY() < bounds.y + bounds.height;
+                if (!onRow) {
+                    // Empty space below the last row: the menu acts on the root.
+                    outputsTree.clearSelection();
+                } else if (!outputsTree.isRowSelected(row)) {
+                    outputsTree.setSelectionRow(row);
                 }
+                menu.show(outputsTree, e.getX(), e.getY());
             }
         });
     }
