@@ -553,6 +553,7 @@ public class RunManager extends JFrame {
             lastRunNode, currentRunsNode, libraryNode, loadedDatasetsNode);
         runContextMenuManager.setupOutputsTreeContextMenu(this::expandAllFromSelected,
                                                           this::collapseAllFromSelected,
+                                                          this::showChecked,
                                                           this::showSelected
         );
     }
@@ -731,6 +732,14 @@ public class RunManager extends JFrame {
             for (TreePath path : selectedPaths) {
                 collapseAllChildren(path);
             }
+        }
+    }
+
+    private void showChecked() {
+        // Collapse all and then expand to checked paths only
+        collapseAllChildren(new TreePath(timeseriesTreeModel.getRoot()));
+        for (TreePath path : timeseriesTree.getCheckedPaths()) {
+            timeseriesTree.makeVisible(path);
         }
     }
 

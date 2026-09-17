@@ -268,6 +268,7 @@ public class RunContextMenuManager {
      */
     public void setupOutputsTreeContextMenu(Runnable expandAllCallback,
                                             Runnable collapseAllCallback,
+                                            Runnable showCheckedCallback,
                                             Runnable showSelectedCallback) {
         JPopupMenu contextMenu = new JPopupMenu();
 
@@ -278,6 +279,10 @@ public class RunContextMenuManager {
         JMenuItem collapseAllItem = new JMenuItem("Collapse all");
         collapseAllItem.addActionListener(e -> collapseAllCallback.run());
         contextMenu.add(collapseAllItem);
+
+        JMenuItem showCheckedItem = new JMenuItem("Show checked");
+        showCheckedItem.addActionListener(e -> showCheckedCallback.run());
+        contextMenu.add(showCheckedItem);
 
         JMenuItem showSelectedItem = new JMenuItem("Show selected");
         showSelectedItem.addActionListener(e -> showSelectedCallback.run());
