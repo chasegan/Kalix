@@ -15,7 +15,6 @@ import java.awt.Font;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.util.List;
 
 /**
  * The left-hand project region: a small header showing the open folder's name above the live
@@ -134,10 +133,10 @@ public class ProjectTreePanel extends JPanel {
     }
 
     /**
-     * Shows the tree's right-click context menu for the given files (e.g. from an editor tab),
+     * Shows the tree's right-click context menu for the given editor tab file,
      * at the given screen location within {@code invoker}.
      */
-    public void showContextMenuForFiles(List<File> files, Component invoker, int x, int y) {
-        tree.showContextMenuForFiles(files, invoker, x, y);
+    public void showTabContextMenu(File file, Component invoker, int x, int y) {
+        tree.showTabContextMenu(file, invoker, x, y);
     }
 }
