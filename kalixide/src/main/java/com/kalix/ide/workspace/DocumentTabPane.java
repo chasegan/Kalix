@@ -151,6 +151,11 @@ public class DocumentTabPane extends JPanel {
                 }
             }
 
+            /**
+             * Shows the right-click context menu for the tab under {@code e}, targeting
+             * its file directly. Right-clicking a background tab shows a menu for it
+             * without switching the editor to it or moving the tab strip's highlight.
+             */
             private void showTabContextMenu(MouseEvent e) {
                 int tabIndex = tabbedPane.indexAtLocation(e.getX(), e.getY());
 
