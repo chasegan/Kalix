@@ -738,9 +738,11 @@ public class RunManager extends JFrame {
     private void showChecked() {
         // Collapse all and then expand to checked paths only
         collapseAllChildren(new TreePath(timeseriesTreeModel.getRoot()));
-        for (TreePath path : timeseriesTree.getCheckedPaths()) {
+        TreePath[] checkedPaths = timeseriesTree.getCheckedPaths();
+        for (TreePath path : checkedPaths) {
             timeseriesTree.makeVisible(path);
         }
+        scrollToTopmost(checkedPaths);
     }
 
     private void showSelected() {
@@ -749,6 +751,28 @@ public class RunManager extends JFrame {
         collapseAllChildren(new TreePath(timeseriesTreeModel.getRoot()));
         // Restoring the selection also reveals it: JTree expands selected paths by default.
         timeseriesTree.setSelectionPaths(selectedPaths);
+        scrollToTopmost(selectedPaths);
+    }
+
+    /**
+     * Scrolls to the highest revealed row, so the folded tree opens at the top of what was
+     * revealed rather than wherever the viewport happened to sit. Topmost by row order, not
+     * by the order the paths were ticked.
+     */
+    private void scrollToTopmost(TreePath[] paths) {
+        if (paths == null) {
+            return;
+        }
+        int topRow = Integer.MAX_VALUE;
+        for (TreePath path : paths) {
+            int row = timeseriesTree.getRowForPath(path);
+            if (row >= 0) {
+                topRow = Math.min(topRow, row);
+            }
+        }
+        if (topRow != Integer.MAX_VALUE) {
+            timeseriesTree.scrollRowToVisible(topRow);
+        }
     }
 
     /**
