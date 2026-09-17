@@ -1,6 +1,7 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.cli.RunModelProgram;
+import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.filedialog.FileDialogFilter;
@@ -8,8 +9,6 @@ import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.swing.JFrame;
 import javax.swing.JMenuItem;
@@ -20,6 +19,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -38,7 +38,7 @@ import java.util.function.Supplier;
  *
  * Responsibilities:
  * - Setting up run tree context menu (rename, remove, save, show model, diff, session manager)
- * - Setting up outputs tree context menu (expand all, collapse all)
+ * - Setting up outputs tree context menu (expand/collapse, show checked/selected)
  * - Handling all context menu actions
  * - Managing tree expansion/collapse operations
  *
@@ -52,7 +52,7 @@ public class RunContextMenuManager {
     // Dependencies
     private final JFrame parentFrame;
     private final JTree runTree;
-    private final JTree outputsTree;
+    private final JCheckboxTree outputsTree;
     private final DefaultTreeModel runTreeModel;
     private final StdioTaskManager stdioTaskManager;
     private final Consumer<String> statusUpdater;
@@ -113,7 +113,7 @@ public class RunContextMenuManager {
     public RunContextMenuManager(
             JFrame parentFrame,
             JTree runTree,
-            JTree outputsTree,
+            JCheckboxTree outputsTree,
             DefaultTreeModel runTreeModel,
             StdioTaskManager stdioTaskManager,
             Consumer<String> statusUpdater,
@@ -264,10 +264,14 @@ public class RunContextMenuManager {
     }
 
     /**
-     * Sets up the context menu for the outputs tree with expand/collapse operations.
-     * These methods delegate to the caller for tree expansion operations.
+     * Sets up the context menu for the outputs tree: expand/collapse, and the two
+     * "Show" actions that fold the tree back to what is checked or selected. Every item
+     * is a view/state action (ADR-0002 §1) and delegates to the caller.
      */
-    public void setupOutputsTreeContextMenu(Runnable expandAllCallback, Runnable collapseAllCallback) {
+    public void setupOutputsTreeContextMenu(Runnable expandAllCallback,
+                                            Runnable collapseAllCallback,
+                                            Runnable showCheckedCallback,
+                                            Runnable showSelectedCallback) {
         JPopupMenu contextMenu = new JPopupMenu();
 
         JMenuItem expandAllItem = new JMenuItem("Expand all");
@@ -277,6 +281,14 @@ public class RunContextMenuManager {
         JMenuItem collapseAllItem = new JMenuItem("Collapse all");
         collapseAllItem.addActionListener(e -> collapseAllCallback.run());
         contextMenu.add(collapseAllItem);
+
+        JMenuItem showCheckedItem = new JMenuItem("Show checked");
+        showCheckedItem.addActionListener(e -> showCheckedCallback.run());
+        contextMenu.add(showCheckedItem);
+
+        JMenuItem showSelectedItem = new JMenuItem("Show selected");
+        showSelectedItem.addActionListener(e -> showSelectedCallback.run());
+        contextMenu.add(showSelectedItem);
 
         // Add mouse listener for right-click
         outputsTree.addMouseListener(new MouseAdapter() {
@@ -295,18 +307,24 @@ public class RunContextMenuManager {
             }
 
             private void showContextMenu(MouseEvent e, JPopupMenu menu) {
-                // Get the path at the mouse location
-                TreePath path = outputsTree.getPathForLocation(e.getX(), e.getY());
-                if (path != null) {
-                    // Select the node that was right-clicked if not already selected
-                    if (!outputsTree.isPathSelected(path)) {
-                        outputsTree.setSelectionPath(path);
-                    }
-                    menu.show(outputsTree, e.getX(), e.getY());
-                } else {
-                    // Right-clicked on empty space - still show menu (applies to root)
-                    menu.show(outputsTree, e.getX(), e.getY());
+                // Get the path at the mouse location (full-width hit test)
+                int row = outputsTree.getClosestRowForLocation(0, e.getY());
+                Rectangle bounds = row < 0 ? null : outputsTree.getRowBounds(row);
+                boolean onRow = bounds != null
+                    && e.getY() >= bounds.y && e.getY() < bounds.y + bounds.height;
+                if (!onRow) {
+                    // Empty space below the last row: the menu acts on the root.
+                    outputsTree.clearSelection();
+                } else if (!outputsTree.isRowSelected(row)) {
+                    outputsTree.setSelectionRow(row);
                 }
+                // Enable/disable and hide/show menu items based on context (ADR-0002 §4).
+                // "Show selected" cannot apply to an empty-space click, which just cleared the selection
+                showSelectedItem.setVisible(onRow);
+                // "Show checked" stays visible but greyed, so the user learns it exists.
+                showCheckedItem.setEnabled(outputsTree.getCheckedPaths().length > 0);
+
+                menu.show(outputsTree, e.getX(), e.getY());
             }
         });
     }
