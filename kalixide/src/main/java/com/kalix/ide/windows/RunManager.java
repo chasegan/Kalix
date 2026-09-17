@@ -741,7 +741,10 @@ public class RunManager extends JFrame {
             TreePath childPath = path.pathByAddingChild(node.getChildAt(i));
             collapseAllChildren(childPath);
         }
-        timeseriesTree.collapsePath(path);
+        // The root is hidden, so collapsing it would hide every row rather than fold them.
+        if (path.getParentPath() != null || timeseriesTree.isRootVisible()) {
+            timeseriesTree.collapsePath(path);
+        }
     }
 
     /**
