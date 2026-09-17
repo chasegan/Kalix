@@ -38,7 +38,7 @@ import java.util.function.Supplier;
  *
  * Responsibilities:
  * - Setting up run tree context menu (rename, remove, save, show model, diff, session manager)
- * - Setting up outputs tree context menu (expand all, collapse all)
+ * - Setting up outputs tree context menu (expand/collapse, show checked/selected)
  * - Handling all context menu actions
  * - Managing tree expansion/collapse operations
  *
@@ -264,8 +264,9 @@ public class RunContextMenuManager {
     }
 
     /**
-     * Sets up the context menu for the outputs tree with expand/collapse operations.
-     * These methods delegate to the caller for tree expansion operations.
+     * Sets up the context menu for the outputs tree: expand/collapse, and the two
+     * "Show" actions that fold the tree back to what is checked or selected. Every item
+     * is a view/state action (ADR-0002 §1) and delegates to the caller.
      */
     public void setupOutputsTreeContextMenu(Runnable expandAllCallback,
                                             Runnable collapseAllCallback,
