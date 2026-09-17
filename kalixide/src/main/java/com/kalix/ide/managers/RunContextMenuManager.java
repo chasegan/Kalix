@@ -318,6 +318,12 @@ public class RunContextMenuManager {
                 } else if (!outputsTree.isRowSelected(row)) {
                     outputsTree.setSelectionRow(row);
                 }
+                // Enable/disable and hide/show menu items based on context (ADR-0002 §4).
+                // "Show selected" cannot apply to an empty-space click, which just cleared the selection
+                showSelectedItem.setVisible(onRow);
+                // "Show checked" stays visible but greyed, so the user learns it exists.
+                showCheckedItem.setEnabled(outputsTree.getCheckedPaths().length > 0);
+
                 menu.show(outputsTree, e.getX(), e.getY());
             }
         });
