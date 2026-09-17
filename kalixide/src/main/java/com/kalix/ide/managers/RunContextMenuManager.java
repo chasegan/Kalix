@@ -1,6 +1,7 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.cli.RunModelProgram;
+import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.filedialog.FileDialogFilter;
@@ -51,7 +52,7 @@ public class RunContextMenuManager {
     // Dependencies
     private final JFrame parentFrame;
     private final JTree runTree;
-    private final JTree outputsTree;
+    private final JCheckboxTree outputsTree;
     private final DefaultTreeModel runTreeModel;
     private final StdioTaskManager stdioTaskManager;
     private final Consumer<String> statusUpdater;
@@ -112,7 +113,7 @@ public class RunContextMenuManager {
     public RunContextMenuManager(
             JFrame parentFrame,
             JTree runTree,
-            JTree outputsTree,
+            JCheckboxTree outputsTree,
             DefaultTreeModel runTreeModel,
             StdioTaskManager stdioTaskManager,
             Consumer<String> statusUpdater,
