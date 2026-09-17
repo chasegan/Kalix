@@ -289,7 +289,6 @@ public class RunContextMenuManager {
         showSelectedItem.addActionListener(e -> showSelectedCallback.run());
         contextMenu.add(showSelectedItem);
 
-
         // Add mouse listener for right-click
         outputsTree.addMouseListener(new MouseAdapter() {
             @Override
