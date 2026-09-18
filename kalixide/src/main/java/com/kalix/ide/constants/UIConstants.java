@@ -88,6 +88,9 @@ public final class UIConstants {
         /** Border width for unselected nodes */
         public static final float NODE_UNSELECTED_STROKE_WIDTH = 1.0f;
 
+        /** Color for a dragged link that would be refused (and its target's ring) */
+        public static final Color LINK_DRAG_REFUSED = new Color(210, 40, 40);
+
         private Selection() { throw new UnsupportedOperationException("Constants class"); }
     }
 

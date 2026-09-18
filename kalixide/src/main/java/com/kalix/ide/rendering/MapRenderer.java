@@ -72,7 +72,7 @@ public class MapRenderer {
 
     // Link-drag styling (dragging a new link from a node's ring)
     private static final Color LINK_DRAG_COLOR = UIConstants.Selection.RECTANGLE_BORDER;
-    private static final Color LINK_DRAG_REFUSED_COLOR = new Color(210, 40, 40);
+    private static final Color LINK_DRAG_REFUSED_COLOR = UIConstants.Selection.LINK_DRAG_REFUSED;
     private static final BasicStroke LINK_HANDLE_STROKE = new BasicStroke(2.0f);
 
     // Chevron arrow constants
