@@ -403,14 +403,19 @@ public class MapPanel extends JPanel {
                 // transition matters — an unchanged hover costs nothing beyond the
                 // coordinate overlay repaint below.
                 boolean hoverChanged = updateHoveredNode(e.getPoint());
-                hoverChanged |= updateLinkHandleHover(e.getPoint());
+
+                // With Shift (rectangle select) or a rotation modifier held, a press would not
+                // draw a link, so no ring is offered.
+                boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
+                boolean rotating = isCtrlDown && interactionManager != null
+                    && interactionManager.canStartRotation();
+                hoverChanged |= updateLinkHandleHover(rotating || e.isShiftDown() ? null : e.getPoint());
 
                 // Show rotation cursor when Ctrl is held and multiple nodes are selected,
                 // and a crosshair over a node's link ring. Only touch the cursor on a state
                 // change — setCursor per event is wasteful.
-                boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
                 Cursor desiredCursor;
-                if (isCtrlDown && interactionManager != null && interactionManager.canStartRotation()) {
+                if (rotating) {
                     desiredCursor = rotateCursor();
                 } else if (linkHandleHoverNode != null) {
                     desiredCursor = Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
@@ -830,11 +835,12 @@ public class MapPanel extends JPanel {
     }
 
     /**
-     * Recomputes which node's link ring is under the idle mouse, returning whether it
-     * changed. On a node itself there is no ring: pressing there selects or moves it.
+     * Recomputes which node's link ring is under the idle mouse (none for a null point),
+     * returning whether it changed. On a node itself there is no ring: pressing there
+     * selects or moves it.
      */
     private boolean updateLinkHandleHover(Point screenPoint) {
-        String near = getNodeNear(screenPoint);
+        String near = screenPoint != null ? getNodeNear(screenPoint) : null;
         String hover = near != null && getNodeAtPoint(screenPoint) == null ? near : null;
         if (java.util.Objects.equals(hover, linkHandleHoverNode)) {
             return false;
@@ -1167,6 +1173,9 @@ public class MapPanel extends JPanel {
             if (interactionManager != null && interactionManager.canStartRotation()
                     && !interactionManager.isDragging()) {
                 setCursor(rotateCursor());
+                if (updateLinkHandleHover(null)) {
+                    repaint();
+                }
             }
         };
         Runnable previewOff = () -> {
