@@ -10,6 +10,7 @@ import com.kalix.ide.flowviz.data.LastSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
+import com.kalix.ide.io.PixieReader;
 import com.kalix.ide.io.PixieStore;
 import com.kalix.ide.managers.DatasetLoaderManager;
 import com.kalix.ide.managers.DatasetSeriesSource;
@@ -20,6 +21,7 @@ import com.kalix.ide.managers.TreeFilterManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -286,6 +288,14 @@ class SeriesFetchCoordinator {
             }
         }
 
+        // The plot pool holds every plotted series strongly, so ticking a parent over a
+        // large Pixie file (e.g. #430's 181 x 3.65M points) would decode the whole file
+        // into memory, one series at a time. Judge the Pixie series of the whole new
+        // selection - including any already plotted - by the same estimate and budget
+        // as the whole-file views, and fetch none of the new ones if it is over.
+        String pixieRefusal = pixieSelectionRefusal(newSelectedSeries);
+        boolean pixieRefused = false;
+
         // Fetch dataset series into the pool. The sources map is keyed by the
         // DatasetSeries ref (absolutePath + baseName); we already have that ref.
         for (SeriesRef ref : datasetRefs) {
@@ -296,11 +306,22 @@ class SeriesFetchCoordinator {
                 window.addSeriesToPool(ref, loaded.data());
                 tabManager.updateSeriesInStatsTabsWithAggregation(ref, loaded.data());
             } else if (source instanceof DatasetSeriesSource.Pixie pixie) {
-                fetchPixieSeries(datasetRef, pixie, targetPanel, shouldResetZoom);
+                if (pixieRefusal != null) {
+                    tabManager.addErrorSeriesInStatsTabs(ref, "Not loaded: selection too large");
+                    pixieRefused = true;
+                } else {
+                    fetchPixieSeries(datasetRef, pixie, targetPanel, shouldResetZoom);
+                }
             } else {
                 logger.warn("Dataset series not found: {}", datasetRef);
                 tabManager.addErrorSeriesInStatsTabs(ref, "Series not found");
             }
+        }
+
+        if (pixieRefused) {
+            // After this listener returns, so a modal dialog never runs inside the tree event.
+            SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(window, pixieRefusal,
+                "Selection Too Large", JOptionPane.WARNING_MESSAGE));
         }
 
         // Update the target tab's selected series (rebuilds legend, visible series, display)
@@ -313,6 +334,37 @@ class SeriesFetchCoordinator {
         if (shouldResetZoom && targetPanel != null) {
             targetPanel.zoomToFit();
         }
+    }
+
+    /**
+     * Why the Pixie series in {@code selection} must not be fetched, or {@code null} if
+     * they fit: their estimated decoded size ({@link PixieStore#estimateWholeLoadBytes})
+     * against {@link PixieStore#defaultWholeLoadBudget}. A key whose file has changed is
+     * left out of the estimate; its fetch fails as stale anyway.
+     */
+    private String pixieSelectionRefusal(Set<SeriesRef> selection) {
+        PixieStore store = PixieStore.shared();
+        List<PixieReader.SeriesInfo> infos = new ArrayList<>();
+        for (SeriesRef ref : selection) {
+            if (ref instanceof DatasetSeries datasetRef
+                    && datasetSeriesSources.get(datasetRef) instanceof DatasetSeriesSource.Pixie pixie) {
+                try {
+                    infos.add(store.info(pixie.key()));
+                } catch (IllegalArgumentException stale) {
+                    // Not countable; fetchPixieSeries reports it.
+                }
+            }
+        }
+        long estimate = PixieStore.estimateWholeLoadBytes(infos);
+        long budget = PixieStore.defaultWholeLoadBudget();
+        if (estimate <= budget) {
+            return null;
+        }
+        return String.format(
+            "The ticked Pixie series (%,d) would need about %s in memory to plot together,"
+                + " more than the %s the Run Manager allows (half the IDE's memory).%n%n"
+                + "Tick fewer series at a time: those not yet plotted were not loaded.",
+            infos.size(), PixieStore.formatBytes(estimate), PixieStore.formatBytes(budget));
     }
 
     /**
