@@ -374,11 +374,11 @@ public class MapPanel extends JPanel {
             @Override
             public void mouseExited(MouseEvent e) {
                 mouseInPanel = false;
-                linkHandleHoverNode = null;
-                if (hoveredNodeName != null) {
-                    // Leaving the panel must retract a hover-revealed label, otherwise
-                    // it stays painted with the mouse nowhere near it.
+                if (hoveredNodeName != null || linkHandleHoverNode != null) {
+                    // Leaving the panel must retract a hover-revealed label or link ring,
+                    // otherwise it stays painted with the mouse nowhere near it.
                     hoveredNodeName = null;
+                    linkHandleHoverNode = null;
                     repaint();
                 } else {
                     repaintCoordinateOverlay();
