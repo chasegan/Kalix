@@ -754,48 +754,23 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
-     * Links two existing nodes (e.g. from a drag on the map), as a single undoable edit:
-     * {@code upstream} gains {@code ds_N = downstream} at its first free N, or, once every
-     * outlet its type allows is taken, its last allowed outlet is re-pointed at
-     * {@code downstream}.
+     * Links two existing nodes (e.g. from a drag on the map); see
+     * {@link CommandExecutor#linkEdit} for which outlet is used.
      *
      * @param upstreamType the upstream node's type, for its allowed outlets (may be null)
-     * @return true if the link was written, false if nothing changed
      */
-    public boolean addLink(String upstream, String upstreamType, String downstream) {
+    public void addLink(String upstream, String upstreamType, String downstream) {
         if (commandParentFrame == null) {
             logger.warn("Context commands not initialized - cannot add link");
-            return false;
+            return;
         }
-
-        CommandExecutor executor = new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
-
-        return executor.addLink(upstream, downstream, maxOutlet(upstreamType));
-    }
-
-    private static final java.util.regex.Pattern DS_PARAM_PATTERN =
-        java.util.regex.Pattern.compile("ds_(\\d{1,9})");
-
-    /**
-     * The highest {@code ds_N} the schema allows for a node type, or 0 if the type or
-     * schema is unknown.
-     */
-    private int maxOutlet(String nodeType) {
         com.kalix.ide.linter.LinterSchema schema =
             schemaManager != null ? schemaManager.getCurrentSchema() : null;
-        com.kalix.ide.linter.schema.NodeTypeDefinition def =
-            schema != null && nodeType != null ? schema.getNodeType(nodeType) : null;
-        if (def == null) {
-            return 0;
-        }
-        int max = 0;
-        for (String param : def.dsnodeParams) {
-            java.util.regex.Matcher m = DS_PARAM_PATTERN.matcher(param);
-            if (m.matches()) {
-                max = Math.max(max, Integer.parseInt(m.group(1)));
-            }
-        }
-        return max;
+        com.kalix.ide.linter.schema.NodeTypeDefinition type =
+            schema != null && upstreamType != null ? schema.getNodeType(upstreamType) : null;
+
+        CommandExecutor executor = new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
+        executor.addLink(upstream, downstream, type != null ? type.maxDsOutlet() : 0);
     }
 
     private void setupKeyBindings() {

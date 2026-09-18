@@ -471,13 +471,9 @@ public class MapRenderer {
     }
 
     /**
-     * Renders the ring around a node that shows a link can be dragged from it (hover
-     * affordance), or that the dragged link will snap to it (drop target).
-     *
-     * @param g2d Graphics context (in screen space)
-     * @param screenX Node centre X in screen coordinates
-     * @param screenY Node centre Y in screen coordinates
-     * @param valid false to draw the ring in the refusal colour
+     * Renders the ring around a node (centre in screen coordinates) that shows a link can
+     * be dragged from it, or that the dragged link will snap to it; in the refusal colour
+     * unless {@code valid}.
      */
     public void renderLinkHandle(Graphics2D g2d, double screenX, double screenY, boolean valid) {
         double r = NODE_SIZE / 2.0 + UIConstants.Map.LINK_HANDLE_RING_PX / 2.0;
@@ -488,15 +484,9 @@ public class MapRenderer {
     }
 
     /**
-     * Renders the link being dragged: a dashed line with a flow chevron from the source
-     * node to the cursor, or to the snapped target node.
-     *
-     * @param g2d Graphics context (in screen space)
-     * @param fromX Source node centre X in screen coordinates
-     * @param fromY Source node centre Y in screen coordinates
-     * @param toX Line end X: the target node centre when snapped, else the cursor
-     * @param toY Line end Y: the target node centre when snapped, else the cursor
-     * @param valid false to draw the line in the refusal colour
+     * Renders the link being dragged, in screen coordinates: a dashed line with a flow
+     * chevron from the source node to the cursor or snapped target, in the refusal colour
+     * unless {@code valid}.
      */
     public void renderLinkDrag(Graphics2D g2d, double fromX, double fromY, double toX, double toY,
                                boolean valid) {

@@ -644,16 +644,12 @@ public class CommandExecutor {
     }
 
     /**
-     * Links two existing nodes (e.g. by dragging on the map), as one atomic edit — see
-     * {@link #linkEdit} for which outlet is used. Whether the link is sensible (self-link,
-     * duplicate, cycle) is the caller's concern; this writes the text only. The definition
-     * order is deliberately not repaired — an upstream node defined below its target is
-     * left for the linter to report (per ADR-0005 §2.1).
+     * Links two existing nodes as one atomic edit; see {@link #linkEdit}. Whether the link
+     * is sensible (self-link, duplicate, loop) is the caller's concern. Definition order is
+     * not repaired: a target defined above its source is left for the linter (per
+     * ADR-0005 §2.1).
      *
-     * @param maxOutlet the highest {@code ds_N} the upstream node's type allows, or 0 if
-     *                  unknown (then a new outlet is always added)
-     * @return true if the link was written; false if the upstream node has no section in
-     *         the text, in which case nothing was changed
+     * @return false if the upstream node has no section, in which case nothing changed
      */
     public boolean addLink(String upstream, String downstream, int maxOutlet) {
         try {
