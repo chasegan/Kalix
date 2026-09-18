@@ -200,7 +200,10 @@ public final class PixieStore {
                 entry.inFlight.remove(info.index);
             }
             decode.complete(data);
-        } catch (IOException | RuntimeException e) {
+        } catch (Throwable e) {
+            // Every future must settle, errors included: a decode that runs out of memory
+            // would otherwise leave its series "loading" forever, and the stuck in-flight
+            // entry would hand the same unsettled future to every later request.
             synchronized (this) {
                 entry.inFlight.remove(info.index);
             }
