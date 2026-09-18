@@ -17,7 +17,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongSupplier;
 
@@ -98,19 +97,6 @@ public final class PixieDataSession implements FindableData {
         }
     }
 
-    /**
-     * Estimated peak bytes per point for a whole-file load: 17 held per point
-     * (timestamp, value, validity flag) plus 8 for the union index's working
-     * copy of every timestamp.
-     */
-    private static final long LOAD_BYTES_PER_POINT = 25;
-
-    /**
-     * Transient bytes per point of the series being decoded: the float codec's float[]
-     * before it is widened (decoded arrays are adopted, not copied, by TimeSeriesData).
-     */
-    private static final long DECODE_BYTES_PER_POINT = 4;
-
     private final File pxtFile;
     private final LongSupplier rowLimit;
     private final LongSupplier memoryBudget;
@@ -129,7 +115,7 @@ public final class PixieDataSession implements FindableData {
 
     /** Test seam: the row limit is injectable so tests need no preference writes. */
     PixieDataSession(File pxtFile, LongSupplier rowLimit) {
-        this(pxtFile, rowLimit, () -> Runtime.getRuntime().maxMemory() / 2);
+        this(pxtFile, rowLimit, PixieStore::defaultWholeLoadBudget);
     }
 
     /** Test seam: the memory budget too, so tests need no heap of a particular size. */
@@ -180,15 +166,13 @@ public final class PixieDataSession implements FindableData {
             List<PixieSeriesKey> keys = store.open(pxtFile);
             List<PixieReader.SeriesInfo> infos = new ArrayList<>(keys.size());
             long longestSeries = 0;
-            long totalPoints = 0;
             for (PixieSeriesKey key : keys) {
                 PixieReader.SeriesInfo info = store.info(key);
                 infos.add(info);
                 longestSeries = Math.max(longestSeries, info.pointCount);
-                totalPoints += info.pointCount;
             }
             long limit = rowLimit.getAsLong();
-            long estimate = totalPoints * LOAD_BYTES_PER_POINT + longestSeries * DECODE_BYTES_PER_POINT;
+            long estimate = PixieStore.estimateWholeLoadBytes(infos);
             long budget = memoryBudget.getAsLong();
             if (longestSeries > limit) {
                 // Refused BEFORE decoding: the gate must never cost the memory
@@ -210,11 +194,11 @@ public final class PixieDataSession implements FindableData {
                     "Table and plot disabled: %,d series of up to %,d rows need about %s in memory,"
                         + " more than the %s this viewer allows (half the IDE's memory)."
                         + " Load the file in the Run Manager to plot selected series.",
-                    keys.size(), longestSeries, formatBytes(estimate), formatBytes(budget)));
+                    keys.size(), longestSeries, PixieStore.formatBytes(estimate), PixieStore.formatBytes(budget)));
             } else {
                 List<NamedSeries> series = new ArrayList<>(keys.size());
                 for (int i = 0; i < keys.size(); i++) {
-                    TimeSeriesData data = decode(store, keys.get(i));
+                    TimeSeriesData data = store.read(keys.get(i));
                     // Dotted names nest as a whole-file read's would (NamedSeries.dotted).
                     series.add(NamedSeries.dotted(infos.get(i).name, data));
                 }
@@ -243,34 +227,6 @@ public final class PixieDataSession implements FindableData {
                 listener.onLoaded();
             }
         });
-    }
-
-    /** Waits for one series from the store (worker thread), surfacing its failure as thrown. */
-    private static TimeSeriesData decode(PixieStore store, PixieSeriesKey key) throws IOException {
-        try {
-            return store.get(key).get();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted while decoding", e);
-        } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof IOException io) {
-                throw io;
-            }
-            if (cause instanceof RuntimeException runtime) {
-                throw runtime;
-            }
-            if (cause instanceof Error error) {
-                throw error;
-            }
-            throw new IOException(cause);
-        }
-    }
-
-    /** Sizes for the gate's note: one decimal of GB, or whole MB below that. */
-    private static String formatBytes(long bytes) {
-        double gb = bytes / (1024.0 * 1024 * 1024);
-        return gb >= 1 ? String.format("%.1f GB", gb) : String.format("%,d MB", bytes / (1024 * 1024));
     }
 
     /** Every timestamp any series has — sorted, deduped: the table's row index. */

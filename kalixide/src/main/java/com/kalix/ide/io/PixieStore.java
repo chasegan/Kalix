@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -110,6 +111,48 @@ public final class PixieStore {
     public PixieStore() {
     }
 
+    // --- whole-file memory check (issue #430) ---
+    //
+    // Shared by the views that decode every series of a pair (the data viewer and the
+    // FlowViz window), so a file is judged the same way wherever it is opened. Reads
+    // the index only. A file over budget should be refused before decoding, pointing
+    // the user at the Run Manager, which decodes only the series that are plotted.
+
+    /**
+     * Estimated peak bytes per point for a whole-file load: 17 held per point
+     * (timestamp, value, validity flag) plus 8 for the view's own working
+     * structures (the data viewer's union time index; plot headroom in FlowViz).
+     */
+    private static final long WHOLE_LOAD_BYTES_PER_POINT = 25;
+
+    /**
+     * Transient bytes per point of the series being decoded: the float codec's float[]
+     * before it is widened (decoded arrays are adopted, not copied, by TimeSeriesData).
+     */
+    private static final long DECODE_BYTES_PER_POINT = 4;
+
+    /** Estimated peak memory to decode and hold every series in {@code index}. */
+    public static long estimateWholeLoadBytes(List<PixieReader.SeriesInfo> index) {
+        long totalPoints = 0;
+        long longestSeries = 0;
+        for (PixieReader.SeriesInfo info : index) {
+            totalPoints += info.pointCount;
+            longestSeries = Math.max(longestSeries, info.pointCount);
+        }
+        return totalPoints * WHOLE_LOAD_BYTES_PER_POINT + longestSeries * DECODE_BYTES_PER_POINT;
+    }
+
+    /** The default whole-load budget: half the heap, leaving the rest to runs and other documents. */
+    public static long defaultWholeLoadBudget() {
+        return Runtime.getRuntime().maxMemory() / 2;
+    }
+
+    /** Sizes for refusal messages: one decimal of GB, or whole MB below that. */
+    public static String formatBytes(long bytes) {
+        double gb = bytes / (1024.0 * 1024 * 1024);
+        return gb >= 1 ? String.format("%.1f GB", gb) : String.format("%,d MB", bytes / (1024 * 1024));
+    }
+
     /**
      * Opens a pair from either half, reading only its {@code .pxt} index. Re-opening
      * a pair that is unchanged on disk returns the same keys and keeps what has been
@@ -201,6 +244,33 @@ public final class PixieStore {
             entry.inFlight.put(key.index(), decode);
             decoder.execute(() -> decodeInto(entry, info, decode));
             return decode;
+        }
+    }
+
+    /**
+     * {@link #get}, waited for: for worker threads that need a series before going on.
+     * Never call on the EDT. Failures surface as thrown: an {@link IOException}
+     * (including {@link StaleIndexException}), a {@link RuntimeException}, or an
+     * {@link Error} such as running out of memory.
+     */
+    public TimeSeriesData read(PixieSeriesKey key) throws IOException {
+        try {
+            return get(key).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while decoding", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException io) {
+                throw io;
+            }
+            if (cause instanceof RuntimeException runtime) {
+                throw runtime;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IOException(cause);
         }
     }
 
