@@ -21,12 +21,14 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.dnd.DragSource;
 import java.awt.geom.Arc2D;
 import java.awt.image.BufferedImage;
 
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.interaction.MapClipboardManager;
+import com.kalix.ide.interaction.LinkRules;
 import com.kalix.ide.interaction.MapContextMenuManager;
 import com.kalix.ide.interaction.MapInteractionManager;
 import com.kalix.ide.interaction.MapSearchManager;
@@ -78,6 +80,15 @@ public class MapPanel extends JPanel {
     private boolean isRectangleSelecting = false;
     private Point rectangleStartPoint = null;
     private Point rectangleCurrentPoint = null;
+
+    // Link drag: a press in the ring just outside a node drags a new link
+    // out of it. linkDragSource is non-null only while such a drag is in progress.
+    private String linkDragSource = null;
+    private Point linkDragPoint = null;
+    private String linkDragTarget = null;
+    private boolean linkDragTargetAllowed = false;
+    /** Node whose ring is under the idle mouse. */
+    private String linkHandleHoverNode = null;
 
     // Mouse hover tracking for coordinate display
     private double mouseWorldX = 0;
@@ -285,6 +296,10 @@ public class MapPanel extends JPanel {
                         // Navigation to the node's definition happens on mouseReleased,
                         // once we know this was a click and not the start of a drag —
                         // navigating here moved the editor caret on every drag.
+                    } else if (!e.isShiftDown() && getNodeNear(e.getPoint()) != null) {
+                        // In the ring just outside a node (not on any node): drag out a
+                        // new link. Shift keeps its meaning of rectangle selection.
+                        startLinkDrag(getNodeNear(e.getPoint()), e.getPoint());
                     } else {
                         // Not clicking on a node - check for links
                         com.kalix.ide.model.ModelLink linkAtPoint = getLinkAtPoint(e.getPoint());
@@ -317,6 +332,10 @@ public class MapPanel extends JPanel {
             @Override
             public void mouseReleased(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
+                    if (linkDragSource != null) {
+                        finishLinkDrag();
+                    }
+
                     // End dragging if active
                     boolean wasDragging = interactionManager != null && interactionManager.isDragging();
                     if (wasDragging) {
@@ -349,6 +368,7 @@ public class MapPanel extends JPanel {
             @Override
             public void mouseExited(MouseEvent e) {
                 mouseInPanel = false;
+                linkHandleHoverNode = null;
                 if (hoveredNodeName != null) {
                     // Leaving the panel must retract a hover-revealed label, otherwise
                     // it stays painted with the mouse nowhere near it.
@@ -369,14 +389,20 @@ public class MapPanel extends JPanel {
                 // transition matters — an unchanged hover costs nothing beyond the
                 // coordinate overlay repaint below.
                 boolean hoverChanged = updateHoveredNode(e.getPoint());
+                hoverChanged |= updateLinkHandleHover(e.getPoint());
 
-                // Show rotation cursor when Ctrl is held and multiple nodes are selected.
-                // Only touch the cursor on a state change — setCursor per event is wasteful.
+                // Show rotation cursor when Ctrl is held and multiple nodes are selected,
+                // and a crosshair over a node's link ring. Only touch the cursor on a state
+                // change — setCursor per event is wasteful.
                 boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
-                Cursor desiredCursor = (isCtrlDown && interactionManager != null
-                        && interactionManager.canStartRotation())
-                    ? rotateCursor()
-                    : Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR);
+                Cursor desiredCursor;
+                if (isCtrlDown && interactionManager != null && interactionManager.canStartRotation()) {
+                    desiredCursor = rotateCursor();
+                } else if (linkHandleHoverNode != null) {
+                    desiredCursor = Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
+                } else {
+                    desiredCursor = Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR);
+                }
                 if (getCursor() != desiredCursor) {
                     setCursor(desiredCursor);
                 }
@@ -397,6 +423,11 @@ public class MapPanel extends JPanel {
                 mouseWorldX = toWorldX(e.getX());
                 mouseWorldY = toWorldY(e.getY());
                 mouseInPanel = true;
+
+                if (linkDragSource != null) {
+                    updateLinkDrag(e.getPoint());
+                    return;
+                }
 
                 // Check if we should start node dragging. A drag only starts once the
                 // mouse has moved past the click tolerance, so small jitters while
@@ -498,6 +529,7 @@ public class MapPanel extends JPanel {
         mapRenderer.renderMap(g2d, getWidth(), getHeight(), zoomLevel, panX, panY,
                              showGridlines, model, nodeTheme, selectionStart, selectionCurrent,
                              mouseWorldX, mouseWorldY, mouseInPanel, showLabels, hoveredNodeName);
+        paintLinkDrag(g2d);
 
         g2d.dispose();
     }
@@ -764,6 +796,113 @@ public class MapPanel extends JPanel {
     }
 
     /**
+     * Find the node nearest the given screen point, within its circle or the link ring
+     * just outside it ({@link UIConstants.Map#LINK_HANDLE_RING_PX}).
+     * @param screenPoint Screen coordinates (mouse position)
+     * @return Node name if found, null if no node is that close
+     */
+    private String getNodeNear(Point screenPoint) {
+        double reach = NODE_SIZE / 2.0 + UIConstants.Map.LINK_HANDLE_RING_PX;
+        String nearest = null;
+        double nearestDistance = reach;
+        for (ModelNode node : model.getAllNodes()) {
+            double distance = screenPoint.distance(toScreenX(node.getX()), toScreenY(node.getY()));
+            if (distance <= nearestDistance) {
+                nearest = node.getName();
+                nearestDistance = distance;
+            }
+        }
+        return nearest;
+    }
+
+    /**
+     * Recomputes which node's link ring is under the idle mouse, returning whether it
+     * changed. On a node itself there is no ring: pressing there selects or moves it.
+     */
+    private boolean updateLinkHandleHover(Point screenPoint) {
+        String near = getNodeNear(screenPoint);
+        String hover = near != null && getNodeAtPoint(screenPoint) == null ? near : null;
+        if (java.util.Objects.equals(hover, linkHandleHoverNode)) {
+            return false;
+        }
+        linkHandleHoverNode = hover;
+        return true;
+    }
+
+    private void startLinkDrag(String sourceNode, Point screenPoint) {
+        linkDragSource = sourceNode;
+        linkHandleHoverNode = null;
+        updateLinkDrag(screenPoint);
+    }
+
+    /** Follows the mouse: snaps to the node under it and shows by cursor whether it can be linked. */
+    private void updateLinkDrag(Point screenPoint) {
+        linkDragPoint = new Point(screenPoint);
+        String near = getNodeAtPoint(screenPoint);
+        if (near == null) {
+            near = getNodeNear(screenPoint);
+        }
+        String target = linkDragSource.equals(near) ? null : near;
+        if (!java.util.Objects.equals(target, linkDragTarget)) {
+            linkDragTarget = target;
+            // Only on a change of target: the loop check walks the network.
+            linkDragTargetAllowed = target != null
+                && LinkRules.allows(model.getAllLinks(), linkDragSource, target);
+        }
+        setCursor(linkDragCursor());
+        repaint();
+    }
+
+    /** Crosshair over empty map; the platform's link drop / no-drop cursor over a node. */
+    private Cursor linkDragCursor() {
+        Cursor cursor = linkDragTarget == null ? null
+            : linkDragTargetAllowed ? DragSource.DefaultLinkDrop : DragSource.DefaultLinkNoDrop;
+        // DragSource leaves these null if the platform could not supply them.
+        return cursor != null ? cursor : Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
+    }
+
+    /** Writes the link if released on a node that can take it; otherwise just ends the drag. */
+    private void finishLinkDrag() {
+        if (linkDragTarget != null && linkDragTargetAllowed) {
+            textEditor.addLink(linkDragSource, linkDragTarget);
+        }
+        clearLinkDrag();
+    }
+
+    private void clearLinkDrag() {
+        linkDragSource = null;
+        linkDragPoint = null;
+        linkDragTarget = null;
+        linkDragTargetAllowed = false;
+        setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+        repaint();
+    }
+
+    /** Paints the link being dragged, or the ring affordance under the idle mouse. */
+    private void paintLinkDrag(Graphics2D g2d) {
+        if (linkDragSource != null) {
+            ModelNode source = model.getNode(linkDragSource);
+            if (source == null || linkDragPoint == null) {
+                return; // source vanished mid-drag (text edited); release will clear
+            }
+            ModelNode target = linkDragTarget != null ? model.getNode(linkDragTarget) : null;
+            boolean valid = target == null || linkDragTargetAllowed;
+            double toX = target != null ? toScreenX(target.getX()) : linkDragPoint.x;
+            double toY = target != null ? toScreenY(target.getY()) : linkDragPoint.y;
+            mapRenderer.renderLinkDrag(g2d, toScreenX(source.getX()), toScreenY(source.getY()),
+                toX, toY, valid);
+            if (target != null) {
+                mapRenderer.renderLinkHandle(g2d, toX, toY, valid);
+            }
+        } else if (linkHandleHoverNode != null) {
+            ModelNode node = model.getNode(linkHandleHoverNode);
+            if (node != null) {
+                mapRenderer.renderLinkHandle(g2d, toScreenX(node.getX()), toScreenY(node.getY()), true);
+            }
+        }
+    }
+
+    /**
      * Find the link at the given screen coordinates.
      * @param screenPoint Screen coordinates (mouse position)
      * @return ModelLink if found, null if no link at that position
@@ -1001,6 +1140,13 @@ public class MapPanel extends JPanel {
             }
         };
         bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "map.delete", delete);
+
+        // Cancel a link drag in progress
+        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "map.cancelLinkDrag", () -> {
+            if (linkDragSource != null) {
+                clearLinkDrag();
+            }
+        });
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_SPACE, 0), "map.delete");
 
         // Rotation-cursor preview while the modifier key itself is held

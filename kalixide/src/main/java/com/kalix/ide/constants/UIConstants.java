@@ -35,6 +35,12 @@ public final class UIConstants {
          */
         public static final int DRAG_START_THRESHOLD_PX = 5;
 
+        /**
+         * Width in pixels of the ring just outside a node's circle where a press
+         * starts dragging a new link rather than selecting or moving the node.
+         */
+        public static final int LINK_HANDLE_RING_PX = 8;
+
         private Map() { throw new UnsupportedOperationException("Constants class"); }
     }
 

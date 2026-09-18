@@ -5,8 +5,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class LinkRulesTest {
 
@@ -17,29 +17,29 @@ class LinkRulesTest {
 
     @Test
     void allowsNewLinkBetweenUnconnectedNodes() {
-        assertNull(LinkRules.refusal(LINKS, "c", "d"));
-        assertNull(LinkRules.refusal(LINKS, "d", "a"));
+        assertTrue(LinkRules.allows(LINKS, "c", "d"));
+        assertTrue(LinkRules.allows(LINKS, "d", "a"));
     }
 
     @Test
     void allowsSecondRouteToTheSameNode() {
         // a -> c alongside a -> b -> c is a branch, not a loop.
-        assertNull(LinkRules.refusal(LINKS, "a", "c"));
+        assertTrue(LinkRules.allows(LINKS, "a", "c"));
     }
 
     @Test
     void refusesSelfLink() {
-        assertNotNull(LinkRules.refusal(LINKS, "a", "a"));
+        assertFalse(LinkRules.allows(LINKS, "a", "a"));
     }
 
     @Test
     void refusesDuplicateLink() {
-        assertNotNull(LinkRules.refusal(LINKS, "a", "b"));
+        assertFalse(LinkRules.allows(LINKS, "a", "b"));
     }
 
     @Test
     void refusesLoops() {
-        assertNotNull(LinkRules.refusal(LINKS, "b", "a"));
-        assertNotNull(LinkRules.refusal(LINKS, "c", "a"), "loop through an intermediate node");
+        assertFalse(LinkRules.allows(LINKS, "b", "a"));
+        assertFalse(LinkRules.allows(LINKS, "c", "a"), "loop through an intermediate node");
     }
 }

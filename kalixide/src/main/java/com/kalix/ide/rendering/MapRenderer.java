@@ -70,6 +70,11 @@ public class MapRenderer {
             1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER,
             SELECTION_DASH_MITER_LIMIT, SELECTION_DASH_PATTERN, 0.0f);
 
+    // Link-drag styling (dragging a new link from a node's ring)
+    private static final Color LINK_DRAG_COLOR = UIConstants.Selection.RECTANGLE_BORDER;
+    private static final Color LINK_DRAG_REFUSED_COLOR = new Color(210, 40, 40);
+    private static final BasicStroke LINK_HANDLE_STROKE = new BasicStroke(2.0f);
+
     // Chevron arrow constants
     private static final double CHEVRON_SIZE = 8.0; // Size of chevron in pixels
     private static final double CHEVRON_ANGLE = Math.PI / 6; // 30 degrees
@@ -463,6 +468,44 @@ public class MapRenderer {
 
         // Restore original font
         g2d.setFont(originalFont);
+    }
+
+    /**
+     * Renders the ring around a node that shows a link can be dragged from it (hover
+     * affordance), or that the dragged link will snap to it (drop target).
+     *
+     * @param g2d Graphics context (in screen space)
+     * @param screenX Node centre X in screen coordinates
+     * @param screenY Node centre Y in screen coordinates
+     * @param valid false to draw the ring in the refusal colour
+     */
+    public void renderLinkHandle(Graphics2D g2d, double screenX, double screenY, boolean valid) {
+        double r = NODE_SIZE / 2.0 + UIConstants.Map.LINK_HANDLE_RING_PX / 2.0;
+        g2d.setColor(valid ? LINK_DRAG_COLOR : LINK_DRAG_REFUSED_COLOR);
+        g2d.setStroke(LINK_HANDLE_STROKE);
+        g2d.draw(new java.awt.geom.Ellipse2D.Double(screenX - r, screenY - r, 2 * r, 2 * r));
+        g2d.setStroke(DEFAULT_STROKE);
+    }
+
+    /**
+     * Renders the link being dragged: a dashed line with a flow chevron from the source
+     * node to the cursor, or to the snapped target node.
+     *
+     * @param g2d Graphics context (in screen space)
+     * @param fromX Source node centre X in screen coordinates
+     * @param fromY Source node centre Y in screen coordinates
+     * @param toX Line end X: the target node centre when snapped, else the cursor
+     * @param toY Line end Y: the target node centre when snapped, else the cursor
+     * @param valid false to draw the line in the refusal colour
+     */
+    public void renderLinkDrag(Graphics2D g2d, double fromX, double fromY, double toX, double toY,
+                               boolean valid) {
+        g2d.setColor(valid ? LINK_DRAG_COLOR : LINK_DRAG_REFUSED_COLOR);
+        g2d.setStroke(LINK_DASHED_STROKE);
+        g2d.draw(new java.awt.geom.Line2D.Double(fromX, fromY, toX, toY));
+        g2d.setStroke(LINK_STROKE);
+        renderChevronArrow(g2d, fromX, fromY, toX, toY);
+        g2d.setStroke(DEFAULT_STROKE);
     }
 
     /**

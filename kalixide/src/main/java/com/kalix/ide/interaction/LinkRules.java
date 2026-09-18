@@ -26,30 +26,26 @@ public final class LinkRules {
     }
 
     /**
-     * Returns why {@code upstream -> downstream} may not be linked, or null if it may.
-     * The reason is short enough to show beside the cursor.
+     * Whether {@code upstream -> downstream} may be linked.
      *
      * @param links      the model's current links
      * @param upstream   the node the link flows from
      * @param downstream the node the link flows to
      */
-    public static String refusal(Collection<ModelLink> links, String upstream, String downstream) {
+    public static boolean allows(Collection<ModelLink> links, String upstream, String downstream) {
         if (upstream.equals(downstream)) {
-            return "Cannot link a node to itself";
+            return false;
         }
         Map<String, List<String>> downstreamOf = new HashMap<>();
         for (ModelLink link : links) {
             if (link.getUpstreamTerminus().equals(upstream)
                     && link.getDownstreamTerminus().equals(downstream)) {
-                return "Already linked";
+                return false;
             }
             downstreamOf.computeIfAbsent(link.getUpstreamTerminus(), k -> new ArrayList<>())
                 .add(link.getDownstreamTerminus());
         }
-        if (reaches(downstreamOf, downstream, upstream)) {
-            return "Would create a loop";
-        }
-        return null;
+        return !reaches(downstreamOf, downstream, upstream);
     }
 
     /** Whether {@code to} is reachable from {@code from} by following links downstream. */
