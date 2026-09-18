@@ -2,6 +2,7 @@ package com.kalix.ide.managers;
 
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.io.NamedSeries;
 import com.kalix.ide.io.TimeSeriesCsvImporter;
 import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.io.CsvZipFormat;
@@ -348,7 +349,7 @@ public class DatasetLoaderManager {
         String fileName = csvFile.getName();
         int seriesAdded = 0;
 
-        for (com.kalix.ide.io.NamedSeries ns : importResult.getSeries()) {
+        for (NamedSeries ns : importResult.getSeries()) {
             // Create hierarchical series name from the series' path segments
             String seriesName = composeDatasetSeriesName(csvFile, ns.path());
 
@@ -480,7 +481,7 @@ public class DatasetLoaderManager {
         String fileName = resCsvFile.getName();
         int seriesAdded = 0;
 
-        for (com.kalix.ide.io.NamedSeries ns : importResult.getSeries()) {
+        for (NamedSeries ns : importResult.getSeries()) {
             String seriesName = composeDatasetSeriesName(resCsvFile, ns.path());
             DatasetSeries ref = new DatasetSeries(resCsvFile.getAbsolutePath(), seriesName);
             datasetSeriesCache.put(ref, ns.data());
@@ -554,13 +555,13 @@ public class DatasetLoaderManager {
         progressDialog.setLocationRelativeTo(parentFrame);
 
         // Create background loading task
-        SwingWorker<List<com.kalix.ide.io.NamedSeries>, Integer> loadTask = new SwingWorker<>() {
+        SwingWorker<List<NamedSeries>, Integer> loadTask = new SwingWorker<>() {
             @Override
-            protected List<com.kalix.ide.io.NamedSeries> doInBackground() throws Exception {
+            protected List<NamedSeries> doInBackground() throws Exception {
                 publish(25);
                 PixieReader reader = new PixieReader();
                 publish(50);
-                List<com.kalix.ide.io.NamedSeries> seriesList = reader.readAllSeries(basePath);
+                List<NamedSeries> seriesList = reader.readAllSeries(basePath);
                 publish(100);
                 return seriesList;
             }
@@ -578,10 +579,10 @@ public class DatasetLoaderManager {
                 progressDialog.dispose();
 
                 try {
-                    List<com.kalix.ide.io.NamedSeries> seriesList = get();
+                    List<NamedSeries> seriesList = get();
 
                     // Add all series to cache using hierarchical naming scheme
-                    for (com.kalix.ide.io.NamedSeries ns : seriesList) {
+                    for (NamedSeries ns : seriesList) {
                         // Create hierarchical series name from the series' path segments
                         String seriesName = composeDatasetSeriesName(pxtFile, ns.path());
 
@@ -661,7 +662,7 @@ public class DatasetLoaderManager {
      *
      * <p>This is the one generic place where structure is assembled: the segmentation (how
      * many levels and what they are) is the importer's format-specific responsibility, carried
-     * on {@link com.kalix.ide.io.NamedSeries#path()}; sanitisation and joining are uniform.</p>
+     * on {@link NamedSeries#path()}; sanitisation and joining are uniform.</p>
      *
      * @param file The data file (used only as an identifiable fallback when no segment survives)
      * @param segments The series' raw hierarchy segments (each trimmed and sanitised here)
