@@ -148,6 +148,10 @@ class PixieVizViewTest {
         PixieVizView view = openView(writePixie("big", List.of(
             new NamedSeries("a", daily(1, 2, 3, 4, 5)))), 4);
         await(() -> panel.getStatusText().contains("exceeds"), "gate note");
+        String[] tip = new String[1];
+        SwingUtilities.invokeAndWait(() -> tip[0] = panel.getStatusToolTip());
+        assertTrue(tip[0] != null && tip[0].contains(session.refusal()),
+            "hovering the strip shows the whole refusal, however narrow the strip: " + tip[0]);
         assertTrue(view.dataSetForTests().isEmpty(), "nothing decoded, nothing plotted");
         assertEquals(" ", view.noteText(),
             "the table's strip owns the reason; the viz note must not stutter it");
