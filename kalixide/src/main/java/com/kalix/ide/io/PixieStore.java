@@ -67,24 +67,33 @@ public final class PixieStore {
         }
     }
 
-    /** One open pair: its index, the stamp it was read under, and what has been decoded from it. */
+    /**
+     * One open pair: its index, the generation and stamp it was read under, and what
+     * has been decoded from it.
+     */
     private static final class Entry {
         final File pxtFile;
         final String basePath;
+        final long generation;
         final Stamp stamp;
         final Map<Integer, PixieReader.SeriesInfo> index; // insertion order = .pxt order
         final Map<Integer, SoftReference<TimeSeriesData>> decoded = new HashMap<>();
         final Map<Integer, CompletableFuture<TimeSeriesData>> inFlight = new HashMap<>();
 
-        Entry(File pxtFile, String basePath, Stamp stamp, Map<Integer, PixieReader.SeriesInfo> index) {
+        Entry(File pxtFile, String basePath, long generation, Stamp stamp,
+              Map<Integer, PixieReader.SeriesInfo> index) {
             this.pxtFile = pxtFile;
             this.basePath = basePath;
+            this.generation = generation;
             this.stamp = stamp;
             this.index = index;
         }
     }
 
     private final Map<File, Entry> entries = new HashMap<>();
+
+    /** Next index generation; every index read gets its own, store-wide. */
+    private long nextGeneration = 1;
 
     /**
      * One decode at a time: decoding a long series peaks at approximately twice the storage
@@ -104,8 +113,11 @@ public final class PixieStore {
     /**
      * Opens a pair from either half, reading only its {@code .pxt} index. Re-opening
      * a pair that is unchanged on disk returns the same keys and keeps what has been
-     * decoded; re-opening one that has changed reads the new index and drops the old
-     * decoded series. Blocking (reads the index file); call off the EDT.
+     * decoded; re-opening one that has changed reads the new index under a new
+     * generation and drops the old decoded series. Keys from the old generation then
+     * fail as stale for every caller holding them: a re-open by one window never
+     * silently hands another window different data. Blocking (reads the index file);
+     * call off the EDT.
      *
      * @return the pair's series keys, in {@code .pxt} order
      * @throws IOException if either half is missing or the index cannot be read
@@ -133,9 +145,9 @@ public final class PixieStore {
         for (PixieReader.SeriesInfo info : new PixieReader().getSeriesInfo(basePath)) {
             index.put(info.index, info);
         }
-        Entry entry = new Entry(pxtFile, basePath, stamp, Collections.unmodifiableMap(index));
-
         synchronized (this) {
+            Entry entry = new Entry(pxtFile, basePath, nextGeneration++, stamp,
+                Collections.unmodifiableMap(index));
             entries.put(pxtFile, entry);
             return keysOf(entry);
         }
@@ -145,7 +157,8 @@ public final class PixieStore {
      * The index row for a series: name, point count, time span, timestep. A copy,
      * so callers cannot disturb the offsets the store decodes from.
      *
-     * @throws IllegalArgumentException if the key's pair is not open or has no such series
+     * @throws IllegalArgumentException if the key's pair is not open, the key is from an
+     *                                  older generation of its index, or it has no such series
      */
     public synchronized PixieReader.SeriesInfo info(PixieSeriesKey key) {
         return copyOf(indexRow(key));
@@ -155,11 +168,16 @@ public final class PixieStore {
      * The decoded series, from the cache if it is still there, otherwise decoded on
      * the store's background thread. Concurrent requests for one series share a
      * single decode. The future fails with {@link StaleIndexException} if the pair
-     * changed since {@link #open}, and with {@link IllegalArgumentException} if the
-     * key's pair is not open or has no such series.
+     * changed since the key's {@link #open}, whether or not it has been re-opened since,
+     * and with {@link IllegalArgumentException} if the key's pair is not open or has no
+     * such series.
      */
     public CompletableFuture<TimeSeriesData> get(PixieSeriesKey key) {
         synchronized (this) {
+            Entry current = entries.get(key.pxtFile());
+            if (current != null && current.generation != key.generation()) {
+                return CompletableFuture.failedFuture(new StaleIndexException(key.pxtFile()));
+            }
             Entry entry;
             PixieReader.SeriesInfo info;
             try {
@@ -237,6 +255,10 @@ public final class PixieStore {
         if (entry == null) {
             throw new IllegalArgumentException("Pixie file is not open: " + key.pxtFile());
         }
+        if (entry.generation != key.generation()) {
+            throw new IllegalArgumentException("Key is from an older index of " + key.pxtFile().getName()
+                + "; the file has been re-opened since");
+        }
         return entry;
     }
 
@@ -251,7 +273,7 @@ public final class PixieStore {
     private static List<PixieSeriesKey> keysOf(Entry entry) {
         List<PixieSeriesKey> keys = new ArrayList<>(entry.index.size());
         for (Integer index : entry.index.keySet()) {
-            keys.add(new PixieSeriesKey(entry.pxtFile, index));
+            keys.add(new PixieSeriesKey(entry.pxtFile, entry.generation, index));
         }
         return Collections.unmodifiableList(keys);
     }

@@ -3,6 +3,8 @@ package com.kalix.ide.dataview;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.io.NamedSeries;
 import com.kalix.ide.io.PixieReader;
+import com.kalix.ide.io.PixieSeriesKey;
+import com.kalix.ide.io.PixieStore;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.SwingUtilities;
@@ -11,10 +13,11 @@ import java.io.IOException;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongSupplier;
 
@@ -23,9 +26,9 @@ import java.util.function.LongSupplier;
  * and plot. Pixie inverts the CSV physics — there is no row text to index
  * (values exist only after Gorilla decode of the {@code .pxb}), so this is a
  * <b>decode-once, serve-both-views-from-arrays</b> session: the metadata
- * ({@code .pxt}) is read first for an honest pre-decode gate (total values vs
- * {@link PreferenceKeys#DATAVIEW_PLOT_MAX_ROWS}), then the whole pair decodes
- * on a worker and both views read the arrays.
+ * ({@code .pxt}) is read first for an honest pre-decode gate, then every series
+ * decodes on a worker, through the shared {@link PixieStore}, and both views
+ * read the arrays.
  *
  * <p>Series in one file may disagree on time base; the table serves a
  * <b>union time index</b> (every timestamp any series has, sorted, deduped)
@@ -37,20 +40,30 @@ import java.util.function.LongSupplier;
  * is published <em>on the EDT</em>, in the same runnable that notifies
  * listeners, so a view can never read a new snapshot through stale structure.
  *
- * <p>The gate counts <b>rows</b> — the longest series, which bounds the union
- * index — against {@code DATAVIEW_PLOT_MAX_ROWS}, matching what the preference
- * names and what the CSV viewer counts, so the same dataset behaves the same
- * in either format. Unlike CSV (which materialises only the columns you plot),
- * a pixie load decodes every series, so a file that is both very long and very
- * wide is heavy at any row count; the status strip always states the series
- * count and row count so the scale is visible rather than implied.
+ * <p>The gate has two tests, and a file must pass both:
+ * <ul>
+ *   <li><b>Rows</b> — the longest series, which bounds the union index —
+ *       against {@link PreferenceKeys#DATAVIEW_PLOT_MAX_ROWS}, matching what the
+ *       preference names and what the CSV viewer counts, so the same dataset
+ *       behaves the same in either format.</li>
+ *   <li><b>Memory</b> — the estimated decoded size of the whole file (every
+ *       series, plus the union index's working copy) against a budget of half
+ *       the heap. Unlike CSV (which materialises only the columns you plot), a
+ *       pixie load decodes every series, so a file that is both very long and
+ *       very wide is heavy at any row count; this is what refuses such a file
+ *       (issue #430's 181 series x 3.65M rows) rather than running out of
+ *       memory. A budget relative to the heap, not a sum of values against the
+ *       row preference, so ordinary wide result files still open.</li>
+ * </ul>
+ * The status strip always states the series count and row count so the scale
+ * is visible rather than implied.
  *
  * <p>Two honest limits of the pre-decode gate, both bounded by the manifest
  * being the modeller's own inspectable file: it trusts the {@code .pxt}'s
  * declared point counts (a manifest that understates them is decoded before
- * the discrepancy could be known), and the metadata is read once for the gate
- * and again by the decode, so a rewrite landing between them gates one
- * manifest and decodes another — self-healing on the next coalesced reload.
+ * the discrepancy could be known), and a rewrite landing between the gate and
+ * the decode fails the decode as stale — self-healing on the next coalesced
+ * reload, which the rewrite itself triggers.
  */
 public final class PixieDataSession implements FindableData {
 
@@ -85,9 +98,19 @@ public final class PixieDataSession implements FindableData {
         }
     }
 
+    /**
+     * Estimated peak bytes per point for a whole-file load: 17 held per point
+     * (timestamp, value, validity flag) plus 8 for the union index's working
+     * copy of every timestamp.
+     */
+    private static final long LOAD_BYTES_PER_POINT = 25;
+
+    /** Transient bytes per point of the series being decoded, while TimeSeriesData copies it. */
+    private static final long DECODE_BYTES_PER_POINT = 16;
+
     private final File pxtFile;
-    private final String basePath;
     private final LongSupplier rowLimit;
+    private final LongSupplier memoryBudget;
     private final List<Listener> listeners = new CopyOnWriteArrayList<>();
 
     private volatile Snapshot snapshot = Snapshot.LOADING;
@@ -101,15 +124,16 @@ public final class PixieDataSession implements FindableData {
         this(pxtFile, () -> PreferenceKeys.DATAVIEW_PLOT_MAX_ROWS.get());
     }
 
-    /** Test seam: the value limit is injectable so tests need no preference writes. */
+    /** Test seam: the row limit is injectable so tests need no preference writes. */
     PixieDataSession(File pxtFile, LongSupplier rowLimit) {
+        this(pxtFile, rowLimit, () -> Runtime.getRuntime().maxMemory() / 2);
+    }
+
+    /** Test seam: the memory budget too, so tests need no heap of a particular size. */
+    PixieDataSession(File pxtFile, LongSupplier rowLimit, LongSupplier memoryBudget) {
         this.pxtFile = pxtFile;
-        String path = pxtFile.getAbsolutePath();
-        String lower = path.toLowerCase(Locale.ROOT);
-        // PixieReader takes the extension-less base path and appends .pxt/.pxb itself.
-        this.basePath = lower.endsWith(".pxt") || lower.endsWith(".pxb")
-            ? path.substring(0, path.length() - 4) : path;
         this.rowLimit = rowLimit;
+        this.memoryBudget = memoryBudget;
         reloadFromDisk();
     }
 
@@ -148,12 +172,21 @@ public final class PixieDataSession implements FindableData {
     private void loadOnce() {
         Snapshot fresh;
         try {
-            PixieReader reader = new PixieReader();
+            // Re-opening re-reads the index only if the pair changed on disk.
+            PixieStore store = PixieStore.shared();
+            List<PixieSeriesKey> keys = store.open(pxtFile);
+            List<PixieReader.SeriesInfo> infos = new ArrayList<>(keys.size());
             long longestSeries = 0;
-            for (PixieReader.SeriesInfo info : reader.getSeriesInfo(basePath)) {
+            long totalPoints = 0;
+            for (PixieSeriesKey key : keys) {
+                PixieReader.SeriesInfo info = store.info(key);
+                infos.add(info);
                 longestSeries = Math.max(longestSeries, info.pointCount);
+                totalPoints += info.pointCount;
             }
             long limit = rowLimit.getAsLong();
+            long estimate = totalPoints * LOAD_BYTES_PER_POINT + longestSeries * DECODE_BYTES_PER_POINT;
+            long budget = memoryBudget.getAsLong();
             if (longestSeries > limit) {
                 // Refused BEFORE decoding: the gate must never cost the memory
                 // it exists to protect. The measure is ROWS — the longest
@@ -165,11 +198,28 @@ public final class PixieDataSession implements FindableData {
                     "Table and plot disabled: %,d rows exceeds the %,d-row limit"
                         + " (Preferences → Editor → Load and Save)",
                     longestSeries, limit));
+            } else if (estimate > budget) {
+                // Also refused before decoding. Rows alone let a file that is both
+                // long and wide through (issue #430: 181 series x 3.65M rows passed
+                // a 5M-row limit and then ran out of memory), so the whole-file
+                // estimate is checked against the heap as well.
+                fresh = Snapshot.refused(String.format(
+                    "Table and plot disabled: %,d series of up to %,d rows need about %s in memory,"
+                        + " more than the %s this viewer allows (half the IDE's memory)."
+                        + " Load the file in the Run Manager to plot selected series.",
+                    keys.size(), longestSeries, formatBytes(estimate), formatBytes(budget)));
             } else {
-                List<NamedSeries> series = reader.readAllSeries(basePath);
+                List<NamedSeries> series = new ArrayList<>(keys.size());
+                for (int i = 0; i < keys.size(); i++) {
+                    TimeSeriesData data = decode(store, keys.get(i));
+                    // Dotted names nest as a whole-file read's would (NamedSeries.dotted).
+                    series.add(NamedSeries.dotted(infos.get(i).name, data));
+                }
                 fresh = new Snapshot(true, null, List.copyOf(series), unionTimestamps(series));
             }
-        } catch (IOException | RuntimeException e) {
+        } catch (IOException | RuntimeException | OutOfMemoryError e) {
+            // Out of memory despite the gate (e.g. the rest of the IDE is using more
+            // than half the heap): refuse, rather than leave the view loading forever.
             fresh = Snapshot.refused("Pixie read failed: " + e.getMessage());
         }
         if (disposed) {
@@ -190,6 +240,34 @@ public final class PixieDataSession implements FindableData {
                 listener.onLoaded();
             }
         });
+    }
+
+    /** Waits for one series from the store (worker thread), surfacing its failure as thrown. */
+    private static TimeSeriesData decode(PixieStore store, PixieSeriesKey key) throws IOException {
+        try {
+            return store.get(key).get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while decoding", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException io) {
+                throw io;
+            }
+            if (cause instanceof RuntimeException runtime) {
+                throw runtime;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IOException(cause);
+        }
+    }
+
+    /** Sizes for the gate's note: one decimal of GB, or whole MB below that. */
+    private static String formatBytes(long bytes) {
+        double gb = bytes / (1024.0 * 1024 * 1024);
+        return gb >= 1 ? String.format("%.1f GB", gb) : String.format("%,d MB", bytes / (1024 * 1024));
     }
 
     /** Every timestamp any series has — sorted, deduped: the table's row index. */

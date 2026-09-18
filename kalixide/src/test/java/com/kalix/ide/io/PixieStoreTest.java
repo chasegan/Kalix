@@ -100,6 +100,28 @@ class PixieStoreTest {
         assertEquals(36.0, fresh.getValues()[4], 0.0);
     }
 
+    /**
+     * One window re-opening a rewritten pair must not retarget another window's keys:
+     * here the rewrite swaps the series, so an old key's index now holds a different one.
+     */
+    @Test
+    void reopeningAChangedPairMakesOldKeysStaleRatherThanRetargetingThem() throws Exception {
+        File pxt = write("retarget", List.of(
+            new NamedSeries("a", daily(10, 1.0)), new NamedSeries("b", daily(10, 2.0))));
+        List<PixieSeriesKey> old = store.open(pxt);
+
+        write("retarget", List.of(
+            new NamedSeries("b", daily(10, 2.0)), new NamedSeries("a", daily(10, 1.0))));
+        bumpModified(pxt);
+        List<PixieSeriesKey> fresh = store.open(pxt);
+        assertEquals("b", store.info(fresh.get(0)).name, "the re-opening window sees the new index");
+
+        ExecutionException stale = assertThrows(ExecutionException.class, () -> await(store.get(old.get(0))));
+        assertInstanceOf(PixieStore.StaleIndexException.class, stale.getCause(),
+            "an old key must not resolve to series b now sitting at its index");
+        assertThrows(IllegalArgumentException.class, () -> store.info(old.get(0)));
+    }
+
     @Test
     void closeForgetsThePair() throws Exception {
         File pxt = write("closed", List.of(new NamedSeries("s", daily(10, 1.0))));
