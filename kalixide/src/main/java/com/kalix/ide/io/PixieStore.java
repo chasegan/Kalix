@@ -189,6 +189,13 @@ public final class PixieStore {
             index.put(info.index, info);
         }
         synchronized (this) {
+            // A concurrent open of the same bytes may have installed an entry while we
+            // read. Reuse it: replacing it would start a new generation and make the
+            // other caller's keys stale although nothing changed on disk.
+            Entry concurrent = entries.get(pxtFile);
+            if (concurrent != null && concurrent.stamp.equals(stamp)) {
+                return keysOf(concurrent);
+            }
             Entry entry = new Entry(pxtFile, basePath, nextGeneration++, stamp,
                 Collections.unmodifiableMap(index));
             entries.put(pxtFile, entry);

@@ -9,9 +9,14 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
@@ -120,6 +125,40 @@ class PixieStoreTest {
         assertInstanceOf(PixieStore.StaleIndexException.class, stale.getCause(),
             "an old key must not resolve to series b now sitting at its index");
         assertThrows(IllegalArgumentException.class, () -> store.info(old.get(0)));
+    }
+
+    /**
+     * Windows opening the same unchanged pair at the same moment must share one index:
+     * installing one entry per open would make all but the last caller's keys stale
+     * although nothing changed on disk.
+     */
+    @Test
+    void concurrentOpensOfAnUnchangedPairShareOneIndex() throws Exception {
+        File pxt = write("concurrent", List.of(
+            new NamedSeries("a", daily(10, 1.0)), new NamedSeries("b", daily(10, 2.0))));
+        int threads = 8;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            for (int round = 0; round < 50; round++) {
+                PixieStore fresh = new PixieStore();
+                CyclicBarrier start = new CyclicBarrier(threads);
+                List<Future<List<PixieSeriesKey>>> opens = new ArrayList<>();
+                for (int t = 0; t < threads; t++) {
+                    opens.add(pool.submit(() -> {
+                        start.await();
+                        return fresh.open(pxt);
+                    }));
+                }
+                List<PixieSeriesKey> first = opens.get(0).get(10, TimeUnit.SECONDS);
+                for (Future<List<PixieSeriesKey>> open : opens) {
+                    List<PixieSeriesKey> keys = open.get(10, TimeUnit.SECONDS);
+                    assertEquals(first, keys, "round " + round + ": every opener gets the same keys");
+                    assertEquals("b", fresh.info(keys.get(1)).name, "and none of them is stale");
+                }
+            }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     @Test
