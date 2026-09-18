@@ -280,6 +280,11 @@ public class MapPanel extends JPanel {
                     clickStartPoint = new Point(e.getPoint());
                     clickedNodeName = nodeAtPoint;
                     
+                    // A press in the ring just outside a node (not on any node) drags out a
+                    // new link. Shift keeps its meaning of rectangle selection.
+                    String ringNode = nodeAtPoint == null && !e.isShiftDown()
+                        ? getNodeNear(e.getPoint()) : null;
+
                     // Check for Ctrl+click rotation start (anywhere on the map)
                     boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
                     if (isCtrlDown && interactionManager != null && interactionManager.canStartRotation()) {
@@ -302,10 +307,8 @@ public class MapPanel extends JPanel {
                         // Navigation to the node's definition happens on mouseReleased,
                         // once we know this was a click and not the start of a drag —
                         // navigating here moved the editor caret on every drag.
-                    } else if (!e.isShiftDown() && getNodeNear(e.getPoint()) != null) {
-                        // In the ring just outside a node (not on any node): drag out a
-                        // new link. Shift keeps its meaning of rectangle selection.
-                        startLinkDrag(getNodeNear(e.getPoint()), e.getPoint());
+                    } else if (ringNode != null) {
+                        startLinkDrag(ringNode, e.getPoint());
                     } else {
                         // Not clicking on a node - check for links
                         com.kalix.ide.model.ModelLink linkAtPoint = getLinkAtPoint(e.getPoint());
@@ -843,24 +846,22 @@ public class MapPanel extends JPanel {
     private void startLinkDrag(String sourceNode, Point screenPoint) {
         linkDragSource = sourceNode;
         linkHandleHoverNode = null;
+        setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
         updateLinkDrag(screenPoint);
     }
 
     /** Follows the mouse: snaps to the node under it and shows by cursor whether it can be linked. */
     private void updateLinkDrag(Point screenPoint) {
         linkDragPoint = new Point(screenPoint);
-        String near = getNodeAtPoint(screenPoint);
-        if (near == null) {
-            near = getNodeNear(screenPoint);
-        }
+        String near = getNodeNear(screenPoint);
         String target = linkDragSource.equals(near) ? null : near;
         if (!java.util.Objects.equals(target, linkDragTarget)) {
             linkDragTarget = target;
             // Only on a change of target: the loop check walks the network.
             linkDragTargetAllowed = target != null
                 && LinkRules.allows(model.getAllLinks(), linkDragSource, target);
+            setCursor(linkDragCursor());
         }
-        setCursor(linkDragCursor());
         repaint();
     }
 
@@ -894,7 +895,7 @@ public class MapPanel extends JPanel {
     private void paintLinkDrag(Graphics2D g2d) {
         if (linkDragSource != null) {
             ModelNode source = model.getNode(linkDragSource);
-            if (source == null || linkDragPoint == null) {
+            if (source == null) {
                 return; // source vanished mid-drag (text edited); release will clear
             }
             ModelNode target = linkDragTarget != null ? model.getNode(linkDragTarget) : null;
@@ -1152,6 +1153,7 @@ public class MapPanel extends JPanel {
             }
         };
         bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "map.delete", delete);
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_SPACE, 0), "map.delete");
 
         // Cancel a link drag in progress
         bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "map.cancelLinkDrag", () -> {
@@ -1159,7 +1161,6 @@ public class MapPanel extends JPanel {
                 clearLinkDrag();
             }
         });
-        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_SPACE, 0), "map.delete");
 
         // Rotation-cursor preview while the modifier key itself is held
         Runnable previewOn = () -> {
