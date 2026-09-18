@@ -45,6 +45,14 @@ public record NamedSeries(String name, List<String> path, TimeSeriesData data) {
      * {@code [name]} path.</p>
      */
     public static NamedSeries dotted(String name, TimeSeriesData data) {
+        return new NamedSeries(name, dottedPath(name), data);
+    }
+
+    /**
+     * The hierarchy segments {@link #dotted} gives {@code name}, for callers that have a
+     * series name before they have its data (e.g. a Pixie index read ahead of decoding).
+     */
+    public static List<String> dottedPath(String name) {
         List<String> path = new ArrayList<>();
         for (String segment : name.split("\\.")) {
             if (!segment.isBlank()) {
@@ -54,6 +62,6 @@ public record NamedSeries(String name, List<String> path, TimeSeriesData data) {
         if (path.isEmpty()) {
             path.add(name);
         }
-        return new NamedSeries(name, path, data);
+        return path;
     }
 }

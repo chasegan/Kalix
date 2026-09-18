@@ -10,7 +10,9 @@ import com.kalix.ide.flowviz.data.LastSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
+import com.kalix.ide.io.PixieStore;
 import com.kalix.ide.managers.DatasetLoaderManager;
+import com.kalix.ide.managers.DatasetSeriesSource;
 import com.kalix.ide.managers.OutputsTreeBuilder;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
 import com.kalix.ide.managers.TreeFilterManager;
@@ -30,6 +32,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletionException;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
@@ -58,7 +61,7 @@ class SeriesFetchCoordinator {
     private final DataSet plotDataSet;
     private final SeriesSlotManager seriesSlotManager;
     private final TimeSeriesRequestManager timeSeriesRequestManager;
-    private final Map<DatasetSeries, TimeSeriesData> datasetSeriesCache;
+    private final Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources;
     /**
      * Defers to {@link LastRunTracker#getGeneration()}. Captured at fetch-issue time so
      * async responses for "[Last]" series can be dropped when a newer run has become Last.
@@ -80,7 +83,7 @@ class SeriesFetchCoordinator {
                            DataSet plotDataSet,
                            SeriesSlotManager seriesSlotManager,
                            TimeSeriesRequestManager timeSeriesRequestManager,
-                           Map<DatasetSeries, TimeSeriesData> datasetSeriesCache,
+                           Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources,
                            LongSupplier lastRunGeneration,
                            Supplier<RunInfoImpl> lastRunInfoSupplier) {
         this.window = window;
@@ -92,7 +95,7 @@ class SeriesFetchCoordinator {
         this.plotDataSet = plotDataSet;
         this.seriesSlotManager = seriesSlotManager;
         this.timeSeriesRequestManager = timeSeriesRequestManager;
-        this.datasetSeriesCache = datasetSeriesCache;
+        this.datasetSeriesSources = datasetSeriesSources;
         this.lastRunGeneration = lastRunGeneration;
         this.lastRunInfoSupplier = lastRunInfoSupplier;
     }
@@ -283,17 +286,19 @@ class SeriesFetchCoordinator {
             }
         }
 
-        // Fetch dataset series into the pool. The dataset cache is keyed by the
+        // Fetch dataset series into the pool. The sources map is keyed by the
         // DatasetSeries ref (absolutePath + baseName); we already have that ref.
         for (SeriesRef ref : datasetRefs) {
             if (!(ref instanceof DatasetSeries datasetRef)) continue;
 
-            TimeSeriesData cachedData = datasetSeriesCache.get(datasetRef);
-            if (cachedData != null) {
-                window.addSeriesToPool(ref, cachedData);
-                tabManager.updateSeriesInStatsTabsWithAggregation(ref, cachedData);
+            DatasetSeriesSource source = datasetSeriesSources.get(datasetRef);
+            if (source instanceof DatasetSeriesSource.Loaded loaded) {
+                window.addSeriesToPool(ref, loaded.data());
+                tabManager.updateSeriesInStatsTabsWithAggregation(ref, loaded.data());
+            } else if (source instanceof DatasetSeriesSource.Pixie pixie) {
+                fetchPixieSeries(datasetRef, pixie, targetPanel, shouldResetZoom);
             } else {
-                logger.warn("Dataset series not found in cache: {}", datasetRef);
+                logger.warn("Dataset series not found: {}", datasetRef);
                 tabManager.addErrorSeriesInStatsTabs(ref, "Series not found");
             }
         }
@@ -308,6 +313,38 @@ class SeriesFetchCoordinator {
         if (shouldResetZoom && targetPanel != null) {
             targetPanel.zoomToFit();
         }
+    }
+
+    /**
+     * Decodes a Pixie dataset series from {@link PixieStore} into the pool, following the
+     * run-fetch pattern: a loading row in the stats tabs, then the pool and target tab
+     * update on the EDT, or an error row if the decode fails (e.g. the file changed on
+     * disk since it was loaded).
+     *
+     * <p>The result is dropped if the dataset was removed while the decode ran, so a
+     * removed file's series never reappear in the pool.
+     */
+    private void fetchPixieSeries(DatasetSeries ref, DatasetSeriesSource.Pixie source,
+                                  FlowVizPanel targetPanel, boolean shouldResetZoom) {
+        tabManager.addLoadingSeriesInStatsTabs(ref);
+        PixieStore.shared().get(source.key()).whenComplete((data, failure) ->
+            SwingUtilities.invokeLater(() -> {
+                if (!source.equals(datasetSeriesSources.get(ref))) {
+                    return; // dataset removed (or reloaded) meanwhile
+                }
+                if (failure != null) {
+                    Throwable cause = failure instanceof CompletionException && failure.getCause() != null
+                        ? failure.getCause() : failure;
+                    logger.warn("Failed to decode Pixie series {}", ref, cause);
+                    tabManager.addErrorSeriesInStatsTabs(ref, cause.getMessage());
+                    return;
+                }
+                window.addSeriesToPool(ref, data);
+                tabManager.updateSeriesInStatsTabsWithAggregation(ref, data);
+                if (targetPanel != null) {
+                    tabManager.updateTab(targetPanel, shouldResetZoom);
+                }
+            }));
     }
 
     /**

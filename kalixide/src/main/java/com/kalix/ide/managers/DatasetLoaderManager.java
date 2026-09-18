@@ -1,13 +1,13 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.flowviz.data.DatasetSeries;
-import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.io.NamedSeries;
 import com.kalix.ide.io.TimeSeriesCsvImporter;
 import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.io.SourceResCsvImporter;
-import com.kalix.ide.io.PixieReader;
+import com.kalix.ide.io.PixieSeriesKey;
+import com.kalix.ide.io.PixieStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,6 +34,7 @@ import java.awt.datatransfer.Transferable;
 import java.io.File;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -60,7 +61,7 @@ public class DatasetLoaderManager {
 
     // Dependencies
     private final JFrame parentFrame;
-    private final Map<DatasetSeries, TimeSeriesData> datasetSeriesCache;
+    private final Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources;
     private final DefaultMutableTreeNode loadedDatasetsNode;
     private final DefaultTreeModel treeModel;
     private final Consumer<String> statusUpdater;
@@ -72,7 +73,7 @@ public class DatasetLoaderManager {
      * Creates a new DatasetLoaderManager.
      *
      * @param parentFrame Parent frame for dialogs
-     * @param datasetSeriesCache Cache to store loaded series
+     * @param datasetSeriesSources Where each loaded series's data comes from, keyed by ref
      * @param loadedDatasetsNode Tree node for loaded datasets
      * @param treeModel Tree model for updates
      * @param statusUpdater Status bar updater
@@ -80,13 +81,13 @@ public class DatasetLoaderManager {
      */
     public DatasetLoaderManager(
             JFrame parentFrame,
-            Map<DatasetSeries, TimeSeriesData> datasetSeriesCache,
+            Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources,
             DefaultMutableTreeNode loadedDatasetsNode,
             DefaultTreeModel treeModel,
             Consumer<String> statusUpdater,
             Runnable onDatasetLoadedCallback) {
         this.parentFrame = parentFrame;
-        this.datasetSeriesCache = datasetSeriesCache;
+        this.datasetSeriesSources = datasetSeriesSources;
         this.loadedDatasetsNode = loadedDatasetsNode;
         this.treeModel = treeModel;
         this.statusUpdater = statusUpdater;
@@ -359,7 +360,7 @@ public class DatasetLoaderManager {
             // the DatasetSeries ref; the absolute path qualifies the entry so two files
             // whose names sanitize to the same identifier stay separate.
             DatasetSeries ref = new DatasetSeries(csvFile.getAbsolutePath(), seriesName);
-            datasetSeriesCache.put(ref, ns.data());
+            datasetSeriesSources.put(ref, new DatasetSeriesSource.Loaded(ns.data()));
             seriesAdded++;
         }
 
@@ -484,7 +485,7 @@ public class DatasetLoaderManager {
         for (NamedSeries ns : importResult.getSeries()) {
             String seriesName = composeDatasetSeriesName(resCsvFile, ns.path());
             DatasetSeries ref = new DatasetSeries(resCsvFile.getAbsolutePath(), seriesName);
-            datasetSeriesCache.put(ref, ns.data());
+            datasetSeriesSources.put(ref, new DatasetSeriesSource.Loaded(ns.data()));
             seriesAdded++;
         }
 
@@ -554,16 +555,23 @@ public class DatasetLoaderManager {
         progressDialog.setSize(400, 120);
         progressDialog.setLocationRelativeTo(parentFrame);
 
-        // Create background loading task
-        SwingWorker<List<NamedSeries>, Integer> loadTask = new SwingWorker<>() {
+        // A series in the index, before anything is decoded.
+        record IndexedSeries(PixieSeriesKey key, String name) {
+        }
+
+        // Create background loading task. Only the .pxt index is read here; each series
+        // is decoded by PixieStore when it is first plotted (see SeriesFetchCoordinator).
+        SwingWorker<List<IndexedSeries>, Integer> loadTask = new SwingWorker<>() {
             @Override
-            protected List<NamedSeries> doInBackground() throws Exception {
-                publish(25);
-                PixieReader reader = new PixieReader();
+            protected List<IndexedSeries> doInBackground() throws Exception {
                 publish(50);
-                List<NamedSeries> seriesList = reader.readAllSeries(basePath);
+                PixieStore store = PixieStore.shared();
+                List<IndexedSeries> index = new ArrayList<>();
+                for (PixieSeriesKey key : store.open(pxtFile)) {
+                    index.add(new IndexedSeries(key, store.info(key).name));
+                }
                 publish(100);
-                return seriesList;
+                return index;
             }
 
             @Override
@@ -579,19 +587,18 @@ public class DatasetLoaderManager {
                 progressDialog.dispose();
 
                 try {
-                    List<NamedSeries> seriesList = get();
+                    List<IndexedSeries> seriesList = get();
 
-                    // Add all series to cache using hierarchical naming scheme
-                    for (NamedSeries ns : seriesList) {
-                        // Create hierarchical series name from the series' path segments
-                        String seriesName = composeDatasetSeriesName(pxtFile, ns.path());
+                    // Register every series by its hierarchical name, holding only its store key
+                    for (IndexedSeries series : seriesList) {
+                        // Dotted names nest exactly as a full read's NamedSeries.dotted would
+                        String seriesName = composeDatasetSeriesName(pxtFile, NamedSeries.dottedPath(series.name()));
 
-                        logger.info("Loading Pixie series: originalName='{}' -> seriesName='{}'", ns.name(), seriesName);
+                        logger.info("Loading Pixie series: originalName='{}' -> seriesName='{}'", series.name(), seriesName);
 
-                        // The importer already returns nameless data — store it directly.
                         // Key by DatasetSeries ref so the absolute path qualifies the entry.
                         DatasetSeries ref = new DatasetSeries(pxtFile.getAbsolutePath(), seriesName);
-                        datasetSeriesCache.put(ref, ns.data());
+                        datasetSeriesSources.put(ref, new DatasetSeriesSource.Pixie(series.key()));
                     }
 
                     // Add file to loaded datasets tree
