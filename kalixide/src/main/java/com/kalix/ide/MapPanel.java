@@ -248,6 +248,12 @@ public class MapPanel extends JPanel {
         MouseAdapter panningHandler = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                // Any new press ends a link drag: a release that never arrived (e.g. taken
+                // by a popup) must not leave one running.
+                if (linkDragSource != null) {
+                    clearLinkDrag();
+                }
+
                 // Right-click: show context menu.
                 //
                 // Deliberately isRightMouseButton and not the conventional isPopupTrigger:
@@ -384,6 +390,11 @@ public class MapPanel extends JPanel {
                 mouseWorldX = toWorldX(e.getX());
                 mouseWorldY = toWorldY(e.getY());
                 mouseInPanel = true;
+
+                // No button is held, so a link drag still open lost its release.
+                if (linkDragSource != null) {
+                    clearLinkDrag();
+                }
 
                 // With labels hidden, hovering a node reveals its label. Only the
                 // transition matters — an unchanged hover costs nothing beyond the
