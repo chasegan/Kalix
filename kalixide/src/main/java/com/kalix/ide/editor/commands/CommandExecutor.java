@@ -813,7 +813,12 @@ public class CommandExecutor {
         if (section == null) {
             return null;
         }
-        int n = firstFreeDsIndex(text.substring(section.start(), section.contentEnd()));
+        return dsLineInsertion(text, section,
+            firstFreeDsIndex(text.substring(section.start(), section.contentEnd())), targetName);
+    }
+
+    private static TextEdit dsLineInsertion(String text, NodeSectionLocator.NodeSection section,
+                                            int n, String targetName) {
         int at = section.contentEnd();
         String line = "ds_" + n + " = " + targetName + "\n";
         if (at > 0 && text.charAt(at - 1) != '\n') {
@@ -834,7 +839,8 @@ public class CommandExecutor {
             if (!ref.sourceNode().equals(upstreamNode) || !ref.target().equals(oldTarget)) {
                 continue;
             }
-            TextEdit edit = dsValueEdit(text, ref, newTarget);
+            TextEdit edit = dsValueEdit(text.substring(ref.lineStart(), ref.lineEnd()), ref.lineStart(),
+                oldTarget, newTarget);
             if (edit != null) {
                 return edit;
             }
@@ -854,12 +860,15 @@ public class CommandExecutor {
         if (section == null) {
             return null;
         }
-        int n = firstFreeDsIndex(text.substring(section.start(), section.contentEnd()));
+        String body = text.substring(section.start(), section.contentEnd());
+        int n = firstFreeDsIndex(body);
         if (maxOutlet > 0 && n > maxOutlet) {
-            for (NodeSectionLocator.DsReference ref : NodeSectionLocator.findDsReferences(text)) {
-                if (ref.sourceNode().equals(upstream) && ref.outlet() == maxOutlet
-                        && ref.lineStart() >= section.start() && ref.lineEnd() <= section.end()) {
-                    TextEdit edit = dsValueEdit(text, ref, downstream);
+            // Scanning the section alone keeps other nodes' ds lines out of it.
+            for (NodeSectionLocator.DsReference ref : NodeSectionLocator.findDsReferences(body)) {
+                String line = body.substring(ref.lineStart(), ref.lineEnd());
+                java.util.regex.Matcher key = DS_KEY_PATTERN.matcher(line.trim());
+                if (key.find() && key.group(1).equals(String.valueOf(maxOutlet))) {
+                    TextEdit edit = dsValueEdit(line, section.start() + ref.lineStart(), ref.target(), downstream);
                     if (edit != null) {
                         return edit;
                     }
@@ -868,16 +877,15 @@ public class CommandExecutor {
             // ds_maxOutlet has no value to re-point (e.g. "ds_1 ="): add a new line, beyond
             // the type's limit, and leave it for the linter to flag.
         }
-        return dsLineInsertion(text, upstream, downstream);
+        return dsLineInsertion(text, section, n, downstream);
     }
 
     /**
-     * The exact value-range replacement of one {@code ds_N} line's target. Range-anchored
-     * to the value only, so keys and same-line comments cannot be touched. Null if the
-     * target does not sit where expected.
+     * The exact value-range replacement of {@code oldTarget} on one {@code ds_N} line that
+     * starts at {@code lineStart}. Range-anchored to the value only, so keys and same-line
+     * comments cannot be touched. Null if the target does not sit where expected.
      */
-    private static TextEdit dsValueEdit(String text, NodeSectionLocator.DsReference ref, String newTarget) {
-        String line = text.substring(ref.lineStart(), ref.lineEnd());
+    private static TextEdit dsValueEdit(String line, int lineStart, String oldTarget, String newTarget) {
         int eq = line.indexOf('=');
         if (eq < 0) {
             return null;
@@ -886,11 +894,10 @@ public class CommandExecutor {
         while (valueStart < line.length() && Character.isWhitespace(line.charAt(valueStart))) {
             valueStart++;
         }
-        if (!line.startsWith(ref.target(), valueStart)) {
+        if (!line.startsWith(oldTarget, valueStart)) {
             return null; // defensive: the reference's target must sit exactly here
         }
-        return new TextEdit(ref.lineStart() + valueStart,
-            ref.lineStart() + valueStart + ref.target().length(), newTarget);
+        return new TextEdit(lineStart + valueStart, lineStart + valueStart + oldTarget.length(), newTarget);
     }
 
     /**

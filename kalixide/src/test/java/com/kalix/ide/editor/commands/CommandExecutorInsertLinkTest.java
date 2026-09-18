@@ -196,6 +196,14 @@ class CommandExecutorInsertLinkTest {
     }
 
     @Test
+    void linkEditReusesTheOutletOfTheSectionThatWins() {
+        // Duplicate sections: the last one wins (as in the parser), and only it is edited.
+        String text = "[node.a]\nds_1 = x\n\n[node.a]\nds_1 = y\n";
+        assertEquals("[node.a]\nds_1 = x\n\n[node.a]\nds_1 = new\n",
+            applied(text, CommandExecutor.linkEdit(text, "a", "new", 1)));
+    }
+
+    @Test
     void linkEditAddsBeyondTheLimitWhenTheLastOutletHasNoValue() {
         String text = "[node.a]\nds_1 =\n";
         assertEquals("[node.a]\nds_1 =\nds_2 = new\n",
