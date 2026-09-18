@@ -44,13 +44,28 @@ public class TimeSeriesData {
      * the copy is sorted by timestamp if not already ascending.
      */
     public TimeSeriesData(long[] timestamps, double[] values) {
+        this(timestamps, values, true);
+    }
+
+    /**
+     * Constructs a time series that takes ownership of freshly built arrays instead of
+     * copying them — for decoders that allocate the arrays themselves, where the copy
+     * would briefly double the memory of a multi-million-point series. The caller must
+     * not use either array afterwards: they become this series' storage, and may be
+     * sorted in place.
+     */
+    public static TimeSeriesData adopting(long[] timestamps, double[] values) {
+        return new TimeSeriesData(timestamps, values, false);
+    }
+
+    private TimeSeriesData(long[] timestamps, double[] values, boolean copy) {
         if (timestamps.length != values.length) {
             throw new IllegalArgumentException("Timestamp and value arrays must have same length");
         }
 
         this.pointCount = timestamps.length;
-        this.timestamps = timestamps.clone();
-        this.values = values.clone();
+        this.timestamps = copy ? timestamps.clone() : timestamps;
+        this.values = copy ? values.clone() : values;
         this.validPoints = new boolean[pointCount];
 
         for (int i = 0; i < pointCount; i++) {

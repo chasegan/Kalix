@@ -96,9 +96,9 @@ public final class PixieStore {
     private long nextGeneration = 1;
 
     /**
-     * One decode at a time: decoding a long series peaks at approximately twice the storage
-     * required at rest since TimeSeriesData copies the decoder's arrays. However, bounding
-     * peak memory is the point of the store. Daemon, so it never keeps the IDE from exiting.
+     * One decode at a time: a long series is tens of MB decoded, so concurrent decodes
+     * would stack, and bounding peak memory is the point of the store. Daemon, so it
+     * never keeps the IDE from exiting.
      */
     private final ExecutorService decoder = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "kalix-pixie-decode");

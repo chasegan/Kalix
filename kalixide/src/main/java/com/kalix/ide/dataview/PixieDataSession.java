@@ -105,8 +105,11 @@ public final class PixieDataSession implements FindableData {
      */
     private static final long LOAD_BYTES_PER_POINT = 25;
 
-    /** Transient bytes per point of the series being decoded, while TimeSeriesData copies it. */
-    private static final long DECODE_BYTES_PER_POINT = 16;
+    /**
+     * Transient bytes per point of the series being decoded: the float codec's float[]
+     * before it is widened (decoded arrays are adopted, not copied, by TimeSeriesData).
+     */
+    private static final long DECODE_BYTES_PER_POINT = 4;
 
     private final File pxtFile;
     private final LongSupplier rowLimit;

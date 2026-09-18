@@ -293,7 +293,8 @@ public class PixieReader {
             timestampsSec[i] *= 1000L;
         }
 
-        return new TimeSeriesData(timestampsSec, values);
+        // Both arrays are ours alone, so hand them over rather than have them copied.
+        return TimeSeriesData.adopting(timestampsSec, values);
     }
 
     private int readUInt16(RandomAccessFile file) throws IOException {

@@ -141,8 +141,8 @@ class PixieDataSessionTest {
     @Test
     void memoryGateRefusesAFileTooBigToDecodeWhole() throws IOException {
         File pxt = writePixie("wideAndLong", twelveSeriesOfFiveRows());
-        // 60 points x 25 bytes + the longest series' 5 x 16 = 1,580 bytes estimated.
-        PixieDataSession session = openLoaded(pxt, 1000, 1579);
+        // 60 points x 25 bytes + the longest series' 5 x 4 = 1,520 bytes estimated.
+        PixieDataSession session = openLoaded(pxt, 1000, 1519);
         assertTrue(session.refusal().contains("12 series of up to 5 rows"), session.refusal());
         assertTrue(session.refusal().contains("Run Manager"), session.refusal());
         assertEquals(0, session.rowCount(), "nothing was decoded");
@@ -152,7 +152,7 @@ class PixieDataSessionTest {
     @Test
     void memoryGateAdmitsAFileWithinBudget() throws IOException {
         File pxt = writePixie("withinBudget", twelveSeriesOfFiveRows());
-        PixieDataSession session = openLoaded(pxt, 1000, 1580);
+        PixieDataSession session = openLoaded(pxt, 1000, 1520);
         assertNull(session.refusal());
         assertEquals(12, session.seriesCount());
         assertEquals(5, session.rowCount());
