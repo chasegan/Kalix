@@ -865,7 +865,8 @@ public class CommandExecutor {
                     }
                 }
             }
-            // ds_maxOutlet has no plain value to re-point: fall back to a new line.
+            // ds_maxOutlet has no value to re-point (e.g. "ds_1 ="): add a new line, beyond
+            // the type's limit, and leave it for the linter to flag.
         }
         return dsLineInsertion(text, upstream, downstream);
     }

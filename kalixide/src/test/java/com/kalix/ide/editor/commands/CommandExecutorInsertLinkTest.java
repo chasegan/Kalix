@@ -196,10 +196,9 @@ class CommandExecutorInsertLinkTest {
     }
 
     @Test
-    void linkEditAddsBeyondTheLimitWhenTheLastOutletLineIsMissing() {
-        // Limit 1, ds_1 absent but ds_2 present: ds_1 is free, so it is added.
-        String text = "[node.a]\nds_2 = x\n";
-        assertEquals("[node.a]\nds_2 = x\nds_1 = new\n",
+    void linkEditAddsBeyondTheLimitWhenTheLastOutletHasNoValue() {
+        String text = "[node.a]\nds_1 =\n";
+        assertEquals("[node.a]\nds_1 =\nds_2 = new\n",
             applied(text, CommandExecutor.linkEdit(text, "a", "new", 1)));
     }
 }
