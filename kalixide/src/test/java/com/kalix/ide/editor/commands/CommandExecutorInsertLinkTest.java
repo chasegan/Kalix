@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -126,5 +127,38 @@ class CommandExecutorInsertLinkTest {
 
         f.area().undoLastAction();
         assertEquals(MODEL, f.area().getText(), "one undo must restore the original text");
+    }
+
+    @Test
+    void addLinkWritesFirstFreeDsOnUpstreamNode() {
+        Fixture f = fixture(MODEL);
+
+        assertTrue(f.executor().addLink("b", "a"));
+
+        String after = f.area().getText();
+        assertTrue(after.contains("loc = 0, 50\nds_1 = a\n"),
+            "'b' must gain ds_1 at the end of its section: " + after);
+
+        f.area().undoLastAction();
+        assertEquals(MODEL, f.area().getText(), "one undo must restore the original text");
+    }
+
+    @Test
+    void addLinkUsesNextOutletEvenBeyondWhatTheTypeAllows() {
+        // Inflow nodes have only ds_1; the link is written anyway and the linter flags it.
+        Fixture f = fixture(MODEL);
+
+        assertTrue(f.executor().addLink("a", "c"));
+
+        assertTrue(f.area().getText().contains("ds_1 = b\nds_2 = c\n"), f.area().getText());
+    }
+
+    @Test
+    void addLinkFromUnknownNodeChangesNothing() {
+        Fixture f = fixture(MODEL);
+
+        assertFalse(f.executor().addLink("no_such_node", "a"));
+
+        assertEquals(MODEL, f.area().getText());
     }
 }

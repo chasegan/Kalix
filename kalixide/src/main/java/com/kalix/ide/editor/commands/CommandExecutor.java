@@ -644,6 +644,38 @@ public class CommandExecutor {
     }
 
     /**
+     * Links two existing nodes (e.g. by dragging on the map): the upstream node's section
+     * gains {@code ds_N = downstream} at the first free N, as one atomic edit. Whether the
+     * link is sensible (self-link, duplicate, cycle) is the caller's concern; this writes
+     * the text only. The definition order is deliberately not repaired — an upstream node
+     * defined below its target is left for the linter to report (per ADR-0005 §2.1).
+     *
+     * @return true if the link was written; false if the upstream node has no section in
+     *         the text, in which case nothing was changed
+     */
+    public boolean addLink(String upstream, String downstream) {
+        try {
+            TextEdit edit = dsLineInsertion(editor.getText(), upstream, downstream);
+            if (edit == null) {
+                logger.warn("Link skipped: no section found for upstream node '{}'", upstream);
+                return false;
+            }
+            editor.beginAtomicEdit();
+            try {
+                applyEdit(edit);
+            } finally {
+                editor.endAtomicEdit();
+            }
+            logger.info("Linked {} -> {}", upstream, downstream);
+            return true;
+        } catch (Exception e) {
+            logger.error("Error adding link", e);
+            showError("Failed to add link: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Inserts a new node template from the text-editor context menu: the section goes
      * relative to the caret (see {@link NodeInsertionPoint}), at the given world
      * location — typically the centre of the map view, since a text-editor invocation

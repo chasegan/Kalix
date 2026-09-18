@@ -750,6 +750,23 @@ public class EnhancedTextEditor extends JPanel {
         return executor.insertNodeTemplateAtLocation(nodeType, worldX, worldY, selectedNodeNames, spliceLink);
     }
 
+    /**
+     * Links two existing nodes (e.g. from a drag on the map): {@code upstream} gains
+     * {@code ds_N = downstream} at its first free N, as a single undoable edit.
+     *
+     * @return true if the link was written, false if nothing changed
+     */
+    public boolean addLink(String upstream, String downstream) {
+        if (commandParentFrame == null) {
+            logger.warn("Context commands not initialized - cannot add link");
+            return false;
+        }
+
+        CommandExecutor executor = new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
+
+        return executor.addLink(upstream, downstream);
+    }
+
     private void setupKeyBindings() {
         InputMap inputMap = textArea.getInputMap();
         ActionMap actionMap = textArea.getActionMap();
