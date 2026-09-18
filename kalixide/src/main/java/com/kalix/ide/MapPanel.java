@@ -1161,9 +1161,17 @@ public class MapPanel extends JPanel {
         bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "map.delete", delete);
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_SPACE, 0), "map.delete");
 
-        // Cancel a link drag in progress
-        bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "map.cancelLinkDrag", () -> {
-            if (linkDragSource != null) {
+        // Cancel a link drag in progress. Enabled only mid-drag: Swing does not consume a
+        // key bound to a disabled action, so Esc otherwise still reaches anyone else.
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "map.cancelLinkDrag");
+        getActionMap().put("map.cancelLinkDrag", new AbstractAction() {
+            @Override
+            public boolean isEnabled() {
+                return linkDragSource != null;
+            }
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
                 clearLinkDrag();
             }
         });
