@@ -77,6 +77,8 @@ public class EnhancedTextEditor extends JPanel {
     private TextSearchManager searchManager;
     private FileDropManager dropManager;
     private LinterManager linterManager;
+    /** Node-type definitions (e.g. allowed outlets) for map edits; null until the linter is initialised. */
+    private SchemaManager schemaManager;
     private AutoCompleteManager autoCompleteManager;
     private com.kalix.ide.linter.ui.HoverTipSupplier hoverTips;
     private com.kalix.ide.editor.commands.ContextCommandManager contextCommandManager;
@@ -229,6 +231,7 @@ public class EnhancedTextEditor extends JPanel {
      * This should be called after the EnhancedTextEditor is created.
      */
     public void initializeLinter(SchemaManager schemaManager) {
+        this.schemaManager = schemaManager;
         if (linterManager != null) {
             linterManager.dispose();
         }
@@ -751,12 +754,15 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
-     * Links two existing nodes (e.g. from a drag on the map): {@code upstream} gains
-     * {@code ds_N = downstream} at its first free N, as a single undoable edit.
+     * Links two existing nodes (e.g. from a drag on the map), as a single undoable edit:
+     * {@code upstream} gains {@code ds_N = downstream} at its first free N, or, once every
+     * outlet its type allows is taken, its last allowed outlet is re-pointed at
+     * {@code downstream}.
      *
+     * @param upstreamType the upstream node's type, for its allowed outlets (may be null)
      * @return true if the link was written, false if nothing changed
      */
-    public boolean addLink(String upstream, String downstream) {
+    public boolean addLink(String upstream, String upstreamType, String downstream) {
         if (commandParentFrame == null) {
             logger.warn("Context commands not initialized - cannot add link");
             return false;
@@ -764,7 +770,32 @@ public class EnhancedTextEditor extends JPanel {
 
         CommandExecutor executor = new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
 
-        return executor.addLink(upstream, downstream);
+        return executor.addLink(upstream, downstream, maxOutlet(upstreamType));
+    }
+
+    private static final java.util.regex.Pattern DS_PARAM_PATTERN =
+        java.util.regex.Pattern.compile("ds_(\\d{1,9})");
+
+    /**
+     * The highest {@code ds_N} the schema allows for a node type, or 0 if the type or
+     * schema is unknown.
+     */
+    private int maxOutlet(String nodeType) {
+        com.kalix.ide.linter.LinterSchema schema =
+            schemaManager != null ? schemaManager.getCurrentSchema() : null;
+        com.kalix.ide.linter.schema.NodeTypeDefinition def =
+            schema != null && nodeType != null ? schema.getNodeType(nodeType) : null;
+        if (def == null) {
+            return 0;
+        }
+        int max = 0;
+        for (String param : def.dsnodeParams) {
+            java.util.regex.Matcher m = DS_PARAM_PATTERN.matcher(param);
+            if (m.matches()) {
+                max = Math.max(max, Integer.parseInt(m.group(1)));
+            }
+        }
+        return max;
     }
 
     private void setupKeyBindings() {

@@ -87,10 +87,11 @@ public final class NodeSectionLocator {
 
     /**
      * A downstream-link property line ({@code ds_N = <target>}) inside a node section:
-     * the owning section's node name, the referenced target node, and the whole-line
-     * span {@code [lineStart, lineEnd)} including the trailing newline if present.
+     * the owning section's node name, the outlet number N, the referenced target node,
+     * and the whole-line span {@code [lineStart, lineEnd)} including the trailing newline
+     * if present.
      */
-    public record DsReference(String sourceNode, String target, int lineStart, int lineEnd) {
+    public record DsReference(String sourceNode, int outlet, String target, int lineStart, int lineEnd) {
     }
 
     /**
@@ -216,12 +217,21 @@ public final class NodeSectionLocator {
                 Matcher ds = DS_LINE_PATTERN.matcher(code);
                 if (ds.matches()) {
                     references.add(new DsReference(
-                        currentNode, ds.group(2), scanner.lineStart, scanner.nextLineStart));
+                        currentNode, parseOutlet(ds.group(1)), ds.group(2), scanner.lineStart, scanner.nextLineStart));
                 }
             }
         }
 
         return references;
+    }
+
+    /** The outlet number N of {@code ds_N}, or -1 if it is too long to be one. */
+    private static int parseOutlet(String digits) {
+        try {
+            return Integer.parseInt(digits);
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     /**

@@ -133,7 +133,7 @@ class CommandExecutorInsertLinkTest {
     void addLinkWritesFirstFreeDsOnUpstreamNode() {
         Fixture f = fixture(MODEL);
 
-        assertTrue(f.executor().addLink("b", "a"));
+        assertTrue(f.executor().addLink("b", "a", 1));
 
         String after = f.area().getText();
         assertTrue(after.contains("loc = 0, 50\nds_1 = a\n"),
@@ -144,11 +144,23 @@ class CommandExecutorInsertLinkTest {
     }
 
     @Test
-    void addLinkUsesNextOutletEvenBeyondWhatTheTypeAllows() {
-        // Inflow nodes have only ds_1; the link is written anyway and the linter flags it.
+    void addLinkRepointsTheOnlyOutletWhenItIsTaken() {
         Fixture f = fixture(MODEL);
 
-        assertTrue(f.executor().addLink("a", "c"));
+        assertTrue(f.executor().addLink("a", "c", 1));
+
+        String after = f.area().getText();
+        assertTrue(after.contains("loc = 0, 0\nds_1 = c\n\n"), "ds_1 must now go to c: " + after);
+
+        f.area().undoLastAction();
+        assertEquals(MODEL, f.area().getText(), "one undo must restore the original text");
+    }
+
+    @Test
+    void addLinkWithUnknownOutletLimitAlwaysAddsAnOutlet() {
+        Fixture f = fixture(MODEL);
+
+        assertTrue(f.executor().addLink("a", "c", 0));
 
         assertTrue(f.area().getText().contains("ds_1 = b\nds_2 = c\n"), f.area().getText());
     }
@@ -157,8 +169,37 @@ class CommandExecutorInsertLinkTest {
     void addLinkFromUnknownNodeChangesNothing() {
         Fixture f = fixture(MODEL);
 
-        assertFalse(f.executor().addLink("no_such_node", "a"));
+        assertFalse(f.executor().addLink("no_such_node", "a", 1));
 
         assertEquals(MODEL, f.area().getText());
+    }
+
+    // --- Outlet choice for a new link (pure) ---
+
+    private static String applied(String text, CommandExecutor.TextEdit edit) {
+        return text.substring(0, edit.start()) + edit.replacement() + text.substring(edit.end());
+    }
+
+    @Test
+    void linkEditFillsGapsBeforeReusingAnOutlet() {
+        String text = "[node.s]\ntype = storage\nds_1 = x\nds_3 = y\n";
+        assertEquals("[node.s]\ntype = storage\nds_1 = x\nds_3 = y\nds_2 = new\n",
+            applied(text, CommandExecutor.linkEdit(text, "s", "new", 4)));
+    }
+
+    @Test
+    void linkEditReusesTheLastAllowedOutletWhenAllAreTaken() {
+        String text = "[node.s]\ntype = storage\nds_1 = w\nds_2 = x\nds_3 = y\nds_4 = z  # spill\n\n[node.t]\nds_4 = z\n";
+        assertEquals("[node.s]\ntype = storage\nds_1 = w\nds_2 = x\nds_3 = y\nds_4 = new  # spill\n\n[node.t]\nds_4 = z\n",
+            applied(text, CommandExecutor.linkEdit(text, "s", "new", 4)),
+            "only s's ds_4 value changes; its comment and t's ds_4 are untouched");
+    }
+
+    @Test
+    void linkEditAddsBeyondTheLimitWhenTheLastOutletLineIsMissing() {
+        // Limit 1, ds_1 absent but ds_2 present: ds_1 is free, so it is added.
+        String text = "[node.a]\nds_2 = x\n";
+        assertEquals("[node.a]\nds_2 = x\nds_1 = new\n",
+            applied(text, CommandExecutor.linkEdit(text, "a", "new", 1)));
     }
 }

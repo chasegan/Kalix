@@ -864,7 +864,8 @@ public class MapPanel extends JPanel {
     /** Writes the link if released on a node that can take it; otherwise just ends the drag. */
     private void finishLinkDrag() {
         if (linkDragTarget != null && linkDragTargetAllowed) {
-            textEditor.addLink(linkDragSource, linkDragTarget);
+            ModelNode source = model.getNode(linkDragSource);
+            textEditor.addLink(linkDragSource, source != null ? source.getType() : null, linkDragTarget);
         }
         clearLinkDrag();
     }
