@@ -20,6 +20,8 @@ Click and drag to select nodes on the schematic map. Then drag to move or ctrl+d
 
 ![](../assets/docs-using-ide/image_2.png)
 
+**Draw a link** by dragging out from just beside a node on the schematic map. Hover near the edge of a node until the cursor becomes a crosshair and a ring appears, then drag to the downstream node and release. The upstream node gains a `ds_N = <downstream>` line at its first free outlet (`ds_1`, `ds_2`, …). If every outlet its type allows is already used, the last one is re-pointed at the new node instead (`ds_1` for most nodes, `ds_2` for a splitter, `ds_4` for storage). To use a different outlet, swap the lines in the text. The cursor shows when a drop isn't allowed: onto the same node, a node it already links to, or a node that would make a loop. Press Esc to cancel, and Ctrl+Z to undo a link.
+
 Ctrl+f in the model editor for **find**, or Ctrl+h for **find-and-replace**
 
 ![](../assets/docs-using-ide/image_3.png)
