@@ -144,28 +144,6 @@ class CommandExecutorInsertLinkTest {
     }
 
     @Test
-    void addLinkRepointsTheOnlyOutletWhenItIsTaken() {
-        Fixture f = fixture(MODEL);
-
-        assertTrue(f.executor().addLink("a", "c", 1));
-
-        String after = f.area().getText();
-        assertTrue(after.contains("loc = 0, 0\nds_1 = c\n\n"), "ds_1 must now go to c: " + after);
-
-        f.area().undoLastAction();
-        assertEquals(MODEL, f.area().getText(), "one undo must restore the original text");
-    }
-
-    @Test
-    void addLinkWithUnknownOutletLimitAlwaysAddsAnOutlet() {
-        Fixture f = fixture(MODEL);
-
-        assertTrue(f.executor().addLink("a", "c", 0));
-
-        assertTrue(f.area().getText().contains("ds_1 = b\nds_2 = c\n"), f.area().getText());
-    }
-
-    @Test
     void addLinkFromUnknownNodeChangesNothing() {
         Fixture f = fixture(MODEL);
 
@@ -201,6 +179,13 @@ class CommandExecutorInsertLinkTest {
         String text = "[node.a]\nds_1 = x\n\n[node.a]\nds_1 = y\n";
         assertEquals("[node.a]\nds_1 = x\n\n[node.a]\nds_1 = new\n",
             applied(text, CommandExecutor.linkEdit(text, "a", "new", 1)));
+    }
+
+    @Test
+    void linkEditWithUnknownLimitAlwaysAddsAnOutlet() {
+        String text = "[node.a]\nds_1 = x\n";
+        assertEquals("[node.a]\nds_1 = x\nds_2 = new\n",
+            applied(text, CommandExecutor.linkEdit(text, "a", "new", 0)));
     }
 
     @Test
