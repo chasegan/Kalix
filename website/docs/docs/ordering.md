@@ -60,7 +60,7 @@ User nodes in regulated zones with `regulated = true` place orders based on the 
 
 User nodes not located in regulated zones do not place orders. User nodes with `regulated = false` (default) do not place orders.
 
-Streamflow losses impede the delivery of regulated flows. To account for losses, orders are automatically increased as needed, based on the flow-loss relationship at the relevant loss nodes.
+Streamflow losses impede the delivery of regulated flows. To account for losses, orders are automatically increased as needed, based on the flow-loss relationship at the relevant loss nodes. Orders are increased in the same way for the flow that a splitter's table sends down its effluent.
 
 Inflows represent opportunities for demands to be satisfied without releasing all orders from the supplying storage(s). Inflows in regulated zones are evaluated during the ordering phase. If the travel time at the inflow node is T=0, the full inflow is assumed to be available this timestep and the orders are reduced accordingly. If T>0, the relevant inflow is the one that occurs after T timesteps. This value is not known yet, therefore the model uses a simple calculation to estimate how much inflow might be available `assumed_inflow = current_inflow * recession_factor`.
 
@@ -72,7 +72,7 @@ Orders propagate in an upstream direction, from users to the supply storage(s). 
 
 At loss nodes and inflow nodes the orders are adjusted as discussed above.
 
-At splitter nodes, the orders from both outlets are added together and the total is sent upstream.
+At splitter nodes, the orders from both outlets are combined and sent upstream. The order on the main channel is first raised to cover the flow that the splitter's table sends down the effluent, in the same way that orders are raised through a loss node (see [Splitter](splitter.md#the-order-sent-upstream)).
 
 When a node, which is *not a confluence*, has multiple incoming links (branches), the full order is sent up each regulated link. This allows the modeller to make flow-phase decisions about how (from which branch) the order will be met. Note that a naive configuration could result in the order being met by both branches. If the modeller want more control over how the orders are apportioned up each branch, they should use a confluence node.
 
@@ -82,7 +82,7 @@ At confluence nodes, the orders are directed up regulated branches on the basis 
 
 Regulated outlets on storage nodes are operated to satisfy orders.
 
-Splitters deliver orders placed on their effluent (ds\_2) outlet. A splitter holds each effluent order for the travel time from the supply storage, then sends at least that volume down the effluent when the ordered water arrives. If the flow cannot meet the orders on both outlets, the effluent order is met first. Orders are not adjusted for the flow that the splitter's table sends down the effluent. See [Splitter](splitter.md#orders-on-the-effluent).
+Splitters deliver orders placed on their effluent (ds\_2) outlet. A splitter holds each effluent order for the travel time from the supply storage, then sends at least that volume down the effluent when the ordered water arrives. If the flow cannot meet the orders on both outlets, the effluent order is met first. See [Splitter](splitter.md#orders-on-the-effluent).
 
 ## How Orders Propagate
 

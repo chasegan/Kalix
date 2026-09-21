@@ -105,38 +105,9 @@ impl Node for LossNode {
             return Err(format!("Node '{}' loss table slope exceeds 1:1 (outflow would decrease). {}", self.name, e));
         }
 
-        // The maximum outflow is the last row's (inflow - loss); the slope check
-        // guarantees (inflow - loss) is non-decreasing, so the last row is the max.
-        let last_row = self.loss_table.nrows() - 1;
-        let max_outflow = self.loss_table.get_value(last_row, 0) - self.loss_table.get_value(last_row, 1);
-
-        // Build order_translation_table from loss_table (for lookups during ordering)
-        // I require that the loss function does not cause the outflow to decrease. However,
-        // multiple consecutive inflow values may still produce the same outflow, and therefore
-        // ambiguity still exists in how much to order upstream. Moreover, if the PWL has multiple
-        // segments with constant outflow, then the interpolation may depend on which segment the
-        // binary search lands on!
-        // The answer is to define a new type of PWL table which ALLOWS FOR NON-CONTINUOUS y values,
-        // and to use a binary search to find where xlo < x <= xhi, which will always give us the
-        // lowest possible order that produces the required outflow.
-        self.order_translation_table = TableDiscontinuous::new();
-        self.order_translation_table.add_point(-1.0, 0.0);
-        self.order_translation_table.add_point(0.0, 0.0);
-        if max_outflow > 0.0 {
-            for row in 0..self.loss_table.nrows() {
-                let inflow = self.loss_table.get_value(row, 0);
-                let loss = self.loss_table.get_value(row, 1);
-                let outflow = inflow - loss;
-                self.order_translation_table.add_point(outflow, inflow);
-            }
-        } else {
-            // Loss table has 100% loss and cant satisfy any orders.
-            // The only reasonable thing to do is to make a new table with no orders.
-            //self.order_translation_table = TableDiscontinuous::new();
-            self.order_translation_table.add_point(0.0, 0.0);
-            self.order_translation_table.add_point(1.0, 0.0);
-        }
-        self.order_translation_table.cap_if_unfinished();
+        // Build order_translation_table from loss_table (for lookups during ordering):
+        // the smallest inflow that delivers a required outflow. Relies on the checks above.
+        self.order_translation_table = TableDiscontinuous::order_translation(&self.loss_table);
 
         // Initialize result recorders
         self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
