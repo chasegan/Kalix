@@ -141,3 +141,17 @@ fn test_travel_time_below_a_two_name_confluence_is_the_longest_branch() {
     let mut model = run(&ini).expect("model should run");
     assert_eq!(series(&mut model, "node.user_1.order_due")[..5], [0.0, 0.0, 0.0, 5.0, 5.0]);
 }
+
+#[test]
+fn test_harmony_fraction_is_recorded_for_the_step_it_was_used() {
+    // The fraction steps from 0 to 1 on the third step. The recorded series
+    // shows each value on the step the ordering system used it.
+    let ini = rig(&[("a", 1), ("b", 1)], "type = confluence\nregulated = lag_a, lag_b\nharmony_fraction = if(var.count.n > 2, 1, 0)")
+        .replace("end = 2020-01-08\n", "end = 2020-01-08\n\n[var.count]\nphase = ras\nn = var.count.n[-1, 0] + 1\n")
+        .replace("[outputs]", "[outputs]\nnode.junction.harmony_fraction");
+    let mut model = run(&ini).expect("model should run");
+    assert_eq!(series(&mut model, "node.junction.harmony_fraction")[..4], [0.0, 0.0, 1.0, 1.0]);
+    // ...and it is the split that was used: all of the order goes to dam_a from the third step
+    assert_eq!(series(&mut model, "node.dam_a.ds_1_order")[..4], [0.0, 0.0, 5.0, 5.0]);
+    assert_eq!(series(&mut model, "node.dam_b.ds_1_order")[..4], [5.0, 5.0, 0.0, 0.0]);
+}
