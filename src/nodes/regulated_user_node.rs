@@ -309,7 +309,8 @@ impl RegulatedUserNode {
                     outlet_orders_accepted += supply_outlet.order;
                 }
             }
-            self.order_value = self.order_value.min(remaining);
+            // Ensure non-negativity of orders, as below: a negative order is no order
+            self.order_value = self.order_value.max(0.0).min(remaining);
             let order_placed = if SUPPLY_OUTLETS { outlet_orders_accepted + self.order_value } else { self.order_value };
             let mut excess = (order_placed - regular_balance).max(0.0);
             for &account_idx in &self.order_account_idxs {
