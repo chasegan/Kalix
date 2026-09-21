@@ -7,6 +7,10 @@ use crate::numerical::fifo_buffer::FifoBuffer;
 
 const MAX_DS_LINKS: usize = 5;
 
+/// Outlet indices are zero-based: ds_1 (the main channel) is 0, ds_2 (the effluent) is 1.
+pub const DS_1_OUTLET: u8 = 0;
+pub const DS_2_OUTLET: u8 = 1;
+
 #[derive(Default, Clone)]
 pub struct SplitterNode {
     pub name: String,
@@ -21,8 +25,7 @@ pub struct SplitterNode {
 
     // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
-    pub order_travel_time: usize,          //Supply travel time must be known to divert effluent orders on correct step
-    pub ds_2_order_buffer: FifoBuffer, //Fifo buffer for the effluent orders pursuant to the abovementioned delay
+    pub ds_2_order_buffer: FifoBuffer, //Delays effluent orders by the supply travel time, so they are diverted on the step the ordered water arrives. Sized by the ordering system from the ds_2 link's lag.
     pub ds_2_order_due: f64,           //Populated from the fifo buffer in the ordering phase
 
     // Recorders
@@ -54,6 +57,12 @@ impl Node for SplitterNode {
         self.usflow = 0.0;
         self.ds_1_flow = 0.0;
         self.ds_2_flow = 0.0;
+
+        // Reset order state. A zero-length buffer passes orders straight through;
+        // the ordering system (which initialises after the nodes) replaces it when ds_2 is
+        // a regulated link.
+        self.ds_2_order_buffer = FifoBuffer::default();
+        self.ds_2_order_due = 0.0;
 
         // Check the splitter table is well-behaved (mirrors the loss node, see the
         // matching Table assertions):
@@ -99,14 +108,14 @@ impl Node for SplitterNode {
     fn run_order_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
         // Update the effluent order buffer
-        self.ds_2_order_due = self.ds_2_order_buffer.push(self.dsorders[1]);
+        self.ds_2_order_due = self.ds_2_order_buffer.push(self.dsorders[DS_2_OUTLET as usize]);
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
-            data_cache.add_value_at_index(idx, self.dsorders[0]);
+            data_cache.add_value_at_index(idx, self.dsorders[DS_1_OUTLET as usize]);
         }
         if let Some(idx) = self.recorder_idx_ds_2_order {
-            data_cache.add_value_at_index(idx, self.dsorders[1]);
+            data_cache.add_value_at_index(idx, self.dsorders[DS_2_OUTLET as usize]);
         }
         if let Some(idx) = self.recorder_idx_ds_2_order_due {
             data_cache.add_value_at_index(idx, self.ds_2_order_due);
@@ -127,7 +136,7 @@ impl Node for SplitterNode {
         // secondary purpose ensuring that ds_2_flow >= 0.
         // We made a deliberate decision that effluent orders (ds_2 orders) get
         // priority over main channel orders (ds_1 orders); this is in line with the
-        // first-in-best-dressed principal followed elsewhere in the ordering system.
+        // first-in-best-dressed principle followed elsewhere in the ordering system.
         self.ds_2_flow = self.splitter_table.interpolate_or_extrapolate(0, 1, self.usflow).max(self.ds_2_order_due).min(self.usflow);
         self.ds_1_flow = self.usflow - self.ds_2_flow;
         if self.ds_1_flow < 0f64 {
@@ -158,12 +167,12 @@ impl Node for SplitterNode {
 
     fn remove_dsflow(&mut self, outlet: u8) -> f64 {
         match outlet {
-            0 => {
+            DS_1_OUTLET => {
                 let outflow = self.ds_1_flow;
                 self.ds_1_flow = 0.0;
                 outflow
             }
-            1 => {
+            DS_2_OUTLET => {
                 let outflow = self.ds_2_flow;
                 self.ds_2_flow = 0.0;
                 outflow
