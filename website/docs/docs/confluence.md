@@ -56,7 +56,7 @@ ds_1 = another_node
   - With neither `regulated` nor `harmony_fraction`, the confluence sends no orders upstream: nothing says which branch they should go to. The supplies upstream see no order and release nothing for it, so an unintended case shows in the results. (Up to version 0.4.5 this case behaved as `harmony_fraction = 0` — every order to the second regulated branch. A model that relied on that should now say `harmony_fraction = 0`, or better, name the branch with `regulated`.)
   - When splitting, if either upstream branch has a shorter lag time than the other, the orders designated for the short branch are delayed by n timesteps (n = long\_branch\_lag - short\_branch\_lag) so the water from both branches arrives on the correct timestep to meet downstream orders.
   - Each `regulated` name must be one of the confluence's upstream nodes (a load-time error otherwise).
-  - This node should not have more than 2 upstream links.
+  - A confluence directs orders up two branches at most. More than 2 regulated upstream links is an error when the model is initialised; join the others at another node upstream.
   - If `expected_inflow` is set, it is subtracted from the sum of downstream orders before the remainder is propagated upstream (floored at zero) — the same order-adjustment mechanism used by the [inflow](inflow.md) node's `expected_inflow`.
 
 ## References

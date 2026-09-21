@@ -50,7 +50,7 @@ When two regulated zones join at a confluence (confluence node or other node) th
 
 The travel time for each node in a regulated zone is an estimate of the streamflow routing lag between the supply storage and the node. The travel time is assumed to be constant throughout the whole simulation, and is based on the streamflow lag at a typical flow rate (specified by the modeller at the routing nodes, e.g. `typical_regulated_flow = 100`).
 
-For nodes in regulated zones below confluences, the travel time is based on the longest branch.
+For nodes in regulated zones below a junction, the travel time is based on the longest regulated branch. Below a confluence that names its `regulated` pathway(s), it is based on the named branches alone, because those are the only branches an order travels up (see [Confluence](confluence.md)).
 
 #### Adjusting Orders According to Expected Inflows and Losses
 
