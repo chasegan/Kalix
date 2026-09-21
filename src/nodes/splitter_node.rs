@@ -30,7 +30,7 @@ pub struct SplitterNode {
     pub dsorders: [f64; MAX_DS_LINKS],
     pub usorders: f64,                 //The order sent upstream, set in the ordering phase
     max_ds_1_flow: f64,                //The most ds_1 can ever receive: finite only when the table's last segment sends all additional flow down the effluent. Set in initialise().
-    order_identity_limit: f64,         //Up to this ds_1 order the table diverts nothing, so the order passes through unchanged. Set in initialise().
+    zero_effluent_limit: f64,          //Up to this inflow the table sends nothing down the effluent, so both phases skip their lookup beneath it. Infinite for no table. Set in initialise().
     pub ds_2_order_buffer: FifoBuffer, //Delays effluent orders by the supply travel time, so they are diverted on the step the ordered water arrives. Sized by the ordering system from the ds_2 link's lag.
     pub ds_2_order_due: f64,           //Populated from the fifo buffer in the ordering phase
 
@@ -133,19 +133,20 @@ impl Node for SplitterNode {
             }
         }
 
-        // Most regulated splitters are high-flow breakouts: their table diverts
-        // nothing until the inflow passes some threshold well above regulated flows.
-        // Up to that threshold the order translation is the identity, so find it
-        // once here and let the ordering phase skip the lookup beneath it. It is the
+        // Most splitters are high-flow breakouts: their table diverts nothing until
+        // the inflow passes some threshold, usually well above regulated flows. Up
+        // to that threshold the table flow is zero and the order translation is the
+        // identity, so find it once here and let both phases skip their lookup
+        // beneath it. It is the
         // inflow of the last leading row whose effluent is zero (interpolating
         // between two zero rows gives zero). A table whose effluent is zero in every
         // row, including the one that stands in for no table, diverts nothing at any
         // inflow - its last segment extends at zero - so the limit is infinite.
-        self.order_identity_limit = f64::INFINITY;
+        self.zero_effluent_limit = f64::INFINITY;
         let mut last_zero_inflow = 0.0;
         for row in 0..self.flow_table.nrows() {
             if self.flow_table.get_value(row, 1) > 0.0 {
-                self.order_identity_limit = last_zero_inflow;
+                self.zero_effluent_limit = last_zero_inflow;
                 break;
             }
             last_zero_inflow = self.flow_table.get_value(row, 0);
@@ -184,13 +185,13 @@ impl Node for SplitterNode {
         // construction, see `initialise()`, so cannot return negative orders
         let ds_1_order = self.dsorders[DS_1_OUTLET as usize].min(self.max_ds_1_flow);
         let ds_2_order = self.dsorders[DS_2_OUTLET as usize];
-        // Beneath order_identity_limit the table diverts nothing and the lookup would
+        // Beneath zero_effluent_limit the table diverts nothing and the lookup would
         // return the order unchanged (or zero for a negative order, hence the max), so
         // skip it. Measured on 60 regulated breakout splitters: the lookup cost +10%
         // simulation time, this path +2%, and where the table does divert at regulated
         // flows the extra compare measured as no change (per ADR-0004 §6). A NaN order
         // fails the compare and takes the lookup, as before.
-        let through_table = if ds_1_order <= self.order_identity_limit {
+        let through_table = if ds_1_order <= self.zero_effluent_limit {
             ds_1_order.max(0.0)
         } else {
             self.order_translation_table.interpolate_or_extrapolate(ds_1_order)
@@ -224,7 +225,20 @@ impl Node for SplitterNode {
         // We made a deliberate decision that effluent orders (ds_2 orders) get
         // priority over main channel orders (ds_1 orders); this is in line with the
         // first-in-best-dressed principle followed elsewhere in the ordering system.
-        self.ds_2_flow = self.flow_table.interpolate_or_extrapolate(0, 1, self.usflow).max(self.ds_2_order_due).min(self.usflow);
+        //
+        // Beneath zero_effluent_limit the table flow is zero, so skip the lookup: a
+        // binary search, four bounds-checked reads and a division, every step, to
+        // arrive at zero. That covers a splitter with no table at all, and a breakout
+        // running beneath its threshold. Measured on 60 splitters per ADR-0004 §3.4:
+        // -37% simulation time with no table, -26% for a breakout beneath its
+        // threshold, and no change where the table always diverts. A NaN inflow fails
+        // the compare and takes the lookup, as before.
+        let table_flow = if self.usflow <= self.zero_effluent_limit {
+            0.0
+        } else {
+            self.flow_table.interpolate_or_extrapolate(0, 1, self.usflow)
+        };
+        self.ds_2_flow = table_flow.max(self.ds_2_order_due).min(self.usflow);
         self.ds_1_flow = self.usflow - self.ds_2_flow;
         if self.ds_1_flow < 0f64 {
             panic!("Negative ds_1 flow at '{}' when usflow={}, ds_1={}", self.name, self.usflow, self.ds_1_flow);
