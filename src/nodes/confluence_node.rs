@@ -17,11 +17,16 @@ const MAX_DS_LINKS: usize = 1;
 /// - `AllToUs1`: one `regulated` pathway named — every order goes up it,
 ///   immediately (no lag-differential buffering: there is no second pathway
 ///   to synchronise with).
+/// - `NoPathway`: neither `regulated` nor `harmony_fraction` given — the
+///   modeller has not said where orders go, so none are sent upstream. The
+///   supply upstream sees no order and releases nothing for it, which shows
+///   in the results the first time anyone looks.
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OrderSplit {
     #[default]
     Harmony,
     AllToUs1,
+    NoPathway,
 }
 
 #[derive(Default, Clone)]

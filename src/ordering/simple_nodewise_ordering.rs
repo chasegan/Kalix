@@ -351,9 +351,18 @@ impl SimpleNodewiseOrderingSystem {
         // Collect (confluence_idx, us_1 link, optional us_2 link) immutably
         // first; apply mutably after.
         let mut resolved: Vec<(usize, usize, Option<usize>)> = Vec::new();
+        let mut no_pathway: Vec<usize> = Vec::new();
         for (node_idx, node) in nodes.iter().enumerate() {
             let NodeEnum::ConfluenceNode(confluence) = node else { continue };
-            if confluence.regulated_upstream.is_empty() { continue; }
+            if confluence.regulated_upstream.is_empty() {
+                // No names. With a harmony_fraction this is the legacy link-order mode
+                // (the default, set in the node's initialise). With neither, nothing
+                // says where orders go, so none are sent.
+                if matches!(confluence.harmony_fraction, crate::model_inputs::DynamicInput::None { .. }) {
+                    no_pathway.push(node_idx);
+                }
+                continue;
+            }
 
             let mut resolved_links: Vec<usize> = Vec::with_capacity(2);
             for name in &confluence.regulated_upstream {
@@ -371,6 +380,10 @@ impl SimpleNodewiseOrderingSystem {
             resolved.push((node_idx, resolved_links[0], resolved_links.get(1).copied()));
         }
 
+        for node_idx in no_pathway {
+            let NodeEnum::ConfluenceNode(confluence) = &mut nodes[node_idx] else { unreachable!() };
+            confluence.order_split = crate::nodes::confluence_node::OrderSplit::NoPathway;
+        }
         for (node_idx, us_1_link, us_2_link) in resolved {
             let NodeEnum::ConfluenceNode(confluence) = &mut nodes[node_idx] else { unreachable!() };
             confluence.us_1_link_idx = Some(us_1_link);
@@ -435,16 +448,18 @@ impl SimpleNodewiseOrderingSystem {
                     // Evaluate the split once and compute both upstream orders
                     // simultaneously. A single named `regulated` pathway is a
                     // fixed 1.0 to us_1 — no fraction exists where there is
-                    // nothing to split.
-                    let link_1_harmony = match node.order_split {
-                        crate::nodes::confluence_node::OrderSplit::AllToUs1 => 1.0,
+                    // nothing to split. With no pathway stated at all (neither
+                    // `regulated` nor `harmony_fraction`), no order goes upstream.
+                    let (link_1_harmony, order_to_split) = match node.order_split {
+                        crate::nodes::confluence_node::OrderSplit::AllToUs1 => (1.0, node.total_outgoing_order),
                         crate::nodes::confluence_node::OrderSplit::Harmony =>
-                            node.harmony_fraction.get_value(data_cache).clamp(0.0, 1.0),
+                            (node.harmony_fraction.get_value(data_cache).clamp(0.0, 1.0), node.total_outgoing_order),
+                        crate::nodes::confluence_node::OrderSplit::NoPathway => (0.0, 0.0),
                     };
                     node.harmony_fraction_value = link_1_harmony;
                     node.record_harmony_fraction(data_cache);
-                    let link_1_order = link_1_harmony * node.total_outgoing_order;
-                    let link_2_order = (1.0 - link_1_harmony) * node.total_outgoing_order;
+                    let link_1_order = link_1_harmony * order_to_split;
+                    let link_2_order = (1.0 - link_1_harmony) * order_to_split;
 
                     // Propagate orders upstream: a different order up each branch
                     for il in incoming {

@@ -155,3 +155,21 @@ fn test_harmony_fraction_is_recorded_for_the_step_it_was_used() {
     assert_eq!(series(&mut model, "node.dam_a.ds_1_order")[..4], [0.0, 0.0, 5.0, 5.0]);
     assert_eq!(series(&mut model, "node.dam_b.ds_1_order")[..4], [5.0, 5.0, 0.0, 0.0]);
 }
+
+#[test]
+fn test_a_bare_confluence_sends_no_orders_upstream() {
+    // Neither `regulated` nor `harmony_fraction`: the modeller has not said
+    // where orders go, so none are sent, and both supplies record no order.
+    let mut model = run(&rig(&[("a", 1), ("b", 1)], "type = confluence")).expect("model should run");
+    assert_eq!(series(&mut model, "node.dam_a.ds_1_order")[..3], [0.0, 0.0, 0.0]);
+    assert_eq!(series(&mut model, "node.dam_b.ds_1_order")[..3], [0.0, 0.0, 0.0]);
+}
+
+#[test]
+fn test_a_legacy_harmony_fraction_still_splits_by_link_order() {
+    // harmony_fraction without `regulated` keeps its legacy meaning: the
+    // fraction to the first regulated link defined, the rest to the second.
+    let mut model = run(&rig(&[("a", 1), ("b", 1)], "type = confluence\nharmony_fraction = 0")).expect("model should run");
+    assert_eq!(series(&mut model, "node.dam_a.ds_1_order")[0], 0.0);
+    assert_eq!(series(&mut model, "node.dam_b.ds_1_order")[0], 5.0);
+}
