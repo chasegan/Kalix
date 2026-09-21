@@ -208,3 +208,23 @@ fn upstream_order_is_the_sum_when_the_effluent_order_exceeds_the_table_flow() {
     assert_all_close(&series(&mut model, "node.user_1.diversion"), 100.0, "main channel diversion");
     assert_all_close(&series(&mut model, "node.user_2.diversion"), 20.0, "effluent diversion");
 }
+
+/// A high-flow breakout: nothing is diverted below an inflow of 200, and half
+/// of everything above it. Orders beneath the threshold pass through
+/// unchanged (the ordering phase skips the table lookup there); an order
+/// above it is raised through the table. 300 on ds_1 needs an inflow of 400:
+/// the table takes (400 - 200) / 2 = 100 and leaves 300.
+#[test]
+fn breakout_table_passes_small_orders_unchanged_and_raises_large_ones() {
+    for (order, expected_inflow) in [(150.0, 150.0), (200.0, 200.0), (300.0, 400.0)] {
+        let ini = ten_percent_rig(0.0)
+            .replace("table = 0,    0,\n        1000, 100,", "table = 0,    0,\n        200,  0,\n        1000, 400,")
+            .replace("order = 100", &format!("order = {order}"));
+        assert!(ini.contains("200,  0,"), "the rig's table should have been replaced");
+        let mut model = load(&ini);
+        model.run().expect("simulation should run");
+
+        assert_all_close(&series(&mut model, "node.splitter_1.usflow"), expected_inflow, "splitter inflow");
+        assert_all_close(&series(&mut model, "node.user_1.diversion"), order, "main channel diversion");
+    }
+}

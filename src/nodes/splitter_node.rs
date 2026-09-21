@@ -28,6 +28,7 @@ pub struct SplitterNode {
     // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
     pub usorders: f64,                 //The order sent upstream, set in the ordering phase
+    order_identity_limit: f64,         //Up to this ds_1 order the table diverts nothing, so the order passes through unchanged. Set in initialise().
     pub ds_2_order_buffer: FifoBuffer, //Delays effluent orders by the supply travel time, so they are diverted on the step the ordered water arrives. Sized by the ordering system from the ds_2 link's lag.
     pub ds_2_order_due: f64,           //Populated from the fifo buffer in the ordering phase
 
@@ -98,6 +99,20 @@ impl Node for SplitterNode {
         // node uses for its losses, and it relies on the checks above.
         self.order_translation_table = TableDiscontinuous::order_translation(&self.splitter_table);
 
+        // Most regulated splitters are high-flow breakouts: their table diverts
+        // nothing until the inflow passes some threshold well above regulated flows.
+        // Up to that threshold the order translation is the identity, so find it
+        // once here and let the ordering phase skip the lookup beneath it. It is the
+        // inflow of the last leading row whose effluent is zero (interpolating
+        // between two zero rows gives zero).
+        self.order_identity_limit = 0.0;
+        for row in 0..self.splitter_table.nrows() {
+            if self.splitter_table.get_value(row, 1) > 0.0 {
+                break;
+            }
+            self.order_identity_limit = self.splitter_table.get_value(row, 0);
+        }
+
         // Initialize result recorders
         self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
         self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
@@ -131,8 +146,18 @@ impl Node for SplitterNode {
         // construction, see `initialise()`, so cannot return negative orders
         let ds_1_order = self.dsorders[DS_1_OUTLET as usize];
         let ds_2_order = self.dsorders[DS_2_OUTLET as usize];
-        self.usorders = self.order_translation_table.interpolate_or_extrapolate(ds_1_order)
-            .max(ds_1_order + ds_2_order);
+        // Beneath order_identity_limit the table diverts nothing and the lookup would
+        // return the order unchanged (or zero for a negative order, hence the max), so
+        // skip it. Measured on 60 regulated breakout splitters: the lookup cost +10%
+        // simulation time, this path +2%, and where the table does divert at regulated
+        // flows the extra compare measured as no change (per ADR-0004 §6). A NaN order
+        // fails the compare and takes the lookup, as before.
+        let through_table = if ds_1_order <= self.order_identity_limit {
+            ds_1_order.max(0.0)
+        } else {
+            self.order_translation_table.interpolate_or_extrapolate(ds_1_order)
+        };
+        self.usorders = through_table.max(ds_1_order + ds_2_order);
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
