@@ -147,6 +147,9 @@ mod test_calendar_builtins;
 #[cfg(test)]
 mod test_opportunistic_demand;
 
+// The order phase visits nodes in reverse definition order
+mod test_ordering_visit_order;
+
 // Nodes with several incoming regulated links
 mod test_ordering_inlets;
 

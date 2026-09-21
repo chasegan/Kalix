@@ -299,39 +299,35 @@ impl SimpleNodewiseOrderingSystem {
             }
         }
 
+        // Supply storages at the top of the network start a regulated zone but have no incoming
+        // regulated link. They have no order to send upstream, but their order phase still has
+        // to run, so that their ds_orders_due buffers are updated.
+        let mut supplies: Vec<bool> = vec![false; nodes.len()];
+        for li in &self.links_simple_ordering {
+            if li.zone_idx.is_some() {
+                if let NodeEnum::StorageNode(_) = &nodes[li.from_node] {
+                    supplies[li.from_node] = true;
+                }
+            }
+        }
+
+        // Visit in reverse definition order, every node alike: that is the order the file
+        // promises (downstream before upstream), and it is what decides whether an expression
+        // may read another node's order-phase result in the same step.
         self.flat_incoming_links.clear();
         self.regulated_nodes.clear();
         for node_idx in (0..nodes.len()).rev() {
-            if per_node_links[node_idx].is_empty() {
+            if per_node_links[node_idx].is_empty() && !supplies[node_idx] {
                 continue;
             }
             let start = self.flat_incoming_links.len();
             self.flat_incoming_links.extend(per_node_links[node_idx].drain(..));
-            let end = self.flat_incoming_links.len();
+            let end = self.flat_incoming_links.len(); // an empty range for a supply with no incoming regulated link
             self.regulated_nodes.push(RegulatedNodeEntry {
                 node_idx,
                 links_start: start,
                 links_end: end,
             });
-        }
-
-        // Phase 4: Include supply storages that define regulated zones but have no incoming
-        // regulated links (i.e. they are at the top of the network). These nodes still need
-        // run_order_phase() called so that their ds_orders_due buffers are updated, even though
-        // they have no upstream orders to propagate.
-        for li in &self.links_simple_ordering {
-            if li.zone_idx.is_some() {
-                if let NodeEnum::StorageNode(_) = &nodes[li.from_node] {
-                    if !self.regulated_nodes.iter().any(|e| e.node_idx == li.from_node) {
-                        let start = self.flat_incoming_links.len();
-                        self.regulated_nodes.push(RegulatedNodeEntry {
-                            node_idx: li.from_node,
-                            links_start: start,
-                            links_end: start, // empty range: no incoming regulated links
-                        });
-                    }
-                }
-            }
         }
 
         // Do we ever need to run the ordering phase?
