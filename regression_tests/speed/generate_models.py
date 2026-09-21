@@ -31,6 +31,15 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 
+# A confluence that gives neither `regulated` nor `harmony_fraction` sends no orders
+# upstream: the modeller has not said where they go. It used to behave as the legacy
+# link-order mode with a fraction of 0 - nothing to the first regulated link defined,
+# everything to the second - and models 4 and 5 were built on that. Their confluences
+# now say so, which keeps their results, and the ordering work they were built to
+# exercise, exactly what they were. (The confluences in models 2 and 3 stay bare: those
+# rivers are unregulated, so there are no orders to direct.)
+LEGACY_ALL_TO_SECOND_BRANCH = "harmony_fraction = 0"
+
 
 # ---------------------------------------------------------------------------
 # Data synthesis
@@ -338,8 +347,11 @@ def build_model_4():
                storage_props(30_000) + [f"ds_1 = v{v}_route_b"])
         m.node(f"v{v}_route_b", "routing", x + 20, 20, routing_props(rng, f"v{v}_junction"))
 
-        # Junction, then an order-through re-regulating storage and more demand
-        m.node(f"v{v}_junction", "confluence", x + 10, 50, [f"ds_1 = v{v}_midstorage"])
+        # Junction, then an order-through re-regulating storage and more demand.
+        # The confluences in this model split orders in the legacy link-order mode
+        # (LEGACY_ALL_TO_SECOND_BRANCH, above).
+        m.node(f"v{v}_junction", "confluence", x + 10, 50,
+               [LEGACY_ALL_TO_SECOND_BRANCH, f"ds_1 = v{v}_midstorage"])
         m.node(f"v{v}_midstorage", "storage", x + 10, 60,
                storage_props(15_000, order_through=True) + [f"ds_1 = v{v}_route_c"])
         m.node(f"v{v}_route_c", "routing", x + 10, 70, routing_props(rng, f"v{v}_user_c0"))
@@ -353,12 +365,12 @@ def build_model_4():
     # Valleys 0+1 join, then join valley 2, into a trunk storage and users.
     m.node("v0_gauge", "gauge", 10, 100, ["ds_1 = trunk_conf_a"])
     m.node("v1_gauge", "gauge", 70, 100, ["ds_1 = trunk_conf_a"])
-    m.node("trunk_conf_a", "confluence", 40, 110, ["ds_1 = trunk_route_a"])
+    m.node("trunk_conf_a", "confluence", 40, 110, [LEGACY_ALL_TO_SECOND_BRANCH, "ds_1 = trunk_route_a"])
     m.node("trunk_route_a", "routing", 40, 120, routing_props(rng, "trunk_user_a"))
     m.node("trunk_user_a", "regulated_user", 40, 130,
            [seasonal_order(rng), "ds_1 = trunk_conf_b"])
     m.node("v2_gauge", "gauge", 130, 100, ["ds_1 = trunk_conf_b"])
-    m.node("trunk_conf_b", "confluence", 80, 140, ["ds_1 = trunk_dam"])
+    m.node("trunk_conf_b", "confluence", 80, 140, [LEGACY_ALL_TO_SECOND_BRANCH, "ds_1 = trunk_dam"])
     m.node("trunk_dam", "storage", 80, 150,
            storage_props(120_000) + ["ds_1 = trunk_route_b"])
     m.node("trunk_route_b", "routing", 80, 160, routing_props(rng, "trunk_user_b0"))
@@ -389,11 +401,11 @@ def build_model_4():
 # Shaped on the topology of a real regulated valley model: ~110 nodes, ten
 # confluences, and a long ordering chain through storages, order controls, a
 # splitter diamond and a loss. Model 4 is the closest sibling but has five
-# confluences (all in legacy bare mode) and about half the nodes, so it can
+# confluences (all in legacy link-order mode) and about half the nodes, so it can
 # see neither the per-confluence ordering cost nor the cache pressure that a
 # large NodeEnum array puts on per-node struct size -- the effect behind the
 # 2026-08 ConfluenceNode field-order regression (ADR-0004
-# §3.4 and its Amendments). All three confluence ordering modes appear here: bare/legacy, a
+# §3.4 and its Amendments). All three confluence ordering modes appear here: legacy link-order, a
 # single `regulated` name (all orders up one pathway), and two `regulated`
 # names split by harmony_fraction, which no other speed model exercises.
 #
@@ -445,14 +457,14 @@ def build_model_5():
 
     # --- Merge cascade: 8 tributaries -> 4 -> 2 -> 1 ----------------------
     # Each level mixes the confluence ordering modes on purpose.
-    m.node("c00", "confluence", 12, 60, ["ds_1 = c10"])                    # bare
+    m.node("c00", "confluence", 12, 60, [LEGACY_ALL_TO_SECOND_BRANCH, "ds_1 = c10"])   # legacy, constant
     m.node("c01", "confluence", 62, 60, [                                  # one name
         "regulated = t2_g2", "ds_1 = c10"])
     m.node("c02", "confluence", 112, 60, [                                 # two names
         "regulated = t4_g2, t5_g2",
         "harmony_fraction = if(sim.month >= 10 || sim.month <= 3, 0.7, 0.35)",
         "ds_1 = c11"])
-    m.node("c03", "confluence", 162, 60, ["ds_1 = c11"])                   # bare
+    m.node("c03", "confluence", 162, 60, [LEGACY_ALL_TO_SECOND_BRANCH, "ds_1 = c11"])  # legacy, constant
 
     m.node("c10", "confluence", 37, 75, ["regulated = c00", "ds_1 = c20"])
     m.node("c11", "confluence", 137, 75, ["harmony_fraction = 0.4", "ds_1 = c20"])
@@ -484,7 +496,7 @@ def build_model_5():
         "        999999, 30,",
         "ds_1 = c30"])
     reach("b", 4, 107, 165, "c30")
-    m.node("c30", "confluence", 87, 195, ["ds_1 = trunk_oc1"])
+    m.node("c30", "confluence", 87, 195, [LEGACY_ALL_TO_SECOND_BRANCH, "ds_1 = trunk_oc1"])
 
     # --- Lower trunk, with two side tributaries joining -------------------
     m.node("trunk_oc1", "order_control", 87, 205, ["min_order = 5", "ds_1 = trunk_g0"])
@@ -507,7 +519,7 @@ def build_model_5():
     m.node("s1_ureg", "unregulated_user", 180, 257,
            [f"demand = {rng.uniform(2, 9):.1f}", "ds_1 = s1_g0"])
     reach("s1", 3, 180, 265, "c32")
-    m.node("c32", "confluence", 148, 285, ["ds_1 = outlet_g0"])
+    m.node("c32", "confluence", 148, 285, [LEGACY_ALL_TO_SECOND_BRANCH, "ds_1 = outlet_g0"])
 
     reach("outlet", 2, 148, 295, "sink")
     m.node("sink", "blackhole", 148, 310, [])
