@@ -13,7 +13,7 @@
 //   3. size every node's delay buffers from its travel time (size_order_buffers);
 //   4. list the nodes the order phase visits (build_visit_list).
 // What the ordering system needs to know about each node type is stated in this file, in
-// matches that name every type: does an outlet start a zone, does the node add routing lag,
+// matches that name every type: what does an outlet do to the zone, does the node add routing lag,
 // can it originate an order, does it name its order pathways, which delay buffers does it
 // keep, and what order does it send upstream. None of those has a wildcard arm, so a new node
 // type does not compile until each question has been answered for it. (The only single-type
@@ -147,6 +147,12 @@ impl SimpleNodewiseOrderingSystem {
                 NodeEnum::RegulatedUserNode(node) => {
                     node.order_travel_time = travel_time;
                     node.order_buffer = FifoBuffer::new(travel_time);
+                    // The orders arriving on its supply outlets (ds_2 to ds_4) are delivered
+                    // when the ordered water reaches the user, so they are held for the
+                    // user's travel time, whatever lies between the user and the node below.
+                    for supply_outlet in &mut node.supply_outlets {
+                        supply_outlet.order_buffer = FifoBuffer::new(travel_time);
+                    }
                 }
                 NodeEnum::FieldNode(node) => {
                     node.order_travel_time = travel_time;
@@ -218,7 +224,7 @@ impl SimpleNodewiseOrderingSystem {
         // run, so that its ds_orders_due buffers are updated.
         let mut supplies: Vec<bool> = vec![false; nodes.len()];
         for li in &self.links_simple_ordering {
-            if li.regulated && starts_regulated_zone(&nodes[li.from_node], li.from_outlet) {
+            if li.regulated && zone_role(&nodes[li.from_node], li.from_outlet) == ZoneRole::Starts {
                 supplies[li.from_node] = true;
             }
         }
@@ -389,7 +395,8 @@ impl SimpleNodewiseOrderingSystem {
                 }
                 NodeEnum::RegulatedUserNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    node.dsorders[0] + node.order_factor * node.order_value
+                    // order_placed is its own order plus the orders accepted from its supply outlets
+                    node.dsorders[0] + node.order_factor * node.order_placed()
                 }
                 NodeEnum::FieldNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
@@ -452,27 +459,47 @@ struct LinkInfo {
     to_node: usize,
 }
 
-/// Does a link leaving this outlet start a regulated zone? A storage that does not order
-/// through supplies the reach below it: orders stop there, and travel time is counted from it.
+/// What a link leaving one of a node's outlets does to the regulated zone the node is in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum ZoneRole {
+    /// The link is the top of a zone. Orders stop at this node, which supplies the reach
+    /// below, and travel time is counted from here.
+    Starts,
+    /// The link is regulated if a regulated link comes into the node, and carries on its
+    /// travel time. This is what almost every outlet does.
+    Continues,
+    /// The link is not regulated, whatever comes into the node. No order travels up it, and
+    /// it carries no travel time on to the reach below.
+    Ends,
+}
+
+/// What does a link leaving this outlet do to the regulated zone? A storage that does not
+/// order through supplies the reach below it, and so does an unregulated user down its supply
+/// outlets. A field's outlets carry surplus and returns
+/// back to the river: they are drains, not delivery paths, so no order travels up them, and
+/// the travel time to the field is no part of the travel time to anything below it.
 /// Every node type is named, with no wildcard, so a new one does not compile until it answers.
-fn starts_regulated_zone(node: &NodeEnum, _outlet: u8) -> bool {
+fn zone_role(node: &NodeEnum, outlet: u8) -> ZoneRole {
     match node {
-        NodeEnum::StorageNode(n) => !n.order_through,
+        NodeEnum::StorageNode(n) => if n.order_through { ZoneRole::Continues } else { ZoneRole::Starts },
+        NodeEnum::FieldNode(_) => ZoneRole::Ends,
+        // ds_1 is the river, and carries on whatever zone the user is in. ds_2 to ds_4 are
+        // supply outlets: the user is the supply for the nodes on them, which place their
+        // orders with it, and their travel time is counted from the user.
+        NodeEnum::UnregulatedUserNode(_) => if outlet >= 1 { ZoneRole::Starts } else { ZoneRole::Continues },
         NodeEnum::BlackholeNode(_) |
         NodeEnum::ConfluenceNode(_) |
         NodeEnum::GaugeNode(_) |
         NodeEnum::LossNode(_) |
         NodeEnum::SplitterNode(_) |
-        NodeEnum::UnregulatedUserNode(_) |
         NodeEnum::RegulatedUserNode(_) |
-        NodeEnum::FieldNode(_) |
         NodeEnum::Gr4jNode(_) |
         NodeEnum::InflowNode(_) |
         NodeEnum::RoutingNode(_) |
         NodeEnum::SacramentoNode(_) |
         NodeEnum::OrderControlNode(_) |
         NodeEnum::AwbmNode(_) |
-        NodeEnum::SurmNode(_) => false,
+        NodeEnum::SurmNode(_) => ZoneRole::Continues,
     }
 }
 
@@ -570,37 +597,40 @@ fn regulated_topology(nodes: &Vec<NodeEnum>,
             to_node: links[idx].to_node,
         };
 
-        if starts_regulated_zone(from_node, link_info.from_outlet) {
+        match zone_role(from_node, link_info.from_outlet) {
             // The top of a zone: travel time is counted from here
-            link_info.regulated = true;
-        } else {
-            // Continue the zone of the links coming into the upstream node, taking the
-            // longest travel time among them.
-            //
-            // A confluence that names its `regulated` pathway(s) sends orders up those
-            // branches alone, so they alone set the travel time below it: water ordered
-            // down a 1-step branch arrives after 1 step however long the other branch is.
-            // (Step 1 has pinned the named links.) If no named branch is regulated there
-            // is no order pathway to time, and the longest regulated branch stands.
-            let named_pathways = named_order_pathways(from_node);
-            // Every link into a node is scanned before any link out of it, because links are
-            // created in definition order and every link points down the file
-            // (check_execution_order). Say so, rather than index out of bounds, if that changes.
-            if let Some(&unscanned) = incoming_links[link_info.from_node].iter().find(|&&l| l >= idx) {
-                return Err(format!(
-                    "Ordering system: link {} into node '{}' comes after link {} out of it. Links must be in upstream-first order.",
-                    unscanned, from_node.get_name(), idx));
-            }
-            let a_named_pathway_is_regulated = named_pathways.iter().flatten()
-                .any(|&l| link_infos[l].regulated);
-            for &us_link_idx in &incoming_links[link_info.from_node] {
-                if a_named_pathway_is_regulated && !named_pathways.contains(&Some(us_link_idx)) {
-                    continue;
+            ZoneRole::Starts => link_info.regulated = true,
+            // Not regulated, whatever comes into the upstream node
+            ZoneRole::Ends => {}
+            ZoneRole::Continues => {
+                // Continue the zone of the links coming into the upstream node, taking the
+                // longest travel time among them.
+                //
+                // A confluence that names its `regulated` pathway(s) sends orders up those
+                // branches alone, so they alone set the travel time below it: water ordered
+                // down a 1-step branch arrives after 1 step however long the other branch is.
+                // (Step 1 has pinned the named links.) If no named branch is regulated there
+                // is no order pathway to time, and the longest regulated branch stands.
+                let named_pathways = named_order_pathways(from_node);
+                // Every link into a node is scanned before any link out of it, because links are
+                // created in definition order and every link points down the file
+                // (check_execution_order). Say so, rather than index out of bounds, if that changes.
+                if let Some(&unscanned) = incoming_links[link_info.from_node].iter().find(|&&l| l >= idx) {
+                    return Err(format!(
+                        "Ordering system: link {} into node '{}' comes after link {} out of it. Links must be in upstream-first order.",
+                        unscanned, from_node.get_name(), idx));
                 }
-                let us_link = &link_infos[us_link_idx];
-                if us_link.regulated && us_link.travel_time >= link_info.travel_time {
-                    link_info.travel_time = us_link.travel_time;
-                    link_info.regulated = true;
+                let a_named_pathway_is_regulated = named_pathways.iter().flatten()
+                    .any(|&l| link_infos[l].regulated);
+                for &us_link_idx in &incoming_links[link_info.from_node] {
+                    if a_named_pathway_is_regulated && !named_pathways.contains(&Some(us_link_idx)) {
+                        continue;
+                    }
+                    let us_link = &link_infos[us_link_idx];
+                    if us_link.regulated && us_link.travel_time >= link_info.travel_time {
+                        link_info.travel_time = us_link.travel_time;
+                        link_info.regulated = true;
+                    }
                 }
             }
         }

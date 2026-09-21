@@ -44,6 +44,10 @@ The simple ordering system is explained in detail below.
 
 Areas downstream of storage outlets are designated regulated zones. This storage node is the supply for the zone immediately below it. The zone extends downstream to (a) the next storage that can act as a supply, (b) the end of the system.
 
+User nodes can supply other nodes through their supply outlets (`ds_2` to `ds_4`), and the two kinds of user differ in what that does to the zone. The links below a [regulated user's](regulated-user.md#supply-outlets) supply outlets are part of the zone the user is in, with travel time counted from the same supply: the orders arriving on them become part of the user's own order. An [unregulated user's](unregulated-user.md#supply-outlets) supply outlets start a new zone, with the user as its supply and travel time counted from the user, while its `ds_1` carries on whatever zone the river is in.
+
+A zone also ends at a `field` node. A field's outlets carry surplus and returns back to the river. They are drains, not delivery paths, so the links leaving a field are not regulated: no order travels up them, and the travel time to the field is no part of the travel time to anything below it.
+
 When two regulated zones join at a confluence (confluence node or other node) the reach downstream can be considered part of both zones. Nodes below the confluence may be supplied by the storage of either zone. The section on ***directing orders*** describes how this works in more detail.
 
 #### Travel Times

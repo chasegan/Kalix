@@ -156,6 +156,12 @@ mod test_ordering_visit_order;
 // Nodes with several incoming regulated links
 mod test_ordering_inlets;
 
+// Unregulated user: supply outlets (ds_2 to ds_4)
+mod test_unregulated_user_supply_outlets;
+
+// Regulated user: supply outlets (ds_2 to ds_4)
+mod test_regulated_user_supply_outlets;
+
 // Field node (skeleton): orders from a storage, takes its order
 mod test_field_node;
 

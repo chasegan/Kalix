@@ -1,6 +1,7 @@
 // Tests for the field node SKELETON: a water demand that places orders
 // upstream (as a regulated user does), takes its order from what arrives, and
-// passes the rest to ds_1. There is no soil store yet.
+// passes the rest to ds_1, which is a drain: the links leaving a field are
+// not regulated. There is no soil store yet.
 
 use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
@@ -89,15 +90,85 @@ fn test_negative_order_is_no_order() {
 }
 
 #[test]
-fn test_field_does_not_pass_downstream_orders_upstream() {
-    // A regulated user below the field orders 7. The field records the order
-    // arriving on its ds_1 and drops it: the storage sees the field's 5 alone.
+fn test_links_leaving_a_field_are_not_regulated() {
+    // A regulated user below the field orders 7. The field's ds_1 is a drain,
+    // not a delivery path, so the link below it is not regulated: the user is
+    // outside any zone, its order goes nowhere, and the storage sees the
+    // field's 5 alone.
     let ini = rig("order = 5")
         .replace("type = gauge\nloc = 0, 30", "type = regulated_user\nloc = 0, 30\norder = 7")
-        .replace("[outputs]", "[outputs]\nnode.paddock.ds_1_order");
+        .replace("[outputs]", "[outputs]\nnode.outlet.diversion\nnode.outlet.order");
     let mut model = run(&ini);
-    assert_eq!(series(&mut model, "node.paddock.ds_1_order")[1], 7.0, "the arriving order is visible");
-    assert_eq!(series(&mut model, "node.dam.ds_1_order")[1], 5.0, "and is not sent on");
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[1], 5.0);
+    assert_eq!(series(&mut model, "node.paddock.supply")[1], 5.0);
+    assert_eq!(series(&mut model, "node.outlet.diversion")[1], 0.0, "no order falls due outside a regulated zone");
+    // The order phase never visits a node outside every zone, so its order is never evaluated
+    let order = series(&mut model, "node.outlet.order");
+    assert!(order.iter().all(|v| v.is_nan()) || order.is_empty(), "the user below the field is outside the zone, got {:?}", order);
+}
+
+#[test]
+fn test_a_field_adds_nothing_to_the_travel_time_of_the_reach_below_it() {
+    // The river: dam -> 2-step reach -> junction -> user. A field hangs off the
+    // dam through a 5-step supply channel and drains to the same junction. The
+    // user's travel time is the river's 2 steps; the field's 5 is no part of it.
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-10
+
+[node.dam]
+type = storage
+loc = 0, 10
+initial_volume = 5000
+dimensions = Level [m], Volume [ML], Area [km2], Spill [ML],
+             0.0      , 0.0        , 0.0       , 0.0,
+             1.0      , 10000.0    , 0.1       , 0.0,
+             2.0      , 20000.0    , 0.1       , 1.0E9,
+ds_1_outlet = 0, 10000
+ds_2_outlet = 0, 10000
+ds_1 = river
+ds_2 = channel
+
+[node.river]
+type = routing
+loc = 0, 20
+lag = 2
+ds_1 = junction
+
+[node.channel]
+type = routing
+loc = 10, 20
+lag = 5
+ds_1 = paddock
+
+[node.paddock]
+type = field
+loc = 10, 30
+order = 3
+ds_1 = junction
+
+[node.junction]
+type = gauge
+loc = 0, 40
+ds_1 = user
+
+[node.user]
+type = regulated_user
+loc = 0, 50
+order = 7
+
+[outputs]
+node.user.order_due
+node.paddock.order_due
+node.dam.ds_1_order
+node.dam.ds_2_order
+"#;
+    let mut model = run(ini);
+    assert_eq!(series(&mut model, "node.user.order_due")[..4], [0.0, 0.0, 7.0, 7.0], "2 steps, by the river");
+    assert_eq!(series(&mut model, "node.paddock.order_due")[..7], [0.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.0], "5 steps, by the channel");
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[0], 7.0, "the user's order goes up the river alone");
+    assert_eq!(series(&mut model, "node.dam.ds_2_order")[0], 3.0, "and the field's up the channel");
 }
 
 #[test]
