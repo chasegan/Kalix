@@ -148,6 +148,10 @@ impl SimpleNodewiseOrderingSystem {
                     node.order_travel_time = travel_time;
                     node.order_buffer = FifoBuffer::new(travel_time);
                 }
+                NodeEnum::FieldNode(node) => {
+                    node.order_travel_time = travel_time;
+                    node.order_buffer = FifoBuffer::new(travel_time);
+                }
                 NodeEnum::OrderControlNode(node) => {
                     node.sent_order_buffer = FifoBuffer::new(travel_time);
                 }
@@ -387,6 +391,11 @@ impl SimpleNodewiseOrderingSystem {
                     node.run_order_phase(data_cache, account_manager);
                     node.dsorders[0] + node.order_factor * node.order_value
                 }
+                NodeEnum::FieldNode(node) => {
+                    node.run_order_phase(data_cache, account_manager);
+                    // Only its own order goes upstream: ds_1 is a drain, not a delivery path
+                    node.order_value
+                }
                 NodeEnum::BlackholeNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
                     0.0
@@ -456,6 +465,7 @@ fn starts_regulated_zone(node: &NodeEnum, _outlet: u8) -> bool {
         NodeEnum::SplitterNode(_) |
         NodeEnum::UnregulatedUserNode(_) |
         NodeEnum::RegulatedUserNode(_) |
+        NodeEnum::FieldNode(_) |
         NodeEnum::Gr4jNode(_) |
         NodeEnum::InflowNode(_) |
         NodeEnum::RoutingNode(_) |
@@ -478,6 +488,7 @@ fn routing_lag(node: &NodeEnum) -> f64 {
         NodeEnum::SplitterNode(_) |
         NodeEnum::UnregulatedUserNode(_) |
         NodeEnum::RegulatedUserNode(_) |
+        NodeEnum::FieldNode(_) |
         NodeEnum::Gr4jNode(_) |
         NodeEnum::InflowNode(_) |
         NodeEnum::SacramentoNode(_) |
@@ -489,12 +500,13 @@ fn routing_lag(node: &NodeEnum) -> f64 {
 }
 
 /// Can this node originate an order, as opposed to passing on or adjusting one that reaches
-/// it from below? A storage can (to meet a target level), and so can a regulated user and an
-/// order control (a minimum order). These seed the list of nodes the order phase visits.
+/// it from below? A storage can (to meet a target level), and so can a regulated user, a field
+/// and an order control (a minimum order). These seed the list of nodes the order phase visits.
 fn can_originate_orders(node: &NodeEnum) -> bool {
     match node {
         NodeEnum::StorageNode(_) |
         NodeEnum::RegulatedUserNode(_) |
+        NodeEnum::FieldNode(_) |
         NodeEnum::OrderControlNode(_) => true,
         NodeEnum::BlackholeNode(_) |
         NodeEnum::ConfluenceNode(_) |
@@ -525,6 +537,7 @@ fn named_order_pathways(node: &NodeEnum) -> [Option<usize>; 2] {
         NodeEnum::SplitterNode(_) |
         NodeEnum::UnregulatedUserNode(_) |
         NodeEnum::RegulatedUserNode(_) |
+        NodeEnum::FieldNode(_) |
         NodeEnum::Gr4jNode(_) |
         NodeEnum::InflowNode(_) |
         NodeEnum::RoutingNode(_) |
