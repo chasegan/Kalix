@@ -118,3 +118,26 @@ fn test_order_control_delay_does_not_depend_on_link_definition_order() {
                    "branches defined {:?}", branches);
     }
 }
+
+#[test]
+fn test_travel_time_below_a_one_name_confluence_is_the_named_branch() {
+    // `regulated = lag_a` sends every order up the lag-1 branch, so the ordered
+    // water reaches the user after 1 step. The user's travel time is therefore
+    // 1 step, whatever the lag of the unnamed branch and whichever order the
+    // branches are defined in.
+    for branches in [[("a", 1), ("b", 3)], [("b", 3), ("a", 1)]] {
+        let ini = rig(&branches, "type = confluence\nregulated = lag_a");
+        let mut model = run(&ini).expect("model should run");
+        assert_eq!(series(&mut model, "node.dam_a.ds_1_order")[0], 5.0);
+        assert_eq!(series(&mut model, "node.dam_b.ds_1_order")[0], 0.0, "no order travels up the unnamed branch");
+        assert_eq!(series(&mut model, "node.user_1.order_due")[..3], [0.0, 5.0, 5.0],
+                   "branches defined {:?}", branches);
+    }
+}
+
+#[test]
+fn test_travel_time_below_a_two_name_confluence_is_the_longest_branch() {
+    let ini = rig(&[("a", 1), ("b", 3)], "type = confluence\nregulated = lag_a, lag_b\nharmony_fraction = 0.5");
+    let mut model = run(&ini).expect("model should run");
+    assert_eq!(series(&mut model, "node.user_1.order_due")[..5], [0.0, 0.0, 0.0, 5.0, 5.0]);
+}

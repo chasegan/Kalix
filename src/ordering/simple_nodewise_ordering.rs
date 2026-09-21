@@ -110,7 +110,22 @@ impl SimpleNodewiseOrderingSystem {
             } else {
                 // Zone info based on upstream link.
                 // If the upstream node has multiple incoming links, we look at the one with the longest lag.
+                //
+                // A confluence that names its `regulated` pathway(s) sends orders up those
+                // branches alone, so they alone set the travel time below it: water ordered
+                // down a lag-1 branch arrives after 1 step however long the other branch is.
+                // (Phase 0 has pinned the named links.) If no named branch is regulated there
+                // is no order pathway to time, and the longest regulated branch stands as before.
+                let named_pathways: [Option<usize>; 2] = match &nodes[new_link_item.from_node] {
+                    NodeEnum::ConfluenceNode(n) if !n.regulated_upstream.is_empty() => [n.us_1_link_idx, n.us_2_link_idx],
+                    _ => [None, None],
+                };
+                let a_named_pathway_is_regulated = named_pathways.iter().flatten()
+                    .any(|&l| self.links_simple_ordering[l].zone_idx.is_some());
                 for &us_link_idx in &incoming_links[new_link_item.from_node] {
+                    if a_named_pathway_is_regulated && !named_pathways.contains(&Some(us_link_idx)) {
+                        continue;
+                    }
                     let us_zone_idx = self.links_simple_ordering[us_link_idx].zone_idx;
 
                     // Only look at upstream links that are in regulated zones
