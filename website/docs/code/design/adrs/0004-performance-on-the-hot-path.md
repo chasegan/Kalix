@@ -382,3 +382,71 @@ citing them when a trade is proposed.
   one CPU (Apple M5). Sources: `a5c1795a` on `refine/ordering-at-junctions`
   and `41dd2e84` on `refactor/ordering-setup`; the rejected variants are
   described in those commit messages and were not committed.
+- *2026-09-22* — ninth data point for §3.4, and a possibility noted for
+  later. Supply outlets (`ds_2` to `ds_4`) were added to both user nodes. The
+  same two fields went into each struct - a `Vec` of outlet state, empty
+  for almost every user, and the `dsorders` array widened from one order to
+  four - and in both a user without supply outlets computes exactly what it
+  did (all 43 regression and speed models byte-identical with every recorder
+  on). Arms built in one worktree with the source swapped, checked by hash,
+  interleaved runs of 15 to 30 reps, median simulation time against the
+  previous commit. Tests 2 and 3 have 72 unregulated users each; tests 4 and
+  5 have 16 and 20 regulated users; test 5 has 10 unregulated users and
+  test 4 none. Layout first. For `RegulatedUserNode` a fields-only arm -
+  the first version's new fields, about 96 bytes among the node's existing
+  ones, and no new code - cost +3.7% and +3.9% on tests 4 and 5 with the
+  control flat, which was the whole cost of that version. The feature with
+  its new state cut to the two fields above, declared last (776 to 824
+  bytes), measured −0.2%, −0.7%, −0.2% on tests 2, 4 and 5. For
+  `UnregulatedUserNode` (720 to 768 bytes) a fields-only arm with
+  the same two fields declared last cost +3.5%, +2.0% and +2.0% on test 2 in
+  three sessions; declared first it measured −0.7%, +0.3%, −0.8%, +0.8% on
+  tests 2 to 5 (30 reps); and three positions between gave −0.3% to +0.8% on
+  test 2. `NodeEnum`'s stride was 4,064 throughout. So the same fields
+  wanted opposite ends of two structs. Then code. Plain loops over the
+  empty `Vec` cost +3.7% and +2.6% on the regulated-user models and +6.1% on
+  test 2, so both nodes' phases are monomorphised on a `const` for whether
+  the user has supply outlets, as the 2026-09-14 entry describes. For the
+  regulated user, with the layout right, that landed at the noise floor
+  (+0.2%, +0.7%, +0.8%). For the unregulated user it did not: pinned out of
+  line +2.9%, not pinned +2.6%, the ordinary instantiation inlined with the
+  other kept out of line and cold +2.2%, the same dispatching on a one-byte
+  flag set in `initialise` +2.2%, +1.2%, +1.8%, +1.7% on tests 2 to 5 (30
+  reps), and moving the outlet search out of `remove_dsflow` no change. Test
+  4 moved with the rest although it contains no unregulated user and so runs
+  none of the changed code. The lead accepted that cost on 2026-09-22 to
+  keep the feature work moving. Three things follow. The 2026-09-15 lesson
+  again, with a sharper edge: where a field should sit is a fact about one
+  struct, and the answer for one struct was the opposite of the answer for
+  the next, so build the fields-only arm and try positions - four positions
+  were built and timed by a short script in a few minutes. Monomorphising on
+  a `const` removes the work of an unused option, but not the test that
+  chooses the instantiation, nor the growth of the node's arm in the shared
+  dispatch: for a phase that is several times larger that is lost in the
+  noise, and for one of a few nanoseconds per node per step it shows. And a
+  possibility for later, which removes both: node sub-variants, for lack of
+  a better word. A node type that the modeller sees as one
+  (`type = unregulated_user`) could be held as more than one `NodeEnum`
+  variant, the variant chosen once, at load, from how the node is
+  configured. The common configuration's code and struct would stay exactly
+  as they were, and choosing between them would cost nothing per step,
+  because the enum's dispatch is already paid for. It is §3.5 taken as far
+  as it goes: for an option fixed by the model file, the coldest place is
+  load time. Nothing about it was built or measured; the nearest evidence is
+  that adding the `FieldNode` variant to `NodeEnum` measured at the noise
+  floor (+0.4%, +0.1%, +0.4%). The lead has deferred it to a consolidated
+  performance effort once the feature set is more or less stable, because it
+  multiplies variants behind one visible node type and is better designed
+  once, across the nodes that would gain from it, than one node at a time.
+  Candidates then: both user nodes with and without supply outlets, and any
+  node whose phase is monomorphised on a `const` today (the routing node's
+  `LOSS_OR_DEAD`). Every sub-variant adds an arm to every match over
+  `NodeEnum`, and
+  [ADR-0008](0008-ordering-knowledge-in-exhaustive-matches.md) §2 is what
+  would make that safe: the compiler lists each place a new variant must
+  answer. (This note was first written as an amendment to ADR-0008, which
+  the commit message of `9f7f2f5d` points to; it was moved here the same
+  day, before anything was published, because its subject is performance.)
+  That the shared dispatch is the mechanism behind test 4 moving is a
+  guess: no disassembly was compared. One machine, one CPU (Apple M5).
+  Sources: `25267c90` and `9f7f2f5d` on `feat/user-supply-outlets`.
