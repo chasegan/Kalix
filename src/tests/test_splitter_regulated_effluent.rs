@@ -249,3 +249,70 @@ fn ds_1_order_is_held_to_what_the_table_can_pass() {
         assert_all_close(&series(&mut model, "node.splitter_1.ds_2"), expected_ds_2, "effluent flow");
     }
 }
+
+/// The table is optional. A splitter without one diverts nothing of its own
+/// accord, so the effluent receives exactly what is ordered down it - a
+/// regulated offtake - and the order sent upstream is the plain sum.
+#[test]
+fn splitter_without_a_table_is_a_regulated_offtake() {
+    let ini = ten_percent_rig(20.0).replace("table = 0,    0,\n        1000, 100,\n", "");
+    assert!(!ini.contains("table ="), "the rig's table should have been removed");
+    let mut model = load(&ini);
+    model.run().expect("a splitter with no table should run");
+
+    assert_all_close(&series(&mut model, "node.splitter_1.usflow"), 120.0, "splitter inflow");
+    assert_all_close(&series(&mut model, "node.splitter_1.ds_2"), 20.0, "effluent flow");
+    assert_all_close(&series(&mut model, "node.user_1.diversion"), 100.0, "main channel diversion");
+    assert_all_close(&series(&mut model, "node.user_2.diversion"), 20.0, "effluent diversion");
+}
+
+/// With no table and no orders, everything stays in the main channel.
+#[test]
+fn splitter_without_a_table_or_orders_sends_everything_down_ds_1() {
+    let mut model = load("
+[kalix]
+start = 2020-01-01
+end = 2020-01-03
+
+[node.headwater]
+type = inflow
+loc = 0, 0
+inflow = 10
+ds_1 = splitter_1
+
+[node.splitter_1]
+type = splitter
+loc = 0, 10
+ds_1 = main_gauge
+ds_2 = effluent_gauge
+
+[node.main_gauge]
+type = gauge
+loc = 0, 20
+
+[node.effluent_gauge]
+type = gauge
+loc = 10, 20
+
+[outputs]
+node.splitter_1.ds_1
+node.splitter_1.ds_2
+");
+    model.run().expect("a splitter with no table should run");
+    assert_all_close(&series(&mut model, "node.splitter_1.ds_1"), 10.0, "main channel flow");
+    assert_all_close(&series(&mut model, "node.splitter_1.ds_2"), 0.0, "effluent flow");
+}
+
+/// What you read is what runs, and what you wrote is what is saved: the
+/// table that stands in for a missing one is the engine's working copy, and
+/// a model written back after a run must not gain a table nobody wrote.
+#[test]
+fn saving_after_a_run_does_not_invent_a_table() {
+    let ini = ten_percent_rig(20.0).replace("table = 0,    0,\n        1000, 100,\n", "");
+    let mut model = load(&ini);
+    model.run().expect("simulation should run");
+
+    let saved = IniModelIO::model_to_string(&model);
+    assert!(saved.contains("[node.splitter_1]"), "the splitter should be written");
+    assert!(!saved.contains("table"), "no table should be written for a splitter that has none:\n{saved}");
+}

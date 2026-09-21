@@ -730,10 +730,11 @@
       ],
       "required_params": [
         "type",
-        "loc",
+        "loc"
+      ],
+      "optional_params": [
         "table"
       ],
-      "optional_params": [],
       "dsnode_params": [
         "ds_1",
         "ds_2"
