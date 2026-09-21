@@ -211,4 +211,34 @@ else { ZoneRole::Continues }`.
 
 ## Amendments
 
-*None.*
+- *2026-09-22* — a possibility noted for later: node sub-variants. This
+  records an idea and the decision to defer it. It changes no clause.
+  Supply outlets on the unregulated user (`9f7f2f5d`) cost about 2% of
+  simulation time on models that do not use them: +2.2%, +1.2%, +1.8% and
+  +1.7% on speed tests 2 to 5, after the struct's layout had been made flat
+  and seven ways of writing the flow phase had been measured. The node's
+  flow phase is a few nanoseconds per node per step, so one added test per
+  step shows; and test 4, which contains no unregulated user, moved with
+  the rest, which suggests that code added to one node's arm of the shared
+  dispatch moves the others. The lead accepted that cost on 2026-09-22 to
+  keep the feature work moving. The idea: a node type that the modeller
+  sees as one (`type = unregulated_user`) could be held as more than one
+  `NodeEnum` variant — sub-variants, for lack of a better word — with the
+  variant chosen once, at load, from how the node is configured. The
+  common configuration's code and struct would then stay exactly as they
+  were, and the choice between them would cost nothing per step, because
+  the enum's dispatch is already paid for. It is ADR-0004 §3.5 taken as
+  far as it goes: decide at the coldest place, which for an option fixed by
+  the model file is load time. Nothing about it was built or measured. The
+  nearest evidence is that adding the `FieldNode` variant to `NodeEnum`
+  measured at the noise floor (+0.4%, +0.1%, +0.4%). It is deferred, by the
+  lead, to a consolidated performance effort once the feature set is more
+  or less stable, because it multiplies variants behind one visible node
+  type and is better designed once, across the nodes that would gain from
+  it, than one node at a time. Candidates to look at then: the unregulated
+  and regulated users with and without supply outlets, and any node whose
+  phase is monomorphised on a `const` today (the routing node's
+  `LOSS_OR_DEAD`). Why the note lives in this ADR: every sub-variant adds an
+  arm to every match over `NodeEnum`, and §2 is what would make that safe
+  to do — the compiler lists each place a new variant must answer, and an
+  or-pattern keeps the answer to one line per question.
