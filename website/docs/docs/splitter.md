@@ -27,7 +27,7 @@ ds_2 = node_on_breakout
 | [node.?] (compulsory) | Start of node declaration. This says we are creating a node, and also defines the name of the node. Node naming conventions are discussed at . Example: `[node.high_flow_splitter]` |
 | type (compulsory) | The node type, which is “splitter” in this case. `type = splitter` |
 | loc (compulsory) | The location of the node in cartesian coordinates.  Example: `loc = 20, 30` |
-| table (compulsory) | Splitter table defines the relationship between the upstream flow and the flow sent to the secondary (effluent) outlet: a two-column table of upstream flow and effluent flow, laid out across lines however you like (see [Tables](conventions.md#tables)). Example: `table = 0, 0, 1000, 0, 2000, 500, 1e8, 1e7` |
+| table (optional) | Splitter table defines the relationship between the upstream flow and the flow sent to the secondary (effluent) outlet: a two-column table of upstream flow and effluent flow, laid out across lines however you like (see [Tables](conventions.md#tables)). If omitted, the splitter sends nothing down the effluent except what is ordered (see [A splitter with no table](#a-splitter-with-no-table)). Example: `table = 0, 0, 1000, 0, 2000, 500, 1e8, 1e7` |
 | ds\_1 (optional) | Name of the downstream node on the primary outlet (the main channel). Example: `ds_1 = next_river_node` |
 | ds\_2 (optional) | Name of the downstream node on the secondary outlet (the effluent). Example: `ds_2 = node_on_breakout` |
 
@@ -66,6 +66,20 @@ Ordered water takes time to arrive from the supply storage. The splitter holds e
 - If the upstream flow cannot meet the orders on both outlets, the effluent order is met first and the main channel takes the shortfall.
 
 - Outside a regulated zone there are no orders, and the split follows the table alone.
+
+### A splitter with no table
+
+The table is optional. A splitter without one diverts nothing of its own accord, so the effluent receives exactly what is ordered down it and everything else stays in the main channel. This represents a regulated offtake, such as the head of an irrigation channel.
+
+```ini
+[node.channel_offtake]
+type = splitter
+loc = 20, 30
+ds_1 = next_river_node
+ds_2 = irrigation_channel
+```
+
+Outside a regulated zone a splitter with no table sends all of the upstream flow to ds\_1.
 
 ### The order sent upstream
 
