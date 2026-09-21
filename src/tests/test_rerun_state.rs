@@ -75,3 +75,45 @@ node.user.diversion
     assert_eq!(series(&mut model, "node.user.order_due"), first_due);
     assert_eq!(series(&mut model, "node.user.diversion"), first_diversion);
 }
+
+/// An announced allocation that first fires on 1 July. The `pct` series
+/// carries the standing announcement forward between firings, and before the
+/// first firing of a run there is none: it must read zero, not the last
+/// percentage announced by the run before.
+#[test]
+fn ras_standing_announcement_is_cleared_for_every_run() {
+    let mut model = load("
+[kalix]
+start = 2020-01-01
+end = 2020-12-31
+
+[acc.entitlements]
+accounts = name,  size,
+           smith, 150,
+
+[ras.announce]
+targets = acc.entitlements
+trigger = start_water_year(7)
+action = allocate(50)
+
+[node.headwater]
+type = inflow
+loc = 0, 0
+inflow = 10
+ds_1 = outlet
+
+[node.outlet]
+type = gauge
+loc = 0, 10
+
+[outputs]
+ras.announce.pct
+");
+    model.run().expect("first run");
+    let first = series(&mut model, "ras.announce.pct");
+    assert_eq!(first[0], 0.0, "no announcement before the first firing");
+    assert_eq!(*first.last().unwrap(), 50.0, "the July announcement stands to the end of the run");
+
+    model.run().expect("second run");
+    assert_eq!(series(&mut model, "ras.announce.pct"), first);
+}
