@@ -103,3 +103,49 @@ fn loss_rate_survives_a_resave() {
     reread.run().unwrap();
     assert_eq!(series(&reread, "node.reach_loss.loss"), vec![30.0; 3]);
 }
+
+/// The flow phase skips the table lookup beneath the inflow where the table
+/// starts to lose water. The loss must be the same as the table gives on both
+/// sides of that threshold and exactly on it: nothing at 150 and at 200, then
+/// 75% of the excess up to 400, then the last segment extended.
+#[test]
+fn table_loss_is_unchanged_either_side_of_the_zero_loss_threshold() {
+    for (inflow, expected_loss) in [(0.0, 0.0), (150.0, 0.0), (200.0, 0.0), (300.0, 75.0), (400.0, 150.0), (600.0, 300.0)] {
+        let ini = format!("
+[kalix]
+start = 2020-01-01
+end = 2020-01-03
+
+[node.headwater]
+type = inflow
+loc = 0, 0
+inflow = {inflow}
+ds_1 = reach_loss
+
+[node.reach_loss]
+type = loss
+loc = 0, 10
+table = 0,   0,
+        200, 0,
+        400, 150,
+ds_1 = outlet
+
+[node.outlet]
+type = gauge
+loc = 0, 20
+
+[outputs]
+node.reach_loss.loss
+node.reach_loss.dsflow
+");
+        let mut model = crate::io::ini_model_io::IniModelIO::read_model_string(&ini).expect("model should load");
+        model.configure().expect("model should configure");
+        model.run().expect("simulation should run");
+        for (name, expected) in [("node.reach_loss.loss", expected_loss), ("node.reach_loss.dsflow", inflow - expected_loss)] {
+            let idx = model.data_cache.get_series_idx(name, false).expect("series should exist");
+            for v in &model.data_cache.series[idx].values {
+                assert!((v - expected).abs() < 1e-9, "{name} at an inflow of {inflow}: got {v}, expected {expected}");
+            }
+        }
+    }
+}

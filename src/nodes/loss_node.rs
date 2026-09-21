@@ -27,6 +27,17 @@ pub struct LossNode {
     pub dsorders: [f64; MAX_DS_LINKS],
     pub usorders: f64,
 
+    // Up to this inflow the table loses nothing, so the flow phase skips its lookup
+    // beneath it. Set in initialise().
+    // Keep this declared away from `usflow`, and measure if these fields move. The
+    // flow phase reads both. Declared between mbal and usflow it landed beside
+    // usflow, the compiler fetched the two with one paired load (ldp), and a model
+    // that never skips ran 24% slower than with no skip at all; a fields-only build
+    // was flat, so it was not the size. Declared here they load separately (two ldr)
+    // and that model is flat. Why is not established: the builds differ only in
+    // field offsets, and the same 10 ms reappeared on the skip path. Per ADR-0004 §3.4.
+    zero_loss_limit: f64,
+
     // Recorders
     recorder_idx_usflow: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
@@ -105,6 +116,23 @@ impl Node for LossNode {
             return Err(format!("Node '{}' loss table slope exceeds 1:1 (outflow would decrease). {}", self.name, e));
         }
 
+        // Many loss tables lose nothing until the inflow passes some threshold, and a
+        // node with no table loses nothing at all. Up to that threshold the table loss
+        // is zero, so find it once here and let the flow phase skip the lookup beneath
+        // it. It is the inflow of the last leading row whose loss is zero (interpolating
+        // between two zero rows gives zero). A table whose loss is zero in every row
+        // loses nothing at any inflow - its last segment extends at zero - so the limit
+        // is infinite.
+        self.zero_loss_limit = f64::INFINITY;
+        let mut last_zero_inflow = 0.0;
+        for row in 0..self.loss_table.nrows() {
+            if self.loss_table.get_value(row, 1) > 0.0 {
+                self.zero_loss_limit = last_zero_inflow;
+                break;
+            }
+            last_zero_inflow = self.loss_table.get_value(row, 0);
+        }
+
         // Build order_translation_table from loss_table (for lookups during ordering):
         // the smallest inflow that delivers a required outflow. Relies on the checks above.
         self.order_translation_table = TableDiscontinuous::order_translation(&self.loss_table);
@@ -149,7 +177,14 @@ impl Node for LossNode {
         // else the loss table (inflow rate -> loss rate). Either way the loss
         // actually taken is clamped to [0, usflow] below.
         let attempted_loss = match self.loss_rate {
-            DynamicInput::None { .. } => self.loss_table.interpolate_or_extrapolate(0, 1, self.usflow),
+            // Beneath zero_loss_limit the table loss is zero, so skip the lookup (a
+            // binary search, four bounds-checked reads and a division). A NaN inflow
+            // fails the compare and takes the lookup, as before.
+            DynamicInput::None { .. } => if self.usflow <= self.zero_loss_limit {
+                0.0
+            } else {
+                self.loss_table.interpolate_or_extrapolate(0, 1, self.usflow)
+            },
             _ => {
                 self.loss_rate_value = self.loss_rate.get_value(data_cache);
                 self.loss_rate_value
