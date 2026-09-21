@@ -3,6 +3,7 @@ use crate::numerical::table::Table;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
+use crate::numerical::fifo_buffer::FifoBuffer;
 
 const MAX_DS_LINKS: usize = 5;
 
@@ -20,14 +21,19 @@ pub struct SplitterNode {
 
     // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
+    pub order_travel_time: usize,          //Supply travel time must be known to divert effluent orders on correct step
+    pub ds_2_order_buffer: FifoBuffer, //Fifo buffer for the effluent orders pursuant to the abovementioned delay
+    pub ds_2_order_due: f64,           //Populated from the fifo buffer in the ordering phase
 
     // Recorders
     recorder_idx_usflow: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
+    //recorder_idx_ds_1_order_due: Option<usize>, // currently not tracking when ds_1 orders are due
     recorder_idx_ds_2: Option<usize>,
     recorder_idx_ds_2_order: Option<usize>,
+    recorder_idx_ds_2_order_due: Option<usize>,
 }
 
 impl SplitterNode {
@@ -80,6 +86,7 @@ impl Node for SplitterNode {
         self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
         self.recorder_idx_ds_2 = recorder(data_cache, &self.name, "ds_2");
         self.recorder_idx_ds_2_order = recorder(data_cache, &self.name, "ds_2_order");
+        self.recorder_idx_ds_2_order_due = recorder(data_cache, &self.name, "ds_2_order_due");
 
         // Return
         Ok(())
@@ -91,12 +98,18 @@ impl Node for SplitterNode {
 
     fn run_order_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
+        // Update the effluent order buffer
+        self.ds_2_order_due = self.ds_2_order_buffer.push(self.dsorders[1]);
+
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
             data_cache.add_value_at_index(idx, self.dsorders[0]);
         }
         if let Some(idx) = self.recorder_idx_ds_2_order {
             data_cache.add_value_at_index(idx, self.dsorders[1]);
+        }
+        if let Some(idx) = self.recorder_idx_ds_2_order_due {
+            data_cache.add_value_at_index(idx, self.ds_2_order_due);
         }
     }
 
@@ -110,13 +123,12 @@ impl Node for SplitterNode {
         // Determine effluent flow. Use interpolate_or_extrapolate so that inflows
         // beyond the table domain extend the last segment rather than returning NaN
         // (NaN would slip through .min, sending the entire flow down ds_2). The
-        // .min(usflow) guards over-extraction, and max(effluent_order) serves a dual
-        // purpose ensuring that ds_2_flow >= 0.
-        // It is a deliberate design decision that effluent orders (ds_2 orders) get
-        // priority over main channel orders (ds_1 orders) in line with the
-        // first-in-best-dressed principal followed elsewhere.
-        let effluent_order = self.dsorders[1];
-        self.ds_2_flow = self.splitter_table.interpolate_or_extrapolate(0, 1, self.usflow).max(effluent_order).min(self.usflow);
+        // .min(usflow) guards over-extraction, and max(self.ds_2_order_due) serves a
+        // secondary purpose ensuring that ds_2_flow >= 0.
+        // We made a deliberate decision that effluent orders (ds_2 orders) get
+        // priority over main channel orders (ds_1 orders); this is in line with the
+        // first-in-best-dressed principal followed elsewhere in the ordering system.
+        self.ds_2_flow = self.splitter_table.interpolate_or_extrapolate(0, 1, self.usflow).max(self.ds_2_order_due).min(self.usflow);
         self.ds_1_flow = self.usflow - self.ds_2_flow;
         if self.ds_1_flow < 0f64 {
             panic!("Negative ds_1 flow at '{}' when usflow={}, ds_1={}", self.name, self.usflow, self.ds_1_flow);
@@ -135,9 +147,6 @@ impl Node for SplitterNode {
         if let Some(idx) = self.recorder_idx_ds_2 {
             data_cache.add_value_at_index(idx, self.ds_2_flow);
         }
-        // if let Some(idx) = self.recorder_idx_ds_2_order {
-        //     data_cache.add_value_at_index(idx, self.dsorders[1]);
-        // }
 
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;

@@ -167,6 +167,10 @@ impl SimpleNodewiseOrderingSystem {
                         let int_lag = new_link_item.lag.round() as usize;
                         node.sent_order_buffer = FifoBuffer::new(int_lag);
                     }
+                    NodeEnum::SplitterNode(node) => {
+                        let int_lag = new_link_item.lag.round() as usize;
+                        node.ds_2_order_buffer = FifoBuffer::new(int_lag);
+                    }
                     NodeEnum::ConfluenceNode(node) => {
                         let int_lag = new_link_item.lag.round() as usize;
                         if !node.regulated_upstream.is_empty() {
