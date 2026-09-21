@@ -811,46 +811,50 @@ public class RunManager extends JFrame {
      * Restores checked state to match the given series set.
      * This ensures the tree visually reflects what's plotted, even after tree rebuilds
      * (rebuilds reset checked state, since old TreePaths reference discarded nodes).
-     * Returns the set of series that were successfully restored (found in the tree).
+     *
+     * <p>Purely a projection onto the <em>visible</em> tree: a series the filter hides
+     * has no node to check, and that says nothing about whether it is still plotted.
+     * Which series a tab keeps is {@link #reconcileTabSeriesWithSources}' question.</p>
      *
      * @param seriesToRestore The set of series keys to check in the tree
      */
-    Set<SeriesRef> restoreTreeChecksForSeries(
-            Set<SeriesRef> seriesToRestore) {
+    void restoreTreeChecksForSeries(Set<SeriesRef> seriesToRestore) {
         if (seriesToRestore.isEmpty()) {
             timeseriesTree.setCheckedPaths(Collections.emptyList());
-            return Collections.emptySet();
+            return;
         }
 
         List<TreePath> pathsToCheck = new ArrayList<>();
-        Set<SeriesRef> restoredRefs = new HashSet<>();
         DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
 
-        // Search tree for nodes matching the ref set, collect which ones we found
+        // Tick in the tab's series order
         for (SeriesRef ref : seriesToRestore) {
-            List<TreePath> foundPaths = new ArrayList<>();
-            searchAndCollectPaths(root, Collections.singleton(ref), foundPaths);
-            if (!foundPaths.isEmpty()) {
-                pathsToCheck.addAll(foundPaths);
-                restoredRefs.add(ref);
-            }
+            searchAndCollectPaths(root, Collections.singleton(ref), pathsToCheck);
         }
 
         // Note: Callers run inside a programmatic-update section to block events
         timeseriesTree.setCheckedPaths(pathsToCheck);
-
-        return restoredRefs;
     }
 
     /**
-     * Reconciles the target tab's selected series with what's actually available in the tree.
-     * Removes series from the tab that couldn't be restored (e.g., when a run is deselected).
+     * Reconciles the target tab's selected series with what the checked sources offer,
+     * removing series whose source has gone (a run unchecked) or no longer produces
+     * them (a new Last run without that output).
+     *
+     * <p>Availability is asked of the sources, never of the visible tree: under a
+     * filter the tree omits series that are still offered, and pruning against it
+     * emptied the plot on any source change while filtering (#431).</p>
      */
-    void reconcileCheckedSeriesWithTree(Set<SeriesRef> restoredSeries,
-                                        Set<SeriesRef> tabSeries) {
+    void reconcileTabSeriesWithSources(Set<SeriesRef> tabSeries) {
+        List<Object> checkedRuns = new ArrayList<>();
+        List<Object> checkedDatasets = new ArrayList<>();
+        collectCheckedSources(checkedRuns, checkedDatasets);
+        List<Object> checkedSources = new ArrayList<>(checkedRuns);
+        checkedSources.addAll(checkedDatasets);
+
         // Find series that need to be removed from the tab
         Set<SeriesRef> seriesToRemove = new HashSet<>(tabSeries);
-        seriesToRemove.removeAll(restoredSeries);
+        seriesToRemove.removeAll(outputsTreeBuilder.availableRefs(checkedSources));
 
         if (seriesToRemove.isEmpty()) {
             return;
@@ -907,8 +911,8 @@ public class RunManager extends JFrame {
 
             // Restore checked state to match what's currently plotted on active tab
             Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-            Set<SeriesRef> restoredSeries = restoreTreeChecksForSeries(tabSeries);
-            reconcileCheckedSeriesWithTree(restoredSeries, tabSeries);
+            restoreTreeChecksForSeries(tabSeries);
+            reconcileTabSeriesWithSources(tabSeries);
         } finally {
             fetchCoordinator.endProgrammaticUpdate();
         }
@@ -937,17 +941,23 @@ public class RunManager extends JFrame {
      * Updates the timeseries tree based on current run tree selection.
      */
     void updateOutputsTree() {
-        TreePath[] checkedPaths = timeseriesSourceTree.getCheckedPaths();
-        if (checkedPaths.length == 0) {
-            outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
-            return;
-        }
-
-        // Collect all selected RunInfo and LoadedDatasetInfo objects
         List<Object> checkedRuns = new ArrayList<>();
         List<Object> checkedDatasets = new ArrayList<>();
+        collectCheckedSources(checkedRuns, checkedDatasets);
 
-        for (TreePath path : checkedPaths) {
+        if (checkedRuns.isEmpty() && checkedDatasets.isEmpty()) {
+            outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
+        } else {
+            outputsTreeBuilder.updateTree(checkedRuns, checkedDatasets);
+        }
+    }
+
+    /**
+     * Collects the RunInfo and LoadedDatasetInfo objects currently checked in the data
+     * source tree. Category paths (auto-checked parents) are neither, and are skipped.
+     */
+    private void collectCheckedSources(List<Object> checkedRuns, List<Object> checkedDatasets) {
+        for (TreePath path : timeseriesSourceTree.getCheckedPaths()) {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
             Object userObject = node.getUserObject();
 
@@ -956,12 +966,6 @@ public class RunManager extends JFrame {
             } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                 checkedDatasets.add(userObject);
             }
-        }
-
-        if (checkedRuns.isEmpty() && checkedDatasets.isEmpty()) {
-            outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
-        } else {
-            outputsTreeBuilder.updateTree(checkedRuns, checkedDatasets);
         }
     }
 
