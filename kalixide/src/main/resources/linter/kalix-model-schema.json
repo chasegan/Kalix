@@ -358,6 +358,43 @@
         }
       }
     },
+    "field": {
+      "description": "Field node representing an irrigated field that orders water (skeleton)",
+      "allowed_outputs": [
+        "dsflow",
+        "usflow",
+        "ds_1",
+        "ds_1_order",
+        "order",
+        "order_due",
+        "supply"
+      ],
+      "required_params": [
+        "type",
+        "loc"
+      ],
+      "optional_params": [
+        "order"
+      ],
+      "dsnode_params": [
+        "ds_1"
+      ],
+      "parameters": {
+        "type": {
+          "type": "literal",
+          "value": "field"
+        },
+        "loc": {
+          "type": "coordinates",
+          "format": "float,float",
+          "description": "X,Y coordinates"
+        },
+        "order": {
+          "type": "function_expression",
+          "description": "Water order input (data reference, constant, or expression)"
+        }
+      }
+    },
     "storage": {
       "description": "Storage node for water storage modeling",
       "allowed_outputs": [

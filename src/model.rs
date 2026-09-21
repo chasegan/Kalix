@@ -1185,6 +1185,7 @@ impl Model {
             "surm",
             "regulated_user",
             "unregulated_user",
+            "field",
             "order_control",
             "loss",
             "storage",

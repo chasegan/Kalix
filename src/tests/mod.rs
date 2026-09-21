@@ -156,6 +156,9 @@ mod test_ordering_visit_order;
 // Nodes with several incoming regulated links
 mod test_ordering_inlets;
 
+// Field node (skeleton): orders from a storage, takes its order
+mod test_field_node;
+
 // Confluence order routing (regulated = <upstream node(s)>)
 mod test_confluence_order_routing;
 
