@@ -147,6 +147,12 @@ impl SimpleNodewiseOrderingSystem {
                 NodeEnum::RegulatedUserNode(node) => {
                     node.order_travel_time = travel_time;
                     node.order_buffer = FifoBuffer::new(travel_time);
+                    // The orders arriving on its supply outlets (ds_2 to ds_4) are delivered
+                    // when the ordered water reaches the user, so they are held for the
+                    // user's travel time, whatever lies between the user and the node below.
+                    for supply_outlet in &mut node.supply_outlets {
+                        supply_outlet.order_buffer = FifoBuffer::new(travel_time);
+                    }
                 }
                 NodeEnum::FieldNode(node) => {
                     node.order_travel_time = travel_time;
@@ -389,7 +395,8 @@ impl SimpleNodewiseOrderingSystem {
                 }
                 NodeEnum::RegulatedUserNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    node.dsorders[0] + node.order_factor * node.order_value
+                    // order_placed is its own order plus the orders accepted from its supply outlets
+                    node.dsorders[0] + node.order_factor * node.order_placed()
                 }
                 NodeEnum::FieldNode(node) => {
                     node.run_order_phase(data_cache, account_manager);

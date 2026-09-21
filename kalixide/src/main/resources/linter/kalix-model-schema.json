@@ -294,6 +294,15 @@
         "usflow",
         "ds_1",
         "ds_1_order",
+        "ds_2",
+        "ds_3",
+        "ds_4",
+        "ds_2_order",
+        "ds_3_order",
+        "ds_4_order",
+        "ds_2_order_due",
+        "ds_3_order_due",
+        "ds_4_order_due",
         "order",
         "order_due",
         "demand",
@@ -317,7 +326,10 @@
         "order_factor"
       ],
       "dsnode_params": [
-        "ds_1"
+        "ds_1",
+        "ds_2",
+        "ds_3",
+        "ds_4"
       ],
       "parameters": {
         "type": {
