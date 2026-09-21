@@ -72,6 +72,8 @@ Orders propagate in an upstream direction, from users to the supply storage(s). 
 
 At loss nodes and inflow nodes the orders are adjusted as discussed above.
 
+At splitter nodes, the orders from both outlets are added together and the total is sent upstream.
+
 When a node, which is *not a confluence*, has multiple incoming links (branches), the full order is sent up each regulated link. This allows the modeller to make flow-phase decisions about how (from which branch) the order will be met. Note that a naive configuration could result in the order being met by both branches. If the modeller want more control over how the orders are apportioned up each branch, they should use a confluence node.
 
 At confluence nodes, the orders are directed up regulated branches on the basis of the harmony rule expression. If the upstream branches have different travel times (T1 > T2), orders designated for the shorter branch are delayed (by an amount DT = T1-T2) such that the ordered water will arrive at the user node at the right time.
@@ -80,7 +82,7 @@ At confluence nodes, the orders are directed up regulated branches on the basis 
 
 Regulated outlets on storage nodes are operated to satisfy orders.
 
-Splitters (TBD).
+Splitters deliver orders placed on their effluent (ds\_2) outlet. A splitter holds each effluent order for the travel time from the supply storage, then sends at least that volume down the effluent when the ordered water arrives. If the flow cannot meet the orders on both outlets, the effluent order is met first. Orders are not adjusted for the flow that the splitter's table sends down the effluent. See [Splitter](splitter.md#orders-on-the-effluent).
 
 ## How Orders Propagate
 

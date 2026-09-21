@@ -725,7 +725,8 @@
         "ds_1",
         "ds_2",
         "ds_1_order",
-        "ds_2_order"
+        "ds_2_order",
+        "ds_2_order_due"
       ],
       "required_params": [
         "type",

@@ -149,6 +149,9 @@ mod test_opportunistic_demand;
 
 // Confluence order routing (regulated = <upstream node(s)>)
 mod test_confluence_order_routing;
+
+// Splitter: regulated orders on the effluent (ds_2) link
+mod test_splitter_regulated_effluent;
 mod test_output_casing;
 mod test_static_properties;
 mod test_linter_schema;

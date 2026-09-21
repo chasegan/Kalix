@@ -13,6 +13,7 @@
 use crate::data_management::data_cache::DataCache;
 use crate::misc::simulation_context::set_context_node;
 use crate::nodes::{Link, Node, NodeEnum};
+use crate::nodes::splitter_node::DS_2_OUTLET;
 use crate::numerical::fifo_buffer::FifoBuffer;
 
 /// Pre-computed information about an incoming regulated link to a node.
@@ -126,6 +127,17 @@ impl SimpleNodewiseOrderingSystem {
                     new_link_item.lag += node_lag;
                 }
                 _ => {}
+            }
+
+            // A splitter diverts effluent (ds_2) orders on the step the ordered water
+            // arrives at the splitter. To do this, it remembers the ds_2 orders using a delay
+            // buffer, matching the travel time from the supply storage. Sizing from the outgoing
+            // link rather than from each incoming link keeps the delay independent of which
+            // incoming link is defined first.
+            if new_link_item.zone_idx.is_some() && new_link_item.from_outlet == DS_2_OUTLET {
+                if let NodeEnum::SplitterNode(node) = &mut nodes[new_link_item.from_node] {
+                    node.ds_2_order_buffer = FifoBuffer::new(new_link_item.lag.round() as usize);
+                }
             }
 
             // Initialize node ordering aspects
