@@ -149,3 +149,53 @@ node.reach_loss.dsflow
         }
     }
 }
+
+/// The ordering phase skips the order translation beneath the same threshold.
+/// The numbers are the Ordering page's worked example: no loss up to 200, then
+/// 150 lost by 400. Orders of 100 and 200 reach the dam unchanged; an order of
+/// 300 is raised to 450, because 450 - 150 = 300.
+#[test]
+fn orders_are_unchanged_beneath_the_zero_loss_threshold_and_raised_above_it() {
+    for (order, expected_release) in [(100.0, 100.0), (200.0, 200.0), (300.0, 450.0)] {
+        let ini = format!("
+[kalix]
+start = 2020-01-01
+end = 2020-01-03
+
+[node.dam]
+type = storage
+loc = 0, 0
+initial_volume = 5000
+dimensions = 0, 0, 0, 0, 1, 10000, 0, 0, 1.1, 10001, 0, 10000, 1.2, 10002, 0, 10000
+ds_1 = reach_loss
+
+[node.reach_loss]
+type = loss
+loc = 0, 10
+table = Flow [ML], Loss [ML],
+        0        , 0,
+        200      , 0,
+        400      , 150,
+        1000     , 150,
+ds_1 = user
+
+[node.user]
+type = regulated_user
+loc = 0, 20
+order = {order}
+
+[outputs]
+node.dam.ds_1
+node.user.diversion
+");
+        let mut model = crate::io::ini_model_io::IniModelIO::read_model_string(&ini).expect("model should load");
+        model.configure().expect("model should configure");
+        model.run().expect("simulation should run");
+        for (name, expected) in [("node.dam.ds_1", expected_release), ("node.user.diversion", order)] {
+            let idx = model.data_cache.get_series_idx(name, false).expect("series should exist");
+            for v in &model.data_cache.series[idx].values {
+                assert!((v - expected).abs() < 1e-9, "{name} for an order of {order}: got {v}, expected {expected}");
+            }
+        }
+    }
+}

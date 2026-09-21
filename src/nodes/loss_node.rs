@@ -27,7 +27,7 @@ pub struct LossNode {
     pub dsorders: [f64; MAX_DS_LINKS],
     pub usorders: f64,
 
-    // Up to this inflow the table loses nothing, so the flow phase skips its lookup
+    // Up to this inflow the table loses nothing, so both phases skip their lookup
     // beneath it. Set in initialise().
     // Keep this declared away from `usflow`, and measure if these fields move. The
     // flow phase reads both. Declared between mbal and usflow it landed beside
@@ -118,8 +118,8 @@ impl Node for LossNode {
 
         // Many loss tables lose nothing until the inflow passes some threshold, and a
         // node with no table loses nothing at all. Up to that threshold the table loss
-        // is zero, so find it once here and let the flow phase skip the lookup beneath
-        // it. It is the inflow of the last leading row whose loss is zero (interpolating
+        // is zero and the order translation is the identity, so find it once here and
+        // let both phases skip their lookup beneath it. It is the inflow of the last leading row whose loss is zero (interpolating
         // between two zero rows gives zero). A table whose loss is zero in every row
         // loses nothing at any inflow - its last segment extends at zero - so the limit
         // is infinite.
@@ -163,7 +163,18 @@ impl Node for LossNode {
         // Calculate usorders 
         // Note: order_translation_table is well-formed and non-negative by
         // construction, see `initialise()`, so cannot return negative orders
-        self.usorders = self.order_translation_table.interpolate_or_extrapolate(self.dsorders[0]);
+        //
+        // Beneath zero_loss_limit the table loses nothing and the lookup would return
+        // the order unchanged (or zero for a negative order, hence the max), so skip
+        // it. Measured on 60 regulated loss nodes: -8.4% simulation time with orders
+        // beneath the threshold, -0.4% where the table always loses (per ADR-0004 §6).
+        // A NaN order fails the compare and takes the lookup, as before.
+        let ds_order = self.dsorders[0];
+        self.usorders = if ds_order <= self.zero_loss_limit {
+            ds_order.max(0.0)
+        } else {
+            self.order_translation_table.interpolate_or_extrapolate(ds_order)
+        };
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
