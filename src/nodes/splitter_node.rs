@@ -4,6 +4,7 @@ use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
 use crate::numerical::fifo_buffer::FifoBuffer;
+use crate::numerical::table_discontinuous::TableDiscontinuous;
 
 const MAX_DS_LINKS: usize = 5;
 
@@ -17,6 +18,7 @@ pub struct SplitterNode {
     pub location: Location,
     pub mbal: f64,
     pub splitter_table: Table,  // By default, the columns mean Inflow Rate ML, Effluent Rate ML (maybe ways to override this later)
+    pub order_translation_table: TableDiscontinuous, // Required ds_1 flow -> smallest inflow that delivers it past the table. Built in initialise().
 
     // Internal state only
     usflow: f64,
@@ -25,6 +27,7 @@ pub struct SplitterNode {
 
     // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
+    pub usorders: f64,                 //The order sent upstream, set in the ordering phase
     pub ds_2_order_buffer: FifoBuffer, //Delays effluent orders by the supply travel time, so they are diverted on the step the ordered water arrives. Sized by the ordering system from the ds_2 link's lag.
     pub ds_2_order_due: f64,           //Populated from the fifo buffer in the ordering phase
 
@@ -63,6 +66,7 @@ impl Node for SplitterNode {
         // a regulated link.
         self.ds_2_order_buffer = FifoBuffer::default();
         self.ds_2_order_due = 0.0;
+        self.usorders = 0.0;
 
         // Check the splitter table is well-behaved (mirrors the loss node, see the
         // matching Table assertions):
@@ -88,6 +92,12 @@ impl Node for SplitterNode {
             return Err(format!("Node '{}' splitter table slope exceeds 1:1 (ds_1 flow would decrease). {}", self.name, e));
         }
 
+        // Build order_translation_table from splitter_table (for lookups during
+        // ordering): the smallest inflow that leaves a required flow on ds_1 after
+        // the table has sent its share down the effluent. The same function a loss
+        // node uses for its losses, and it relies on the checks above.
+        self.order_translation_table = TableDiscontinuous::order_translation(&self.splitter_table);
+
         // Initialize result recorders
         self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
         self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
@@ -109,6 +119,20 @@ impl Node for SplitterNode {
 
         // Update the effluent order buffer
         self.ds_2_order_due = self.ds_2_order_buffer.push(self.dsorders[DS_2_OUTLET as usize]);
+
+        // Calculate usorders: the smallest inflow that meets both orders when it
+        // arrives. The flow phase gives ds_2 the larger of the table flow and its
+        // order, and ds_1 the rest, so ds_1 receives min(q - table(q), q - ds_2_order)
+        // from an inflow q. Both terms rise with q, so the order on ds_1 is met once
+        // q reaches the larger of the two inflows that satisfy them: the inflow that
+        // passes the ds_1 order through the table (as at a loss node), and the plain
+        // sum of the two orders.
+        // Note: order_translation_table is well-formed and non-negative by
+        // construction, see `initialise()`, so cannot return negative orders
+        let ds_1_order = self.dsorders[DS_1_OUTLET as usize];
+        let ds_2_order = self.dsorders[DS_2_OUTLET as usize];
+        self.usorders = self.order_translation_table.interpolate_or_extrapolate(ds_1_order)
+            .max(ds_1_order + ds_2_order);
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {

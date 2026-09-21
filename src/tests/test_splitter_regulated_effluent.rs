@@ -131,3 +131,80 @@ fn rerun_starts_with_an_empty_order_buffer() {
     assert_eq!(series(&mut model, "node.splitter_1.ds_2_order_due"), first_due);
     assert_eq!(series(&mut model, "node.splitter_1.ds_2"), first_ds_2);
 }
+
+/// A storage directly above a splitter whose table sends 10% of the inflow
+/// down the effluent, with constant orders on both outlets. `{ds_2_order}`
+/// sets the effluent user's order; the main channel user always orders 100.
+fn ten_percent_rig(ds_2_order: f64) -> String {
+    format!("
+[kalix]
+start = 2020-01-01
+end = 2020-01-05
+
+[node.dam]
+type = storage
+loc = 0, 0
+initial_volume = 12000
+{DAM_DIMENSIONS}
+ds_1 = splitter_1
+
+[node.splitter_1]
+type = splitter
+loc = 0, 20
+table = 0,    0,
+        1000, 100,
+ds_1 = user_1
+ds_2 = user_2
+
+[node.user_1]
+type = regulated_user
+loc = 0, 30
+order = 100
+
+[node.user_2]
+type = regulated_user
+loc = 10, 30
+order = {ds_2_order}
+
+[outputs]
+node.splitter_1.usflow
+node.splitter_1.ds_1
+node.splitter_1.ds_2
+node.user_1.diversion
+node.user_2.diversion
+")
+}
+
+fn assert_all_close(values: &[f64], expected: f64, what: &str) {
+    for (i, v) in values.iter().enumerate() {
+        assert!((v - expected).abs() < 1e-9, "{what}: step {i} was {v}, expected {expected}");
+    }
+}
+
+/// The table takes more than the effluent ordered. The order sent upstream
+/// must allow for it, as a loss node's does: 100 on ds_1 needs an inflow of
+/// 100 / 0.9, not the plain sum of 105 that would leave ds_1 with 94.5.
+#[test]
+fn upstream_order_allows_for_the_flow_the_table_diverts() {
+    let mut model = load(&ten_percent_rig(5.0));
+    model.run().expect("simulation should run");
+
+    assert_all_close(&series(&mut model, "node.splitter_1.usflow"), 100.0 / 0.9, "splitter inflow");
+    assert_all_close(&series(&mut model, "node.splitter_1.ds_1"), 100.0, "main channel flow");
+    assert_all_close(&series(&mut model, "node.user_1.diversion"), 100.0, "main channel diversion");
+    assert_all_close(&series(&mut model, "node.user_2.diversion"), 5.0, "effluent diversion");
+}
+
+/// The effluent ordered more than the table would send it. The order then
+/// displaces the table flow, nothing more is diverted than was ordered, and
+/// the plain sum of the two orders is exactly enough.
+#[test]
+fn upstream_order_is_the_sum_when_the_effluent_order_exceeds_the_table_flow() {
+    let mut model = load(&ten_percent_rig(20.0));
+    model.run().expect("simulation should run");
+
+    assert_all_close(&series(&mut model, "node.splitter_1.usflow"), 120.0, "splitter inflow");
+    assert_all_close(&series(&mut model, "node.splitter_1.ds_2"), 20.0, "effluent flow");
+    assert_all_close(&series(&mut model, "node.user_1.diversion"), 100.0, "main channel diversion");
+    assert_all_close(&series(&mut model, "node.user_2.diversion"), 20.0, "effluent diversion");
+}
