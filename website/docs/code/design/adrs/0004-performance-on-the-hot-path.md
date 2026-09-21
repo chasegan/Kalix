@@ -343,3 +343,42 @@ citing them when a trade is proposed.
   which is a longer store-then-load chain than a real network offers. One
   machine, one CPU (Apple M5), one session. Source: `9bdf76cf` on
   `perf/skip-table-lookup-beneath-threshold`.
+- *2026-09-21* — eighth data point for §3.4: code that is never executed
+  moved a benchmark, twice, in one module. Both cases came from work on the
+  ordering system (`src/ordering/simple_nodewise_ordering.rs`); in both the
+  variants compared gave byte-identical results over all 43 regression and
+  speed models with every recorder on, so none of this is work done
+  differently. Arms built in one worktree with the source swapped and
+  checked by hash, interleaved runs, median simulation time, against main.
+  First: recording a confluence's `harmony_fraction` on the step it is
+  used. The version that reads best moved the evaluation of the fraction
+  from the ordering loop into `ConfluenceNode::run_order_phase`. On
+  `2_unregulated_users` - a model with no confluence, which returns from
+  `run_ordering_phase` at its first line, so that not one changed
+  instruction runs - it measured +3.5%, +3.0% and +2.4% in three sessions of
+  15 to 20 reps, against a previous commit within +0.5% of main. A version
+  that leaves the evaluation in the loop and has it call a small recording
+  method on the node measured +0.4%, −0.4% and +0.5% on tests 2, 4 and 5 in
+  the same session, and was kept. Second: restructuring
+  `initialize`, which runs once per run, with `run_ordering_phase` untouched
+  ([ADR-0008](0008-ordering-knowledge-in-exhaustive-matches.md)). A version
+  that gathered each node's incoming links into a `Vec` of `Vec`s measured
+  +1.8%, 0.0% and +2.6% on tests 2, 4 and 5, and +2.3% to +2.5% on test 5 in
+  two earlier sessions. A version keeping the longest travel time per node
+  in one flat `Vec`, and gathering the links for confluences alone,
+  measured 0.0%, −0.3% and −0.2% in the same session of 25 reps, and was
+  kept. Along the way, pinning `run_ordering_phase` out of line with
+  `#[inline(never)]`, in the change and in main, moved none of four arms
+  beyond 0.3% of each other, so whether that function is inlined into
+  `run_timestep` is not the lever. Two things follow. A change confined to
+  cold code is not thereby free: time it, as §4 says of the hot path,
+  whenever it lands in a module the hot path lives in. And when a variant
+  measures slow for no reason the source explains, the productive move has
+  been to write the same thing another way and measure again, which cost
+  minutes each time; reasoning about why did not predict either result. The
+  mechanism is not established. Where the compiler places the hot functions
+  relative to one another is the obvious suspect and was not examined: no
+  disassembly was compared and no symbol addresses were read. One machine,
+  one CPU (Apple M5). Sources: `a5c1795a` on `refine/ordering-at-junctions`
+  and `41dd2e84` on `refactor/ordering-setup`; the rejected variants are
+  described in those commit messages and were not committed.
