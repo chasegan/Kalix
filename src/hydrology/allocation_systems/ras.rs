@@ -107,8 +107,12 @@ pub struct RasSystem {
 }
 
 impl RasSystem {
-    /// Resolve the opt-in recorder series (registered by [outputs]).
+    /// Resolve the opt-in recorder series (registered by [outputs]), and clear
+    /// the standing announcement so a rerun of the same model object does not
+    /// start by reporting the previous run's last percentage. Called at the
+    /// start of every run.
     pub fn initialize_recorders(&mut self, data_cache: &mut DataCache) {
+        self.last_pct = 0.0;
         self.recorder_idx_fired = data_cache.get_series_idx(
             format!("ras.{}.fired", self.name).as_str(), false);
         self.recorder_idx_pct = data_cache.get_series_idx(

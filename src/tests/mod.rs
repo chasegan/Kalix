@@ -152,6 +152,9 @@ mod test_confluence_order_routing;
 
 // Splitter: regulated orders on the effluent (ds_2) link
 mod test_splitter_regulated_effluent;
+
+// Rerunning one model object: no state may leak from one run into the next
+mod test_rerun_state;
 mod test_output_casing;
 mod test_static_properties;
 mod test_linter_schema;
