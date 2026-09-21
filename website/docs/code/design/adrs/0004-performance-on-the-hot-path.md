@@ -300,3 +300,46 @@ citing them when a trade is proposed.
   grows with every option should be pinned out of line and measured. And
   the layout sensitivity of a struct is a fact about this struct at this
   size, not a rule to reason from: measure the fields-only arm every time.
+- *2026-09-21* — seventh data point for §3.4: a field that changed the
+  code the compiler emitted, not only where the data sits. Adding
+  `zero_loss_limit` (8 bytes) to `LossNode`, read in the flow phase
+  alongside `usflow`, left `NodeEnum`'s stride untouched at 4,064. The
+  change lets the flow phase skip its table lookup beneath the inflow where
+  the table starts to lose water. Measured on three models of 60 loss nodes
+  in series, 200 years daily: one with no table, one running beneath its
+  table's threshold, and one with a 1% table that never takes the skip. Arms
+  built in one worktree and checked by hash, 11 interleaved runs, median
+  simulation time. Declared between `mbal` and `usflow`, the field landed
+  next to `usflow` and the compiler fetched the two with one paired load
+  (`ldp`): the skipping models went −48% and −60%, and the never-skips model
+  went +24.0% (41.4 to 51.3 ms, sd under 0.5). A fields-only arm - the field
+  present and set at setup, the flow phase unchanged - measured +0.6%, so it
+  was not the size. Declared after `usorders`, or last in the struct, the
+  field sits at one and the same offset, the two values load separately (two
+  `ldr`), the never-skips model is flat (−1.1% to −1.5%), and the skipping
+  models gain −24% and −42% to −44%. So the same ~10 ms, about 2.3 ns per
+  node per step, left the never-skips path and appeared on the skip path.
+  The two builds' flow phases are instruction-for-instruction the same apart
+  from field offsets and the one paired load. The unchanged baseline was
+  itself bimodal on the beneath-threshold model (41 to 56 ms across runs,
+  sd 3.5 to 7.0) where every other arm held under about 1 ms. Speed tests 4
+  and 5, with one loss node between them, were flat throughout. The
+  placement kept is the second, because it slows nothing; the larger
+  figures of the first are recorded here and not claimed. The mechanism is
+  not established. A store-forwarding stall on the paired load was the
+  first guess, and the second measurement does not support it on its own.
+  Open questions, none yet investigated, for whenever this is taken up in
+  earnest. Whether the paired load is the cause or a bystander: a throwaway
+  `#[repr(C)]` build could hold the two fields adjacent while forcing
+  separate loads, or the reverse. Whether the stride matters: 4,064 is 32
+  bytes short of 4,096, so a field at offset X in one node shares its low
+  twelve address bits with offset X − 32 in the node before it, and the flow
+  phase writes the next node's `usflow` just after reading its own fields;
+  a build padded to a 4,096-byte stride would show whether that aliasing is
+  in play. Whether the bimodal baseline follows the address the node array
+  happens to be allocated at from run to run. Whether any of it appears on
+  another CPU. And how much of it is the shape of the benchmark: 60
+  identical nodes in series hand each value to the next through memory,
+  which is a longer store-then-load chain than a real network offers. One
+  machine, one CPU (Apple M5), one session. Source: `9bdf76cf` on
+  `perf/skip-table-lookup-beneath-threshold`.
