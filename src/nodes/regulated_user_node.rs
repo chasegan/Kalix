@@ -115,6 +115,16 @@ impl Node for RegulatedUserNode {
         self.diversion = 0.0;
         self.pump_capacity_value = f64::INFINITY;
 
+        // Reset order state, so a rerun of the same model object starts clean.
+        // The ordering system (which initialises after the nodes) only replaces
+        // the buffer when it finds a longer travel time than the one stored, so
+        // without this a second run keeps the first run's buffer, and the first
+        // run's final orders fall due at the start of the second.
+        self.order_travel_time = 0;
+        self.order_buffer = FifoBuffer::default();
+        self.order_value = 0.0;
+        self.order_due = 0.0;
+
         // Checks
         if !(self.order_factor >= 0.0 && self.order_factor.is_finite()) {
             return Err(format!("Error in node '{}'. order_factor must be a finite, non-negative factor, got {}.", self.name, self.order_factor));
