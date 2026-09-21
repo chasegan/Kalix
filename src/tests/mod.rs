@@ -147,6 +147,9 @@ mod test_calendar_builtins;
 #[cfg(test)]
 mod test_opportunistic_demand;
 
+// The ordering module names every node type in its matches (ADR-0008 §2)
+mod test_ordering_exhaustive;
+
 // The order phase visits nodes in reverse definition order
 mod test_ordering_visit_order;
 
