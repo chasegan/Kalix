@@ -12,9 +12,10 @@ title: "ADR-0008: State ordering knowledge per node type, in exhaustive matches"
 ## Context and problem statement
 
 The ordering system has to know a few things about every node type. Does a
-link leaving it start a regulated zone? Does water take time to pass through
-it? Can it originate an order, or only pass one on? Does it keep a delay
-buffer, and how long? What order does it send upstream?
+link leaving it start a regulated zone, continue one, or end it? Does water
+take time to pass through it? Can it originate an order, or only pass one
+on? Does it keep a delay buffer, and how long? What order does it send
+upstream?
 
 Until September 2026 the answers sat in `match` statements inside
 `SimpleNodewiseOrderingSystem::initialize`, most of them ending in a
@@ -73,7 +74,7 @@ easier.
 
 1. **What the ordering system needs to know about a node type is stated in
    the ordering module**, one function or match per question
-   (`starts_regulated_zone`, `routing_lag`, `can_originate_orders`,
+   (`zone_role`, `routing_lag`, `can_originate_orders`,
    `named_order_pathways`, `size_order_buffers`, and the upstream order in
    `run_ordering_phase`). The answers to one question read together, in one
    place.
@@ -85,8 +86,10 @@ easier.
    (the confluence's `regulated =`) decides nothing about the others and is
    not covered.
 3. **A question whose answer can differ between a node's outlets takes the
-   outlet.** `starts_regulated_zone(node, outlet)`, not
-   `starts_regulated_zone(node)`.
+   outlet.** `zone_role(node, outlet)`, not `zone_role(node)`. Its answers
+   are that a link leaving the outlet *starts* a regulated zone (a supply),
+   *continues* the one the node is in (almost everything), or *ends* it (a
+   drain, up which no order travels and which carries no travel time on).
 4. **The travel time to a node is worked out once, from the topology, and
    every node is sized from it.** It is the travel time of the node's
    longest regulated incoming link. It is accumulated down the network as a
@@ -160,25 +163,28 @@ easier.
 The question, and every node type's answer to it:
 
 ```rust
-fn starts_regulated_zone(node: &NodeEnum, _outlet: u8) -> bool {
+fn zone_role(node: &NodeEnum, _outlet: u8) -> ZoneRole {
     match node {
-        NodeEnum::StorageNode(n) => !n.order_through,
+        NodeEnum::StorageNode(n) => if n.order_through { ZoneRole::Continues } else { ZoneRole::Starts },
+        NodeEnum::FieldNode(_) => ZoneRole::Ends,
         NodeEnum::BlackholeNode(_) |
         NodeEnum::ConfluenceNode(_) |
         // ... every other node type, by name ...
-        NodeEnum::SurmNode(_) => false,
+        NodeEnum::SurmNode(_) => ZoneRole::Continues,
     }
 }
 ```
 
-Adding a `FieldNode` variant to `NodeEnum` stops the build here, and at
-`routing_lag`, `can_originate_orders`, `named_order_pathways`,
-`size_order_buffers` and `run_ordering_phase`, each with "pattern
-`NodeEnum::FieldNode(_)` not covered". Before this decision the build
-stopped at the last of those only.
+When the `FieldNode` variant was added to `NodeEnum`, on a branch begun
+before this decision, rebasing it onto the restructured module stopped the
+build in six places: here, and at `routing_lag`, `can_originate_orders`,
+`named_order_pathways`, `size_order_buffers` and `run_ordering_phase`, each
+with "pattern `NodeEnum::FieldNode(_)` not covered". Before this decision the
+build stopped at the last of those only.
 
 When an unregulated user gains a `ds_2` that starts a zone, clause 3 is where
-it goes: `NodeEnum::UnregulatedUserNode(_) => outlet >= 1`.
+it goes: `NodeEnum::UnregulatedUserNode(_) => if outlet >= 1 { ZoneRole::Starts }
+else { ZoneRole::Continues }`.
 
 ## Enforcement
 
