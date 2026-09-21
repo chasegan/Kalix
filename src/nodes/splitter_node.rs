@@ -28,6 +28,7 @@ pub struct SplitterNode {
     // Orders
     pub dsorders: [f64; MAX_DS_LINKS],
     pub usorders: f64,                 //The order sent upstream, set in the ordering phase
+    max_ds_1_flow: f64,                //The most ds_1 can ever receive: finite only when the table's last segment sends all additional flow down the effluent. Set in initialise().
     order_identity_limit: f64,         //Up to this ds_1 order the table diverts nothing, so the order passes through unchanged. Set in initialise().
     pub ds_2_order_buffer: FifoBuffer, //Delays effluent orders by the supply travel time, so they are diverted on the step the ordered water arrives. Sized by the ordering system from the ds_2 link's lag.
     pub ds_2_order_due: f64,           //Populated from the fifo buffer in the ordering phase
@@ -99,6 +100,21 @@ impl Node for SplitterNode {
         // node uses for its losses, and it relies on the checks above.
         self.order_translation_table = TableDiscontinuous::order_translation(&self.splitter_table);
 
+        // If the table's last segment has a 1:1 slope, everything above it goes down
+        // the effluent and ds_1 can never receive more than it does at that point. An
+        // order beyond that cannot be met by any inflow, so the ordering phase holds
+        // the ds_1 order to it (the order translation alone caps its own term, as at
+        // a loss node, but the sum of the two orders would not be). Otherwise the last
+        // segment extends and ds_1 is unbounded.
+        self.max_ds_1_flow = f64::INFINITY;
+        let n = self.splitter_table.nrows();
+        if n >= 2 {
+            let passing = |row: usize| self.splitter_table.get_value(row, 0) - self.splitter_table.get_value(row, 1);
+            if passing(n - 1) <= passing(n - 2) {
+                self.max_ds_1_flow = passing(n - 1);
+            }
+        }
+
         // Most regulated splitters are high-flow breakouts: their table diverts
         // nothing until the inflow passes some threshold well above regulated flows.
         // Up to that threshold the order translation is the identity, so find it
@@ -144,7 +160,7 @@ impl Node for SplitterNode {
         // sum of the two orders.
         // Note: order_translation_table is well-formed and non-negative by
         // construction, see `initialise()`, so cannot return negative orders
-        let ds_1_order = self.dsorders[DS_1_OUTLET as usize];
+        let ds_1_order = self.dsorders[DS_1_OUTLET as usize].min(self.max_ds_1_flow);
         let ds_2_order = self.dsorders[DS_2_OUTLET as usize];
         // Beneath order_identity_limit the table diverts nothing and the lookup would
         // return the order unchanged (or zero for a negative order, hence the max), so

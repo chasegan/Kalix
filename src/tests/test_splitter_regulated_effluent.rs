@@ -228,3 +228,24 @@ fn breakout_table_passes_small_orders_unchanged_and_raises_large_ones() {
         assert_all_close(&series(&mut model, "node.user_1.diversion"), order, "main channel diversion");
     }
 }
+
+/// Above an inflow of 200 this table sends every additional megalitre down
+/// the effluent, so the main channel can never receive more than 200. An
+/// order of 300 on ds_1 cannot be met by any inflow; ordering 300 would only
+/// send 100 down the effluent for nothing. The order is held to what can be
+/// delivered, as it is at a loss node - and an effluent order still adds.
+#[test]
+fn ds_1_order_is_held_to_what_the_table_can_pass() {
+    for (ds_2_order, expected_inflow, expected_ds_2) in [(0.0, 200.0, 0.0), (50.0, 250.0, 50.0)] {
+        let ini = ten_percent_rig(ds_2_order)
+            .replace("table = 0,    0,\n        1000, 100,", "table = 0,    0,\n        200,  0,\n        1000, 800,")
+            .replace("order = 100", "order = 300");
+        assert!(ini.contains("1000, 800,"), "the rig's table should have been replaced");
+        let mut model = load(&ini);
+        model.run().expect("simulation should run");
+
+        assert_all_close(&series(&mut model, "node.splitter_1.usflow"), expected_inflow, "splitter inflow");
+        assert_all_close(&series(&mut model, "node.splitter_1.ds_1"), 200.0, "main channel flow");
+        assert_all_close(&series(&mut model, "node.splitter_1.ds_2"), expected_ds_2, "effluent flow");
+    }
+}
