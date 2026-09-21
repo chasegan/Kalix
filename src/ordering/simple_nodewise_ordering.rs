@@ -227,6 +227,21 @@ impl SimpleNodewiseOrderingSystem {
             self.links_simple_ordering.push(new_link_item);
         }
 
+        // A confluence directs orders up two branches at most. A third regulated branch would
+        // share us_2's delay buffer and push it twice a step, so refuse it here.
+        for (node_idx, node) in nodes.iter().enumerate() {
+            if let NodeEnum::ConfluenceNode(confluence) = node {
+                let n_regulated = self.links_simple_ordering.iter()
+                    .filter(|li| li.to_node == node_idx && li.zone_idx.is_some())
+                    .count();
+                if n_regulated > 2 {
+                    return Err(format!(
+                        "Confluence '{}' has {} regulated upstream links. A confluence directs orders up two branches at most: join the others at another node upstream of it.",
+                        confluence.name, n_regulated));
+                }
+            }
+        }
+
         // Phase 2: Determine which regulated nodes actually need to be visited.
         // A node only needs ordering if it (or a downstream node reachable through
         // regulated links) is an order-generating type: storage, regulated_user, or
@@ -374,38 +389,27 @@ impl SimpleNodewiseOrderingSystem {
             // Set node context for error reporting
             set_context_node(node_idx);
 
-            // Compute order(s) for upstream links. We store them in a small buffer and propagate
-            // after the match block releases the mutable borrow on nodes[node_idx].
-            // Max incoming regulated links is 2 (confluence), so a fixed array suffices.
-            let mut upstream_orders: [(usize, u8, f64); 2] = [(0, 0, 0.0); 2];
-            let mut n_orders: usize = 0;
+            // Every link points down the file (check_execution_order), so the nodes this one
+            // sends orders to all sit before it. Splitting the slice there lets this node be
+            // borrowed while its order is written into them, however many incoming links it has.
+            let (upstream, rest) = nodes.split_at_mut(node_idx);
 
-            match &mut nodes[node_idx] {
+            // Run the node's order phase and get the order it sends upstream. Every node type
+            // but the confluence sends the same order up each of its incoming regulated links.
+            let order: f64 = match &mut rest[0] {
                 NodeEnum::StorageNode(node) => {
                     // Pre-order phase
                     node.run_order_phase(data_cache, account_manager);
-                    // Propagate orders upstream
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.us_orders);
-                        n_orders += 1;
-                    }
+                    node.us_orders
                 },
                 NodeEnum::LossNode(node) => {
                     // Pre-order phase
                     node.run_order_phase(data_cache, account_manager);
-                    // Propagate orders upstream
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.usorders);
-                        n_orders += 1;
-                    }
+                    node.usorders
                 },
                 NodeEnum::InflowNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    // Propagate orders upstream
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.usorders);
-                        n_orders += 1;
-                    }
+                    node.usorders
                 },
                 NodeEnum::ConfluenceNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
@@ -423,110 +427,66 @@ impl SimpleNodewiseOrderingSystem {
                     let link_1_order = link_1_harmony * node.total_outgoing_order;
                     let link_2_order = (1.0 - link_1_harmony) * node.total_outgoing_order;
 
-                    // Propagate orders upstream
+                    // Propagate orders upstream: a different order up each branch
                     for il in incoming {
-                        if node.us_1_link_idx == Some(il.link_idx) {
-                            upstream_orders[n_orders] = (il.from_node, il.from_outlet,
-                                node.us_1_order_buffer.push(link_1_order));
+                        let link_order = if node.us_1_link_idx == Some(il.link_idx) {
+                            node.us_1_order_buffer.push(link_1_order)
                         } else {
-                            upstream_orders[n_orders] = (il.from_node, il.from_outlet,
-                                node.us_2_order_buffer.push(link_2_order));
-                        }
-                        n_orders += 1;
+                            node.us_2_order_buffer.push(link_2_order)
+                        };
+                        upstream[il.from_node].dsorders_mut()[il.from_outlet as usize] = link_order;
                     }
+                    continue;
                 },
                 NodeEnum::OrderControlNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    // Propagate orders upstream
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.usorders);
-                        n_orders += 1;
-                    }
+                    node.usorders
                 }
                 NodeEnum::SplitterNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    // Propagate orders upstream
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.usorders);
-                        n_orders += 1;
-                    }
+                    node.usorders
                 }
                 NodeEnum::RegulatedUserNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    // Propagate orders upstream
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0] + node.order_factor * node.order_value);
-                        n_orders += 1;
-                    }
+                    node.dsorders[0] + node.order_factor * node.order_value
                 }
                 NodeEnum::BlackholeNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    // Propagate orders upstream. zero.
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, 0.0);
-                        n_orders += 1;
-                    }
+                    0.0
                 }
                 NodeEnum::GaugeNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    // Propagate orders upstream.
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
-                        n_orders += 1;
-                    }
+                    node.dsorders[0]
                 }
                 NodeEnum::UnregulatedUserNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    // Propagate orders upstream.
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
-                        n_orders += 1;
-                    }
+                    node.dsorders[0]
                 }
                 NodeEnum::Gr4jNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    // Propagate orders upstream.
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
-                        n_orders += 1;
-                    }
+                    node.dsorders[0]
                 }
                 NodeEnum::AwbmNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
-                        n_orders += 1;
-                    }
+                    node.dsorders[0]
                 }
                 NodeEnum::SurmNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
-                        n_orders += 1;
-                    }
+                    node.dsorders[0]
                 }
                 NodeEnum::RoutingNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    // Propagate orders upstream.
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
-                        n_orders += 1;
-                    }
+                    node.dsorders[0]
                 }
                 NodeEnum::SacramentoNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
-                    // Propagate orders upstream.
-                    for il in incoming {
-                        upstream_orders[n_orders] = (il.from_node, il.from_outlet, node.dsorders[0]);
-                        n_orders += 1;
-                    }
+                    node.dsorders[0]
                 }
-            }
+            };
 
-            // Propagate computed orders to upstream nodes
-            for i in 0..n_orders {
-                let (from_node, from_outlet, order) = upstream_orders[i];
-                nodes[from_node].dsorders_mut()[from_outlet as usize] = order;
+            // Propagate the order to upstream nodes
+            for il in incoming {
+                upstream[il.from_node].dsorders_mut()[il.from_outlet as usize] = order;
             }
         }
     }

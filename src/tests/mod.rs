@@ -147,6 +147,9 @@ mod test_calendar_builtins;
 #[cfg(test)]
 mod test_opportunistic_demand;
 
+// Nodes with several incoming regulated links
+mod test_ordering_inlets;
+
 // Confluence order routing (regulated = <upstream node(s)>)
 mod test_confluence_order_routing;
 
