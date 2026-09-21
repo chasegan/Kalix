@@ -78,6 +78,10 @@ impl SimpleNodewiseOrderingSystem {
         // single name routes every order up that branch.
         self.resolve_confluence_regulated_pathways(nodes, links, incoming_links)?;
 
+        // The travel time to each node: that of its longest regulated incoming link, built up
+        // as the links are scanned (ordering.md, "Travel Times").
+        let mut node_travel_times: Vec<f64> = vec![0.0; nodes.len()];
+
         // Phase 1: Build the links_simple_ordering vector and initialize nodes.
         // This is identical to SimpleOrderingSystem::initialize().
         for idx in 0..links.len() {
@@ -142,12 +146,22 @@ impl SimpleNodewiseOrderingSystem {
 
             // Initialize node ordering aspects
             if new_link_item.zone_idx.is_some() {
+                // A node is sized from its longest regulated incoming link, not from whichever
+                // one is defined last: the link leaving it takes the longest lag (above), and a
+                // node timed from a shorter branch would act before the water from the longer
+                // one arrives. Each link that lands re-sizes the node from the longest so far,
+                // so the last re-size stands whatever order the links are defined in. The
+                // confluence is the exception: it keeps a lag per branch.
+                let travel_time = {
+                    let longest = &mut node_travel_times[new_link_item.to_node];
+                    *longest = longest.max(new_link_item.lag);
+                    longest.round() as usize
+                };
                 match &mut nodes[new_link_item.to_node] {
                     NodeEnum::StorageNode(node) => {
-                        let int_lag = new_link_item.lag.round() as usize;
                         if node.order_through {
                             // Set order buffers to delay releases.
-                            node.ds_order_buffers = std::array::from_fn(|_| FifoBuffer::new(int_lag));
+                            node.ds_order_buffers = std::array::from_fn(|_| FifoBuffer::new(travel_time));
                             // Probably not necessary:
                             node.target_level_order_buffer = FifoBuffer::new(0);
                         } else {
@@ -158,7 +172,7 @@ impl SimpleNodewiseOrderingSystem {
                             // with ordering to meet target level.
                             
                             if node.has_target_level {
-                                node.target_level_order_buffer = FifoBuffer::new(int_lag);
+                                node.target_level_order_buffer = FifoBuffer::new(travel_time);
                             } else {
                                 // Probably not necessary:
                                 node.target_level_order_buffer = FifoBuffer::new(0);
@@ -166,18 +180,11 @@ impl SimpleNodewiseOrderingSystem {
                         }
                     },
                     NodeEnum::RegulatedUserNode(node) => {
-                        let int_lag = new_link_item.lag.round() as usize;
-                        if int_lag > node.order_travel_time {
-                            // TODO: why do I have the above clause? I cant remember? If you remember, make a note.
-                            //  It might be to do with making sure I pick up the longest travel time in which
-                            //  case we probably need to use the same approach for all other node types too.
-                            node.order_travel_time = int_lag;
-                            node.order_buffer = FifoBuffer::new(int_lag);
-                        }
+                        node.order_travel_time = travel_time;
+                        node.order_buffer = FifoBuffer::new(travel_time);
                     }
                     NodeEnum::OrderControlNode(node) => {
-                        let int_lag = new_link_item.lag.round() as usize;
-                        node.sent_order_buffer = FifoBuffer::new(int_lag);
+                        node.sent_order_buffer = FifoBuffer::new(travel_time);
                     }
                     NodeEnum::ConfluenceNode(node) => {
                         let int_lag = new_link_item.lag.round() as usize;

@@ -89,3 +89,32 @@ fn test_two_regulated_links_into_a_confluence_still_runs() {
     let mut model = run(&ini).expect("two regulated branches is the supported case");
     assert_eq!(series(&mut model, "node.dam_b.ds_1_order")[0], 2.5);
 }
+
+/// The junction as an order-through weir, or as an order control.
+const WEIR: &str = "type = storage\ninitial_volume = 5000\norder_through = true\ndimensions = 0,  0,     0,  0,\n             10, 12000, 10, 0,\n             11, 12100, 10, 1000,";
+
+#[test]
+fn test_storage_delay_does_not_depend_on_link_definition_order() {
+    // An order-through weir delays its release by the travel time from the
+    // supply, so that it releases as the ordered water arrives. With a lag-1
+    // and a lag-3 branch that is 3 steps, the longest, as it is for the link
+    // leaving the weir and for the user below. The result is the same
+    // whichever order the branches are defined in.
+    for branches in [[("a", 1), ("b", 3)], [("b", 3), ("a", 1)]] {
+        let ini = rig(&branches, WEIR).replace("[outputs]", "[outputs]\nnode.junction.ds_1_order_due");
+        let mut model = run(&ini).expect("model should run");
+        assert_eq!(series(&mut model, "node.junction.ds_1_order_due")[..5], [0.0, 0.0, 0.0, 5.0, 5.0],
+                   "branches defined {:?}", branches);
+        assert_eq!(series(&mut model, "node.user_1.order_due")[..5], [0.0, 0.0, 0.0, 5.0, 5.0]);
+    }
+}
+
+#[test]
+fn test_order_control_delay_does_not_depend_on_link_definition_order() {
+    for branches in [[("a", 1), ("b", 3)], [("b", 3), ("a", 1)]] {
+        let ini = rig(&branches, "type = order_control").replace("[outputs]", "[outputs]\nnode.junction.order_due");
+        let mut model = run(&ini).expect("model should run");
+        assert_eq!(series(&mut model, "node.junction.order_due")[..5], [0.0, 0.0, 0.0, 5.0, 5.0],
+                   "branches defined {:?}", branches);
+    }
+}
