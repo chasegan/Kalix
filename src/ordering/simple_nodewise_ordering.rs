@@ -1,19 +1,33 @@
 // About the ordering system
 // =========================================
-// This system iterates over nodes in reverse definition order (highest index to lowest). Since
-// check_execution_order() enforces from_node < to_node for all links, reverse node order guarantees
-// that downstream nodes are always processed before upstream nodes.
+// Orders travel upstream, from the nodes that want water to the storages that supply it. A
+// supply storage starts a regulated zone, which runs downstream through every node below it.
+// Every order in a zone is timed from its supply: an order placed this step reaches the supply
+// within this step's order phase, the supply releases this step, and a node whose travel time
+// from the supply is T steps acts on the order T steps later, by way of a delay buffer.
 //
-// The initialize() method - zone propagation and lag computation depend on forward link iteration.
+// initialize() works that out once, in four steps:
+//   1. resolve the `regulated =` pathways that confluences name;
+//   2. the topology - which links are regulated, and the travel time down each
+//      (regulated_topology, which changes nothing);
+//   3. size every node's delay buffers from its travel time (size_order_buffers);
+//   4. list the nodes the order phase visits (build_visit_list).
+// What the ordering system needs to know about each node type is stated in this file, in
+// matches that name every type: does an outlet start a zone, does the node add routing lag,
+// can it originate an order, does it name its order pathways, which delay buffers does it
+// keep, and what order does it send upstream. None of those has a wildcard arm, so a new node
+// type does not compile until each question has been answered for it. (The only single-type
+// patterns left pick out confluences, to resolve their own `regulated =` property.)
 //
-// The run_ordering_phase() - iterates nodes.
-// - Only regulated nodes are visited (pre-filtered during initialize)
+// run_ordering_phase() runs every step. It visits nodes in reverse definition order (highest
+// index to lowest). Since check_execution_order() enforces from_node < to_node for all links,
+// that visits downstream nodes before upstream ones.
+// - Only nodes that need it are visited (decided in initialize)
 // - Incoming regulated links are stored in a flat CSR-style layout for cache locality
 
 use crate::data_management::data_cache::DataCache;
 use crate::misc::simulation_context::set_context_node;
 use crate::nodes::{Link, Node, NodeEnum};
-use crate::nodes::splitter_node::DS_2_OUTLET;
 use crate::numerical::fifo_buffer::FifoBuffer;
 
 /// Pre-computed information about an incoming regulated link to a node.
@@ -42,7 +56,6 @@ pub struct SimpleNodewiseOrderingSystem {
     /// One entry per regulated node (in reverse definition order), pointing into flat_incoming_links.
     regulated_nodes: Vec<RegulatedNodeEntry>,
 
-    regulated_zone_counter: usize,
     model_has_ordering: bool,
 }
 
@@ -52,7 +65,6 @@ impl SimpleNodewiseOrderingSystem {
             links_simple_ordering: Vec::new(),
             flat_incoming_links: Vec::new(),
             regulated_nodes: Vec::new(),
-            regulated_zone_counter: 0,
             model_has_ordering: false,
         }
     }
@@ -68,229 +80,127 @@ impl SimpleNodewiseOrderingSystem {
         //         incoming_links[node_idx] = vec of indices for link coming into node idx. This
         //         is handy for navigating up the network.
 
-        // Start clean
-        self.links_simple_ordering.clear();
-        self.regulated_zone_counter = 0;
-
-        // Phase 0: resolve confluence `regulated =` declarations. Each named
+        // Step 1: resolve confluence `regulated =` declarations. Each named
         // node must be an upstream neighbour; the first name becomes us_1
         // (so a two-name harmony_fraction is direction-unambiguous), a
         // single name routes every order up that branch.
         self.resolve_confluence_regulated_pathways(nodes, links, incoming_links)?;
 
-        // The travel time to each node: that of its longest regulated incoming link, built up
-        // as the links are scanned (ordering.md, "Travel Times").
-        let mut node_travel_times: Vec<f64> = vec![0.0; nodes.len()];
+        // Step 2: the topology. Which links are regulated, and the travel time down each
+        // from its supply. Reads the nodes and changes nothing.
+        self.links_simple_ordering = regulated_topology(nodes, links, incoming_links)?;
 
-        // Phase 1: Build the links_simple_ordering vector and initialize nodes.
-        // This is identical to SimpleOrderingSystem::initialize().
-        for idx in 0..links.len() {
+        // Step 3: size every node's order buffers from its travel time.
+        self.size_order_buffers(nodes)?;
 
-            // Create a new link info item
-            let mut new_link_item = LinkInfo {
-                link_idx: idx,
-                from_node: links[idx].from_node,
-                from_outlet: links[idx].from_outlet,
-                to_node: links[idx].to_node,
-                to_inlet: links[idx].to_inlet,
-                zone_idx: None,
-                lag: 0f64,
-            };
+        // Step 4: the list of nodes the order phase visits, with their incoming regulated links.
+        self.build_visit_list(nodes);
 
-            // Determine if this is a new zone, or continuation of upstream zone.
-            // Basically if it is a storage without 'order through', then it is a new zone.
-            let is_new_zone = match &nodes[new_link_item.from_node] {
-                NodeEnum::StorageNode(n) => { !n.order_through }
-                _ => { false }
-            };
-            if is_new_zone {
-                // This is a new zone.
-                new_link_item.zone_idx = Some(self.regulated_zone_counter);
-                self.regulated_zone_counter += 1;
-            } else {
-                // Zone info based on upstream link.
-                // If the upstream node has multiple incoming links, we look at the one with the longest lag.
-                //
-                // A confluence that names its `regulated` pathway(s) sends orders up those
-                // branches alone, so they alone set the travel time below it: water ordered
-                // down a lag-1 branch arrives after 1 step however long the other branch is.
-                // (Phase 0 has pinned the named links.) If no named branch is regulated there
-                // is no order pathway to time, and the longest regulated branch stands as before.
-                let named_pathways: [Option<usize>; 2] = match &nodes[new_link_item.from_node] {
-                    NodeEnum::ConfluenceNode(n) if !n.regulated_upstream.is_empty() => [n.us_1_link_idx, n.us_2_link_idx],
-                    _ => [None, None],
-                };
-                let a_named_pathway_is_regulated = named_pathways.iter().flatten()
-                    .any(|&l| self.links_simple_ordering[l].zone_idx.is_some());
-                for &us_link_idx in &incoming_links[new_link_item.from_node] {
-                    if a_named_pathway_is_regulated && !named_pathways.contains(&Some(us_link_idx)) {
-                        continue;
-                    }
-                    let us_zone_idx = self.links_simple_ordering[us_link_idx].zone_idx;
+        // Do we ever need to run the ordering phase?
+        self.model_has_ordering = self.links_simple_ordering.iter().any(|li| li.regulated);
 
-                    // Only look at upstream links that are in regulated zones
-                    if us_zone_idx.is_some() {
-                        let us_link_lag = self.links_simple_ordering[us_link_idx].lag;
-                        if us_link_lag >= new_link_item.lag {
-                            new_link_item.lag = us_link_lag;
-                            new_link_item.zone_idx = us_zone_idx;
-                        }
-                    }
-                }
+        Ok(())
+    }
+
+    /// Step 3 of initialize. A node in a regulated zone delays what it does with an order by
+    /// its travel time from the supply. That is the travel time of its longest regulated
+    /// incoming link (ordering.md, "Travel Times"), worked out once here, so that every node
+    /// type is timed by one rule and none depends on the order its links are defined in. It
+    /// is rounded to whole steps once, from the accumulated travel time. A node with no
+    /// regulated incoming link gets zero-length buffers, which pass orders straight through.
+    ///
+    /// The match names every node type, with no wildcard: a new node type does not compile
+    /// until it says here whether it keeps a delay buffer.
+    fn size_order_buffers(&self, nodes: &mut Vec<NodeEnum>) -> Result<(), String> {
+        // The travel time to each node, in whole steps: that of its longest regulated
+        // incoming link, and zero if it has none. (Rounding keeps order, so the longest
+        // rounded travel time is the rounded longest travel time.)
+        let mut travel_times: Vec<usize> = vec![0; nodes.len()];
+        for li in &self.links_simple_ordering {
+            if li.regulated {
+                let t = li.travel_time.round() as usize;
+                travel_times[li.to_node] = travel_times[li.to_node].max(t);
             }
+        }
 
-            // Increase the lag to account for routing in the upstream node if applicable
-            match &nodes[new_link_item.from_node] {
-                NodeEnum::RoutingNode(routing_node) => {
-                    let node_lag = routing_node.estimate_total_lag(routing_node.typical_regulated_flow);
-                    new_link_item.lag += node_lag;
-                }
-                _ => {}
-            }
+        for node_idx in 0..nodes.len() {
+            let travel_time = travel_times[node_idx];
 
-            // A splitter diverts effluent (ds_2) orders on the step the ordered water
-            // arrives at the splitter. To do this, it remembers the ds_2 orders using a delay
-            // buffer, matching the travel time from the supply storage. Sizing from the outgoing
-            // link rather than from each incoming link keeps the delay independent of which
-            // incoming link is defined first.
-            if new_link_item.zone_idx.is_some() && new_link_item.from_outlet == DS_2_OUTLET {
-                if let NodeEnum::SplitterNode(node) = &mut nodes[new_link_item.from_node] {
-                    node.ds_2_order_buffer = FifoBuffer::new(new_link_item.lag.round() as usize);
-                }
-            }
-
-            // Initialize node ordering aspects
-            if new_link_item.zone_idx.is_some() {
-                // A node is sized from its longest regulated incoming link, not from whichever
-                // one is defined last: the link leaving it takes the longest lag (above), and a
-                // node timed from a shorter branch would act before the water from the longer
-                // one arrives. Each link that lands re-sizes the node from the longest so far,
-                // so the last re-size stands whatever order the links are defined in. The
-                // confluence is the exception: it keeps a lag per branch.
-                let travel_time = {
-                    let longest = &mut node_travel_times[new_link_item.to_node];
-                    *longest = longest.max(new_link_item.lag);
-                    longest.round() as usize
-                };
-                match &mut nodes[new_link_item.to_node] {
-                    NodeEnum::StorageNode(node) => {
-                        if node.order_through {
-                            // Set order buffers to delay releases.
-                            node.ds_order_buffers = std::array::from_fn(|_| FifoBuffer::new(travel_time));
-                            // Probably not necessary:
-                            node.target_level_order_buffer = FifoBuffer::new(0);
+            match &mut nodes[node_idx] {
+                NodeEnum::StorageNode(node) => {
+                    if node.order_through {
+                        // Delay releases, so that they are made as the ordered water arrives
+                        node.ds_order_buffers = std::array::from_fn(|_| FifoBuffer::new(travel_time));
+                        node.target_level_order_buffer = FifoBuffer::new(0);
+                    } else {
+                        // A supply releases immediately: zero-length ds_x_order buffers
+                        node.ds_order_buffers = std::array::from_fn(|_| FifoBuffer::new(0));
+                        // The buffer that remembers upstream orders placed to meet a target
+                        // level, which are en route for the travel time
+                        node.target_level_order_buffer = if node.has_target_level {
+                            FifoBuffer::new(travel_time)
                         } else {
-                            // If order_through == false, then we are supplying immediately. Do
-                            // not delay releases; set ds_x_order buffers to zero length.
-                            node.ds_order_buffers = std::array::from_fn(|_| FifoBuffer::new(0));
-                            // Initialize the buffer that remembers upstream orders associated
-                            // with ordering to meet target level.
-                            
-                            if node.has_target_level {
-                                node.target_level_order_buffer = FifoBuffer::new(travel_time);
-                            } else {
-                                // Probably not necessary:
-                                node.target_level_order_buffer = FifoBuffer::new(0);
-                            }
-                        }
-                    },
-                    NodeEnum::RegulatedUserNode(node) => {
-                        node.order_travel_time = travel_time;
-                        node.order_buffer = FifoBuffer::new(travel_time);
+                            FifoBuffer::new(0)
+                        };
                     }
-                    NodeEnum::OrderControlNode(node) => {
-                        node.sent_order_buffer = FifoBuffer::new(travel_time);
-                    }
-                    NodeEnum::ConfluenceNode(node) => {
-                        let int_lag = new_link_item.lag.round() as usize;
-                        if !node.regulated_upstream.is_empty() {
-                            // Named pathways (resolved in Phase 0): record the
-                            // lag against its pinned slot. With one name there
-                            // is nothing to synchronise, so buffers stay
-                            // zero-length (orders propagate immediately); with
-                            // two, rebuild the lag-differential buffers as each
-                            // lag lands (idempotent — the last rebuild, with
-                            // both lags known, stands).
-                            if node.us_1_link_idx == Some(new_link_item.link_idx) {
-                                node.us_1_lag = int_lag;
-                            } else if node.us_2_link_idx == Some(new_link_item.link_idx) {
-                                node.us_2_lag = int_lag;
-                            }
-                            if node.us_2_link_idx.is_some() {
-                                if node.us_1_lag < node.us_2_lag {
-                                    node.us_1_order_buffer = FifoBuffer::new(node.us_2_lag - node.us_1_lag);
-                                    node.us_2_order_buffer = FifoBuffer::new(0);
-                                } else {
-                                    node.us_2_order_buffer = FifoBuffer::new(node.us_1_lag - node.us_2_lag);
-                                    node.us_1_order_buffer = FifoBuffer::new(0);
-                                }
-                            }
-                        } else if node.us_1_link_idx.is_none() {
-                            node.us_1_lag = int_lag;
-                            node.us_1_link_idx = Some(new_link_item.link_idx);
-                        } else {
-                            node.us_2_lag = int_lag;
-                            if node.us_1_lag < node.us_2_lag {
-                                let lag_differential = node.us_2_lag - node.us_1_lag;
-                                node.us_1_order_buffer = FifoBuffer::new(lag_differential);
-                                node.us_2_order_buffer = FifoBuffer::new(0);
-                            } else {
-                                let lag_differential = node.us_1_lag - node.us_2_lag;
-                                node.us_2_order_buffer = FifoBuffer::new(lag_differential);
-                                node.us_1_order_buffer = FifoBuffer::new(0);
-                            }
-                        }
-                    }
-                    _ => {}
                 }
-            }
-
-            // Add the new_link_item to the vec
-            self.links_simple_ordering.push(new_link_item);
-        }
-
-        // A confluence directs orders up two branches at most. A third regulated branch would
-        // share us_2's delay buffer and push it twice a step, so refuse it here.
-        for (node_idx, node) in nodes.iter().enumerate() {
-            if let NodeEnum::ConfluenceNode(confluence) = node {
-                let n_regulated = self.links_simple_ordering.iter()
-                    .filter(|li| li.to_node == node_idx && li.zone_idx.is_some())
-                    .count();
-                if n_regulated > 2 {
-                    return Err(format!(
-                        "Confluence '{}' has {} regulated upstream links. A confluence directs orders up two branches at most: join the others at another node upstream of it.",
-                        confluence.name, n_regulated));
+                NodeEnum::RegulatedUserNode(node) => {
+                    node.order_travel_time = travel_time;
+                    node.order_buffer = FifoBuffer::new(travel_time);
                 }
+                NodeEnum::OrderControlNode(node) => {
+                    node.sent_order_buffer = FifoBuffer::new(travel_time);
+                }
+                NodeEnum::SplitterNode(node) => {
+                    // A splitter diverts effluent (ds_2) orders on the step the ordered water
+                    // arrives at the splitter, so it holds them for its own travel time.
+                    node.ds_2_order_buffer = FifoBuffer::new(travel_time);
+                }
+                NodeEnum::ConfluenceNode(node) => {
+                    // The one node that keeps a travel time per branch, not the longest: its
+                    // regulated incoming links in definition order, as (link index, travel
+                    // time in whole steps)
+                    let regulated_inlets: Vec<(usize, usize)> = self.links_simple_ordering.iter()
+                        .filter(|li| li.to_node == node_idx && li.regulated)
+                        .map(|li| (li.link_idx, li.travel_time.round() as usize))
+                        .collect();
+                    size_confluence_order_buffers(node, &regulated_inlets)?;
+                }
+                // These keep no delay buffer: they act on an order, or pass it on, within the
+                // order phase of the step it is placed.
+                NodeEnum::BlackholeNode(_) |
+                NodeEnum::GaugeNode(_) |
+                NodeEnum::LossNode(_) |
+                NodeEnum::UnregulatedUserNode(_) |
+                NodeEnum::Gr4jNode(_) |
+                NodeEnum::InflowNode(_) |
+                NodeEnum::RoutingNode(_) |
+                NodeEnum::SacramentoNode(_) |
+                NodeEnum::AwbmNode(_) |
+                NodeEnum::SurmNode(_) => {}
             }
         }
+        Ok(())
+    }
 
-        // Phase 2: Determine which regulated nodes actually need to be visited.
-        // A node only needs ordering if it (or a downstream node reachable through
-        // regulated links) is an order-generating type: storage, regulated_user, or
-        // order_control. Nodes below the last order-generating node on any branch
-        // will only ever see zero dsorders, so visiting them is wasted work.
-        let mut needed = vec![false; nodes.len()];
-        for (i, node) in nodes.iter().enumerate() {
-            match node {
-                NodeEnum::StorageNode(_) |
-                NodeEnum::RegulatedUserNode(_) |
-                NodeEnum::OrderControlNode(_) => needed[i] = true,
-                _ => {}
-            }
-        }
+    /// Step 4 of initialize. The order phase visits only the nodes that need it, in reverse
+    /// definition order, each with its incoming regulated links in a flat CSR-style layout.
+    fn build_visit_list(&mut self, nodes: &Vec<NodeEnum>) {
+        // A node needs visiting if it, or a node below it on regulated links, can originate
+        // an order. Nodes below the last such node on any branch only ever see zero dsorders,
+        // so visiting them is wasted work.
+        let mut needed: Vec<bool> = nodes.iter().map(can_originate_orders).collect();
         // Propagate backward through regulated links: if to_node is needed, from_node is too.
         // Reverse iteration ensures transitivity (links are ordered with from_node < to_node).
         for li in self.links_simple_ordering.iter().rev() {
-            if li.zone_idx.is_some() && needed[li.to_node] {
+            if li.regulated && needed[li.to_node] {
                 needed[li.from_node] = true;
             }
         }
 
-        // Phase 3: Build CSR-style regulated node list and flat incoming links vec.
-        // Only include nodes that are both regulated and needed.
         let mut per_node_links: Vec<Vec<IncomingRegulatedLink>> = vec![Vec::new(); nodes.len()];
         for li in &self.links_simple_ordering {
-            if li.zone_idx.is_some() && needed[li.to_node] {
+            if li.regulated && needed[li.to_node] {
                 per_node_links[li.to_node].push(IncomingRegulatedLink {
                     link_idx: li.link_idx,
                     from_node: li.from_node,
@@ -299,15 +209,13 @@ impl SimpleNodewiseOrderingSystem {
             }
         }
 
-        // Supply storages at the top of the network start a regulated zone but have no incoming
-        // regulated link. They have no order to send upstream, but their order phase still has
-        // to run, so that their ds_orders_due buffers are updated.
+        // A supply at the top of the network starts a regulated zone but has no incoming
+        // regulated link. It has no order to send upstream, but its order phase still has to
+        // run, so that its ds_orders_due buffers are updated.
         let mut supplies: Vec<bool> = vec![false; nodes.len()];
         for li in &self.links_simple_ordering {
-            if li.zone_idx.is_some() {
-                if let NodeEnum::StorageNode(_) = &nodes[li.from_node] {
-                    supplies[li.from_node] = true;
-                }
+            if li.regulated && starts_regulated_zone(&nodes[li.from_node], li.from_outlet) {
+                supplies[li.from_node] = true;
             }
         }
 
@@ -329,16 +237,11 @@ impl SimpleNodewiseOrderingSystem {
                 links_end: end,
             });
         }
-
-        // Do we ever need to run the ordering phase?
-        self.model_has_ordering = self.regulated_zone_counter > 0;
-
-        Ok(())
     }
 
-    /// Phase 0 of initialize: resolve each confluence's `regulated =` names
+    /// Step 1 of initialize: resolve each confluence's `regulated =` names
     /// to its incoming links, pinning us_1 (and us_2, when two are named) so
-    /// the Phase 1 link scan records lags against the right slots. Structural
+    /// the later steps time the right branches. Structural
     /// validation lives here — every name must be an upstream neighbour of
     /// its confluence — because this is the first point where the links are
     /// known. Whether a named branch is actually regulated is deliberately
@@ -526,13 +429,222 @@ impl SimpleNodewiseOrderingSystem {
     }
 }
 
+/// What the ordering system knows about one link.
 #[derive(Clone, Default, Debug)]
 struct LinkInfo {
     link_idx: usize,
-    zone_idx: Option<usize>,
-    lag: f64,
+    /// In a regulated zone: orders travel up this link
+    regulated: bool,
+    /// The estimated time, in steps, for water to travel from the zone's supply to the bottom
+    /// of this link. Accumulated as a real number down the network; whoever uses it rounds.
+    travel_time: f64,
     from_node: usize,
     from_outlet: u8,
     to_node: usize,
-    to_inlet: u8,
+}
+
+/// Does a link leaving this outlet start a regulated zone? A storage that does not order
+/// through supplies the reach below it: orders stop there, and travel time is counted from it.
+/// Every node type is named, with no wildcard, so a new one does not compile until it answers.
+fn starts_regulated_zone(node: &NodeEnum, _outlet: u8) -> bool {
+    match node {
+        NodeEnum::StorageNode(n) => !n.order_through,
+        NodeEnum::BlackholeNode(_) |
+        NodeEnum::ConfluenceNode(_) |
+        NodeEnum::GaugeNode(_) |
+        NodeEnum::LossNode(_) |
+        NodeEnum::SplitterNode(_) |
+        NodeEnum::UnregulatedUserNode(_) |
+        NodeEnum::RegulatedUserNode(_) |
+        NodeEnum::Gr4jNode(_) |
+        NodeEnum::InflowNode(_) |
+        NodeEnum::RoutingNode(_) |
+        NodeEnum::SacramentoNode(_) |
+        NodeEnum::OrderControlNode(_) |
+        NodeEnum::AwbmNode(_) |
+        NodeEnum::SurmNode(_) => false,
+    }
+}
+
+/// The time, in steps, that water takes to pass through this node: the routing node's
+/// estimate of its own lag at its typical regulated flow, and nothing for every other type.
+fn routing_lag(node: &NodeEnum) -> f64 {
+    match node {
+        NodeEnum::RoutingNode(n) => n.estimate_total_lag(n.typical_regulated_flow),
+        NodeEnum::BlackholeNode(_) |
+        NodeEnum::ConfluenceNode(_) |
+        NodeEnum::GaugeNode(_) |
+        NodeEnum::LossNode(_) |
+        NodeEnum::SplitterNode(_) |
+        NodeEnum::UnregulatedUserNode(_) |
+        NodeEnum::RegulatedUserNode(_) |
+        NodeEnum::Gr4jNode(_) |
+        NodeEnum::InflowNode(_) |
+        NodeEnum::SacramentoNode(_) |
+        NodeEnum::StorageNode(_) |
+        NodeEnum::OrderControlNode(_) |
+        NodeEnum::AwbmNode(_) |
+        NodeEnum::SurmNode(_) => 0.0,
+    }
+}
+
+/// Can this node originate an order, as opposed to passing on or adjusting one that reaches
+/// it from below? A storage can (to meet a target level), and so can a regulated user and an
+/// order control (a minimum order). These seed the list of nodes the order phase visits.
+fn can_originate_orders(node: &NodeEnum) -> bool {
+    match node {
+        NodeEnum::StorageNode(_) |
+        NodeEnum::RegulatedUserNode(_) |
+        NodeEnum::OrderControlNode(_) => true,
+        NodeEnum::BlackholeNode(_) |
+        NodeEnum::ConfluenceNode(_) |
+        NodeEnum::GaugeNode(_) |
+        NodeEnum::LossNode(_) |
+        NodeEnum::SplitterNode(_) |
+        NodeEnum::UnregulatedUserNode(_) |
+        NodeEnum::Gr4jNode(_) |
+        NodeEnum::InflowNode(_) |
+        NodeEnum::RoutingNode(_) |
+        NodeEnum::SacramentoNode(_) |
+        NodeEnum::AwbmNode(_) |
+        NodeEnum::SurmNode(_) => false,
+    }
+}
+
+/// The incoming links that this node names as its order pathways, if it names any. Only a
+/// confluence can (`regulated =`, pinned to links in step 1); every other node type sends its
+/// order up all of its regulated incoming links, and names none.
+fn named_order_pathways(node: &NodeEnum) -> [Option<usize>; 2] {
+    match node {
+        NodeEnum::ConfluenceNode(n) => {
+            if n.regulated_upstream.is_empty() { [None, None] } else { [n.us_1_link_idx, n.us_2_link_idx] }
+        }
+        NodeEnum::BlackholeNode(_) |
+        NodeEnum::GaugeNode(_) |
+        NodeEnum::LossNode(_) |
+        NodeEnum::SplitterNode(_) |
+        NodeEnum::UnregulatedUserNode(_) |
+        NodeEnum::RegulatedUserNode(_) |
+        NodeEnum::Gr4jNode(_) |
+        NodeEnum::InflowNode(_) |
+        NodeEnum::RoutingNode(_) |
+        NodeEnum::SacramentoNode(_) |
+        NodeEnum::StorageNode(_) |
+        NodeEnum::OrderControlNode(_) |
+        NodeEnum::AwbmNode(_) |
+        NodeEnum::SurmNode(_) => [None, None],
+    }
+}
+
+/// Step 2 of initialize: which links are regulated, and the travel time down each. Pure: it
+/// reads the nodes and links and returns one LinkInfo per link, in link order.
+///
+/// A link is regulated if it leaves an outlet that starts a regulated zone, or if it leaves a
+/// node that a regulated link comes into. Its travel time is that of the longest regulated
+/// link into its upstream node, plus the routing lag of that node.
+fn regulated_topology(nodes: &Vec<NodeEnum>,
+                      links: &Vec<Link>,
+                      incoming_links: &Vec<Vec<usize>>) -> Result<Vec<LinkInfo>, String> {
+    let mut link_infos: Vec<LinkInfo> = Vec::with_capacity(links.len());
+    for idx in 0..links.len() {
+        let from_node = &nodes[links[idx].from_node];
+        let mut link_info = LinkInfo {
+            link_idx: idx,
+            regulated: false,
+            travel_time: 0.0,
+            from_node: links[idx].from_node,
+            from_outlet: links[idx].from_outlet,
+            to_node: links[idx].to_node,
+        };
+
+        if starts_regulated_zone(from_node, link_info.from_outlet) {
+            // The top of a zone: travel time is counted from here
+            link_info.regulated = true;
+        } else {
+            // Continue the zone of the links coming into the upstream node, taking the
+            // longest travel time among them.
+            //
+            // A confluence that names its `regulated` pathway(s) sends orders up those
+            // branches alone, so they alone set the travel time below it: water ordered
+            // down a 1-step branch arrives after 1 step however long the other branch is.
+            // (Step 1 has pinned the named links.) If no named branch is regulated there
+            // is no order pathway to time, and the longest regulated branch stands.
+            let named_pathways = named_order_pathways(from_node);
+            // Every link into a node is scanned before any link out of it, because links are
+            // created in definition order and every link points down the file
+            // (check_execution_order). Say so, rather than index out of bounds, if that changes.
+            if let Some(&unscanned) = incoming_links[link_info.from_node].iter().find(|&&l| l >= idx) {
+                return Err(format!(
+                    "Ordering system: link {} into node '{}' comes after link {} out of it. Links must be in upstream-first order.",
+                    unscanned, from_node.get_name(), idx));
+            }
+            let a_named_pathway_is_regulated = named_pathways.iter().flatten()
+                .any(|&l| link_infos[l].regulated);
+            for &us_link_idx in &incoming_links[link_info.from_node] {
+                if a_named_pathway_is_regulated && !named_pathways.contains(&Some(us_link_idx)) {
+                    continue;
+                }
+                let us_link = &link_infos[us_link_idx];
+                if us_link.regulated && us_link.travel_time >= link_info.travel_time {
+                    link_info.travel_time = us_link.travel_time;
+                    link_info.regulated = true;
+                }
+            }
+        }
+
+        // Water takes time to pass through the upstream node, if it routes
+        link_info.travel_time += routing_lag(from_node);
+
+        link_infos.push(link_info);
+    }
+    Ok(link_infos)
+}
+
+/// Size a confluence's two order buffers. A confluence directs orders up two branches, and
+/// where their travel times differ it holds back the orders for the shorter branch by the
+/// difference, so that water from both arrives together. `regulated_inlets` is the
+/// confluence's regulated incoming links in definition order, as (link index, travel time in
+/// whole steps).
+fn size_confluence_order_buffers(node: &mut crate::nodes::confluence_node::ConfluenceNode,
+                                 regulated_inlets: &[(usize, usize)]) -> Result<(), String> {
+    // A third regulated branch would share us_2's delay buffer and push it twice a step
+    if regulated_inlets.len() > 2 {
+        return Err(format!(
+            "Confluence '{}' has {} regulated upstream links. A confluence directs orders up two branches at most: join the others at another node upstream of it.",
+            node.name, regulated_inlets.len()));
+    }
+
+    if !node.regulated_upstream.is_empty() {
+        // Named pathways (pinned in step 1): record each one's travel time against its slot.
+        // A named branch that is not regulated keeps a travel time of zero.
+        for &(link_idx, travel_time) in regulated_inlets {
+            if node.us_1_link_idx == Some(link_idx) {
+                node.us_1_lag = travel_time;
+            } else if node.us_2_link_idx == Some(link_idx) {
+                node.us_2_lag = travel_time;
+            }
+        }
+        // With one name there is nothing to synchronise, so the buffers stay zero-length
+        // (orders propagate immediately). With two, delay the shorter branch.
+        if node.us_2_link_idx.is_none() {
+            return Ok(());
+        }
+    } else {
+        // Legacy link-order mode: the first regulated link defined is us_1, the second us_2.
+        // With one regulated branch there is nothing to synchronise.
+        let Some(&(us_1_link_idx, us_1_travel_time)) = regulated_inlets.first() else { return Ok(()) };
+        node.us_1_link_idx = Some(us_1_link_idx);
+        node.us_1_lag = us_1_travel_time;
+        let Some(&(_, us_2_travel_time)) = regulated_inlets.get(1) else { return Ok(()) };
+        node.us_2_lag = us_2_travel_time;
+    }
+
+    if node.us_1_lag < node.us_2_lag {
+        node.us_1_order_buffer = FifoBuffer::new(node.us_2_lag - node.us_1_lag);
+        node.us_2_order_buffer = FifoBuffer::new(0);
+    } else {
+        node.us_2_order_buffer = FifoBuffer::new(node.us_1_lag - node.us_2_lag);
+        node.us_1_order_buffer = FifoBuffer::new(0);
+    }
+    Ok(())
 }
