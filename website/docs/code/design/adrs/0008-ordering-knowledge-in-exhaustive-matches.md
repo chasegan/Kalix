@@ -4,7 +4,7 @@ title: "ADR-0008: State ordering knowledge per node type, in exhaustive matches"
 
 # ADR-0008: State ordering knowledge per node type, in exhaustive matches
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-09-21
 - **Deciders**: Chas Egan (@chasegan)
 - **Tags**: engine
