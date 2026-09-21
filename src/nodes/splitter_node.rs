@@ -110,8 +110,13 @@ impl Node for SplitterNode {
         // Determine effluent flow. Use interpolate_or_extrapolate so that inflows
         // beyond the table domain extend the last segment rather than returning NaN
         // (NaN would slip through .min, sending the entire flow down ds_2). The
-        // .max(0) guards the lower bound and the .min(usflow) guards over-extraction.
-        self.ds_2_flow = self.splitter_table.interpolate_or_extrapolate(0, 1, self.usflow).max(0f64).min(self.usflow);
+        // .min(usflow) guards over-extraction, and max(effluent_order) serves a dual
+        // purpose ensuring that ds_2_flow >= 0.
+        // It is a deliberate design decision that effluent orders (ds_2 orders) get
+        // priority over main channel orders (ds_1 orders) in line with the
+        // first-in-best-dressed principal followed elsewhere.
+        let effluent_order = self.dsorders[1];
+        self.ds_2_flow = self.splitter_table.interpolate_or_extrapolate(0, 1, self.usflow).max(effluent_order).min(self.usflow);
         self.ds_1_flow = self.usflow - self.ds_2_flow;
         if self.ds_1_flow < 0f64 {
             panic!("Negative ds_1 flow at '{}' when usflow={}, ds_1={}", self.name, self.usflow, self.ds_1_flow);
