@@ -27,7 +27,7 @@ ds_2 = node_on_breakout
 | [node.?] (compulsory) | Start of node declaration. This says we are creating a node, and also defines the name of the node. Node naming conventions are discussed at . Example: `[node.high_flow_splitter]` |
 | type (compulsory) | The node type, which is “splitter” in this case. `type = splitter` |
 | loc (compulsory) | The location of the node in cartesian coordinates.  Example: `loc = 20, 30` |
-| table (optional) | Splitter table defines the relationship between the upsteam flow and the flow sent to the secondary (effluent) outlet. Refer to this page to read more about in Kalix. Example: `table = 0, 0, 1000, 0, 2000, 500, 1e8, 1e7` |
+| table (compulsory) | Splitter table defines the relationship between the upstream flow and the flow sent to the secondary (effluent) outlet: a two-column table of upstream flow and effluent flow, laid out across lines however you like (see [Tables](conventions.md#tables)). Example: `table = 0, 0, 1000, 0, 2000, 500, 1e8, 1e7` |
 | ds\_1 (optional) | Name of the downstream node on the primary outlet (the main channel). Example: `ds_1 = next_river_node` |
 | ds\_2 (optional) | Name of the downstream node on the secondary outlet (the effluent). Example: `ds_2 = node_on_breakout` |
 
