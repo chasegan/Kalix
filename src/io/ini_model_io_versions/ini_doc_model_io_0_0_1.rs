@@ -989,6 +989,15 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
+                        } else if name_lower == "ds_2" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_2_OUTLET, INLET));
+                            n.add_supply_outlet(DS_2_OUTLET);
+                        } else if name_lower == "ds_3" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_3_OUTLET, INLET));
+                            n.add_supply_outlet(DS_3_OUTLET);
+                        } else if name_lower == "ds_4" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_4_OUTLET, INLET));
+                            n.add_supply_outlet(DS_4_OUTLET);
                         } else if name_lower == "demand" {
                             n.demand_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;

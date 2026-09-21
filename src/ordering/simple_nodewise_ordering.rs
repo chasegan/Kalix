@@ -474,20 +474,24 @@ enum ZoneRole {
 }
 
 /// What does a link leaving this outlet do to the regulated zone? A storage that does not
-/// order through supplies the reach below it. A field's outlets carry surplus and returns
+/// order through supplies the reach below it, and so does an unregulated user down its supply
+/// outlets. A field's outlets carry surplus and returns
 /// back to the river: they are drains, not delivery paths, so no order travels up them, and
 /// the travel time to the field is no part of the travel time to anything below it.
 /// Every node type is named, with no wildcard, so a new one does not compile until it answers.
-fn zone_role(node: &NodeEnum, _outlet: u8) -> ZoneRole {
+fn zone_role(node: &NodeEnum, outlet: u8) -> ZoneRole {
     match node {
         NodeEnum::StorageNode(n) => if n.order_through { ZoneRole::Continues } else { ZoneRole::Starts },
         NodeEnum::FieldNode(_) => ZoneRole::Ends,
+        // ds_1 is the river, and carries on whatever zone the user is in. ds_2 to ds_4 are
+        // supply outlets: the user is the supply for the nodes on them, which place their
+        // orders with it, and their travel time is counted from the user.
+        NodeEnum::UnregulatedUserNode(_) => if outlet >= 1 { ZoneRole::Starts } else { ZoneRole::Continues },
         NodeEnum::BlackholeNode(_) |
         NodeEnum::ConfluenceNode(_) |
         NodeEnum::GaugeNode(_) |
         NodeEnum::LossNode(_) |
         NodeEnum::SplitterNode(_) |
-        NodeEnum::UnregulatedUserNode(_) |
         NodeEnum::RegulatedUserNode(_) |
         NodeEnum::Gr4jNode(_) |
         NodeEnum::InflowNode(_) |
