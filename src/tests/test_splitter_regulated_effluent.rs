@@ -316,3 +316,48 @@ fn saving_after_a_run_does_not_invent_a_table() {
     assert!(saved.contains("[node.splitter_1]"), "the splitter should be written");
     assert!(!saved.contains("table"), "no table should be written for a splitter that has none:\n{saved}");
 }
+
+/// The flow phase skips the table lookup beneath the inflow where the table
+/// starts to divert. The split must be the same as the table gives on both
+/// sides of that threshold and exactly on it: nothing at 150 and at 200, and
+/// half of the excess above 200.
+#[test]
+fn split_is_unchanged_either_side_of_the_breakout_threshold() {
+    for (inflow, expected_ds_2) in [(0.0, 0.0), (150.0, 0.0), (200.0, 0.0), (300.0, 50.0), (1000.0, 400.0), (2000.0, 900.0)] {
+        let mut model = load(&format!("
+[kalix]
+start = 2020-01-01
+end = 2020-01-03
+
+[node.headwater]
+type = inflow
+loc = 0, 0
+inflow = {inflow}
+ds_1 = splitter_1
+
+[node.splitter_1]
+type = splitter
+loc = 0, 10
+table = 0,    0,
+        200,  0,
+        1000, 400,
+ds_1 = main_gauge
+ds_2 = effluent_gauge
+
+[node.main_gauge]
+type = gauge
+loc = 0, 20
+
+[node.effluent_gauge]
+type = gauge
+loc = 10, 20
+
+[outputs]
+node.splitter_1.ds_1
+node.splitter_1.ds_2
+"));
+        model.run().expect("simulation should run");
+        assert_all_close(&series(&mut model, "node.splitter_1.ds_2"), expected_ds_2, &format!("effluent flow at an inflow of {inflow}"));
+        assert_all_close(&series(&mut model, "node.splitter_1.ds_1"), inflow - expected_ds_2, &format!("main channel flow at an inflow of {inflow}"));
+    }
+}
