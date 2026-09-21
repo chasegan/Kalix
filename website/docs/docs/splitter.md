@@ -53,9 +53,7 @@ The flow on the secondary link is determined by interpolating the provided split
 
 ### Orders on the effluent
 
-In a regulated zone (see [Ordering](ordering.md)) nodes on either outlet may place orders. The splitter adds the orders from both outlets together and sends the total upstream:
-
-`upstream order=ds_1_order+ds_2_order`
+In a regulated zone (see [Ordering](ordering.md)) nodes on either outlet may place orders. The splitter sends upstream the smallest order that meets both of them once its table has taken its share, as described under [The order sent upstream](#the-order-sent-upstream) below.
 
 Ordered water takes time to arrive from the supply storage. The splitter holds each effluent order for that travel time, and reports the order that falls due today as `ds_2_order_due`. When the water arrives, the effluent receives the table flow or the order due, whichever is larger, up to the upstream flow:
 
@@ -69,7 +67,21 @@ Ordered water takes time to arrive from the supply storage. The splitter holds e
 
 - Outside a regulated zone there are no orders, and the split follows the table alone.
 
-Orders pass through the splitter without allowing for the flow that the table sends down the effluent. Take a table that sends 10% of the upstream flow to ds\_2, an order of 100 ML on ds\_1, and an order of 5 ML on ds\_2. The splitter orders 105 ML from upstream. When it arrives the table sends 10.5 ML to ds\_2, which is more than the 5 ML order, and ds\_1 receives 94.5 ML. Where a table diverts water at regulated flows, raise the orders to cover it, for example with the regulated user's [`order_factor`](regulated-user.md#order-factor).
+### The order sent upstream
+
+The table sends water down the effluent whether or not anyone ordered it, and that water does not reach the main channel. The splitter allows for this in the same way that a [loss node](loss.md) allows for its losses: it raises the order on ds\_1 to the upstream flow that leaves that much on ds\_1 after the table has taken its share. The order sent upstream is that flow, or the sum of the two orders, whichever is larger:
+
+`upstream order=max(g(ds_1_order),ds_1_order+ds_2_order)`
+
+where `g(x)` is the smallest upstream flow for which `usflow−f(usflow)` reaches `x`.
+
+Take a table that sends 10% of the upstream flow to ds\_2, and an order of 100 ML on ds\_1.
+
+- With an order of 5 ML on ds\_2, the splitter orders 111.1 ML. When it arrives the table sends 11.1 ML to ds\_2, which covers the 5 ML order, and ds\_1 receives 100 ML.
+
+- With an order of 20 ML on ds\_2, the splitter orders 120 ML. The table would send 12 ML to ds\_2, the order raises that to 20 ML, and ds\_1 receives 100 ML.
+
+Where the table diverts nothing at regulated flows, as for a high-flow breakout, the order sent upstream is simply the sum of the two orders. If the table sends all additional flow down the effluent above some point, no upstream flow can deliver more than that on ds\_1, and the order is capped there, as it is at a loss node.
 
 ## References
 
