@@ -66,6 +66,8 @@ ds_1 = my_other_node
 | ds\_1\_spill | Flow over the spillway to ds\_1 [ML] (also available for other links, but = 0) |
 | ds\_1\_outlet | Flow through the outlet to ds\_1 [ML] (also available for other links) |
 | target\_level | Evaluated `target_level` [m], when configured |
+| order | The order this storage places upstream [ML]: to reach its `target_level`, or the downstream orders it passes on with `order_through`. Not written for a storage that does not order |
+| orders\_en\_route | For a storage with a `target_level`: water on its way to it at the end of the step [ML], today's order included and the order arriving today not. The `O_upstream_enroute` term of the forecast below. 0 for a storage with `order_through`, to which nothing is en route; not written for a storage that does not order |
 | exists | Evaluated `exists` input; 1 when not configured |
 | volume | Volume of water in the storage at the end of the timestep [ML] |
 | level | Level of water in the storage at the end of the timestep [m] |

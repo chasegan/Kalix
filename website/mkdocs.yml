@@ -147,6 +147,7 @@ nav:
               - Blackhole: docs/blackhole.md
               - Confluence: docs/confluence.md
               - Gauge: docs/gauge.md
+              - Field: docs/field.md
               - GR4J: docs/gr4j.md
               - Inflow: docs/inflow.md
               - Loss: docs/loss.md
