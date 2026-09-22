@@ -90,9 +90,10 @@ fn assert_balance_closes(model: &mut Model) {
         s(model, "depletion"), s(model, "rain"), s(model, "et"), s(model, "excess"),
         s(model, "supply"), s(model, "escape"), s(model, "bypass"), s(model, "usflow"), s(model, "ds_1"));
     let area = 2.0;
-    for t in 0..dep.len() - 1 {
-        // depletion is recorded at the start of the step, so held(t+1) - held(t) = -(dep[t+1] - dep[t]) x area
-        let d_held = -(dep[t + 1] - dep[t]) * area;
+    for t in 1..dep.len() {
+        // depletion is recorded at the end of the step, so the change in water held over step t
+        // is -(dep[t] - dep[t-1]) x area
+        let d_held = -(dep[t] - dep[t - 1]) * area;
         assert_close(rain[t] + supply[t] - escape[t], et[t] + excess[t] + d_held, &format!("soil balance on step {t}"));
         assert_close(usflow[t], supply[t] + bypass[t], &format!("usflow on step {t}"));
         assert_close(ds_1[t], bypass[t] + excess[t], &format!("ds_1 on step {t}"));
@@ -107,19 +108,19 @@ fn test_a_rain_fed_field_dries_fills_and_sheds_excess() {
     let ks = s(&mut model, "ks");
     let et = s(&mut model, "et");
     let excess = s(&mut model, "excess");
+    // depletion is the value at the end of each step.
     // Day 1: opening depletion 20; ks = (100 - 20) / 50 = 1.6 -> 1; et = 4 mm = 8 ML; closes at 24
-    assert_eq!(dep[0], 20.0);
     assert_eq!(ks[0], 1.0);
     assert_eq!(et[0], 8.0);
-    assert_eq!(dep[1], 24.0);
+    assert_eq!(dep[0], 24.0);
     // Day 2: 24 -> 28. Day 3: et 4 then rain 30: 28 + 4 - 30 = 2
-    assert_eq!(dep[2], 28.0);
+    assert_eq!(dep[1], 28.0);
     assert_eq!(excess[2], 0.0);
-    assert_eq!(dep[3], 2.0);
+    assert_eq!(dep[2], 2.0);
     // Day 4: 2 -> 6. Day 5: et 4 then rain 80: 6 + 4 - 80 = -70, so excess 70 mm = 140 ML, closes full
-    assert_eq!(dep[4], 6.0);
+    assert_eq!(dep[3], 6.0);
     assert_eq!(excess[4], 140.0);
-    assert_eq!(dep[5], 0.0);
+    assert_eq!(dep[4], 0.0);
     assert_eq!(s(&mut model, "ds_1")[4], 140.0, "excess leaves down ds_1");
     assert_eq!(s(&mut model, "supply").iter().sum::<f64>(), 0.0, "rain-fed: never irrigated");
     assert_balance_closes(&mut model);
@@ -134,7 +135,7 @@ fn test_stress_reduces_evapotranspiration_as_the_soil_dries() {
     let dep = s(&mut model, "depletion");
     assert_eq!(ks[0], 0.8);
     assert_eq!(et[0], 16.0, "0.8 x 1 x 10 mm x 2 km2");
-    assert_eq!(dep[1], 68.0);
+    assert_eq!(dep[0], 68.0, "at the end of day 1");
     assert_close(ks[1], 0.64, "ks on day 2");
     assert!(ks.iter().zip(ks.iter().skip(1)).all(|(a, b)| b < a), "ks falls every day");
     assert!(dep.last().unwrap() < &100.0, "and the soil never quite empties");
@@ -149,7 +150,7 @@ fn test_irrigation_fills_the_room_left_after_rain_and_bypasses_the_rest() {
     assert_eq!(s(&mut model, "usflow")[0], 100.0);
     assert_eq!(s(&mut model, "supply")[0], 84.0);
     assert_eq!(s(&mut model, "bypass")[0], 16.0);
-    assert_eq!(s(&mut model, "depletion")[1], 0.0, "full after irrigation");
+    assert_eq!(s(&mut model, "depletion")[0], 0.0, "full after irrigation");
     assert_eq!(s(&mut model, "excess")[1], 16.0, "8 mm of rain on a nearly full profile");
     assert_eq!(s(&mut model, "supply")[1], 0.0, "no room left after the rain");
     assert_eq!(s(&mut model, "bypass")[1], 100.0);
@@ -164,7 +165,7 @@ fn test_escape_leaves_the_model_and_the_take_allows_for_it() {
     assert_eq!(s(&mut model, "supply")[0], 100.0);
     assert_close(s(&mut model, "escape")[0], 20.0, "escape");
     assert_eq!(s(&mut model, "bypass")[0], 50.0);
-    assert_eq!(s(&mut model, "depletion")[1], 0.0);
+    assert_eq!(s(&mut model, "depletion")[0], 0.0);
     assert_balance_closes(&mut model);
     let mbal: std::collections::HashMap<String, f64> = model.get_mass_balance_data().into_iter()
         .map(|(name, _, v)| (name, v)).collect();
@@ -180,38 +181,41 @@ fn test_the_default_rule_and_what_it_reads() {
     // The IDE template's rule, with a target of 20 mm: top the soil up to 20 mm depletion, at
     // most 120 mm a day, grossed up for escape, less what is already on its way. No travel time.
     // The soil starts at 45 mm, inside the readily available water (p x capacity = 50), so
-    // ks = 1 and it dries 2 mm a day. Day 1 orders 2 km2 x 25 mm / 0.8 = 62.5 ML, of which 50
-    // reach the soil: 45 + 2 - 25 = 22. From then on it orders the day's drying, 2 x 2 / 0.8 = 5.
-    let mut model = run(&rig(0, "evap = 2\nkc = 1\ninitial_depletion = 45\nefficiency = 0.8\norder = this.area * clamp(this.depletion - 20, 0, 120) / this.efficiency - this.orders_en_route"));
-    assert_eq!(s(&mut model, "order")[0], 62.5);
-    assert_eq!(s(&mut model, "depletion")[1], 22.0);
-    assert_eq!(s(&mut model, "order")[1], 5.0);
-    assert_eq!(s(&mut model, "depletion")[2], 22.0, "held at the target from then on");
+    // ks = 1 and it dries 2 mm a day. The rule reads yesterday's closing depletion: on day 1
+    // there is none and it reads the fallback 0, so nothing is ordered and the soil closes at
+    // 47. Day 2 reads 47 and orders 2 km2 x 27 mm / 0.8 = 67.5 ML, of which 54 reach the soil:
+    // 47 + 2 - 27 = 22. From then on it orders the day's drying, 2 x 2 / 0.8 = 5.
+    let mut model = run(&rig(0, "evap = 2\nkc = 1\ninitial_depletion = 45\nefficiency = 0.8\norder = this.area * clamp(this.depletion[-1, 0] - 20, 0, 120) / this.efficiency - this.orders_en_route"));
+    assert_eq!(s(&mut model, "order")[..4], [0.0, 67.5, 5.0, 5.0]);
+    assert_eq!(s(&mut model, "depletion")[..4], [47.0, 22.0, 22.0, 22.0], "held at the target from day 2");
     assert_eq!(s(&mut model, "orders_en_route")[1], 0.0, "no travel time, nothing en route");
     assert_balance_closes(&mut model);
 }
 
 #[test]
 fn test_orders_en_route_stop_the_deficit_being_ordered_again_while_water_travels() {
-    // 3 steps of travel time, drying 1 mm a day. Without the en-route term the field would
-    // order its 25 mm on each of the first three days; with it, days 2 to 4 order the day's
-    // drying only, and the first order arrives on day 4.
-    let mut model = run(&rig(3, "evap = 1\nkc = 1\ninitial_depletion = 45\norder = this.area * clamp(this.depletion - 20, 0, 120) - this.orders_en_route"));
-    assert_eq!(s(&mut model, "order")[..4], [50.0, 2.0, 2.0, 2.0]);
-    assert_eq!(s(&mut model, "orders_en_route")[..4], [0.0, 50.0, 52.0, 54.0]);
-    assert_eq!(s(&mut model, "order_due")[..4], [0.0, 0.0, 0.0, 50.0]);
-    assert_eq!(s(&mut model, "usflow")[3], 50.0, "the first order arrives on day 4");
-    assert_eq!(s(&mut model, "depletion")[4], 24.0, "48 at the start of day 4, + 1 of et, - 25 delivered");
+    // 3 steps of travel time, drying 1 mm a day. Day 1 reads the fallback and orders nothing.
+    // Day 2 reads 46 and orders 52. Without the en-route term days 3 and 4 would order the
+    // whole deficit again; with it they order the day's drying only, and the 52 arrives on
+    // day 5.
+    let mut model = run(&rig(3, "evap = 1\nkc = 1\ninitial_depletion = 45\norder = this.area * clamp(this.depletion[-1, 0] - 20, 0, 120) - this.orders_en_route"));
+    assert_eq!(s(&mut model, "order")[..5], [0.0, 52.0, 2.0, 2.0, 2.0]);
+    assert_eq!(s(&mut model, "orders_en_route")[..5], [0.0, 0.0, 52.0, 54.0, 56.0]);
+    assert_eq!(s(&mut model, "order_due")[..5], [0.0, 0.0, 0.0, 0.0, 52.0]);
+    assert_eq!(s(&mut model, "usflow")[4], 52.0, "the first order arrives on day 5");
+    assert_eq!(s(&mut model, "depletion")[4], 24.0, "49 at the start of day 5, + 1 of et, - 26 delivered");
     assert_balance_closes(&mut model);
 }
 
 #[test]
-fn test_this_depletion_in_an_order_is_the_start_of_the_step() {
-    // The value the rule reads is the opening depletion, recorded in the order phase;
-    // the closing depletion is the next step's opening one.
-    let mut model = run(&rig(0, "evap = 5\nkc = 1\ninitial_depletion = 10\norder = this.depletion"));
-    assert_eq!(s(&mut model, "order")[0], 10.0);
-    assert_eq!(s(&mut model, "order")[1], s(&mut model, "depletion")[1]);
+fn test_depletion_is_the_end_of_step_state() {
+    // depletion is reported at the end of the step, as a storage's volume is, so a rule reads
+    // yesterday's value with an offset: today's does not exist yet when the order is placed.
+    let mut model = run(&rig(0, "evap = 5\nkc = 1\ninitial_depletion = 10\norder = this.depletion[-1, 0]"));
+    assert_eq!(s(&mut model, "order")[0], 0.0, "nothing to read on the first step");
+    assert_eq!(s(&mut model, "order")[1], s(&mut model, "depletion")[0]);
+    let err = load_err(&rig(0, "evap = 5\nkc = 1\norder = this.depletion"));
+    assert!(err.contains("no value yet") && err.contains("this.depletion[-1, 0.0]") || err.contains("[-1, 0.0]"), "got: {err}");
 }
 
 #[test]

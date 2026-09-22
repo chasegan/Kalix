@@ -155,13 +155,10 @@ impl Node for FieldNode {
 
     fn run_order_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
-        // Publish what the irrigation rule reads, before it is evaluated, so that
-        // `this.depletion` and `this.orders_en_route` read cleanly in the same step:
-        // the soil at the start of the step, and what has been ordered and has not
-        // yet arrived.
-        if let Some(idx) = self.recorder_idx_depletion {
-            data_cache.add_value_at_index(idx, self.depletion);
-        }
+        // Publish what has been ordered and has not yet arrived, before the irrigation
+        // rule is evaluated, so that `this.orders_en_route` reads cleanly in the same
+        // step. (`depletion` is a state, recorded at the end of the step like a storage's
+        // volume; the rule reads yesterday's closing value as `this.depletion[-1, 0]`.)
         if let Some(idx) = self.recorder_idx_orders_en_route {
             data_cache.add_value_at_index(idx, self.order_buffer.sum());
         }
@@ -224,7 +221,11 @@ impl Node for FieldNode {
         self.dsflow_primary = bypass + excess;
         self.mbal += self.dsflow_primary - self.usflow;
 
-        // Record results
+        // Record results. depletion is the state at the end of the step, as a storage's
+        // volume is.
+        if let Some(idx) = self.recorder_idx_depletion {
+            data_cache.add_value_at_index(idx, self.depletion);
+        }
         if let Some(idx) = self.recorder_idx_ks {
             data_cache.add_value_at_index(idx, ks);
         }

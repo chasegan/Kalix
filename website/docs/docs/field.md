@@ -27,7 +27,7 @@ capacity = 120
 kc = 0.6
 p = 0.5
 efficiency = 0.8
-order = this.area * clamp(this.depletion - 40, 0, 120) / this.efficiency - this.orders_en_route
+order = this.area * clamp(this.depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.orders_en_route
 ds_1 = drain
 ```
 
@@ -59,8 +59,8 @@ ds_1 = drain
 
 | Result | Description |
 | --- | --- |
-| depletion | How far the root zone is below field capacity at the start of the step [mm]: 0 is full, `capacity` is empty. Recorded before the irrigation rule is evaluated, so `this.depletion` in `order` is this value |
-| orders\_en\_route | Water ordered and not yet arrived [ML], where there is travel time from the supply. Recorded with `depletion` |
+| depletion | How far the root zone is below field capacity at the end of the step [mm]: 0 is full, `capacity` is empty. A state, reported at the end of the step like a storage's `volume`; the irrigation rule reads the previous step's value, `this.depletion[-1, 0]`, which is the soil at the start of today |
+| orders\_en\_route | Water ordered and not yet arrived [ML], where there is travel time from the supply. Recorded before the irrigation rule is evaluated, so `this.orders_en_route` reads today's value |
 | order | The order placed this step [ML] |
 | order\_due | The order placed earlier that is due to arrive this step [ML] |
 | usflow | Upstream flow: the water that arrives at the field [ML] |
@@ -103,18 +103,20 @@ running off a profile that irrigation has just filled. Effective rainfall is `ra
 #### The irrigation rule
 
 The field owns the physics. When to irrigate, and how much, is the farmer's decision, and it is
-written in the `order` expression, in ML. The field publishes what the decision needs, and these
-read cleanly in the same step with no offsets:
+written in the `order` expression, in ML. The field publishes what the decision needs:
 
-- `this.depletion`, the soil at the start of the step [mm];
+- `this.depletion[-1, 0]`, the soil at the start of today [mm]. `depletion` is a state, reported at
+  the end of each step, so the rule reads the previous step's value; the `0` is what it reads on the
+  first step, before any value exists;
 - `this.area` [km²] and `this.efficiency`;
-- `this.orders_en_route`, what has been ordered and has not yet arrived [ML].
+- `this.orders_en_route`, what has been ordered and has not yet arrived [ML], which reads today's
+  value with no offset.
 
 The rule the IDE template carries tops the soil up to a target depletion of 40 mm, at most 120 mm
 in a day, grossed up for escape, less what is already on its way:
 
 ```ini
-order = this.area * clamp(this.depletion - 40, 0, 120) / this.efficiency - this.orders_en_route
+order = this.area * clamp(this.depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.orders_en_route
 ```
 
 `order` means what it means everywhere in Kalix, the order placed on the network. Nothing is
@@ -122,13 +124,13 @@ transformed behind the modeller's back: the allowance for escape is in the line.
 one line each. A refill trigger, irrigating to a target once the depletion passes a threshold:
 
 ```ini
-order = if(this.depletion >= 60, this.area * (this.depletion - 20) / this.efficiency, 0)
+order = if(this.depletion[-1, 0] >= 60, this.area * (this.depletion[-1, 0] - 20) / this.efficiency, 0)
 ```
 
 Stopping irrigation once the soil is past the point of saving the crop:
 
 ```ini
-order = if(this.depletion >= 100, 0, this.area * clamp(this.depletion - 40, 0, 120) / this.efficiency - this.orders_en_route)
+order = if(this.depletion[-1, 0] >= 100, 0, this.area * clamp(this.depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.orders_en_route)
 ```
 
 `this.orders_en_route` matters where there is travel time between the supply and the field.
@@ -138,8 +140,10 @@ delivery lands.
 #### Ordering
 
 A field orders like a regulated user: its order travels upstream to the supply, and the field
-acts on it after its travel time (see [Ordering](ordering.md)). A field outside any regulated zone
-never has an order fall due, so it is rain-fed whatever its `order` says.
+acts on it after its travel time (see [Ordering](ordering.md)). The order decides what is released
+for the field; what the field takes is decided by the soil, from whatever arrives. So a field
+outside any regulated zone, on an unregulated creek say, never places an order (and its `order`
+and `order_due` results are not written), but irrigates from what reaches it all the same.
 
 The links leaving a field are not regulated. A field's `ds_1` carries bypass and excess back to
 the river: it is a drain, not a delivery path. No order travels up it, and the travel time to the
