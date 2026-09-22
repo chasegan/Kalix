@@ -230,6 +230,37 @@ public class NodeShapeRenderer {
         0     // left side of shaft back to start
     };
 
+    // Tree - a triangular canopy on a short trunk, standing on a thin strip of ground (the
+    // field). Canopy 26px wide and 17px tall, trunk 4px wide and 4px tall, ground 26px by 2px.
+    // One polygon, traced clockwise from the apex. The canopy is wide enough at the text line
+    // (y = 0) for a two-letter label.
+    private static final int[] TREE_X = {
+        0,    // apex of the canopy
+        13,   // canopy bottom right
+        2,    // trunk top right
+        2,    // trunk bottom right
+        13,   // ground top right
+        13,   // ground bottom right
+        -13,  // ground bottom left
+        -13,  // ground top left
+        -2,   // trunk bottom left
+        -2,   // trunk top left
+        -13   // canopy bottom left
+    };
+    private static final int[] TREE_Y = {
+        -12,  // apex of the canopy
+        5,    // canopy bottom right
+        5,    // trunk top right
+        9,    // trunk bottom right
+        9,    // ground top right
+        11,   // ground bottom right
+        11,   // ground bottom left
+        9,    // ground top left
+        9,    // trunk bottom left
+        5,    // trunk top left
+        5     // canopy bottom left
+    };
+
     /**
      * Renders a node shape with the specified parameters.
      */
@@ -291,6 +322,9 @@ public class NodeShapeRenderer {
                 break;
             case ARROW_DOWN:
                 renderPolygon(g2d, centerX, centerY, ARROW_DOWN_X, ARROW_DOWN_Y, fill);
+                break;
+            case TREE:
+                renderPolygon(g2d, centerX, centerY, TREE_X, TREE_Y, fill);
                 break;
         }
     }
