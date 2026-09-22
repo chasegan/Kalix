@@ -138,7 +138,7 @@ use.
 
 #### Supply outlets
 
-A regulated user can supply water to other nodes through its supply outlets, `ds_2`, `ds_3` and `ds_4`. The usual case is a `field` node: the field does not pump from the river itself, it is supplied by the user, through the user's pump and accounts.
+A regulated user can supply water to other nodes through its supply outlets, `ds_2`, `ds_3` and `ds_4`. The usual case is a [field](field.md): the field does not pump from the river itself, it is supplied by the user, through the user's pump and accounts.
 
 ```ini
 [node.farm_pump]

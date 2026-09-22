@@ -34,6 +34,9 @@ ds_1 = paddock
 
 [node.paddock]
 type = field
+area = 1
+capacity = 1000
+initial_depletion = 1000
 loc = 10, 50
 order = {field_order}
 ds_1 = outlet

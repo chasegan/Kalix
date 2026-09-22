@@ -27,6 +27,9 @@ ds_1 = paddock
 
 [node.paddock]
 type = field
+area = 1
+capacity = 1000
+initial_depletion = 1000
 loc = 0, 20
 {field}
 ds_1 = outlet
@@ -144,6 +147,9 @@ ds_1 = paddock
 
 [node.paddock]
 type = field
+area = 1
+capacity = 1000
+initial_depletion = 1000
 loc = 10, 30
 order = 3
 ds_1 = junction

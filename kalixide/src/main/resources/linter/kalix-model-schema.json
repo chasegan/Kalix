@@ -380,20 +380,39 @@
       }
     },
     "field": {
-      "description": "Field node representing an irrigated field that orders water (skeleton)",
+      "description": "Irrigated field: a root-zone soil store that orders water to meet its deficit",
       "allowed_outputs": [
-        "dsflow",
-        "usflow",
-        "ds_1",
+        "depletion",
+        "orders_en_route",
         "order",
         "order_due",
-        "supply"
+        "usflow",
+        "ks",
+        "kc",
+        "et",
+        "rain",
+        "excess",
+        "supply",
+        "escape",
+        "bypass",
+        "dsflow",
+        "ds_1",
+        "area",
+        "efficiency"
       ],
       "required_params": [
         "type",
-        "loc"
+        "loc",
+        "area",
+        "capacity"
       ],
       "optional_params": [
+        "rain",
+        "evap",
+        "kc",
+        "p",
+        "efficiency",
+        "initial_depletion",
         "order"
       ],
       "dsnode_params": [
@@ -409,9 +428,48 @@
           "format": "float,float",
           "description": "X,Y coordinates"
         },
+        "area": {
+          "type": "number",
+          "min": 0,
+          "description": "Field area [km2]"
+        },
+        "capacity": {
+          "type": "number",
+          "min": 0,
+          "description": "Water the root zone holds between full and empty [mm]"
+        },
+        "rain": {
+          "type": "function_expression",
+          "description": "Rainfall [mm] (data reference, constant, or expression)"
+        },
+        "evap": {
+          "type": "function_expression",
+          "description": "Reference evapotranspiration [mm], the reference the kc values were derived for"
+        },
+        "kc": {
+          "type": "function_expression",
+          "description": "Crop coefficient (constant, table on sim.day_of_year, or expression)"
+        },
+        "p": {
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "description": "Depletion fraction: stress begins beyond p x capacity (default 0.5)"
+        },
+        "efficiency": {
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "description": "Share of supply that reaches the soil; the rest is escape, which leaves the model (default 1)"
+        },
+        "initial_depletion": {
+          "type": "number",
+          "min": 0,
+          "description": "Depletion at the start of the run [mm] (default 0, full)"
+        },
         "order": {
           "type": "function_expression",
-          "description": "Water order input (data reference, constant, or expression)"
+          "description": "The irrigation rule: the order placed upstream [ML]. Omitted, the field is rain-fed"
         }
       }
     },

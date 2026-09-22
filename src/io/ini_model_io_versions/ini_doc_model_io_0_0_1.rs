@@ -59,6 +59,8 @@ pub(crate) const NODE_STATIC_F64_PROPERTIES: &[(&str, &str)] = &[
     ("routing", "dead_storage"),
     ("storage", "initial_volume"),
     ("regulated_user", "order_factor"),
+    ("field", "area"),
+    ("field", "efficiency"),
 ];
 
 pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<std::path::PathBuf>) -> Result<Model, KalixIoError> {
@@ -1095,6 +1097,30 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "order" {
                             n.order_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "rain" {
+                            n.rain_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "evap" {
+                            n.evap_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "kc" {
+                            n.kc_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "area" {
+                            n.area = v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: area must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
+                        } else if name_lower == "capacity" {
+                            n.capacity = v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: capacity must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
+                        } else if name_lower == "initial_depletion" {
+                            n.initial_depletion = v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: initial_depletion must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
+                        } else if name_lower == "efficiency" {
+                            n.efficiency = v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: efficiency must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
+                        } else if name_lower == "p" {
+                            n.p = v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: p must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                                ini_property.line_number, name, node_name)));
@@ -1717,6 +1743,14 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
                 ini_doc.set_property(section_name.as_str(), "type", "field");
+                ini_doc.set_property(section_name.as_str(), "area", format_f64(n.area).as_str());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_input.to_string());
+                ini_doc.set_property(section_name.as_str(), "capacity", format_f64(n.capacity).as_str());
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "initial_depletion", &format_f64(n.initial_depletion), "0");
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "kc", &n.kc_input.to_string());
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "p", &format_f64(n.p), "0.5");
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "efficiency", &format_f64(n.efficiency), "1");
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "order", &n.order_input.to_string());
             }
         }
