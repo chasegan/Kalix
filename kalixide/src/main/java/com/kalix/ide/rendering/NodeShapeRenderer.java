@@ -231,7 +231,7 @@ public class NodeShapeRenderer {
     };
 
     // Tree - a triangular canopy on a short trunk, standing on a thin strip of ground (the
-    // field). Canopy 26px wide and 17px tall, trunk 4px wide and 4px tall, ground 26px by 2px.
+    // field). Canopy 26px wide and 17px tall, trunk 4px wide and 4px tall, ground 20px by 2px.
     // One polygon, traced clockwise from the apex. The canopy is wide enough at the text line
     // (y = 0) for a two-letter label.
     private static final int[] TREE_X = {
@@ -239,10 +239,10 @@ public class NodeShapeRenderer {
         13,   // canopy bottom right
         2,    // trunk top right
         2,    // trunk bottom right
-        13,   // ground top right
-        13,   // ground bottom right
-        -13,  // ground bottom left
-        -13,  // ground top left
+        10,   // ground top right
+        10,   // ground bottom right
+        -10,  // ground bottom left
+        -10,  // ground top left
         -2,   // trunk bottom left
         -2,   // trunk top left
         -13   // canopy bottom left
