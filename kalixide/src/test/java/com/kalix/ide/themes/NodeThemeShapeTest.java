@@ -30,7 +30,7 @@ public class NodeThemeShapeTest {
         assertEquals(NodeTheme.NodeShape.SQUARE, theme.getShapeForNodeType("loss"));
         assertEquals(NodeTheme.NodeShape.CIRCLE, theme.getShapeForNodeType("gauge"));
         assertEquals(NodeTheme.NodeShape.CIRCLE, theme.getShapeForNodeType("splitter"));
-        assertEquals(NodeTheme.NodeShape.TREE, theme.getShapeForNodeType("field"));
+        assertEquals(NodeTheme.NodeShape.SPROUT, theme.getShapeForNodeType("field"));
 
         // Test unknown node type falls back to circle
         assertEquals(NodeTheme.NodeShape.CIRCLE, theme.getShapeForNodeType("unknown_type"));
@@ -57,7 +57,7 @@ public class NodeThemeShapeTest {
     public void testAllShapeTypesCount() {
         // Test that we have the expected number of shape types
         NodeTheme.NodeShape[] shapes = NodeTheme.NodeShape.values();
-        assertEquals(12, shapes.length); // 4 triangles + circle + square + diamond + hexagon + water drop + podium + arrow down + tree
+        assertEquals(12, shapes.length); // 4 triangles + circle + square + diamond + hexagon + water drop + podium + arrow down + sprout
     }
 
     @Test

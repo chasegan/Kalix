@@ -26,7 +26,7 @@ public class NodeTheme {
         WATER_DROP,       // 💧 Symmetric water drop shape
         PODIUM,           // 🏆 Three-step podium shape
         ARROW_DOWN,       // ⬇ Fat arrow pointing down with snub arrowhead
-        TREE              // 🌲 Triangular canopy on a short trunk, standing on a thin strip of ground
+        SPROUT            // 🌱 Diamond leaf on a short stem, standing on a thin strip of ground
     }
 
     /**
@@ -367,7 +367,7 @@ public class NodeTheme {
         Map.entry("gauge", new ShapeTextMapping(NodeShape.CIRCLE, "Ga")),
         Map.entry("splitter", new ShapeTextMapping(NodeShape.CIRCLE, "Sp")),
         Map.entry("order_control", new ShapeTextMapping(NodeShape.HEXAGON, "OC")),
-        Map.entry("field", new ShapeTextMapping(NodeShape.TREE, "Fd"))
+        Map.entry("field", new ShapeTextMapping(NodeShape.SPROUT, "Fd"))
     );
 
     // Default shape text styling
