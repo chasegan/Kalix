@@ -27,7 +27,7 @@ capacity = 120
 kc = 0.6
 p = 0.5
 efficiency = 0.8
-order = this.area * clamp(this.depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.orders_en_route
+order = this.area * clamp(this.depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.orders_en_route[-1, 0]
 ds_1 = drain
 ```
 
@@ -60,7 +60,7 @@ ds_1 = drain
 | Result | Description |
 | --- | --- |
 | depletion | How far the root zone is below field capacity at the end of the step [mm]: 0 is full, `capacity` is empty. A state, reported at the end of the step like a storage's `volume`; the irrigation rule reads the previous step's value, `this.depletion[-1, 0]`, which is the soil at the start of today |
-| orders\_en\_route | Water ordered and not yet arrived [ML], where there is travel time from the supply. Recorded before the irrigation rule is evaluated, so `this.orders_en_route` reads today's value |
+| orders\_en\_route | Water on its way at the end of the step [ML]: ordered, today's order included, and not yet arrived. Zero without travel time from the supply. A state, like `depletion`; the irrigation rule reads `this.orders_en_route[-1, 0]` |
 | order | The order placed this step [ML] |
 | order\_due | The order placed earlier that is due to arrive this step [ML] |
 | usflow | Upstream flow: the water that arrives at the field [ML] |
@@ -105,18 +105,20 @@ running off a profile that irrigation has just filled. Effective rainfall is `ra
 The field owns the physics. When to irrigate, and how much, is the farmer's decision, and it is
 written in the `order` expression, in ML. The field publishes what the decision needs:
 
-- `this.depletion[-1, 0]`, the soil at the start of today [mm]. `depletion` is a state, reported at
-  the end of each step, so the rule reads the previous step's value; the `0` is what it reads on the
-  first step, before any value exists;
-- `this.area` [km²] and `this.efficiency`;
-- `this.orders_en_route`, what has been ordered and has not yet arrived [ML], which reads today's
-  value with no offset.
+- `this.depletion[-1, 0]`, the soil at the start of today [mm];
+- `this.orders_en_route[-1, 0]`, what was ordered before today and has not arrived before today
+  [ML], which includes what arrives today;
+- `this.area` [km²] and `this.efficiency`.
+
+`depletion` and `orders_en_route` are states, reported at the end of each step as a storage's
+`volume` is, so the rule reads the previous step's value; the `0` is what it reads on the first
+step, before any value exists.
 
 The rule the IDE template carries tops the soil up to a target depletion of 40 mm, at most 120 mm
 in a day, grossed up for escape, less what is already on its way:
 
 ```ini
-order = this.area * clamp(this.depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.orders_en_route
+order = this.area * clamp(this.depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.orders_en_route[-1, 0]
 ```
 
 `order` means what it means everywhere in Kalix, the order placed on the network. Nothing is
@@ -130,10 +132,10 @@ order = if(this.depletion[-1, 0] >= 60, this.area * (this.depletion[-1, 0] - 20)
 Stopping irrigation once the soil is past the point of saving the crop:
 
 ```ini
-order = if(this.depletion[-1, 0] >= 100, 0, this.area * clamp(this.depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.orders_en_route)
+order = if(this.depletion[-1, 0] >= 100, 0, this.area * clamp(this.depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.orders_en_route[-1, 0])
 ```
 
-`this.orders_en_route` matters where there is travel time between the supply and the field.
+`this.orders_en_route[-1, 0]` matters where there is travel time between the supply and the field.
 Without it, a rule that orders the deficit places the same order every day until the first
 delivery lands.
 

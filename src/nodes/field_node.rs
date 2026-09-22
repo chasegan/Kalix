@@ -155,19 +155,20 @@ impl Node for FieldNode {
 
     fn run_order_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
-        // Publish what has been ordered and has not yet arrived, before the irrigation
-        // rule is evaluated, so that `this.orders_en_route` reads cleanly in the same
-        // step. (`depletion` is a state, recorded at the end of the step like a storage's
-        // volume; the rule reads yesterday's closing value as `this.depletion[-1, 0]`.)
-        if let Some(idx) = self.recorder_idx_orders_en_route {
-            data_cache.add_value_at_index(idx, self.order_buffer.sum());
-        }
-
-        // Ensure non-negativity of orders
+        // Ensure non-negativity of orders. The rule reads the field's states as they
+        // stood at the end of yesterday: `this.depletion[-1, 0]`, the soil at the start
+        // of today, and `this.orders_en_route[-1, 0]`, everything ordered before today
+        // that has not arrived before today - which includes what arrives today.
         self.order_value = self.order_input.get_value(data_cache).max(0.0);
 
         // The order placed order_travel_time steps ago is due to arrive today
         self.order_due = self.order_buffer.push(self.order_value);
+
+        // What is on its way at the end of today's ordering: today's order included, the
+        // order arriving today not. A state, recorded at the end of the step it changes in.
+        if let Some(idx) = self.recorder_idx_orders_en_route {
+            data_cache.add_value_at_index(idx, self.order_buffer.sum());
+        }
 
         // Order phase recorders
         if let Some(idx) = self.recorder_idx_order {

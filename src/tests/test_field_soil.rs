@@ -185,10 +185,10 @@ fn test_the_default_rule_and_what_it_reads() {
     // there is none and it reads the fallback 0, so nothing is ordered and the soil closes at
     // 47. Day 2 reads 47 and orders 2 km2 x 27 mm / 0.8 = 67.5 ML, of which 54 reach the soil:
     // 47 + 2 - 27 = 22. From then on it orders the day's drying, 2 x 2 / 0.8 = 5.
-    let mut model = run(&rig(0, "evap = 2\nkc = 1\ninitial_depletion = 45\nefficiency = 0.8\norder = this.area * clamp(this.depletion[-1, 0] - 20, 0, 120) / this.efficiency - this.orders_en_route"));
+    let mut model = run(&rig(0, "evap = 2\nkc = 1\ninitial_depletion = 45\nefficiency = 0.8\norder = this.area * clamp(this.depletion[-1, 0] - 20, 0, 120) / this.efficiency - this.orders_en_route[-1, 0]"));
     assert_eq!(s(&mut model, "order")[..4], [0.0, 67.5, 5.0, 5.0]);
     assert_eq!(s(&mut model, "depletion")[..4], [47.0, 22.0, 22.0, 22.0], "held at the target from day 2");
-    assert_eq!(s(&mut model, "orders_en_route")[1], 0.0, "no travel time, nothing en route");
+    assert_eq!(s(&mut model, "orders_en_route")[1], 0.0, "no travel time: an order arrives the day it is placed, nothing is ever en route");
     assert_balance_closes(&mut model);
 }
 
@@ -198,9 +198,10 @@ fn test_orders_en_route_stop_the_deficit_being_ordered_again_while_water_travels
     // Day 2 reads 46 and orders 52. Without the en-route term days 3 and 4 would order the
     // whole deficit again; with it they order the day's drying only, and the 52 arrives on
     // day 5.
-    let mut model = run(&rig(3, "evap = 1\nkc = 1\ninitial_depletion = 45\norder = this.area * clamp(this.depletion[-1, 0] - 20, 0, 120) - this.orders_en_route"));
+    let mut model = run(&rig(3, "evap = 1\nkc = 1\ninitial_depletion = 45\norder = this.area * clamp(this.depletion[-1, 0] - 20, 0, 120) - this.orders_en_route[-1, 0]"));
     assert_eq!(s(&mut model, "order")[..5], [0.0, 52.0, 2.0, 2.0, 2.0]);
-    assert_eq!(s(&mut model, "orders_en_route")[..5], [0.0, 0.0, 52.0, 54.0, 56.0]);
+    // On its way at the end of each day: today's order included, the one arriving today not
+    assert_eq!(s(&mut model, "orders_en_route")[..5], [0.0, 52.0, 54.0, 56.0, 6.0]);
     assert_eq!(s(&mut model, "order_due")[..5], [0.0, 0.0, 0.0, 0.0, 52.0]);
     assert_eq!(s(&mut model, "usflow")[4], 52.0, "the first order arrives on day 5");
     assert_eq!(s(&mut model, "depletion")[4], 24.0, "49 at the start of day 5, + 1 of et, - 26 delivered");
