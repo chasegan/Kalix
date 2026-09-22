@@ -288,11 +288,13 @@ class SeriesFetchCoordinator {
             }
         }
 
-        // The plot pool holds every plotted series strongly, so ticking a parent over a
-        // large Pixie file (e.g. #430's 181 x 3.65M points) would decode the whole file
-        // into memory, one series at a time. Judge the Pixie series of the whole new
-        // selection - including any already plotted - by the same estimate and budget
-        // as the whole-file views, and fetch none of the new ones if it is over.
+        // The plot pool holds every series it has fetched strongly, for every tab, and
+        // does not shrink on deselect (undo, tab switches and duplication re-select from
+        // it without fetching). So ticking a parent over a large Pixie file (e.g. #430's
+        // 181 x 3.65M points) - or ticking different series in turn, or across tabs -
+        // would decode the file into memory a series at a time. Judge the Pixie series
+        // already in the pool plus the newly ticked ones by the same estimate and budget
+        // as the whole-file views, and fetch none of the new ones if that is over.
         String pixieRefusal = pixieSelectionRefusal(newSelectedSeries);
         boolean pixieRefused = false;
 
@@ -307,7 +309,7 @@ class SeriesFetchCoordinator {
                 tabManager.updateSeriesInStatsTabsWithAggregation(ref, loaded.data());
             } else if (source instanceof DatasetSeriesSource.Pixie pixie) {
                 if (pixieRefusal != null) {
-                    tabManager.addErrorSeriesInStatsTabs(ref, "Not loaded: selection too large");
+                    tabManager.addErrorSeriesInStatsTabs(ref, "Not loaded: too much Pixie data loaded");
                     pixieRefused = true;
                 } else {
                     fetchPixieSeries(datasetRef, pixie, targetPanel, shouldResetZoom);
@@ -321,7 +323,7 @@ class SeriesFetchCoordinator {
         if (pixieRefused) {
             // After this listener returns, so a modal dialog never runs inside the tree event.
             SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(window, pixieRefusal,
-                "Selection Too Large", JOptionPane.WARNING_MESSAGE));
+                "Too Much Pixie Data Loaded", JOptionPane.WARNING_MESSAGE));
         }
 
         // Update the target tab's selected series (rebuilds legend, visible series, display)
@@ -337,22 +339,36 @@ class SeriesFetchCoordinator {
     }
 
     /**
-     * Why the Pixie series in {@code selection} must not be fetched, or {@code null} if
-     * they fit: their estimated decoded size ({@link PixieStore#estimateWholeLoadBytes})
-     * against {@link PixieStore#defaultWholeLoadBudget}. A key whose file has changed is
-     * left out of the estimate; its fetch fails as stale anyway.
+     * Why the newly ticked Pixie series in {@code selection} must not be fetched, or
+     * {@code null} if they fit. Counts every Pixie series already in the pool (by its
+     * decoded point count, so one from a since-changed file still counts) plus each
+     * ticked one not yet there (by its index row), and compares their estimated size
+     * ({@link PixieStore#estimateWholeLoadBytes}) with
+     * {@link PixieStore#defaultWholeLoadBudget}. A ticked key whose file has changed
+     * is left out; its fetch fails as stale anyway.
      */
     private String pixieSelectionRefusal(Set<SeriesRef> selection) {
         PixieStore store = PixieStore.shared();
         List<PixieReader.SeriesInfo> infos = new ArrayList<>();
+        Set<SeriesRef> counted = new HashSet<>();
+        for (SeriesRef ref : plotDataSet.getSeriesRefs()) {
+            TimeSeriesData data = plotDataSet.getSeries(ref);
+            if (data != null && isPixieSeries(ref) && counted.add(ref)) {
+                PixieReader.SeriesInfo pooled = new PixieReader.SeriesInfo();
+                pooled.pointCount = data.getPointCount();
+                infos.add(pooled);
+            }
+        }
         for (SeriesRef ref : selection) {
-            if (ref instanceof DatasetSeries datasetRef
-                    && datasetSeriesSources.get(datasetRef) instanceof DatasetSeriesSource.Pixie pixie) {
-                try {
-                    infos.add(store.info(pixie.key()));
-                } catch (IllegalArgumentException stale) {
-                    // Not countable; fetchPixieSeries reports it.
-                }
+            if (counted.contains(ref) || !(ref instanceof DatasetSeries datasetRef)
+                    || !(datasetSeriesSources.get(datasetRef) instanceof DatasetSeriesSource.Pixie pixie)) {
+                continue;
+            }
+            try {
+                infos.add(store.info(pixie.key()));
+                counted.add(ref);
+            } catch (IllegalArgumentException stale) {
+                // Not countable; fetchPixieSeries reports it.
             }
         }
         long estimate = PixieStore.estimateWholeLoadBytes(infos);
@@ -361,10 +377,18 @@ class SeriesFetchCoordinator {
             return null;
         }
         return String.format(
-            "The ticked Pixie series (%,d) would need about %s in memory to plot together,"
-                + " more than the %s the Run Manager allows (half the IDE's memory).%n%n"
-                + "Tick fewer series at a time: those not yet plotted were not loaded.",
+            "The Pixie series loaded or ticked in the Run Manager (%,d) would need about %s"
+                + " in memory, more than the %s it allows (half the IDE's memory).%n%n"
+                + "The newly ticked series were not loaded. Series stay loaded, even when"
+                + " unticked, until their dataset is removed: remove and re-add a dataset to"
+                + " free its memory, then tick fewer series.",
             infos.size(), PixieStore.formatBytes(estimate), PixieStore.formatBytes(budget));
+    }
+
+    /** Whether {@code ref} is a loaded dataset series backed by a Pixie file. */
+    private boolean isPixieSeries(SeriesRef ref) {
+        return ref instanceof DatasetSeries datasetRef
+            && datasetSeriesSources.get(datasetRef) instanceof DatasetSeriesSource.Pixie;
     }
 
     /**
