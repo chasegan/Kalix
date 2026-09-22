@@ -162,6 +162,9 @@ mod test_unregulated_user_supply_outlets;
 // Regulated user: supply outlets (ds_2 to ds_4)
 mod test_regulated_user_supply_outlets;
 
+// Storage: the order it places, and what is en route to a target level
+mod test_storage_order_results;
+
 // Field node: the soil water balance
 mod test_field_soil;
 

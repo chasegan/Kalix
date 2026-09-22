@@ -510,6 +510,8 @@
         "area",
         "pond_diversion",
         "target_level",
+        "order",
+        "orders_en_route",
         "rain_vol",
         "seep_vol",
         "evap_vol",
