@@ -34,6 +34,15 @@ class PixieStoreHeapTest {
     private static final int SERIES = 40;
     private static final int POINTS = 250_000;
 
+    /**
+     * The out-of-memory case gets its own one-series file, sized so that each of its two
+     * arrays alone (2.5M x 8 bytes = 20 MB) is larger than the whole {@link #TINY_HEAP}.
+     * Its decode then cannot fit on any JVM or platform. (Sizing it against a single
+     * 250,000-point series left a 4 MB series in a 6 MB heap, which fitted on macOS.)
+     */
+    private static final int ONE_SERIES_POINTS = 2_500_000;
+    private static final String TINY_HEAP = "-Xmx16m";
+
     private static final int EXIT_OK = 0;
     private static final int EXIT_OUT_OF_MEMORY = 3;
 
@@ -41,6 +50,7 @@ class PixieStoreHeapTest {
     static Path tempDir;
 
     private static String basePath;
+    private static String oneSeriesBasePath;
 
     @BeforeAll
     static void writeFixture() throws Exception {
@@ -61,39 +71,47 @@ class PixieStoreHeapTest {
         }
         basePath = tempDir.resolve("big").toString();
         new PixieWriter().writeToFile(basePath, series, true);
+
+        long[] oneTimestamps = new long[ONE_SERIES_POINTS];
+        double[] oneValues = new double[ONE_SERIES_POINTS];
+        for (int i = 0; i < ONE_SERIES_POINTS; i++) {
+            oneTimestamps[i] = i * day;
+            oneValues[i] = 1.0;
+        }
+        oneSeriesBasePath = tempDir.resolve("oneBig").toString();
+        new PixieWriter().writeToFile(oneSeriesBasePath, List.of(
+            new NamedSeries("node.big.dsflow", TimeSeriesData.adopting(oneTimestamps, oneValues))), true);
     }
 
     @Test
     void readingTheWholeFileRunsOutOfMemory() throws Exception {
-        assertEquals(EXIT_OUT_OF_MEMORY, runChild("eager"),
+        assertEquals(EXIT_OUT_OF_MEMORY, runChild("eager", HEAP, basePath, SERIES, POINTS),
             "control: the fixture must not fit the heap when read whole, or the lazy test proves nothing");
     }
 
     @Test
     void storeOpensAndServesEverySeriesWithinTheSameHeap() throws Exception {
-        assertEquals(EXIT_OK, runChild("lazy", HEAP));
+        assertEquals(EXIT_OK, runChild("lazy", HEAP, basePath, SERIES, POINTS));
     }
 
     /**
-     * A heap too small for even one series: the decode itself runs out of memory on the
+     * A heap smaller than either array of one series: the decode runs out of memory on the
      * store's thread. The request must fail rather than hang, or the Run Manager would
      * show the series as loading forever.
      */
     @Test
     void decodeThatRunsOutOfMemoryFailsTheRequestRatherThanHanging() throws Exception {
-        assertEquals(EXIT_OUT_OF_MEMORY, runChild("lazy", "-Xmx6m"));
-    }
-
-    private static int runChild(String mode) throws Exception {
-        return runChild(mode, HEAP);
+        assertEquals(EXIT_OUT_OF_MEMORY,
+            runChild("lazy", TINY_HEAP, oneSeriesBasePath, 1, ONE_SERIES_POINTS));
     }
 
     /** Runs {@link Child} in a fresh JVM under {@code heap}; returns its exit code. */
-    private static int runChild(String mode, String heap) throws Exception {
+    private static int runChild(String mode, String heap, String base, int series, int points)
+            throws Exception {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         Process process = new ProcessBuilder(java, heap, "-XX:+UseSerialGC", "-Djava.awt.headless=true",
                 "-cp", System.getProperty("java.class.path"),
-                Child.class.getName(), mode, basePath)
+                Child.class.getName(), mode, base, String.valueOf(series), String.valueOf(points))
             .redirectErrorStream(true)
             .start();
         byte[] output = process.getInputStream().readAllBytes();
@@ -106,11 +124,16 @@ class PixieStoreHeapTest {
         return exit;
     }
 
-    /** The child JVM's entry point: {@code eager|lazy <basePath>}; exits 0, or 3 on running out of memory. */
+    /**
+     * The child JVM's entry point: {@code eager|lazy <basePath> <series> <points>}, the last
+     * two being what the file holds; exits 0, or 3 on running out of memory.
+     */
     public static final class Child {
         public static void main(String[] args) throws Exception {
             String mode = args[0];
             String base = args[1];
+            int expectedSeries = Integer.parseInt(args[2]);
+            int expectedPoints = Integer.parseInt(args[3]);
             try {
                 if (mode.equals("eager")) {
                     List<NamedSeries> all = new PixieReader().readAllSeries(base);
@@ -120,13 +143,13 @@ class PixieStoreHeapTest {
                     // at a time as they are plotted, holding none of them afterwards.
                     PixieStore store = new PixieStore();
                     List<PixieSeriesKey> keys = store.open(new File(base + ".pxt"));
-                    if (keys.size() != SERIES) {
-                        throw new AssertionError("expected " + SERIES + " series, got " + keys.size());
+                    if (keys.size() != expectedSeries) {
+                        throw new AssertionError("expected " + expectedSeries + " series, got " + keys.size());
                     }
                     for (PixieSeriesKey key : keys) {
                         // A bounded wait: a request that never settles fails as a timeout.
                         int points = store.get(key).get(30, TimeUnit.SECONDS).getPointCount();
-                        if (points != POINTS) {
+                        if (points != expectedPoints) {
                             throw new AssertionError("series " + key.index() + " has " + points + " points");
                         }
                     }
