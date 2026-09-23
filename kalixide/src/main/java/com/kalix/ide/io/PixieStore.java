@@ -140,6 +140,15 @@ public final class PixieStore {
             totalPoints += info.pointCount;
             longestSeries = Math.max(longestSeries, info.pointCount);
         }
+        return estimateWholeLoadBytes(totalPoints, longestSeries);
+    }
+
+    /**
+     * Estimated peak memory to decode and hold series totalling {@code totalPoints}
+     * points, the longest of them {@code longestSeries} points, for callers that count
+     * series the index does not list together (the Run Manager's pool and pending fetches).
+     */
+    public static long estimateWholeLoadBytes(long totalPoints, long longestSeries) {
         return totalPoints * WHOLE_LOAD_BYTES_PER_POINT + longestSeries * DECODE_BYTES_PER_POINT;
     }
 
