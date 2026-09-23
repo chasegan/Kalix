@@ -65,10 +65,11 @@ public class TreeContextMenu {
     }
 
     /**
-     * Builds the popup for the given selection in row order, or returns null if it is empty.
-     * Used to build from editor tab right click context menu.
+     * Builds the popup for one node, as right-clicked on its editor tab. The node need not be
+     * in the tree (see {@code ProjectTree#showTabContextMenu}).
      */
-    JPopupMenu buildFromEditorTab(List<FileTreeNode> selection) {
+    JPopupMenu buildFromEditorTab(FileTreeNode node) {
+        List<FileTreeNode> selection = List.of(node);
         return build(selection, BuildContext.EditorTab);
     }
 
@@ -126,8 +127,7 @@ public class TreeContextMenu {
     // --- Entry definitions ---
 
     private List<List<Entry>> buildEntries(BuildContext context) {
-        // Groups follow the context-menu skeleton (ADR-0002
-        // §1):
+        // Groups follow the context-menu skeleton (ADR-0002 §1):
         // primary -> context-specific -> external handoff -> clipboard -> create ->
         // modify -> destructive (isolated) -> view/state. Labels are sentence case.
         return List.of(
