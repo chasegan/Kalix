@@ -105,6 +105,20 @@ class PixieStoreTest {
         assertEquals(36.0, fresh.getValues()[4], 0.0);
     }
 
+    /** A cache hit is checked against the file just as a decode is. */
+    @Test
+    void cachedSeriesFailsStaleAfterRewrite() throws Exception {
+        File pxt = write("cached-stale", List.of(new NamedSeries("s", daily(10, 1.0))));
+        PixieSeriesKey key = store.open(pxt).get(0);
+        assertEquals(10, await(store.get(key)).getPointCount(), "decoded, and now cached");
+
+        write("cached-stale", List.of(new NamedSeries("s", daily(5, 9.0))));
+        bumpModified(pxt);
+
+        ExecutionException stale = assertThrows(ExecutionException.class, () -> await(store.get(key)));
+        assertInstanceOf(PixieStore.StaleIndexException.class, stale.getCause());
+    }
+
     /**
      * One window re-opening a rewritten pair must not retarget another window's keys:
      * here the rewrite swaps the series, so an old key's index now holds a different one.
