@@ -1,6 +1,6 @@
 ---
 version: "0.4.6"
-date: TBD
+date: 2026-09-23
 prerelease: false
 assets:
   Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.6/KalixIDE-Windows-0.4.6-Portable.zip"
@@ -9,18 +9,30 @@ assets:
 pip: "pip install kalix==0.4.6"
 ---
 
-- New `allocation_pct` output for accounts and account groups: allocation as a percentage of size (100 = full entitlement; can exceed 100).
-    - `acc.<account>.allocation_pct` for each account, and `acc.<group>.allocation_pct` for the group as a whole (total allocation over total size).
-    - Reports the allocation actually held, which can differ from the percentage an `allocate` action announced (`ras.<name>.pct`).
-    - Reads `NaN` for a zero-size account or group.
-- Fixed: the editor tab right-click menu was not reliably shown. Some platform popup gestures were missed, and the menu was suppressed for a file outside the open project folder.
-- Large Pixie (`.pxt`) results files no longer run KalixIDE out of memory.
-    - The Run Manager opens a Pixie file straight away and only reads the series you tick. Ticking more than fits in memory at once is refused with a message.
-    - The data viewer and FlowViz still load a whole file, so a file too big for memory is refused with a message pointing you to the Run Manager (hover the message to read it in full).
-    - If a loaded file changes on disk, plotting from it shows an error; remove and re-add it to pick up the new data.
-- Draw links on the map: drag out from just beside a node and drop on the downstream node. The link uses the first free `ds_N`, or re-points the last allowed outlet when all are used.
-- Run Manager timeseries tree context menu:
-    - New "Show checked" and "Show selected" commands fold the tree back to just the ticked or selected series and their parents.
-    - Right-click now works anywhere along the row, not just on the label. Right-clicking below the last row clears the selection and acts on the whole tree.
-    - "Collapse all" with nothing selected no longer hides every row; it folds back to the top-level runs and datasets.
+- New! Link nodes using a mouse on the map! Drag from the perimeter of a node and drop on the intended downstream node. The link uses the first free outlet, or re-points the last allowed outlet if all are already used.
+- New rainfall-runoff nodes: [AWBM](https://kalix.org/docs/awbm/) (`type = awbm`) and [SURM](https://kalix.org/docs/surm/) (`type = surm`).
+    - AWBM is the Australian Water Balance Model with its 8 standard parameters. 
+    - `variant = two_tap` selects Hydro Tasmania's AWBM Two Tap version (__BETA!__).
+    - SURM is the Simple Urban Runoff Model used by MUSIC and Source.
+- New [field](https://kalix.org/docs/field/) node (`type = field`) is Kalix's crop model (__BETA!__).
+    - Runs a FAO-56 daily root-zone depletion model with a crop coefficient and a stress coefficient.
+    - Field nodes order water to meet soil moisture deficit. For testing purposes currently this is a custom `order` expression. Useful recorders include `this.depletion[-1, 0]` and `this.orders_en_route[-1, 0]`.
+    - Surplus inflows are ejected to `ds_1`. Field nodes, unlike any other node, do not support ordering on their ds_1. This is to avoid orders entering from the river return pathway.
+- Ordering refinements:
+    - You can now ORDER TO `unregulated_user` and THROUGH `regulated_user` nodes by connecting their `ds_2`, `ds_3`, or `ds_4` links. This way a user can supply other nodes such as [field](https://kalix.org/docs/field/) nodes through its pump and accounts.
+    - Below a confluence, the travel time comes from the named `regulated` pathway(s) only (longest of these as previously documented).
+    - Confluence with neither `regulated` nor `harmony_fraction` defined now sends no orders upstream. This is to force modeller's deliberate intention.
+    - Regulated user negative orders now -> 0. Previously, for users with accounts, negative orders slipped through.
+    - Confluence `harmony_fraction` recorder showed stale value; now fixed.
+    - New storage recorders: `order` and `orders_en_route`. These show the order a storage places to reach its `target_level` (or passes on with `order_through`), and the water it thinks is currently on its way.
+    - Splitter nodes now deliver regulated orders down the effluent. The splitter remembers the order and sends it when the water arrives.
+    - Splitter nodes now increase orders automatically (like loss nodes) if needed to cover losses to the effluent path.
+    - Splitter `table` is now optional. A splitter with no table diverts just what was ordered, representing a regulated offtake such as the head of an irrigation channel.
+- Other small things:
+    - BETA. `acc.<account>.allocation_pct` for each account, and `acc.<group>.allocation_pct` for the group as a whole (total allocation over total size) reports allocation as a percentage of account size. Note this is the allocation actually held, not the percentage an `allocate` action announced (`ras.<name>.pct`).
+    - Huge Pixie files (`.pxt`) can now lazy-load in the Run Manager to avoid consuming memory.
+    - New "Show checked" and "Show selected" commands in the Run Manager timeseries tree.
     - Menu items that cannot apply are hidden or greyed, such as "Show checked" with nothing ticked.
+    - Minor UX fixes in the Run Manager.
+    - The IDE file IO now understands proleptic year 0000.
+    - Improvements in editor tab right-click menu behaviour.
