@@ -9,4 +9,13 @@ assets:
 pip: "pip install kalix==0.4.6"
 ---
 
+- New `allocation_pct` output for accounts and account groups: allocation as a percentage of size (100 = full entitlement; can exceed 100).
+    - `acc.<account>.allocation_pct` for each account, and `acc.<group>.allocation_pct` for the group as a whole (total allocation over total size).
+    - Reports the allocation actually held, which can differ from the percentage an `allocate` action announced (`ras.<name>.pct`).
+    - Reads `NaN` for a zero-size account or group.
+- Fixed: the editor tab right-click menu was not reliably shown. Some platform popup gestures were missed, and the menu was suppressed for a file outside the open project folder.
+- Large Pixie (`.pxt`) results files no longer run KalixIDE out of memory.
+    - The Run Manager opens a Pixie file straight away and only reads the series you tick. Ticking more than fits in memory at once is refused with a message.
+    - The data viewer and FlowViz still load a whole file, so a file too big for memory is refused with a message pointing you to the Run Manager (hover the message to read it in full).
+    - If a loaded file changes on disk, plotting from it shows an error; remove and re-add it to pick up the new data.
 - Draw links on the map: drag out from just beside a node and drop on the downstream node. The link uses the first free `ds_N`, or re-points the last allowed outlet when all are used.

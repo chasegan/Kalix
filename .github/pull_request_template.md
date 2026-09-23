@@ -36,5 +36,5 @@ For example:
 # Checklist
 
 - [ ] `cargo test` (engine) / `./gradlew build` (IDE) pass
-- [ ] `mkdocs build --strict` passes (ran `scripts/gen_corpus.py` if docs changed)
+- [ ] `mkdocs build --strict` passes
 - [ ] New node property: reader, writer, linter schema, docs

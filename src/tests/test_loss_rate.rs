@@ -103,3 +103,99 @@ fn loss_rate_survives_a_resave() {
     reread.run().unwrap();
     assert_eq!(series(&reread, "node.reach_loss.loss"), vec![30.0; 3]);
 }
+
+/// The flow phase skips the table lookup beneath the inflow where the table
+/// starts to lose water. The loss must be the same as the table gives on both
+/// sides of that threshold and exactly on it: nothing at 150 and at 200, then
+/// 75% of the excess up to 400, then the last segment extended.
+#[test]
+fn table_loss_is_unchanged_either_side_of_the_zero_loss_threshold() {
+    for (inflow, expected_loss) in [(0.0, 0.0), (150.0, 0.0), (200.0, 0.0), (300.0, 75.0), (400.0, 150.0), (600.0, 300.0)] {
+        let ini = format!("
+[kalix]
+start = 2020-01-01
+end = 2020-01-03
+
+[node.headwater]
+type = inflow
+loc = 0, 0
+inflow = {inflow}
+ds_1 = reach_loss
+
+[node.reach_loss]
+type = loss
+loc = 0, 10
+table = 0,   0,
+        200, 0,
+        400, 150,
+ds_1 = outlet
+
+[node.outlet]
+type = gauge
+loc = 0, 20
+
+[outputs]
+node.reach_loss.loss
+node.reach_loss.dsflow
+");
+        let mut model = crate::io::ini_model_io::IniModelIO::read_model_string(&ini).expect("model should load");
+        model.configure().expect("model should configure");
+        model.run().expect("simulation should run");
+        for (name, expected) in [("node.reach_loss.loss", expected_loss), ("node.reach_loss.dsflow", inflow - expected_loss)] {
+            let idx = model.data_cache.get_series_idx(name, false).expect("series should exist");
+            for v in &model.data_cache.series[idx].values {
+                assert!((v - expected).abs() < 1e-9, "{name} at an inflow of {inflow}: got {v}, expected {expected}");
+            }
+        }
+    }
+}
+
+/// The ordering phase skips the order translation beneath the same threshold.
+/// The numbers are the Ordering page's worked example: no loss up to 200, then
+/// 150 lost by 400. Orders of 100 and 200 reach the dam unchanged; an order of
+/// 300 is raised to 450, because 450 - 150 = 300.
+#[test]
+fn orders_are_unchanged_beneath_the_zero_loss_threshold_and_raised_above_it() {
+    for (order, expected_release) in [(100.0, 100.0), (200.0, 200.0), (300.0, 450.0)] {
+        let ini = format!("
+[kalix]
+start = 2020-01-01
+end = 2020-01-03
+
+[node.dam]
+type = storage
+loc = 0, 0
+initial_volume = 5000
+dimensions = 0, 0, 0, 0, 1, 10000, 0, 0, 1.1, 10001, 0, 10000, 1.2, 10002, 0, 10000
+ds_1 = reach_loss
+
+[node.reach_loss]
+type = loss
+loc = 0, 10
+table = Flow [ML], Loss [ML],
+        0        , 0,
+        200      , 0,
+        400      , 150,
+        1000     , 150,
+ds_1 = user
+
+[node.user]
+type = regulated_user
+loc = 0, 20
+order = {order}
+
+[outputs]
+node.dam.ds_1
+node.user.diversion
+");
+        let mut model = crate::io::ini_model_io::IniModelIO::read_model_string(&ini).expect("model should load");
+        model.configure().expect("model should configure");
+        model.run().expect("simulation should run");
+        for (name, expected) in [("node.dam.ds_1", expected_release), ("node.user.diversion", order)] {
+            let idx = model.data_cache.get_series_idx(name, false).expect("series should exist");
+            for v in &model.data_cache.series[idx].values {
+                assert!((v - expected).abs() < 1e-9, "{name} for an order of {order}: got {v}, expected {expected}");
+            }
+        }
+    }
+}

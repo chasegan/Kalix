@@ -51,7 +51,7 @@ expression](dynamic-expressions.md)**:
 | `start_month` | First timestep of each month. |
 | `start_year` | First timestep of each calendar year. |
 | `start_water_year(m)` | First timestep of month `m` (1–12) each year. `m` may be a literal or a `const.*` reference. |
-| *any expression* | Every timestep the expression is non-zero. |
+| *any expression* | Every timestep the expression is non-zero. NaN counts as non-zero, so a trigger that evaluates to NaN fires — guard a possibly-missing value with `infill(x, 0)`. |
 
 Expression triggers are **level-semantic**: the action applies on *every* step
 the condition holds, not once on the rising edge — "while the dam spills, forfeit

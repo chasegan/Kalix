@@ -10,9 +10,11 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -121,6 +123,28 @@ public class OutputsTreeBuilder {
         }
 
         updateTreeForMultipleSources(selectedRuns, selectedDatasets);
+    }
+
+    /**
+     * Every series the given sources offer, as refs — what an unfiltered tree built
+     * from them would hold as leaves. Deliberately blind to the filter: the filter
+     * decides what the tree <em>shows</em>, never what the sources <em>offer</em>, so
+     * callers pruning a tab's series must ask this rather than search the visible tree
+     * (a series hidden by the filter is still offered, and must stay plotted).
+     */
+    public Set<SeriesRef> availableRefs(List<Object> sources) {
+        Set<SeriesRef> refs = new HashSet<>();
+        for (Object source : sources) {
+            List<String> seriesNames = getSeriesNamesCallback.apply(source);
+            if (seriesNames == null) continue;
+            for (String seriesName : seriesNames) {
+                SeriesRef ref = refForSource.apply(seriesName, source);
+                if (ref != null) {
+                    refs.add(ref);
+                }
+            }
+        }
+        return refs;
     }
 
     /**

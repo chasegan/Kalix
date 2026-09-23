@@ -300,3 +300,153 @@ citing them when a trade is proposed.
   grows with every option should be pinned out of line and measured. And
   the layout sensitivity of a struct is a fact about this struct at this
   size, not a rule to reason from: measure the fields-only arm every time.
+- *2026-09-21* — seventh data point for §3.4: a field that changed the
+  code the compiler emitted, not only where the data sits. Adding
+  `zero_loss_limit` (8 bytes) to `LossNode`, read in the flow phase
+  alongside `usflow`, left `NodeEnum`'s stride untouched at 4,064. The
+  change lets the flow phase skip its table lookup beneath the inflow where
+  the table starts to lose water. Measured on three models of 60 loss nodes
+  in series, 200 years daily: one with no table, one running beneath its
+  table's threshold, and one with a 1% table that never takes the skip. Arms
+  built in one worktree and checked by hash, 11 interleaved runs, median
+  simulation time. Declared between `mbal` and `usflow`, the field landed
+  next to `usflow` and the compiler fetched the two with one paired load
+  (`ldp`): the skipping models went −48% and −60%, and the never-skips model
+  went +24.0% (41.4 to 51.3 ms, sd under 0.5). A fields-only arm - the field
+  present and set at setup, the flow phase unchanged - measured +0.6%, so it
+  was not the size. Declared after `usorders`, or last in the struct, the
+  field sits at one and the same offset, the two values load separately (two
+  `ldr`), the never-skips model is flat (−1.1% to −1.5%), and the skipping
+  models gain −24% and −42% to −44%. So the same ~10 ms, about 2.3 ns per
+  node per step, left the never-skips path and appeared on the skip path.
+  The two builds' flow phases are instruction-for-instruction the same apart
+  from field offsets and the one paired load. The unchanged baseline was
+  itself bimodal on the beneath-threshold model (41 to 56 ms across runs,
+  sd 3.5 to 7.0) where every other arm held under about 1 ms. Speed tests 4
+  and 5, with one loss node between them, were flat throughout. The
+  placement kept is the second, because it slows nothing; the larger
+  figures of the first are recorded here and not claimed. The mechanism is
+  not established. A store-forwarding stall on the paired load was the
+  first guess, and the second measurement does not support it on its own.
+  Open questions, none yet investigated, for whenever this is taken up in
+  earnest. Whether the paired load is the cause or a bystander: a throwaway
+  `#[repr(C)]` build could hold the two fields adjacent while forcing
+  separate loads, or the reverse. Whether the stride matters: 4,064 is 32
+  bytes short of 4,096, so a field at offset X in one node shares its low
+  twelve address bits with offset X − 32 in the node before it, and the flow
+  phase writes the next node's `usflow` just after reading its own fields;
+  a build padded to a 4,096-byte stride would show whether that aliasing is
+  in play. Whether the bimodal baseline follows the address the node array
+  happens to be allocated at from run to run. Whether any of it appears on
+  another CPU. And how much of it is the shape of the benchmark: 60
+  identical nodes in series hand each value to the next through memory,
+  which is a longer store-then-load chain than a real network offers. One
+  machine, one CPU (Apple M5), one session. Source: `9bdf76cf` on
+  `perf/skip-table-lookup-beneath-threshold`.
+- *2026-09-21* — eighth data point for §3.4: code that is never executed
+  moved a benchmark, twice, in one module. Both cases came from work on the
+  ordering system (`src/ordering/simple_nodewise_ordering.rs`); in both the
+  variants compared gave byte-identical results over all 43 regression and
+  speed models with every recorder on, so none of this is work done
+  differently. Arms built in one worktree with the source swapped and
+  checked by hash, interleaved runs, median simulation time, against main.
+  First: recording a confluence's `harmony_fraction` on the step it is
+  used. The version that reads best moved the evaluation of the fraction
+  from the ordering loop into `ConfluenceNode::run_order_phase`. On
+  `2_unregulated_users` - a model with no confluence, which returns from
+  `run_ordering_phase` at its first line, so that not one changed
+  instruction runs - it measured +3.5%, +3.0% and +2.4% in three sessions of
+  15 to 20 reps, against a previous commit within +0.5% of main. A version
+  that leaves the evaluation in the loop and has it call a small recording
+  method on the node measured +0.4%, −0.4% and +0.5% on tests 2, 4 and 5 in
+  the same session, and was kept. Second: restructuring
+  `initialize`, which runs once per run, with `run_ordering_phase` untouched
+  ([ADR-0008](0008-ordering-knowledge-in-exhaustive-matches.md)). A version
+  that gathered each node's incoming links into a `Vec` of `Vec`s measured
+  +1.8%, 0.0% and +2.6% on tests 2, 4 and 5, and +2.3% to +2.5% on test 5 in
+  two earlier sessions. A version keeping the longest travel time per node
+  in one flat `Vec`, and gathering the links for confluences alone,
+  measured 0.0%, −0.3% and −0.2% in the same session of 25 reps, and was
+  kept. Along the way, pinning `run_ordering_phase` out of line with
+  `#[inline(never)]`, in the change and in main, moved none of four arms
+  beyond 0.3% of each other, so whether that function is inlined into
+  `run_timestep` is not the lever. Two things follow. A change confined to
+  cold code is not thereby free: time it, as §4 says of the hot path,
+  whenever it lands in a module the hot path lives in. And when a variant
+  measures slow for no reason the source explains, the productive move has
+  been to write the same thing another way and measure again, which cost
+  minutes each time; reasoning about why did not predict either result. The
+  mechanism is not established. Where the compiler places the hot functions
+  relative to one another is the obvious suspect and was not examined: no
+  disassembly was compared and no symbol addresses were read. One machine,
+  one CPU (Apple M5). Sources: `a5c1795a` on `refine/ordering-at-junctions`
+  and `41dd2e84` on `refactor/ordering-setup`; the rejected variants are
+  described in those commit messages and were not committed.
+- *2026-09-22* — ninth data point for §3.4, and a possibility noted for
+  later. Supply outlets (`ds_2` to `ds_4`) were added to both user nodes. The
+  same two fields went into each struct - a `Vec` of outlet state, empty
+  for almost every user, and the `dsorders` array widened from one order to
+  four - and in both a user without supply outlets computes exactly what it
+  did (all 43 regression and speed models byte-identical with every recorder
+  on). Arms built in one worktree with the source swapped, checked by hash,
+  interleaved runs of 15 to 30 reps, median simulation time against the
+  previous commit. Tests 2 and 3 have 72 unregulated users each; tests 4 and
+  5 have 16 and 20 regulated users; test 5 has 10 unregulated users and
+  test 4 none. Layout first. For `RegulatedUserNode` a fields-only arm -
+  the first version's new fields, about 96 bytes among the node's existing
+  ones, and no new code - cost +3.7% and +3.9% on tests 4 and 5 with the
+  control flat, which was the whole cost of that version. The feature with
+  its new state cut to the two fields above, declared last (776 to 824
+  bytes), measured −0.2%, −0.7%, −0.2% on tests 2, 4 and 5. For
+  `UnregulatedUserNode` (720 to 768 bytes) a fields-only arm with
+  the same two fields declared last cost +3.5%, +2.0% and +2.0% on test 2 in
+  three sessions; declared first it measured −0.7%, +0.3%, −0.8%, +0.8% on
+  tests 2 to 5 (30 reps); and three positions between gave −0.3% to +0.8% on
+  test 2. `NodeEnum`'s stride was 4,064 throughout. So the same fields
+  wanted opposite ends of two structs. Then code. Plain loops over the
+  empty `Vec` cost +3.7% and +2.6% on the regulated-user models and +6.1% on
+  test 2, so both nodes' phases are monomorphised on a `const` for whether
+  the user has supply outlets, as the 2026-09-14 entry describes. For the
+  regulated user, with the layout right, that landed at the noise floor
+  (+0.2%, +0.7%, +0.8%). For the unregulated user it did not: pinned out of
+  line +2.9%, not pinned +2.6%, the ordinary instantiation inlined with the
+  other kept out of line and cold +2.2%, the same dispatching on a one-byte
+  flag set in `initialise` +2.2%, +1.2%, +1.8%, +1.7% on tests 2 to 5 (30
+  reps), and moving the outlet search out of `remove_dsflow` no change. Test
+  4 moved with the rest although it contains no unregulated user and so runs
+  none of the changed code. The lead accepted that cost on 2026-09-22 to
+  keep the feature work moving. Three things follow. The 2026-09-15 lesson
+  again, with a sharper edge: where a field should sit is a fact about one
+  struct, and the answer for one struct was the opposite of the answer for
+  the next, so build the fields-only arm and try positions - four positions
+  were built and timed by a short script in a few minutes. Monomorphising on
+  a `const` removes the work of an unused option, but not the test that
+  chooses the instantiation, nor the growth of the node's arm in the shared
+  dispatch: for a phase that is several times larger that is lost in the
+  noise, and for one of a few nanoseconds per node per step it shows. And a
+  possibility for later, which removes both: node sub-variants, for lack of
+  a better word. A node type that the modeller sees as one
+  (`type = unregulated_user`) could be held as more than one `NodeEnum`
+  variant, the variant chosen once, at load, from how the node is
+  configured. The common configuration's code and struct would stay exactly
+  as they were, and choosing between them would cost nothing per step,
+  because the enum's dispatch is already paid for. It is §3.5 taken as far
+  as it goes: for an option fixed by the model file, the coldest place is
+  load time. Nothing about it was built or measured; the nearest evidence is
+  that adding the `FieldNode` variant to `NodeEnum` measured at the noise
+  floor (+0.4%, +0.1%, +0.4%). The lead has deferred it to a consolidated
+  performance effort once the feature set is more or less stable, because it
+  multiplies variants behind one visible node type and is better designed
+  once, across the nodes that would gain from it, than one node at a time.
+  Candidates then: both user nodes with and without supply outlets, and any
+  node whose phase is monomorphised on a `const` today (the routing node's
+  `LOSS_OR_DEAD`). Every sub-variant adds an arm to every match over
+  `NodeEnum`, and
+  [ADR-0008](0008-ordering-knowledge-in-exhaustive-matches.md) §2 is what
+  would make that safe: the compiler lists each place a new variant must
+  answer. (This note was first written as an amendment to ADR-0008, which
+  the commit message of `9f7f2f5d` points to; it was moved here the same
+  day, before anything was published, because its subject is performance.)
+  That the shared dispatch is the mechanism behind test 4 moving is a
+  guess: no disassembly was compared. One machine, one CPU (Apple M5).
+  Sources: `25267c90` and `9f7f2f5d` on `feat/user-supply-outlets`.

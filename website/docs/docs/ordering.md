@@ -44,13 +44,17 @@ The simple ordering system is explained in detail below.
 
 Areas downstream of storage outlets are designated regulated zones. This storage node is the supply for the zone immediately below it. The zone extends downstream to (a) the next storage that can act as a supply, (b) the end of the system.
 
+User nodes can supply other nodes through their supply outlets (`ds_2` to `ds_4`), and the two kinds of user differ in what that does to the zone. The links below a [regulated user's](regulated-user.md#supply-outlets) supply outlets are part of the zone the user is in, with travel time counted from the same supply: the orders arriving on them become part of the user's own order. An [unregulated user's](unregulated-user.md#supply-outlets) supply outlets start a new zone, with the user as its supply and travel time counted from the user, while its `ds_1` carries on whatever zone the river is in.
+
+A zone also ends at a [field](field.md). A field's outlets carry surplus and returns back to the river. They are drains, not delivery paths, so the links leaving a field are not regulated: no order travels up them, and the travel time to the field is no part of the travel time to anything below it.
+
 When two regulated zones join at a confluence (confluence node or other node) the reach downstream can be considered part of both zones. Nodes below the confluence may be supplied by the storage of either zone. The section on ***directing orders*** describes how this works in more detail.
 
 #### Travel Times
 
 The travel time for each node in a regulated zone is an estimate of the streamflow routing lag between the supply storage and the node. The travel time is assumed to be constant throughout the whole simulation, and is based on the streamflow lag at a typical flow rate (specified by the modeller at the routing nodes, e.g. `typical_regulated_flow = 100`).
 
-For nodes in regulated zones below confluences, the travel time is based on the longest branch.
+For nodes in regulated zones below a junction, the travel time is based on the longest regulated branch. Below a confluence that names its `regulated` pathway(s), it is based on the named branches alone, because those are the only branches an order travels up (see [Confluence](confluence.md)).
 
 #### Adjusting Orders According to Expected Inflows and Losses
 
@@ -60,7 +64,7 @@ User nodes in regulated zones with `regulated = true` place orders based on the 
 
 User nodes not located in regulated zones do not place orders. User nodes with `regulated = false` (default) do not place orders.
 
-Streamflow losses impede the delivery of regulated flows. To account for losses, orders are automatically increased as needed, based on the flow-loss relationship at the relevant loss nodes.
+Streamflow losses impede the delivery of regulated flows. To account for losses, orders are automatically increased as needed, based on the flow-loss relationship at the relevant loss nodes. Orders are increased in the same way for the flow that a splitter's table sends down its effluent.
 
 Inflows represent opportunities for demands to be satisfied without releasing all orders from the supplying storage(s). Inflows in regulated zones are evaluated during the ordering phase. If the travel time at the inflow node is T=0, the full inflow is assumed to be available this timestep and the orders are reduced accordingly. If T>0, the relevant inflow is the one that occurs after T timesteps. This value is not known yet, therefore the model uses a simple calculation to estimate how much inflow might be available `assumed_inflow = current_inflow * recession_factor`.
 
@@ -72,6 +76,8 @@ Orders propagate in an upstream direction, from users to the supply storage(s). 
 
 At loss nodes and inflow nodes the orders are adjusted as discussed above.
 
+At splitter nodes, the orders from both outlets are combined and sent upstream. The order on the main channel is first raised to cover the flow that the splitter's table sends down the effluent, in the same way that orders are raised through a loss node (see [Splitter](splitter.md#the-order-sent-upstream)).
+
 When a node, which is *not a confluence*, has multiple incoming links (branches), the full order is sent up each regulated link. This allows the modeller to make flow-phase decisions about how (from which branch) the order will be met. Note that a naive configuration could result in the order being met by both branches. If the modeller want more control over how the orders are apportioned up each branch, they should use a confluence node.
 
 At confluence nodes, the orders are directed up regulated branches on the basis of the harmony rule expression. If the upstream branches have different travel times (T1 > T2), orders designated for the shorter branch are delayed (by an amount DT = T1-T2) such that the ordered water will arrive at the user node at the right time.
@@ -80,7 +86,7 @@ At confluence nodes, the orders are directed up regulated branches on the basis 
 
 Regulated outlets on storage nodes are operated to satisfy orders.
 
-Splitters (TBD).
+Splitters deliver orders placed on their effluent (ds\_2) outlet. A splitter holds each effluent order for the travel time from the supply storage, then sends at least that volume down the effluent when the ordered water arrives. If the flow cannot meet the orders on both outlets, the effluent order is met first. See [Splitter](splitter.md#orders-on-the-effluent).
 
 ## How Orders Propagate
 

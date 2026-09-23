@@ -28,6 +28,7 @@ const NODE_SOURCES: &[(&str, &str)] = &[
     ("awbm", include_str!("../nodes/awbm_node.rs")),
     ("blackhole", include_str!("../nodes/blackhole_node.rs")),
     ("confluence", include_str!("../nodes/confluence_node.rs")),
+    ("field", include_str!("../nodes/field_node.rs")),
     ("gauge", include_str!("../nodes/gauge_node.rs")),
     ("gr4j", include_str!("../nodes/gr4j_node.rs")),
     ("inflow", include_str!("../nodes/inflow_node.rs")),

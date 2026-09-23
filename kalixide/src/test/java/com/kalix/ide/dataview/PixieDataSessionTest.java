@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Pins the decode-once pixie session: the union time index over mixed time
- * bases (absent cells blank, stored NaN spelled NaN), the pre-decode value
- * gate, and the honest refusal when the binary half is missing.
+ * bases (absent cells blank, stored NaN spelled NaN), the pre-decode row and
+ * memory gates, and the honest refusal when the binary half is missing.
  */
 class PixieDataSessionTest {
 
@@ -58,6 +58,12 @@ class PixieDataSessionTest {
 
     private static PixieDataSession openLoaded(File pxt, long limit) {
         PixieDataSession session = new PixieDataSession(pxt, () -> limit);
+        await("decode", session::isLoaded);
+        return session;
+    }
+
+    private static PixieDataSession openLoaded(File pxt, long limit, long memoryBudget) {
+        PixieDataSession session = new PixieDataSession(pxt, () -> limit, () -> memoryBudget);
         await("decode", session::isLoaded);
         return session;
     }
@@ -125,6 +131,41 @@ class PixieDataSessionTest {
         assertEquals(5, session.rowCount());
         assertEquals(12, session.seriesCount());
         session.dispose();
+    }
+
+    /**
+     * Issue #430: a file both long and wide passes the row limit yet cannot fit in
+     * memory whole. The memory gate refuses it before decoding, and points at the
+     * Run Manager, which can plot its series one at a time.
+     */
+    @Test
+    void memoryGateRefusesAFileTooBigToDecodeWhole() throws IOException {
+        File pxt = writePixie("wideAndLong", twelveSeriesOfFiveRows());
+        // 60 points x 25 bytes + the longest series' 5 x 4 = 1,520 bytes estimated.
+        PixieDataSession session = openLoaded(pxt, 1000, 1519);
+        assertTrue(session.refusal().contains("12 series of up to 5 rows"), session.refusal());
+        assertTrue(session.refusal().contains("Run Manager"), session.refusal());
+        assertEquals(0, session.rowCount(), "nothing was decoded");
+        session.dispose();
+    }
+
+    @Test
+    void memoryGateAdmitsAFileWithinBudget() throws IOException {
+        File pxt = writePixie("withinBudget", twelveSeriesOfFiveRows());
+        PixieDataSession session = openLoaded(pxt, 1000, 1520);
+        assertNull(session.refusal());
+        assertEquals(12, session.seriesCount());
+        assertEquals(5, session.rowCount());
+        session.dispose();
+    }
+
+    private static List<NamedSeries> twelveSeriesOfFiveRows() {
+        List<NamedSeries> wide = new java.util.ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            wide.add(new NamedSeries("node.n" + i + ".flow",
+                daily(LocalDateTime.of(2020, 1, 1, 0, 0), 1, 2, 3, 4, 5)));
+        }
+        return wide;
     }
 
     @Test

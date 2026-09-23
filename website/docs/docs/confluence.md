@@ -31,7 +31,7 @@ ds_1 = another_node
 | type (compulsory) | The node type, which is “confluence” in this case. `type = confluence` |
 | loc (compulsory) | The location of the node in cartesian coordinates.  Example: `loc = 20, 30` |
 | regulated (optional) | The regulated ordering pathway(s), by upstream node name — the preferred, direction-unambiguous idiom. One name: that branch is the only regulated pathway and all orders propagate up it immediately. Two names: `harmony_fraction` is the fraction of orders sent to the *first listed*. Example: `regulated = north_arm, south_arm` |
-| harmony\_fraction (optional) | A dynamic expression giving the fraction of orders directed up the first `regulated` pathway. Required with two `regulated` names; an error beside a single name (one pathway takes everything, so there is nothing to split). Without `regulated` it keeps its legacy meaning — the fraction to the first upstream link defined in the model file — which depends on link order and is better stated with `regulated`. Example: `harmony_fraction = if(sim.month > 6, 1, 0)` |
+| harmony\_fraction (optional) | A dynamic expression giving the fraction of orders directed up the first `regulated` pathway. Required with two `regulated` names; an error beside a single name (one pathway takes everything, so there is nothing to split). Without `regulated` it keeps its legacy meaning — the fraction to the first regulated upstream link defined in the model file, with the complement to the second — which depends on link order and is better stated with `regulated`. Example: `harmony_fraction = if(sim.month > 6, 1, 0)` |
 | expected\_inflow (optional) | Expected inflow joining at this confluence, for the purpose of adjusting orders [ML]. Reduces the order propagated upstream by this amount, the same way it does on an [inflow](inflow.md) node. Useful where an unregulated tributary or minor inflow joins at the confluence and is expected to help meet downstream demand. Example: `expected_inflow = 0.5 * this.dsflow[-1,0]` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
@@ -53,9 +53,10 @@ ds_1 = another_node
 - Propagation of orders is as follows:
   - With one `regulated` name, every order propagates up the named branch immediately — there is no second pathway to synchronise with, so no lag buffering applies.
   - With two `regulated` names (or none — the legacy link-order convention), the harmony\_fraction is evaluated to determine the proportion of orders directed up the first pathway, with the complement up the second.
+  - With neither `regulated` nor `harmony_fraction`, the confluence sends no orders upstream: nothing says which branch they should go to. The supplies upstream see no order and release nothing for it, so an unintended case shows in the results. (Up to version 0.4.5 this case behaved as `harmony_fraction = 0` — every order to the second regulated branch. A model that relied on that should now say `harmony_fraction = 0`, or better, name the branch with `regulated`.)
   - When splitting, if either upstream branch has a shorter lag time than the other, the orders designated for the short branch are delayed by n timesteps (n = long\_branch\_lag - short\_branch\_lag) so the water from both branches arrives on the correct timestep to meet downstream orders.
   - Each `regulated` name must be one of the confluence's upstream nodes (a load-time error otherwise).
-  - This node should not have more than 2 upstream links.
+  - A confluence directs orders up two branches at most. More than 2 regulated upstream links is an error when the model is initialised; join the others at another node upstream.
   - If `expected_inflow` is set, it is subtracted from the sum of downstream orders before the remainder is propagated upstream (floored at zero) — the same order-adjustment mechanism used by the [inflow](inflow.md) node's `expected_inflow`.
 
 ## References

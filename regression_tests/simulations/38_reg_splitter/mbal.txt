@@ -1,0 +1,26 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 6
+  Timesteps: 32
+  Stepsize (s): 86400
+  Period: 2020-01-01T00:00:00.000Z, 2020-02-01T00:00:00.000Z
+  Note: units are ML/timestep
+
+REGULATED_USER NODES
+  regulated_user_1, -13.59375
+  regulated_user_2, -14.53125
+
+STORAGE NODES
+  storage_1, 33
+
+ROUTING NODES
+  lag1d, -0.9375
+  lag2d, -3.9375
+
+SPLITTER NODES
+  splitter_1, 0
+
+----------------------------------
+TOTAL = 0
+----------------------------------

@@ -753,6 +753,7 @@ class FunctionExpressionValidatorTest {
         assertValid("acc.smith.closing_balance");
         assertValid("acc.smith.debits");
         assertValid("acc.smith.size");
+        assertValid("acc.smith.allocation_pct[-1, 0]");
         assertValid("0.1 * acc.smith.opening_balance");
         assertValid("if(acc.smith.opening_balance > 10, 5, 0)");
         assertValid("acc.smith.closing_balance[-1, 0]");
@@ -793,6 +794,8 @@ class FunctionExpressionValidatorTest {
                 "group size aggregate should be valid");
         assertTrue(validator.validate("acc.gs_annual.use", context).isEmpty(),
                 "group use aggregate should be valid");
+        assertTrue(validator.validate("acc.gs_annual.allocation_pct", context).isEmpty(),
+                "group allocation_pct should be valid");
         assertTrue(validator.validate("acc.gs_annual.sizes", context).stream()
                         .anyMatch(e -> e.contains("Unknown field for account group")),
                 "the group field set stays closed");
