@@ -553,7 +553,11 @@ public class RunManager extends JFrame {
         // most-recent run's session, so removing it removes that one run (same as its "Remove").
         runContextMenuManager.setRemovableCategories(
             lastRunNode, currentRunsNode, libraryNode, loadedDatasetsNode);
-        runContextMenuManager.setupOutputsTreeContextMenu(this::expandAllFromSelected, this::collapseAllFromSelected);
+        runContextMenuManager.setupOutputsTreeContextMenu(this::expandAllFromSelected,
+                                                          this::collapseAllFromSelected,
+                                                          this::showChecked,
+                                                          this::showSelected
+        );
     }
 
     /**
@@ -733,6 +737,46 @@ public class RunManager extends JFrame {
         }
     }
 
+    private void showChecked() {
+        // Collapse all and then expand to checked paths only
+        collapseAllChildren(new TreePath(timeseriesTreeModel.getRoot()));
+        TreePath[] checkedPaths = timeseriesTree.getCheckedPaths();
+        for (TreePath path : checkedPaths) {
+            timeseriesTree.makeVisible(path);
+        }
+        scrollToTopmost(checkedPaths);
+    }
+
+    private void showSelected() {
+        // Captured first: collapsing a node replaces any selected descendants with the node itself.
+        TreePath[] selectedPaths = timeseriesTree.getSelectionPaths();
+        collapseAllChildren(new TreePath(timeseriesTreeModel.getRoot()));
+        // Restoring the selection also reveals it: JTree expands selected paths by default.
+        timeseriesTree.setSelectionPaths(selectedPaths);
+        scrollToTopmost(selectedPaths);
+    }
+
+    /**
+     * Scrolls to the highest revealed row, so the folded tree opens at the top of what was
+     * revealed rather than wherever the viewport happened to sit. Topmost by row order, not
+     * by the order the paths were ticked.
+     */
+    private void scrollToTopmost(TreePath[] paths) {
+        if (paths == null) {
+            return;
+        }
+        int topRow = Integer.MAX_VALUE;
+        for (TreePath path : paths) {
+            int row = timeseriesTree.getRowForPath(path);
+            if (row >= 0) {
+                topRow = Math.min(topRow, row);
+            }
+        }
+        if (topRow != Integer.MAX_VALUE) {
+            timeseriesTree.scrollRowToVisible(topRow);
+        }
+    }
+
     /**
      * Recursively collapses all children of a given tree path.
      */
@@ -743,7 +787,10 @@ public class RunManager extends JFrame {
             TreePath childPath = path.pathByAddingChild(node.getChildAt(i));
             collapseAllChildren(childPath);
         }
-        timeseriesTree.collapsePath(path);
+        // The root is hidden, so collapsing it would hide every row rather than fold them.
+        if (path.getParentPath() != null || timeseriesTree.isRootVisible()) {
+            timeseriesTree.collapsePath(path);
+        }
     }
 
     /**

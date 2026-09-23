@@ -19,3 +19,8 @@ pip: "pip install kalix==0.4.6"
     - The data viewer and FlowViz still load a whole file, so a file too big for memory is refused with a message pointing you to the Run Manager (hover the message to read it in full).
     - If a loaded file changes on disk, plotting from it shows an error; remove and re-add it to pick up the new data.
 - Draw links on the map: drag out from just beside a node and drop on the downstream node. The link uses the first free `ds_N`, or re-points the last allowed outlet when all are used.
+- Run Manager timeseries tree context menu:
+    - New "Show checked" and "Show selected" commands fold the tree back to just the ticked or selected series and their parents.
+    - Right-click now works anywhere along the row, not just on the label. Right-clicking below the last row clears the selection and acts on the whole tree.
+    - "Collapse all" with nothing selected no longer hides every row; it folds back to the top-level runs and datasets.
+    - Menu items that cannot apply are hidden or greyed, such as "Show checked" with nothing ticked.
