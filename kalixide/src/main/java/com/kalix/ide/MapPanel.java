@@ -1061,10 +1061,12 @@ public class MapPanel extends JPanel {
             }
         });
 
-        // Rotation-cursor preview while the modifier key itself is held
+        // Rotation-cursor preview while the modifier key itself is held. A link drag owns
+        // the cursor while it runs (drop / no-drop is its only refusal feedback), so the
+        // preview must not touch it then.
         Runnable previewOn = () -> {
             if (interactionManager != null && interactionManager.canStartRotation()
-                    && !interactionManager.isDragging()) {
+                    && !interactionManager.isDragging() && !linkDragManager.isDragging()) {
                 setCursor(rotateCursor());
                 if (linkDragManager.updateHover(null)) {
                     repaint();
@@ -1072,7 +1074,8 @@ public class MapPanel extends JPanel {
             }
         };
         Runnable previewOff = () -> {
-            if (interactionManager != null && !interactionManager.isDragging()) {
+            if (interactionManager != null && !interactionManager.isDragging()
+                    && !linkDragManager.isDragging()) {
                 setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
             }
         };
