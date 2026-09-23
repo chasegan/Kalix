@@ -64,7 +64,7 @@ public class DocumentTabPane extends JPanel {
 
     List<String> tabNames;
 
-    /** Requests the tree's right-click context menu be shown for the given files. */
+    /** Requests the tree's right-click context menu be shown for a tab's file. */
     @FunctionalInterface
     public interface ContextMenuRequestHandler {
         void showContextMenu(File file, Component invoker, int x, int y);
