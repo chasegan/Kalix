@@ -13,3 +13,4 @@ pip: "pip install kalix==0.4.6"
     - `acc.<account>.allocation_pct` for each account, and `acc.<group>.allocation_pct` for the group as a whole (total allocation over total size).
     - Reports the allocation actually held, which can differ from the percentage an `allocate` action announced (`ras.<name>.pct`).
     - Reads `NaN` for a zero-size account or group.
+- Fixed: the editor tab right-click menu was not reliably shown. Some platform popup gestures were missed, and the menu was suppressed for a file outside the open project folder.
