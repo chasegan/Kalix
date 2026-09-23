@@ -117,7 +117,9 @@ member's value. Members drift apart when:
   small account than of a large one;
 - an action sets the balance without regard to water already used —
   `set_full` after a take leaves that member above 100%;
-- members are clamped at their own sizes.
+- a balance-setting action such as `credit`, `set` or `scale` caps the balance at
+  the account size, so one member stops rising at its cap while another keeps
+  going (`allocate` and `set_full` are not capped).
 
 Note that this is the allocation *held*, which can differ from the percentage
 an `allocate` action announces (see [`ras.<name>.pct`](ras.md)) — `allocate`
