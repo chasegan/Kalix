@@ -1,3 +1,5 @@
+use crate::numerical::table::Table;
+
 /// This is a continuous or discontinuous function made from PWL segments (it's still a function
 /// because every x value maps to exactly 1 y value). The discontinuity means we allow adjacent
 /// PWL segments to not be connected at a common y. For a function that is discontinuous at a
@@ -47,6 +49,44 @@ impl TableDiscontinuous {
             x_max_incl_draft: 0.0,
             i_hint: 0,
         }
+    }
+
+    /// The order translation for a node that takes water out of the flow passing
+    /// through it - a loss node's loss, a splitter's effluent. `removal_table` has
+    /// two columns, inflow and the amount removed at that inflow. The result maps
+    /// a required passing flow (x) to the smallest inflow that delivers it (y).
+    ///
+    /// The caller must already have checked that the table starts at zero inflow
+    /// and that its slope does not exceed 1:1, so the passing flow (inflow minus
+    /// removed) never decreases. It may still be flat: several consecutive inflows
+    /// can pass the same flow, which leaves the inflow to order ambiguous, and if
+    /// the table has more than one flat segment a plain interpolation would depend
+    /// on which one a binary search happened to land on. This type exists for that
+    /// case. It allows discontinuous y values, and its search finds xlo < x <= xhi,
+    /// which always gives the lowest inflow that passes the required flow.
+    pub fn order_translation(removal_table: &Table) -> TableDiscontinuous {
+        // The maximum passing flow is the last row's (inflow - removed); the slope
+        // check guarantees that quantity is non-decreasing, so the last row is the max.
+        let last_row = removal_table.nrows() - 1;
+        let max_passing = removal_table.get_value(last_row, 0) - removal_table.get_value(last_row, 1);
+
+        let mut translation = TableDiscontinuous::new();
+        translation.add_point(-1.0, 0.0);
+        translation.add_point(0.0, 0.0);
+        if max_passing > 0.0 {
+            for row in 0..removal_table.nrows() {
+                let inflow = removal_table.get_value(row, 0);
+                let removed = removal_table.get_value(row, 1);
+                translation.add_point(inflow - removed, inflow);
+            }
+        } else {
+            // Everything is removed at every inflow, so no order can be satisfied.
+            // The only reasonable thing to do is to order nothing.
+            translation.add_point(0.0, 0.0);
+            translation.add_point(1.0, 0.0);
+        }
+        translation.cap_if_unfinished();
+        translation
     }
 
     /// You build a TableDiscontinuous by adding points to the table, if

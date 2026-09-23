@@ -257,6 +257,10 @@ pub struct StorageNode {
     recorder_idx_volume: Option<usize>,
     recorder_idx_level: Option<usize>,
     recorder_idx_target_level: Option<usize>,
+    // Declared here, and recorded through an out-of-line helper, on measurement
+    // (ADR-0004 §3.4): see the commit that added them.
+    recorder_idx_order: Option<usize>,
+    recorder_idx_orders_en_route: Option<usize>,
     recorder_idx_area: Option<usize>,
     recorder_idx_seep_megs: Option<usize>,
     recorder_idx_evap_megs: Option<usize>,
@@ -1074,6 +1078,21 @@ impl StorageNode {
     }
 }
 
+impl StorageNode {
+    /// Record the order this storage places upstream and what is on its way to it. Out of
+    /// line and cold, so that run_order_phase stays the size it was (ADR-0004 §3.4).
+    #[cold]
+    #[inline(never)]
+    fn record_orders(&self, data_cache: &mut DataCache, orders_en_route: f64) {
+        if let Some(idx) = self.recorder_idx_order {
+            data_cache.add_value_at_index(idx, self.us_orders);
+        }
+        if let Some(idx) = self.recorder_idx_orders_en_route {
+            data_cache.add_value_at_index(idx, orders_en_route);
+        }
+    }
+}
+
 impl Node for StorageNode {
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(),String> {
@@ -1259,6 +1278,8 @@ impl Node for StorageNode {
         self.recorder_idx_pond_demand = recorder(data_cache, &self.name, "pond_demand");
         self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
         self.recorder_idx_forced_level = recorder(data_cache, &self.name, "forced_level");
+        self.recorder_idx_order = recorder(data_cache, &self.name, "order");
+        self.recorder_idx_orders_en_route = recorder(data_cache, &self.name, "orders_en_route");
         self.recorder_idx_sid_flux = recorder(data_cache, &self.name, "sid_flux");
         self.recorder_idx_adjustment_volume = recorder(data_cache, &self.name, "adjustment_volume");
         for i in 0..MAX_DS_LINKS {
@@ -1297,6 +1318,8 @@ impl Node for StorageNode {
             // 'Order through' means (1) the ordering system does not consider this storage
             // to be a supply, (2) total orders are propagated upstream without adjustment.
             self.us_orders = self.ds_orders.iter().sum();
+            // Nothing is en route to a storage that orders through: it is not the supply
+            self.record_orders(data_cache, 0.0);
             //
         } else if self.has_target_level {
             //
@@ -1326,10 +1349,15 @@ impl Node for StorageNode {
             let known_usage: f64 = self.ds_orders_due.iter().sum();
             let forecast_volume = self.volume + inflows - known_usage;
             self.us_orders = (target_volume - forecast_volume).max(0.0);
-            self.target_level_order_buffer.push(self.us_orders);
+            // push hands back the order leaving the buffer - the one arriving today - so
+            // what is on its way at the end of the step, today's order included, is the
+            // sum already taken, plus today's, less that, with no second pass.
+            let arriving = self.target_level_order_buffer.push(self.us_orders);
+            self.record_orders(data_cache, inflows + self.us_orders - arriving);
         } else {
-            // Storage does not order upstream
-            // self.usorders = 0.0
+            // Storage does not order upstream, and writes neither order result: recording
+            // zeros here, on the branch every supply storage takes every step, measured
+            // +1.6% and +4.7% on speed tests 4 and 5 (see the commit that added them)
         }
     }
 

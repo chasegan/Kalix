@@ -25,7 +25,8 @@ public class NodeTheme {
         HEXAGON,          // ⬡ Hexagon (wide orientation)
         WATER_DROP,       // 💧 Symmetric water drop shape
         PODIUM,           // 🏆 Three-step podium shape
-        ARROW_DOWN        // ⬇ Fat arrow pointing down with snub arrowhead
+        ARROW_DOWN,       // ⬇ Fat arrow pointing down with snub arrowhead
+        SPROUT            // 🌱 Diamond leaf on a short stem, standing on a thin strip of ground
     }
 
     /**
@@ -240,6 +241,7 @@ public class NodeTheme {
                     map.put("confluence", "8B4513");     // Saddle Brown - same as splitter
                     map.put("gauge", "228B22");          // Forest Green (index 0)
                     map.put("order_control", "CCCC00"); // Yellow-lime (index 7)
+                    map.put("field", "6B8E23");         // Olive Drab - a cropped field
                     break;
                 case NEMO: // Nemo
                     // Map to similar concept colors in Nemo palette
@@ -258,6 +260,7 @@ public class NodeTheme {
                     map.put("confluence", "00CED1");     // Dark Turquoise - same as splitter
                     map.put("gauge", "87CEEB");          // Sky Blue (index 3)
                     map.put("order_control", "4682B4"); // Steel Blue (index 9)
+                    map.put("field", "3CB371");         // Medium Sea Green - a cropped field
                     break;
                 case SUNSET_WARMTH:
                     // Sunset warmth color mappings with requested swaps
@@ -276,6 +279,7 @@ public class NodeTheme {
                     map.put("confluence", "FF6B35");     // Orange-Red - same as splitter
                     map.put("gauge", "F7931E");          // Orange (from palette index 1)
                     map.put("order_control", "FFD23F"); // Yellow (from palette index 2)
+                    map.put("field", "8FBC8F");         // Dark Sea Green - a cropped field
                     break;
                 case LIGHT:
                     // Light theme color mappings using the Light palette
@@ -294,6 +298,7 @@ public class NodeTheme {
                     map.put("confluence", "F8961E");     // Orange - same as splitter
                     map.put("gauge", "F94144");          // Red (index 0)
                     map.put("order_control", "43AA8B"); // Teal (index 6)
+                    map.put("field", "43AA8B");         // Teal (index 6) - shares with order_control; the shape tells them apart
                     break;
                 case DRACULA:
                 case ONE_DARK:
@@ -319,6 +324,7 @@ public class NodeTheme {
                     map.put("unregulated_user", colors[7]);
                     map.put("blackhole", colors[8]);
                     map.put("order_control", colors[9]);
+                    map.put("field", colors[3]);         // shares --node-rr with the rainfall-runoff nodes: land, in both cases
                     break;
                 default:
                     // For other themes, use cycling assignment
@@ -360,7 +366,8 @@ public class NodeTheme {
         Map.entry("loss", new ShapeTextMapping(NodeShape.SQUARE, "Lo")),
         Map.entry("gauge", new ShapeTextMapping(NodeShape.CIRCLE, "Ga")),
         Map.entry("splitter", new ShapeTextMapping(NodeShape.CIRCLE, "Sp")),
-        Map.entry("order_control", new ShapeTextMapping(NodeShape.HEXAGON, "OC"))
+        Map.entry("order_control", new ShapeTextMapping(NodeShape.HEXAGON, "OC")),
+        Map.entry("field", new ShapeTextMapping(NodeShape.SPROUT, "Fd"))
     );
 
     // Default shape text styling

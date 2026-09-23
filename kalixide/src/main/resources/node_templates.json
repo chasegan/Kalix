@@ -76,6 +76,21 @@
         "demand = 0 #expression"
       ]
     },
+    "field": {
+      "label": "Field",
+      "lines": [
+        "type = field",
+        "loc = %%X%%,%%Y%%",
+        "area = 1 #km2",
+        "capacity = 120 #mm",
+        "rain = 0 #expression, mm",
+        "evap = 0 #expression, mm",
+        "kc = 1 #expression",
+        "p = 0.5",
+        "efficiency = 0.8",
+        "order = this.area * clamp(this.depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.orders_en_route[-1, 0]"
+      ]
+    },
     "regulated_user": {
       "label": "Regulated user",
       "lines": [

@@ -5,6 +5,8 @@ import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.io.SourceResCsvImporter;
 import com.kalix.ide.io.PixieReader;
+import com.kalix.ide.io.PixieSeriesKey;
+import com.kalix.ide.io.PixieStore;
 import com.kalix.ide.io.NamedSeries;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
@@ -32,6 +34,7 @@ import java.awt.dnd.DropTargetDropEvent;
 import java.awt.dnd.DropTargetEvent;
 import java.awt.dnd.DropTargetListener;
 import java.io.File;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -454,16 +457,44 @@ public class FlowVizDataManager {
         progressDialog.setSize(400, 120);
         progressDialog.setLocationRelativeTo(parentFrame);
 
-        // Create background loading task
-        SwingWorker<List<com.kalix.ide.io.NamedSeries>, Integer> loadTask = new SwingWorker<List<com.kalix.ide.io.NamedSeries>, Integer>() {
+        // What the worker found: the decoded series, or why the file was refused.
+        record PixieLoad(List<NamedSeries> series, String refusal) {
+        }
+
+        // Create background loading task. FlowViz plots every series of a file, so the
+        // whole-file estimate is checked against the budget BEFORE anything is decoded
+        // (issue #430); the Run Manager is the place for files too large to load whole.
+        SwingWorker<PixieLoad, Integer> loadTask = new SwingWorker<>() {
             @Override
-            protected List<com.kalix.ide.io.NamedSeries> doInBackground() throws Exception {
-                publish(25);
-                PixieReader reader = new PixieReader();
-                publish(50);
-                List<com.kalix.ide.io.NamedSeries> seriesList = reader.readAllSeries(basePath);
-                publish(100);
-                return seriesList;
+            protected PixieLoad doInBackground() throws Exception {
+                publish(10);
+                PixieStore store = PixieStore.shared();
+                List<PixieSeriesKey> keys = store.open(pixieFile);
+                List<PixieReader.SeriesInfo> infos = new ArrayList<>(keys.size());
+                long longestSeries = 0;
+                for (PixieSeriesKey key : keys) {
+                    PixieReader.SeriesInfo info = store.info(key);
+                    infos.add(info);
+                    longestSeries = Math.max(longestSeries, info.pointCount);
+                }
+                long estimate = PixieStore.estimateWholeLoadBytes(infos);
+                long budget = PixieStore.defaultWholeLoadBudget();
+                if (estimate > budget) {
+                    return new PixieLoad(List.of(), String.format(
+                        "%s has %,d series of up to %,d rows and would need about %s in memory"
+                            + " to plot here, more than the %s FlowViz allows (half the IDE's memory).%n%n"
+                            + "Drop it on the Run Manager instead: it opens the file's index at once"
+                            + " and decodes only the series you plot.",
+                        pixieFile.getName(), keys.size(), longestSeries,
+                        PixieStore.formatBytes(estimate), PixieStore.formatBytes(budget)));
+                }
+                List<NamedSeries> seriesList = new ArrayList<>(keys.size());
+                for (int i = 0; i < keys.size(); i++) {
+                    // Dotted names, as a whole-file read's NamedSeries.dotted would give.
+                    seriesList.add(NamedSeries.dotted(infos.get(i).name, store.read(keys.get(i))));
+                    publish(10 + 90 * (i + 1) / keys.size());
+                }
+                return new PixieLoad(seriesList, null);
             }
 
             @Override
@@ -480,8 +511,13 @@ public class FlowVizDataManager {
                 progressDialog.dispose();
 
                 try {
-                    List<com.kalix.ide.io.NamedSeries> seriesList = get();
-                    handlePixieImportResult(pixieFile, seriesList);
+                    PixieLoad load = get();
+                    if (load.refusal() != null) {
+                        JOptionPane.showMessageDialog(parentFrame, load.refusal(),
+                            "File Too Large for FlowViz", JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                    handlePixieImportResult(pixieFile, load.series());
                 } catch (Exception e) {
                     JOptionPane.showMessageDialog(parentFrame,
                         "Error loading Pixie file:\n" + e.getMessage(),
@@ -506,7 +542,7 @@ public class FlowVizDataManager {
      * @param pixieFile The source .pxt file
      * @param seriesList The loaded time series data
      */
-    private void handlePixieImportResult(File pixieFile, List<com.kalix.ide.io.NamedSeries> seriesList) {
+    private void handlePixieImportResult(File pixieFile, List<NamedSeries> seriesList) {
         if (seriesList == null || seriesList.isEmpty()) {
             JOptionPane.showMessageDialog(parentFrame,
                 "No time series data found in file: " + pixieFile.getName(),

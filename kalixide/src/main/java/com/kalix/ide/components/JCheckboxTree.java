@@ -20,8 +20,9 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 
-// Reference - https://stackoverflow.com/a/21851201
-//      Posted by SomethingSomething, modified by community. Retrieved 2026-07-03, License - CC BY-SA 4.0
+// Acknowledgement:
+// Design inspired by https://stackoverflow.com/a/21851201 (SomethingSomething, retrieved 2026-07-03).
+// Independent implementation - no code from that answer remains.
 
 /// Note that rendering of individual entries is the purview of the chosen TreeCellRenderer implementation.
 ///

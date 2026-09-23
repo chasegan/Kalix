@@ -29,20 +29,24 @@ ds_1 = my_other_node
 | accounts (optional) | Names of the [accounts](accounts.md) this user draws on, comma-separated in order of use. Orders are capped by the accounts' combined balance and deliveries are debited from them, so an [allocation system](allocation-systems.md) can constrain the user. Example: `accounts = smith_carryover, smith_annual` |
 | order\_accounts (optional) | Names of order-authorisation accounts (debit-on-order), comma-separated in order of use. They extend the order cap beyond the regular `accounts` balance, and the excess portion of each approved order is debited from them immediately at order time. They are invisible to the flow phase. See "Order accounts" below. Example: `order_accounts = wy_bridge` |
 | order\_factor (optional) | Factor applied to this node's order as it is sent upstream. The network sees `order_factor × order`, while `order`, `order_due` and the delivery are unchanged. A number; default 1. See [Order factor](#order-factor). Example: `order_factor = 1.1` |
-| ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
+| ds\_1 (optional) | Name of the downstream node on the river. This property defines a downstream link: what the user does not divert flows down it.  Example: `ds_1 = my_other_node` |
+| ds\_2, ds\_3, ds\_4 (optional) | Supply outlets. The node on a supply outlet places its orders with this user, and the user diverts that water and sends it down the outlet. See [Supply outlets](#supply-outlets). Example: `ds_2 = my_field` |
 
 ## Results associated with this node
 
 | Result | Description |
 | --- | --- |
-| dsflow | Downstream flow [ML] |
+| dsflow | Downstream flow [ML], the total down all outlets |
 | usflow | Upstream flow [ML] |
 | ds\_1 | Downstream flow on link ds\_1 [ML] |
 | ds\_1\_order | Order on link ds\_1 [ML] |
+| ds\_2, ds\_3, ds\_4 | Flow sent down the supply outlet [ML] |
+| ds\_2\_order (and 3, 4) | The order arriving on the supply outlet today, as it arrived [ML] |
+| ds\_2\_order\_due (and 3, 4) | The order accepted from the supply outlet earlier, which is due to be delivered today [ML] |
 | order | The order placed today [ML] |
 | order\_due | The order previously placed, which is due to be delivered today [ML] |
 | demand | Demand at this node [ML] |
-| diversion | Diverted volume [ML] — the sum of the regulated and opportunistic takes |
+| diversion | Diverted volume [ML] — the sum of the regulated and opportunistic takes. This is the whole metered take, including what is sent down supply outlets |
 | diversion\_regulated | The part of the diversion that delivers the arriving order [ML] |
 | diversion\_opportunistic | The part of the diversion taken under opportunistic\_demand [ML] |
 | opportunistic\_demand | Today's opportunistic\_demand value [ML] (zero when the property is not set) |
@@ -131,6 +135,39 @@ Second, a *pure order-debit scheme*: with `accounts` empty and only
 `order_accounts` listed, the user is debited when it orders and never at
 take — the "you ordered it, you own it" accounting some supply schemes
 use.
+
+#### Supply outlets
+
+A regulated user can supply water to other nodes through its supply outlets, `ds_2`, `ds_3` and `ds_4`. The usual case is a [field](field.md): the field does not pump from the river itself, it is supplied by the user, through the user's pump and accounts.
+
+```ini
+[node.farm_pump]
+type = regulated_user
+loc = 20, 30
+order = 0
+pump = 86.4
+accounts = farm_licence
+ds_1 = river_below
+ds_2 = paddock
+
+[node.paddock]
+type = field
+loc = 30, 40
+order = 5
+ds_1 = river_below
+```
+
+The node on a supply outlet places its orders with the user, and they become the user's order:
+
+- The orders arriving on the supply outlets are added to the user's own `order`. The total is capped by the user's accounts, where it has them, and scaled by `order_factor`, and that is the order the network sees: `order_factor × (order + ds_2_order + ds_3_order + ds_4_order)`. The `order` result stays the user's own order.
+- The user holds each accepted order for its own travel time, as it does its own (`ds_2_order_due`). When the ordered water reaches the user it diverts it and sends it down the outlet. If there is routing between the user and the node below, that node's travel time is longer than the user's by that much, and the water arrives there on the step its order falls due.
+- The links below a supply outlet are part of the same regulated zone as the user, with travel time counted from the same supply.
+
+When the user cannot divert everything that is due — the flow is short, or the pump capacity or the account balance limits the take — the supply outlets are served first, `ds_2` then `ds_3` then `ds_4`, and the user's own order takes what is left. The same order applies when the accounts cap the order as it is placed. `opportunistic_demand` is the user's own, and is served last.
+
+Everything that limits or meters the take applies to the whole diversion, the supply outlets' share included: `pump`, the accounts' balance, and the debit to the accounts. It is the user's water. Water that the node below returns to the river is not credited back.
+
+For the mass balance, only what the user keeps for itself leaves the model at the user; the water sent down a supply outlet is still in the model, on that link. What the user keeps is `diversion − ds_2 − ds_3 − ds_4`, and `usflow = ds_1 + diversion`.
 
 ## References
 

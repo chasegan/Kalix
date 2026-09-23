@@ -96,6 +96,7 @@ Account state is published as ordinary series — readable in any
 | `acc.<name>.closing_balance` | Balance at the end of the step. |
 | `acc.<name>.debits` | Water taken by users this step (not policy changes). |
 | `acc.<name>.allocation` | Allocation to date: balance plus use since the last reset (see [Allocation systems](allocation-systems.md)). |
+| `acc.<name>.allocation_pct` | Allocation as a percentage (nominally 0-100) of the account size. `NaN` for a zero-size account (and NaN counts as true in a [condition](dynamic-expressions.md), so a bare `acc.<name>.allocation_pct` trigger on such an account fires every step). The allocation percentage may be >100% — the allocations are not clamped to the account `size`. |
 | `acc.<name>.use` | Water taken since the last `reset_allocation` — the use term of the allocation. Fed only by user takes, like `debits`. |
 | `acc.<name>.size` | Account size, as declared. |
 | `acc.<name>.initial` | Opening balance at the start of the run, as declared (defaults to 0 if omitted). |
@@ -105,6 +106,24 @@ and `use` are also published for the **group aggregate**, summed over its
 members: `acc.<group>.use`, `acc.<group>.closing_balance`, and so on — so a
 resource assessment can write `/ acc.gs.size` instead of a magic total that
 silently goes stale when an entitlement changes.
+
+`allocation_pct` is also made available as a group aggregate: the group
+allocation over the group size. That is a mean of the members' own
+`allocation_pct` weighted by account size, so it can differ from any one
+member's value. Members drift apart when:
+
+- they start at different percentages (`initial` as a proportion of `size`);
+- a RAS action works in absolute amounts — `credit(20)` is a larger share of a
+  small account than of a large one;
+- an action sets the balance without regard to water already used —
+  `set_full` after a take leaves that member above 100%;
+- a balance-setting action such as `credit`, `set` or `scale` caps the balance at
+  the account size, so one member stops rising at its cap while another keeps
+  going (`allocate` and `set_full` are not capped).
+
+Note that this is the allocation *held*, which can differ from the percentage
+an `allocate` action announces (see [`ras.<name>.pct`](ras.md)) — `allocate`
+never reduces an account's allocation, and other actions can increase it.
 
 `size` and `initial` are also group aggregates — the sum of member sizes and
 opening balances — but like their per-account counterparts above, they're

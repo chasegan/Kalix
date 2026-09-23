@@ -1,6 +1,6 @@
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
-use crate::nodes::{Node, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, unregulated_user_node::UnregulatedUserNode, regulated_user_node::RegulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode};
+use crate::nodes::{Node, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, unregulated_user_node::UnregulatedUserNode, regulated_user_node::RegulatedUserNode, field_node::FieldNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode};
 
 #[derive(Clone)]
 pub enum NodeEnum {
@@ -11,6 +11,7 @@ pub enum NodeEnum {
     SplitterNode(SplitterNode),
     UnregulatedUserNode(UnregulatedUserNode),
     RegulatedUserNode(RegulatedUserNode),
+    FieldNode(FieldNode),
     Gr4jNode(Gr4jNode),
     InflowNode(InflowNode),
     RoutingNode(RoutingNode),
@@ -35,6 +36,7 @@ macro_rules! dispatch {
             NodeEnum::SplitterNode($node) => $call,
             NodeEnum::UnregulatedUserNode($node) => $call,
             NodeEnum::RegulatedUserNode($node) => $call,
+            NodeEnum::FieldNode($node) => $call,
             NodeEnum::Gr4jNode($node) => $call,
             NodeEnum::InflowNode($node) => $call,
             NodeEnum::RoutingNode($node) => $call,
@@ -57,6 +59,7 @@ impl NodeEnum {
             NodeEnum::SplitterNode(_) => "splitter",
             NodeEnum::UnregulatedUserNode(_) => "unregulated_user",
             NodeEnum::RegulatedUserNode(_) => "regulated_user",
+            NodeEnum::FieldNode(_) => "field",
             NodeEnum::Gr4jNode(_) => "gr4j",
             NodeEnum::InflowNode(_) => "inflow",
             NodeEnum::RoutingNode(_) => "routing",

@@ -147,6 +147,7 @@ nav:
               - Blackhole: docs/blackhole.md
               - Confluence: docs/confluence.md
               - Gauge: docs/gauge.md
+              - Field: docs/field.md
               - GR4J: docs/gr4j.md
               - Inflow: docs/inflow.md
               - Loss: docs/loss.md
@@ -213,6 +214,7 @@ nav:
               - "0005 Node definition order": code/design/adrs/0005-node-definition-order.md
               - "0006 Expression naming": code/design/adrs/0006-expression-naming.md
               - "0007 File-tree colour": code/design/adrs/0007-file-tree-colour.md
+              - "0008 Ordering knowledge in exhaustive matches": code/design/adrs/0008-ordering-knowledge-in-exhaustive-matches.md
           - Website:
               - code/design/website/index.md
               - Todo: code/design/website/todo.md
