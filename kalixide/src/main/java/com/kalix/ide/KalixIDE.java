@@ -2263,13 +2263,13 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Shows the project tree's right-click context menu for the given files, as requested by
+     * Shows the project tree's right-click context menu on a tab, as requested by
      * a right-click on an editor tab.
      */
-    private void showTabContextMenu(List<File> files, Component invoker, int x, int y) {
+    private void showTabContextMenu(File file, Component invoker, int x, int y) {
         if (projectTreePanel == null) {
             return;
         }
-        projectTreePanel.showContextMenuForFiles(files, invoker, x, y);
+        projectTreePanel.showTabContextMenu(file, invoker, x, y);
     }
 }

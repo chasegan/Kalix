@@ -154,3 +154,22 @@ fn test_no_refund_for_undelivered_order() {
     assert_eq!(series(&mut model, "node.user.diversion"), vec![0.0, 0.0], "nothing delivered");
     assert_eq!(balance(&model, "a1"), 10.0, "regular account undebited (nothing taken)");
 }
+
+/// A negative order is no order, with accounts as without them. (Without
+/// accounts the order was always floored at zero; with them it was passed on
+/// as it came, and a negative order went upstream and reduced what the network
+/// saw from the nodes below.)
+#[test]
+fn test_negative_order_is_no_order_with_accounts() {
+    for (accounts, order_accounts) in [("accounts = a1", ""), ("accounts = a1", "order_accounts = b2"), ("", "order_accounts = b2")] {
+        let ini = user_model(-7.0, accounts, order_accounts).replace("[outputs]", "[outputs]\nnode.dam.ds_1_order");
+        let mut model = IniModelIO::read_model_string(&ini).expect("model should load");
+        model.configure().expect("model should configure");
+        model.run().expect("simulation should run");
+        assert_eq!(series(&mut model, "node.user.order")[0], 0.0, "{accounts} {order_accounts}");
+        assert_eq!(series(&mut model, "node.dam.ds_1_order")[0], 0.0, "{accounts} {order_accounts}");
+        assert_eq!(series(&mut model, "node.user.diversion")[0], 0.0, "{accounts} {order_accounts}");
+        assert_eq!(balance(&model, "a1"), 10.0, "nothing debited");
+        assert_eq!(balance(&model, "b2"), 100.0, "nothing debited");
+    }
+}

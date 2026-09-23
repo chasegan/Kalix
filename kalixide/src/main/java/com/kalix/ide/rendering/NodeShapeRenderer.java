@@ -230,6 +230,37 @@ public class NodeShapeRenderer {
         0     // left side of shaft back to start
     };
 
+    // Sprout - a diamond leaf on a short stem, standing on a thin strip of ground (the field).
+    // Leaf 22px wide and 18px tall, stem 4px wide and 4px tall, ground 16px by 2px. One polygon,
+    // traced clockwise from the apex. The shape sits 3px below the node's centre so that the
+    // leaf's widest line lies on the text line (y = 0), as the podium is shifted for its label.
+    private static final int[] SPROUT_X = {
+        0,    // apex of the leaf
+        11,   // leaf right point
+        2,    // leaf bottom / stem top right
+        2,    // stem bottom right
+        8,    // ground top right
+        8,    // ground bottom right
+        -8,   // ground bottom left
+        -8,   // ground top left
+        -2,   // stem bottom left
+        -2,   // leaf bottom / stem top left
+        -11   // leaf left point
+    };
+    private static final int[] SPROUT_Y = {
+        -10,  // apex of the leaf
+        0,    // leaf right point, on the text line
+        8,    // leaf bottom / stem top right
+        12,   // stem bottom right
+        12,   // ground top right
+        14,   // ground bottom right
+        14,   // ground bottom left
+        12,   // ground top left
+        12,   // stem bottom left
+        8,    // leaf bottom / stem top left
+        0     // leaf left point, on the text line
+    };
+
     /**
      * Renders a node shape with the specified parameters.
      */
@@ -291,6 +322,9 @@ public class NodeShapeRenderer {
                 break;
             case ARROW_DOWN:
                 renderPolygon(g2d, centerX, centerY, ARROW_DOWN_X, ARROW_DOWN_Y, fill);
+                break;
+            case SPROUT:
+                renderPolygon(g2d, centerX, centerY, SPROUT_X, SPROUT_Y, fill);
                 break;
         }
     }

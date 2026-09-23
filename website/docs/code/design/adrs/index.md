@@ -90,6 +90,7 @@ repository has the complete record.
 
 Newest first.
 
+- [ADR-0008 — State ordering knowledge per node type, in exhaustive matches](0008-ordering-knowledge-in-exhaustive-matches.md)
 - [ADR-0007 — File-tree colour](0007-file-tree-colour.md)
 - [ADR-0006 — Expression naming](0006-expression-naming.md)
 - [ADR-0005 — Node definition order is execution order](0005-node-definition-order.md)

@@ -7,6 +7,7 @@ import java.time.ZoneOffset;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -397,5 +398,26 @@ class TimeSeriesDataTest {
         TimeSeriesData bigGap = new TimeSeriesData(
             new long[]{0, DAY_MS, 2 * DAY_MS, 1000 * DAY_MS}, new double[]{1, 2, 3, 4});
         assertSame(bigGap, bigGap.densified(10), "over-cap → left gap-bearing");
+    }
+
+    @Test
+    void constructorCopiesItsInputArrays() {
+        long[] timestamps = {0, DAY_MS};
+        double[] values = {1, 2};
+        TimeSeriesData data = new TimeSeriesData(timestamps, values);
+        assertNotSame(timestamps, data.getTimestamps());
+        assertNotSame(values, data.getValues());
+    }
+
+    /** Decoders hand over arrays they built; a copy would briefly double a long series. */
+    @Test
+    void adoptingTakesTheArraysWithoutCopying() {
+        long[] timestamps = {0, DAY_MS, 2 * DAY_MS};
+        double[] values = {1, Double.NaN, 3};
+        TimeSeriesData data = TimeSeriesData.adopting(timestamps, values);
+        assertSame(timestamps, data.getTimestamps());
+        assertSame(values, data.getValues());
+        assertFalse(data.getValidPoints()[1], "validity is still derived");
+        assertEquals(2, data.getValidPointCount());
     }
 }

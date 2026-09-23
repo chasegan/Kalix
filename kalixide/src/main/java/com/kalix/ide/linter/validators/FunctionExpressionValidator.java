@@ -372,11 +372,13 @@ public class FunctionExpressionValidator {
      *  `size` and `initial` are static (fixed at load, not per-step), but are
      *  still valid field names here. */
     private static final java.util.Set<String> ACCOUNT_FIELDS =
-        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "use", "size", "initial");
+        java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "allocation_pct",
+                         "use", "size", "initial");
 
     /** Fields published per account group: every account field is aggregated
-     *  (summed) over the members, `size` and `use` included. Mirrors the
-     *  engine's GROUP_SERIES_FIELDS. */
+     *  over the members — summed, `size` and `use` included, except
+     *  `allocation_pct`, which is group allocation over group size. Mirrors
+     *  the engine's GROUP_SERIES_FIELDS. */
     private static final java.util.Set<String> ACCOUNT_GROUP_FIELDS = ACCOUNT_FIELDS;
 
     /** Fields published per resource allocation system (`ras.<name>.<field>`). */

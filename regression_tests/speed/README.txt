@@ -35,7 +35,7 @@ The models
                      diamond and a loss, 130 years daily. Shaped on a real
                      regulated valley (synthetic throughout - no real names,
                      parameters or data). Exists because model 4 has half the
-                     nodes and five confluences, all in legacy bare mode, so it
+                     nodes and five confluences, all in legacy link-order mode, so it
                      sees neither confluence-mode cost nor the cache pressure a
                      large node array puts on per-node struct size. The only
                      model exercising two-name `regulated` + harmony_fraction.

@@ -17,11 +17,16 @@ const MAX_DS_LINKS: usize = 1;
 /// - `AllToUs1`: one `regulated` pathway named — every order goes up it,
 ///   immediately (no lag-differential buffering: there is no second pathway
 ///   to synchronise with).
+/// - `NoPathway`: neither `regulated` nor `harmony_fraction` given — the
+///   modeller has not said where orders go, so none are sent upstream. The
+///   supply upstream sees no order and releases nothing for it, which shows
+///   in the results the first time anyone looks.
 #[derive(Default, Clone, Copy, PartialEq, Eq, Debug)]
 pub enum OrderSplit {
     #[default]
     Harmony,
     AllToUs1,
+    NoPathway,
 }
 
 #[derive(Default, Clone)]
@@ -89,6 +94,15 @@ impl ConfluenceNode {
             ..Default::default()
         }
     }
+
+    /// Record this step's harmony fraction. Called by the ordering system straight after
+    /// it evaluates the split, so the series shows the value that was used, on the step
+    /// it was used.
+    pub fn record_harmony_fraction(&self, data_cache: &mut DataCache) {
+        if let Some(idx) = self.recorder_idx_harmony_fraction {
+            data_cache.add_value_at_index(idx, self.harmony_fraction_value);
+        }
+    }
 }
 
 impl Node for ConfluenceNode {
@@ -138,9 +152,8 @@ impl Node for ConfluenceNode {
         if let Some(idx) = self.recorder_idx_ds_1_order {
             data_cache.add_value_at_index(idx, self.dsorders[0]);
         }
-        if let Some(idx) = self.recorder_idx_harmony_fraction {
-            data_cache.add_value_at_index(idx, self.harmony_fraction_value);
-        }
+        // harmony_fraction is recorded by record_harmony_fraction, once the ordering
+        // system has evaluated it for this step.
 
         self.total_outgoing_order = (
             self.dsorders.iter().sum::<f64>()

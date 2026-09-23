@@ -147,8 +147,38 @@ mod test_calendar_builtins;
 #[cfg(test)]
 mod test_opportunistic_demand;
 
+// The ordering module names every node type in its matches (ADR-0008 §2)
+mod test_ordering_exhaustive;
+
+// The order phase visits nodes in reverse definition order
+mod test_ordering_visit_order;
+
+// Nodes with several incoming regulated links
+mod test_ordering_inlets;
+
+// Unregulated user: supply outlets (ds_2 to ds_4)
+mod test_unregulated_user_supply_outlets;
+
+// Regulated user: supply outlets (ds_2 to ds_4)
+mod test_regulated_user_supply_outlets;
+
+// Storage: the order it places, and what is en route to a target level
+mod test_storage_order_results;
+
+// Field node: the soil water balance
+mod test_field_soil;
+
+// Field node: orders from a storage, takes what the soil has room for
+mod test_field_node;
+
 // Confluence order routing (regulated = <upstream node(s)>)
 mod test_confluence_order_routing;
+
+// Splitter: regulated orders on the effluent (ds_2) link
+mod test_splitter_regulated_effluent;
+
+// Rerunning one model object: no state may leak from one run into the next
+mod test_rerun_state;
 mod test_output_casing;
 mod test_static_properties;
 mod test_linter_schema;

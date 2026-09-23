@@ -16,6 +16,7 @@ import com.kalix.ide.managers.StdioTaskManager;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
 import com.kalix.ide.managers.OutputsTreeBuilder;
 import com.kalix.ide.managers.DatasetLoaderManager;
+import com.kalix.ide.managers.DatasetSeriesSource;
 import com.kalix.ide.managers.RunContextMenuManager;
 import com.kalix.ide.managers.TreeFilterManager;
 import com.kalix.ide.flowviz.style.PaletteSeriesStyleResolver;
@@ -151,14 +152,15 @@ public class RunManager extends JFrame {
     private VisualizationTabManager tabManager;
     private DataSet plotDataSet;
 
-    // Cache for loaded dataset series.
+    // Loaded dataset series.
     // Key: DatasetSeries ref qualifying by absolute path + base name. The base name is the
     // series' own hierarchy only (no filename prefix), so it can collate with runs and other
     // files by name; the absolute-path qualifier is therefore essential to keep identically
     // named series from different files distinct. Keying by ref preserves that separation.
-    // Value: TimeSeriesData
-    // Mirrors how runs store data in TimeSeriesRequestManager's cache.
-    private final Map<DatasetSeries, TimeSeriesData> datasetSeriesCache = new HashMap<>();
+    // Value: where the data comes from - held here for formats parsed whole on load, a
+    // PixieStore key for Pixie, so decoded Pixie data is never pinned by this map.
+    // Keys double as the list of each dataset's series for the outputs tree.
+    private final Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources = new HashMap<>();
 
     // Manager instances
     private OutputsTreeBuilder outputsTreeBuilder;
@@ -492,7 +494,7 @@ public class RunManager extends JFrame {
             plotDataSet,
             seriesSlotManager,
             timeSeriesRequestManager,
-            datasetSeriesCache,
+            datasetSeriesSources,
             () -> lastRunTracker.getGeneration(),
             () -> lastRunTracker.getLastRunInfo()
         );
@@ -522,7 +524,7 @@ public class RunManager extends JFrame {
         // DatasetLoaderManager - handles dataset file loading
         datasetLoaderManager = new DatasetLoaderManager(
             this,                             // Parent frame
-            datasetSeriesCache,               // Series cache
+            datasetSeriesSources,             // Series sources
             loadedDatasetsNode,               // Tree node
             treeModel,                        // Tree model
             statusUpdater,                    // Status updater
@@ -586,7 +588,7 @@ public class RunManager extends JFrame {
         String datasetId = datasetInfo.file.getAbsolutePath();
 
         // Get series from cache (NOT plotDataSet) - mirrors how runs work
-        return datasetSeriesCache.keySet().stream()
+        return datasetSeriesSources.keySet().stream()
             .filter(ref -> ref.datasetId().equals(datasetId))
             .map(DatasetSeries::baseName)
             .sorted(NaturalSortUtils::naturalCompare)
@@ -858,46 +860,50 @@ public class RunManager extends JFrame {
      * Restores checked state to match the given series set.
      * This ensures the tree visually reflects what's plotted, even after tree rebuilds
      * (rebuilds reset checked state, since old TreePaths reference discarded nodes).
-     * Returns the set of series that were successfully restored (found in the tree).
+     *
+     * <p>Purely a projection onto the <em>visible</em> tree: a series the filter hides
+     * has no node to check, and that says nothing about whether it is still plotted.
+     * Which series a tab keeps is {@link #reconcileTabSeriesWithSources}' question.</p>
      *
      * @param seriesToRestore The set of series keys to check in the tree
      */
-    Set<SeriesRef> restoreTreeChecksForSeries(
-            Set<SeriesRef> seriesToRestore) {
+    void restoreTreeChecksForSeries(Set<SeriesRef> seriesToRestore) {
         if (seriesToRestore.isEmpty()) {
             timeseriesTree.setCheckedPaths(Collections.emptyList());
-            return Collections.emptySet();
+            return;
         }
 
         List<TreePath> pathsToCheck = new ArrayList<>();
-        Set<SeriesRef> restoredRefs = new HashSet<>();
         DefaultMutableTreeNode root = (DefaultMutableTreeNode) timeseriesTreeModel.getRoot();
 
-        // Search tree for nodes matching the ref set, collect which ones we found
+        // Tick in the tab's series order
         for (SeriesRef ref : seriesToRestore) {
-            List<TreePath> foundPaths = new ArrayList<>();
-            searchAndCollectPaths(root, Collections.singleton(ref), foundPaths);
-            if (!foundPaths.isEmpty()) {
-                pathsToCheck.addAll(foundPaths);
-                restoredRefs.add(ref);
-            }
+            searchAndCollectPaths(root, Collections.singleton(ref), pathsToCheck);
         }
 
         // Note: Callers run inside a programmatic-update section to block events
         timeseriesTree.setCheckedPaths(pathsToCheck);
-
-        return restoredRefs;
     }
 
     /**
-     * Reconciles the target tab's selected series with what's actually available in the tree.
-     * Removes series from the tab that couldn't be restored (e.g., when a run is deselected).
+     * Reconciles the target tab's selected series with what the checked sources offer,
+     * removing series whose source has gone (a run unchecked) or no longer produces
+     * them (a new Last run without that output).
+     *
+     * <p>Availability is asked of the sources, never of the visible tree: under a
+     * filter the tree omits series that are still offered, and pruning against it
+     * emptied the plot on any source change while filtering (#431).</p>
      */
-    void reconcileCheckedSeriesWithTree(Set<SeriesRef> restoredSeries,
-                                        Set<SeriesRef> tabSeries) {
+    void reconcileTabSeriesWithSources(Set<SeriesRef> tabSeries) {
+        List<Object> checkedRuns = new ArrayList<>();
+        List<Object> checkedDatasets = new ArrayList<>();
+        collectCheckedSources(checkedRuns, checkedDatasets);
+        List<Object> checkedSources = new ArrayList<>(checkedRuns);
+        checkedSources.addAll(checkedDatasets);
+
         // Find series that need to be removed from the tab
         Set<SeriesRef> seriesToRemove = new HashSet<>(tabSeries);
-        seriesToRemove.removeAll(restoredSeries);
+        seriesToRemove.removeAll(outputsTreeBuilder.availableRefs(checkedSources));
 
         if (seriesToRemove.isEmpty()) {
             return;
@@ -954,8 +960,8 @@ public class RunManager extends JFrame {
 
             // Restore checked state to match what's currently plotted on active tab
             Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-            Set<SeriesRef> restoredSeries = restoreTreeChecksForSeries(tabSeries);
-            reconcileCheckedSeriesWithTree(restoredSeries, tabSeries);
+            restoreTreeChecksForSeries(tabSeries);
+            reconcileTabSeriesWithSources(tabSeries);
         } finally {
             fetchCoordinator.endProgrammaticUpdate();
         }
@@ -984,17 +990,23 @@ public class RunManager extends JFrame {
      * Updates the timeseries tree based on current run tree selection.
      */
     void updateOutputsTree() {
-        TreePath[] checkedPaths = timeseriesSourceTree.getCheckedPaths();
-        if (checkedPaths.length == 0) {
-            outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
-            return;
-        }
-
-        // Collect all selected RunInfo and LoadedDatasetInfo objects
         List<Object> checkedRuns = new ArrayList<>();
         List<Object> checkedDatasets = new ArrayList<>();
+        collectCheckedSources(checkedRuns, checkedDatasets);
 
-        for (TreePath path : checkedPaths) {
+        if (checkedRuns.isEmpty() && checkedDatasets.isEmpty()) {
+            outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
+        } else {
+            outputsTreeBuilder.updateTree(checkedRuns, checkedDatasets);
+        }
+    }
+
+    /**
+     * Collects the RunInfo and LoadedDatasetInfo objects currently checked in the data
+     * source tree. Category paths (auto-checked parents) are neither, and are skipped.
+     */
+    private void collectCheckedSources(List<Object> checkedRuns, List<Object> checkedDatasets) {
+        for (TreePath path : timeseriesSourceTree.getCheckedPaths()) {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
             Object userObject = node.getUserObject();
 
@@ -1003,12 +1015,6 @@ public class RunManager extends JFrame {
             } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                 checkedDatasets.add(userObject);
             }
-        }
-
-        if (checkedRuns.isEmpty() && checkedDatasets.isEmpty()) {
-            outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
-        } else {
-            outputsTreeBuilder.updateTree(checkedRuns, checkedDatasets);
         }
     }
 
@@ -1031,7 +1037,7 @@ public class RunManager extends JFrame {
 
     /**
      * Removes a loaded dataset and every trace of its series from this window:
-     * the shared {@code plotDataSet} pool, the per-context {@code datasetSeriesCache}
+     * the shared {@code plotDataSet} pool, the per-context {@code datasetSeriesSources}
      * and {@link com.kalix.ide.flowviz.style.SeriesSlotManager}, every plot and
      * stats tab, and the source tree node itself. The outputs tree refreshes via
      * the tree's selection-change listener if the dataset was selected.
@@ -1043,7 +1049,7 @@ public class RunManager extends JFrame {
 
         // Collect all DatasetSeries refs that belong to this dataset.
         List<SeriesRef> refs = new ArrayList<>();
-        for (DatasetSeries dsRef : datasetSeriesCache.keySet()) {
+        for (DatasetSeries dsRef : datasetSeriesSources.keySet()) {
             if (dsRef.datasetId().equals(absPath)) {
                 refs.add(dsRef);
             }
@@ -1054,7 +1060,7 @@ public class RunManager extends JFrame {
             plotDataSet.removeSeries(ref);
             seriesSlotManager.removeSlot(ref);
         }
-        datasetSeriesCache.keySet().removeIf(dsRef -> dsRef.datasetId().equals(absPath));
+        datasetSeriesSources.keySet().removeIf(dsRef -> dsRef.datasetId().equals(absPath));
 
         // Remove the tree node FIRST, exactly as run removal does (RunTreeController
         // removes paths before removeRunData). If the dataset was checked, removePath

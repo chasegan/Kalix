@@ -77,6 +77,8 @@ public class EnhancedTextEditor extends JPanel {
     private TextSearchManager searchManager;
     private FileDropManager dropManager;
     private LinterManager linterManager;
+    /** Node-type definitions (e.g. allowed outlets) for map edits; null until the linter is initialised. */
+    private SchemaManager schemaManager;
     private AutoCompleteManager autoCompleteManager;
     private com.kalix.ide.linter.ui.HoverTipSupplier hoverTips;
     private com.kalix.ide.editor.commands.ContextCommandManager contextCommandManager;
@@ -229,6 +231,7 @@ public class EnhancedTextEditor extends JPanel {
      * This should be called after the EnhancedTextEditor is created.
      */
     public void initializeLinter(SchemaManager schemaManager) {
+        this.schemaManager = schemaManager;
         if (linterManager != null) {
             linterManager.dispose();
         }
@@ -748,6 +751,26 @@ public class EnhancedTextEditor extends JPanel {
         CommandExecutor executor = new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
 
         return executor.insertNodeTemplateAtLocation(nodeType, worldX, worldY, selectedNodeNames, spliceLink);
+    }
+
+    /**
+     * Links two existing nodes (e.g. from a drag on the map); see
+     * {@link CommandExecutor#linkEdit} for which outlet is used.
+     *
+     * @param upstreamType the upstream node's type, for its allowed outlets (may be null)
+     */
+    public void addLink(String upstream, String upstreamType, String downstream) {
+        if (commandParentFrame == null) {
+            logger.warn("Context commands not initialized - cannot add link");
+            return;
+        }
+        com.kalix.ide.linter.LinterSchema schema =
+            schemaManager != null ? schemaManager.getCurrentSchema() : null;
+        com.kalix.ide.linter.schema.NodeTypeDefinition type =
+            schema != null && upstreamType != null ? schema.getNodeType(upstreamType) : null;
+
+        CommandExecutor executor = new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
+        executor.addLink(upstream, downstream, type != null ? type.maxDsOutlet() : 0);
     }
 
     private void setupKeyBindings() {

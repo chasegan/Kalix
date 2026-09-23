@@ -37,6 +37,9 @@ public class PixieReader {
     private static final int CODEC_GORILLA_DOUBLE = 0;
     private static final int CODEC_GORILLA_FLOAT = 1;
 
+    /** Block header: codec (u16) + compressed length (u32). */
+    private static final int BLOCK_HEADER_BYTES = 6;
+
     /**
      * Read all timeseries from the file pair. Each result pairs the series-name metadata
      * with nameless {@link TimeSeriesData}; the caller builds the {@code SeriesRef} identity.
@@ -91,6 +94,30 @@ public class PixieReader {
     }
 
     /**
+     * Read one series by seeking straight to the block that {@code info} (from
+     * {@link #getSeriesInfo}) locates, without re-reading the {@code .pxt}.
+     *
+     * <p>The offset is only valid for the {@code .pxb} the index was read from. If
+     * the pair has been rewritten since, the block is checked against the file's
+     * size before anything is allocated, and the decoded point count against the
+     * index, so a stale offset fails with an {@link IOException} instead of
+     * decoding the wrong bytes.
+     */
+    public TimeSeriesData readSeries(String basePath, SeriesInfo info) throws IOException {
+        String binaryPath = basePath + ".pxb";
+
+        try (RandomAccessFile binaryFile = new RandomAccessFile(binaryPath, "r")) {
+            TimeSeriesData series = readSeriesFromBinary(binaryFile, info.offset, info.timestepSeconds);
+            if (series.getPointCount() != info.pointCount) {
+                throw new IOException(String.format(
+                    "Series '%s' decoded %d points but the index declares %d; the .pxb may have changed since the .pxt was read",
+                    info.name, series.getPointCount(), info.pointCount));
+            }
+            return series;
+        }
+    }
+
+    /**
      * Get series names and metadata without reading the binary data
      */
     public List<SeriesInfo> getSeriesInfo(String basePath) throws IOException {
@@ -100,6 +127,8 @@ public class PixieReader {
         List<SeriesInfo> result = new ArrayList<>();
         for (SeriesMetadata meta : metadataList) {
             SeriesInfo info = new SeriesInfo();
+            info.index = meta.index;
+            info.offset = meta.offset;
             info.name = meta.seriesName;
             info.pointCount = meta.length;
             info.startTime = LocalDateTime.ofInstant(
@@ -201,12 +230,25 @@ public class PixieReader {
     }
 
     private TimeSeriesData readSeriesFromBinary(RandomAccessFile binaryFile, SeriesMetadata meta) throws IOException {
+        return readSeriesFromBinary(binaryFile, meta.offset, meta.timestep);
+    }
+
+    private TimeSeriesData readSeriesFromBinary(RandomAccessFile binaryFile, long offset, long timestepSeconds)
+            throws IOException {
         // Seek to the series block
-        binaryFile.seek(meta.offset);
+        binaryFile.seek(offset);
 
         // Read block header
         int codec = readUInt16(binaryFile);
         long dataLength = readUInt32(binaryFile);
+
+        // A block that runs past the end of the file means the offset does not point
+        // at a block header (e.g. a stale index); refuse before allocating its length.
+        if (offset + BLOCK_HEADER_BYTES + dataLength > binaryFile.length()) {
+            throw new IOException(String.format(
+                "Block at offset %d declares %d bytes, past the end of the .pxb (%d bytes)",
+                offset, dataLength, binaryFile.length()));
+        }
 
         // Read compressed data
         byte[] compressedData = new byte[(int) dataLength];
@@ -216,7 +258,6 @@ public class PixieReader {
         // (no per-point TimeValue objects for multi-million-point series).
         long[] timestampsSec;
         double[] values;
-        long timestepSeconds = meta.timestep; // Already in seconds
 
         switch (codec) {
             case CODEC_GORILLA_DOUBLE: {
@@ -252,7 +293,8 @@ public class PixieReader {
             timestampsSec[i] *= 1000L;
         }
 
-        return new TimeSeriesData(timestampsSec, values);
+        // Both arrays are ours alone, so hand them over rather than have them copied.
+        return TimeSeriesData.adopting(timestampsSec, values);
     }
 
     private int readUInt16(RandomAccessFile file) throws IOException {
@@ -283,6 +325,10 @@ public class PixieReader {
      * Information about a series without loading the actual data
      */
     public static class SeriesInfo {
+        /** The .pxt series index. */
+        public int index;
+        /** Byte offset of the series block in the .pxb, for {@link PixieReader#readSeries(String, SeriesInfo)}. */
+        public long offset;
         public String name;
         public int pointCount;
         public LocalDateTime startTime;

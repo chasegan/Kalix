@@ -26,6 +26,7 @@ import java.awt.image.BufferedImage;
 
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
+import com.kalix.ide.interaction.LinkDragManager;
 import com.kalix.ide.interaction.MapClipboardManager;
 import com.kalix.ide.interaction.MapContextMenuManager;
 import com.kalix.ide.interaction.MapInteractionManager;
@@ -96,6 +97,7 @@ public class MapPanel extends JPanel {
     private final MapContextMenuManager contextMenuManager;
     private final MapClipboardManager clipboardManager;
     private final MapSearchManager mapSearchManager;
+    private final LinkDragManager linkDragManager;
     private final EnhancedTextEditor textEditor;
 
     // Rendering
@@ -149,6 +151,7 @@ public class MapPanel extends JPanel {
         this.contextMenuManager.setMapSearchManager(mapSearchManager);
         this.contextMenuManager.setClipboardManager(clipboardManager);
         this.contextMenuManager.setTextEditor(textEditor);
+        this.linkDragManager = new LinkDragManager(this, model, textEditor, mapRenderer);
     }
 
     /**
@@ -237,6 +240,12 @@ public class MapPanel extends JPanel {
         MouseAdapter panningHandler = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                // Any new press ends a link drag: a release that never arrived (e.g. taken
+                // by a popup) must not leave one running.
+                if (linkDragManager.isDragging()) {
+                    linkDragManager.cancel();
+                }
+
                 // Right-click: show context menu.
                 //
                 // Deliberately isRightMouseButton and not the conventional isPopupTrigger:
@@ -263,6 +272,11 @@ public class MapPanel extends JPanel {
                     clickStartPoint = new Point(e.getPoint());
                     clickedNodeName = nodeAtPoint;
                     
+                    // A press in the ring just outside a node (not on any node) drags out a
+                    // new link. Shift keeps its meaning of rectangle selection.
+                    String ringNode = nodeAtPoint == null && !e.isShiftDown()
+                        ? linkDragManager.ringNodeAt(e.getPoint()) : null;
+
                     // Check for Ctrl+click rotation start (anywhere on the map)
                     boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
                     if (isCtrlDown && interactionManager != null && interactionManager.canStartRotation()) {
@@ -285,6 +299,8 @@ public class MapPanel extends JPanel {
                         // Navigation to the node's definition happens on mouseReleased,
                         // once we know this was a click and not the start of a drag —
                         // navigating here moved the editor caret on every drag.
+                    } else if (ringNode != null) {
+                        linkDragManager.startDrag(ringNode, e.getPoint());
                     } else {
                         // Not clicking on a node - check for links
                         com.kalix.ide.model.ModelLink linkAtPoint = getLinkAtPoint(e.getPoint());
@@ -317,6 +333,10 @@ public class MapPanel extends JPanel {
             @Override
             public void mouseReleased(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
+                    if (linkDragManager.isDragging()) {
+                        linkDragManager.finishDrag();
+                    }
+
                     // End dragging if active
                     boolean wasDragging = interactionManager != null && interactionManager.isDragging();
                     if (wasDragging) {
@@ -349,9 +369,10 @@ public class MapPanel extends JPanel {
             @Override
             public void mouseExited(MouseEvent e) {
                 mouseInPanel = false;
-                if (hoveredNodeName != null) {
-                    // Leaving the panel must retract a hover-revealed label, otherwise
-                    // it stays painted with the mouse nowhere near it.
+                // Leaving the panel must retract a hover-revealed label or link ring,
+                // otherwise it stays painted with the mouse nowhere near it.
+                boolean linkHoverChanged = linkDragManager.updateHover(null);
+                if (hoveredNodeName != null || linkHoverChanged) {
                     hoveredNodeName = null;
                     repaint();
                 } else {
@@ -365,18 +386,34 @@ public class MapPanel extends JPanel {
                 mouseWorldY = toWorldY(e.getY());
                 mouseInPanel = true;
 
+                // No button is held, so a link drag still open lost its release.
+                if (linkDragManager.isDragging()) {
+                    linkDragManager.cancel();
+                }
+
                 // With labels hidden, hovering a node reveals its label. Only the
                 // transition matters — an unchanged hover costs nothing beyond the
                 // coordinate overlay repaint below.
                 boolean hoverChanged = updateHoveredNode(e.getPoint());
 
-                // Show rotation cursor when Ctrl is held and multiple nodes are selected.
-                // Only touch the cursor on a state change — setCursor per event is wasteful.
+                // With Shift (rectangle select) or a rotation modifier held, a press would not
+                // draw a link, so no ring is offered.
                 boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
-                Cursor desiredCursor = (isCtrlDown && interactionManager != null
-                        && interactionManager.canStartRotation())
-                    ? rotateCursor()
-                    : Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR);
+                boolean rotating = isCtrlDown && interactionManager != null
+                    && interactionManager.canStartRotation();
+                hoverChanged |= linkDragManager.updateHover(rotating || e.isShiftDown() ? null : e.getPoint());
+
+                // Show rotation cursor when Ctrl is held and multiple nodes are selected,
+                // and a crosshair over a node's link ring. Only touch the cursor on a state
+                // change — setCursor per event is wasteful.
+                Cursor desiredCursor;
+                if (rotating) {
+                    desiredCursor = rotateCursor();
+                } else if (linkDragManager.isHovering()) {
+                    desiredCursor = Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
+                } else {
+                    desiredCursor = Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR);
+                }
                 if (getCursor() != desiredCursor) {
                     setCursor(desiredCursor);
                 }
@@ -397,6 +434,11 @@ public class MapPanel extends JPanel {
                 mouseWorldX = toWorldX(e.getX());
                 mouseWorldY = toWorldY(e.getY());
                 mouseInPanel = true;
+
+                if (linkDragManager.isDragging()) {
+                    linkDragManager.updateDrag(e.getPoint());
+                    return;
+                }
 
                 // Check if we should start node dragging. A drag only starts once the
                 // mouse has moved past the click tolerance, so small jitters while
@@ -498,6 +540,7 @@ public class MapPanel extends JPanel {
         mapRenderer.renderMap(g2d, getWidth(), getHeight(), zoomLevel, panX, panY,
                              showGridlines, model, nodeTheme, selectionStart, selectionCurrent,
                              mouseWorldX, mouseWorldY, mouseInPanel, showLabels, hoveredNodeName);
+        linkDragManager.paint(g2d);
 
         g2d.dispose();
     }
@@ -1003,15 +1046,36 @@ public class MapPanel extends JPanel {
         bind(inputMap, KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), "map.delete", delete);
         inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_SPACE, 0), "map.delete");
 
-        // Rotation-cursor preview while the modifier key itself is held
+        // Cancel a link drag in progress. Enabled only mid-drag: Swing does not consume a
+        // key bound to a disabled action, so Esc otherwise still reaches anyone else.
+        inputMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "map.cancelLinkDrag");
+        getActionMap().put("map.cancelLinkDrag", new AbstractAction() {
+            @Override
+            public boolean isEnabled() {
+                return linkDragManager.isDragging();
+            }
+
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                linkDragManager.cancel();
+            }
+        });
+
+        // Rotation-cursor preview while the modifier key itself is held. A link drag owns
+        // the cursor while it runs (drop / no-drop is its only refusal feedback), so the
+        // preview must not touch it then.
         Runnable previewOn = () -> {
             if (interactionManager != null && interactionManager.canStartRotation()
-                    && !interactionManager.isDragging()) {
+                    && !interactionManager.isDragging() && !linkDragManager.isDragging()) {
                 setCursor(rotateCursor());
+                if (linkDragManager.updateHover(null)) {
+                    repaint();
+                }
             }
         };
         Runnable previewOff = () -> {
-            if (interactionManager != null && !interactionManager.isDragging()) {
+            if (interactionManager != null && !interactionManager.isDragging()
+                    && !linkDragManager.isDragging()) {
                 setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
             }
         };

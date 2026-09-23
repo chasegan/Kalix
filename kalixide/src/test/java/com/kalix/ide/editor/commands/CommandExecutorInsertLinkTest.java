@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -126,5 +127,71 @@ class CommandExecutorInsertLinkTest {
 
         f.area().undoLastAction();
         assertEquals(MODEL, f.area().getText(), "one undo must restore the original text");
+    }
+
+    @Test
+    void addLinkWritesFirstFreeDsOnUpstreamNode() {
+        Fixture f = fixture(MODEL);
+
+        assertTrue(f.executor().addLink("b", "a", 1));
+
+        String after = f.area().getText();
+        assertTrue(after.contains("loc = 0, 50\nds_1 = a\n"),
+            "'b' must gain ds_1 at the end of its section: " + after);
+
+        f.area().undoLastAction();
+        assertEquals(MODEL, f.area().getText(), "one undo must restore the original text");
+    }
+
+    @Test
+    void addLinkFromUnknownNodeChangesNothing() {
+        Fixture f = fixture(MODEL);
+
+        assertFalse(f.executor().addLink("no_such_node", "a", 1));
+
+        assertEquals(MODEL, f.area().getText());
+    }
+
+    // --- Outlet choice for a new link (pure) ---
+
+    private static String applied(String text, CommandExecutor.TextEdit edit) {
+        return text.substring(0, edit.start()) + edit.replacement() + text.substring(edit.end());
+    }
+
+    @Test
+    void linkEditFillsGapsBeforeReusingAnOutlet() {
+        String text = "[node.s]\ntype = storage\nds_1 = x\nds_3 = y\n";
+        assertEquals("[node.s]\ntype = storage\nds_1 = x\nds_3 = y\nds_2 = new\n",
+            applied(text, CommandExecutor.linkEdit(text, "s", "new", 4)));
+    }
+
+    @Test
+    void linkEditReusesTheLastAllowedOutletWhenAllAreTaken() {
+        String text = "[node.s]\ntype = storage\nds_1 = w\nds_2 = x\nds_3 = y\nds_4 = z  # spill\n\n[node.t]\nds_4 = z\n";
+        assertEquals("[node.s]\ntype = storage\nds_1 = w\nds_2 = x\nds_3 = y\nds_4 = new  # spill\n\n[node.t]\nds_4 = z\n",
+            applied(text, CommandExecutor.linkEdit(text, "s", "new", 4)),
+            "only s's ds_4 value changes; its comment and t's ds_4 are untouched");
+    }
+
+    @Test
+    void linkEditReusesTheOutletOfTheSectionThatWins() {
+        // Duplicate sections: the last one wins (as in the parser), and only it is edited.
+        String text = "[node.a]\nds_1 = x\n\n[node.a]\nds_1 = y\n";
+        assertEquals("[node.a]\nds_1 = x\n\n[node.a]\nds_1 = new\n",
+            applied(text, CommandExecutor.linkEdit(text, "a", "new", 1)));
+    }
+
+    @Test
+    void linkEditWithUnknownLimitAlwaysAddsAnOutlet() {
+        String text = "[node.a]\nds_1 = x\n";
+        assertEquals("[node.a]\nds_1 = x\nds_2 = new\n",
+            applied(text, CommandExecutor.linkEdit(text, "a", "new", 0)));
+    }
+
+    @Test
+    void linkEditAddsBeyondTheLimitWhenTheLastOutletHasNoValue() {
+        String text = "[node.a]\nds_1 =\n";
+        assertEquals("[node.a]\nds_1 =\nds_2 = new\n",
+            applied(text, CommandExecutor.linkEdit(text, "a", "new", 1)));
     }
 }

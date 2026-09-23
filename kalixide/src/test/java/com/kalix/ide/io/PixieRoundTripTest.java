@@ -4,6 +4,7 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -11,6 +12,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PixieRoundTripTest {
@@ -181,5 +183,69 @@ class PixieRoundTripTest {
         assertEquals(LocalDateTime.of(9999, 12, 31, 0, 0), info.endTime);
         assertEquals(3652425, info.pointCount);
         assertEquals(86400L, info.timestepSeconds);
+    }
+
+    /** Seeking by the index's offset decodes the same series a full read does, in any order. */
+    @Test
+    void offsetReadMatchesFullRead() throws Exception {
+        List<NamedSeries> written = List.of(
+            new NamedSeries("a", dailySeries(10, 1.0)),
+            new NamedSeries("b", dailySeries(400, 2.0)),
+            new NamedSeries("c", dailySeries(3, 3.0)));
+        String base = tempDir.resolve("multi").toString();
+        new PixieWriter().writeToFile(base, written, true);
+
+        PixieReader reader = new PixieReader();
+        List<PixieReader.SeriesInfo> infos = reader.getSeriesInfo(base);
+        assertEquals(List.of(1, 2, 3), infos.stream().map(i -> i.index).toList());
+
+        // Last first: each read seeks directly to its own block.
+        for (int i = infos.size() - 1; i >= 0; i--) {
+            TimeSeriesData reloaded = reader.readSeries(base, infos.get(i));
+            assertArrayEquals(written.get(i).data().getTimestamps(), reloaded.getTimestamps());
+            assertArrayEquals(written.get(i).data().getValues(), reloaded.getValues(), 0.0);
+        }
+    }
+
+    /** An index read before the pair was rewritten must fail, not decode the new bytes as the old series. */
+    @Test
+    void staleIndexIsRefusedRatherThanMisdecoded() throws Exception {
+        String base = tempDir.resolve("rewritten").toString();
+        new PixieWriter().writeToFile(base,
+            List.of(new NamedSeries("a", dailySeries(10, 1.0)), new NamedSeries("b", dailySeries(10, 2.0))), true);
+        List<PixieReader.SeriesInfo> stale = new PixieReader().getSeriesInfo(base);
+
+        // Same first block offset, fewer points; the second block no longer exists.
+        new PixieWriter().writeToFile(base, List.of(new NamedSeries("a", dailySeries(5, 1.0))), true);
+
+        PixieReader reader = new PixieReader();
+        assertThrows(IOException.class, () -> reader.readSeries(base, stale.get(0)),
+            "point count disagrees with the index");
+        assertThrows(IOException.class, () -> reader.readSeries(base, stale.get(1)),
+            "offset now lies past the end of the .pxb");
+    }
+
+    /** A header declaring more bytes than the file holds is refused before allocating them. */
+    @Test
+    void blockLongerThanFileIsRefusedBeforeAllocating() throws Exception {
+        String base = tempDir.resolve("garbage").toString();
+        // codec 0, then a ~2 GB length, then nothing.
+        Files.write(Path.of(base + ".pxb"), new byte[] {0, 0, 0x7F, (byte) 0xFF, (byte) 0xFF, (byte) 0xFF});
+
+        PixieReader.SeriesInfo info = new PixieReader.SeriesInfo();
+        info.offset = 0;
+        info.timestepSeconds = 86400;
+        IOException e = assertThrows(IOException.class, () -> new PixieReader().readSeries(base, info));
+        assertTrue(e.getMessage().contains("past the end"), e.getMessage());
+    }
+
+    private static TimeSeriesData dailySeries(int days, double scale) {
+        LocalDateTime[] times = new LocalDateTime[days];
+        double[] values = new double[days];
+        for (int i = 0; i < days; i++) {
+            times[i] = LocalDateTime.of(2020, 1, 1, 0, 0).plusDays(i);
+            values[i] = scale * i;
+        }
+        return new TimeSeriesData(times, values);
     }
 }

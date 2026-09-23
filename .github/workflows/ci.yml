@@ -54,10 +54,20 @@ jobs:
           java-version: ${{ env.JDK_VERSION }}
       # `check`, not `test`: Checkstyle is wired into the check lifecycle, so running
       # `test` alone would leave the no-wildcard-imports rule unenforced on main.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
       - name: Java tests and checks
         working-directory: kalixide
         shell: bash
-        run: ./gradlew check --no-daemon
+        # Sometimes, gradle fails to download properly. This guards against that class
+        # of test failure.
+        run: |
+          for attempt in 1 2 3; do
+            ./gradlew check --no-daemon && exit 0
+            echo "Gradle attempt ${attempt} failed; retrying..."
+            sleep $((attempt * 10))
+          done
+          exit 1
       - name: Upload test results
         if: failure()
         uses: actions/upload-artifact@v4

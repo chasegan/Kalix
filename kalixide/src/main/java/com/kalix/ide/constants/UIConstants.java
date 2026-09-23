@@ -35,6 +35,12 @@ public final class UIConstants {
          */
         public static final int DRAG_START_THRESHOLD_PX = 5;
 
+        /**
+         * Width in pixels of the ring just outside a node's circle where a press
+         * starts dragging a new link rather than selecting or moving the node.
+         */
+        public static final int LINK_HANDLE_RING_PX = 8;
+
         private Map() { throw new UnsupportedOperationException("Constants class"); }
     }
 
@@ -81,6 +87,9 @@ public final class UIConstants {
 
         /** Border width for unselected nodes */
         public static final float NODE_UNSELECTED_STROKE_WIDTH = 1.0f;
+
+        /** Color for a dragged link that would be refused (and its target's ring) */
+        public static final Color LINK_DRAG_REFUSED = new Color(210, 40, 40);
 
         private Selection() { throw new UnsupportedOperationException("Constants class"); }
     }
