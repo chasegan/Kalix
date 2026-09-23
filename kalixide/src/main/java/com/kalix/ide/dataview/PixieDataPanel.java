@@ -2,6 +2,7 @@ package com.kalix.ide.dataview;
 
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.UIConstants;
+import com.kalix.ide.linter.ui.HoverTipSupplier;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -120,11 +121,16 @@ public final class PixieDataPanel extends JPanel {
     private void refreshStatus() {
         if (!session.isLoaded()) {
             status.setText("Decoding pixie…");
+            status.setToolTipText(null);
         } else if (session.refusal() != null) {
             status.setText(session.refusal());
+            // A refusal can outrun the strip's width; hovering shows it whole, wrapped.
+            status.setToolTipText("<html><body style='width: 360px'>"
+                + HoverTipSupplier.escapeHtml(session.refusal()) + "</body></html>");
         } else {
             status.setText(String.format("%,d series  ·  %,d rows  ·  pixie (Gorilla-compressed)",
                 session.seriesCount(), session.rowCount()));
+            status.setToolTipText(null);
         }
     }
 
@@ -156,5 +162,10 @@ public final class PixieDataPanel extends JPanel {
     /** The status strip's current text — package-private, for tests. */
     String getStatusText() {
         return status.getText();
+    }
+
+    /** The status strip's current tooltip, or {@code null} — package-private, for tests. */
+    String getStatusToolTip() {
+        return status.getToolTipText();
     }
 }
