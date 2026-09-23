@@ -35,9 +35,10 @@ import java.util.concurrent.Executors;
  * and ask the store.
  *
  * <p><b>Changed files.</b> An index is only valid for the bytes it was read from.
- * {@link #open} stamps the pair's sizes and modification times, and every decode
- * checks the stamp first: if the pair has changed, the request fails with
- * {@link StaleIndexException} rather than decoding the new bytes against the old
+ * {@link #open} stamps the pair's sizes and modification times, and every request
+ * checks the stamp first, whether it is served from the cache or decoded: if the pair
+ * has changed, the request fails with {@link StaleIndexException} rather than handing
+ * out data decoded from the old bytes or decoding the new bytes against the old
  * offsets. The caller re-opens the file to pick up the new index. (A rewrite within
  * the filesystem's timestamp resolution that also keeps both sizes slips past the
  * stamp; {@code PixieReader}'s bounds and point-count checks are the backstop.)
@@ -139,6 +140,15 @@ public final class PixieStore {
             totalPoints += info.pointCount;
             longestSeries = Math.max(longestSeries, info.pointCount);
         }
+        return estimateWholeLoadBytes(totalPoints, longestSeries);
+    }
+
+    /**
+     * Estimated peak memory to decode and hold series totalling {@code totalPoints}
+     * points, the longest of them {@code longestSeries} points, for callers that count
+     * series the index does not list together (the Run Manager's pool and pending fetches).
+     */
+    public static long estimateWholeLoadBytes(long totalPoints, long longestSeries) {
         return totalPoints * WHOLE_LOAD_BYTES_PER_POINT + longestSeries * DECODE_BYTES_PER_POINT;
     }
 
@@ -240,6 +250,11 @@ public final class PixieStore {
             SoftReference<TimeSeriesData> cached = entry.decoded.get(key.index());
             TimeSeriesData data = cached != null ? cached.get() : null;
             if (data != null) {
+                // A cached series is only as valid as the bytes it was decoded from.
+                // Serve it only while the pair is unchanged, as a decode would be.
+                if (!entry.stamp.equals(currentStamp(entry))) {
+                    return CompletableFuture.failedFuture(new StaleIndexException(entry.pxtFile));
+                }
                 return CompletableFuture.completedFuture(data);
             }
             CompletableFuture<TimeSeriesData> pending = entry.inFlight.get(key.index());
@@ -284,7 +299,7 @@ public final class PixieStore {
     /** Decode thread: check the stamp, decode, cache, settle the future. */
     private void decodeInto(Entry entry, PixieReader.SeriesInfo info, CompletableFuture<TimeSeriesData> decode) {
         try {
-            if (!entry.stamp.equals(Stamp.of(entry.pxtFile, new File(entry.basePath + ".pxb")))) {
+            if (!entry.stamp.equals(currentStamp(entry))) {
                 throw new StaleIndexException(entry.pxtFile);
             }
             TimeSeriesData data = new PixieReader().readSeries(entry.basePath, info);
@@ -326,6 +341,11 @@ public final class PixieStore {
     }
 
     // --- helpers (callers hold the lock where they touch entries) ---
+
+    /** The pair's stamp as it is on disk now, to compare with the one it was opened under. */
+    private static Stamp currentStamp(Entry entry) {
+        return Stamp.of(entry.pxtFile, new File(entry.basePath + ".pxb"));
+    }
 
     private Entry entryFor(PixieSeriesKey key) {
         Entry entry = entries.get(key.pxtFile());

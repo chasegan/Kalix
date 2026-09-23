@@ -10,7 +10,6 @@ import com.kalix.ide.flowviz.data.LastSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
-import com.kalix.ide.io.PixieReader;
 import com.kalix.ide.io.PixieStore;
 import com.kalix.ide.managers.DatasetLoaderManager;
 import com.kalix.ide.managers.DatasetSeriesSource;
@@ -64,6 +63,14 @@ class SeriesFetchCoordinator {
     private final SeriesSlotManager seriesSlotManager;
     private final TimeSeriesRequestManager timeSeriesRequestManager;
     private final Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources;
+
+    /**
+     * Pixie series whose decode has been requested but has not yet landed in the pool
+     * (or failed), by point count. Read and written on the EDT only. The memory gate
+     * counts these with the pool: a tick that follows another before its decodes
+     * complete must not pass because the pool does not show them yet.
+     */
+    private final Map<DatasetSeries, Integer> pendingPixiePoints = new HashMap<>();
     /**
      * Defers to {@link LastRunTracker#getGeneration()}. Captured at fetch-issue time so
      * async responses for "[Last]" series can be dropped when a newer run has become Last.
@@ -341,22 +348,29 @@ class SeriesFetchCoordinator {
     /**
      * Why the newly ticked Pixie series in {@code selection} must not be fetched, or
      * {@code null} if they fit. Counts every Pixie series already in the pool (by its
-     * decoded point count, so one from a since-changed file still counts) plus each
-     * ticked one not yet there (by its index row), and compares their estimated size
-     * ({@link PixieStore#estimateWholeLoadBytes}) with
+     * decoded point count, so one from a since-changed file still counts), every one
+     * still being decoded for an earlier tick ({@link #pendingPixiePoints}), and each
+     * ticked one not yet among those (by its index row), and compares their estimated
+     * size ({@link PixieStore#estimateWholeLoadBytes}) with
      * {@link PixieStore#defaultWholeLoadBudget}. A ticked key whose file has changed
      * is left out; its fetch fails as stale anyway.
      */
     private String pixieSelectionRefusal(Set<SeriesRef> selection) {
         PixieStore store = PixieStore.shared();
-        List<PixieReader.SeriesInfo> infos = new ArrayList<>();
         Set<SeriesRef> counted = new HashSet<>();
+        long totalPoints = 0;
+        long longestSeries = 0;
         for (SeriesRef ref : plotDataSet.getSeriesRefs()) {
             TimeSeriesData data = plotDataSet.getSeries(ref);
             if (data != null && isPixieSeries(ref) && counted.add(ref)) {
-                PixieReader.SeriesInfo pooled = new PixieReader.SeriesInfo();
-                pooled.pointCount = data.getPointCount();
-                infos.add(pooled);
+                totalPoints += data.getPointCount();
+                longestSeries = Math.max(longestSeries, data.getPointCount());
+            }
+        }
+        for (Map.Entry<DatasetSeries, Integer> pending : pendingPixiePoints.entrySet()) {
+            if (counted.add(pending.getKey())) {
+                totalPoints += pending.getValue();
+                longestSeries = Math.max(longestSeries, pending.getValue());
             }
         }
         for (SeriesRef ref : selection) {
@@ -365,24 +379,26 @@ class SeriesFetchCoordinator {
                 continue;
             }
             try {
-                infos.add(store.info(pixie.key()));
+                int points = store.info(pixie.key()).pointCount;
+                totalPoints += points;
+                longestSeries = Math.max(longestSeries, points);
                 counted.add(ref);
             } catch (IllegalArgumentException stale) {
                 // Not countable; fetchPixieSeries reports it.
             }
         }
-        long estimate = PixieStore.estimateWholeLoadBytes(infos);
+        long estimate = PixieStore.estimateWholeLoadBytes(totalPoints, longestSeries);
         long budget = PixieStore.defaultWholeLoadBudget();
         if (estimate <= budget) {
             return null;
         }
         return String.format(
-            "The Pixie series loaded or ticked in the Run Manager (%,d) would need about %s"
-                + " in memory, more than the %s it allows (half the IDE's memory).%n%n"
+            "The Pixie series loaded, loading or ticked in the Run Manager (%,d) would need"
+                + " about %s in memory, more than the %s it allows (half the IDE's memory).%n%n"
                 + "The newly ticked series were not loaded. Series stay loaded, even when"
                 + " unticked, until their dataset is removed: remove and re-add a dataset to"
                 + " free its memory, then tick fewer series.",
-            infos.size(), PixieStore.formatBytes(estimate), PixieStore.formatBytes(budget));
+            counted.size(), PixieStore.formatBytes(estimate), PixieStore.formatBytes(budget));
     }
 
     /** Whether {@code ref} is a loaded dataset series backed by a Pixie file. */
@@ -399,12 +415,22 @@ class SeriesFetchCoordinator {
      *
      * <p>The result is dropped if the dataset was removed while the decode ran, so a
      * removed file's series never reappear in the pool.
+     *
+     * <p>Until the decode settles here on the EDT the series is counted as pending by
+     * {@link #pixieSelectionRefusal}, so a tick issued meanwhile sees it.
      */
     private void fetchPixieSeries(DatasetSeries ref, DatasetSeriesSource.Pixie source,
                                   FlowVizPanel targetPanel, boolean shouldResetZoom) {
         tabManager.addLoadingSeriesInStatsTabs(ref);
-        PixieStore.shared().get(source.key()).whenComplete((data, failure) ->
+        PixieStore store = PixieStore.shared();
+        try {
+            pendingPixiePoints.put(ref, store.info(source.key()).pointCount);
+        } catch (IllegalArgumentException stale) {
+            // Not countable; the fetch below fails and reports it.
+        }
+        store.get(source.key()).whenComplete((data, failure) ->
             SwingUtilities.invokeLater(() -> {
+                pendingPixiePoints.remove(ref);
                 if (!source.equals(datasetSeriesSources.get(ref))) {
                     return; // dataset removed (or reloaded) meanwhile
                 }
