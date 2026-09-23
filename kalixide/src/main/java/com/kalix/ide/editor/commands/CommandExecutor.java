@@ -644,6 +644,36 @@ public class CommandExecutor {
     }
 
     /**
+     * Links two existing nodes as one atomic edit; see {@link #linkEdit}. Whether the link
+     * is sensible (self-link, duplicate, loop) is the caller's concern. Definition order is
+     * not repaired: a target defined above its source is left for the linter (per
+     * ADR-0005 §2.1).
+     *
+     * @return false if the upstream node has no section, in which case nothing changed
+     */
+    public boolean addLink(String upstream, String downstream, int maxOutlet) {
+        try {
+            TextEdit edit = linkEdit(editor.getText(), upstream, downstream, maxOutlet);
+            if (edit == null) {
+                logger.warn("Link skipped: no section found for upstream node '{}'", upstream);
+                return false;
+            }
+            editor.beginAtomicEdit();
+            try {
+                applyEdit(edit);
+            } finally {
+                editor.endAtomicEdit();
+            }
+            logger.info("Linked {} -> {}", upstream, downstream);
+            return true;
+        } catch (Exception e) {
+            logger.error("Error adding link", e);
+            showError("Failed to add link: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Inserts a new node template from the text-editor context menu: the section goes
      * relative to the caret (see {@link NodeInsertionPoint}), at the given world
      * location — typically the centre of the map view, since a text-editor invocation
@@ -779,7 +809,12 @@ public class CommandExecutor {
         if (section == null) {
             return null;
         }
-        int n = firstFreeDsIndex(text.substring(section.start(), section.contentEnd()));
+        return dsLineInsertion(text, section,
+            firstFreeDsIndex(text.substring(section.start(), section.contentEnd())), targetName);
+    }
+
+    private static TextEdit dsLineInsertion(String text, NodeSectionLocator.NodeSection section,
+                                            int n, String targetName) {
         int at = section.contentEnd();
         String line = "ds_" + n + " = " + targetName + "\n";
         if (at > 0 && text.charAt(at - 1) != '\n') {
@@ -800,22 +835,65 @@ public class CommandExecutor {
             if (!ref.sourceNode().equals(upstreamNode) || !ref.target().equals(oldTarget)) {
                 continue;
             }
-            String line = text.substring(ref.lineStart(), ref.lineEnd());
-            int eq = line.indexOf('=');
-            if (eq < 0) {
-                continue;
+            TextEdit edit = dsValueEdit(text.substring(ref.lineStart(), ref.lineEnd()), ref.lineStart(),
+                oldTarget, newTarget);
+            if (edit != null) {
+                return edit;
             }
-            int valueStart = eq + 1;
-            while (valueStart < line.length() && Character.isWhitespace(line.charAt(valueStart))) {
-                valueStart++;
-            }
-            if (!line.startsWith(oldTarget, valueStart)) {
-                continue; // defensive: the reference's target must sit exactly here
-            }
-            return new TextEdit(ref.lineStart() + valueStart,
-                ref.lineStart() + valueStart + oldTarget.length(), newTarget);
         }
         return null;
+    }
+
+    /**
+     * Computes the link from {@code upstream} to {@code downstream}: a new {@code ds_N}
+     * line at the first free N while that is within {@code maxOutlet}; once every allowed
+     * outlet is taken, {@code ds_maxOutlet} is re-pointed at {@code downstream} instead,
+     * replacing the link it held. With {@code maxOutlet} of 0 (type unknown) a new line
+     * is always added. Returns null when the node has no section in the text.
+     */
+    static TextEdit linkEdit(String text, String upstream, String downstream, int maxOutlet) {
+        NodeSectionLocator.NodeSection section = NodeSectionLocator.find(text, upstream);
+        if (section == null) {
+            return null;
+        }
+        String body = text.substring(section.start(), section.contentEnd());
+        int n = firstFreeDsIndex(body);
+        if (maxOutlet > 0 && n > maxOutlet) {
+            // Scanning the section alone keeps other nodes' ds lines out of it.
+            for (NodeSectionLocator.DsReference ref : NodeSectionLocator.findDsReferences(body)) {
+                String line = body.substring(ref.lineStart(), ref.lineEnd());
+                java.util.regex.Matcher key = DS_KEY_PATTERN.matcher(line.trim());
+                if (key.find() && key.group(1).equals(String.valueOf(maxOutlet))) {
+                    TextEdit edit = dsValueEdit(line, section.start() + ref.lineStart(), ref.target(), downstream);
+                    if (edit != null) {
+                        return edit;
+                    }
+                }
+            }
+            // ds_maxOutlet has no value to re-point (e.g. "ds_1 ="): add a new line, beyond
+            // the type's limit, and leave it for the linter to flag.
+        }
+        return dsLineInsertion(text, section, n, downstream);
+    }
+
+    /**
+     * The exact value-range replacement of {@code oldTarget} on one {@code ds_N} line that
+     * starts at {@code lineStart}. Range-anchored to the value only, so keys and same-line
+     * comments cannot be touched. Null if the target does not sit where expected.
+     */
+    private static TextEdit dsValueEdit(String line, int lineStart, String oldTarget, String newTarget) {
+        int eq = line.indexOf('=');
+        if (eq < 0) {
+            return null;
+        }
+        int valueStart = eq + 1;
+        while (valueStart < line.length() && Character.isWhitespace(line.charAt(valueStart))) {
+            valueStart++;
+        }
+        if (!line.startsWith(oldTarget, valueStart)) {
+            return null; // defensive: the reference's target must sit exactly here
+        }
+        return new TextEdit(lineStart + valueStart, lineStart + valueStart + oldTarget.length(), newTarget);
     }
 
     /**
