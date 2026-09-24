@@ -123,7 +123,7 @@ Aggregates appear under **Aggregate series** in the Run Manager's source tree, g
 
 **Removing a source keeps its aggregates.** You can load a dataset, make an aggregate, then remove the dataset and keep only the aggregate for comparison. Its group is then labelled, for example, `flows.csv (removed)`.
 
-**Managing aggregates.** Right-click an aggregate in the source tree to **Save…**, **Rename…** or **Delete** it. Right-click a group to save all of its aggregates, or choose **Save aggregates…** in the **Timeseries** tree to save the selected ones together. Aggregates save as CSV, zipped CSV or Pixie, one column per aggregate.
+**Managing aggregates.** Right-click an aggregate in the source tree to **Show component series** (a window listing its inputs, one per line, ready to copy), or to **Save…**, **Rename…** or **Delete** it. Right-click a group to save all of its aggregates, or choose **Save aggregates…** in the **Timeseries** tree to save the selected ones together. Aggregates save as CSV, zipped CSV or Pixie, one column per aggregate.
 
 Aggregates last for the session; save them to keep them. A dataset with a column named exactly like an existing aggregate (`aggregate.<name>`) can't be loaded until one of the two is renamed or removed.
 

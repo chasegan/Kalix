@@ -624,6 +624,9 @@ class AggregatedSeriesController {
             return null;
         }
         JPopupMenu menu = new JPopupMenu();
+        JMenuItem show = new JMenuItem("Show component series");
+        show.addActionListener(e -> showComponents(info));
+        menu.add(show);
         JMenuItem save = new JMenuItem("Save…");
         save.addActionListener(e -> save(List.of(info), labelResolver.labelFor(info.ref())));
         menu.add(save);
@@ -788,13 +791,7 @@ class AggregatedSeriesController {
 
     /** The source-tree tooltip for an aggregate: what it sums, and why it is unavailable. */
     String recipe(AggregateInfo info) {
-        List<String> names = info.inputs.stream().map(input -> switch (input) {
-            case AggregateInfo.SeriesInput series -> series.name();
-            case AggregateInfo.AggregateInput aggregate -> {
-                AggregateInfo source = aggregates.get(aggregate.aggregateId());
-                yield source != null ? labelResolver.nameFor(source.ref()) : "(deleted aggregate)";
-            }
-        }).toList();
+        List<String> names = componentNames(info);
         int shown = Math.min(names.size(), RECIPE_LINES);
         StringBuilder html = new StringBuilder("<html>Sum of:");
         for (String name : names.subList(0, shown)) {
@@ -807,6 +804,24 @@ class AggregatedSeriesController {
             html.append("<br><br>Unavailable: ").append(escapeHtml(info.unavailableReason()));
         }
         return html.append("</html>").toString();
+    }
+
+    /** Opens the aggregate's inputs, one per line, in a text window they can be copied from. */
+    private void showComponents(AggregateInfo info) {
+        MinimalEditorWindow editor = new MinimalEditorWindow(String.join("\n", componentNames(info)) + "\n");
+        editor.setTitle(labelResolver.labelFor(info.ref()));
+        editor.setVisible(true);
+    }
+
+    /** An aggregate's inputs by their current names. */
+    private List<String> componentNames(AggregateInfo info) {
+        return info.inputs.stream().map(input -> switch (input) {
+            case AggregateInfo.SeriesInput series -> series.name();
+            case AggregateInfo.AggregateInput aggregate -> {
+                AggregateInfo source = aggregates.get(aggregate.aggregateId());
+                yield source != null ? labelResolver.nameFor(source.ref()) : "(deleted aggregate)";
+            }
+        }).toList();
     }
 
     private static String escapeHtml(String text) {
