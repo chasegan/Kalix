@@ -11,6 +11,7 @@ import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.SeriesSum;
+import com.kalix.ide.io.PixieStore;
 import com.kalix.ide.managers.DatasetLoaderManager;
 import com.kalix.ide.managers.DatasetSeriesSource;
 import com.kalix.ide.managers.OutputsTreeBuilder;
@@ -33,6 +34,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * The Run Manager's user-created aggregates: the sum of chosen series from one source,
@@ -109,22 +111,22 @@ class AggregatedSeriesController {
             return;
         }
 
-        Map<SourceRef, List<CompletableFuture<TimeSeriesData>>> futures = new LinkedHashMap<>();
+        List<Plan> plans = new ArrayList<>();
         for (Map.Entry<SourceRef, OriginInputs> entry : selection.entrySet()) {
-            List<CompletableFuture<TimeSeriesData>> originFutures =
-                requestInputs(entry.getKey(), entry.getValue());
-            if (originFutures == null) {
+            Plan plan = plan(entry.getKey(), entry.getValue());
+            if (plan == null) {
                 return;
             }
-            futures.put(entry.getKey(), originFutures);
+            plans.add(plan);
+        }
+        String refusal = pixieRefusal(plans);
+        if (refusal != null) {
+            error(refusal);
+            return;
         }
 
-        long lastGeneration = lastRunTracker.getGeneration();
         status("Creating aggregate." + name + "…");
-        CompletableFuture.allOf(futures.values().stream().flatMap(List::stream)
-                .toArray(CompletableFuture[]::new))
-            .whenComplete((ignored, failure) -> SwingUtilities.invokeLater(
-                () -> finishCreation(name, selection, futures, lastGeneration)));
+        new Creation(name, plans, lastRunTracker.getGeneration()).next();
     }
 
     /** One origin's selected inputs, keyed by display name, and where its series are read. */
@@ -240,26 +242,61 @@ class AggregatedSeriesController {
         return null;
     }
 
-    /**
-     * Starts fetching one origin's inputs, or returns {@code null} (after telling the user
-     * why) if they can't be.
-     */
-    private List<CompletableFuture<TimeSeriesData>> requestInputs(SourceRef origin, OriginInputs selected) {
-        List<CompletableFuture<TimeSeriesData>> futures = new ArrayList<>();
-        for (AggregateInfo.Input input : selected.inputs.values()) {
-            CompletableFuture<TimeSeriesData> future = switch (input) {
-                case AggregateInfo.SeriesInput series -> requestSeries(origin, selected.source, series.name());
-                case AggregateInfo.AggregateInput aggregate -> aggregateValues(origin, aggregate.aggregateId());
-            };
-            if (future == null) {
-                return null;
-            }
-            futures.add(future);
-        }
-        return futures;
+    /** One origin's inputs, ready to be read one at a time. */
+    private record Plan(SourceRef origin, List<String> names, List<AggregateInfo.Input> inputs,
+                        List<Supplier<CompletableFuture<TimeSeriesData>>> reads,
+                        boolean pixieBacked, long length, int longestPixieInput) {
     }
 
-    private CompletableFuture<TimeSeriesData> requestSeries(SourceRef origin, Object source, String name) {
+    /** How to read one series input; {@code pixiePoints} is 0 unless it decodes from Pixie. */
+    private record Read(Supplier<CompletableFuture<TimeSeriesData>> read, int pixiePoints) {
+    }
+
+    /**
+     * Plans the reads for one origin's inputs, or returns {@code null} (after telling the
+     * user why) if they can't be read. Run series are requested now, as the request manager
+     * caches them anyway; Pixie series are decoded only when their turn comes.
+     */
+    private Plan plan(SourceRef origin, OriginInputs selected) {
+        List<Supplier<CompletableFuture<TimeSeriesData>>> reads = new ArrayList<>();
+        boolean pixieBacked = false;
+        long length = 0;
+        int longestPixieInput = 0;
+        for (AggregateInfo.Input input : selected.inputs.values()) {
+            switch (input) {
+                case AggregateInfo.SeriesInput series -> {
+                    Read read = seriesRead(origin, selected.source, series.name());
+                    if (read == null) {
+                        return null;
+                    }
+                    reads.add(read.read());
+                    if (read.pixiePoints() > 0) {
+                        pixieBacked = true;
+                        length = Math.max(length, read.pixiePoints());
+                        longestPixieInput = Math.max(longestPixieInput, read.pixiePoints());
+                    }
+                }
+                case AggregateInfo.AggregateInput aggregate -> {
+                    AggregateInfo info = aggregates.get(aggregate.aggregateId());
+                    TimeSeriesData values = info != null ? info.values() : null;
+                    if (values == null) {
+                        String reason = info != null ? info.unavailableReason() : "it was deleted";
+                        error(originLabel(origin) + ": an input aggregate is unavailable (" + reason + ").");
+                        return null;
+                    }
+                    reads.add(() -> CompletableFuture.completedFuture(values));
+                    if (info.pixieBacked) {
+                        pixieBacked = true;
+                        length = Math.max(length, values.getPointCount());
+                    }
+                }
+            }
+        }
+        return new Plan(origin, List.copyOf(selected.inputs.keySet()), List.copyOf(selected.inputs.values()),
+            reads, pixieBacked, length, longestPixieInput);
+    }
+
+    private Read seriesRead(SourceRef origin, Object source, String name) {
         if (source instanceof RunInfoImpl run) {
             RunInfoImpl resolved = run.isLastAlias() ? lastRunTracker.getLastRunInfo() : run;
             SessionManager.KalixSession session = resolved != null ? resolved.getSession() : null;
@@ -267,17 +304,24 @@ class AggregatedSeriesController {
                 error(originLabel(origin) + " has no session to read from.");
                 return null;
             }
-            return timeSeriesRequestManager.requestTimeSeries(session.getSessionKey(), name);
+            CompletableFuture<TimeSeriesData> request =
+                timeSeriesRequestManager.requestTimeSeries(session.getSessionKey(), name);
+            return new Read(() -> request, 0);
         }
         if (source instanceof DatasetLoaderManager.LoadedDatasetInfo dataset) {
             String datasetId = dataset.file.getAbsolutePath();
             switch (datasetSeriesSources.get(new DatasetSeries(datasetId, name))) {
                 case DatasetSeriesSource.Loaded loaded -> {
-                    return CompletableFuture.completedFuture(loaded.data());
+                    return new Read(() -> CompletableFuture.completedFuture(loaded.data()), 0);
                 }
-                case DatasetSeriesSource.Pixie ignored -> {
-                    error("Aggregates of Pixie datasets are not supported yet.");
-                    return null;
+                case DatasetSeriesSource.Pixie pixie -> {
+                    PixieStore store = PixieStore.shared();
+                    try {
+                        return new Read(() -> store.get(pixie.key()), store.info(pixie.key()).pointCount);
+                    } catch (IllegalArgumentException stale) {
+                        error(originLabel(origin) + " has changed on disk since it was loaded. Reload it.");
+                        return null;
+                    }
                 }
                 case null -> {
                     error(originLabel(origin) + " has no series " + name + ".");
@@ -289,76 +333,121 @@ class AggregatedSeriesController {
         return null;
     }
 
-    private CompletableFuture<TimeSeriesData> aggregateValues(SourceRef origin, long aggregateId) {
-        AggregateInfo aggregate = aggregates.get(aggregateId);
-        TimeSeriesData values = aggregate != null ? aggregate.values() : null;
-        if (values == null) {
-            String reason = aggregate != null ? aggregate.unavailableReason() : "it was deleted";
-            error(originLabel(origin) + ": an input aggregate is unavailable (" + reason + ").");
-            return null;
+    /** The Pixie memory check for {@code plans}, or {@code null} if none reads Pixie data. */
+    private String pixieRefusal(List<Plan> plans) {
+        long newPoints = 0;
+        int longestInput = 0;
+        for (Plan plan : plans) {
+            if (plan.pixieBacked()) {
+                newPoints += plan.length();
+            }
+            longestInput = Math.max(longestInput, plan.longestPixieInput());
         }
-        return CompletableFuture.completedFuture(values);
+        return newPoints == 0 ? null : window.pixieAggregateRefusal(newPoints, longestInput);
     }
 
-    /** Sums and registers every origin's aggregate, or none of them. */
-    private void finishCreation(String name, Map<SourceRef, OriginInputs> selection,
-                                Map<SourceRef, List<CompletableFuture<TimeSeriesData>>> futures,
-                                long lastGeneration) {
-        List<SourceRef> origins = List.copyOf(selection.keySet());
-        if (origins.contains(new LastSource()) && lastRunTracker.getGeneration() != lastGeneration) {
-            fail("The last run changed while aggregate." + name + " was being created. Try again.");
-            return;
-        }
-        // Re-checked: another creation may have taken the name while this one fetched.
-        String problem = nameProblem(name, origins);
-        if (problem != null) {
-            fail(problem);
-            return;
+    /**
+     * One creation in progress: reads each origin's inputs one after another, adding each
+     * to the running sum on the EDT as it arrives and then dropping it, so at most one
+     * decoded Pixie input is held at a time. The first failure abandons the creation.
+     */
+    private final class Creation {
+        private final String name;
+        private final List<Plan> plans;
+        private final long lastGeneration;
+        private final List<TimeSeriesData> sums = new ArrayList<>();
+        private int planIndex;
+        private int inputIndex;
+        private SeriesSum sum = new SeriesSum();
+
+        Creation(String name, List<Plan> plans, long lastGeneration) {
+            this.name = name;
+            this.plans = plans;
+            this.lastGeneration = lastGeneration;
         }
 
-        Map<SourceRef, TimeSeriesData> sums = new LinkedHashMap<>();
-        List<String> problems = new ArrayList<>();
-        for (SourceRef origin : origins) {
-            List<String> names = List.copyOf(selection.get(origin).inputs.keySet());
-            List<CompletableFuture<TimeSeriesData>> originFutures = futures.get(origin);
-            SeriesSum sum = new SeriesSum();
-            for (int i = 0; i < names.size(); i++) {
-                String where = originLabel(origin) + ": " + names.get(i);
-                try {
-                    sum.add(originFutures.get(i).join());
-                } catch (CompletionException e) {
-                    Throwable cause = e.getCause() != null ? e.getCause() : e;
-                    problems.add(where + " could not be read (" + cause.getMessage() + ")");
-                } catch (IllegalArgumentException e) {
-                    problems.add(where + " " + e.getMessage());
-                }
+        void next() {
+            if (planIndex == plans.size()) {
+                finish();
+                return;
             }
-            if (problems.isEmpty()) {
-                sums.put(origin, sum.result());
+            Plan plan = plans.get(planIndex);
+            if (inputIndex == plan.reads().size()) {
+                sums.add(sum.result());
+                sum = new SeriesSum();
+                planIndex++;
+                inputIndex = 0;
+                next();
+                return;
+            }
+            plan.reads().get(inputIndex).get().whenComplete((data, failure) ->
+                SwingUtilities.invokeLater(() -> accept(data, failure)));
+        }
+
+        private void accept(TimeSeriesData data, Throwable failure) {
+            Plan plan = plans.get(planIndex);
+            String where = originLabel(plan.origin()) + ": " + plan.names().get(inputIndex);
+            if (failure != null) {
+                Throwable cause = failure instanceof CompletionException && failure.getCause() != null
+                    ? failure.getCause() : failure;
+                fail("aggregate." + name + " was not created: " + where
+                    + " could not be read (" + cause.getMessage() + ").");
+                return;
+            }
+            try {
+                sum.add(data);
+            } catch (IllegalArgumentException e) {
+                fail("aggregate." + name + " was not created: " + where + " " + e.getMessage() + ".");
+                return;
+            }
+            inputIndex++;
+            next();
+        }
+
+        /** Registers every origin's aggregate, or none of them. */
+        private void finish() {
+            List<SourceRef> origins = plans.stream().map(Plan::origin).toList();
+            if (origins.contains(new LastSource()) && lastRunTracker.getGeneration() != lastGeneration) {
+                fail("The last run changed while aggregate." + name + " was being created. Try again.");
+                return;
+            }
+            // Re-checked: another creation may have taken the name while this one read.
+            String problem = nameProblem(name, origins);
+            if (problem != null) {
+                fail(problem);
+                return;
+            }
+
+            List<TreePath> newPaths = new ArrayList<>();
+            Set<SeriesRef> newRefs = new LinkedHashSet<>();
+            for (int i = 0; i < plans.size(); i++) {
+                Plan plan = plans.get(i);
+                DefaultMutableTreeNode node =
+                    register(plan.origin(), name, plan.inputs(), plan.pixieBacked(), sums.get(i));
+                newPaths.add(new TreePath(node.getPath()));
+                newRefs.add(((AggregateInfo) node.getUserObject()).ref());
+            }
+
+            // Show and plot them: check the new sources, then their series.
+            for (TreePath path : newPaths) {
+                sourceTree.expandPath(path.getParentPath());
+            }
+            sourceTree.addCheckedPaths(newPaths);
+            window.checkOutputsSeries(newRefs);
+            status("Created aggregate." + name + " for " + origins.size()
+                + (origins.size() == 1 ? " source" : " sources"));
+        }
+    }
+
+    /** Point counts of the aggregates made from Pixie data, for the Pixie memory budget. */
+    List<Integer> pixieBackedPoints() {
+        List<Integer> points = new ArrayList<>();
+        for (AggregateInfo info : aggregates.values()) {
+            if (info.pixieBacked && info.values() != null) {
+                points.add(info.values().getPointCount());
             }
         }
-        if (!problems.isEmpty()) {
-            fail("aggregate." + name + " was not created:\n  " + String.join("\n  ", problems));
-            return;
-        }
-
-        List<TreePath> newPaths = new ArrayList<>();
-        Set<SeriesRef> newRefs = new LinkedHashSet<>();
-        for (SourceRef origin : origins) {
-            DefaultMutableTreeNode node = register(origin, name,
-                List.copyOf(selection.get(origin).inputs.values()), sums.get(origin));
-            newPaths.add(new TreePath(node.getPath()));
-            newRefs.add(((AggregateInfo) node.getUserObject()).ref());
-        }
-
-        // Show and plot them: check the new sources, then their series.
-        for (TreePath path : newPaths) {
-            sourceTree.expandPath(path.getParentPath());
-        }
-        sourceTree.addCheckedPaths(newPaths);
-        window.checkOutputsSeries(newRefs);
-        status("Created aggregate." + name + " for " + origins.size()
-            + (origins.size() == 1 ? " source" : " sources"));
+        return points;
     }
 
     /** The label lookup for {@link DefaultLabelResolver}; {@code null} for an unknown id. */
@@ -373,8 +462,8 @@ class AggregatedSeriesController {
      * creating the group if this is the origin's first aggregate. Returns its tree node.
      */
     DefaultMutableTreeNode register(SourceRef origin, String name, List<AggregateInfo.Input> inputs,
-                                    TimeSeriesData values) {
-        AggregateInfo info = new AggregateInfo(nextId++, origin, name, inputs, values);
+                                    boolean pixieBacked, TimeSeriesData values) {
+        AggregateInfo info = new AggregateInfo(nextId++, origin, name, inputs, pixieBacked, values);
         aggregates.put(info.id, info);
 
         DefaultMutableTreeNode group = groupNodeFor(origin);

@@ -970,6 +970,16 @@ public class RunManager extends JFrame {
         return runTreeController.runNameForId(runId);
     }
 
+    /** Point counts of the aggregates made from Pixie data, for the Pixie memory budget. */
+    List<Integer> pixieBackedAggregatePoints() {
+        return aggregatedSeriesController.pixieBackedPoints();
+    }
+
+    /** See {@link SeriesFetchCoordinator#pixieAggregateRefusal}. */
+    String pixieAggregateRefusal(long newPoints, int longestInput) {
+        return fetchCoordinator.pixieAggregateRefusal(newPoints, longestInput);
+    }
+
     /** The aggregate lookup for {@link DefaultLabelResolver}. */
     private AggregateLabel aggregateLabel(long aggregateId) {
         return aggregatedSeriesController.labelFor(aggregateId);

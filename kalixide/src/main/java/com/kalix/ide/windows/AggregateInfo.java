@@ -29,17 +29,20 @@ final class AggregateInfo {
     final SourceRef origin;
     /** The recipe: what was summed, as resolved at creation. */
     final List<Input> inputs;
+    /** Made from Pixie data, directly or through an input aggregate: counts towards the Pixie budget. */
+    final boolean pixieBacked;
 
     private String name;
     private TimeSeriesData values;
     private String unavailableReason;
 
     AggregateInfo(long id, SourceRef origin, String name, List<Input> inputs,
-                  TimeSeriesData values) {
+                  boolean pixieBacked, TimeSeriesData values) {
         this.id = id;
         this.origin = origin;
         this.name = name;
         this.inputs = List.copyOf(inputs);
+        this.pixieBacked = pixieBacked;
         this.values = values;
     }
 
