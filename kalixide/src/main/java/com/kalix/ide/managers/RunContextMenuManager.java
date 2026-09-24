@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -72,6 +73,10 @@ public class RunContextMenuManager {
     // Top-level category nodes that support "Remove all" on right-click (e.g. "Current runs",
     // "Run library", "Loaded datasets"). Set by the owner via setRemovableCategories.
     private final Set<DefaultMutableTreeNode> removableCategories = new HashSet<>();
+
+    // Menus for node kinds this manager doesn't know (e.g. aggregates): user object -> menu,
+    // or null for none. Set by the owner via setNodeMenuProvider.
+    private Function<Object, JPopupMenu> nodeMenuProvider = userObject -> null;
 
     /**
      * Represents run status for context menu decisions.
@@ -228,12 +233,19 @@ public class RunContextMenuManager {
                     contextMenu.show(runTree, e.getX(), e.getY());
                 } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                     datasetMenu.show(runTree, e.getX(), e.getY());
+                } else if (nodeMenuProvider.apply(userObject) instanceof JPopupMenu menu) {
+                    menu.show(runTree, e.getX(), e.getY());
                 } else if (removableCategories.contains(node)) {
                     removeAllItem.setEnabled(countRemovableChildren(node) > 0);
                     categoryMenu.show(runTree, e.getX(), e.getY());
                 }
             }
         });
+    }
+
+    /** Supplies the right-click menu for node kinds this manager doesn't handle itself. */
+    public void setNodeMenuProvider(Function<Object, JPopupMenu> provider) {
+        this.nodeMenuProvider = provider;
     }
 
     /**

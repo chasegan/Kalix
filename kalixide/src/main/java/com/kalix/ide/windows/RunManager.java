@@ -352,6 +352,8 @@ public class RunManager extends JFrame {
                         return uid;
                     } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo datasetInfo) {
                         return datasetInfo.file.getAbsolutePath();
+                    } else if (userObject instanceof AggregateInfo aggregate) {
+                        return aggregatedSeriesController.recipe(aggregate);
                     }
                 }
                 return null;
@@ -583,6 +585,7 @@ public class RunManager extends JFrame {
         runContextMenuManager.setupRunTreeContextMenu();
         // Top-level categories that support "Remove all". Last run holds a single alias to the
         // most-recent run's session, so removing it removes that one run (same as its "Remove").
+        runContextMenuManager.setNodeMenuProvider(aggregatedSeriesController::contextMenuFor);
         runContextMenuManager.setRemovableCategories(
             lastRunNode, currentRunsNode, libraryNode, loadedDatasetsNode);
         runContextMenuManager.setupOutputsTreeContextMenu(aggregatedSeriesController::createAggregatedSeries,
@@ -844,6 +847,20 @@ public class RunManager extends JFrame {
      */
     public void refreshRuns() {
         runTreeController.refreshRuns();
+    }
+
+    /**
+     * Rebuilds the outputs tree after a label it is built from changed (a rename), keeping
+     * the target tab's series checked.
+     */
+    void rebuildOutputsTree() {
+        fetchCoordinator.beginProgrammaticUpdate();
+        try {
+            updateOutputsTree();
+            restoreTreeChecksForSeries(tabManager.getTargetTabSelectedSeries());
+        } finally {
+            fetchCoordinator.endProgrammaticUpdate();
+        }
     }
 
     /**

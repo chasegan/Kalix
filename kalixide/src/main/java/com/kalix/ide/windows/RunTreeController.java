@@ -369,14 +369,7 @@ class RunTreeController {
         // the new RunInfoImpl (the leaf display via toString() picks up the new run name);
         // and (b) trigger a repaint so any text surfaces that aren't actively reading the
         // resolver see the update.
-        fetchCoordinator.beginProgrammaticUpdate();
-        try {
-            window.updateOutputsTree();
-            Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-            window.restoreTreeChecksForSeries(tabSeries);
-        } finally {
-            fetchCoordinator.endProgrammaticUpdate();
-        }
+        window.rebuildOutputsTree();
 
         // Cheap repaint to pick up the new label in plot legends / stats column headers
         // that already cache projected strings.

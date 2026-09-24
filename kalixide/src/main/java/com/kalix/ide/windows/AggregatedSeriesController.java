@@ -5,6 +5,7 @@ import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.data.AggregateLabel;
 import com.kalix.ide.flowviz.data.AggregateSeries;
+import com.kalix.ide.flowviz.data.AggregateSource;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DefaultLabelResolver;
@@ -13,6 +14,7 @@ import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.SeriesSum;
+import com.kalix.ide.icons.MenuIcons;
 import com.kalix.ide.io.PixieStore;
 import com.kalix.ide.managers.DatasetLoaderManager;
 import com.kalix.ide.managers.DatasetSeriesSource;
@@ -20,7 +22,9 @@ import com.kalix.ide.managers.OutputsTreeBuilder;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
 import com.kalix.ide.utils.DialogUtils;
 
+import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
+import javax.swing.JPopupMenu;
 import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
@@ -52,6 +56,8 @@ import java.util.function.Supplier;
 class AggregatedSeriesController {
 
     private static final String TITLE = "New Aggregate";
+    // Inputs listed in the recipe tooltip before "… and N more".
+    private static final int RECIPE_LINES = 20;
 
     private final RunManager window;
     private final JCheckboxTree sourceTree;
@@ -577,6 +583,121 @@ class AggregatedSeriesController {
             plotDataSet.removeSeries(ref);
             tabManager.addErrorSeriesInStatsTabs(ref, reason);
         }
+    }
+
+    /**
+     * The source-tree right-click menu for an aggregate, or {@code null} for any other node.
+     * Modify, then destructive, each in its own block (ADR-0002 §1).
+     */
+    JPopupMenu contextMenuFor(Object userObject) {
+        if (!(userObject instanceof AggregateInfo info)) {
+            return null;
+        }
+        JPopupMenu menu = new JPopupMenu();
+        JMenuItem rename = new JMenuItem("Rename…");
+        rename.addActionListener(e -> rename(info));
+        menu.add(rename);
+        menu.addSeparator();
+        JMenuItem delete = new JMenuItem("Delete", MenuIcons.delete());
+        delete.addActionListener(e -> delete(info));
+        menu.add(delete);
+        return menu;
+    }
+
+    /** Prompts for a new name, valid within the aggregate's origin, and applies it. */
+    private void rename(AggregateInfo info) {
+        String name = info.name();
+        while (true) {
+            name = (String) JOptionPane.showInputDialog(window, "Aggregate name:", "Rename Aggregate",
+                JOptionPane.PLAIN_MESSAGE, null, null, name);
+            if (name == null) {
+                return;
+            }
+            name = name.trim();
+            if (name.equals(info.name())) {
+                return;
+            }
+            String problem = nameProblem(name, List.of(info.origin));
+            if (problem == null) {
+                break;
+            }
+            DialogUtils.showWarning(window, problem, "Invalid Name");
+        }
+        String oldName = labelResolver.nameFor(info.ref());
+        info.rename(name);
+        treeModel.nodeChanged(nodeFor(info));
+        window.rebuildOutputsTree();
+        tabManager.updateAllTabs(false);
+        status("Renamed " + oldName + " to " + labelResolver.nameFor(info.ref()));
+    }
+
+    /**
+     * Deletes an aggregate after confirming, naming any aggregates made from it: they keep
+     * their values, but those of Last fail on their next recompute. Deleting a group's last
+     * aggregate removes the group.
+     */
+    private void delete(AggregateInfo info) {
+        String label = labelResolver.labelFor(info.ref());
+        AggregateInfo.AggregateInput asInput = new AggregateInfo.AggregateInput(info.id);
+        List<String> dependents = aggregates.values().stream()
+            .filter(a -> a.inputs.contains(asInput))
+            .map(a -> labelResolver.labelFor(a.ref())).toList();
+        String message = "Delete " + label + "?";
+        if (!dependents.isEmpty()) {
+            message += "\n\nThese were made from it. They keep their values, but any of Last"
+                + " can no longer be recomputed:\n  " + String.join("\n  ", dependents);
+        }
+        if (!DialogUtils.showConfirmation(window, message, "Delete Aggregate")) {
+            return;
+        }
+
+        DefaultMutableTreeNode group = (DefaultMutableTreeNode) nodeFor(info).getParent();
+        window.removeSourceNode(group, info);
+        window.purgeSeries(List.of(info.ref()), new AggregateSource(info.id));
+        aggregates.remove(info.id);
+        if (group.getChildCount() == 0) {
+            window.removeSourceNode(aggregateSeriesNode, group.getUserObject());
+        }
+        status("Deleted " + label);
+    }
+
+    /** The source-tree tooltip for an aggregate: what it sums, and why it is unavailable. */
+    String recipe(AggregateInfo info) {
+        List<String> names = info.inputs.stream().map(input -> switch (input) {
+            case AggregateInfo.SeriesInput series -> series.name();
+            case AggregateInfo.AggregateInput aggregate -> {
+                AggregateInfo source = aggregates.get(aggregate.aggregateId());
+                yield source != null ? labelResolver.nameFor(source.ref()) : "(deleted aggregate)";
+            }
+        }).toList();
+        int shown = Math.min(names.size(), RECIPE_LINES);
+        StringBuilder html = new StringBuilder("<html>Sum of:");
+        for (String name : names.subList(0, shown)) {
+            html.append("<br>&nbsp;&nbsp;").append(escapeHtml(name));
+        }
+        if (names.size() > shown) {
+            html.append("<br>&nbsp;&nbsp;… and ").append(names.size() - shown).append(" more");
+        }
+        if (info.values() == null) {
+            html.append("<br><br>Unavailable: ").append(escapeHtml(info.unavailableReason()));
+        }
+        return html.append("</html>").toString();
+    }
+
+    private static String escapeHtml(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    /** The source-tree node holding {@code info}. */
+    private DefaultMutableTreeNode nodeFor(AggregateInfo info) {
+        DefaultMutableTreeNode group = groupNodeFor(info.origin);
+        for (int i = 0; i < group.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) group.getChildAt(i);
+            if (child.getUserObject() == info) {
+                return child;
+            }
+        }
+        throw new IllegalStateException("No tree node for " + info);
     }
 
     /**
