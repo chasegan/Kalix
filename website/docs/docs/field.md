@@ -67,7 +67,9 @@ ds_1 = drain
 | ks | The stress coefficient this step, 0 to 1 |
 | kc | The value of the `kc` expression this step |
 | et | Evapotranspiration [ML] |
-| rain | Rain on the field [ML] |
+| rain | The value of the `rain` expression [mm] |
+| rain\_vol | Rain on the field [ML]: `rain × area` |
+| evap | The value of the `evap` expression [mm] |
 | excess | Rain the soil could not hold [ML], drained down `ds_1` |
 | supply | The water the field takes from what arrives [ML] |
 | escape | The share of `supply` that does not reach the soil [ML], which leaves the model here |
@@ -93,11 +95,11 @@ The field works in mm over its area: 1 mm × 1 km² = 1 ML. Each step, in this o
    `bypass`. So irrigation never overfills the soil, whatever was ordered.
 
 Rain goes on before irrigation so that a day's rain reduces what the field takes, rather than
-running off a profile that irrigation has just filled. Effective rainfall is `rain − excess`.
+running off a profile that irrigation has just filled. Effective rainfall is `rain_vol − excess`.
 
 **The balance closes every step, to machine precision:**
 
-`rain + (supply − escape) = et + excess + Δ(water held)`, with `usflow = supply + bypass` and
+`rain_vol + (supply − escape) = et + excess + Δ(water held)`, with `usflow = supply + bypass` and
 `ds_1 = bypass + excess`. Every term is a result, so the balance can be replayed line by line.
 
 #### The irrigation rule

@@ -66,6 +66,8 @@ pub struct FieldNode {
     recorder_idx_kc: Option<usize>,
     recorder_idx_et: Option<usize>,
     recorder_idx_rain: Option<usize>,
+    recorder_idx_rain_vol: Option<usize>,
+    recorder_idx_evap: Option<usize>,
     recorder_idx_excess: Option<usize>,
     recorder_idx_supply: Option<usize>,
     recorder_idx_escape: Option<usize>,
@@ -140,6 +142,8 @@ impl Node for FieldNode {
         self.recorder_idx_kc = recorder(data_cache, &self.name, "kc");
         self.recorder_idx_et = recorder(data_cache, &self.name, "et");
         self.recorder_idx_rain = recorder(data_cache, &self.name, "rain");
+        self.recorder_idx_rain_vol = recorder(data_cache, &self.name, "rain_vol");
+        self.recorder_idx_evap = recorder(data_cache, &self.name, "evap");
         self.recorder_idx_excess = recorder(data_cache, &self.name, "excess");
         self.recorder_idx_supply = recorder(data_cache, &self.name, "supply");
         self.recorder_idx_escape = recorder(data_cache, &self.name, "escape");
@@ -236,8 +240,16 @@ impl Node for FieldNode {
         if let Some(idx) = self.recorder_idx_et {
             data_cache.add_value_at_index(idx, et_mm * self.area);
         }
+        // A result named for a property reports the property's value: rain and evap are
+        // the inputs in mm, as on a storage, and rain_vol is the volume
         if let Some(idx) = self.recorder_idx_rain {
+            data_cache.add_value_at_index(idx, rain_mm);
+        }
+        if let Some(idx) = self.recorder_idx_rain_vol {
             data_cache.add_value_at_index(idx, rain_mm * self.area);
+        }
+        if let Some(idx) = self.recorder_idx_evap {
+            data_cache.add_value_at_index(idx, evap_mm);
         }
         if let Some(idx) = self.recorder_idx_excess {
             data_cache.add_value_at_index(idx, excess);

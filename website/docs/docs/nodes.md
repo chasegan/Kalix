@@ -18,6 +18,7 @@ Nodes are the active elements of a Kalix model — lumped river processes that m
 | [Splitter](splitter.md) | |
 | [Regulated User](regulated-user.md) | |
 | [Unregulated User](unregulated-user.md) | |
+| [Field](field.md) | |
 | [Blackhole](blackhole.md) | |
 | [Routing](routing.md) | |
 | [Loss](loss.md) | |
