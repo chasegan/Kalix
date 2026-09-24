@@ -39,6 +39,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -608,16 +609,33 @@ class AggregatedSeriesController {
     }
 
     /**
-     * The source-tree right-click menu for an aggregate or an origin's group, or {@code null}
+     * The source-tree right-click menu for an aggregate, an origin's group or the top-level
+     * node, or {@code null}
      * for any other node. Context-specific, modify, then destructive, each in its own block
      * (ADR-0002 §1).
      */
     JPopupMenu contextMenuFor(Object userObject) {
+        if (userObject == aggregateSeriesNode.getUserObject()) {
+            JPopupMenu menu = new JPopupMenu();
+            JMenuItem deleteAll = new JMenuItem("Delete all", MenuIcons.delete());
+            deleteAll.setEnabled(!aggregates.isEmpty());
+            deleteAll.addActionListener(e -> delete(List.copyOf(aggregates.values()),
+                "all " + aggregates.size() + " aggregates"));
+            menu.add(deleteAll);
+            return menu;
+        }
         if (userObject instanceof OriginGroup group) {
             JPopupMenu menu = new JPopupMenu();
             JMenuItem save = new JMenuItem("Save…");
             save.addActionListener(e -> save(aggregatesOf(group.origin), "aggregates " + group));
             menu.add(save);
+            menu.addSeparator();
+            JMenuItem deleteAll = new JMenuItem("Delete all", MenuIcons.delete());
+            deleteAll.addActionListener(e -> {
+                List<AggregateInfo> ofGroup = aggregatesOf(group.origin);
+                delete(ofGroup, "all " + ofGroup.size() + " aggregates of " + group);
+            });
+            menu.add(deleteAll);
             return menu;
         }
         if (!(userObject instanceof AggregateInfo info)) {
@@ -636,7 +654,7 @@ class AggregatedSeriesController {
         menu.add(rename);
         menu.addSeparator();
         JMenuItem delete = new JMenuItem("Delete", MenuIcons.delete());
-        delete.addActionListener(e -> delete(info));
+        delete.addActionListener(e -> delete(List.of(info), labelResolver.labelFor(info.ref())));
         menu.add(delete);
         return menu;
     }
@@ -760,33 +778,44 @@ class AggregatedSeriesController {
     }
 
     /**
-     * Deletes an aggregate after confirming, naming any aggregates made from it: they keep
-     * their values, but those of Last fail on their next recompute. Deleting a group's last
-     * aggregate removes the group.
+     * Deletes {@code toDelete} ({@code what} names it in the dialog) after confirming, naming
+     * any other aggregates made from them: they keep their values, but those of Last fail on
+     * their next recompute. Deleting a group's last aggregate removes the group.
      */
-    private void delete(AggregateInfo info) {
-        String label = labelResolver.labelFor(info.ref());
-        AggregateInfo.AggregateInput asInput = new AggregateInfo.AggregateInput(info.id);
-        List<String> dependents = aggregates.values().stream()
-            .filter(a -> a.inputs.contains(asInput))
-            .map(a -> labelResolver.labelFor(a.ref())).toList();
-        String message = "Delete " + label + "?";
-        if (!dependents.isEmpty()) {
-            message += "\n\nThese were made from it. They keep their values, but any of Last"
-                + " can no longer be recomputed:\n  " + String.join("\n  ", dependents);
+    private void delete(List<AggregateInfo> toDelete, String what) {
+        if (toDelete.isEmpty()) {
+            return;
         }
-        if (!DialogUtils.showConfirmation(window, message, "Delete Aggregate")) {
+        Set<AggregateInfo.Input> deleted = new HashSet<>();
+        for (AggregateInfo info : toDelete) {
+            deleted.add(new AggregateInfo.AggregateInput(info.id));
+        }
+        List<String> dependents = aggregates.values().stream()
+            .filter(a -> !deleted.contains(new AggregateInfo.AggregateInput(a.id))
+                && a.inputs.stream().anyMatch(deleted::contains))
+            .map(a -> labelResolver.labelFor(a.ref())).toList();
+        String message = "Delete " + what + "?";
+        if (!dependents.isEmpty()) {
+            message += "\n\nThese were made from " + (toDelete.size() == 1 ? "it" : "them")
+                + ". They keep their values, but any of Last can no longer be recomputed:\n  "
+                + String.join("\n  ", dependents);
+        }
+        if (!DialogUtils.showConfirmation(window, message,
+                toDelete.size() == 1 ? "Delete Aggregate" : "Delete Aggregates")) {
             return;
         }
 
-        DefaultMutableTreeNode group = (DefaultMutableTreeNode) nodeFor(info).getParent();
-        window.removeSourceNode(group, info);
-        window.purgeSeries(List.of(info.ref()), new AggregateSource(info.id));
-        aggregates.remove(info.id);
-        if (group.getChildCount() == 0) {
-            window.removeSourceNode(aggregateSeriesNode, group.getUserObject());
+        for (AggregateInfo info : toDelete) {
+            DefaultMutableTreeNode group = (DefaultMutableTreeNode) nodeFor(info).getParent();
+            window.removeSourceNode(group, info);
+            window.purgeSeries(List.of(info.ref()), new AggregateSource(info.id));
+            aggregates.remove(info.id);
+            if (group.getChildCount() == 0) {
+                window.removeSourceNode(aggregateSeriesNode, group.getUserObject());
+                removedOriginLabels.remove(info.origin);
+            }
         }
-        status("Deleted " + label);
+        status("Deleted " + what);
     }
 
     /** The source-tree tooltip for an aggregate: what it sums, and why it is unavailable. */
@@ -845,8 +874,8 @@ class AggregatedSeriesController {
      * labelled {@code "<lastLabel> (removed)"}.
      */
     void onOriginRemoved(SourceRef origin, String lastLabel) {
-        removedOriginLabels.put(origin, lastLabel);
         if (hasAggregatesOf(origin)) {
+            removedOriginLabels.put(origin, lastLabel);
             refreshOriginLabels();
         }
     }
