@@ -9,7 +9,7 @@ assets:
 pip: "pip install kalix==0.4.7"
 ---
 
-- New! [Aggregate series](https://kalix.org/docs/ide/#aggregate-series) in the Run Manager: the point-by-point sum of series from a run, the Last run, or a loaded dataset. Select series in the Timeseries tree and choose `New aggregate…`.
+- New! [Aggregate series](https://kalix.org/docs/ide/#aggregate-series) in the Run Manager: the point-by-point sum of series from a run, the Last run, or a loaded dataset. Select or tick series in the Timeseries tree and choose `New aggregate from selected…` or `New aggregate from checked…`.
     - Series from several sources make one aggregate per source; selecting a folder sums everything under it, narrowed by the filter.
     - Aggregates of Last run are recomputed when a new run completes.
     - Aggregates survive removing their source, and can be saved as CSV, zipped CSV or Pixie, renamed and deleted from the source tree.

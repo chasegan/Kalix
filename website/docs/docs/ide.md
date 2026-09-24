@@ -110,9 +110,9 @@ It is a run manager. Yes.
 
 An **aggregate** is the point-by-point sum of series from one source: a run, the **Last run**, or a loaded dataset. Use one to total the flows through several nodes, or the demands of a group of users.
 
-**Creating an aggregate.** Select the series to sum in the **Timeseries** tree, right-click and choose **New aggregate…**, then give it a name (a suggestion such as `sum_1` is filled in).
+**Creating an aggregate.** In the **Timeseries** tree, either select the series to sum and right-click **New aggregate from selected…**, or tick them and right-click **New aggregate from checked…**. Then give it a name (a suggestion such as `sum_1` is filled in). Each appears once there are at least two series to sum. Ticking suits "all but a few": tick everything, then untick the ones to leave out.
 
-- Selecting a folder such as `node.mygr4j` sums every series under it, as the tree shows it. Use the filter to narrow what is summed, for example to every `ds_1`.
+- Selecting (or ticking) a folder such as `node.mygr4j` sums every series under it, as the tree shows it. Use the filter to narrow what is summed, for example to every `ds_1`.
 - When the selected series come from several sources (for example `Run_1` and `Run_2`), Kalix makes one aggregate per source, each summing that source's series. Every source must include every selected series.
 - An aggregate can be summed into another aggregate of the same source.
 - The series must have identical timestamps. A point missing in any input is missing in the sum.

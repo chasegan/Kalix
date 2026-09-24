@@ -588,9 +588,15 @@ public class RunManager extends JFrame {
         runContextMenuManager.setNodeMenuProvider(aggregatedSeriesController::contextMenuFor);
         runContextMenuManager.setRemovableCategories(
             lastRunNode, currentRunsNode, libraryNode, loadedDatasetsNode);
-        runContextMenuManager.setupOutputsTreeContextMenu(aggregatedSeriesController::saveSelectedAggregates,
-                                                          aggregatedSeriesController::selectionHasAggregates,
-                                                          aggregatedSeriesController::createAggregatedSeries,
+        AggregatedSeriesController aggregates = aggregatedSeriesController;
+        runContextMenuManager.setupOutputsTreeContextMenu(
+            List.of(new RunContextMenuManager.OptionalItem("Save aggregates…",
+                aggregates::saveSelectedAggregates, aggregates::selectionHasAggregates)),
+            List.of(
+                new RunContextMenuManager.OptionalItem("New aggregate from selected…",
+                    aggregates::createFromSelected, aggregates::selectionHasSeriesToSum),
+                new RunContextMenuManager.OptionalItem("New aggregate from checked…",
+                    aggregates::createFromChecked, aggregates::checkedHasSeriesToSum)),
                                                           this::expandAllFromSelected,
                                                           this::collapseAllFromSelected,
                                                           this::showChecked,

@@ -247,6 +247,35 @@ public class RunContextMenuManager {
         });
     }
 
+    /** A menu item shown only while {@code applies} holds. */
+    public record OptionalItem(String label, Runnable action, BooleanSupplier applies) {
+    }
+
+    /**
+     * Adds {@code items} and a separator after them; returns what updates their visibility
+     * when the menu opens.
+     */
+    private static Runnable addOptionalBlock(JPopupMenu menu, List<OptionalItem> items) {
+        List<JMenuItem> menuItems = new ArrayList<>();
+        for (OptionalItem item : items) {
+            JMenuItem menuItem = new JMenuItem(item.label());
+            menuItem.addActionListener(e -> item.action().run());
+            menu.add(menuItem);
+            menuItems.add(menuItem);
+        }
+        JSeparator separator = new JSeparator();
+        menu.add(separator);
+        return () -> {
+            boolean any = false;
+            for (int i = 0; i < items.size(); i++) {
+                boolean show = items.get(i).applies().getAsBoolean();
+                menuItems.get(i).setVisible(show);
+                any |= show;
+            }
+            separator.setVisible(any);
+        };
+    }
+
     /** Supplies the right-click menu for node kinds this manager doesn't handle itself. */
     public void setNodeMenuProvider(Function<Object, JPopupMenu> provider) {
         this.nodeMenuProvider = provider;
@@ -280,30 +309,25 @@ public class RunContextMenuManager {
     }
 
     /**
-     * Sets up the context menu for the outputs tree. All items delegate to their
-     * respective callbacks.
+     * Sets up the context menu for the outputs tree: the {@code contextItems} and
+     * {@code createItems} blocks, then the view/state block (ADR-0002 §1). Optional items
+     * are hidden when they don't apply, and a block with none showing loses its separator
+     * (§4). All items delegate to their callbacks.
      */
-    public void setupOutputsTreeContextMenu(Runnable saveAggregatesCallback,
-                                            BooleanSupplier selectionHasAggregates,
-                                            Runnable newAggregateCallback,
+    public void setupOutputsTreeContextMenu(List<OptionalItem> contextItems,
+                                            List<OptionalItem> createItems,
                                             Runnable expandAllCallback,
                                             Runnable collapseAllCallback,
                                             Runnable showCheckedCallback,
                                             Runnable showSelectedCallback) {
         JPopupMenu contextMenu = new JPopupMenu();
-
-        // Context-specific, shown only when the selection holds an aggregate (ADR-0002 §4).
-        JMenuItem saveAggregatesItem = new JMenuItem("Save aggregates…");
-        saveAggregatesItem.addActionListener(e -> saveAggregatesCallback.run());
-        contextMenu.add(saveAggregatesItem);
-        JSeparator saveSeparator = new JSeparator();
-        contextMenu.add(saveSeparator);
+        List<Runnable> refreshers = new ArrayList<>();
+        refreshers.add(addOptionalBlock(contextMenu, contextItems));
+        refreshers.add(addOptionalBlock(contextMenu, createItems));
         contextMenu.addPopupMenuListener(new PopupMenuListener() {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
-                boolean show = selectionHasAggregates.getAsBoolean();
-                saveAggregatesItem.setVisible(show);
-                saveSeparator.setVisible(show);
+                refreshers.forEach(Runnable::run);
             }
 
             @Override
@@ -314,13 +338,6 @@ public class RunContextMenuManager {
             public void popupMenuCanceled(PopupMenuEvent e) {
             }
         });
-
-        // Ellipsis: it prompts for a name before anything is created (ADR-0002 §2.4).
-        JMenuItem newAggregateItem = new JMenuItem("New aggregate…");
-        newAggregateItem.addActionListener(e -> newAggregateCallback.run());
-        contextMenu.add(newAggregateItem);
-
-        contextMenu.addSeparator();
 
         JMenuItem expandAllItem = new JMenuItem("Expand all");
         expandAllItem.addActionListener(e -> expandAllCallback.run());

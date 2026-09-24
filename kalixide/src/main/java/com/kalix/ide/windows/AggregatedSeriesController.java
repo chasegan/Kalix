@@ -115,18 +115,42 @@ class AggregatedSeriesController {
         this.statusUpdater = statusUpdater;
     }
 
+    /** "New aggregate from selected…": sums the series under the outputs-tree selection. */
+    void createFromSelected() {
+        create(selectedLeaves(), "Select the series to sum in the Timeseries tree.");
+    }
+
+    /** "New aggregate from checked…": sums the series ticked in the outputs tree. */
+    void createFromChecked() {
+        create(checkedLeaves(), "Tick the series to sum in the Timeseries tree.");
+    }
+
+    /** Whether the outputs-tree selection covers more than one series, so there is a sum. */
+    boolean selectionHasSeriesToSum() {
+        return hasSeriesToSum(selectedLeaves());
+    }
+
+    /** Whether more than one series is ticked in the outputs tree, so there is a sum. */
+    boolean checkedHasSeriesToSum() {
+        return hasSeriesToSum(checkedLeaves());
+    }
+
+    // Counted by name: one series ticked in two sources is still one input per source.
+    private static boolean hasSeriesToSum(List<OutputsTreeBuilder.SeriesLeafNode> leaves) {
+        return leaves.stream().map(leaf -> leaf.seriesName).distinct().limit(2).count() > 1;
+    }
+
     /**
-     * Creates one aggregate per origin covered by the outputs-tree selection, each the sum
-     * of the selected series in that origin. Wired to the outputs tree's
-     * "New aggregate…" item.
+     * Creates one aggregate per origin covered by {@code leaves}, each the sum of that
+     * origin's series among them.
      *
-     * <p>A selected node contributes every series leaf under it, as the tree currently
-     * shows it (so the filter narrows what an in-between node sums). An aggregate counts as
-     * a series of its own origin. Every origin must contribute the same series.
-     * All-or-nothing: if any input fails, nothing is created.</p>
+     * <p>A node contributes every series leaf under it, as the tree currently shows it (so
+     * the filter narrows what an in-between node sums). An aggregate counts as a series of
+     * its own origin. Every origin must contribute the same series. All-or-nothing: if any
+     * input fails, nothing is created.</p>
      */
-    void createAggregatedSeries() {
-        Map<SourceRef, OriginInputs> selection = selectedInputsByOrigin();
+    private void create(List<OutputsTreeBuilder.SeriesLeafNode> leaves, String noneMessage) {
+        Map<SourceRef, OriginInputs> selection = inputsByOrigin(leaves, noneMessage);
         if (selection == null) {
             return;
         }
@@ -165,17 +189,18 @@ class AggregatedSeriesController {
     }
 
     /**
-     * The selected inputs grouped by origin, or {@code null} (after telling the user why)
-     * if the selection can't make an aggregate.
+     * {@code leaves} grouped by origin, or {@code null} (after telling the user why) if they
+     * can't make an aggregate.
      */
-    private Map<SourceRef, OriginInputs> selectedInputsByOrigin() {
+    private Map<SourceRef, OriginInputs> inputsByOrigin(List<OutputsTreeBuilder.SeriesLeafNode> leaves,
+                                                       String noneMessage) {
         Map<SourceRef, OriginInputs> selection = new LinkedHashMap<>();
         Map<Object, SourceRef> originOfSource = new IdentityHashMap<>();
-        for (OutputsTreeBuilder.SeriesLeafNode leaf : selectedLeaves()) {
+        for (OutputsTreeBuilder.SeriesLeafNode leaf : leaves) {
             addLeaf(selection, originOfSource, leaf);
         }
         if (selection.isEmpty()) {
-            error("Select the series to sum in the Timeseries tree.");
+            error(noneMessage);
             return null;
         }
 
@@ -637,10 +662,18 @@ class AggregatedSeriesController {
 
     /** Every series leaf under the outputs-tree selection, as the tree shows it. */
     private List<OutputsTreeBuilder.SeriesLeafNode> selectedLeaves() {
+        return leavesUnder(outputsTree.getSelectionPaths());
+    }
+
+    /** Every series leaf ticked in the outputs tree, as the tree shows it. */
+    private List<OutputsTreeBuilder.SeriesLeafNode> checkedLeaves() {
+        return leavesUnder(outputsTree.getCheckedPaths());
+    }
+
+    private static List<OutputsTreeBuilder.SeriesLeafNode> leavesUnder(TreePath[] paths) {
         List<OutputsTreeBuilder.SeriesLeafNode> leaves = new ArrayList<>();
-        TreePath[] selected = outputsTree.getSelectionPaths();
-        if (selected != null) {
-            for (TreePath path : selected) {
+        if (paths != null) {
+            for (TreePath path : paths) {
                 Enumeration<TreeNode> nodes =
                     ((DefaultMutableTreeNode) path.getLastPathComponent()).preorderEnumeration();
                 while (nodes.hasMoreElements()) {
