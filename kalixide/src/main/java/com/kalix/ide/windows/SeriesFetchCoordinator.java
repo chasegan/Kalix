@@ -78,6 +78,8 @@ class SeriesFetchCoordinator {
     private final LongSupplier lastRunGeneration;
     /** Defers to {@link LastRunTracker#getLastRunInfo()} for resolving the Last alias. */
     private final Supplier<RunInfoImpl> lastRunInfoSupplier;
+    /** Point counts of aggregates made from Pixie data, which count towards the budget. */
+    private final Supplier<Map<SeriesRef, Integer>> pixieAggregatePoints;
 
     // Depth of nested programmatic tree-update sections. Listeners stay suppressed while
     // any section is open. A counter rather than a boolean so that nesting is safe.
@@ -94,7 +96,8 @@ class SeriesFetchCoordinator {
                            TimeSeriesRequestManager timeSeriesRequestManager,
                            Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources,
                            LongSupplier lastRunGeneration,
-                           Supplier<RunInfoImpl> lastRunInfoSupplier) {
+                           Supplier<RunInfoImpl> lastRunInfoSupplier,
+                           Supplier<Map<SeriesRef, Integer>> pixieAggregatePoints) {
         this.window = window;
         this.timeseriesTree = timeseriesTree;
         this.timeseriesTreeModel = timeseriesTreeModel;
@@ -107,6 +110,7 @@ class SeriesFetchCoordinator {
         this.datasetSeriesSources = datasetSeriesSources;
         this.lastRunGeneration = lastRunGeneration;
         this.lastRunInfoSupplier = lastRunInfoSupplier;
+        this.pixieAggregatePoints = pixieAggregatePoints;
     }
 
     /** Returns whether a programmatic tree update is in progress. */
@@ -432,11 +436,7 @@ class SeriesFetchCoordinator {
         for (Map.Entry<DatasetSeries, Integer> pending : pendingPixiePoints.entrySet()) {
             tally.add(pending.getKey(), pending.getValue());
         }
-        for (int points : window.pixieBackedAggregatePoints()) {
-            tally.series++;
-            tally.points += points;
-            tally.longest = Math.max(tally.longest, points);
-        }
+        pixieAggregatePoints.get().forEach(tally::add);
         return tally;
     }
 

@@ -4,6 +4,7 @@ import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
 import com.kalix.ide.flowviz.data.AggregateLabel;
+import com.kalix.ide.flowviz.data.AggregateSeries;
 import com.kalix.ide.flowviz.data.AggregateSource;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DatasetSource;
@@ -508,7 +509,8 @@ public class RunManager extends JFrame {
             timeSeriesRequestManager,
             datasetSeriesSources,
             () -> lastRunTracker.getGeneration(),
-            () -> lastRunTracker.getLastRunInfo()
+            () -> lastRunTracker.getLastRunInfo(),
+            () -> aggregatedSeriesController.pixieBackedPoints()
         );
         lastRunTracker = new LastRunTracker(
             this,
@@ -537,12 +539,16 @@ public class RunManager extends JFrame {
             timeseriesTree,
             treeModel,
             aggregateSeriesNode,
+            tabManager,
+            plotDataSet,
             timeSeriesRequestManager,
             labelResolver,
             datasetSeriesSources,
             lastRunTracker,
+            fetchCoordinator,
             statusUpdater
         );
+        lastRunTracker.addLastChangeListener(aggregatedSeriesController::onLastChanged);
 
         // DatasetLoaderManager - handles dataset file loading
         datasetLoaderManager = new DatasetLoaderManager(
@@ -882,19 +888,13 @@ public class RunManager extends JFrame {
      * resulting ref is cached on the leaf so subsequent lookups don't re-project.
      */
     private SeriesRef refForSource(String seriesName, Object source) {
-        if (source instanceof RunInfoImpl runInfo) {
-            if (runInfo.isLastAlias()) {
-                return new LastSeries(seriesName);
-            }
-            return new RunSeries(runInfo.getRunId(), seriesName);
-        }
-        if (source instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
-            return new DatasetSeries(info.file.getAbsolutePath(), seriesName);
-        }
-        if (source instanceof AggregateInfo aggregate) {
-            return aggregate.ref();
-        }
-        return null;
+        return switch (sourceRefForNode(source)) {
+            case RunSource r -> new RunSeries(r.runId(), seriesName);
+            case LastSource l -> new LastSeries(seriesName);
+            case DatasetSource d -> new DatasetSeries(d.datasetId(), seriesName);
+            case AggregateSource a -> new AggregateSeries(a.aggregateId());
+            case null -> null;
+        };
     }
 
     /**
@@ -969,36 +969,6 @@ public class RunManager extends JFrame {
      */
     private String runNameForId(long runId) {
         return runTreeController.runNameForId(runId);
-    }
-
-    /** Called by {@link LastRunTracker} whenever Last changes, including to no run. */
-    void onLastRunChanged() {
-        aggregatedSeriesController.onLastChanged();
-    }
-
-    /**
-     * Swaps an aggregate's values in the pool and every tab after a recompute, or clears
-     * them with {@code unavailableReason} when {@code values} is {@code null}.
-     */
-    void updateAggregateValues(SeriesRef ref, TimeSeriesData values, String unavailableReason) {
-        if (values != null) {
-            plotDataSet.addSeries(ref, values);
-            tabManager.updateSeriesInStatsTabsWithAggregation(ref, values);
-        } else {
-            plotDataSet.removeSeries(ref);
-            tabManager.addErrorSeriesInStatsTabs(ref, unavailableReason);
-        }
-        tabManager.updateAllTabs(false);
-    }
-
-    /** Point counts of the aggregates made from Pixie data, for the Pixie memory budget. */
-    List<Integer> pixieBackedAggregatePoints() {
-        return aggregatedSeriesController.pixieBackedPoints();
-    }
-
-    /** See {@link SeriesFetchCoordinator#pixieAggregateRefusal}. */
-    String pixieAggregateRefusal(long newPoints, int longestInput) {
-        return fetchCoordinator.pixieAggregateRefusal(newPoints, longestInput);
     }
 
     /** The aggregate lookup for {@link DefaultLabelResolver}. */

@@ -8,6 +8,7 @@ import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.io.SourceResCsvImporter;
 import com.kalix.ide.io.PixieSeriesKey;
 import com.kalix.ide.io.PixieStore;
+import com.kalix.ide.utils.DialogUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -105,7 +106,7 @@ public class DatasetLoaderManager {
         if (refusal == null) {
             return false;
         }
-        JOptionPane.showMessageDialog(parentFrame, refusal, "Name Clash", JOptionPane.WARNING_MESSAGE);
+        DialogUtils.showWarning(parentFrame, refusal, "Name Clash");
         if (statusUpdater != null) {
             statusUpdater.accept("Did not load " + file.getName());
         }
@@ -368,15 +369,16 @@ public class DatasetLoaderManager {
         String fileName = csvFile.getName();
         int seriesAdded = 0;
 
+        // Hierarchical series names from each series' path segments
         List<String> names = importResult.getSeries().stream()
             .map(ns -> composeDatasetSeriesName(csvFile, ns.path())).toList();
         if (refuseNames(csvFile, names)) {
             return;
         }
 
-        for (NamedSeries ns : importResult.getSeries()) {
-            // Create hierarchical series name from the series' path segments
-            String seriesName = composeDatasetSeriesName(csvFile, ns.path());
+        for (int i = 0; i < names.size(); i++) {
+            NamedSeries ns = importResult.getSeries().get(i);
+            String seriesName = names.get(i);
 
             logger.info("Loading CSV series: columnName='{}' -> seriesName='{}'", ns.name(), seriesName);
 
@@ -512,8 +514,9 @@ public class DatasetLoaderManager {
             return;
         }
 
-        for (NamedSeries ns : importResult.getSeries()) {
-            String seriesName = composeDatasetSeriesName(resCsvFile, ns.path());
+        for (int i = 0; i < names.size(); i++) {
+            NamedSeries ns = importResult.getSeries().get(i);
+            String seriesName = names.get(i);
             DatasetSeries ref = new DatasetSeries(resCsvFile.getAbsolutePath(), seriesName);
             datasetSeriesSources.put(ref, new DatasetSeriesSource.Loaded(ns.data()));
             seriesAdded++;
@@ -618,6 +621,7 @@ public class DatasetLoaderManager {
 
                 try {
                     List<IndexedSeries> seriesList = get();
+                    // Dotted names nest exactly as a full read's NamedSeries.dotted would
                     List<String> names = seriesList.stream()
                         .map(series -> composeDatasetSeriesName(pxtFile, NamedSeries.dottedPath(series.name())))
                         .toList();
@@ -626,9 +630,9 @@ public class DatasetLoaderManager {
                     }
 
                     // Register every series by its hierarchical name, holding only its store key
-                    for (IndexedSeries series : seriesList) {
-                        // Dotted names nest exactly as a full read's NamedSeries.dotted would
-                        String seriesName = composeDatasetSeriesName(pxtFile, NamedSeries.dottedPath(series.name()));
+                    for (int i = 0; i < names.size(); i++) {
+                        IndexedSeries series = seriesList.get(i);
+                        String seriesName = names.get(i);
 
                         logger.info("Loading Pixie series: originalName='{}' -> seriesName='{}'", series.name(), seriesName);
 
