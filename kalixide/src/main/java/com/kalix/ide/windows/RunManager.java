@@ -3,9 +3,11 @@ package com.kalix.ide.windows;
 import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
+import com.kalix.ide.flowviz.data.AggregateLabel;
 import com.kalix.ide.flowviz.data.AggregateSource;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DatasetSource;
+import com.kalix.ide.flowviz.data.DefaultLabelResolver;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.LastSeries;
 import com.kalix.ide.flowviz.data.LastSource;
@@ -192,8 +194,8 @@ public class RunManager extends JFrame {
     // Single point of authority for projecting SeriesRef → display label.
     // Consumed by stats tables, legends, and the outputs tree so that the user-visible
     // string for a run-derived series tracks the current run name automatically.
-    private final LabelResolver labelResolver =
-        new com.kalix.ide.flowviz.data.DefaultLabelResolver(this::runNameForId);
+    private final DefaultLabelResolver labelResolver =
+        new DefaultLabelResolver(this::runNameForId, this::aggregateLabel);
 
     /**
      * Private constructor for singleton pattern.
@@ -538,7 +540,8 @@ public class RunManager extends JFrame {
             tabManager,
             plotDataSet,
             seriesSlotManager,
-            timeSeriesRequestManager
+            timeSeriesRequestManager,
+            labelResolver
         );
 
         // DatasetLoaderManager - handles dataset file loading
@@ -582,7 +585,7 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Gets series names from a source (RunInfo or LoadedDatasetInfo).
+     * Gets series names from a source (RunInfo, LoadedDatasetInfo, or AggregateInfo).
      * Used by OutputsTreeBuilder.
      */
     private List<String> getSeriesNamesFromSource(Object source) {
@@ -594,6 +597,8 @@ public class RunManager extends JFrame {
             return Collections.emptyList();
         } else if (source instanceof DatasetLoaderManager.LoadedDatasetInfo) {
             return getSeriesNamesFromDataset((DatasetLoaderManager.LoadedDatasetInfo) source);
+        } else if (source instanceof AggregateInfo aggregate) {
+            return List.of(labelResolver.nameFor(aggregate.ref()));
         }
         return Collections.emptyList();
     }
@@ -874,6 +879,9 @@ public class RunManager extends JFrame {
         if (source instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
             return new DatasetSeries(info.file.getAbsolutePath(), seriesName);
         }
+        if (source instanceof AggregateInfo aggregate) {
+            return aggregate.ref();
+        }
         return null;
     }
 
@@ -951,6 +959,11 @@ public class RunManager extends JFrame {
         return runTreeController.runNameForId(runId);
     }
 
+    /** The aggregate lookup for {@link DefaultLabelResolver}. */
+    private AggregateLabel aggregateLabel(long aggregateId) {
+        return aggregatedSeriesController.labelFor(aggregateId);
+    }
+
     /**
      * Returns the {@link LabelResolver} bound to this
      * RunManager's state. Components that need to render series labels — stats tables,
@@ -1023,7 +1036,7 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Collects the RunInfo and LoadedDatasetInfo objects currently checked in the data
+     * Collects the RunInfo, AggregateInfo and LoadedDatasetInfo objects currently checked in the data
      * source tree. Category paths (auto-checked parents) are neither, and are skipped.
      */
     private void collectCheckedSources(List<Object> checkedRuns, List<Object> checkedDatasets) {
@@ -1031,7 +1044,9 @@ public class RunManager extends JFrame {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
             Object userObject = node.getUserObject();
 
-            if (userObject instanceof RunContextMenuManager.RunInfo) {
+            // Aggregates go with runs: the builder only tells datasets apart for expansion.
+            if (userObject instanceof RunContextMenuManager.RunInfo
+                    || userObject instanceof AggregateInfo) {
                 checkedRuns.add(userObject);
             } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                 checkedDatasets.add(userObject);
@@ -1134,6 +1149,9 @@ public class RunManager extends JFrame {
         }
         if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
             return new DatasetSource(info.file.getAbsolutePath());
+        }
+        if (userObject instanceof AggregateInfo aggregate) {
+            return new AggregateSource(aggregate.id);
         }
         return null;
     }

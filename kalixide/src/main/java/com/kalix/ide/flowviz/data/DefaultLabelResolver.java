@@ -79,10 +79,15 @@ public final class DefaultLabelResolver implements LabelResolver {
      * name, marked removed, once it does not.
      */
     public String originLabel(AggregateLabel label) {
-        if (label.removedOriginLabel() != null) {
-            return label.removedOriginLabel() + REMOVED_SUFFIX;
+        return originLabel(label.origin(), label.removedOriginLabel());
+    }
+
+    /** {@link #originLabel(AggregateLabel)} for an origin alone, e.g. its group node. */
+    public String originLabel(SourceRef origin, String removedOriginLabel) {
+        if (removedOriginLabel != null) {
+            return removedOriginLabel + REMOVED_SUFFIX;
         }
-        return switch (label.origin()) {
+        return switch (origin) {
             case RunSource r -> runLabel(r.runId());
             case LastSource l -> "Last";
             case DatasetSource d -> datasetLabel(d.datasetId());

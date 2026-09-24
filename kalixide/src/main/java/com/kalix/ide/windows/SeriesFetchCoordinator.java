@@ -209,6 +209,15 @@ class SeriesFetchCoordinator {
 
             if (leaf.source instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                 datasetRefs.add(ref);
+            } else if (leaf.source instanceof AggregateInfo aggregate) {
+                // Held by the controller, as loaded datasets are by datasetSeriesSources.
+                TimeSeriesData values = aggregate.values();
+                if (values != null) {
+                    window.addSeriesToPool(ref, values);
+                    tabManager.updateSeriesInStatsTabsWithAggregation(ref, values);
+                } else {
+                    tabManager.addErrorSeriesInStatsTabs(ref, aggregate.unavailableReason());
+                }
             } else {
                 RunInfoImpl runInfo = (RunInfoImpl) leaf.source;
                 SessionManager.KalixSession resolvedSession = resolveRunInfoSession(runInfo);
