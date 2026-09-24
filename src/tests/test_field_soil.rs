@@ -9,7 +9,7 @@
 use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
 
-const ALL: &str = "node.paddock.depletion\nnode.paddock.orders_en_route\nnode.paddock.order\nnode.paddock.order_due\nnode.paddock.usflow\nnode.paddock.ks\nnode.paddock.kc\nnode.paddock.et\nnode.paddock.rain\nnode.paddock.rain_vol\nnode.paddock.evap\nnode.paddock.excess\nnode.paddock.supply\nnode.paddock.escape\nnode.paddock.bypass\nnode.paddock.dsflow\nnode.paddock.ds_1";
+const ALL: &str = "node.paddock.depletion\nnode.paddock.orders_en_route\nnode.paddock.order\nnode.paddock.order_due\nnode.paddock.usflow\nnode.paddock.ks\nnode.paddock.kc\nnode.paddock.et\nnode.paddock.et_vol\nnode.paddock.rain\nnode.paddock.rain_vol\nnode.paddock.evap\nnode.paddock.excess\nnode.paddock.supply\nnode.paddock.escape\nnode.paddock.bypass\nnode.paddock.dsflow\nnode.paddock.ds_1";
 
 /// A supply storage above the field, `river_lag` steps of routing between,
 /// and a gauge below. `{FIELD}` is the field's properties after area and capacity.
@@ -87,7 +87,7 @@ fn assert_close(a: f64, b: f64, what: &str) {
 /// and at the node usflow = supply + bypass, ds_1 = bypass + excess.
 fn assert_balance_closes(model: &mut Model) {
     let (dep, rain, et, excess, supply, escape, bypass, usflow, ds_1) = (
-        s(model, "depletion"), s(model, "rain_vol"), s(model, "et"), s(model, "excess"),
+        s(model, "depletion"), s(model, "rain_vol"), s(model, "et_vol"), s(model, "excess"),
         s(model, "supply"), s(model, "escape"), s(model, "bypass"), s(model, "usflow"), s(model, "ds_1"));
     let area = 2.0;
     for t in 1..dep.len() {
@@ -111,7 +111,8 @@ fn test_a_rain_fed_field_dries_fills_and_sheds_excess() {
     // depletion is the value at the end of each step.
     // Day 1: opening depletion 20; ks = (100 - 20) / 50 = 1.6 -> 1; et = 4 mm = 8 ML; closes at 24
     assert_eq!(ks[0], 1.0);
-    assert_eq!(et[0], 8.0);
+    assert_eq!(et[0], 4.0, "mm");
+    assert_eq!(s(&mut model, "et_vol")[0], 8.0, "ML");
     assert_eq!(dep[0], 24.0);
     // Day 2: 24 -> 28. Day 3: et 4 then rain 30: 28 + 4 - 30 = 2
     assert_eq!(dep[1], 28.0);
@@ -138,7 +139,8 @@ fn test_stress_reduces_evapotranspiration_as_the_soil_dries() {
     let et = s(&mut model, "et");
     let dep = s(&mut model, "depletion");
     assert_eq!(ks[0], 0.8);
-    assert_eq!(et[0], 16.0, "0.8 x 1 x 10 mm x 2 km2");
+    assert_eq!(et[0], 8.0, "0.8 x 1 x 10 mm");
+    assert_eq!(s(&mut model, "et_vol")[0], 16.0, "x 2 km2");
     assert_eq!(dep[0], 68.0, "at the end of day 1");
     assert_close(ks[1], 0.64, "ks on day 2");
     assert!(ks.iter().zip(ks.iter().skip(1)).all(|(a, b)| b < a), "ks falls every day");
