@@ -106,6 +106,27 @@ It is a run manager. Yes.
 
 ![](../assets/docs-using-ide/image_19.png)
 
+### Aggregate series
+
+An **aggregate** is the point-by-point sum of series from one source: a run, the **Last run**, or a loaded dataset. Use one to total the flows through several nodes, or the demands of a group of users.
+
+**Creating an aggregate.** Select the series to sum in the **Timeseries** tree, right-click and choose **New aggregate…**, then give it a name (a suggestion such as `sum_1` is filled in).
+
+- Selecting a folder such as `node.mygr4j` sums every series under it, as the tree shows it. Use the filter to narrow what is summed, for example to every `ds_1`.
+- When the selected series come from several sources (for example `Run_1` and `Run_2`), Kalix makes one aggregate per source, each summing that source's series. Every source must include every selected series.
+- An aggregate can be summed into another aggregate of the same source.
+- The series must have identical timestamps. A point missing in any input is missing in the sum.
+
+Aggregates appear under **Aggregate series** in the Run Manager's source tree, grouped by source, and as `aggregate.<name>` in the **Timeseries** tree, where they plot like any other series. Hover over an aggregate to see what it sums.
+
+**Aggregates of Last run** are recomputed whenever a new run completes. If the new run can't supply an input (a series is missing, say), the aggregate is cleared and its row in the statistics view says why; it comes back when a later run can.
+
+**Removing a source keeps its aggregates.** You can load a dataset, make an aggregate, then remove the dataset and keep only the aggregate for comparison. Its group is then labelled, for example, `flows.csv (removed)`.
+
+**Managing aggregates.** Right-click an aggregate in the source tree to **Save…**, **Rename…** or **Delete** it. Right-click a group to save all of its aggregates, or choose **Save aggregates…** in the **Timeseries** tree to save the selected ones together. Aggregates save as CSV, zipped CSV or Pixie, one column per aggregate.
+
+Aggregates last for the session; save them to keep them. A dataset with a column named exactly like an existing aggregate (`aggregate.<name>`) can't be loaded until one of the two is renamed or removed.
+
 ## Docking
 
 Fn+F9 reveals docking capabilities in the main window. Holding Fn+F9, look for the blue handles that appear in the top left of the schematic editor and text editors. This feature is in alpha. Good luck 😄.
