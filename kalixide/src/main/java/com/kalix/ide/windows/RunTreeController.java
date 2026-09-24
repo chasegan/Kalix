@@ -169,10 +169,7 @@ class RunTreeController {
                     // If session is already DONE when first discovered, treat it as a completion
                     // (This handles fast-completing runs that finish before refreshRuns() is called)
                     if (initialStatus == RunInfoImpl.DetailedRunStatus.DONE) {
-                        long completionTime = System.currentTimeMillis();
-                        sessions.putCompletionTimestamp(sessionKey, completionTime);
-
-                        lastRunTracker.onRunCompleted(runInfo, completionTime);
+                        completeRun(sessionKey, runInfo);
                     }
                 } else {
                     // Existing session - check for status changes
@@ -196,12 +193,7 @@ class RunTreeController {
 
                         // Check if run just completed
                         if (currentStatus == RunInfoImpl.DetailedRunStatus.DONE && lastStatus != RunInfoImpl.DetailedRunStatus.DONE) {
-                            // Record completion timestamp
-                            long completionTime = System.currentTimeMillis();
-                            sessions.putCompletionTimestamp(sessionKey, completionTime);
-
-                            // Update Last if this is more recent
-                            lastRunTracker.onRunCompleted(runInfo, completionTime);
+                            completeRun(sessionKey, runInfo);
                         }
 
                         // Update outputs if this run is currently checked
@@ -290,6 +282,15 @@ class RunTreeController {
                 treeModel.nodesWereRemoved(currentRunsNode, indices, children);
             }
         });
+    }
+
+    private void completeRun(String sessionKey, RunInfoImpl runInfo) {
+        // Record completion timestamp
+        long completionTime = System.currentTimeMillis();
+        sessions.putCompletionTimestamp(sessionKey, completionTime);
+
+        // Update Last if this is more recent
+        lastRunTracker.onRunCompleted(runInfo, completionTime);
     }
 
     /**
