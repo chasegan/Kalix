@@ -95,12 +95,18 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             }
 
             let mut ncols: usize = 2;
+            let mut bilinear: bool = false;
             let mut values: Option<&str> = None;
             for (key, ini_property) in &ini_section.properties {
                 match key.to_lowercase().as_str() {
                     "n_cols" => {
                         ncols = ini_property.value.trim().parse::<usize>()
                             .map_err(|_| KalixIoError::Parse(format!("Error on line {}: n_cols for table '{}' must be an integer, got '{}'",
+                                                 ini_property.line_number, table_name, ini_property.value)))?;
+                    }
+                    "bilinear" => {
+                        bilinear = ini_property.value.trim().parse::<bool>()
+                            .map_err(|_| KalixIoError::Parse(format!("Error on line {}: bilinear for table '{}' must be a true or false, got '{}'",
                                                  ini_property.line_number, table_name, ini_property.value)))?;
                     }
                     "values" => values = Some(ini_property.value.as_str()),
@@ -113,7 +119,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             let values = values.ok_or(KalixIoError::Validate(format!("Error on line {}: Table '{}' has no 'values' property",
                                               ini_section.line_number, table_name)))?;
 
-            let table = LookupTable::from_ini_data(table_name, values, ncols)
+            let table = LookupTable::from_ini_data(table_name, values, ncols, bilinear)
                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_section.line_number, e)))?;
             model.data_cache.tables.insert(table)
                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_section.line_number, e)))?;
@@ -1777,6 +1783,9 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
         let section_name = format!("table.{}", name);
         if table.ncols() > 2 {
             ini_doc.set_property(section_name.as_str(), "n_cols", table.ncols().to_string().as_str());
+        }
+        if table.is_bilinear() {
+            ini_doc.set_property(section_name.as_str(), "bilinear", "true");
         }
         ini_doc.set_property(section_name.as_str(), "values", table.format_data(4).as_str());
     }

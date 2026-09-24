@@ -24,8 +24,8 @@ reference_flow = table.rating(node.reach_5.dsflow)
 Tables come in two forms:
 
 - **1D tables** interpolate linearly between (x, y) breakpoints.
-- **2D tables** first select a column by exact key match, then interpolate
-  down that column.
+- **2D tables** select a column by exact key match by default, then interpolate
+  down that column. They can optionally use bilinear interpolation across both axes.
 
 Tables are global: define one once and reference it from as many expressions
 as you like. The `[table.*]` section can appear anywhere in the model file.
@@ -85,14 +85,12 @@ Call a 2D table with two arguments — the **column key** first, then the
 **row key**:
 
 ```ini
-release = table.pump_rating(sim.month, node.dam.volume)
-```
+release = table.pump_rating(sim.month, node.dam.volume)```
 
 The lookup works in two steps:
-
-1. **Column selection is an exact match.** The first argument must exactly
-   equal one of the column keys. If it doesn't, the simulation stops with an
-   error naming the table, the offending value, and the available keys.
+1. **Column selection is an exact match by default.** The first argument must
+   exactly equal one of the column keys. If it doesn't, the simulation stops
+   with an error naming the table, the offending value, and the available keys.
 2. **Row lookup interpolates** down the selected column, with the same
    clamped-linear rule as 1D tables.
 
@@ -103,6 +101,24 @@ The lookup works in two steps:
     introduce floating-point error (e.g. `volume / 300`): a value of
     `6.9999999…` will not match a key of `7`, and the run will stop with an
     error showing the offending value.
+
+### Bilinear interpolation
+
+Set `bilinear = true` to interpolate across both the column and row axes:
+
+```ini
+[table.pump_rating]
+n_cols = 4
+bilinear = true
+values = volume\month, 1,    2,    3,
+         0,            0,    0,    0,
+         500,          1.0,  1.2,  1.5,
+         2000,         4.0,  4.8,  6.0,
+```
+
+With bilinear interpolation enabled, the first argument no longer needs to exactly match a column key. Kalix interpolates down the two surrounding columns using the row key, then interpolates between those results using the column key.
+
+Values outside either axis are clamped to the nearest table edge. The default is `bilinear = false`, which preserves exact column matching.
 
 ### The corner label
 
@@ -161,4 +177,4 @@ model ever runs.
 | Malformed values (bad number, wrong count, non-ascending keys) | Model load (and live in the IDE) |
 | Unknown table name in an expression | Model load |
 | Wrong number of arguments (1D takes 1, 2D takes 2) | Model load |
-| 2D column key with no exact match | During simulation, with table name, value, and available keys |
+| 2D column key with no exact match when `bilinear = false` | During simulation, with table name, value, and available keys |

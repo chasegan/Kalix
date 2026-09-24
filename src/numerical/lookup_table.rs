@@ -15,7 +15,8 @@
 ///   followed by `n_cols - 1` column keys; each following row is a row key and
 ///   `n_cols - 1` values. The first argument selects a column by **exact
 ///   match** (panics with context otherwise); the second interpolates down
-///   that column with the same clamped-linear rule as 1D.
+///   that column with the same clamped-linear rule as 1D. When `bilinear = true`,
+///   the lookup becomes bilinear interpolation over the surrounding four cells.
 ///
 /// Line breaks carry no meaning in the `values` property: a table may be
 /// written on one line or spread over many continuation lines.
@@ -51,6 +52,8 @@ pub struct LookupTable2D {
     /// Values stored column-major (`values[c * nrows + r]`) so the
     /// interpolation walk down a selected column is contiguous in memory.
     values: Vec<f64>,
+    /// Selects the bilinear variant during expression lowering.
+    bilinear: bool,
 }
 
 /// A parsed, validated lookup table of either dimensionality.
@@ -116,6 +119,45 @@ impl LookupTable2D {
         clamped_lerp(&self.row_keys, column, row_key)
     }
 
+    /// Interpolate down the columns bracketing the key and interpolate between
+    /// those results. Clamps at both table edges.
+    #[inline]
+    pub fn lookup_bilinear(&self, col_key: f64, row_key: f64) -> f64 {
+        if col_key.is_nan() {
+            return f64::NAN;
+        }
+
+        let ncols = self.col_keys.len();
+        let nrows = self.row_keys.len();
+
+        if col_key <= self.col_keys[0] {
+            let column = &self.values[..nrows];
+            return clamped_lerp(&self.row_keys, column, row_key);
+        }
+
+        if col_key >= self.col_keys[ncols - 1] {
+            let column = &self.values[(ncols - 1) * nrows..ncols * nrows];
+            return clamped_lerp(&self.row_keys, column, row_key);
+        }
+
+        let upper = self.col_keys.partition_point(|key| *key < col_key);
+        let lower = upper - 1;
+
+        let lower_column = &self.values[lower * nrows..upper * nrows];
+        let upper_column = &self.values[upper * nrows..(upper + 1) * nrows];
+
+        let lower_value = clamped_lerp(&self.row_keys, lower_column, row_key);
+        let upper_value = clamped_lerp(&self.row_keys, upper_column, row_key);
+
+        lower_value
+            + (col_key - self.col_keys[lower]) * (upper_value - lower_value)
+                / (self.col_keys[upper] - self.col_keys[lower])
+    }
+
+    pub fn is_bilinear(&self) -> bool {
+        self.bilinear
+    }
+
     #[inline]
     fn find_column(&self, key: f64) -> usize {
         let i = self.col_keys.partition_point(|k| *k < key);
@@ -141,7 +183,7 @@ impl LookupTable {
     /// `[table.<name>]` section. `n_cols = 2` produces a 1D table, `n_cols > 2`
     /// a 2D table. Cold path: every structural error is rejected here so the
     /// lookup methods never need to.
-    pub fn from_ini_data(name: &str, data: &str, ncols: usize) -> Result<LookupTable, String> {
+    pub fn from_ini_data(name: &str, data: &str, ncols: usize, bilinear: bool) -> Result<LookupTable, String> {
         if ncols < 2 {
             return Err(format!("Table 'table.{}': n_cols must be at least 2, got {}", name, ncols));
         }
@@ -157,7 +199,7 @@ impl LookupTable {
         if ncols == 2 {
             Self::parse_1d(name, &tokens)
         } else {
-            Self::parse_2d(name, &tokens, ncols)
+            Self::parse_2d(name, &tokens, ncols, bilinear)
         }
     }
 
@@ -204,7 +246,7 @@ impl LookupTable {
         })))
     }
 
-    fn parse_2d(name: &str, tokens: &[&str], ncols: usize) -> Result<LookupTable, String> {
+    fn parse_2d(name: &str, tokens: &[&str], ncols: usize, bilinear: bool) -> Result<LookupTable, String> {
         // The key row: a non-numeric corner marker, then ncols-1 column keys.
         // Requiring the corner keeps every row ncols wide, so a well-formed
         // table's total element count is an exact multiple of ncols.
@@ -253,6 +295,7 @@ impl LookupTable {
             col_keys,
             row_keys,
             values,
+            bilinear,
         })))
     }
 
@@ -277,6 +320,13 @@ impl LookupTable {
         match self {
             LookupTable::OneD(_) => 1,
             LookupTable::TwoD(_) => 2,
+        }
+    }
+
+    pub fn is_bilinear(&self) -> bool {
+        match self {
+            LookupTable::OneD(_) => false,
+            LookupTable::TwoD(t) => t.bilinear,
         }
     }
 

@@ -54,7 +54,7 @@ public class TableSectionValidator implements ValidationStrategy {
                     ValidationRule.Severity.ERROR, "invalid_table_name");
         }
 
-        // Properties: only n_cols and values are recognised
+        // Properties: only n_cols, values and bilinear are recognised
         int nCols = 2;
         INIModelParser.Property valuesProp = null;
         for (INIModelParser.Property prop : section.getProperties().values()) {
@@ -75,13 +75,21 @@ public class TableSectionValidator implements ValidationStrategy {
                         return;
                     }
                     break;
+                case "bilinear":
+                    String bilinear = prop.getValue().trim();
+                    if (!bilinear.equals("true") && !bilinear.equals("false")) {
+                        result.addIssue(prop.getLineNumber(),
+                                "bilinear must be 'true' or 'false', got '" + bilinear + "'",
+                                ValidationRule.Severity.ERROR, "invalid_table_bilinear");
+                    }
+                    break;
                 case "values":
                     valuesProp = prop;
                     break;
                 default:
                     result.addIssue(prop.getLineNumber(),
                             "Unexpected property '" + prop.getKey() + "' in [" + sectionName
-                                    + "] (allowed: values, n_cols)",
+                                    + "] (allowed: values, n_cols, bilinear)",
                             ValidationRule.Severity.ERROR, "unexpected_table_property");
                     break;
             }
