@@ -525,7 +525,6 @@ public class RunManager extends JFrame {
             currentRunsNode,
             tabManager,
             plotDataSet,
-            seriesSlotManager,
             timeSeriesRequestManager,
             lastRunTracker,
             fetchCoordinator
@@ -1077,41 +1076,51 @@ public class RunManager extends JFrame {
             }
         }
 
-        // Drop them from the shared pool, the per-context cache, and slot assignment.
-        for (SeriesRef ref : refs) {
-            plotDataSet.removeSeries(ref);
-            seriesSlotManager.removeSlot(ref);
-        }
         datasetSeriesSources.keySet().removeIf(dsRef -> dsRef.datasetId().equals(absPath));
 
-        // Remove the tree node FIRST, exactly as run removal does (RunTreeController
-        // removes paths before removeRunData). If the dataset was checked, removePath
-        // fires the tick listener synchronously: its snapshot+reconcile prunes the
-        // dataset's sources AND series from the active tab in ONE history entry.
-        // Running the scrubs first pushed while the record still held the dead
-        // source, and the listener then pushed again without it — two entries
-        // differing only in sources, making the first Undo a visible no-op.
-        for (int i = 0; i < loadedDatasetsNode.getChildCount(); i++) {
-            DefaultMutableTreeNode child = (DefaultMutableTreeNode) loadedDatasetsNode.getChildAt(i);
-            var path = child.getPath();
-            if (child.getUserObject() == info) {
-                timeseriesSourceTree.removePath(new TreePath(path));
-                loadedDatasetsNode.remove(i);
-                treeModel.nodesWereRemoved(loadedDatasetsNode, new int[]{i}, new Object[]{child});
-                break;
-            }
-        }
-
-        // Strip them from every tab's selection, legend, visible-series, and stats,
-        // and forget the dataset from every tab's recorded source context. For the
-        // active tab these are no-ops (the listener above already did both, and the
-        // duplicate push dedupes); background tabs are scrubbed silently by design.
-        tabManager.removeSeriesFromAllTabs(refs);
-        tabManager.removeSourceFromAllTabs(new DatasetSource(absPath));
+        // Node first, exactly as run removal does: see removeSourceNode.
+        removeSourceNode(loadedDatasetsNode, info);
+        purgeSeries(refs, new DatasetSource(absPath));
 
         if (statusUpdater != null) {
             statusUpdater.accept("Removed dataset: " + info.fileName);
         }
+    }
+
+    /**
+     * Removes the child of {@code parent} holding {@code userObject} from the source tree.
+     *
+     * <p>Call before {@link #purgeSeries}. If the source was checked, removePath fires the
+     * tick listener synchronously: its snapshot+reconcile prunes the source AND its series
+     * from the active tab in ONE history entry. Purging first pushed while the record still
+     * held the dead source, and the listener then pushed again without it — two entries
+     * differing only in sources, making the first Undo a visible no-op.</p>
+     */
+    void removeSourceNode(DefaultMutableTreeNode parent, Object userObject) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
+            if (child.getUserObject() == userObject) {
+                timeseriesSourceTree.removePath(new TreePath(child.getPath()));
+                parent.remove(i);
+                treeModel.nodesWereRemoved(parent, new int[]{i}, new Object[]{child});
+                return;
+            }
+        }
+    }
+
+    /**
+     * Drops {@code refs} from the shared pool, their colour slots and every tab, and forgets
+     * {@code source} from every tab's recorded source context. For the active tab the tab
+     * scrubs are no-ops after {@link #removeSourceNode} (its listener already did both);
+     * background tabs are scrubbed silently by design.
+     */
+    void purgeSeries(List<SeriesRef> refs, SourceRef source) {
+        for (SeriesRef ref : refs) {
+            plotDataSet.removeSeries(ref);
+            seriesSlotManager.removeSlot(ref);
+        }
+        tabManager.removeSeriesFromAllTabs(refs);
+        tabManager.removeSourceFromAllTabs(source);
     }
 
     /**

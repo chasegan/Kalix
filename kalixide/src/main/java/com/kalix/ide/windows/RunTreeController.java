@@ -8,7 +8,6 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.RunSeries;
 import com.kalix.ide.flowviz.data.RunSource;
 import com.kalix.ide.flowviz.data.SeriesRef;
-import com.kalix.ide.flowviz.style.SeriesSlotManager;
 import com.kalix.ide.managers.RunContextMenuManager;
 import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.StdioTaskManager;
@@ -43,7 +42,6 @@ class RunTreeController {
     private final DefaultMutableTreeNode currentRunsNode;
     private final VisualizationTabManager tabManager;
     private final DataSet plotDataSet;
-    private final SeriesSlotManager seriesSlotManager;
     private final TimeSeriesRequestManager timeSeriesRequestManager;
     private final LastRunTracker lastRunTracker;
     private final SeriesFetchCoordinator fetchCoordinator;
@@ -61,7 +59,6 @@ class RunTreeController {
                       DefaultMutableTreeNode currentRunsNode,
                       VisualizationTabManager tabManager,
                       DataSet plotDataSet,
-                      SeriesSlotManager seriesSlotManager,
                       TimeSeriesRequestManager timeSeriesRequestManager,
                       LastRunTracker lastRunTracker,
                       SeriesFetchCoordinator fetchCoordinator) {
@@ -72,7 +69,6 @@ class RunTreeController {
         this.currentRunsNode = currentRunsNode;
         this.tabManager = tabManager;
         this.plotDataSet = plotDataSet;
-        this.seriesSlotManager = seriesSlotManager;
         this.timeSeriesRequestManager = timeSeriesRequestManager;
         this.lastRunTracker = lastRunTracker;
         this.fetchCoordinator = fetchCoordinator;
@@ -429,17 +425,8 @@ class RunTreeController {
                 refs.add(ref);
             }
         }
-        for (SeriesRef ref : refs) {
-            plotDataSet.removeSeries(ref);
-            seriesSlotManager.removeSlot(ref);
-        }
-        if (!refs.isEmpty()) {
-            tabManager.removeSeriesFromAllTabs(refs);
-        }
-
-        // Forget the run from every tab's recorded source context — runIds are never
-        // reused, so no tab should try to restore this source again.
-        tabManager.removeSourceFromAllTabs(new RunSource(runId));
+        // runIds are never reused, so no tab should try to restore this source again.
+        window.purgeSeries(refs, new RunSource(runId));
 
         // Clear by UID, not session key: the session has already left the session
         // manager, so key-based lookup cannot reach these entries any more.
