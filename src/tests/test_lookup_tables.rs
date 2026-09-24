@@ -12,11 +12,15 @@ use crate::timeseries::Timeseries;
 use crate::tid::utils::wrap_to_u64;
 
 fn parse_1d(data: &str) -> LookupTable {
-    LookupTable::from_ini_data("t", data, 2).expect("1D table should parse")
+    LookupTable::from_ini_data("t", data, 2, false).expect("1D table should parse")
 }
 
 fn parse_2d(data: &str, ncols: usize) -> LookupTable {
-    LookupTable::from_ini_data("t", data, ncols).expect("2D table should parse")
+    LookupTable::from_ini_data("t", data, ncols, false).expect("2D table should parse")
+}
+
+fn parse_2d_bilinear(data: &str, ncols: usize) -> LookupTable {
+    LookupTable::from_ini_data("t", data, ncols, true).expect("2D bilinear table should parse")
 }
 
 fn lookup_1d(table: &LookupTable, x: f64) -> f64 {
@@ -29,6 +33,13 @@ fn lookup_1d(table: &LookupTable, x: f64) -> f64 {
 fn lookup_2d(table: &LookupTable, col_key: f64, row_key: f64) -> f64 {
     match table {
         LookupTable::TwoD(t) => t.lookup(col_key, row_key),
+        LookupTable::OneD(_) => panic!("expected a 2D table"),
+    }
+}
+
+fn lookup_2d_bilinear(table: &LookupTable, col_key: f64, row_key: f64) -> f64 {
+    match table {
+        LookupTable::TwoD(t) => t.lookup_bilinear(col_key, row_key),
         LookupTable::OneD(_) => panic!("expected a 2D table"),
     }
 }
@@ -90,23 +101,23 @@ fn test_1d_trailing_comma_and_whitespace_tolerated() {
 #[test]
 fn test_1d_parse_errors() {
     // Odd number of values
-    assert!(LookupTable::from_ini_data("t", "0, 0, 1", 2).is_err());
+    assert!(LookupTable::from_ini_data("t", "0, 0, 1", 2, false).is_err());
     // x values not strictly ascending
-    assert!(LookupTable::from_ini_data("t", "0, 0, 0, 1", 2).is_err());
-    assert!(LookupTable::from_ini_data("t", "1, 0, 0, 1", 2).is_err());
+    assert!(LookupTable::from_ini_data("t", "0, 0, 0, 1", 2, false).is_err());
+    assert!(LookupTable::from_ini_data("t", "1, 0, 0, 1", 2, false).is_err());
     // Bad number
-    assert!(LookupTable::from_ini_data("t", "0, 0, blah, 1", 2).is_err());
+    assert!(LookupTable::from_ini_data("t", "0, 0, blah, 1", 2, false).is_err());
     // NaN / inf cells rejected
-    assert!(LookupTable::from_ini_data("t", "0, nan, 1, 1", 2).is_err());
-    assert!(LookupTable::from_ini_data("t", "0, 0, 1, inf", 2).is_err());
+    assert!(LookupTable::from_ini_data("t", "0, nan, 1, 1", 2, false).is_err());
+    assert!(LookupTable::from_ini_data("t", "0, 0, 1, inf", 2, false).is_err());
     // Empty data
-    assert!(LookupTable::from_ini_data("t", "  ", 2).is_err());
+    assert!(LookupTable::from_ini_data("t", "  ", 2, false).is_err());
     // Header must be exactly two non-numeric labels
-    assert!(LookupTable::from_ini_data("t", "stage, 0, 1, 1", 2).is_err());
+    assert!(LookupTable::from_ini_data("t", "stage, 0, 1, 1", 2, false).is_err());
     // Header with no data rows
-    assert!(LookupTable::from_ini_data("t", "stage, flow", 2).is_err());
+    assert!(LookupTable::from_ini_data("t", "stage, flow", 2, false).is_err());
     // ncols below 2
-    assert!(LookupTable::from_ini_data("t", "0, 0", 1).is_err());
+    assert!(LookupTable::from_ini_data("t", "0, 0", 1, false).is_err());
 }
 
 // -------------------------------------------------------------------------------------
@@ -143,6 +154,30 @@ fn test_2d_exact_column_match_and_row_interpolation() {
 }
 
 #[test]
+fn test_2d_bilinear_interpolation_and_clamping() {
+    let t = parse_2d_bilinear(GRID, 3);
+
+    // Existing column keys still return their normal row interpolation.
+    assert_eq!(lookup_2d_bilinear(&t, 1.0, 5.0), 50.0);
+    assert_eq!(lookup_2d_bilinear(&t, 2.0, 5.0), 1500.0);
+
+    // Halfway between columns 1 and 2 at row 5:
+    // column 1 = 50, column 2 = 1500.
+    assert_eq!(lookup_2d_bilinear(&t, 1.5, 5.0), 775.0);
+
+    // Column keys clamp at both ends.
+    assert_eq!(lookup_2d_bilinear(&t, -100.0, 5.0), 50.0);
+    assert_eq!(lookup_2d_bilinear(&t, 100.0, 5.0), 1500.0);
+
+    // Row keys continue to clamp through the existing clamped_lerp.
+    assert_eq!(lookup_2d_bilinear(&t, 1.5, -100.0), 500.0);
+    assert_eq!(lookup_2d_bilinear(&t, 1.5, 100.0), 1375.0);
+
+    assert!(lookup_2d_bilinear(&t, f64::NAN, 5.0).is_nan());
+    assert!(lookup_2d_bilinear(&t, 1.5, f64::NAN).is_nan());
+}
+
+#[test]
 #[should_panic(expected = "no column with key")]
 fn test_2d_column_miss_panics() {
     let t = parse_2d(GRID, 3);
@@ -176,16 +211,16 @@ fn test_2d_format_data_round_trip() {
 #[test]
 fn test_2d_parse_errors() {
     // Numeric corner cell (missing marker)
-    assert!(LookupTable::from_ini_data("t", "0, 1, 2, 0, 0, 0", 3).is_err());
+    assert!(LookupTable::from_ini_data("t", "0, 1, 2, 0, 0, 0", 3, false).is_err());
     // Element count not a multiple of ncols
-    assert!(LookupTable::from_ini_data("t", "x, 1, 2, 0, 0", 3).is_err());
+    assert!(LookupTable::from_ini_data("t", "x, 1, 2, 0, 0", 3, false).is_err());
     // No data rows after the key row
-    assert!(LookupTable::from_ini_data("t", "x, 1, 2", 3).is_err());
+    assert!(LookupTable::from_ini_data("t", "x, 1, 2", 3, false).is_err());
     // Column keys not strictly ascending
-    assert!(LookupTable::from_ini_data("t", "x, 2, 1, 0, 0, 0", 3).is_err());
-    assert!(LookupTable::from_ini_data("t", "x, 1, 1, 0, 0, 0", 3).is_err());
+    assert!(LookupTable::from_ini_data("t", "x, 2, 1, 0, 0, 0", 3, false).is_err());
+    assert!(LookupTable::from_ini_data("t", "x, 1, 1, 0, 0, 0", 3, false).is_err());
     // Row keys not strictly ascending
-    assert!(LookupTable::from_ini_data("t", "x, 1, 2, 5, 0, 0, 5, 1, 1", 3).is_err());
+    assert!(LookupTable::from_ini_data("t", "x, 1, 2, 5, 0, 0, 5, 1, 1", 3, false).is_err());
 }
 
 // -------------------------------------------------------------------------------------
@@ -254,10 +289,10 @@ fn cache_with_tables() -> DataCache {
     data_cache.set_start_and_stepsize(start_timestamp, 86400);
 
     data_cache.tables.insert(
-        LookupTable::from_ini_data("rating", "0, 0, 10, 100, 20, 150", 2).unwrap()
+        LookupTable::from_ini_data("rating", "0, 0, 10, 100, 20, 150", 2, false).unwrap()
     ).unwrap();
     data_cache.tables.insert(
-        LookupTable::from_ini_data("grid", "x, 1, 2,  0, 0, 1000,  10, 100, 2000", 3).unwrap()
+        LookupTable::from_ini_data("grid", "x, 1, 2,  0, 0, 1000,  10, 100, 2000", 3, false).unwrap()
     ).unwrap();
 
     let idx = data_cache.get_or_add_new_series("data.stage", true);
@@ -300,6 +335,36 @@ fn test_expression_2d_lookup_and_arithmetic() {
 
     data_cache.set_current_step(0);
     assert_eq!(input.get_value(&mut data_cache), 2.0 * 1500.0 + 1.0); // row 5 -> 1500 in column 2
+}
+
+#[test]
+fn test_expression_2d_bilinear_lookup() {
+    let mut data_cache = DataCache::new();
+    let start_timestamp: u64 = wrap_to_u64(1577836800); // 2020-01-01
+    data_cache.initialize(start_timestamp);
+    data_cache.set_start_and_stepsize(start_timestamp, 86400);
+
+    data_cache.tables.insert(
+        LookupTable::from_ini_data(
+            "grid",
+            "x, 1, 2,  0, 0, 1000,  10, 100, 2000",
+            3,
+            true,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    let input = DynamicInput::from_string(
+        "table.grid(1.5, 5)",
+        &mut data_cache,
+        true,
+        None,
+    )
+    .expect("bilinear 2D table expression should lower");
+
+    data_cache.set_current_step(0);
+    assert_eq!(input.get_value(&mut data_cache), 775.0);
 }
 
 #[test]
@@ -427,4 +492,32 @@ type = gauge
         LookupTable::OneD(t) => assert_eq!(t.lookup(0.25), 60.0),
         LookupTable::TwoD(_) => panic!("expected 1D table after round-trip"),
     }
+}
+
+#[test]
+fn test_model_bilinear_table_round_trip() {
+    let ini = "\
+[kalix]
+
+[table.grid]
+n_cols = 3
+bilinear = true
+values = x, 1, 2,
+       0, 0, 1000,
+       10, 100, 2000,
+";
+
+    let model = IniModelIO::read_model_string(ini).expect("model should load");
+    let saved = IniModelIO::model_to_string(&model);
+    assert!(saved.contains("bilinear = true"));
+
+    let grid = model.data_cache.tables.get("grid").expect("grid registered");
+    assert!(grid.is_bilinear());
+
+    let model2 = IniModelIO::read_model_string(&saved)
+        .expect("saved model should re-load");
+
+    let grid2 = model2.data_cache.tables.get("grid")
+        .expect("grid survives round-trip");
+    assert!(grid2.is_bilinear());
 }

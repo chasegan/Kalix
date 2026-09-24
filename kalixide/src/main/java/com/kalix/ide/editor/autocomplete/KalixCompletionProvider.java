@@ -360,6 +360,11 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
                     "<html><b>n_cols</b> <i>(optional)</i><br><br>"
                             + "Grid width, row-key column included.<br>"
                             + "Default 2 (a 1D table); greater than 2 declares a 2D table.</html>"));
+            addCompletion(new BasicCompletion(this, "bilinear = true",
+                    null,
+                    "<html><b>bilinear</b> <i>(optional)</i><br><br>"
+                            + "Enable bilinear interpolation across columns and rows of a 2D table.<br>"
+                            + "Default <code>false</code>.</html>"));
         } else if ("kalix".equals(sectionName)) {
             SectionDefinition kalixSection = schema.getSection("kalix");
             if (kalixSection != null && kalixSection.properties != null) {
@@ -557,7 +562,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
                     null,
                     "<html><b>" + callSignature + "</b>"
                             + "<br><br>Lookup table: " + tableName
-                            + "<br>Shape: " + (is2d ? "2D (exact-match column, interpolated row)" : "1D (interpolated, clamped at ends)")
+                            + "<br>Shape: " + (is2d ? "2D (exact-match column by default; bilinear when enabled clamped at ends)" : "1D (interpolated, clamped at ends)")
                             + "</html>");
             addCompletion(completion);
         }
