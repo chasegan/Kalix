@@ -971,6 +971,26 @@ public class RunManager extends JFrame {
         return runTreeController.runNameForId(runId);
     }
 
+    /** Called by {@link LastRunTracker} whenever Last changes, including to no run. */
+    void onLastRunChanged() {
+        aggregatedSeriesController.onLastChanged();
+    }
+
+    /**
+     * Swaps an aggregate's values in the pool and every tab after a recompute, or clears
+     * them with {@code unavailableReason} when {@code values} is {@code null}.
+     */
+    void updateAggregateValues(SeriesRef ref, TimeSeriesData values, String unavailableReason) {
+        if (values != null) {
+            plotDataSet.addSeries(ref, values);
+            tabManager.updateSeriesInStatsTabsWithAggregation(ref, values);
+        } else {
+            plotDataSet.removeSeries(ref);
+            tabManager.addErrorSeriesInStatsTabs(ref, unavailableReason);
+        }
+        tabManager.updateAllTabs(false);
+    }
+
     /** Point counts of the aggregates made from Pixie data, for the Pixie memory budget. */
     List<Integer> pixieBackedAggregatePoints() {
         return aggregatedSeriesController.pixieBackedPoints();

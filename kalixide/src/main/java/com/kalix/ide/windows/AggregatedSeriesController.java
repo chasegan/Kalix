@@ -357,8 +357,6 @@ class AggregatedSeriesController {
         private final long lastGeneration;
         private final List<TimeSeriesData> sums = new ArrayList<>();
         private int planIndex;
-        private int inputIndex;
-        private SeriesSum sum = new SeriesSum();
 
         Creation(String name, List<Plan> plans, long lastGeneration) {
             this.name = name;
@@ -372,36 +370,14 @@ class AggregatedSeriesController {
                 return;
             }
             Plan plan = plans.get(planIndex);
-            if (inputIndex == plan.reads().size()) {
-                sums.add(sum.result());
-                sum = new SeriesSum();
-                planIndex++;
-                inputIndex = 0;
-                next();
-                return;
-            }
-            plan.reads().get(inputIndex).get().whenComplete((data, failure) ->
-                SwingUtilities.invokeLater(() -> accept(data, failure)));
-        }
-
-        private void accept(TimeSeriesData data, Throwable failure) {
-            Plan plan = plans.get(planIndex);
-            String where = originLabel(plan.origin()) + ": " + plan.names().get(inputIndex);
-            if (failure != null) {
-                Throwable cause = failure instanceof CompletionException && failure.getCause() != null
-                    ? failure.getCause() : failure;
-                fail("aggregate." + name + " was not created: " + where
-                    + " could not be read (" + cause.getMessage() + ").");
-                return;
-            }
-            try {
-                sum.add(data);
-            } catch (IllegalArgumentException e) {
-                fail("aggregate." + name + " was not created: " + where + " " + e.getMessage() + ".");
-                return;
-            }
-            inputIndex++;
-            next();
+            new SequentialSum(plan.reads(), plan.names(), originLabel(plan.origin()),
+                result -> {
+                    sums.add(result);
+                    planIndex++;
+                    next();
+                },
+                problem -> fail("aggregate." + name + " was not created: " + problem + ".")
+            ).next();
         }
 
         /** Registers every origin's aggregate, or none of them. */
@@ -437,6 +413,150 @@ class AggregatedSeriesController {
             status("Created aggregate." + name + " for " + origins.size()
                 + (origins.size() == 1 ? " source" : " sources"));
         }
+    }
+
+    /**
+     * Sums {@code reads} one after another: each input is added on the EDT as it arrives and
+     * then dropped. Reports the sum, or the first problem, naming the input.
+     */
+    private static final class SequentialSum {
+        private final List<Supplier<CompletableFuture<TimeSeriesData>>> reads;
+        private final List<String> names;
+        private final String originLabel;
+        private final Consumer<TimeSeriesData> done;
+        private final Consumer<String> failed;
+        private final SeriesSum sum = new SeriesSum();
+        private int index;
+
+        SequentialSum(List<Supplier<CompletableFuture<TimeSeriesData>>> reads, List<String> names,
+                      String originLabel, Consumer<TimeSeriesData> done, Consumer<String> failed) {
+            this.reads = reads;
+            this.names = names;
+            this.originLabel = originLabel;
+            this.done = done;
+            this.failed = failed;
+        }
+
+        void next() {
+            if (index == reads.size()) {
+                done.accept(sum.result());
+                return;
+            }
+            reads.get(index).get().whenComplete((data, failure) ->
+                SwingUtilities.invokeLater(() -> accept(data, failure)));
+        }
+
+        private void accept(TimeSeriesData data, Throwable failure) {
+            String where = originLabel + ": " + names.get(index);
+            if (failure != null) {
+                Throwable cause = failure instanceof CompletionException && failure.getCause() != null
+                    ? failure.getCause() : failure;
+                failed.accept(where + " could not be read (" + cause.getMessage() + ")");
+                return;
+            }
+            try {
+                sum.add(data);
+            } catch (IllegalArgumentException e) {
+                failed.accept(where + " " + e.getMessage());
+                return;
+            }
+            index++;
+            next();
+        }
+    }
+
+    /**
+     * Recomputes every aggregate of the Last alias from the new Last run. Called whenever
+     * Last changes, including to no run at all.
+     */
+    void onLastChanged() {
+        LastSource last = new LastSource();
+        List<AggregateInfo> targets = aggregates.values().stream()
+            .filter(a -> a.origin.equals(last)).toList();
+        if (targets.isEmpty()) {
+            return;
+        }
+        RunInfoImpl lastRun = lastRunTracker.getLastRunInfo();
+        if (lastRun == null) {
+            for (AggregateInfo target : targets) {
+                apply(target, null, "There is no last run.");
+            }
+            return;
+        }
+        new Recompute(targets, lastRun.getSession().getSessionKey(), lastRunTracker.getGeneration()).next();
+    }
+
+    /**
+     * One recompute of Last's aggregates, in creation order so that an input aggregate is
+     * always recomputed before those made from it. Superseded, and stopped, by a newer Last.
+     */
+    private final class Recompute {
+        private final List<AggregateInfo> targets;
+        private final String sessionKey;
+        private final long generation;
+        private int index;
+
+        Recompute(List<AggregateInfo> targets, String sessionKey, long generation) {
+            this.targets = targets;
+            this.sessionKey = sessionKey;
+            this.generation = generation;
+        }
+
+        void next() {
+            if (lastRunTracker.getGeneration() != generation || index == targets.size()) {
+                return;
+            }
+            AggregateInfo target = targets.get(index);
+            List<Supplier<CompletableFuture<TimeSeriesData>>> reads = new ArrayList<>();
+            List<String> names = new ArrayList<>();
+            for (AggregateInfo.Input input : target.inputs) {
+                switch (input) {
+                    case AggregateInfo.SeriesInput series -> {
+                        CompletableFuture<TimeSeriesData> request =
+                            timeSeriesRequestManager.requestTimeSeries(sessionKey, series.name());
+                        reads.add(() -> request);
+                        names.add(series.name());
+                    }
+                    case AggregateInfo.AggregateInput aggregate -> {
+                        AggregateInfo source = aggregates.get(aggregate.aggregateId());
+                        TimeSeriesData values = source != null ? source.values() : null;
+                        if (values == null) {
+                            done(target, null, "an input aggregate is unavailable ("
+                                + (source != null ? source.unavailableReason() : "it was deleted") + ").");
+                            return;
+                        }
+                        reads.add(() -> CompletableFuture.completedFuture(values));
+                        names.add(labelResolver.nameFor(source.ref()));
+                    }
+                }
+            }
+            new SequentialSum(reads, names, "Last",
+                sum -> done(target, sum, null),
+                problem -> done(target, null, problem + ".")
+            ).next();
+        }
+
+        private void done(AggregateInfo target, TimeSeriesData sum, String problem) {
+            if (lastRunTracker.getGeneration() != generation) {
+                return; // a newer Last has started its own recompute
+            }
+            apply(target, sum, problem);
+            if (problem != null) {
+                status(labelResolver.labelFor(target.ref()) + " could not be recomputed: " + problem);
+            }
+            index++;
+            next();
+        }
+    }
+
+    /** Sets an aggregate's values, or clears them with {@code reason}, everywhere they show. */
+    private void apply(AggregateInfo target, TimeSeriesData values, String reason) {
+        if (values != null) {
+            target.setValues(values);
+        } else {
+            target.setUnavailable(reason);
+        }
+        window.updateAggregateValues(target.ref(), values, reason);
     }
 
     /**

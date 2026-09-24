@@ -179,6 +179,7 @@ class LastRunTracker {
         // resolver); drop the stale rendered lines on every tab, not just whichever
         // one next happens to rebuild.
         tabManager.updateAllTabs(false);
+        window.onLastRunChanged();
     }
 
     /**
@@ -285,6 +286,7 @@ class LastRunTracker {
 
         // Refresh any plotted "[Last]" series to use the new Last run's data
         refreshLastSeries();
+        window.onLastRunChanged();
     }
 
     /**
