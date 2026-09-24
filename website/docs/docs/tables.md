@@ -85,7 +85,7 @@ Call a 2D table with two arguments — the **column key** first, then the
 **row key**:
 
 ```ini
-release = table.pump_rating(sim.month, node.dam.volume)```
+release = table.pump_rating(sim.month, node.dam.volume)
 
 The lookup works in two steps:
 1. **Column selection is an exact match by default.** The first argument must
