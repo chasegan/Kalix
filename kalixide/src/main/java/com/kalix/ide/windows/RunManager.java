@@ -57,6 +57,7 @@ import java.awt.event.WindowEvent;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -978,11 +979,7 @@ public class RunManager extends JFrame {
      * emptied the plot on any source change while filtering (#431).</p>
      */
     void reconcileTabSeriesWithSources(Set<SeriesRef> tabSeries) {
-        List<Object> checkedRuns = new ArrayList<>();
-        List<Object> checkedDatasets = new ArrayList<>();
-        collectCheckedSources(checkedRuns, checkedDatasets);
-        List<Object> checkedSources = new ArrayList<>(checkedRuns);
-        checkedSources.addAll(checkedDatasets);
+        List<Object> checkedSources = checkedSources();
 
         // Find series that need to be removed from the tab
         Set<SeriesRef> seriesToRemove = new HashSet<>(tabSeries);
@@ -1078,34 +1075,26 @@ public class RunManager extends JFrame {
      * Updates the timeseries tree based on current run tree selection.
      */
     void updateOutputsTree() {
-        List<Object> checkedRuns = new ArrayList<>();
-        List<Object> checkedDatasets = new ArrayList<>();
-        collectCheckedSources(checkedRuns, checkedDatasets);
-
-        if (checkedRuns.isEmpty() && checkedDatasets.isEmpty()) {
-            outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
-        } else {
-            outputsTreeBuilder.updateTree(checkedRuns, checkedDatasets);
-        }
+        outputsTreeBuilder.updateTree(checkedSources());
     }
 
     /**
-     * Collects the RunInfo, AggregateInfo and LoadedDatasetInfo objects currently checked in the data
-     * source tree. Category paths (auto-checked parents) are neither, and are skipped.
+     * The RunInfo, AggregateInfo and LoadedDatasetInfo objects currently checked in the data
+     * source tree, datasets last. Category paths (auto-checked parents) are none, and are skipped.
      */
-    private void collectCheckedSources(List<Object> checkedRuns, List<Object> checkedDatasets) {
+    private List<Object> checkedSources() {
+        List<Object> sources = new ArrayList<>();
         for (TreePath path : timeseriesSourceTree.getCheckedPaths()) {
-            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-            Object userObject = node.getUserObject();
-
-            // Aggregates go with runs: the builder only tells datasets apart for expansion.
+            Object userObject = ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
             if (userObject instanceof RunContextMenuManager.RunInfo
-                    || userObject instanceof AggregateInfo) {
-                checkedRuns.add(userObject);
-            } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
-                checkedDatasets.add(userObject);
+                    || userObject instanceof AggregateInfo
+                    || userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
+                sources.add(userObject);
             }
         }
+        // Keeps the old order under a shared series: runs and aggregates, then datasets.
+        sources.sort(Comparator.comparing(s -> s instanceof DatasetLoaderManager.LoadedDatasetInfo));
+        return sources;
     }
 
     /**
