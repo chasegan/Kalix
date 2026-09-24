@@ -580,6 +580,37 @@ class AggregatedSeriesController {
     }
 
     /**
+     * Records {@code origin}'s last display name as it is removed. Its aggregates stay,
+     * labelled {@code "<lastLabel> (removed)"}.
+     */
+    void onOriginRemoved(SourceRef origin, String lastLabel) {
+        removedOriginLabels.put(origin, lastLabel);
+        if (hasAggregatesOf(origin)) {
+            refreshOriginLabels();
+        }
+    }
+
+    /** Forgets a removal when the same dataset is loaded again: its aggregates are live again. */
+    void onOriginLoaded(SourceRef origin) {
+        if (removedOriginLabels.remove(origin) != null && hasAggregatesOf(origin)) {
+            refreshOriginLabels();
+        }
+    }
+
+    /** Redraws every label that names an origin, after one is renamed or removed. */
+    void refreshOriginLabels() {
+        for (int i = 0; i < aggregateSeriesNode.getChildCount(); i++) {
+            treeModel.nodeChanged(aggregateSeriesNode.getChildAt(i));
+        }
+        outputsTree.repaint();
+        tabManager.updateAllTabs(false);
+    }
+
+    private boolean hasAggregatesOf(SourceRef origin) {
+        return aggregates.values().stream().anyMatch(a -> a.origin.equals(origin));
+    }
+
+    /**
      * Why a dataset with these series names must not load, or {@code null}: no column may
      * share an aggregate's full name, or the outputs tree would merge the two.
      */

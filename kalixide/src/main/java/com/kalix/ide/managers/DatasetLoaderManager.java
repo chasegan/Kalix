@@ -69,7 +69,7 @@ public class DatasetLoaderManager {
     private final Consumer<String> statusUpdater;
 
     // Callbacks
-    private final Runnable onDatasetLoadedCallback;
+    private final Consumer<File> onDatasetLoadedCallback;
     private final Function<List<String>, String> seriesNameRefusal;
 
     /**
@@ -80,7 +80,7 @@ public class DatasetLoaderManager {
      * @param loadedDatasetsNode Tree node for loaded datasets
      * @param treeModel Tree model for updates
      * @param statusUpdater Status bar updater
-     * @param onDatasetLoadedCallback Callback after dataset is loaded
+     * @param onDatasetLoadedCallback Callback after a dataset is loaded, given its file
      * @param seriesNameRefusal Why a dataset with the given series names must not load, or null
      */
     public DatasetLoaderManager(
@@ -89,7 +89,7 @@ public class DatasetLoaderManager {
             DefaultMutableTreeNode loadedDatasetsNode,
             DefaultTreeModel treeModel,
             Consumer<String> statusUpdater,
-            Runnable onDatasetLoadedCallback,
+            Consumer<File> onDatasetLoadedCallback,
             Function<List<String>, String> seriesNameRefusal) {
         this.parentFrame = parentFrame;
         this.datasetSeriesSources = datasetSeriesSources;
@@ -413,7 +413,7 @@ public class DatasetLoaderManager {
 
         // Notify callback
         if (onDatasetLoadedCallback != null) {
-            onDatasetLoadedCallback.run();
+            onDatasetLoadedCallback.accept(csvFile);
         }
     }
 
@@ -540,7 +540,7 @@ public class DatasetLoaderManager {
         }
 
         if (onDatasetLoadedCallback != null) {
-            onDatasetLoadedCallback.run();
+            onDatasetLoadedCallback.accept(resCsvFile);
         }
     }
 
@@ -652,7 +652,7 @@ public class DatasetLoaderManager {
 
                     // Notify callback
                     if (onDatasetLoadedCallback != null) {
-                        onDatasetLoadedCallback.run();
+                        onDatasetLoadedCallback.accept(pxtFile);
                     }
                 } catch (Exception e) {
                     JOptionPane.showMessageDialog(parentFrame,

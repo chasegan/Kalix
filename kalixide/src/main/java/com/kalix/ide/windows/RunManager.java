@@ -54,6 +54,7 @@ import java.awt.Point;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -531,7 +532,8 @@ public class RunManager extends JFrame {
             plotDataSet,
             timeSeriesRequestManager,
             lastRunTracker,
-            fetchCoordinator
+            fetchCoordinator,
+            (source, label) -> aggregatedSeriesController.onOriginRemoved(source, label)
         );
         aggregatedSeriesController = new AggregatedSeriesController(
             this,
@@ -573,7 +575,7 @@ public class RunManager extends JFrame {
             () -> editorTextSupplier != null ? editorTextSupplier.get() : null,        // Editor text supplier
             runTreeController.sessionToRunNameView(),  // Session to run name map (live)
             this::refreshRuns,                // Refresh callback
-            runTreeController::renameRun,     // Rename delegate (validation + propagation)
+            this::renameRun,                  // Rename delegate (validation + propagation)
             this::removeLoadedDataset         // Remove-dataset delegate (pool/cache/tab cleanup)
         );
 
@@ -632,9 +634,19 @@ public class RunManager extends JFrame {
      * Callback invoked after a dataset is loaded.
      * Used by DatasetLoaderManager.
      */
-    private void onDatasetLoaded() {
+    private void onDatasetLoaded(File file) {
+        aggregatedSeriesController.onOriginLoaded(new DatasetSource(file.getAbsolutePath()));
         // Refresh the tree to show the newly loaded dataset
         refreshRuns();
+    }
+
+    /** Renames a run; its aggregates' group labels follow. See {@link RunTreeController#renameRun}. */
+    private String renameRun(RunContextMenuManager.RunInfo runInfo, String newName) {
+        String error = runTreeController.renameRun(runInfo, newName);
+        if (error == null) {
+            aggregatedSeriesController.refreshOriginLabels();
+        }
+        return error;
     }
 
 
@@ -1108,6 +1120,7 @@ public class RunManager extends JFrame {
         // Node first, exactly as run removal does: see removeSourceNode.
         removeSourceNode(loadedDatasetsNode, info);
         purgeSeries(refs, new DatasetSource(absPath));
+        aggregatedSeriesController.onOriginRemoved(new DatasetSource(absPath), info.fileName);
 
         if (statusUpdater != null) {
             statusUpdater.accept("Removed dataset: " + info.fileName);

@@ -8,6 +8,7 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.RunSeries;
 import com.kalix.ide.flowviz.data.RunSource;
 import com.kalix.ide.flowviz.data.SeriesRef;
+import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.managers.RunContextMenuManager;
 import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.StdioTaskManager;
@@ -21,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiConsumer;
 
 /**
  * Owns the data-source tree's run bookkeeping for {@link RunManager}: which CLI
@@ -45,6 +47,8 @@ class RunTreeController {
     private final TimeSeriesRequestManager timeSeriesRequestManager;
     private final LastRunTracker lastRunTracker;
     private final SeriesFetchCoordinator fetchCoordinator;
+    // Told of each removed run and its last display name.
+    private final BiConsumer<SourceRef, String> sourceRemoved;
 
     // === RUN TRACKING ===
     // sessionKey -> node/name/status/completion, with single-shot removal cleanup.
@@ -61,7 +65,8 @@ class RunTreeController {
                       DataSet plotDataSet,
                       TimeSeriesRequestManager timeSeriesRequestManager,
                       LastRunTracker lastRunTracker,
-                      SeriesFetchCoordinator fetchCoordinator) {
+                      SeriesFetchCoordinator fetchCoordinator,
+                      BiConsumer<SourceRef, String> sourceRemoved) {
         this.window = window;
         this.stdioTaskManager = stdioTaskManager;
         this.timeseriesSourceTree = timeseriesSourceTree;
@@ -72,6 +77,7 @@ class RunTreeController {
         this.timeSeriesRequestManager = timeSeriesRequestManager;
         this.lastRunTracker = lastRunTracker;
         this.fetchCoordinator = fetchCoordinator;
+        this.sourceRemoved = sourceRemoved;
     }
 
     /**
@@ -427,6 +433,7 @@ class RunTreeController {
         }
         // runIds are never reused, so no tab should try to restore this source again.
         window.purgeSeries(refs, new RunSource(runId));
+        sourceRemoved.accept(new RunSource(runId), runInfo.getRunName());
 
         // Clear by UID, not session key: the session has already left the session
         // manager, so key-based lookup cannot reach these entries any more.
