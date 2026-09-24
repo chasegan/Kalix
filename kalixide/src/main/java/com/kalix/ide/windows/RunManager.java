@@ -95,7 +95,7 @@ import java.util.function.Consumer;
  *   <li>Timeseries tree is rebuilt with available outputs → {@link OutputsTreeBuilder#updateTree}</li>
  *   <li>User checks series in timeseries tree → {@link SeriesFetchCoordinator#onOutputsTreeCheckedChanged}</li>
  *   <li>Data is fetched via {@link TimeSeriesRequestManager} (cached by kalixcliUid:seriesName)</li>
- *   <li>Data is added to shared {@link DataSet} pool → {@link #addSeriesToPool}</li>
+ *   <li>Data is added to shared {@link DataSet} pool → {@link #publishSeries}</li>
  *   <li>All plot tabs are updated → {@link VisualizationTabManager#updateAllTabs}</li>
  * </ol>
  *
@@ -1106,12 +1106,13 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Adds a series to the shared data pool under the given {@link SeriesRef}.
-     * The data's legacy name field is ignored — identity comes from the ref.
-     * Legend and visibility are managed per-tab via VisualizationTabManager.
+     * Adds a series to the shared data pool under the given {@link SeriesRef} and refreshes
+     * its rows in the stats tabs. The data's legacy name field is ignored — identity comes
+     * from the ref. Legend and visibility are managed per-tab via VisualizationTabManager.
      */
-    void addSeriesToPool(SeriesRef ref, TimeSeriesData timeSeriesData) {
+    void publishSeries(SeriesRef ref, TimeSeriesData timeSeriesData) {
         plotDataSet.addSeries(ref, timeSeriesData);
+        tabManager.updateSeriesInStatsTabsWithAggregation(ref, timeSeriesData);
     }
 
     /**

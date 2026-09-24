@@ -217,8 +217,7 @@ class SeriesFetchCoordinator {
                 // Held by the controller, as loaded datasets are by datasetSeriesSources.
                 TimeSeriesData values = aggregate.values();
                 if (values != null) {
-                    window.addSeriesToPool(ref, values);
-                    tabManager.updateSeriesInStatsTabsWithAggregation(ref, values);
+                    window.publishSeries(ref, values);
                 } else {
                     tabManager.addErrorSeriesInStatsTabs(ref, aggregate.unavailableReason());
                 }
@@ -254,8 +253,7 @@ class SeriesFetchCoordinator {
             TimeSeriesData cachedData = timeSeriesRequestManager.getTimeSeriesFromCache(sessionKey, seriesName);
             if (cachedData != null) {
                 for (SeriesRef ref : refs) {
-                    window.addSeriesToPool(ref, cachedData);
-                    tabManager.updateSeriesInStatsTabsWithAggregation(ref, cachedData);
+                    window.publishSeries(ref, cachedData);
                 }
             } else if (!timeSeriesRequestManager.isRequestInProgress(sessionKey, seriesName)) {
                 for (SeriesRef ref : refs) {
@@ -282,8 +280,7 @@ class SeriesFetchCoordinator {
                                 }
                                 // Check if series is still selected on the target tab
                                 if (capturedNewSelection.contains(capturedRef)) {
-                                    window.addSeriesToPool(capturedRef, timeSeriesData);
-                                    tabManager.updateSeriesInStatsTabsWithAggregation(capturedRef, timeSeriesData);
+                                    window.publishSeries(capturedRef, timeSeriesData);
                                 }
                             }
 
@@ -326,8 +323,7 @@ class SeriesFetchCoordinator {
             DatasetSeriesSource source = datasetSeriesSources.get(datasetRef);
             switch (source) {
                 case DatasetSeriesSource.Loaded loaded -> {
-                    window.addSeriesToPool(ref, loaded.data());
-                    tabManager.updateSeriesInStatsTabsWithAggregation(ref, loaded.data());
+                    window.publishSeries(ref, loaded.data());
                 }
                 case DatasetSeriesSource.Pixie pixie -> {
                     if (pixieRefusal != null) {
@@ -508,8 +504,7 @@ class SeriesFetchCoordinator {
                     tabManager.addErrorSeriesInStatsTabs(ref, cause.getMessage());
                     return;
                 }
-                window.addSeriesToPool(ref, data);
-                tabManager.updateSeriesInStatsTabsWithAggregation(ref, data);
+                window.publishSeries(ref, data);
                 if (targetPanel != null) {
                     tabManager.updateTab(targetPanel, shouldResetZoom);
                 }

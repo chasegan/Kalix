@@ -366,8 +366,7 @@ class LastRunTracker {
             if (cachedData != null) {
                 // Synchronous replacement on EDT — atomic via DataSet.addSeries replacing
                 // the existing entry for this ref.
-                window.addSeriesToPool(ref, cachedData);
-                tabManager.updateSeriesInStatsTabsWithAggregation(ref, cachedData);
+                window.publishSeries(ref, cachedData);
                 anySyncReplacement = true;
             } else {
                 // Async fetch. requestTimeSeries returns an existing in-flight future
@@ -381,8 +380,7 @@ class LastRunTracker {
                             if (capturedGeneration != lastRunGeneration) {
                                 return;
                             }
-                            window.addSeriesToPool(ref, timeSeriesData);
-                            tabManager.updateSeriesInStatsTabsWithAggregation(ref, timeSeriesData);
+                            window.publishSeries(ref, timeSeriesData);
 
                             // Only refresh tabs if something on screen needs to redraw.
                             if (tabManager.isSeriesSelectedOnAnyTab(ref)) {

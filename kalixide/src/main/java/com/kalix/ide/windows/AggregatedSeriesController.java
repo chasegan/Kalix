@@ -599,8 +599,7 @@ class AggregatedSeriesController {
         SeriesRef ref = target.ref();
         if (values != null) {
             target.setValues(values);
-            plotDataSet.addSeries(ref, values);
-            tabManager.updateSeriesInStatsTabsWithAggregation(ref, values);
+            window.publishSeries(ref, values);
         } else {
             target.setUnavailable(reason);
             plotDataSet.removeSeries(ref);
