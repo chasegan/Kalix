@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Manages dataset file loading (CSV and Pixie formats) for RunManager.
@@ -68,6 +69,7 @@ public class DatasetLoaderManager {
 
     // Callbacks
     private final Runnable onDatasetLoadedCallback;
+    private final Function<List<String>, String> seriesNameRefusal;
 
     /**
      * Creates a new DatasetLoaderManager.
@@ -78,6 +80,7 @@ public class DatasetLoaderManager {
      * @param treeModel Tree model for updates
      * @param statusUpdater Status bar updater
      * @param onDatasetLoadedCallback Callback after dataset is loaded
+     * @param seriesNameRefusal Why a dataset with the given series names must not load, or null
      */
     public DatasetLoaderManager(
             JFrame parentFrame,
@@ -85,13 +88,28 @@ public class DatasetLoaderManager {
             DefaultMutableTreeNode loadedDatasetsNode,
             DefaultTreeModel treeModel,
             Consumer<String> statusUpdater,
-            Runnable onDatasetLoadedCallback) {
+            Runnable onDatasetLoadedCallback,
+            Function<List<String>, String> seriesNameRefusal) {
         this.parentFrame = parentFrame;
         this.datasetSeriesSources = datasetSeriesSources;
         this.loadedDatasetsNode = loadedDatasetsNode;
         this.treeModel = treeModel;
         this.statusUpdater = statusUpdater;
         this.onDatasetLoadedCallback = onDatasetLoadedCallback;
+        this.seriesNameRefusal = seriesNameRefusal;
+    }
+
+    /** Refuses the load of {@code file} if its series names can't be loaded; true if refused. */
+    private boolean refuseNames(File file, List<String> seriesNames) {
+        String refusal = seriesNameRefusal.apply(seriesNames);
+        if (refusal == null) {
+            return false;
+        }
+        JOptionPane.showMessageDialog(parentFrame, refusal, "Name Clash", JOptionPane.WARNING_MESSAGE);
+        if (statusUpdater != null) {
+            statusUpdater.accept("Did not load " + file.getName());
+        }
+        return true;
     }
 
     /**
@@ -350,6 +368,12 @@ public class DatasetLoaderManager {
         String fileName = csvFile.getName();
         int seriesAdded = 0;
 
+        List<String> names = importResult.getSeries().stream()
+            .map(ns -> composeDatasetSeriesName(csvFile, ns.path())).toList();
+        if (refuseNames(csvFile, names)) {
+            return;
+        }
+
         for (NamedSeries ns : importResult.getSeries()) {
             // Create hierarchical series name from the series' path segments
             String seriesName = composeDatasetSeriesName(csvFile, ns.path());
@@ -482,6 +506,12 @@ public class DatasetLoaderManager {
         String fileName = resCsvFile.getName();
         int seriesAdded = 0;
 
+        List<String> names = importResult.getSeries().stream()
+            .map(ns -> composeDatasetSeriesName(resCsvFile, ns.path())).toList();
+        if (refuseNames(resCsvFile, names)) {
+            return;
+        }
+
         for (NamedSeries ns : importResult.getSeries()) {
             String seriesName = composeDatasetSeriesName(resCsvFile, ns.path());
             DatasetSeries ref = new DatasetSeries(resCsvFile.getAbsolutePath(), seriesName);
@@ -588,6 +618,12 @@ public class DatasetLoaderManager {
 
                 try {
                     List<IndexedSeries> seriesList = get();
+                    List<String> names = seriesList.stream()
+                        .map(series -> composeDatasetSeriesName(pxtFile, NamedSeries.dottedPath(series.name())))
+                        .toList();
+                    if (refuseNames(pxtFile, names)) {
+                        return;
+                    }
 
                     // Register every series by its hierarchical name, holding only its store key
                     for (IndexedSeries series : seriesList) {

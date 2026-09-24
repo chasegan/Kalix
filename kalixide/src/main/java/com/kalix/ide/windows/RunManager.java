@@ -551,7 +551,8 @@ public class RunManager extends JFrame {
             loadedDatasetsNode,               // Tree node
             treeModel,                        // Tree model
             statusUpdater,                    // Status updater
-            this::onDatasetLoaded             // Callback after load
+            this::onDatasetLoaded,            // Callback after load
+            names -> aggregatedSeriesController.datasetNameClash(names)  // Refuse aggregate-name clashes
         );
 
         // RunContextMenuManager - handles context menus

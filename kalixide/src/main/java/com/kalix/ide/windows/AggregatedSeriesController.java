@@ -439,6 +439,23 @@ class AggregatedSeriesController {
         }
     }
 
+    /**
+     * Why a dataset with these series names must not load, or {@code null}: no column may
+     * share an aggregate's full name, or the outputs tree would merge the two.
+     */
+    String datasetNameClash(List<String> seriesNames) {
+        for (String name : seriesNames) {
+            for (AggregateInfo info : aggregates.values()) {
+                if (labelResolver.nameFor(info.ref()).equals(name)) {
+                    return "This dataset has a column named \"" + name + "\", the same as an aggregate of "
+                        + originLabel(info.origin) + ".\n\nRename or delete the aggregate, or rename the"
+                        + " column, then load the dataset again.";
+                }
+            }
+        }
+        return null;
+    }
+
     /** Point counts of the aggregates made from Pixie data, for the Pixie memory budget. */
     List<Integer> pixieBackedPoints() {
         List<Integer> points = new ArrayList<>();
