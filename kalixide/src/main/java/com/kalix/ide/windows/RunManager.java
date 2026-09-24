@@ -537,11 +537,11 @@ public class RunManager extends JFrame {
             timeseriesTree,
             treeModel,
             aggregateSeriesNode,
-            tabManager,
-            plotDataSet,
-            seriesSlotManager,
             timeSeriesRequestManager,
-            labelResolver
+            labelResolver,
+            datasetSeriesSources,
+            lastRunTracker,
+            statusUpdater
         );
 
         // DatasetLoaderManager - handles dataset file loading
@@ -825,6 +825,17 @@ public class RunManager extends JFrame {
      */
     public void refreshRuns() {
         runTreeController.refreshRuns();
+    }
+
+    /**
+     * Checks {@code refs} in the outputs tree, in addition to what is already checked, so
+     * the target tab plots them. Refs with no visible node (e.g. hidden by the filter) are
+     * skipped.
+     */
+    void checkOutputsSeries(Set<SeriesRef> refs) {
+        List<TreePath> paths = new ArrayList<>();
+        searchAndCollectPaths((DefaultMutableTreeNode) timeseriesTreeModel.getRoot(), refs, paths);
+        timeseriesTree.addCheckedPaths(paths);
     }
 
     /**
@@ -1143,7 +1154,7 @@ public class RunManager extends JFrame {
      * identity, or {@code null} for anything that isn't a data source (category
      * headers, the root).
      */
-    private SourceRef sourceRefForNode(Object userObject) {
+    SourceRef sourceRefForNode(Object userObject) {
         if (userObject instanceof RunInfoImpl runInfo) {
             return runInfo.isLastAlias() ? new LastSource() : new RunSource(runInfo.getRunId());
         }
