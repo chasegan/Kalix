@@ -14,12 +14,16 @@ import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.SeriesSum;
+import com.kalix.ide.filedialog.FileDialogFilter;
+import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.icons.MenuIcons;
 import com.kalix.ide.io.PixieStore;
+import com.kalix.ide.io.SeriesFileWriter;
 import com.kalix.ide.managers.DatasetLoaderManager;
 import com.kalix.ide.managers.DatasetSeriesSource;
 import com.kalix.ide.managers.OutputsTreeBuilder;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
+import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.utils.DialogUtils;
 
 import javax.swing.JMenuItem;
@@ -30,6 +34,8 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -38,6 +44,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -162,20 +169,10 @@ class AggregatedSeriesController {
      * if the selection can't make an aggregate.
      */
     private Map<SourceRef, OriginInputs> selectedInputsByOrigin() {
-        TreePath[] selected = outputsTree.getSelectionPaths();
         Map<SourceRef, OriginInputs> selection = new LinkedHashMap<>();
         Map<Object, SourceRef> originOfSource = new IdentityHashMap<>();
-        if (selected != null) {
-            for (TreePath path : selected) {
-                Enumeration<TreeNode> nodes =
-                    ((DefaultMutableTreeNode) path.getLastPathComponent()).preorderEnumeration();
-                while (nodes.hasMoreElements()) {
-                    DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes.nextElement();
-                    if (node.getUserObject() instanceof OutputsTreeBuilder.SeriesLeafNode leaf) {
-                        addLeaf(selection, originOfSource, leaf);
-                    }
-                }
-            }
+        for (OutputsTreeBuilder.SeriesLeafNode leaf : selectedLeaves()) {
+            addLeaf(selection, originOfSource, leaf);
         }
         if (selection.isEmpty()) {
             error("Select the series to sum in the Timeseries tree.");
@@ -586,14 +583,26 @@ class AggregatedSeriesController {
     }
 
     /**
-     * The source-tree right-click menu for an aggregate, or {@code null} for any other node.
-     * Modify, then destructive, each in its own block (ADR-0002 §1).
+     * The source-tree right-click menu for an aggregate or an origin's group, or {@code null}
+     * for any other node. Context-specific, modify, then destructive, each in its own block
+     * (ADR-0002 §1).
      */
     JPopupMenu contextMenuFor(Object userObject) {
+        if (userObject instanceof OriginGroup group) {
+            JPopupMenu menu = new JPopupMenu();
+            JMenuItem save = new JMenuItem("Save…");
+            save.addActionListener(e -> save(aggregatesOf(group.origin), "aggregates " + group));
+            menu.add(save);
+            return menu;
+        }
         if (!(userObject instanceof AggregateInfo info)) {
             return null;
         }
         JPopupMenu menu = new JPopupMenu();
+        JMenuItem save = new JMenuItem("Save…");
+        save.addActionListener(e -> save(List.of(info), labelResolver.labelFor(info.ref())));
+        menu.add(save);
+        menu.addSeparator();
         JMenuItem rename = new JMenuItem("Rename…");
         rename.addActionListener(e -> rename(info));
         menu.add(rename);
@@ -602,6 +611,89 @@ class AggregatedSeriesController {
         delete.addActionListener(e -> delete(info));
         menu.add(delete);
         return menu;
+    }
+
+    /** Whether the outputs-tree selection includes an aggregate, so it can be saved. */
+    boolean selectionHasAggregates() {
+        return selectedLeaves().stream().anyMatch(leaf -> leaf.source instanceof AggregateInfo);
+    }
+
+    /**
+     * Saves the aggregates selected in the outputs tree to one file. Refuses a selection that
+     * also holds run or dataset series, rather than silently leaving them out.
+     */
+    void saveSelectedAggregates() {
+        Set<AggregateInfo> selected = new LinkedHashSet<>();
+        for (OutputsTreeBuilder.SeriesLeafNode leaf : selectedLeaves()) {
+            if (!(leaf.source instanceof AggregateInfo aggregate)) {
+                error("Only aggregates can be saved here: " + labelResolver.labelFor(leaf.ref)
+                    + " is not one. Save a run's results from its own menu.");
+                return;
+            }
+            selected.add(aggregate);
+        }
+        save(List.copyOf(selected), "aggregates");
+    }
+
+    /** Every series leaf under the outputs-tree selection, as the tree shows it. */
+    private List<OutputsTreeBuilder.SeriesLeafNode> selectedLeaves() {
+        List<OutputsTreeBuilder.SeriesLeafNode> leaves = new ArrayList<>();
+        TreePath[] selected = outputsTree.getSelectionPaths();
+        if (selected != null) {
+            for (TreePath path : selected) {
+                Enumeration<TreeNode> nodes =
+                    ((DefaultMutableTreeNode) path.getLastPathComponent()).preorderEnumeration();
+                while (nodes.hasMoreElements()) {
+                    if (((DefaultMutableTreeNode) nodes.nextElement()).getUserObject()
+                            instanceof OutputsTreeBuilder.SeriesLeafNode leaf) {
+                        leaves.add(leaf);
+                    }
+                }
+            }
+        }
+        return leaves;
+    }
+
+    private List<AggregateInfo> aggregatesOf(SourceRef origin) {
+        return aggregates.values().stream().filter(a -> a.origin.equals(origin)).toList();
+    }
+
+    /**
+     * Saves {@code toSave} to one file, CSV, zipped CSV or Pixie, one column per aggregate
+     * named by its label, as a run's "Save results" offers. The dialog suggests a name
+     * made from {@code suggestion}.
+     */
+    private void save(List<AggregateInfo> toSave, String suggestion) {
+        List<String> unavailable = toSave.stream().filter(a -> a.values() == null)
+            .map(a -> labelResolver.labelFor(a.ref())).toList();
+        if (!unavailable.isEmpty()) {
+            error("Nothing was saved. These aggregates are unavailable:\n  " + String.join("\n  ", unavailable));
+            return;
+        }
+        Optional<File> chosen = KalixFileDialog.saveFile(window)
+            .title("Save Aggregates")
+            .startIn(window.baseDirectory())
+            .suggestedName(suggestion.replaceAll("[^A-Za-z0-9._-]+", "_").replaceAll("^_+|_+$", "") + ".csv")
+            .filters(
+                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
+                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"),
+                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
+            .show();
+        if (chosen.isEmpty()) {
+            return;
+        }
+        DataSet data = new DataSet();
+        for (AggregateInfo info : toSave) {
+            data.addSeries(info.ref(), info.values());
+        }
+        try {
+            File written = SeriesFileWriter.write(data, chosen.get(), null, labelResolver,
+                PreferenceKeys.FLOWVIZ_PRECISION64.get());
+            status("Saved " + toSave.size() + (toSave.size() == 1 ? " aggregate" : " aggregates")
+                + " to " + written.getName());
+        } catch (IOException | IllegalArgumentException e) {
+            DialogUtils.showError(window, "Could not save the aggregates: " + e.getMessage(), "Save Aggregates");
+        }
     }
 
     /** Prompts for a new name, valid within the aggregate's origin, and applies it. */

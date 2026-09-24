@@ -588,7 +588,9 @@ public class RunManager extends JFrame {
         runContextMenuManager.setNodeMenuProvider(aggregatedSeriesController::contextMenuFor);
         runContextMenuManager.setRemovableCategories(
             lastRunNode, currentRunsNode, libraryNode, loadedDatasetsNode);
-        runContextMenuManager.setupOutputsTreeContextMenu(aggregatedSeriesController::createAggregatedSeries,
+        runContextMenuManager.setupOutputsTreeContextMenu(aggregatedSeriesController::saveSelectedAggregates,
+                                                          aggregatedSeriesController::selectionHasAggregates,
+                                                          aggregatedSeriesController::createAggregatedSeries,
                                                           this::expandAllFromSelected,
                                                           this::collapseAllFromSelected,
                                                           this::showChecked,
@@ -847,6 +849,11 @@ public class RunManager extends JFrame {
      */
     public void refreshRuns() {
         runTreeController.refreshRuns();
+    }
+
+    /** The model's folder, where save dialogs start; {@code null} if no model is open. */
+    File baseDirectory() {
+        return baseDirectorySupplier != null ? baseDirectorySupplier.get() : null;
     }
 
     /**

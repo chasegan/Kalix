@@ -14,8 +14,11 @@ import javax.swing.JFrame;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
+import javax.swing.JSeparator;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -30,6 +33,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -279,12 +283,37 @@ public class RunContextMenuManager {
      * Sets up the context menu for the outputs tree. All items delegate to their
      * respective callbacks.
      */
-    public void setupOutputsTreeContextMenu(Runnable newAggregateCallback,
+    public void setupOutputsTreeContextMenu(Runnable saveAggregatesCallback,
+                                            BooleanSupplier selectionHasAggregates,
+                                            Runnable newAggregateCallback,
                                             Runnable expandAllCallback,
                                             Runnable collapseAllCallback,
                                             Runnable showCheckedCallback,
                                             Runnable showSelectedCallback) {
         JPopupMenu contextMenu = new JPopupMenu();
+
+        // Context-specific, shown only when the selection holds an aggregate (ADR-0002 §4).
+        JMenuItem saveAggregatesItem = new JMenuItem("Save aggregates…");
+        saveAggregatesItem.addActionListener(e -> saveAggregatesCallback.run());
+        contextMenu.add(saveAggregatesItem);
+        JSeparator saveSeparator = new JSeparator();
+        contextMenu.add(saveSeparator);
+        contextMenu.addPopupMenuListener(new PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+                boolean show = selectionHasAggregates.getAsBoolean();
+                saveAggregatesItem.setVisible(show);
+                saveSeparator.setVisible(show);
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {
+            }
+
+            @Override
+            public void popupMenuCanceled(PopupMenuEvent e) {
+            }
+        });
 
         // Ellipsis: it prompts for a name before anything is created (ADR-0002 §2.4).
         JMenuItem newAggregateItem = new JMenuItem("New aggregate…");
