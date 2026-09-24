@@ -12,22 +12,34 @@ import java.util.List;
  */
 final class AggregateInfo {
 
+    /** One input to an aggregate: a series of its origin, or another aggregate of it. */
+    sealed interface Input {
+    }
+
+    /** A series of the origin, by name. */
+    record SeriesInput(String name) implements Input {
+    }
+
+    /** Another aggregate of the same origin, by id, so a rename doesn't break the recipe. */
+    record AggregateInput(long aggregateId) implements Input {
+    }
+
     final long id;
     /** The run, Last alias, or dataset the inputs were summed from. */
     final SourceRef origin;
-    /** The recipe: the series names summed, as resolved at creation. */
-    final List<String> inputNames;
+    /** The recipe: what was summed, as resolved at creation. */
+    final List<Input> inputs;
 
     private String name;
     private TimeSeriesData values;
     private String unavailableReason;
 
-    AggregateInfo(long id, SourceRef origin, String name, List<String> inputNames,
+    AggregateInfo(long id, SourceRef origin, String name, List<Input> inputs,
                   TimeSeriesData values) {
         this.id = id;
         this.origin = origin;
         this.name = name;
-        this.inputNames = List.copyOf(inputNames);
+        this.inputs = List.copyOf(inputs);
         this.values = values;
     }
 

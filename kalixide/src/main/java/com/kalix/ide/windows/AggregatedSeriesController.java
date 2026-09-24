@@ -88,53 +88,59 @@ class AggregatedSeriesController {
     }
 
     /**
-     * Creates one aggregate per source covered by the outputs-tree selection, each the
-     * sum of the selected series in that source. Wired to the outputs tree's
+     * Creates one aggregate per origin covered by the outputs-tree selection, each the sum
+     * of the selected series in that origin. Wired to the outputs tree's
      * "New aggregate…" item.
      *
      * <p>A selected node contributes every series leaf under it, as the tree currently
-     * shows it (so the filter narrows what an in-between node sums). Every source must
-     * contribute the same series. All-or-nothing: if any input fails, nothing is created.</p>
+     * shows it (so the filter narrows what an in-between node sums). An aggregate counts as
+     * a series of its own origin. Every origin must contribute the same series.
+     * All-or-nothing: if any input fails, nothing is created.</p>
      */
     void createAggregatedSeries() {
-        Map<Object, Set<String>> namesBySource = selectedNamesBySource();
-        if (namesBySource == null) {
+        Map<SourceRef, OriginInputs> selection = selectedInputsByOrigin();
+        if (selection == null) {
             return;
         }
 
-        List<SourceRef> origins = new ArrayList<>();
-        for (Object source : namesBySource.keySet()) {
-            origins.add(window.sourceRefForNode(source));
-        }
+        List<SourceRef> origins = List.copyOf(selection.keySet());
         String name = promptForName(origins);
         if (name == null) {
             return;
         }
 
-        Map<Object, List<CompletableFuture<TimeSeriesData>>> inputs = new LinkedHashMap<>();
-        for (Map.Entry<Object, Set<String>> entry : namesBySource.entrySet()) {
-            List<CompletableFuture<TimeSeriesData>> futures = requestInputs(entry.getKey(), entry.getValue());
-            if (futures == null) {
+        Map<SourceRef, List<CompletableFuture<TimeSeriesData>>> futures = new LinkedHashMap<>();
+        for (Map.Entry<SourceRef, OriginInputs> entry : selection.entrySet()) {
+            List<CompletableFuture<TimeSeriesData>> originFutures =
+                requestInputs(entry.getKey(), entry.getValue());
+            if (originFutures == null) {
                 return;
             }
-            inputs.put(entry.getKey(), futures);
+            futures.put(entry.getKey(), originFutures);
         }
 
         long lastGeneration = lastRunTracker.getGeneration();
         status("Creating aggregate." + name + "…");
-        CompletableFuture.allOf(inputs.values().stream().flatMap(List::stream)
+        CompletableFuture.allOf(futures.values().stream().flatMap(List::stream)
                 .toArray(CompletableFuture[]::new))
             .whenComplete((ignored, failure) -> SwingUtilities.invokeLater(
-                () -> finishCreation(name, namesBySource, inputs, lastGeneration)));
+                () -> finishCreation(name, selection, futures, lastGeneration)));
+    }
+
+    /** One origin's selected inputs, keyed by display name, and where its series are read. */
+    private static final class OriginInputs {
+        /** The run or dataset tree object; {@code null} if every input is an aggregate. */
+        Object source;
+        final Map<String, AggregateInfo.Input> inputs = new LinkedHashMap<>();
     }
 
     /**
-     * The selected series grouped by source, or {@code null} (after telling the user why)
+     * The selected inputs grouped by origin, or {@code null} (after telling the user why)
      * if the selection can't make an aggregate.
      */
-    private Map<Object, Set<String>> selectedNamesBySource() {
+    private Map<SourceRef, OriginInputs> selectedInputsByOrigin() {
         TreePath[] selected = outputsTree.getSelectionPaths();
-        Map<Object, Set<String>> namesBySource = new LinkedHashMap<>();
+        Map<SourceRef, OriginInputs> selection = new LinkedHashMap<>();
         if (selected != null) {
             for (TreePath path : selected) {
                 Enumeration<TreeNode> nodes =
@@ -142,26 +148,25 @@ class AggregatedSeriesController {
                 while (nodes.hasMoreElements()) {
                     DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes.nextElement();
                     if (node.getUserObject() instanceof OutputsTreeBuilder.SeriesLeafNode leaf) {
-                        namesBySource.computeIfAbsent(leaf.source, s -> new LinkedHashSet<>())
-                            .add(leaf.seriesName);
+                        addLeaf(selection, leaf);
                     }
                 }
             }
         }
-        if (namesBySource.isEmpty()) {
+        if (selection.isEmpty()) {
             error("Select the series to sum in the Timeseries tree.");
             return null;
         }
 
-        // Require that all selected series are present in all selected data sources.
+        // Require that all selected series are present in all selected origins.
         // Prevents silent dropped series.
         Set<String> allNames = new LinkedHashSet<>();
-        namesBySource.values().forEach(allNames::addAll);
+        selection.values().forEach(o -> allNames.addAll(o.inputs.keySet()));
         List<String> missing = new ArrayList<>();
-        for (Map.Entry<Object, Set<String>> entry : namesBySource.entrySet()) {
+        for (Map.Entry<SourceRef, OriginInputs> entry : selection.entrySet()) {
             for (String name : allNames) {
-                if (!entry.getValue().contains(name)) {
-                    missing.add(sourceLabel(entry.getKey()) + ": " + name);
+                if (!entry.getValue().inputs.containsKey(name)) {
+                    missing.add(originLabel(entry.getKey()) + ": " + name);
                 }
             }
         }
@@ -170,7 +175,20 @@ class AggregatedSeriesController {
                 + String.join("\n  ", missing));
             return null;
         }
-        return namesBySource;
+        return selection;
+    }
+
+    private void addLeaf(Map<SourceRef, OriginInputs> selection, OutputsTreeBuilder.SeriesLeafNode leaf) {
+        if (leaf.source instanceof AggregateInfo aggregate) {
+            selection.computeIfAbsent(aggregate.origin, o -> new OriginInputs()).inputs
+                .putIfAbsent(labelResolver.nameFor(aggregate.ref()),
+                    new AggregateInfo.AggregateInput(aggregate.id));
+        } else {
+            OriginInputs origin = selection.computeIfAbsent(
+                window.sourceRefForNode(leaf.source), o -> new OriginInputs());
+            origin.source = leaf.source;
+            origin.inputs.putIfAbsent(leaf.seriesName, new AggregateInfo.SeriesInput(leaf.seriesName));
+        }
     }
 
     /** Prompts until the name is valid for every origin; {@code null} if cancelled. */
@@ -209,8 +227,7 @@ class AggregatedSeriesController {
         }
         for (AggregateInfo existing : aggregates.values()) {
             if (existing.name().equals(name) && origins.contains(existing.origin)) {
-                return labelResolver.originLabel(existing.origin, removedOriginLabels.get(existing.origin))
-                    + " already has an aggregate named \"" + name + "\".";
+                return originLabel(existing.origin) + " already has an aggregate named \"" + name + "\".";
             }
         }
         String full = AggregateSeries.NAME_PREFIX + name;
@@ -224,52 +241,70 @@ class AggregatedSeriesController {
     }
 
     /**
-     * Starts fetching {@code names} from {@code source}, or returns {@code null} (after
-     * telling the user why) if it can't be.
+     * Starts fetching one origin's inputs, or returns {@code null} (after telling the user
+     * why) if they can't be.
      */
-    private List<CompletableFuture<TimeSeriesData>> requestInputs(Object source, Set<String> names) {
+    private List<CompletableFuture<TimeSeriesData>> requestInputs(SourceRef origin, OriginInputs selected) {
         List<CompletableFuture<TimeSeriesData>> futures = new ArrayList<>();
-        if (source instanceof RunInfoImpl run) {
-            RunInfoImpl resolved = run.isLastAlias() ? lastRunTracker.getLastRunInfo() : run;
-            SessionManager.KalixSession session = resolved != null ? resolved.getSession() : null;
-            if (session == null) {
-                error(sourceLabel(source) + " has no session to read from.");
+        for (AggregateInfo.Input input : selected.inputs.values()) {
+            CompletableFuture<TimeSeriesData> future = switch (input) {
+                case AggregateInfo.SeriesInput series -> requestSeries(origin, selected.source, series.name());
+                case AggregateInfo.AggregateInput aggregate -> aggregateValues(origin, aggregate.aggregateId());
+            };
+            if (future == null) {
                 return null;
             }
-            for (String name : names) {
-                futures.add(timeSeriesRequestManager.requestTimeSeries(session.getSessionKey(), name));
-            }
-        } else if (source instanceof DatasetLoaderManager.LoadedDatasetInfo dataset) {
-            String datasetId = dataset.file.getAbsolutePath();
-            for (String name : names) {
-                switch (datasetSeriesSources.get(new DatasetSeries(datasetId, name))) {
-                    case DatasetSeriesSource.Loaded loaded ->
-                        futures.add(CompletableFuture.completedFuture(loaded.data()));
-                    case DatasetSeriesSource.Pixie ignored -> {
-                        error("Aggregates of Pixie datasets are not supported yet.");
-                        return null;
-                    }
-                    case null -> {
-                        error(sourceLabel(source) + " has no series " + name + ".");
-                        return null;
-                    }
-                }
-            }
-        } else {
-            error("Unsupported source: " + source);
-            return null;
+            futures.add(future);
         }
         return futures;
     }
 
-    /** Sums and registers every source's aggregate, or none of them. */
-    private void finishCreation(String name, Map<Object, Set<String>> namesBySource,
-                                Map<Object, List<CompletableFuture<TimeSeriesData>>> inputs,
-                                long lastGeneration) {
-        List<SourceRef> origins = new ArrayList<>();
-        for (Object source : namesBySource.keySet()) {
-            origins.add(window.sourceRefForNode(source));
+    private CompletableFuture<TimeSeriesData> requestSeries(SourceRef origin, Object source, String name) {
+        if (source instanceof RunInfoImpl run) {
+            RunInfoImpl resolved = run.isLastAlias() ? lastRunTracker.getLastRunInfo() : run;
+            SessionManager.KalixSession session = resolved != null ? resolved.getSession() : null;
+            if (session == null) {
+                error(originLabel(origin) + " has no session to read from.");
+                return null;
+            }
+            return timeSeriesRequestManager.requestTimeSeries(session.getSessionKey(), name);
         }
+        if (source instanceof DatasetLoaderManager.LoadedDatasetInfo dataset) {
+            String datasetId = dataset.file.getAbsolutePath();
+            switch (datasetSeriesSources.get(new DatasetSeries(datasetId, name))) {
+                case DatasetSeriesSource.Loaded loaded -> {
+                    return CompletableFuture.completedFuture(loaded.data());
+                }
+                case DatasetSeriesSource.Pixie ignored -> {
+                    error("Aggregates of Pixie datasets are not supported yet.");
+                    return null;
+                }
+                case null -> {
+                    error(originLabel(origin) + " has no series " + name + ".");
+                    return null;
+                }
+            }
+        }
+        error("Unsupported source: " + source);
+        return null;
+    }
+
+    private CompletableFuture<TimeSeriesData> aggregateValues(SourceRef origin, long aggregateId) {
+        AggregateInfo aggregate = aggregates.get(aggregateId);
+        TimeSeriesData values = aggregate != null ? aggregate.values() : null;
+        if (values == null) {
+            String reason = aggregate != null ? aggregate.unavailableReason() : "it was deleted";
+            error(originLabel(origin) + ": an input aggregate is unavailable (" + reason + ").");
+            return null;
+        }
+        return CompletableFuture.completedFuture(values);
+    }
+
+    /** Sums and registers every origin's aggregate, or none of them. */
+    private void finishCreation(String name, Map<SourceRef, OriginInputs> selection,
+                                Map<SourceRef, List<CompletableFuture<TimeSeriesData>>> futures,
+                                long lastGeneration) {
+        List<SourceRef> origins = List.copyOf(selection.keySet());
         if (origins.contains(new LastSource()) && lastRunTracker.getGeneration() != lastGeneration) {
             fail("The last run changed while aggregate." + name + " was being created. Try again.");
             return;
@@ -281,17 +316,16 @@ class AggregatedSeriesController {
             return;
         }
 
-        List<TimeSeriesData> sums = new ArrayList<>();
+        Map<SourceRef, TimeSeriesData> sums = new LinkedHashMap<>();
         List<String> problems = new ArrayList<>();
-        for (Map.Entry<Object, Set<String>> entry : namesBySource.entrySet()) {
-            Object source = entry.getKey();
-            List<String> names = List.copyOf(entry.getValue());
-            List<CompletableFuture<TimeSeriesData>> futures = inputs.get(source);
+        for (SourceRef origin : origins) {
+            List<String> names = List.copyOf(selection.get(origin).inputs.keySet());
+            List<CompletableFuture<TimeSeriesData>> originFutures = futures.get(origin);
             SeriesSum sum = new SeriesSum();
             for (int i = 0; i < names.size(); i++) {
-                String where = sourceLabel(source) + ": " + names.get(i);
+                String where = originLabel(origin) + ": " + names.get(i);
                 try {
-                    sum.add(futures.get(i).join());
+                    sum.add(originFutures.get(i).join());
                 } catch (CompletionException e) {
                     Throwable cause = e.getCause() != null ? e.getCause() : e;
                     problems.add(where + " could not be read (" + cause.getMessage() + ")");
@@ -300,7 +334,7 @@ class AggregatedSeriesController {
                 }
             }
             if (problems.isEmpty()) {
-                sums.add(sum.result());
+                sums.put(origin, sum.result());
             }
         }
         if (!problems.isEmpty()) {
@@ -310,13 +344,11 @@ class AggregatedSeriesController {
 
         List<TreePath> newPaths = new ArrayList<>();
         Set<SeriesRef> newRefs = new LinkedHashSet<>();
-        int i = 0;
-        for (Map.Entry<Object, Set<String>> entry : namesBySource.entrySet()) {
-            DefaultMutableTreeNode node =
-                register(origins.get(i), name, List.copyOf(entry.getValue()), sums.get(i));
+        for (SourceRef origin : origins) {
+            DefaultMutableTreeNode node = register(origin, name,
+                List.copyOf(selection.get(origin).inputs.values()), sums.get(origin));
             newPaths.add(new TreePath(node.getPath()));
             newRefs.add(((AggregateInfo) node.getUserObject()).ref());
-            i++;
         }
 
         // Show and plot them: check the new sources, then their series.
@@ -340,9 +372,9 @@ class AggregatedSeriesController {
      * Registers an aggregate and adds it to the source tree under its origin's group,
      * creating the group if this is the origin's first aggregate. Returns its tree node.
      */
-    DefaultMutableTreeNode register(SourceRef origin, String name, List<String> inputNames,
+    DefaultMutableTreeNode register(SourceRef origin, String name, List<AggregateInfo.Input> inputs,
                                     TimeSeriesData values) {
-        AggregateInfo info = new AggregateInfo(nextId++, origin, name, inputNames, values);
+        AggregateInfo info = new AggregateInfo(nextId++, origin, name, inputs, values);
         aggregates.put(info.id, info);
 
         DefaultMutableTreeNode group = groupNodeFor(origin);
@@ -367,8 +399,8 @@ class AggregatedSeriesController {
         return group;
     }
 
-    private String sourceLabel(Object source) {
-        return labelResolver.originLabel(window.sourceRefForNode(source), null);
+    private String originLabel(SourceRef origin) {
+        return labelResolver.originLabel(origin, removedOriginLabels.get(origin));
     }
 
     private void error(String message) {
@@ -396,7 +428,7 @@ class AggregatedSeriesController {
 
         @Override
         public String toString() {
-            return labelResolver.originLabel(origin, removedOriginLabels.get(origin));
+            return originLabel(origin);
         }
     }
 }
