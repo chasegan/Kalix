@@ -66,7 +66,8 @@ ds_1 = drain
 | usflow | Upstream flow: the water that arrives at the field [ML] |
 | ks | The stress coefficient this step, 0 to 1 |
 | kc | The value of the `kc` expression this step |
-| et | Evapotranspiration [ML] |
+| et | Evapotranspiration [mm]: `ks × kc × evap`, no more than the water held |
+| et\_vol | Evapotranspiration [ML]: `et × area` |
 | rain | The value of the `rain` expression [mm] |
 | rain\_vol | Rain on the field [ML]: `rain × area` |
 | evap | The value of the `evap` expression [mm] |
@@ -99,7 +100,7 @@ running off a profile that irrigation has just filled. Effective rainfall is `ra
 
 **The balance closes every step, to machine precision:**
 
-`rain_vol + (supply − escape) = et + excess + Δ(water held)`, with `usflow = supply + bypass` and
+`rain_vol + (supply − escape) = et_vol + excess + Δ(water held)`, with `usflow = supply + bypass` and
 `ds_1 = bypass + excess`. Every term is a result, so the balance can be replayed line by line.
 
 #### The irrigation rule

@@ -65,6 +65,7 @@ pub struct FieldNode {
     recorder_idx_ks: Option<usize>,
     recorder_idx_kc: Option<usize>,
     recorder_idx_et: Option<usize>,
+    recorder_idx_et_vol: Option<usize>,
     recorder_idx_rain: Option<usize>,
     recorder_idx_rain_vol: Option<usize>,
     recorder_idx_evap: Option<usize>,
@@ -141,6 +142,7 @@ impl Node for FieldNode {
         self.recorder_idx_ks = recorder(data_cache, &self.name, "ks");
         self.recorder_idx_kc = recorder(data_cache, &self.name, "kc");
         self.recorder_idx_et = recorder(data_cache, &self.name, "et");
+        self.recorder_idx_et_vol = recorder(data_cache, &self.name, "et_vol");
         self.recorder_idx_rain = recorder(data_cache, &self.name, "rain");
         self.recorder_idx_rain_vol = recorder(data_cache, &self.name, "rain_vol");
         self.recorder_idx_evap = recorder(data_cache, &self.name, "evap");
@@ -237,7 +239,11 @@ impl Node for FieldNode {
         if let Some(idx) = self.recorder_idx_kc {
             data_cache.add_value_at_index(idx, kc);
         }
+        // The soil's terms in mm, and their volumes as _vol, as on a storage
         if let Some(idx) = self.recorder_idx_et {
+            data_cache.add_value_at_index(idx, et_mm);
+        }
+        if let Some(idx) = self.recorder_idx_et_vol {
             data_cache.add_value_at_index(idx, et_mm * self.area);
         }
         // A result named for a property reports the property's value: rain and evap are
