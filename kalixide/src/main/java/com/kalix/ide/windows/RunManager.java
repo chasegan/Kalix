@@ -3,6 +3,7 @@ package com.kalix.ide.windows;
 import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
+import com.kalix.ide.flowviz.data.AggregateSource;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DatasetSource;
 import com.kalix.ide.flowviz.data.LabelResolver;
@@ -42,6 +43,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.BorderLayout;
@@ -51,6 +53,7 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -77,7 +80,8 @@ import java.util.function.Consumer;
  * ├── Last run          → Most recently completed run (updates automatically)
  * ├── Current runs      → All runs in current session (Run_1, Run_2, ...)
  * ├── Run library       → Saved runs (future feature)
- * └── Loaded datasets   → Imported CSV/Pixie files
+ * ├── Loaded datasets   → Imported CSV/Pixie files
+ * └── Aggregate series  → User-created aggregates, grouped by origin (Run_1 > sum_1)
  * </pre>
  *
  * <h2>Data Flow</h2>
@@ -103,7 +107,7 @@ import java.util.function.Consumer;
  *
  * <h2>Window collaborators</h2>
  * This class is the window shell (layout, wiring, delegation). The run bookkeeping and
- * data orchestration live in three same-package collaborators:
+ * data orchestration live in four same-package collaborators:
  * <ul>
  *   <li>{@link RunTreeController} - session discovery/status/removal, run naming,
  *       rename and programmatic selection</li>
@@ -111,6 +115,8 @@ import java.util.function.Consumer;
  *       refreshing plotted "[Last]" series when a run completes</li>
  *   <li>{@link SeriesFetchCoordinator} - timeseries-tree selection diffing, cache
  *       probes, async fetches into the pool, and the selection-update guard</li>
+ *   <li>{@link AggregatedSeriesController} - user-created aggregates: creating,
+ *       holding and recomputing them, and their "Aggregate series" tree nodes</li>
  * </ul>
  *
  * @see OutputsTreeBuilder
@@ -129,7 +135,7 @@ public class RunManager extends JFrame {
     private static java.util.function.Supplier<String> editorTextSupplier;
 
     // === DATA SOURCE TREE (left-top) ===
-    // Shows: Last run, Current runs, Run library, Loaded datasets
+    // Shows: Last run, Current runs, Run library, Loaded datasets, Aggregate series
     // Selection triggers rebuild of timeseries tree
     private JCheckboxTree timeseriesSourceTree;
     private DefaultTreeModel treeModel;
@@ -138,6 +144,7 @@ public class RunManager extends JFrame {
     private DefaultMutableTreeNode currentRunsNode;
     private DefaultMutableTreeNode libraryNode;
     private DefaultMutableTreeNode loadedDatasetsNode;
+    private DefaultMutableTreeNode aggregateSeriesNode;
 
     // === TIMESERIES TREE (left-bottom) ===
     // Shows hierarchical output series from selected sources
@@ -180,6 +187,7 @@ public class RunManager extends JFrame {
     private SeriesFetchCoordinator fetchCoordinator;
     private LastRunTracker lastRunTracker;
     private RunTreeController runTreeController;
+    private AggregatedSeriesController aggregatedSeriesController;
 
     // Single point of authority for projecting SeriesRef → display label.
     // Consumed by stats tables, legends, and the outputs tree so that the user-visible
@@ -311,11 +319,13 @@ public class RunManager extends JFrame {
         currentRunsNode = new DefaultMutableTreeNode("Current runs");
         libraryNode = new DefaultMutableTreeNode("Run library");
         loadedDatasetsNode = new DefaultMutableTreeNode("Loaded datasets");
+        aggregateSeriesNode = new DefaultMutableTreeNode("Aggregate series");
 
         rootNode.add(lastRunNode);
         rootNode.add(currentRunsNode);
         rootNode.add(libraryNode);
         rootNode.add(loadedDatasetsNode);
+        rootNode.add(aggregateSeriesNode);
 
         treeModel = new DefaultTreeModel(rootNode);
         timeseriesSourceTree = new JCheckboxTree(treeModel) {
@@ -520,6 +530,17 @@ public class RunManager extends JFrame {
             lastRunTracker,
             fetchCoordinator
         );
+        aggregatedSeriesController = new AggregatedSeriesController(
+            this,
+            timeseriesSourceTree,
+            timeseriesTree,
+            treeModel,
+            aggregateSeriesNode,
+            tabManager,
+            plotDataSet,
+            seriesSlotManager,
+            timeSeriesRequestManager
+        );
 
         // DatasetLoaderManager - handles dataset file loading
         datasetLoaderManager = new DatasetLoaderManager(
@@ -553,7 +574,8 @@ public class RunManager extends JFrame {
         // most-recent run's session, so removing it removes that one run (same as its "Remove").
         runContextMenuManager.setRemovableCategories(
             lastRunNode, currentRunsNode, libraryNode, loadedDatasetsNode);
-        runContextMenuManager.setupOutputsTreeContextMenu(this::expandAllFromSelected,
+        runContextMenuManager.setupOutputsTreeContextMenu(aggregatedSeriesController::createAggregatedSeries,
+                                                          this::expandAllFromSelected,
                                                           this::collapseAllFromSelected,
                                                           this::showChecked,
                                                           this::showSelected
@@ -1176,11 +1198,14 @@ public class RunManager extends JFrame {
             case LastSource ignored -> lastRunNode;
             case RunSource ignored -> currentRunsNode;
             case DatasetSource ignored -> loadedDatasetsNode;
+            case AggregateSource ignored -> aggregateSeriesNode;
         };
-        for (int i = 0; i < parent.getChildCount(); i++) {
-            DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
-            if (ref.equals(sourceRefForNode(child.getUserObject()))) {
-                return new TreePath(child.getPath());
+        // Traverse all descendants; aggregates sit a level further down.
+        Enumeration<TreeNode> nodes = parent.preorderEnumeration();
+        while (nodes.hasMoreElements()) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes.nextElement();
+            if (node != parent && ref.equals(sourceRefForNode(node.getUserObject()))) {
+                return new TreePath(node.getPath());
             }
         }
         return null;

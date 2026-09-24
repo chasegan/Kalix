@@ -11,7 +11,7 @@ package com.kalix.ide.flowviz.data;
  * therefore does not affect any {@code SeriesRef} — the same refs remain valid; only
  * their projected labels change.</p>
  *
- * <p>The three variants exist to model the three structurally different sources of
+ * <p>The four variants exist to model the four structurally different sources of
  * series data in the IDE:</p>
  * <ul>
  *   <li>{@link RunSeries} — output of a specific simulation run, identified by its
@@ -20,12 +20,19 @@ package com.kalix.ide.flowviz.data;
  *       lookup time to whichever {@code RunSeries} is currently latest.</li>
  *   <li>{@link DatasetSeries} — column from a user-loaded {@code .csv}/{@code .pxt}
  *       file, identified by the dataset's absolute path.</li>
+ *   <li>{@link AggregateSeries} — a user-created sum of series from one source,
+ *       identified by its stable {@code aggregateId}.</li>
  * </ul>
  *
  * <p>All variants share {@link #baseName()} — the unsuffixed series name, e.g.
- * {@code "node.x.ds_1"}.</p>
+ * {@code "node.x.ds_1"} — except {@link AggregateSeries}, whose name is a label and
+ * whose {@code baseName()} is an internal key. Display code uses
+ * {@link LabelResolver#nameFor(SeriesRef)}.</p>
  */
-public sealed interface SeriesRef permits RunSeries, LastSeries, DatasetSeries {
-    /** The bare series name, e.g. {@code "node.x.ds_1"}. Stable across renames. */
+public sealed interface SeriesRef permits RunSeries, LastSeries, DatasetSeries, AggregateSeries {
+    /**
+     * The bare series name, e.g. {@code "node.x.ds_1"}. Stable across renames. For
+     * {@link AggregateSeries} this is an internal key, never displayed.
+     */
     String baseName();
 }

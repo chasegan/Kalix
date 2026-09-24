@@ -264,15 +264,22 @@ public class RunContextMenuManager {
     }
 
     /**
-     * Sets up the context menu for the outputs tree: expand/collapse, and the two
-     * "Show" actions that fold the tree back to what is checked or selected. Every item
-     * is a view/state action (ADR-0002 §1) and delegates to the caller.
+     * Sets up the context menu for the outputs tree. All items delegate to their
+     * respective callbacks.
      */
-    public void setupOutputsTreeContextMenu(Runnable expandAllCallback,
+    public void setupOutputsTreeContextMenu(Runnable newAggregateCallback,
+                                            Runnable expandAllCallback,
                                             Runnable collapseAllCallback,
                                             Runnable showCheckedCallback,
                                             Runnable showSelectedCallback) {
         JPopupMenu contextMenu = new JPopupMenu();
+
+        // Ellipsis: it prompts for a name before anything is created (ADR-0002 §2.4).
+        JMenuItem newAggregateItem = new JMenuItem("New aggregate…");
+        newAggregateItem.addActionListener(e -> newAggregateCallback.run());
+        contextMenu.add(newAggregateItem);
+
+        contextMenu.addSeparator();
 
         JMenuItem expandAllItem = new JMenuItem("Expand all");
         expandAllItem.addActionListener(e -> expandAllCallback.run());
