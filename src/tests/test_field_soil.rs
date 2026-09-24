@@ -9,7 +9,7 @@
 use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
 
-const ALL: &str = "node.paddock.depletion\nnode.paddock.orders_en_route\nnode.paddock.order\nnode.paddock.order_due\nnode.paddock.usflow\nnode.paddock.ks\nnode.paddock.kc\nnode.paddock.et\nnode.paddock.rain\nnode.paddock.excess\nnode.paddock.supply\nnode.paddock.escape\nnode.paddock.bypass\nnode.paddock.dsflow\nnode.paddock.ds_1";
+const ALL: &str = "node.paddock.depletion\nnode.paddock.orders_en_route\nnode.paddock.order\nnode.paddock.order_due\nnode.paddock.usflow\nnode.paddock.ks\nnode.paddock.kc\nnode.paddock.et\nnode.paddock.rain\nnode.paddock.rain_vol\nnode.paddock.evap\nnode.paddock.excess\nnode.paddock.supply\nnode.paddock.escape\nnode.paddock.bypass\nnode.paddock.dsflow\nnode.paddock.ds_1";
 
 /// A supply storage above the field, `river_lag` steps of routing between,
 /// and a gauge below. `{FIELD}` is the field's properties after area and capacity.
@@ -87,7 +87,7 @@ fn assert_close(a: f64, b: f64, what: &str) {
 /// and at the node usflow = supply + bypass, ds_1 = bypass + excess.
 fn assert_balance_closes(model: &mut Model) {
     let (dep, rain, et, excess, supply, escape, bypass, usflow, ds_1) = (
-        s(model, "depletion"), s(model, "rain"), s(model, "et"), s(model, "excess"),
+        s(model, "depletion"), s(model, "rain_vol"), s(model, "et"), s(model, "excess"),
         s(model, "supply"), s(model, "escape"), s(model, "bypass"), s(model, "usflow"), s(model, "ds_1"));
     let area = 2.0;
     for t in 1..dep.len() {
@@ -122,6 +122,10 @@ fn test_a_rain_fed_field_dries_fills_and_sheds_excess() {
     assert_eq!(excess[4], 140.0);
     assert_eq!(dep[4], 0.0);
     assert_eq!(s(&mut model, "ds_1")[4], 140.0, "excess leaves down ds_1");
+    // A result named for a property reports the property: rain and evap in mm, rain_vol in ML
+    assert_eq!(s(&mut model, "rain")[4], 80.0);
+    assert_eq!(s(&mut model, "rain_vol")[4], 160.0);
+    assert_eq!(s(&mut model, "evap")[4], 4.0);
     assert_eq!(s(&mut model, "supply").iter().sum::<f64>(), 0.0, "rain-fed: never irrigated");
     assert_balance_closes(&mut model);
 }
