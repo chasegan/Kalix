@@ -142,10 +142,6 @@ class AggregatedSeriesController {
                 while (nodes.hasMoreElements()) {
                     DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes.nextElement();
                     if (node.getUserObject() instanceof OutputsTreeBuilder.SeriesLeafNode leaf) {
-                        if (leaf.source instanceof AggregateInfo) {
-                            error("An aggregate can't be summed into another aggregate.");
-                            return null;
-                        }
                         namesBySource.computeIfAbsent(leaf.source, s -> new LinkedHashSet<>())
                             .add(leaf.seriesName);
                     }
