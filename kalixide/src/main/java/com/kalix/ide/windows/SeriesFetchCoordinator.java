@@ -311,19 +311,23 @@ class SeriesFetchCoordinator {
             if (!(ref instanceof DatasetSeries datasetRef)) continue;
 
             DatasetSeriesSource source = datasetSeriesSources.get(datasetRef);
-            if (source instanceof DatasetSeriesSource.Loaded loaded) {
-                window.addSeriesToPool(ref, loaded.data());
-                tabManager.updateSeriesInStatsTabsWithAggregation(ref, loaded.data());
-            } else if (source instanceof DatasetSeriesSource.Pixie pixie) {
-                if (pixieRefusal != null) {
-                    tabManager.addErrorSeriesInStatsTabs(ref, "Not loaded: too much Pixie data loaded");
-                    pixieRefused = true;
-                } else {
-                    fetchPixieSeries(datasetRef, pixie, targetPanel, shouldResetZoom);
+            switch (source) {
+                case DatasetSeriesSource.Loaded loaded -> {
+                    window.addSeriesToPool(ref, loaded.data());
+                    tabManager.updateSeriesInStatsTabsWithAggregation(ref, loaded.data());
                 }
-            } else {
-                logger.warn("Dataset series not found: {}", datasetRef);
-                tabManager.addErrorSeriesInStatsTabs(ref, "Series not found");
+                case DatasetSeriesSource.Pixie pixie -> {
+                    if (pixieRefusal != null) {
+                        tabManager.addErrorSeriesInStatsTabs(ref, "Not loaded: too much Pixie data loaded");
+                        pixieRefused = true;
+                    } else {
+                        fetchPixieSeries(datasetRef, pixie, targetPanel, shouldResetZoom);
+                    }
+                }
+                case null -> {
+                    logger.warn("Dataset series not found: {}", datasetRef);
+                    tabManager.addErrorSeriesInStatsTabs(ref, "Series not found");
+                }
             }
         }
 
@@ -403,8 +407,16 @@ class SeriesFetchCoordinator {
 
     /** Whether {@code ref} is a loaded dataset series backed by a Pixie file. */
     private boolean isPixieSeries(SeriesRef ref) {
-        return ref instanceof DatasetSeries datasetRef
-            && datasetSeriesSources.get(datasetRef) instanceof DatasetSeriesSource.Pixie;
+        if (!(ref instanceof DatasetSeries datasetRef)) {
+            return false;
+        }
+        // Exhaustive, so a new kind of dataset source must decide whether it counts
+        // towards the Pixie memory budget.
+        return switch (datasetSeriesSources.get(datasetRef)) {
+            case DatasetSeriesSource.Pixie ignored -> true;
+            case DatasetSeriesSource.Loaded ignored -> false;
+            case null -> false;
+        };
     }
 
     /**
