@@ -80,9 +80,55 @@ ds_1 = drain
 | area | The declared `area` (a static property) |
 | efficiency | The declared `efficiency` (a static property) |
 
+## The crop model, from the top
+
+Think of the soil under a crop as a bucket. Each day, rain and irrigation put water in, the crop
+takes water out, and the field keeps track of how far below full the bucket is. Everything else
+is deciding when to top it up. Depths are in mm over the cropped area; P is rain and E₀ is
+reference evapotranspiration.
+
+1. **Rain that counts.** Some rain never reaches the soil: it wets leaves and evaporates.
+   Effective rain is P_e = max(0, P − 0.2·E₀) (FAO-56). *This version takes rain as given.*
+2. **The bucket.** The root zone is a column of soil of depth Z_r. Between full (field capacity)
+   and empty (wilting point) it holds a depth of water TAW = θ_cap · Z_r, where θ_cap is the
+   soil's water-holding capacity as a fraction (0.1–0.3 is typical). In Kalix this is one
+   number, `capacity`.
+3. **The state: depletion.** D is how far the bucket is below full, in mm. D = 0 is full and
+   D = `capacity` is empty. This is the field's `depletion`.
+4. **What the crop wants.** A well-watered crop uses E_c = K_c · E₀, where the crop coefficient
+   K_c depends on the crop and how far through its growth it is (`kc`).
+5. **What it gets when the bucket is low.** A crop drinks freely until it has used a fraction
+   `p` of the capacity, then less and less:
+   K_s = 1 if D ≤ p·TAW, otherwise (TAW − D) / ((1 − p)·TAW), and E = K_s · E_c.
+   K_s is computed from D at the start of the day (the field's `ks`). A crop whose K_s stays
+   near zero is dead: its area goes back to fallow and it orders no more water. *Later version.*
+6. **The daily balance.** With irrigation I reaching the soil:
+   D_today = D_yesterday − P_e − I + E + runoff + percolation.
+   Part of the water applied is lost on the way in, as runoff and as percolation below the
+   roots; in Kalix that share is 1 − `efficiency`, and leaves as `escape`. Whatever would push D
+   below full runs off, as `excess`.
+7. **Ordering.** The farmer keeps the bucket near a target depletion T. Each day the model works
+   out what will bring the bucket back to the target when the water arrives, counting what is
+   already on its way (`orders_en_route`), grossed up for the losses in step 6:
+   order = max(0, D − T) / efficiency × area.
+   A refill trigger holds the order back until D reaches a threshold, then fills to T. In Kalix
+   the rule is the `order` expression; see [The irrigation rule](#the-irrigation-rule).
+8. **Planting and area.** On the plant date the area is set, from a number, a series, or the
+   water available. The new crop's bucket starts from the fallow's depletion, scaled by root
+   depth: D_new = D_fallow · min(1, Z_new / Z_fallow). Area can later be reduced, never
+   increased, with the surplus going back to fallow. Fallow is itself a crop with no irrigation
+   and a small K_c. *Later version.*
+9. **Yield.** FAO-33: relative yield = 1 − K_y(1 − ΣE / ΣE_c), the sums running from planting to
+   today. A dead crop yields 0. *Later version, if wanted.*
+
+That is the whole model: two inputs (P, E₀), one state (D), three soil numbers (Z_r, θ_cap, p),
+a K_c curve, a loss fraction and a target.
+
 ## How the node works
 
-The field works in mm over its area: 1 mm × 1 km² = 1 ML. Each step, in this order:
+The steps above, as this version runs them each day, exactly:
+
+The field works in mm over its area: 1 mm × 1 km² = 1 ML. In this order:
 
 1. **Stress.** From the depletion `D` at the start of the step:
    `ks = clamp((capacity − D) / ((1 − p) × capacity), 0, 1)`. The crop transpires freely while it
