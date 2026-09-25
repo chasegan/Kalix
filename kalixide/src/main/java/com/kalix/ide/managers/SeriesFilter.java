@@ -8,7 +8,7 @@ import java.util.regex.PatternSyntaxException;
 /**
  * The parsed text of the Timeseries tree filter (#397).
  *
- * <p>Spaces separate terms, except inside {@code "..."} or {@code /.../}, or after a
+ * <p>Spaces (or any whitespace) separate terms, except inside {@code "..."} or {@code /.../}, or after a
  * backslash (node names may contain spaces). A backslash also stops a {@code "} or
  * {@code /} from closing its term; outside a regex it is dropped, keeping the character
  * after it. A closing quote or slash must be followed by a space or the end. A leading
@@ -67,7 +67,7 @@ public final class SeriesFilter {
         char open = text.charAt(i);
         if (open == '"' || open == '/') {
             boolean quoted = open == '"';
-            int close = findUnescaped(String.valueOf(open), text, i + 1);
+            int close = findUnescaped(open, text, i + 1);
             if (close < 0) {
                 throw new SyntaxException(quoted
                     ? "Quote not closed: end it with \""
@@ -81,7 +81,7 @@ public final class SeriesFilter {
             }
             return new Term(exclude, quoted ? Kind.TEXT : Kind.REGEX, text.substring(i + 1, close), rest);
         }
-        int end = findUnescaped(" ", text, i);
+        int end = findUnescaped(' ', text, i);
         if (end < 0) end = text.length();
         return new Term(exclude, Kind.TEXT, text.substring(i, end), text.substring(end));
     }
@@ -132,16 +132,15 @@ public final class SeriesFilter {
 
     /**
      * Index of the first unescaped {@code delimiter} at or after {@code from}, or -1.
-     * A backslash skips the character after it.
-     *
-     * @param delimiter the delimiter to find; only its first character is used
+     * A backslash skips the character after it; a whitespace delimiter matches any whitespace.
      */
-    private static int findUnescaped(String delimiter, String text, int from) {
+    private static int findUnescaped(char delimiter, String text, int from) {
+        boolean anyWhitespace = Character.isWhitespace(delimiter);
         for (int j = from; j < text.length(); j++) {
             char c = text.charAt(j);
             if (c == '\\') {
                 j++;
-            } else if (c == delimiter.charAt(0)) {
+            } else if (c == delimiter || (anyWhitespace && Character.isWhitespace(c))) {
                 return j;
             }
         }

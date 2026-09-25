@@ -197,9 +197,6 @@ public class OutputsTreeBuilder {
             isDatasetTree = !selectedDatasets.isEmpty();  // Has datasets if any selected
         }
 
-        // Apply filter pruning before reload
-        pruneNonMatchingNodes(root);
-
         timeseriesTreeModel.reload();
 
         // Save pre-filter expansion state when first entering filter mode
@@ -246,8 +243,9 @@ public class OutputsTreeBuilder {
         List<String> seriesNames = getSeriesNamesCallback.apply(source);
 
         if (seriesNames != null && !seriesNames.isEmpty()) {
-            seriesNames.sort(naturalCompareCallback::apply);
-            for (String seriesName : seriesNames) {
+            List<String> shown = matchingSeries(source, seriesNames);
+            shown.sort(naturalCompareCallback::apply);
+            for (String seriesName : shown) {
                 // Create standalone leaf node with showSeriesName=true (shows "ds_1 [Run_1]")
                 SeriesLeafNode leafNode = new SeriesLeafNode(seriesName, source, true);
                 DefaultMutableTreeNode node = new DefaultMutableTreeNode(leafNode);
@@ -271,16 +269,18 @@ public class OutputsTreeBuilder {
         allSources.addAll(selectedRuns);
         allSources.addAll(selectedDatasets);
 
+        boolean anyOutputs = false;
         for (Object source : allSources) {
             List<String> seriesNames = getSeriesNamesCallback.apply(source);
-            if (seriesNames != null) {
-                for (String seriesName : seriesNames) {
+            if (seriesNames != null && !seriesNames.isEmpty()) {
+                anyOutputs = true;
+                for (String seriesName : matchingSeries(source, seriesNames)) {
                     seriesAvailability.computeIfAbsent(seriesName, k -> new ArrayList<>()).add(source);
                 }
             }
         }
 
-        if (seriesAvailability.isEmpty()) {
+        if (!anyOutputs) {
             root.add(new DefaultMutableTreeNode("No outputs available from selected sources"));
             return;
         }
@@ -485,28 +485,16 @@ public class OutputsTreeBuilder {
     // ========== Filtering ==========
 
     /**
-     * Removes series the filter doesn't match, then any folder left empty.
-     * Each series is matched on its full name and its source label, so patterns
-     * can span levels ({@code inflow_*.ds_1}). Called after the tree is fully
-     * built but before reload().
+     * The series of {@code source} the filter shows (all of them, as is, when no filter is
+     * active). Each is matched on its full name and the source label, so patterns can span
+     * levels ({@code inflow_*.ds_1}); the label is resolved once per source.
      */
-    private void pruneNonMatchingNodes(DefaultMutableTreeNode parent) {
-        if (!filter.isActive()) return;
-
-        // Work backwards to avoid index shifting during removal
-        for (int i = parent.getChildCount() - 1; i >= 0; i--) {
-            DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
-            if (child.getUserObject() instanceof SeriesLeafNode leaf) {
-                if (!filter.matches(leaf.seriesName, labelResolver.sourceLabel(leaf.ref))) {
-                    parent.remove(i);
-                }
-            } else {
-                pruneNonMatchingNodes(child);
-                if (child.getChildCount() == 0) {
-                    parent.remove(i);
-                }
-            }
-        }
+    private List<String> matchingSeries(Object source, List<String> seriesNames) {
+        if (!filter.isActive()) return seriesNames;
+        String sourceLabel = labelResolver.sourceLabel(refForSource.apply(seriesNames.get(0), source));
+        return seriesNames.stream()
+            .filter(seriesName -> filter.matches(seriesName, sourceLabel))
+            .collect(Collectors.toCollection(ArrayList::new));
     }
 
     // ========== Inner Classes ==========

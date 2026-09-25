@@ -139,6 +139,7 @@ class SeriesFilterTest {
     @Test
     void trailingAndRepeatedSpacesAreHarmless() throws Exception {
         assertTrue(matches("inflow  ", "node.inflow_3.ds_1"));
+        assertTrue(matches("inflow\tds_1", "node.inflow_3.ds_1"));
         assertTrue(matches("  /inflow/   ds_1  ", "node.inflow_3.ds_1"));
         assertTrue(matches("inflow !", "node.inflow_3.ds_1"));
         assertTrue(matches("! inflow", "node.inflow_3.ds_1"));
