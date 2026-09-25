@@ -61,6 +61,7 @@ public class TimeSeriesAggregator {
         }
         if (period == AggregationPeriod.ORIGINAL) {
             return switch (seasonalMaskMode) {
+                case null -> original;
                 case SeasonalMaskMode.Disabled ignored -> original;
                 case SeasonalMaskMode.Enabled ignored ->
                     TimeSeriesMasker.createSeasonalMask(original, seasonalMaskMode).apply(original);
@@ -115,6 +116,7 @@ public class TimeSeriesAggregator {
         SeasonalMaskMode seasonalMaskMode
     ) {
         Set<Month> selectedMonths = switch (seasonalMaskMode) {
+            case null -> null;
             case SeasonalMaskMode.Disabled ignored -> null;
             case SeasonalMaskMode.Enabled(Set<Month> months) -> months;
         };

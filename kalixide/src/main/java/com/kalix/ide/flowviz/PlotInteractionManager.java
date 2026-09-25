@@ -1183,10 +1183,11 @@ public class PlotInteractionManager {
             boolean use64BitPrecision = precision64Supplier != null ? precision64Supplier.get() : true;
             // Series are named by their projected labels in the .pxt metadata.
             File pxtFile = SeriesFileWriter.write(dataSet, file, null, labelResolver, use64BitPrecision);
-            String filePath = pxtFile.getAbsolutePath().substring(0, pxtFile.getAbsolutePath().length() - 4);
+            String pxtName = pxtFile.getName();
 
             JOptionPane.showMessageDialog(parentComponent,
-                "Data saved successfully to " + new File(filePath + ".pxt").getName() + " and " + new File(filePath + ".pxb").getName(),
+                "Data saved successfully to " + pxtName + " and "
+                    + pxtName.substring(0, pxtName.length() - ".pxt".length()) + ".pxb",
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception e) {

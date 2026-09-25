@@ -158,6 +158,7 @@ public class SeasonalMaskButton extends JButton {
     /** Whether a mode masks anything, so lights the button and unticks "All". */
     private static boolean isActive(SeasonalMaskMode mode) {
         return switch (mode) {
+            case null -> false;
             case SeasonalMaskMode.Disabled ignored -> false;
             case SeasonalMaskMode.Enabled ignored -> true;
         };

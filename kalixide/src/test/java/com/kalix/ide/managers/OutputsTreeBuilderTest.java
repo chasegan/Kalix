@@ -38,7 +38,8 @@ class OutputsTreeBuilderTest {
     private final OutputsTreeBuilder builder = new OutputsTreeBuilder(
         tree,
         model,
-        source -> new ArrayList<>(OUTPUTS.getOrDefault(source, List.of())),
+        // Immutable, as RunManager returns for an aggregate: the builder must not sort in place.
+        source -> OUTPUTS.getOrDefault(source, List.of()),
         String::compareTo,
         (seriesName, source) -> new RunSeries((Long) source, seriesName),
         ref -> ref.toString());
@@ -96,6 +97,13 @@ class OutputsTreeBuilderTest {
 
         assertFalse(tree.isExpanded(pathTo("node", "b")), "b should stay collapsed");
         assertTrue(tree.isExpanded(pathTo("node", "a")), "a should stay expanded");
+    }
+
+    @Test
+    void singleSourceWithImmutableNamesBuilds() {
+        builder.updateTree(List.of(1L));
+        assertEquals(Set.of(new RunSeries(1L, "node.a.ds_1"), new RunSeries(1L, "node.b.ds_1")),
+            refsInTree());
     }
 
     private TreePath pathTo(String... names) {

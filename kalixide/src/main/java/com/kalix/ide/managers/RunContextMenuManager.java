@@ -11,6 +11,7 @@ import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 
 import javax.swing.JFrame;
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
@@ -247,19 +248,50 @@ public class RunContextMenuManager {
         });
     }
 
+    /** A menu entry shown only while {@code applies} holds. */
+    public sealed interface OptionalEntry permits OptionalItem, OptionalSubmenu {
+        String label();
+
+        BooleanSupplier applies();
+    }
+
     /** A menu item shown only while {@code applies} holds. */
-    public record OptionalItem(String label, Runnable action, BooleanSupplier applies) {
+    public record OptionalItem(String label, Runnable action, BooleanSupplier applies)
+        implements OptionalEntry {
+    }
+
+    /** A submenu of {@code items}, shown only while {@code applies} holds. */
+    public record OptionalSubmenu(String label, List<SubmenuItem> items, BooleanSupplier applies)
+        implements OptionalEntry {
+    }
+
+    /** An item of an {@link OptionalSubmenu}. */
+    public record SubmenuItem(String label, Runnable action) {
     }
 
     /**
      * Adds {@code items} and a separator after them; returns what updates their visibility
      * when the menu opens.
      */
-    private static Runnable addOptionalBlock(JPopupMenu menu, List<OptionalItem> items) {
+    private static Runnable addOptionalBlock(JPopupMenu menu, List<? extends OptionalEntry> items) {
         List<JMenuItem> menuItems = new ArrayList<>();
-        for (OptionalItem item : items) {
-            JMenuItem menuItem = new JMenuItem(item.label());
-            menuItem.addActionListener(e -> item.action().run());
+        for (OptionalEntry item : items) {
+            JMenuItem menuItem = switch (item) {
+                case OptionalItem single -> {
+                    JMenuItem m = new JMenuItem(single.label());
+                    m.addActionListener(e -> single.action().run());
+                    yield m;
+                }
+                case OptionalSubmenu submenu -> {
+                    JMenu m = new JMenu(submenu.label());
+                    for (SubmenuItem child : submenu.items()) {
+                        JMenuItem childItem = new JMenuItem(child.label());
+                        childItem.addActionListener(e -> child.action().run());
+                        m.add(childItem);
+                    }
+                    yield m;
+                }
+            };
             menu.add(menuItem);
             menuItems.add(menuItem);
         }
@@ -315,7 +347,7 @@ public class RunContextMenuManager {
      * (§4). All items delegate to their callbacks.
      */
     public void setupOutputsTreeContextMenu(List<OptionalItem> contextItems,
-                                            List<OptionalItem> createItems,
+                                            List<OptionalEntry> createItems,
                                             Runnable expandAllCallback,
                                             Runnable collapseAllCallback,
                                             Runnable showCheckedCallback,

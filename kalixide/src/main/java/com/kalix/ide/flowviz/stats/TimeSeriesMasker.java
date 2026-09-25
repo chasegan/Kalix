@@ -189,6 +189,9 @@ public class TimeSeriesMasker {
         }
         Set<Month> months;
         switch (mode) {
+            case null -> {
+                return new Mask(Arrays.copyOf(timestamps, n));
+            }
             case SeasonalMaskMode.Disabled ignored -> {
                 return new Mask(Arrays.copyOf(timestamps, n));
             }

@@ -214,10 +214,18 @@ public class OutputsTreeBuilder {
             }
         } else {
             // Restore previous expansion state
+            boolean restored = false;
             for (TreePath expandedPath : expandedPaths) {
                 TreePath newPath = findEquivalentPath(expandedPath);
                 if (newPath != null) {
                     timeseriesTree.expandPath(newPath);
+                    restored = true;
+                }
+            }
+            // Nothing carried over (e.g. a source with unrelated names) - expand all
+            if (!restored) {
+                for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
+                    timeseriesTree.expandRow(i);
                 }
             }
         }
@@ -230,6 +238,8 @@ public class OutputsTreeBuilder {
         List<String> seriesNames = getSeriesNamesCallback.apply(source);
 
         if (seriesNames != null && !seriesNames.isEmpty()) {
+            // Copied: the callback's list may be immutable, or owned by the source.
+            seriesNames = new ArrayList<>(seriesNames);
             seriesNames.sort(naturalCompareCallback::apply);
             for (String seriesName : seriesNames) {
                 // Create standalone leaf node with showSeriesName=true (shows "ds_1 [Run_1]")

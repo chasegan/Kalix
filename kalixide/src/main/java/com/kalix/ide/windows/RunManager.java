@@ -86,7 +86,7 @@ import java.util.function.Consumer;
  * ├── Current runs      → All runs in current session (Run_1, Run_2, ...)
  * ├── Run library       → Saved runs (future feature)
  * ├── Loaded datasets   → Imported CSV/Pixie files
- * └── Aggregate series  → User-created aggregates, grouped by origin (Run_1 > sum_1)
+ * └── Aggregate series  → User-created aggregates, grouped by origin (Run_1 > total_1)
  * </pre>
  *
  * <h2>Data Flow</h2>
@@ -593,11 +593,14 @@ public class RunManager extends JFrame {
         runContextMenuManager.setupOutputsTreeContextMenu(
             List.of(new RunContextMenuManager.OptionalItem("Save aggregates…",
                 aggregates::saveSelectedAggregates, aggregates::selectionHasAggregates)),
+            // Submenus leave room for aggregation methods beyond Total (#397).
             List.of(
-                new RunContextMenuManager.OptionalItem("New aggregate from selected…",
-                    aggregates::createFromSelected, aggregates::selectionHasSeriesToSum),
-                new RunContextMenuManager.OptionalItem("New aggregate from checked…",
-                    aggregates::createFromChecked, aggregates::checkedHasSeriesToSum)),
+                new RunContextMenuManager.OptionalSubmenu("New series from selection",
+                    List.of(new RunContextMenuManager.SubmenuItem("Total…", aggregates::createFromSelected)),
+                    aggregates::selectionHasSeriesToSum),
+                new RunContextMenuManager.OptionalSubmenu("New series from checked",
+                    List.of(new RunContextMenuManager.SubmenuItem("Total…", aggregates::createFromChecked)),
+                    aggregates::checkedHasSeriesToSum)),
                                                           this::expandAllFromSelected,
                                                           this::collapseAllFromSelected,
                                                           this::showChecked,
@@ -656,7 +659,7 @@ public class RunManager extends JFrame {
     private String renameRun(RunContextMenuManager.RunInfo runInfo, String newName) {
         String error = runTreeController.renameRun(runInfo, newName);
         if (error == null) {
-            aggregatedSeriesController.refreshOriginLabels();
+            aggregatedSeriesController.onOriginRenamed(sourceRefForNode(runInfo));
         }
         return error;
     }
@@ -875,6 +878,25 @@ public class RunManager extends JFrame {
         } finally {
             fetchCoordinator.endProgrammaticUpdate();
         }
+    }
+
+    /**
+     * Runs {@code change} to the source tree's checks as one check change: one outputs-tree
+     * rebuild and one history entry, however many nodes it touches.
+     */
+    void changeSourceTree(Runnable change) {
+        fetchCoordinator.beginProgrammaticUpdate();
+        try {
+            change.run();
+        } finally {
+            fetchCoordinator.endProgrammaticUpdate();
+        }
+        onSourceTreeCheckedChanged();
+    }
+
+    /** Whether the source tree has a node for {@code ref}. */
+    boolean hasSourceNode(SourceRef ref) {
+        return pathForSourceRef(ref) != null;
     }
 
     /**

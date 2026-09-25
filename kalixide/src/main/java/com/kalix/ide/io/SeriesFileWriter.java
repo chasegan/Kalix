@@ -47,8 +47,13 @@ public final class SeriesFileWriter {
             new PixieWriter().writeToFile(basePath, series, pixie64BitPrecision);
             return new File(basePath + ".pxt");
         }
-        String lower = file.getName().toLowerCase();
-        if (!lower.endsWith(".csv") && !lower.endsWith(".csv.zip")) {
+        String name = file.getName();
+        // ".res.csv" before ".csv", which would otherwise swallow it.
+        if (SourceResCsvFormat.isResCsv(name)) {
+            throw new IllegalArgumentException(
+                "Source result CSV (.res.csv) can't be written here. Save as .csv, .csv.zip or .pxt.");
+        }
+        if (!name.toLowerCase().endsWith(".csv") && !CsvZipFormat.isCsvZip(name)) {
             file = new File(file.getAbsolutePath() + ".csv");
         }
         TimeSeriesCsvExporter.export(dataSet, file, plotType, labels);

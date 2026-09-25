@@ -19,6 +19,7 @@ import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.icons.MenuIcons;
 import com.kalix.ide.io.PixieStore;
 import com.kalix.ide.io.SeriesFileWriter;
+import com.kalix.ide.linter.ui.HoverTipSupplier;
 import com.kalix.ide.managers.DatasetLoaderManager;
 import com.kalix.ide.managers.DatasetSeriesSource;
 import com.kalix.ide.managers.OutputsTreeBuilder;
@@ -85,6 +86,8 @@ class AggregatedSeriesController {
     // An origin's last display name, recorded when it is removed.
     private final Map<SourceRef, String> removedOriginLabels = new HashMap<>();
     private long nextId = 1;
+    // The Last generation whose aggregates are fully recomputed.
+    private long recomputedGeneration;
 
     AggregatedSeriesController(
         RunManager window,
@@ -114,14 +117,15 @@ class AggregatedSeriesController {
         this.lastRunTracker = lastRunTracker;
         this.fetchCoordinator = fetchCoordinator;
         this.statusUpdater = statusUpdater;
+        this.recomputedGeneration = lastRunTracker.getGeneration();
     }
 
-    /** "New aggregate from selected…": sums the series under the outputs-tree selection. */
+    /** "New series from selection > Total…": sums the outputs-tree selection. */
     void createFromSelected() {
         create(selectedLeaves(), "Select the series to sum in the Timeseries tree.");
     }
 
-    /** "New aggregate from checked…": sums the series ticked in the outputs tree. */
+    /** "New series from checked > Total…": sums the series ticked in the outputs tree. */
     void createFromChecked() {
         create(checkedLeaves(), "Tick the series to sum in the Timeseries tree.");
     }
@@ -175,6 +179,13 @@ class AggregatedSeriesController {
         String refusal = pixieRefusal(plans);
         if (refusal != null) {
             error(refusal);
+            return;
+        }
+        // Last's aggregates hold the previous run's values until their recompute ends.
+        if (recomputedGeneration != lastRunTracker.getGeneration() && plans.stream().anyMatch(p ->
+                p.origin() instanceof LastSource
+                    && p.inputs().stream().anyMatch(i -> i instanceof AggregateInfo.AggregateInput))) {
+            error("The aggregates of the last run are still being recomputed. Try again when they are done.");
             return;
         }
 
@@ -258,10 +269,10 @@ class AggregatedSeriesController {
 
     private String suggestName(List<SourceRef> origins) {
         int n = 1;
-        while (nameProblem("sum_" + n, origins) != null) {
+        while (nameProblem("total_" + n, origins) != null) {
             n++;
         }
-        return "sum_" + n;
+        return "total_" + n;
     }
 
     /** Why {@code name} can't be used for an aggregate of each origin, or {@code null}. */
@@ -321,9 +332,8 @@ class AggregatedSeriesController {
 
     /**
      * Plans the reads for one origin's inputs, from {@code source} (a run or dataset tree
-     * object, or {@code null} if every input is an aggregate). Run series are requested now,
-     * as the request manager caches them anyway; Pixie series are decoded, and input
-     * aggregates looked up, only when their turn comes.
+     * object, or {@code null} if every input is an aggregate). Run series are requested,
+     * Pixie series decoded, and input aggregates looked up, only when their turn comes.
      */
     private Plan plan(SourceRef origin, Object source, List<AggregateInfo.Input> inputs) throws CannotRead {
         List<Read> reads = new ArrayList<>();
@@ -343,9 +353,8 @@ class AggregatedSeriesController {
             if (session == null) {
                 throw new CannotRead(originLabel(origin) + " has no session to read from.");
             }
-            CompletableFuture<TimeSeriesData> request =
-                timeSeriesRequestManager.requestTimeSeries(session.getSessionKey(), name);
-            return new Read(name, () -> request, 0, 0);
+            String sessionKey = session.getSessionKey();
+            return new Read(name, () -> timeSeriesRequestManager.requestTimeSeries(sessionKey, name), 0, 0);
         }
         if (source instanceof DatasetLoaderManager.LoadedDatasetInfo dataset) {
             String datasetId = dataset.file.getAbsolutePath();
@@ -445,6 +454,14 @@ class AggregatedSeriesController {
                 fail("The last run changed while aggregate." + name + " was being created. Try again.");
                 return;
             }
+            // An origin removed while this one read would never be labelled removed.
+            for (SourceRef origin : origins) {
+                if (!(origin instanceof LastSource) && !removedOriginLabels.containsKey(origin)
+                        && !window.hasSourceNode(origin)) {
+                    fail("A source was removed while aggregate." + name + " was being created.");
+                    return;
+                }
+            }
             // Re-checked: another creation may have taken the name while this one read.
             String problem = nameProblem(name, origins);
             if (problem != null) {
@@ -507,7 +524,8 @@ class AggregatedSeriesController {
             if (failure != null) {
                 Throwable cause = failure instanceof CompletionException && failure.getCause() != null
                     ? failure.getCause() : failure;
-                failed.accept(where + " could not be read (" + cause.getMessage() + ")");
+                String reason = cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
+                failed.accept(where + " could not be read (" + reason + ")");
                 return;
             }
             try {
@@ -530,6 +548,7 @@ class AggregatedSeriesController {
         List<AggregateInfo> targets = aggregates.values().stream()
             .filter(a -> a.origin.equals(last)).toList();
         if (targets.isEmpty()) {
+            recomputedGeneration = lastRunTracker.getGeneration();
             return;
         }
         RunInfoImpl lastRun = lastRunTracker.getLastRunInfo();
@@ -537,6 +556,7 @@ class AggregatedSeriesController {
             for (AggregateInfo target : targets) {
                 apply(target, null, "There is no last run.");
             }
+            recomputedGeneration = lastRunTracker.getGeneration();
             tabManager.updateAllTabs(false);
             return;
         }
@@ -561,6 +581,7 @@ class AggregatedSeriesController {
 
         void next() {
             if (index == targets.size()) {
+                recomputedGeneration = generation;
                 tabManager.updateAllTabs(false);
                 return;
             }
@@ -582,9 +603,12 @@ class AggregatedSeriesController {
             if (lastRunTracker.getGeneration() != generation) {
                 return; // a newer Last has started its own recompute
             }
-            apply(target, sum, problem);
-            if (problem != null) {
-                status(labelResolver.labelFor(target.ref()) + " could not be recomputed: " + problem);
+            // Deleted meanwhile: publishing would put an orphan back in the pool
+            if (aggregates.get(target.id) == target) {
+                apply(target, sum, problem);
+                if (problem != null) {
+                    status(labelResolver.labelFor(target.ref()) + " could not be recomputed: " + problem);
+                }
             }
             index++;
             next();
@@ -804,16 +828,19 @@ class AggregatedSeriesController {
             return;
         }
 
-        for (AggregateInfo info : toDelete) {
-            DefaultMutableTreeNode group = (DefaultMutableTreeNode) nodeFor(info).getParent();
-            window.removeSourceNode(group, info);
-            window.purgeSeries(List.of(info.ref()), new AggregateSource(info.id));
-            aggregates.remove(info.id);
-            if (group.getChildCount() == 0) {
-                window.removeSourceNode(aggregateSeriesNode, group.getUserObject());
-                removedOriginLabels.remove(info.origin);
+        // One source-tree change: one outputs rebuild and one undo step for the lot
+        window.changeSourceTree(() -> {
+            for (AggregateInfo info : toDelete) {
+                DefaultMutableTreeNode group = (DefaultMutableTreeNode) nodeFor(info).getParent();
+                window.removeSourceNode(group, info);
+                window.purgeSeries(List.of(info.ref()), new AggregateSource(info.id));
+                aggregates.remove(info.id);
+                if (group.getChildCount() == 0) {
+                    window.removeSourceNode(aggregateSeriesNode, group.getUserObject());
+                    removedOriginLabels.remove(info.origin);
+                }
             }
-        }
+        });
         status("Deleted " + what);
     }
 
@@ -823,13 +850,13 @@ class AggregatedSeriesController {
         int shown = Math.min(names.size(), RECIPE_LINES);
         StringBuilder html = new StringBuilder("<html>Sum of:");
         for (String name : names.subList(0, shown)) {
-            html.append("<br>&nbsp;&nbsp;").append(escapeHtml(name));
+            html.append("<br>&nbsp;&nbsp;").append(HoverTipSupplier.escapeHtml(name));
         }
         if (names.size() > shown) {
             html.append("<br>&nbsp;&nbsp;… and ").append(names.size() - shown).append(" more");
         }
         if (info.values() == null) {
-            html.append("<br><br>Unavailable: ").append(escapeHtml(info.unavailableReason()));
+            html.append("<br><br>Unavailable: ").append(HoverTipSupplier.escapeHtml(info.unavailableReason()));
         }
         return html.append("</html>").toString();
     }
@@ -850,10 +877,6 @@ class AggregatedSeriesController {
                 yield source != null ? labelResolver.nameFor(source.ref()) : "(deleted aggregate)";
             }
         }).toList();
-    }
-
-    private static String escapeHtml(String text) {
-        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     /** The source-tree node holding {@code info}. */
@@ -886,13 +909,28 @@ class AggregatedSeriesController {
         }
     }
 
-    /** Redraws every label that names an origin, after one is renamed or removed. */
-    void refreshOriginLabels() {
+    /**
+     * Relabels {@code origin}'s group after a run rename; the rename itself already
+     * rebuilt the outputs tree and redrew the tabs.
+     */
+    void onOriginRenamed(SourceRef origin) {
+        if (hasAggregatesOf(origin)) {
+            refreshGroupNodes();
+        }
+    }
+
+    /** Redraws every label that names an origin, after one is removed or loaded again. */
+    private void refreshOriginLabels() {
+        refreshGroupNodes();
+        // Rebuilt, not repainted: rows keep the widths cached for the old labels
+        window.rebuildOutputsTree();
+        tabManager.updateAllTabs(false);
+    }
+
+    private void refreshGroupNodes() {
         for (int i = 0; i < aggregateSeriesNode.getChildCount(); i++) {
             treeModel.nodeChanged(aggregateSeriesNode.getChildAt(i));
         }
-        outputsTree.repaint();
-        tabManager.updateAllTabs(false);
     }
 
     private boolean hasAggregatesOf(SourceRef origin) {
