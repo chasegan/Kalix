@@ -13,7 +13,7 @@ import java.util.regex.PatternSyntaxException;
  * {@code /} from closing its term; outside a regex it is dropped, keeping the character
  * after it. A closing quote or slash must be followed by a space or the end. A leading
  * {@code !} makes a term exclude; a lone {@code !} or {@code ""} is ignored as half-typed.
- * A series shows if any include term matches it (or there are none) and no exclude term
+ * A series shows if all include terms match it (or there are none) and no exclude term
  * does. Each term is tested against the series name and, separately, the source label,
  * ignoring case:</p>
  * <ul>
@@ -118,11 +118,10 @@ public final class SeriesFilter {
         for (Pattern p : exclude) {
             if (hits(p, seriesName, sourceLabel)) return false;
         }
-        if (include.isEmpty()) return true;
         for (Pattern p : include) {
-            if (hits(p, seriesName, sourceLabel)) return true;
+            if (!hits(p, seriesName, sourceLabel)) return false;
         }
-        return false;
+        return true;
     }
 
     /** Checks if the given pattern matches either the series name or the source label. */

@@ -58,10 +58,18 @@ class SeriesFilterTest {
     }
 
     @Test
-    void spacesMeanOr() throws Exception {
-        assertTrue(matches("outflow inflow", "node.inflow_3.ds_1"));
-        assertTrue(matches("inflow outflow", "node.outflow_1.ds_1"));
-        assertFalse(matches("inflow outflow", "node.gr4j_1.ds_1"));
+    void spacesMeanAnd() throws Exception {
+        assertTrue(matches("inflow ds_1", "node.inflow_3.ds_1"));
+        assertFalse(matches("inflow ds_1", "node.inflow_3.ds_2"));
+        assertFalse(matches("inflow outflow", "node.inflow_3.ds_1"));
+    }
+
+    @Test
+    void eachTermMayMatchTheNameOrTheSource() throws Exception {
+        SeriesFilter f = SeriesFilter.parse("Run_2 inflow");
+        assertTrue(f.matches("node.inflow_3.ds_1", "Run_2"));
+        assertFalse(f.matches("node.inflow_3.ds_1", "Run_1"));
+        assertFalse(f.matches("node.gr4j_1.ds_1", "Run_2"));
     }
 
     @Test
@@ -100,7 +108,8 @@ class SeriesFilterTest {
     @Test
     void regexUsesEscapedSlashesAndSitsAmongOtherTerms() throws Exception {
         assertTrue(matches("/x\\/y/", "node.x/y.ds_1"));
-        assertTrue(matches("/nomatch/ inflow", "node.inflow_3.ds_1"));
+        assertTrue(matches("/inflow/ ds_1", "node.inflow_3.ds_1"));
+        assertFalse(matches("/nomatch/ inflow", "node.inflow_3.ds_1"));
         assertTrue(matches("//", "node.inflow_3.ds_1"));
     }
 
@@ -130,7 +139,7 @@ class SeriesFilterTest {
     @Test
     void trailingAndRepeatedSpacesAreHarmless() throws Exception {
         assertTrue(matches("inflow  ", "node.inflow_3.ds_1"));
-        assertTrue(matches("  /inflow/   outflow  ", "node.inflow_3.ds_1"));
+        assertTrue(matches("  /inflow/   ds_1  ", "node.inflow_3.ds_1"));
         assertTrue(matches("inflow !", "node.inflow_3.ds_1"));
         assertTrue(matches("! inflow", "node.inflow_3.ds_1"));
         assertFalse(matches("! inflow", "node.gr4j_1.ds_1"));
