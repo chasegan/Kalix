@@ -22,17 +22,22 @@ import java.awt.event.KeyEvent;
  * The filter is purely visual - it does NOT affect tree selection state,
  * plotted series, or the selectedSeries set. When filter text changes,
  * triggers a callback so the caller can rebuild the tree with filtering applied.
+ * Text that doesn't parse (see {@link SeriesFilter}) outlines the field in red,
+ * explains why in its tooltip, and leaves the last valid filter applied.
  */
 public class TreeFilterManager {
 
     private static final int DEBOUNCE_DELAY_MS = 150;
     private static final int CLEAR_ICON_SIZE = 12;
+    private static final String SYNTAX_TOOLTIP =
+        "Show series matching any term. * and ? are wildcards, ! excludes, /.../ is a regex, \"...\" keeps spaces.";
 
     private final JTextField filterField;
     private final JButton clearButton;
     private final JPanel filterPanel;
     private final Runnable onFilterChanged;
     private Timer debounceTimer;
+    private SeriesFilter applied = SeriesFilter.NONE;
 
     public TreeFilterManager(Runnable onFilterChanged) {
         this.onFilterChanged = onFilterChanged;
@@ -45,12 +50,13 @@ public class TreeFilterManager {
         return filterPanel;
     }
 
-    public String getFilterText() {
-        return filterField.getText().trim();
+    /** The last filter that parsed; invalid text leaves it in place. */
+    public SeriesFilter getFilter() {
+        return applied;
     }
 
     public boolean isFiltering() {
-        return !getFilterText().isEmpty();
+        return applied.isActive();
     }
 
     public void clearFilter() {
@@ -60,6 +66,7 @@ public class TreeFilterManager {
     private JTextField createFilterField() {
         JTextField field = new JTextField();
         field.putClientProperty("JTextField.placeholderText", "Filter...");
+        field.setToolTipText(SYNTAX_TOOLTIP);
 
         field.getDocument().addDocumentListener(new DocumentListener() {
             @Override
@@ -105,11 +112,25 @@ public class TreeFilterManager {
         if (debounceTimer != null && debounceTimer.isRunning()) {
             debounceTimer.stop();
         }
-        debounceTimer = new Timer(DEBOUNCE_DELAY_MS, e -> {
-            clearButton.setVisible(isFiltering());
-            onFilterChanged.run();
-        });
+        debounceTimer = new Timer(DEBOUNCE_DELAY_MS, e -> applyFilterText());
         debounceTimer.setRepeats(false);
         debounceTimer.start();
+    }
+
+    private void applyFilterText() {
+        String text = filterField.getText();
+        clearButton.setVisible(!text.isBlank());
+        SeriesFilter parsed;
+        try {
+            parsed = SeriesFilter.parse(text);
+        } catch (SeriesFilter.SyntaxException ex) {
+            filterField.putClientProperty("JComponent.outline", "error");
+            filterField.setToolTipText(ex.getMessage());
+            return;
+        }
+        filterField.putClientProperty("JComponent.outline", null);
+        filterField.setToolTipText(SYNTAX_TOOLTIP);
+        applied = parsed;
+        onFilterChanged.run();
     }
 }

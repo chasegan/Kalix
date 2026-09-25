@@ -74,7 +74,7 @@ public class OutputsTreeBuilder {
     private final LabelResolver labelResolver;  // Projects refs to display labels
 
     // Filter state
-    private String filterText = "";
+    private SeriesFilter filter = SeriesFilter.NONE;
     private List<TreePath> preFilterExpansionState = null;
 
     /**
@@ -101,15 +101,11 @@ public class OutputsTreeBuilder {
     }
 
     /**
-     * Sets the filter text. When non-empty, only nodes matching the filter
-     * (case-insensitive) and their ancestors are shown after rebuild.
+     * Sets the filter. When active, only series it matches, and their ancestors,
+     * are shown after rebuild.
      */
-    public void setFilterText(String filterText) {
-        this.filterText = (filterText == null) ? "" : filterText.trim();
-    }
-
-    public String getFilterText() {
-        return filterText;
+    public void setFilter(SeriesFilter filter) {
+        this.filter = (filter == null) ? SeriesFilter.NONE : filter;
     }
 
     /**
@@ -207,13 +203,13 @@ public class OutputsTreeBuilder {
         timeseriesTreeModel.reload();
 
         // Save pre-filter expansion state when first entering filter mode
-        if (!filterText.isEmpty() && preFilterExpansionState == null) {
+        if (filter.isActive() && preFilterExpansionState == null) {
             preFilterExpansionState = new ArrayList<>(expandedPaths);
         }
 
         // Expansion logic
         boolean switchedContext = (isDatasetTree != hadDatasetPaths);
-        if (!filterText.isEmpty()) {
+        if (filter.isActive()) {
             // Filter active - expand all to show matches in context
             for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
                 timeseriesTree.expandRow(i);
@@ -489,55 +485,28 @@ public class OutputsTreeBuilder {
     // ========== Filtering ==========
 
     /**
-     * Removes nodes that don't match the current filter text.
-     * Parent/intermediate nodes are kept if any descendant matches.
-     * Called after the tree is fully built but before reload().
+     * Removes series the filter doesn't match, then any folder left empty.
+     * Each series is matched on its full name and its source label, so patterns
+     * can span levels ({@code inflow_*.ds_1}). Called after the tree is fully
+     * built but before reload().
      */
     private void pruneNonMatchingNodes(DefaultMutableTreeNode parent) {
-        if (filterText.isEmpty()) return;
-
-        String lowerFilter = filterText.toLowerCase();
+        if (!filter.isActive()) return;
 
         // Work backwards to avoid index shifting during removal
         for (int i = parent.getChildCount() - 1; i >= 0; i--) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
-            if (!nodeMatchesFilter(child)) {
-                parent.remove(i);
-            } else if (child.getUserObject() instanceof String && !isSpecialMessageNode(child)) {
-                // If this node's own text matches, keep all descendants intact
-                String nodeText = child.getUserObject().toString().toLowerCase();
-                if (!nodeText.contains(lowerFilter)) {
-                    // Node kept only because of matching descendants - prune non-matching children
-                    pruneNonMatchingNodes(child);
-                    if (child.getChildCount() == 0) {
-                        parent.remove(i);
-                    }
+            if (child.getUserObject() instanceof SeriesLeafNode leaf) {
+                if (!filter.matches(leaf.seriesName, labelResolver.sourceLabel(leaf.ref))) {
+                    parent.remove(i);
+                }
+            } else {
+                pruneNonMatchingNodes(child);
+                if (child.getChildCount() == 0) {
+                    parent.remove(i);
                 }
             }
         }
-    }
-
-    /**
-     * Checks if a node or any of its descendants matches the current filter.
-     * Matches against display text (toString()), case-insensitive.
-     */
-    private boolean nodeMatchesFilter(DefaultMutableTreeNode node) {
-        if (filterText.isEmpty()) return true;
-
-        String lowerFilter = filterText.toLowerCase();
-        Object userObject = node.getUserObject();
-
-        if (userObject != null && userObject.toString().toLowerCase().contains(lowerFilter)) {
-            return true;
-        }
-
-        // Check descendants
-        for (int i = 0; i < node.getChildCount(); i++) {
-            if (nodeMatchesFilter((DefaultMutableTreeNode) node.getChildAt(i))) {
-                return true;
-            }
-        }
-        return false;
     }
 
     // ========== Inner Classes ==========

@@ -978,7 +978,7 @@ public class RunManager extends JFrame {
     private void onFilterTextChanged() {
         fetchCoordinator.beginProgrammaticUpdate();
         try {
-            outputsTreeBuilder.setFilterText(treeFilterManager.getFilterText());
+            outputsTreeBuilder.setFilter(treeFilterManager.getFilter());
             updateOutputsTree();
             restoreTreeChecksForSeries(tabManager.getTargetTabSelectedSeries());
         } finally {
