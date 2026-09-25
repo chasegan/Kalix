@@ -151,7 +151,8 @@ class SeriesFilterTest {
     void badSyntaxIsReported() {
         assertMessage("Regex not closed: end it with /", "/inflow");
         assertMessage("Quote not closed: end it with \"", "\"qu art");
-        assertMessage("Put a space after the closing / of a regex", "/a/b");
+        assertMessage("Put a space after the closing / of a regex, or write \\/ for a slash inside it", "/a/b");
+        assertMessage("Put a space after the closing / of a regex, or write \\/ for a slash inside it", "/[/]/");
         assertMessage("Put a space after the closing quote", "\"a\"b");
         assertThrows(SeriesFilter.SyntaxException.class, () -> SeriesFilter.parse("/(/"));
         assertThrows(SeriesFilter.SyntaxException.class, () -> SeriesFilter.parse("!/"));

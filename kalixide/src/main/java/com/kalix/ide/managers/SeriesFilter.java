@@ -77,7 +77,7 @@ public final class SeriesFilter {
             if (!rest.isEmpty() && !Character.isWhitespace(rest.charAt(0))) {
                 throw new SyntaxException(quoted
                     ? "Put a space after the closing quote"
-                    : "Put a space after the closing / of a regex");
+                    : "Put a space after the closing / of a regex, or write \\/ for a slash inside it");
             }
             return new Term(exclude, quoted ? Kind.TEXT : Kind.REGEX, text.substring(i + 1, close), rest);
         }
