@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import javax.swing.JTree;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreePath;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -32,10 +34,12 @@ class OutputsTreeBuilderTest {
 
     private final DefaultMutableTreeNode root = new DefaultMutableTreeNode("root");
     private final DefaultTreeModel model = new DefaultTreeModel(root);
+    private final JTree tree = new JTree(model);
     private final OutputsTreeBuilder builder = new OutputsTreeBuilder(
-        new JTree(model),
+        tree,
         model,
-        source -> new ArrayList<>(OUTPUTS.getOrDefault(source, List.of())),
+        // Immutable, as RunManager returns for an aggregate: the builder must not sort in place.
+        source -> OUTPUTS.getOrDefault(source, List.of()),
         String::compareTo,
         (seriesName, source) -> new RunSeries((Long) source, seriesName),
         ref -> ref.toString());
@@ -54,7 +58,7 @@ class OutputsTreeBuilderTest {
 
     @Test
     void availableRefsMatchTheUnfilteredTree() {
-        builder.updateTree(List.of(1L, 2L), List.of());
+        builder.updateTree(List.of(1L, 2L));
 
         assertEquals(
             Set.of(new RunSeries(1L, "node.a.ds_1"), new RunSeries(1L, "node.b.ds_1"),
@@ -66,11 +70,11 @@ class OutputsTreeBuilderTest {
     @Test
     void filterNarrowsTheTreeButNotWhatSourcesOffer() {
         builder.setFilterText("node.b");  // matches nothing: segments are separate nodes
-        builder.updateTree(List.of(1L, 2L), List.of());
+        builder.updateTree(List.of(1L, 2L));
         assertTrue(refsInTree().isEmpty(), "filter should have hidden every series");
 
         builder.setFilterText("b");
-        builder.updateTree(List.of(1L, 2L), List.of());
+        builder.updateTree(List.of(1L, 2L));
         assertEquals(Set.of(new RunSeries(1L, "node.b.ds_1")), refsInTree());
 
         // Hidden series are still offered — this is what keeps them plotted.
@@ -81,5 +85,42 @@ class OutputsTreeBuilderTest {
     void uncheckedSourcesOfferNothing() {
         assertEquals(Set.of(new RunSeries(2L, "node.a.ds_1")), builder.availableRefs(List.of(2L)));
         assertTrue(builder.availableRefs(List.of()).isEmpty());
+    }
+
+    @Test
+    void rebuildKeepsCollapsedFolders() {
+        builder.updateTree(List.of(1L, 2L));
+        TreePath b = pathTo("node", "b");
+        tree.collapsePath(b);
+
+        builder.updateTree(List.of(1L, 2L));
+
+        assertFalse(tree.isExpanded(pathTo("node", "b")), "b should stay collapsed");
+        assertTrue(tree.isExpanded(pathTo("node", "a")), "a should stay expanded");
+    }
+
+    @Test
+    void singleSourceWithImmutableNamesBuilds() {
+        builder.updateTree(List.of(1L));
+        assertEquals(Set.of(new RunSeries(1L, "node.a.ds_1"), new RunSeries(1L, "node.b.ds_1")),
+            refsInTree());
+    }
+
+    private TreePath pathTo(String... names) {
+        DefaultMutableTreeNode node = root;
+        for (String name : names) {
+            DefaultMutableTreeNode next = null;
+            for (int i = 0; i < node.getChildCount() && next == null; i++) {
+                DefaultMutableTreeNode child = (DefaultMutableTreeNode) node.getChildAt(i);
+                if (name.equals(child.toString())) {
+                    next = child;
+                }
+            }
+            if (next == null) {
+                throw new AssertionError("No node " + name + " under " + node);
+            }
+            node = next;
+        }
+        return new TreePath(node.getPath());
     }
 }

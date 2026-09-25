@@ -191,6 +191,10 @@ public class PlotLegendManager {
         return labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
     }
 
+    private String nameFor(SeriesRef ref) {
+        return labelResolver != null ? labelResolver.nameFor(ref) : ref.baseName();
+    }
+
     private String sourceLabel(SeriesRef ref) {
         return labelResolver != null ? labelResolver.sourceLabel(ref) : "";
     }
@@ -233,7 +237,7 @@ public class PlotLegendManager {
 
     /**
      * Projects a {@link SeriesRef} to the legend's display string under the current
-     * {@link #displayMode}. Builds the label from {@link SeriesRef#baseName()} plus the
+     * {@link #displayMode}. Builds the label from {@link LabelResolver#nameFor} plus the
      * resolver's {@link LabelResolver#sourceLabel} so the various modes don't have to
      * parse the {@code labelFor} output.
      * <ul>
@@ -243,7 +247,7 @@ public class PlotLegendManager {
      * </ul>
      */
     private String displayLabel(SeriesRef ref) {
-        String base = ref.baseName();
+        String base = nameFor(ref);
         switch (displayMode) {
             case FULL_NAME:
                 return labelFor(ref);

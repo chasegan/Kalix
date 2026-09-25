@@ -2,7 +2,7 @@ package com.kalix.ide.flowviz.data;
 
 /**
  * Stable internal identity for a <em>data source</em> in the Run Manager — a run, the
- * "Last" alias, or a loaded dataset file. The source-level counterpart of
+ * "Last" alias, a loaded dataset file, or a user-created aggregate. The source-level counterpart of
  * {@link SeriesRef}: where a {@code SeriesRef} identifies one time-series, a
  * {@code SourceRef} identifies the thing that produced a whole family of them.
  *
@@ -14,5 +14,5 @@ package com.kalix.ide.flowviz.data;
  *
  * <p>Sealed so all variants are known and pattern-matchable.</p>
  */
-public sealed interface SourceRef permits RunSource, LastSource, DatasetSource {
+public sealed interface SourceRef permits RunSource, LastSource, DatasetSource, AggregateSource {
 }

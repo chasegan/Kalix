@@ -88,7 +88,7 @@ import java.util.Set;
  * was built in, as stable {@link SourceRef}s) and then its series checks.
  *
  * @see FlowVizPanel
- * @see com.kalix.ide.windows.RunManager#addSeriesToPool
+ * @see com.kalix.ide.windows.RunManager#publishSeries
  */
 public class VisualizationTabManager {
 

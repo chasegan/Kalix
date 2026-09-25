@@ -8,6 +8,7 @@ import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.io.SourceResCsvImporter;
 import com.kalix.ide.io.PixieSeriesKey;
 import com.kalix.ide.io.PixieStore;
+import com.kalix.ide.utils.DialogUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,6 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * Manages dataset file loading (CSV and Pixie formats) for RunManager.
@@ -67,7 +69,8 @@ public class DatasetLoaderManager {
     private final Consumer<String> statusUpdater;
 
     // Callbacks
-    private final Runnable onDatasetLoadedCallback;
+    private final Consumer<File> onDatasetLoadedCallback;
+    private final Function<List<String>, String> seriesNameRefusal;
 
     /**
      * Creates a new DatasetLoaderManager.
@@ -77,7 +80,8 @@ public class DatasetLoaderManager {
      * @param loadedDatasetsNode Tree node for loaded datasets
      * @param treeModel Tree model for updates
      * @param statusUpdater Status bar updater
-     * @param onDatasetLoadedCallback Callback after dataset is loaded
+     * @param onDatasetLoadedCallback Callback after a dataset is loaded, given its file
+     * @param seriesNameRefusal Why a dataset with the given series names must not load, or null
      */
     public DatasetLoaderManager(
             JFrame parentFrame,
@@ -85,13 +89,28 @@ public class DatasetLoaderManager {
             DefaultMutableTreeNode loadedDatasetsNode,
             DefaultTreeModel treeModel,
             Consumer<String> statusUpdater,
-            Runnable onDatasetLoadedCallback) {
+            Consumer<File> onDatasetLoadedCallback,
+            Function<List<String>, String> seriesNameRefusal) {
         this.parentFrame = parentFrame;
         this.datasetSeriesSources = datasetSeriesSources;
         this.loadedDatasetsNode = loadedDatasetsNode;
         this.treeModel = treeModel;
         this.statusUpdater = statusUpdater;
         this.onDatasetLoadedCallback = onDatasetLoadedCallback;
+        this.seriesNameRefusal = seriesNameRefusal;
+    }
+
+    /** Refuses the load of {@code file} if its series names can't be loaded; true if refused. */
+    private boolean refuseNames(File file, List<String> seriesNames) {
+        String refusal = seriesNameRefusal.apply(seriesNames);
+        if (refusal == null) {
+            return false;
+        }
+        DialogUtils.showWarning(parentFrame, refusal, "Name Clash");
+        if (statusUpdater != null) {
+            statusUpdater.accept("Did not load " + file.getName());
+        }
+        return true;
     }
 
     /**
@@ -350,9 +369,16 @@ public class DatasetLoaderManager {
         String fileName = csvFile.getName();
         int seriesAdded = 0;
 
-        for (NamedSeries ns : importResult.getSeries()) {
-            // Create hierarchical series name from the series' path segments
-            String seriesName = composeDatasetSeriesName(csvFile, ns.path());
+        // Hierarchical series names from each series' path segments
+        List<String> names = importResult.getSeries().stream()
+            .map(ns -> composeDatasetSeriesName(csvFile, ns.path())).toList();
+        if (refuseNames(csvFile, names)) {
+            return;
+        }
+
+        for (int i = 0; i < names.size(); i++) {
+            NamedSeries ns = importResult.getSeries().get(i);
+            String seriesName = names.get(i);
 
             logger.info("Loading CSV series: columnName='{}' -> seriesName='{}'", ns.name(), seriesName);
 
@@ -387,7 +413,7 @@ public class DatasetLoaderManager {
 
         // Notify callback
         if (onDatasetLoadedCallback != null) {
-            onDatasetLoadedCallback.run();
+            onDatasetLoadedCallback.accept(csvFile);
         }
     }
 
@@ -482,8 +508,15 @@ public class DatasetLoaderManager {
         String fileName = resCsvFile.getName();
         int seriesAdded = 0;
 
-        for (NamedSeries ns : importResult.getSeries()) {
-            String seriesName = composeDatasetSeriesName(resCsvFile, ns.path());
+        List<String> names = importResult.getSeries().stream()
+            .map(ns -> composeDatasetSeriesName(resCsvFile, ns.path())).toList();
+        if (refuseNames(resCsvFile, names)) {
+            return;
+        }
+
+        for (int i = 0; i < names.size(); i++) {
+            NamedSeries ns = importResult.getSeries().get(i);
+            String seriesName = names.get(i);
             DatasetSeries ref = new DatasetSeries(resCsvFile.getAbsolutePath(), seriesName);
             datasetSeriesSources.put(ref, new DatasetSeriesSource.Loaded(ns.data()));
             seriesAdded++;
@@ -507,7 +540,7 @@ public class DatasetLoaderManager {
         }
 
         if (onDatasetLoadedCallback != null) {
-            onDatasetLoadedCallback.run();
+            onDatasetLoadedCallback.accept(resCsvFile);
         }
     }
 
@@ -588,11 +621,18 @@ public class DatasetLoaderManager {
 
                 try {
                     List<IndexedSeries> seriesList = get();
+                    // Dotted names nest exactly as a full read's NamedSeries.dotted would
+                    List<String> names = seriesList.stream()
+                        .map(series -> composeDatasetSeriesName(pxtFile, NamedSeries.dottedPath(series.name())))
+                        .toList();
+                    if (refuseNames(pxtFile, names)) {
+                        return;
+                    }
 
                     // Register every series by its hierarchical name, holding only its store key
-                    for (IndexedSeries series : seriesList) {
-                        // Dotted names nest exactly as a full read's NamedSeries.dotted would
-                        String seriesName = composeDatasetSeriesName(pxtFile, NamedSeries.dottedPath(series.name()));
+                    for (int i = 0; i < names.size(); i++) {
+                        IndexedSeries series = seriesList.get(i);
+                        String seriesName = names.get(i);
 
                         logger.info("Loading Pixie series: originalName='{}' -> seriesName='{}'", series.name(), seriesName);
 
@@ -612,7 +652,7 @@ public class DatasetLoaderManager {
 
                     // Notify callback
                     if (onDatasetLoadedCallback != null) {
-                        onDatasetLoadedCallback.run();
+                        onDatasetLoadedCallback.accept(pxtFile);
                     }
                 } catch (Exception e) {
                     JOptionPane.showMessageDialog(parentFrame,

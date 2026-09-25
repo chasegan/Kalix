@@ -9,6 +9,8 @@ package com.kalix.ide.flowviz.data;
  *   <li>{@link RunSeries} → {@code "node.x.ds_1 [Run_3]"} (current run name in brackets)</li>
  *   <li>{@link LastSeries} → {@code "node.x.ds_1 [Last]"}</li>
  *   <li>{@link DatasetSeries} → {@code "flow [mydata.csv]"} (short filename in brackets)</li>
+ *   <li>{@link AggregateSeries} → {@code "aggregate.total_1 [Run_3]"} (current name, and the
+ *       source it was summed from)</li>
  * </ul>
  *
  * <p>All UI code that needs to display a series — legend, status bar, dialog text,
@@ -26,10 +28,23 @@ public interface LabelResolver {
     String labelFor(SeriesRef ref);
 
     /**
+     * Returns the series-name portion of the label — the text before the brackets in
+     * {@link #labelFor(SeriesRef)} (e.g. {@code "node.x.ds_1"}, {@code "aggregate.total_1"}).
+     * Display code uses this rather than {@link SeriesRef#baseName()}, which for an
+     * {@link AggregateSeries} is an internal key, not a name.
+     *
+     * <p>Default returns {@link SeriesRef#baseName()}, correct for resolvers that never
+     * see aggregates.</p>
+     */
+    default String nameFor(SeriesRef ref) {
+        return ref.baseName();
+    }
+
+    /**
      * Returns just the source-identifier portion of the label — the text that would
      * appear inside the brackets in {@link #labelFor(SeriesRef)} (e.g. {@code "Run_1"},
      * {@code "Last"}, {@code "mydata.csv"}), with no brackets. Used by display modes
-     * that want to assemble a custom label format from {@link SeriesRef#baseName()} and
+     * that want to assemble a custom label format from {@link #nameFor(SeriesRef)} and
      * the source identifier without parsing the rendered {@code labelFor} string.
      *
      * <p>Default returns an empty string, suitable for resolvers that don't distinguish

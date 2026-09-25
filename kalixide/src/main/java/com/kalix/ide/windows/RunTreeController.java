@@ -8,7 +8,7 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.RunSeries;
 import com.kalix.ide.flowviz.data.RunSource;
 import com.kalix.ide.flowviz.data.SeriesRef;
-import com.kalix.ide.flowviz.style.SeriesSlotManager;
+import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.managers.RunContextMenuManager;
 import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.StdioTaskManager;
@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiConsumer;
 
 /**
  * Owns the data-source tree's run bookkeeping for {@link RunManager}: which CLI
@@ -43,10 +44,11 @@ class RunTreeController {
     private final DefaultMutableTreeNode currentRunsNode;
     private final VisualizationTabManager tabManager;
     private final DataSet plotDataSet;
-    private final SeriesSlotManager seriesSlotManager;
     private final TimeSeriesRequestManager timeSeriesRequestManager;
     private final LastRunTracker lastRunTracker;
     private final SeriesFetchCoordinator fetchCoordinator;
+    // Told of each removed run and its last display name.
+    private final BiConsumer<SourceRef, String> sourceRemoved;
 
     // === RUN TRACKING ===
     // sessionKey -> node/name/status/completion, with single-shot removal cleanup.
@@ -61,10 +63,10 @@ class RunTreeController {
                       DefaultMutableTreeNode currentRunsNode,
                       VisualizationTabManager tabManager,
                       DataSet plotDataSet,
-                      SeriesSlotManager seriesSlotManager,
                       TimeSeriesRequestManager timeSeriesRequestManager,
                       LastRunTracker lastRunTracker,
-                      SeriesFetchCoordinator fetchCoordinator) {
+                      SeriesFetchCoordinator fetchCoordinator,
+                      BiConsumer<SourceRef, String> sourceRemoved) {
         this.window = window;
         this.stdioTaskManager = stdioTaskManager;
         this.timeseriesSourceTree = timeseriesSourceTree;
@@ -72,10 +74,10 @@ class RunTreeController {
         this.currentRunsNode = currentRunsNode;
         this.tabManager = tabManager;
         this.plotDataSet = plotDataSet;
-        this.seriesSlotManager = seriesSlotManager;
         this.timeSeriesRequestManager = timeSeriesRequestManager;
         this.lastRunTracker = lastRunTracker;
         this.fetchCoordinator = fetchCoordinator;
+        this.sourceRemoved = sourceRemoved;
     }
 
     /**
@@ -169,10 +171,7 @@ class RunTreeController {
                     // If session is already DONE when first discovered, treat it as a completion
                     // (This handles fast-completing runs that finish before refreshRuns() is called)
                     if (initialStatus == RunInfoImpl.DetailedRunStatus.DONE) {
-                        long completionTime = System.currentTimeMillis();
-                        sessions.putCompletionTimestamp(sessionKey, completionTime);
-
-                        lastRunTracker.onRunCompleted(runInfo, completionTime);
+                        completeRun(sessionKey, runInfo);
                     }
                 } else {
                     // Existing session - check for status changes
@@ -196,12 +195,7 @@ class RunTreeController {
 
                         // Check if run just completed
                         if (currentStatus == RunInfoImpl.DetailedRunStatus.DONE && lastStatus != RunInfoImpl.DetailedRunStatus.DONE) {
-                            // Record completion timestamp
-                            long completionTime = System.currentTimeMillis();
-                            sessions.putCompletionTimestamp(sessionKey, completionTime);
-
-                            // Update Last if this is more recent
-                            lastRunTracker.onRunCompleted(runInfo, completionTime);
+                            completeRun(sessionKey, runInfo);
                         }
 
                         // Update outputs if this run is currently checked
@@ -292,6 +286,15 @@ class RunTreeController {
         });
     }
 
+    private void completeRun(String sessionKey, RunInfoImpl runInfo) {
+        // Record completion timestamp
+        long completionTime = System.currentTimeMillis();
+        sessions.putCompletionTimestamp(sessionKey, completionTime);
+
+        // Update Last if this is more recent
+        lastRunTracker.onRunCompleted(runInfo, completionTime);
+    }
+
     /**
      * Renames a run. Series identity in the pool, color map, tab selections, stats models,
      * and undo history is the runId on {@link RunSeries}, which
@@ -366,14 +369,7 @@ class RunTreeController {
         // the new RunInfoImpl (the leaf display via toString() picks up the new run name);
         // and (b) trigger a repaint so any text surfaces that aren't actively reading the
         // resolver see the update.
-        fetchCoordinator.beginProgrammaticUpdate();
-        try {
-            window.updateOutputsTree();
-            Set<SeriesRef> tabSeries = tabManager.getTargetTabSelectedSeries();
-            window.restoreTreeChecksForSeries(tabSeries);
-        } finally {
-            fetchCoordinator.endProgrammaticUpdate();
-        }
+        window.rebuildOutputsTree();
 
         // Cheap repaint to pick up the new label in plot legends / stats column headers
         // that already cache projected strings.
@@ -428,17 +424,9 @@ class RunTreeController {
                 refs.add(ref);
             }
         }
-        for (SeriesRef ref : refs) {
-            plotDataSet.removeSeries(ref);
-            seriesSlotManager.removeSlot(ref);
-        }
-        if (!refs.isEmpty()) {
-            tabManager.removeSeriesFromAllTabs(refs);
-        }
-
-        // Forget the run from every tab's recorded source context — runIds are never
-        // reused, so no tab should try to restore this source again.
-        tabManager.removeSourceFromAllTabs(new RunSource(runId));
+        // runIds are never reused, so no tab should try to restore this source again.
+        window.purgeSeries(refs, new RunSource(runId));
+        sourceRemoved.accept(new RunSource(runId), runInfo.getRunName());
 
         // Clear by UID, not session key: the session has already left the session
         // manager, so key-based lookup cannot reach these entries any more.

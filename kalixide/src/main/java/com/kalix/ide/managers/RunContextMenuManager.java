@@ -11,11 +11,15 @@ import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 
 import javax.swing.JFrame;
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
+import javax.swing.JSeparator;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -30,7 +34,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -72,6 +78,10 @@ public class RunContextMenuManager {
     // Top-level category nodes that support "Remove all" on right-click (e.g. "Current runs",
     // "Run library", "Loaded datasets"). Set by the owner via setRemovableCategories.
     private final Set<DefaultMutableTreeNode> removableCategories = new HashSet<>();
+
+    // Menus for node kinds this manager doesn't know (e.g. aggregates): user object -> menu,
+    // or null for none. Set by the owner via setNodeMenuProvider.
+    private Function<Object, JPopupMenu> nodeMenuProvider = userObject -> null;
 
     /**
      * Represents run status for context menu decisions.
@@ -228,12 +238,79 @@ public class RunContextMenuManager {
                     contextMenu.show(runTree, e.getX(), e.getY());
                 } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                     datasetMenu.show(runTree, e.getX(), e.getY());
+                } else if (nodeMenuProvider.apply(userObject) instanceof JPopupMenu menu) {
+                    menu.show(runTree, e.getX(), e.getY());
                 } else if (removableCategories.contains(node)) {
                     removeAllItem.setEnabled(countRemovableChildren(node) > 0);
                     categoryMenu.show(runTree, e.getX(), e.getY());
                 }
             }
         });
+    }
+
+    /** A menu entry shown only while {@code applies} holds. */
+    public sealed interface OptionalEntry permits OptionalItem, OptionalSubmenu {
+        String label();
+
+        BooleanSupplier applies();
+    }
+
+    /** A menu item shown only while {@code applies} holds. */
+    public record OptionalItem(String label, Runnable action, BooleanSupplier applies)
+        implements OptionalEntry {
+    }
+
+    /** A submenu of {@code items}, shown only while {@code applies} holds. */
+    public record OptionalSubmenu(String label, List<SubmenuItem> items, BooleanSupplier applies)
+        implements OptionalEntry {
+    }
+
+    /** An item of an {@link OptionalSubmenu}. */
+    public record SubmenuItem(String label, Runnable action) {
+    }
+
+    /**
+     * Adds {@code items} and a separator after them; returns what updates their visibility
+     * when the menu opens.
+     */
+    private static Runnable addOptionalBlock(JPopupMenu menu, List<? extends OptionalEntry> items) {
+        List<JMenuItem> menuItems = new ArrayList<>();
+        for (OptionalEntry item : items) {
+            JMenuItem menuItem = switch (item) {
+                case OptionalItem single -> {
+                    JMenuItem m = new JMenuItem(single.label());
+                    m.addActionListener(e -> single.action().run());
+                    yield m;
+                }
+                case OptionalSubmenu submenu -> {
+                    JMenu m = new JMenu(submenu.label());
+                    for (SubmenuItem child : submenu.items()) {
+                        JMenuItem childItem = new JMenuItem(child.label());
+                        childItem.addActionListener(e -> child.action().run());
+                        m.add(childItem);
+                    }
+                    yield m;
+                }
+            };
+            menu.add(menuItem);
+            menuItems.add(menuItem);
+        }
+        JSeparator separator = new JSeparator();
+        menu.add(separator);
+        return () -> {
+            boolean any = false;
+            for (int i = 0; i < items.size(); i++) {
+                boolean show = items.get(i).applies().getAsBoolean();
+                menuItems.get(i).setVisible(show);
+                any |= show;
+            }
+            separator.setVisible(any);
+        };
+    }
+
+    /** Supplies the right-click menu for node kinds this manager doesn't handle itself. */
+    public void setNodeMenuProvider(Function<Object, JPopupMenu> provider) {
+        this.nodeMenuProvider = provider;
     }
 
     /**
@@ -264,15 +341,35 @@ public class RunContextMenuManager {
     }
 
     /**
-     * Sets up the context menu for the outputs tree: expand/collapse, and the two
-     * "Show" actions that fold the tree back to what is checked or selected. Every item
-     * is a view/state action (ADR-0002 §1) and delegates to the caller.
+     * Sets up the context menu for the outputs tree: the {@code contextItems} and
+     * {@code createItems} blocks, then the view/state block (ADR-0002 §1). Optional items
+     * are hidden when they don't apply, and a block with none showing loses its separator
+     * (§4). All items delegate to their callbacks.
      */
-    public void setupOutputsTreeContextMenu(Runnable expandAllCallback,
+    public void setupOutputsTreeContextMenu(List<OptionalItem> contextItems,
+                                            List<OptionalEntry> createItems,
+                                            Runnable expandAllCallback,
                                             Runnable collapseAllCallback,
                                             Runnable showCheckedCallback,
                                             Runnable showSelectedCallback) {
         JPopupMenu contextMenu = new JPopupMenu();
+        List<Runnable> refreshers = new ArrayList<>();
+        refreshers.add(addOptionalBlock(contextMenu, contextItems));
+        refreshers.add(addOptionalBlock(contextMenu, createItems));
+        contextMenu.addPopupMenuListener(new PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+                refreshers.forEach(Runnable::run);
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {
+            }
+
+            @Override
+            public void popupMenuCanceled(PopupMenuEvent e) {
+            }
+        });
 
         JMenuItem expandAllItem = new JMenuItem("Expand all");
         expandAllItem.addActionListener(e -> expandAllCallback.run());
