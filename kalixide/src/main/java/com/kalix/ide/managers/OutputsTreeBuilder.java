@@ -74,7 +74,7 @@ public class OutputsTreeBuilder {
     private final LabelResolver labelResolver;  // Projects refs to display labels
 
     // Filter state
-    private String filterText = "";
+    private SeriesFilter filter = SeriesFilter.NONE;
     private List<TreePath> preFilterExpansionState = null;
 
     /**
@@ -101,15 +101,11 @@ public class OutputsTreeBuilder {
     }
 
     /**
-     * Sets the filter text. When non-empty, only nodes matching the filter
-     * (case-insensitive) and their ancestors are shown after rebuild.
+     * Sets the filter. When active, only series it matches, and their ancestors,
+     * are shown after rebuild.
      */
-    public void setFilterText(String filterText) {
-        this.filterText = (filterText == null) ? "" : filterText.trim();
-    }
-
-    public String getFilterText() {
-        return filterText;
+    public void setFilter(SeriesFilter filter) {
+        this.filter = (filter == null) ? SeriesFilter.NONE : filter;
     }
 
     /**
@@ -201,19 +197,16 @@ public class OutputsTreeBuilder {
             isDatasetTree = !selectedDatasets.isEmpty();  // Has datasets if any selected
         }
 
-        // Apply filter pruning before reload
-        pruneNonMatchingNodes(root);
-
         timeseriesTreeModel.reload();
 
         // Save pre-filter expansion state when first entering filter mode
-        if (!filterText.isEmpty() && preFilterExpansionState == null) {
+        if (filter.isActive() && preFilterExpansionState == null) {
             preFilterExpansionState = new ArrayList<>(expandedPaths);
         }
 
         // Expansion logic
         boolean switchedContext = (isDatasetTree != hadDatasetPaths);
-        if (!filterText.isEmpty()) {
+        if (filter.isActive()) {
             // Filter active - expand all to show matches in context
             for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
                 timeseriesTree.expandRow(i);
@@ -250,8 +243,9 @@ public class OutputsTreeBuilder {
         List<String> seriesNames = getSeriesNamesCallback.apply(source);
 
         if (seriesNames != null && !seriesNames.isEmpty()) {
-            seriesNames.sort(naturalCompareCallback::apply);
-            for (String seriesName : seriesNames) {
+            List<String> shown = matchingSeries(source, seriesNames);
+            shown.sort(naturalCompareCallback::apply);
+            for (String seriesName : shown) {
                 // Create standalone leaf node with showSeriesName=true (shows "ds_1 [Run_1]")
                 SeriesLeafNode leafNode = new SeriesLeafNode(seriesName, source, true);
                 DefaultMutableTreeNode node = new DefaultMutableTreeNode(leafNode);
@@ -275,16 +269,18 @@ public class OutputsTreeBuilder {
         allSources.addAll(selectedRuns);
         allSources.addAll(selectedDatasets);
 
+        boolean anyOutputs = false;
         for (Object source : allSources) {
             List<String> seriesNames = getSeriesNamesCallback.apply(source);
-            if (seriesNames != null) {
-                for (String seriesName : seriesNames) {
+            if (seriesNames != null && !seriesNames.isEmpty()) {
+                anyOutputs = true;
+                for (String seriesName : matchingSeries(source, seriesNames)) {
                     seriesAvailability.computeIfAbsent(seriesName, k -> new ArrayList<>()).add(source);
                 }
             }
         }
 
-        if (seriesAvailability.isEmpty()) {
+        if (!anyOutputs) {
             root.add(new DefaultMutableTreeNode("No outputs available from selected sources"));
             return;
         }
@@ -489,55 +485,16 @@ public class OutputsTreeBuilder {
     // ========== Filtering ==========
 
     /**
-     * Removes nodes that don't match the current filter text.
-     * Parent/intermediate nodes are kept if any descendant matches.
-     * Called after the tree is fully built but before reload().
+     * The series of {@code source} the filter shows (all of them, as is, when no filter is
+     * active). Each is matched on its full name and the source label, so patterns can span
+     * levels ({@code inflow_*.ds_1}); the label is resolved once per source.
      */
-    private void pruneNonMatchingNodes(DefaultMutableTreeNode parent) {
-        if (filterText.isEmpty()) return;
-
-        String lowerFilter = filterText.toLowerCase();
-
-        // Work backwards to avoid index shifting during removal
-        for (int i = parent.getChildCount() - 1; i >= 0; i--) {
-            DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
-            if (!nodeMatchesFilter(child)) {
-                parent.remove(i);
-            } else if (child.getUserObject() instanceof String && !isSpecialMessageNode(child)) {
-                // If this node's own text matches, keep all descendants intact
-                String nodeText = child.getUserObject().toString().toLowerCase();
-                if (!nodeText.contains(lowerFilter)) {
-                    // Node kept only because of matching descendants - prune non-matching children
-                    pruneNonMatchingNodes(child);
-                    if (child.getChildCount() == 0) {
-                        parent.remove(i);
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Checks if a node or any of its descendants matches the current filter.
-     * Matches against display text (toString()), case-insensitive.
-     */
-    private boolean nodeMatchesFilter(DefaultMutableTreeNode node) {
-        if (filterText.isEmpty()) return true;
-
-        String lowerFilter = filterText.toLowerCase();
-        Object userObject = node.getUserObject();
-
-        if (userObject != null && userObject.toString().toLowerCase().contains(lowerFilter)) {
-            return true;
-        }
-
-        // Check descendants
-        for (int i = 0; i < node.getChildCount(); i++) {
-            if (nodeMatchesFilter((DefaultMutableTreeNode) node.getChildAt(i))) {
-                return true;
-            }
-        }
-        return false;
+    private List<String> matchingSeries(Object source, List<String> seriesNames) {
+        if (!filter.isActive()) return seriesNames;
+        String sourceLabel = labelResolver.sourceLabel(refForSource.apply(seriesNames.get(0), source));
+        return seriesNames.stream()
+            .filter(seriesName -> filter.matches(seriesName, sourceLabel))
+            .collect(Collectors.toCollection(ArrayList::new));
     }
 
     // ========== Inner Classes ==========

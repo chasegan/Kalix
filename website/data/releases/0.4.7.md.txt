@@ -1,0 +1,12 @@
+---
+version: "0.4.7"
+date: TBD
+prerelease: false
+assets:
+  Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.7/KalixIDE-Windows-0.4.7-Portable.zip"
+  macOS: "https://github.com/chasegan/Kalix/releases/download/v0.4.7/KalixIDE-macOS-0.4.7-Portable.zip"
+  Linux: "https://github.com/chasegan/Kalix/releases/download/v0.4.7/KalixIDE-Linux-0.4.7-Portable.zip"
+pip: "pip install kalix==0.4.7"
+---
+
+- New! [Filter the Run Manager's Timeseries tree](https://kalix.org/docs/ide/#filtering-the-timeseries-tree) with wildcards (`inflow_*.ds_1`), regular expressions (`/…/`) and exclusions (`!dummy_*`). Terms separated by spaces must all match, and each is matched against the whole series name or its source.

@@ -1,5 +1,6 @@
 package com.kalix.ide.managers;
 
+import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.RunSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,14 @@ class OutputsTreeBuilderTest {
         source -> new ArrayList<>(OUTPUTS.getOrDefault(source, List.of())),
         String::compareTo,
         (seriesName, source) -> new RunSeries((Long) source, seriesName),
-        ref -> ref.toString());
+        new LabelResolver() {
+            @Override public String labelFor(SeriesRef ref) { return ref.toString(); }
+            @Override public String sourceLabel(SeriesRef ref) { return "Run_" + ((RunSeries) ref).runId(); }
+        });
+
+    private void filter(String text) throws SeriesFilter.SyntaxException {
+        builder.setFilter(SeriesFilter.parse(text));
+    }
 
     private Set<SeriesRef> refsInTree() {
         Set<SeriesRef> refs = new HashSet<>();
@@ -64,17 +72,37 @@ class OutputsTreeBuilderTest {
     }
 
     @Test
-    void filterNarrowsTheTreeButNotWhatSourcesOffer() {
-        builder.setFilterText("node.b");  // matches nothing: segments are separate nodes
+    void filterNarrowsTheTreeButNotWhatSourcesOffer() throws Exception {
+        filter("nomatch");
         builder.updateTree(List.of(1L, 2L), List.of());
         assertTrue(refsInTree().isEmpty(), "filter should have hidden every series");
 
-        builder.setFilterText("b");
+        filter("node.b");  // matches across tree levels
         builder.updateTree(List.of(1L, 2L), List.of());
         assertEquals(Set.of(new RunSeries(1L, "node.b.ds_1")), refsInTree());
 
         // Hidden series are still offered — this is what keeps them plotted.
         assertEquals(3, builder.availableRefs(List.of(1L, 2L)).size());
+    }
+
+    @Test
+    void filterMatchesSourceLabelsAndExcludes() throws Exception {
+        filter("Run_2");
+        builder.updateTree(List.of(1L, 2L), List.of());
+        assertEquals(Set.of(new RunSeries(2L, "node.a.ds_1")), refsInTree());
+
+        filter("!Run_2");
+        builder.updateTree(List.of(1L, 2L), List.of());
+        assertEquals(Set.of(new RunSeries(1L, "node.a.ds_1"), new RunSeries(1L, "node.b.ds_1")),
+                     refsInTree());
+
+        filter("node.*.ds_1 !a");
+        builder.updateTree(List.of(1L, 2L), List.of());
+        assertEquals(Set.of(new RunSeries(1L, "node.b.ds_1")), refsInTree());
+
+        builder.setFilter(SeriesFilter.NONE);
+        builder.updateTree(List.of(1L, 2L), List.of());
+        assertEquals(3, refsInTree().size());
     }
 
     @Test

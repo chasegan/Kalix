@@ -106,6 +106,26 @@ It is a run manager. Yes.
 
 ![](../assets/docs-using-ide/image_19.png)
 
+### Filtering the Timeseries tree
+
+Type in the box above the **Timeseries** tree to show only the series you want. Each series is matched on its full name (such as `node.inflow_3.ds_1`) and on its source (such as `Run_2` or `flows.csv`). Case is ignored.
+
+| You type | Shows |
+|----------|-------|
+| `inflow` | Every series whose name or source contains `inflow`. |
+| `inflow_*.ds_1` | `ds_1` of every node named `inflow_…`. `*` matches anything, dots included; `?` matches one character. |
+| `inflow ds_1` | `ds_1` of every inflow node. Spaces separate terms, and a series shows only if it matches all of them. |
+| `*.inflow_* !dummy_*` | Every inflow node except the dummies. `!` excludes whatever a term matches. `!dummy_*` on its own shows everything else. |
+| `"qu art"` or `qu\ art` | A name with a space in it. Quotes, or a backslash before the space, keep it one term. Wildcards still work inside quotes. |
+| `/inflow_[34]\.ds_1$/` | A regular expression, written between slashes. It may contain spaces; write `\/` for a slash. |
+| `Run_2` | Series from any run whose name contains `Run_2`, so `Run_20` too. `/^Run_2$/` picks Run_2 alone, and `Run_2 inflow` narrows to its inflow series. |
+
+A term with `*` or `?` must match whole parts of the name, between dots: `inflow_*.ds_1` matches `node.inflow_3.ds_1` but not `node.inflow_3.ds_10`. A term without them matches anywhere, as `ds_1` does in both.
+
+If the filter doesn't make sense (a quote or regular expression left open, or an unclosed bracket in a regular expression), the box turns red and its tooltip says why. The tree keeps the last filter that worked until you fix it.
+
+The filter only changes what the tree shows. Ticking a folder while filtering ticks just the series you can see, which makes it quick to plot every match. Series you ticked before filtering stay plotted even when the filter hides them.
+
 ## Docking
 
 Fn+F9 reveals docking capabilities in the main window. Holding Fn+F9, look for the blue handles that appear in the top left of the schematic editor and text editors. This feature is in alpha. Good luck 😄.
