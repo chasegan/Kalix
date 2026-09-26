@@ -9,7 +9,7 @@
 use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
 
-const ALL: &str = "node.paddock.depletion\nnode.paddock.orders_en_route\nnode.paddock.order\nnode.paddock.order_due\nnode.paddock.usflow\nnode.paddock.ks\nnode.paddock.kc\nnode.paddock.et\nnode.paddock.et_vol\nnode.paddock.rain\nnode.paddock.rain_vol\nnode.paddock.evap\nnode.paddock.excess\nnode.paddock.supply\nnode.paddock.escape\nnode.paddock.bypass\nnode.paddock.dsflow\nnode.paddock.ds_1";
+const ALL: &str = "node.paddock.depletion\nnode.paddock.orders_en_route\nnode.paddock.order\nnode.paddock.order_due\nnode.paddock.usflow\nnode.paddock.ks\nnode.paddock.kc\nnode.paddock.et\nnode.paddock.et_vol\nnode.paddock.rain\nnode.paddock.rain_vol\nnode.paddock.intercepted\nnode.paddock.evap\nnode.paddock.excess\nnode.paddock.supply\nnode.paddock.escape\nnode.paddock.bypass\nnode.paddock.dsflow\nnode.paddock.ds_1";
 
 /// A supply storage above the field, `river_lag` steps of routing between,
 /// and a gauge below. `{FIELD}` is the field's properties after area and capacity.
@@ -45,6 +45,7 @@ type = field
 loc = 0, 20
 area = 2
 capacity = 100
+interception = 0
 {field}
 ds_1 = outlet
 
@@ -90,11 +91,12 @@ fn assert_balance_closes(model: &mut Model) {
         s(model, "depletion"), s(model, "rain_vol"), s(model, "et_vol"), s(model, "excess"),
         s(model, "supply"), s(model, "escape"), s(model, "bypass"), s(model, "usflow"), s(model, "ds_1"));
     let area = 2.0;
+    let intercepted = s(model, "intercepted");
     for t in 1..dep.len() {
         // depletion is recorded at the end of the step, so the change in water held over step t
         // is -(dep[t] - dep[t-1]) x area
         let d_held = -(dep[t] - dep[t - 1]) * area;
-        assert_close(rain[t] + supply[t] - escape[t], et[t] + excess[t] + d_held, &format!("soil balance on step {t}"));
+        assert_close(rain[t] - intercepted[t] * area + supply[t] - escape[t], et[t] + excess[t] + d_held, &format!("soil balance on step {t}"));
         assert_close(usflow[t], supply[t] + bypass[t], &format!("usflow on step {t}"));
         assert_close(ds_1[t], bypass[t] + excess[t], &format!("ds_1 on step {t}"));
     }
@@ -226,6 +228,24 @@ fn test_depletion_is_the_end_of_step_state() {
 }
 
 #[test]
+fn test_interception_takes_the_first_of_the_rain() {
+    // Rain reaches the soil only beyond interception x evap: with evap 4 and the default 0.2,
+    // the first 0.8 mm of a day's rain is intercepted and lost. 3 mm of rain puts 2.2 on the
+    // soil; 0.5 mm is intercepted entirely.
+    let mut model = run(&rig(0, "evap = 4\nkc = 0\ninitial_depletion = 50\nrain = if(var.day.n == 1, 3, if(var.day.n == 2, 0.5, 0))").replace("interception = 0\n", ""));
+    assert_eq!(s(&mut model, "rain")[..2], [3.0, 0.5]);
+    assert_close(s(&mut model, "intercepted")[0], 0.8, "day 1");
+    assert_close(s(&mut model, "depletion")[0], 47.8, "50 - (3 - 0.8)");
+    assert_close(s(&mut model, "intercepted")[1], 0.5, "day 2: all of it");
+    assert_close(s(&mut model, "depletion")[1], 47.8, "nothing reached the soil");
+    assert_balance_closes(&mut model);
+    // Written as 0, rain is taken as given
+    let mut model = run(&rig(0, "evap = 4\nkc = 0\ninitial_depletion = 50\nrain = 3"));
+    assert_eq!(s(&mut model, "intercepted")[0], 0.0);
+    assert_eq!(s(&mut model, "depletion")[0], 47.0);
+}
+
+#[test]
 fn test_field_validation() {
     assert!(load_err(&rig(0, "capacity = 0")).contains("capacity must be a positive number"));
     assert!(load_err(&rig(0, "efficiency = 0")).contains("efficiency must be greater than 0"));
@@ -241,14 +261,14 @@ fn test_field_round_trips_every_property() {
     let ini = rig(0, "evap = 4\nrain = 1\nkc = 0.9\np = 0.6\ninitial_depletion = 20\nefficiency = 0.8\norder = 5");
     let model = IniModelIO::read_model_string(&ini).expect("model should load");
     let rendered = IniModelIO::model_to_string(&model);
-    for line in ["area = 2", "capacity = 100", "evap = 4", "rain = 1", "kc = 0.9", "p = 0.6", "initial_depletion = 20", "efficiency = 0.8", "order = 5"] {
+    for line in ["area = 2", "capacity = 100", "evap = 4", "rain = 1", "kc = 0.9", "p = 0.6", "initial_depletion = 20", "efficiency = 0.8", "interception = 0", "order = 5"] {
         assert!(rendered.contains(line), "'{line}' survives save:\n{rendered}");
     }
     let reloaded = IniModelIO::read_model_string(&rendered).expect("canonical render should re-load");
     assert_eq!(IniModelIO::model_to_string(&reloaded), rendered);
     // Defaults are not written
-    let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig(0, "")).unwrap());
-    for key in ["p =", "efficiency =", "initial_depletion ="] {
+    let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig(0, "").replace("interception = 0\n", "")).unwrap());
+    for key in ["p =", "efficiency =", "interception =", "initial_depletion ="] {
         assert!(!plain.contains(key), "default '{key}' is not written:\n{plain}");
     }
 }

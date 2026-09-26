@@ -38,6 +38,7 @@ pub struct FieldNode {
     pub capacity: f64,              // mm the root zone holds between full and empty
     pub initial_depletion: f64,     // mm
     pub efficiency: f64,            // share of supply that reaches the soil; the rest escapes
+    pub interception: f64,          // fraction of evap that rain must exceed to reach the soil (FAO-56: 0.2)
     pub rain_input: DynamicInput,   // mm
     pub evap_input: DynamicInput,   // mm, the reference the kc values were derived for
     pub kc_input: DynamicInput,     // crop coefficient. PHASE1-PLACEHOLDER: one crop, on the field
@@ -68,6 +69,7 @@ pub struct FieldNode {
     recorder_idx_et_vol: Option<usize>,
     recorder_idx_rain: Option<usize>,
     recorder_idx_rain_vol: Option<usize>,
+    recorder_idx_intercepted: Option<usize>,
     recorder_idx_evap: Option<usize>,
     recorder_idx_excess: Option<usize>,
     recorder_idx_supply: Option<usize>,
@@ -85,6 +87,7 @@ impl FieldNode {
         Self {
             name: "".to_string(),
             efficiency: 1.0,
+            interception: 0.2,
             p: 0.5,
             rain_input: DynamicInput::default(),
             evap_input: DynamicInput::default(),
@@ -112,6 +115,9 @@ impl Node for FieldNode {
         }
         if !(self.efficiency > 0.0 && self.efficiency <= 1.0) {
             return Err(format!("Error in node '{}'. efficiency must be greater than 0 and at most 1, got {}.", self.name, self.efficiency));
+        }
+        if !(self.interception >= 0.0 && self.interception.is_finite()) {
+            return Err(format!("Error in node '{}'. interception must be a non-negative number, got {}.", self.name, self.interception));
         }
         if !(self.p >= 0.0 && self.p < 1.0) {
             return Err(format!("Error in node '{}'. p must be at least 0 and less than 1, got {}.", self.name, self.p));
@@ -145,6 +151,7 @@ impl Node for FieldNode {
         self.recorder_idx_et_vol = recorder(data_cache, &self.name, "et_vol");
         self.recorder_idx_rain = recorder(data_cache, &self.name, "rain");
         self.recorder_idx_rain_vol = recorder(data_cache, &self.name, "rain_vol");
+        self.recorder_idx_intercepted = recorder(data_cache, &self.name, "intercepted");
         self.recorder_idx_evap = recorder(data_cache, &self.name, "evap");
         self.recorder_idx_excess = recorder(data_cache, &self.name, "excess");
         self.recorder_idx_supply = recorder(data_cache, &self.name, "supply");
@@ -206,8 +213,11 @@ impl Node for FieldNode {
         let et_mm = (ks * kc * evap_mm).min(self.capacity - self.depletion);
         self.depletion += et_mm;
 
-        // 3. Rain goes on the soil; what would take depletion below zero leaves as excess
-        self.depletion -= rain_mm;
+        // 3. Rain goes on the soil, less what the canopy intercepts and evaporates (FAO-56:
+        //    a share of the day's reference evapotranspiration, 0.2 by default). What would
+        //    take depletion below zero leaves as excess.
+        let intercepted_mm = rain_mm.min(self.interception * evap_mm);
+        self.depletion -= rain_mm - intercepted_mm;
         let mut excess_mm = 0.0;
         if self.depletion < 0.0 {
             excess_mm = -self.depletion;
@@ -256,6 +266,9 @@ impl Node for FieldNode {
         }
         if let Some(idx) = self.recorder_idx_evap {
             data_cache.add_value_at_index(idx, evap_mm);
+        }
+        if let Some(idx) = self.recorder_idx_intercepted {
+            data_cache.add_value_at_index(idx, intercepted_mm);
         }
         if let Some(idx) = self.recorder_idx_excess {
             data_cache.add_value_at_index(idx, excess);

@@ -51,6 +51,7 @@ ds_1 = drain
 | kc (optional) | The crop coefficient: a constant, a table on `sim.day_of_year` for a seasonal curve, or any expression. Omitted, 0. Example: `kc = table.cotton_kc(sim.day_of_year)` |
 | p (optional) | The depletion fraction: the share of `capacity` the crop can use before stress begins. Default 0.5. Example: `p = 0.65` |
 | efficiency (optional) | The share of the water supplied that reaches the soil. The rest is `escape` (delivery loss, tailwater the field does not keep) and leaves the model here. Readable as `this.efficiency`. Default 1. Example: `efficiency = 0.8` |
+| interception (optional) | Rain reaches the soil only beyond this fraction of the day's `evap`; the rest wets the canopy and evaporates (`intercepted`). Default 0.2, FAO-56's interception loss. Write `0` to take rain as given. Example: `interception = 0.2` |
 | initial\_depletion (optional) | The depletion at the start of the run [mm]. Default 0, a full profile. Example: `initial_depletion = 20` |
 | order (optional) | The irrigation rule: the order the field places upstream each step [ML]. An expression; see [The irrigation rule](#the-irrigation-rule). Omitted, the field never orders: it is rain-fed. |
 | ds\_1 (optional) | Name of the downstream node. `bypass` and `excess` drain down it. Example: `ds_1 = drain` |
@@ -70,6 +71,7 @@ ds_1 = drain
 | et\_vol | Evapotranspiration [ML]: `et × area` |
 | rain | The value of the `rain` expression [mm] |
 | rain\_vol | Rain on the field [ML]: `rain × area` |
+| intercepted | Rain that did not reach the soil [mm]: `min(rain, interception × evap)` |
 | evap | The value of the `evap` expression [mm] |
 | excess | Rain the soil could not hold [ML], drained down `ds_1` |
 | supply | The water the field takes from what arrives [ML] |
@@ -88,7 +90,8 @@ is deciding when to top it up. Depths are in mm over the cropped area; P is rain
 reference evapotranspiration.
 
 1. **Rain that counts.** Some rain never reaches the soil: it wets leaves and evaporates.
-   Effective rain is P_e = max(0, P − 0.2·E₀) (FAO-56). *This version takes rain as given.*
+   Effective rain is P_e = max(0, P − 0.2·E₀) (FAO-56); the 0.2 is `interception`, and
+   P − P_e is `intercepted`.
 2. **The bucket.** The root zone is a column of soil of depth Z_r. Between full (field capacity)
    and empty (wilting point) it holds a depth of water TAW = θ_cap · Z_r, where θ_cap is the
    soil's water-holding capacity as a fraction (0.1–0.3 is typical). In Kalix this is one
@@ -135,19 +138,20 @@ The field works in mm over its area: 1 mm × 1 km² = 1 ML. In this order:
    has used less than `p` of the capacity, and less and less as the soil dries beyond that
    (FAO-56, equation 84).
 2. **Evapotranspiration.** `et = ks × kc × evap`, no more than the water the soil holds.
-3. **Rain** goes on the soil. What would take the depletion below zero leaves as `excess`.
+3. **Rain** goes on the soil, less `intercepted = min(rain, interception × evap)`. What would
+   take the depletion below zero leaves as `excess`.
 4. **Irrigation.** The field takes from what arrives no more than the soil has room for after the
    rain, allowing for the share that escapes: `supply = min(usflow, room / efficiency)`, of which
    `escape = supply × (1 − efficiency)` and the rest infiltrates. What it does not take is
    `bypass`. So irrigation never overfills the soil, whatever was ordered.
 
 Rain goes on before irrigation so that a day's rain reduces what the field takes, rather than
-running off a profile that irrigation has just filled. Effective rainfall is `rain_vol − excess`.
+running off a profile that irrigation has just filled. Effective rainfall is `rain − intercepted`.
 
 **The balance closes every step, to machine precision:**
 
-`rain_vol + (supply − escape) = et_vol + excess + Δ(water held)`, with `usflow = supply + bypass` and
-`ds_1 = bypass + excess`. Every term is a result, so the balance can be replayed line by line.
+`(rain − intercepted) × area + (supply − escape) = et_vol + excess + Δ(water held)`, with
+`usflow = supply + bypass` and `ds_1 = bypass + excess`. Each term is a result or follows from one.
 
 #### The irrigation rule
 
@@ -203,7 +207,7 @@ field is no part of the travel time to anything below it.
 #### Mass balance
 
 Only what the field keeps and loses leaves the model at the field: the water the soil holds,
-evapotranspiration, and escape. `bypass` and `excess` are still in the model, on `ds_1`.
+evapotranspiration, intercepted rain, and escape. `bypass` and `excess` are still in the model, on `ds_1`.
 
 ## References
 
