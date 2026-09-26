@@ -52,6 +52,7 @@ ds_1 = drain
 | p (optional) | The depletion fraction: the share of `capacity` the crop can use before stress begins. Default 0.5. Example: `p = 0.65` |
 | efficiency (optional) | The share of the water supplied that reaches the soil. The rest is `escape` (delivery loss, tailwater the field does not keep) and leaves the model here. Readable as `this.efficiency`. Default 1. Example: `efficiency = 0.8` |
 | interception (optional) | Rain reaches the soil only beyond this fraction of the day's `evap`; the rest wets the canopy and evaporates (`intercepted`). Default 0.2, FAO-56's interception loss. Write `0` to take rain as given. Example: `interception = 0.2` |
+| return\_fraction (optional) | The share of the field's runoff (`excess`) that survives the farm's drains and goes on down `ds_1` as `return_flow`; the rest is lost from the model at the field. Default 1, nothing lost. Set to 0 when runoff is caught and returned to the farm storage instead; see [Returning runoff to the farm storage](#returning-runoff-to-the-farm-storage). Example: `return_fraction = 0.8` |
 | initial\_depletion (optional) | The depletion at the start of the run [mm]. Default 0, a full profile. Example: `initial_depletion = 20` |
 | order (optional) | The irrigation rule: the order the field places upstream each step [ML]. An expression; see [The irrigation rule](#the-irrigation-rule). Omitted, the field never orders: it is rain-fed. |
 | ds\_1 (optional) | Name of the downstream node. `bypass` and `excess` drain down it. Example: `ds_1 = drain` |
@@ -76,8 +77,9 @@ ds_1 = drain
 | excess | Rain the soil could not hold [ML], drained down `ds_1` |
 | supply | The water the field takes from what arrives [ML] |
 | escape | The share of `supply` that does not reach the soil [ML], which leaves the model here |
-| bypass | The water that arrives and is not taken [ML], passed down `ds_1` |
-| dsflow | Downstream flow [ML]: `bypass + excess` |
+| bypass | The water that arrives and is not taken [ML], passed down `ds_1` whole: the irrigator would have refused it at the pump |
+| return\_flow | The runoff that goes on down `ds_1` [ML]: `return_fraction × excess`. The rest of the excess is lost |
+| dsflow | Downstream flow [ML]: `bypass + return_flow` |
 | ds\_1 | Downstream flow on link ds\_1 [ML], the same |
 | area | The declared `area` (a static property) |
 | efficiency | The declared `efficiency` (a static property) |
@@ -151,7 +153,8 @@ running off a profile that irrigation has just filled. Effective rainfall is `ra
 **The balance closes every step, to machine precision:**
 
 `(rain − intercepted) × area + (supply − escape) = et_vol + excess + Δ(water held)`, with
-`usflow = supply + bypass` and `ds_1 = bypass + excess`. Each term is a result or follows from one.
+`usflow = supply + bypass` and `ds_1 = bypass + return_flow`. Each term is a result or follows from
+one; the runoff lost is `excess − return_flow`.
 
 #### The irrigation rule
 
@@ -204,10 +207,49 @@ The links leaving a field are not regulated. A field's `ds_1` carries bypass and
 the river: it is a drain, not a delivery path. No order travels up it, and the travel time to the
 field is no part of the travel time to anything below it.
 
+#### Returning runoff to the farm storage
+
+Runoff has two fates. Where it drains to the river, `return_fraction` says how much of it gets
+there, and it goes down `ds_1` with the bypass. Where the farm catches it and pumps it back to the
+storage that supplies the field, the storage is defined above the field, and a Kalix model file
+reads downstream, so no link can carry water back up to it. The loop is written with a one-step
+delay, which any loop on a fixed timestep has anyway: set `return_fraction = 0`, so that the field
+loses its runoff, and have an inflow node above the storage recreate the caught share from the
+previous step:
+
+```ini
+[node.returns]
+type = inflow
+loc = 20, 10
+inflow = 0.8 * node.paddock.excess[-1, 0]   ; 80% of yesterday's runoff, caught and pumped back
+ds_1 = ofs
+
+[node.ofs]
+type = storage
+...
+ds_1 = paddock
+
+[node.paddock]
+type = field
+...
+return_fraction = 0
+ds_1 = river                                 ; bypass goes on; runoff does not
+```
+
+Two things to know. The offset is required: without it the run stops with "no value yet", because
+today's excess does not exist when the node above the field runs; nothing can build a same-step
+loop. And use `return_fraction = 0` with the loop, not the fraction you write at the inflow node:
+with both, the same water would go down `ds_1` to the river and be recreated at the storage.
+
+In the mass balance report the loop appears as a loss at the field and a gain of the same size at
+the inflow node, one step later; the two pair up by name. The last step's runoff is in transit when
+the run ends.
+
 #### Mass balance
 
 Only what the field keeps and loses leaves the model at the field: the water the soil holds,
-evapotranspiration, intercepted rain, and escape. `bypass` and `excess` are still in the model, on `ds_1`.
+evapotranspiration, intercepted rain, escape, and the runoff that does not survive the drains.
+`bypass` and `return_flow` are still in the model, on `ds_1`.
 
 ## References
 

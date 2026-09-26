@@ -39,6 +39,7 @@ pub struct FieldNode {
     pub initial_depletion: f64,     // mm
     pub efficiency: f64,            // share of supply that reaches the soil; the rest escapes
     pub interception: f64,          // fraction of evap that rain must exceed to reach the soil (FAO-56: 0.2)
+    pub return_fraction: f64,       // share of the excess that survives the drains and goes down ds_1; the rest is lost
     pub rain_input: DynamicInput,   // mm
     pub evap_input: DynamicInput,   // mm, the reference the kc values were derived for
     pub kc_input: DynamicInput,     // crop coefficient. PHASE1-PLACEHOLDER: one crop, on the field
@@ -75,6 +76,7 @@ pub struct FieldNode {
     recorder_idx_supply: Option<usize>,
     recorder_idx_escape: Option<usize>,
     recorder_idx_bypass: Option<usize>,
+    recorder_idx_return_flow: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
 }
@@ -88,6 +90,7 @@ impl FieldNode {
             name: "".to_string(),
             efficiency: 1.0,
             interception: 0.2,
+            return_fraction: 1.0,
             p: 0.5,
             rain_input: DynamicInput::default(),
             evap_input: DynamicInput::default(),
@@ -118,6 +121,9 @@ impl Node for FieldNode {
         }
         if !(self.interception >= 0.0 && self.interception.is_finite()) {
             return Err(format!("Error in node '{}'. interception must be a non-negative number, got {}.", self.name, self.interception));
+        }
+        if !(self.return_fraction >= 0.0 && self.return_fraction <= 1.0) {
+            return Err(format!("Error in node '{}'. return_fraction must be between 0 and 1, got {}.", self.name, self.return_fraction));
         }
         if !(self.p >= 0.0 && self.p < 1.0) {
             return Err(format!("Error in node '{}'. p must be at least 0 and less than 1, got {}.", self.name, self.p));
@@ -157,6 +163,7 @@ impl Node for FieldNode {
         self.recorder_idx_supply = recorder(data_cache, &self.name, "supply");
         self.recorder_idx_escape = recorder(data_cache, &self.name, "escape");
         self.recorder_idx_bypass = recorder(data_cache, &self.name, "bypass");
+        self.recorder_idx_return_flow = recorder(data_cache, &self.name, "return_flow");
         self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
         self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
 
@@ -232,10 +239,14 @@ impl Node for FieldNode {
         self.depletion -= (supply - escape) / self.area;
         let bypass = self.usflow - supply;
 
-        // Water leaves down ds_1. mbal is emitted minus received, as on a storage:
-        // rain, evapotranspiration, escape and the change in water held all show through it.
+        // Water leaves down ds_1: the bypass, which the irrigator did not take, and the share of
+        // the excess that survives the drains, return_flow. The rest of the excess is lost and
+        // leaves the model here. mbal is emitted minus received, as on a storage: rain,
+        // evapotranspiration, escape, the lost runoff and the change in water held all show
+        // through it.
         let excess = excess_mm * self.area;
-        self.dsflow_primary = bypass + excess;
+        let return_flow = excess * self.return_fraction;
+        self.dsflow_primary = bypass + return_flow;
         self.mbal += self.dsflow_primary - self.usflow;
 
         // Record results. depletion is the state at the end of the step, as a storage's
@@ -281,6 +292,9 @@ impl Node for FieldNode {
         }
         if let Some(idx) = self.recorder_idx_bypass {
             data_cache.add_value_at_index(idx, bypass);
+        }
+        if let Some(idx) = self.recorder_idx_return_flow {
+            data_cache.add_value_at_index(idx, return_flow);
         }
         if let Some(idx) = self.recorder_idx_dsflow {
             data_cache.add_value_at_index(idx, self.dsflow_primary);

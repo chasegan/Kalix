@@ -399,6 +399,7 @@
         "supply",
         "escape",
         "bypass",
+        "return_flow",
         "dsflow",
         "ds_1",
         "area",
@@ -417,6 +418,7 @@
         "p",
         "efficiency",
         "interception",
+        "return_fraction",
         "initial_depletion",
         "order"
       ],
@@ -471,6 +473,12 @@
           "type": "number",
           "min": 0,
           "description": "Rain reaches the soil only beyond this fraction of the day's evap; the rest is intercepted and lost (default 0.2, FAO-56)"
+        },
+        "return_fraction": {
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "description": "Share of the excess (runoff) that goes on down ds_1 as return_flow; the rest is lost from the model at the field (default 1: nothing lost)"
         },
         "initial_depletion": {
           "type": "number",
