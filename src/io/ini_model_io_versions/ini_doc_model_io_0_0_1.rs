@@ -1115,6 +1115,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "initial_depletion" {
                             n.initial_depletion = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: initial_depletion must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
+                        } else if name_lower == "interception" {
+                            n.interception = v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: interception must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
+                        } else if name_lower == "return_fraction" {
+                            n.return_fraction = v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: return_fraction must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
                         } else if name_lower == "efficiency" {
                             n.efficiency = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: efficiency must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
@@ -1751,6 +1757,8 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "kc", &n.kc_input.to_string());
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "p", &format_f64(n.p), "0.5");
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "efficiency", &format_f64(n.efficiency), "1");
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "interception", &format_f64(n.interception), "0.2");
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "return_fraction", &format_f64(n.return_fraction), "1");
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "order", &n.order_input.to_string());
             }
         }

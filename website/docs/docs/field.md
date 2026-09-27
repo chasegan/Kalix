@@ -51,6 +51,8 @@ ds_1 = drain
 | kc (optional) | The crop coefficient: a constant, a table on `sim.day_of_year` for a seasonal curve, or any expression. Omitted, 0. Example: `kc = table.cotton_kc(sim.day_of_year)` |
 | p (optional) | The depletion fraction: the share of `capacity` the crop can use before stress begins. Default 0.5. Example: `p = 0.65` |
 | efficiency (optional) | The share of the water supplied that reaches the soil. The rest is `escape` (delivery loss, tailwater the field does not keep) and leaves the model here. Readable as `this.efficiency`. Default 1. Example: `efficiency = 0.8` |
+| interception (optional) | Rain reaches the soil only beyond this fraction of the day's `evap`; the rest wets the canopy and evaporates (`intercepted`). Default 0.2, FAO-56's interception loss. Write `0` to take rain as given. Example: `interception = 0.2` |
+| return\_fraction (optional) | The share of the field's runoff (`excess`) that survives the farm's drains and goes on down `ds_1` as `return_flow`; the rest is lost from the model at the field. Default 1, nothing lost. Set to 0 when runoff is caught and returned to the farm storage instead; see [Returning runoff to the farm storage](#returning-runoff-to-the-farm-storage). Example: `return_fraction = 0.8` |
 | initial\_depletion (optional) | The depletion at the start of the run [mm]. Default 0, a full profile. Example: `initial_depletion = 20` |
 | order (optional) | The irrigation rule: the order the field places upstream each step [ML]. An expression; see [The irrigation rule](#the-irrigation-rule). Omitted, the field never orders: it is rain-fed. |
 | ds\_1 (optional) | Name of the downstream node. `bypass` and `excess` drain down it. Example: `ds_1 = drain` |
@@ -70,38 +72,89 @@ ds_1 = drain
 | et\_vol | Evapotranspiration [ML]: `et × area` |
 | rain | The value of the `rain` expression [mm] |
 | rain\_vol | Rain on the field [ML]: `rain × area` |
+| intercepted | Rain that did not reach the soil [mm]: `min(rain, interception × evap)` |
 | evap | The value of the `evap` expression [mm] |
 | excess | Rain the soil could not hold [ML], drained down `ds_1` |
 | supply | The water the field takes from what arrives [ML] |
 | escape | The share of `supply` that does not reach the soil [ML], which leaves the model here |
-| bypass | The water that arrives and is not taken [ML], passed down `ds_1` |
-| dsflow | Downstream flow [ML]: `bypass + excess` |
+| bypass | The water that arrives and is not taken [ML], passed down `ds_1` whole: the irrigator would have refused it at the pump |
+| return\_flow | The runoff that goes on down `ds_1` [ML]: `return_fraction × excess`. The rest of the excess is lost |
+| dsflow | Downstream flow [ML]: `bypass + return_flow` |
 | ds\_1 | Downstream flow on link ds\_1 [ML], the same |
 | area | The declared `area` (a static property) |
 | efficiency | The declared `efficiency` (a static property) |
 
+## The crop model, from the top
+
+Think of the soil under a crop as a bucket. Each day, rain and irrigation put water in, the crop
+takes water out, and the field keeps track of how far below full the bucket is. Everything else
+is deciding when to top it up. Depths are in mm over the cropped area; P is rain and E₀ is
+reference evapotranspiration.
+
+1. **Rain that counts.** Some rain never reaches the soil: it wets leaves and evaporates.
+   Effective rain is P_e = max(0, P − 0.2·E₀) (FAO-56); the 0.2 is `interception`, and
+   P − P_e is `intercepted`.
+2. **The bucket.** The root zone is a column of soil of depth Z_r. Between full (field capacity)
+   and empty (wilting point) it holds a depth of water TAW = θ_cap · Z_r, where θ_cap is the
+   soil's water-holding capacity as a fraction (0.1–0.3 is typical). In Kalix this is one
+   number, `capacity`.
+3. **The state: depletion.** D is how far the bucket is below full, in mm. D = 0 is full and
+   D = `capacity` is empty. This is the field's `depletion`.
+4. **What the crop wants.** A well-watered crop uses E_c = K_c · E₀, where the crop coefficient
+   K_c depends on the crop and how far through its growth it is (`kc`).
+5. **What it gets when the bucket is low.** A crop drinks freely until it has used a fraction
+   `p` of the capacity, then less and less:
+   K_s = 1 if D ≤ p·TAW, otherwise (TAW − D) / ((1 − p)·TAW), and E = K_s · E_c.
+   K_s is computed from D at the start of the day (the field's `ks`). A crop whose K_s stays
+   near zero is dead: its area goes back to fallow and it orders no more water. *Later version.*
+6. **The daily balance.** With irrigation I reaching the soil:
+   D_today = D_yesterday − P_e − I + E + runoff + percolation.
+   Part of the water applied is lost on the way in, as runoff and as percolation below the
+   roots; in Kalix that share is 1 − `efficiency`, and leaves as `escape`. Whatever would push D
+   below full runs off, as `excess`.
+7. **Ordering.** The farmer keeps the bucket near a target depletion T. Each day the model works
+   out what will bring the bucket back to the target when the water arrives, counting what is
+   already on its way (`orders_en_route`), grossed up for the losses in step 6:
+   order = max(0, D − T) / efficiency × area.
+   A refill trigger holds the order back until D reaches a threshold, then fills to T. In Kalix
+   the rule is the `order` expression; see [The irrigation rule](#the-irrigation-rule).
+8. **Planting and area.** On the plant date the area is set, from a number, a series, or the
+   water available. The new crop's bucket starts from the fallow's depletion, scaled by root
+   depth: D_new = D_fallow · min(1, Z_new / Z_fallow). Area can later be reduced, never
+   increased, with the surplus going back to fallow. Fallow is itself a crop with no irrigation
+   and a small K_c. *Later version.*
+9. **Yield.** FAO-33: relative yield = 1 − K_y(1 − ΣE / ΣE_c), the sums running from planting to
+   today. A dead crop yields 0. *Later version, if wanted.*
+
+That is the whole model: two inputs (P, E₀), one state (D), three soil numbers (Z_r, θ_cap, p),
+a K_c curve, a loss fraction and a target.
+
 ## How the node works
 
-The field works in mm over its area: 1 mm × 1 km² = 1 ML. Each step, in this order:
+The steps above, as this version runs them each day, exactly:
+
+The field works in mm over its area: 1 mm × 1 km² = 1 ML. In this order:
 
 1. **Stress.** From the depletion `D` at the start of the step:
    `ks = clamp((capacity − D) / ((1 − p) × capacity), 0, 1)`. The crop transpires freely while it
    has used less than `p` of the capacity, and less and less as the soil dries beyond that
    (FAO-56, equation 84).
 2. **Evapotranspiration.** `et = ks × kc × evap`, no more than the water the soil holds.
-3. **Rain** goes on the soil. What would take the depletion below zero leaves as `excess`.
+3. **Rain** goes on the soil, less `intercepted = min(rain, interception × evap)`. What would
+   take the depletion below zero leaves as `excess`.
 4. **Irrigation.** The field takes from what arrives no more than the soil has room for after the
    rain, allowing for the share that escapes: `supply = min(usflow, room / efficiency)`, of which
    `escape = supply × (1 − efficiency)` and the rest infiltrates. What it does not take is
    `bypass`. So irrigation never overfills the soil, whatever was ordered.
 
 Rain goes on before irrigation so that a day's rain reduces what the field takes, rather than
-running off a profile that irrigation has just filled. Effective rainfall is `rain_vol − excess`.
+running off a profile that irrigation has just filled. Effective rainfall is `rain − intercepted`.
 
 **The balance closes every step, to machine precision:**
 
-`rain_vol + (supply − escape) = et_vol + excess + Δ(water held)`, with `usflow = supply + bypass` and
-`ds_1 = bypass + excess`. Every term is a result, so the balance can be replayed line by line.
+`(rain − intercepted) × area + (supply − escape) = et_vol + excess + Δ(water held)`, with
+`usflow = supply + bypass` and `ds_1 = bypass + return_flow`. Each term is a result or follows from
+one; the runoff lost is `excess − return_flow`.
 
 #### The irrigation rule
 
@@ -154,10 +207,49 @@ The links leaving a field are not regulated. A field's `ds_1` carries bypass and
 the river: it is a drain, not a delivery path. No order travels up it, and the travel time to the
 field is no part of the travel time to anything below it.
 
+#### Returning runoff to the farm storage
+
+Runoff has two fates. Where it drains to the river, `return_fraction` says how much of it gets
+there, and it goes down `ds_1` with the bypass. Where the farm catches it and pumps it back to the
+storage that supplies the field, the storage is defined above the field, and a Kalix model file
+reads downstream, so no link can carry water back up to it. The loop is written with a one-step
+delay, which any loop on a fixed timestep has anyway: set `return_fraction = 0`, so that the field
+loses its runoff, and have an inflow node above the storage recreate the caught share from the
+previous step:
+
+```ini
+[node.returns]
+type = inflow
+loc = 20, 10
+inflow = 0.8 * node.paddock.excess[-1, 0]   ; 80% of yesterday's runoff, caught and pumped back
+ds_1 = ofs
+
+[node.ofs]
+type = storage
+...
+ds_1 = paddock
+
+[node.paddock]
+type = field
+...
+return_fraction = 0
+ds_1 = river                                 ; bypass goes on; runoff does not
+```
+
+Two things to know. The offset is required: without it the run stops with "no value yet", because
+today's excess does not exist when the node above the field runs; nothing can build a same-step
+loop. And use `return_fraction = 0` with the loop, not the fraction you write at the inflow node:
+with both, the same water would go down `ds_1` to the river and be recreated at the storage.
+
+In the mass balance report the loop appears as a loss at the field and a gain of the same size at
+the inflow node, one step later; the two pair up by name. The last step's runoff is in transit when
+the run ends.
+
 #### Mass balance
 
 Only what the field keeps and loses leaves the model at the field: the water the soil holds,
-evapotranspiration, and escape. `bypass` and `excess` are still in the model, on `ds_1`.
+evapotranspiration, intercepted rain, escape, and the runoff that does not survive the drains.
+`bypass` and `return_flow` are still in the model, on `ds_1`.
 
 ## References
 
