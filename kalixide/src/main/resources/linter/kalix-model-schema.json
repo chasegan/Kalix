@@ -402,6 +402,7 @@
         "return_flow",
         "dsflow",
         "ds_1",
+        "ds_2",
         "area",
         "efficiency"
       ],
@@ -423,7 +424,8 @@
         "order"
       ],
       "dsnode_params": [
-        "ds_1"
+        "ds_1",
+        "ds_2"
       ],
       "parameters": {
         "type": {
@@ -478,7 +480,7 @@
           "type": "number",
           "min": 0,
           "max": 1,
-          "description": "Share of the excess (runoff) that goes on down ds_1 as return_flow; the rest is lost from the model at the field (default 1: nothing lost)"
+          "description": "Share of the runoff (excess) the farm catches: it leaves on ds_2 as return_flow, the rest on ds_1 with the bypass (default 0)"
         },
         "initial_depletion": {
           "type": "number",

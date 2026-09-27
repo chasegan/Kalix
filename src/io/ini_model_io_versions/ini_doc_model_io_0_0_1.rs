@@ -1094,6 +1094,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             // Skipping this
                         } else if name_lower == "ds_1" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
+                        } else if name_lower == "ds_2" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_2_OUTLET, INLET))
                         } else if name_lower == "order" {
                             n.order_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
@@ -1758,7 +1760,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "p", &format_f64(n.p), "0.5");
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "efficiency", &format_f64(n.efficiency), "1");
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "interception", &format_f64(n.interception), "0.2");
-                set_property_unless_default(&mut ini_doc, section_name.as_str(), "return_fraction", &format_f64(n.return_fraction), "1");
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "return_fraction", &format_f64(n.return_fraction), "0");
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "order", &n.order_input.to_string());
             }
         }
