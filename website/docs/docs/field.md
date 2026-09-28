@@ -184,22 +184,22 @@ partition works in mm over its own area: 1 mm × 1 km² = 1 ML. The soil is kept
 boundaries are the field's distinct root depths, fallow included, so every crop's root zone is a
 whole number of layers; a layer holds `available_water` times its thickness. Each partition has
 one bucket for its root zone, which the plants and the irrigator work, and one depletion for
-each layer below its roots, which only drainage and transfers touch. Below the deepest roots on
+each layer below its roots, which only drainage and planting touch. Below the deepest roots on
 the field nothing draws, so water that passes is gone.
 
 In this order:
 
-1. **Transfers**, so that the day's orders and fluxes use the day's areas. Harvest: a crop whose
+1. **Planting**, so that the day's orders and fluxes use the day's areas. Harvest: a crop whose
    days since planting reach its `season_len` goes back to the fallow. Abandonment: a crop's
    area becomes `min(area, crop_N_viable_area)`, or 0 under the built-in rule when its stress
    coefficient at the start of the day is 0.05 or below; what leaves goes to the fallow.
    Planting: a slot with no crop whose `crop_N_plant` is true takes `crop_N_plant_area` from
-   the fallow, at most what the fallow has. Every transfer moves area with its water, layer by
+   the fallow, at most what the fallow has. Every move carries area with its water, layer by
    layer, in proportion to area: the giver's wetness does not change, and the receiver's is the
    area-weighted mix. Where a root zone shrinks (a deep crop's land going to a shallower
    fallow) the bucket's water is spread evenly over the layers it covered and the deeper ones
    keep it; where it grows, the new bucket pools the layers it reaches, with whatever each held.
-   Nothing is created or lost in a transfer.
+   Nothing is created or lost in a move.
 2. **Stress**, for each partition, from the depletion `D` of its bucket at the start of the day:
    `ks = clamp((TAW − D) / ((1 − p) × TAW), 0, 1)`, with `TAW` the bucket's capacity and `p` the
    crop's. The crop transpires freely while it has used less than `p` of its bucket, and less

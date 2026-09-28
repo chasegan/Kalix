@@ -149,7 +149,7 @@ pub struct FieldNode {
     profile: Profile,
     fallow_partition: Partition,
     fallow_days: u32,
-    transfers_done: bool,           // this step's transfers ran in the order phase
+    planting_done: bool,            // this step's planting ran in the order phase
     usflow: f64,
     dsflow_primary: f64,
     dsflow_return: f64,
@@ -197,12 +197,14 @@ impl FieldNode {
         }
     }
 
-    /// The day's transfers of area, so that the day's orders and fluxes use the
-    /// day's areas: harvest, then abandonment, then planting. Each moves area
-    /// with its water, layer by layer. They are the farmer's first act of the
-    /// day: in the order phase where the field has one (a crop planted today
-    /// orders today), and failing that at the start of the flow phase.
-    fn transfers(&mut self, data_cache: &mut DataCache) {
+    /// Planting, in the wide sense: the day's moves of land between the fallow
+    /// and the crops, so that the day's orders and fluxes use the day's areas.
+    /// Harvest, then abandonment, then planting proper; each moves area with
+    /// its water, layer by layer. It is the farmer's first act of the day: in
+    /// the order phase where the field has one (a crop planted today orders
+    /// today), and failing that at the start of the flow phase, so a field
+    /// outside every regulated zone sees the same day.
+    fn planting(&mut self, data_cache: &mut DataCache) {
         for slot in &mut self.slots {
             if !slot.in_ground { continue; }
             slot.days += 1;
@@ -374,7 +376,7 @@ impl Node for FieldNode {
         self.dsflow_return = 0.0;
         self.fallow_partition = Partition::new(&self.profile, fallow.root_depth, self.area, self.initial_depletion);
         self.fallow_days = 0;
-        self.transfers_done = false;
+        self.planting_done = false;
         for slot in &mut self.slots {
             slot.partition = Partition::new(&self.profile, slot.crop.root_depth, 0.0, self.initial_depletion);
             slot.in_ground = false;
@@ -425,10 +427,10 @@ impl Node for FieldNode {
 
     fn run_order_phase(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
-        // The day begins with its transfers
+        // The day begins with the planting
         if !self.slots.is_empty() {
-            self.transfers(data_cache);
-            self.transfers_done = true;
+            self.planting(data_cache);
+            self.planting_done = true;
         }
 
         // Each crop in the ground orders by its own rule, which reads the slot's states as
@@ -465,12 +467,12 @@ impl Node for FieldNode {
             data_cache.add_value_at_index(idx, self.usflow);
         }
 
-        // 1. Transfers first, so the day's fluxes use the day's areas: already done if the
+        // 1. Planting first, so the day's fluxes use the day's areas: already done if the
         //    field had an order phase today
-        if self.transfers_done {
-            self.transfers_done = false;
+        if self.planting_done {
+            self.planting_done = false;
         } else if !self.slots.is_empty() {
-            self.transfers(data_cache);
+            self.planting(data_cache);
         }
 
         // Get the driving data
