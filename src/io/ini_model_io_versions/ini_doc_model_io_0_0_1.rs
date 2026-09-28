@@ -121,6 +121,47 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     }
 
     // -------------------------------------------------------------------------------------
+    // Parsing crops (pre-pass): position-free declarations a field's crop slots refer to
+    // -------------------------------------------------------------------------------------
+    for (section_name, ini_section) in &ini_doc.sections {
+        let Some(crop_name) = section_name.strip_prefix("crop.") else { continue };
+        if !is_valid_bare_name(crop_name) {
+            return Err(KalixIoError::Parse(format!("Error on line {}: Invalid crop name '{}' (lowercase letter first, then lowercase letters, digits and underscores)", ini_section.line_number, crop_name)));
+        }
+        let mut root_depth: Option<f64> = None;
+        let mut p: f64 = 0.5;
+        let mut kc: Option<crate::hydrology::crop::KcCurve> = None;
+        let mut season_len: Option<u32> = None;
+        for (key, ini_property) in &ini_section.properties {
+            let v = require_non_empty(&ini_property.value, key, ini_property.line_number).map_err(KalixIoError::Validate)?;
+            match key.to_lowercase().as_str() {
+                "root_depth" => root_depth = Some(v.parse::<f64>()
+                    .map_err(|_| KalixIoError::Parse(format!("Error on line {}: root_depth must be a number for crop '{}', got '{}'", ini_property.line_number, crop_name, v)))?),
+                "p" => p = v.parse::<f64>()
+                    .map_err(|_| KalixIoError::Parse(format!("Error on line {}: p must be a number for crop '{}', got '{}'", ini_property.line_number, crop_name, v)))?,
+                "kc" => kc = Some(if let Ok(constant) = v.parse::<f64>() {
+                    crate::hydrology::crop::KcCurve::Constant(constant)
+                } else {
+                    crate::hydrology::crop::KcCurve::ByDay(Table::from_csv_string(v, 2, false)
+                        .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse kc for crop '{}' as a number or a two-column table: {}", ini_property.line_number, crop_name, e)))?)
+                }),
+                "season_len" => season_len = Some(v.parse::<u32>()
+                    .map_err(|_| KalixIoError::Parse(format!("Error on line {}: season_len must be a whole number of days for crop '{}', got '{}'", ini_property.line_number, crop_name, v)))?),
+                other => return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected property '{}' in section '[{}]'", ini_property.line_number, other, section_name))),
+            }
+        }
+        let crop = crate::hydrology::crop::Crop {
+            name: crop_name.to_string(),
+            root_depth: root_depth.ok_or_else(|| KalixIoError::Validate(format!("Error on line {}: Crop '{}' has no 'root_depth'", ini_section.line_number, crop_name)))?,
+            p,
+            kc: kc.ok_or_else(|| KalixIoError::Validate(format!("Error on line {}: Crop '{}' has no 'kc'", ini_section.line_number, crop_name)))?,
+            season_len,
+        };
+        crop.validate().map_err(|e| KalixIoError::Validate(format!("Error on line {}: {}", ini_section.line_number, e)))?;
+        model.crops.insert(crop).map_err(|e| KalixIoError::Validate(format!("Error on line {}: {}", ini_section.line_number, e)))?;
+    }
+
+    // -------------------------------------------------------------------------------------
     // Parsing user-defined functions (pre-pass)
     // -------------------------------------------------------------------------------------
     // Functions are passive — they have no execution time of their own — and may be
@@ -1261,6 +1302,10 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             // Lookup tables — already parsed in the pre-pass above
             // -------------------------------------------------------------------------------------
+        } else if section_name.starts_with("crop.") {
+            // -------------------------------------------------------------------------------------
+            // Crops — already parsed in the pre-pass above
+            // -------------------------------------------------------------------------------------
         } else if section_name.starts_with("acc.") {
             // -------------------------------------------------------------------------------------
             // Account groups — already parsed in the pre-pass above
@@ -1789,6 +1834,21 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
             ini_doc.set_property(section_name.as_str(), "n_cols", table.ncols().to_string().as_str());
         }
         ini_doc.set_property(section_name.as_str(), "values", table.format_data(4).as_str());
+    }
+
+    // Crops are position-free too, and sit with the tables, sorted by name.
+    for crop in model.crops.iter_sorted() {
+        let section_name = format!("crop.{}", crop.name);
+        ini_doc.set_property(section_name.as_str(), "root_depth", format_f64(crop.root_depth).as_str());
+        set_property_unless_default(&mut ini_doc, section_name.as_str(), "p", &format_f64(crop.p), "0.5");
+        let kc = match &crop.kc {
+            crate::hydrology::crop::KcCurve::Constant(kc) => format_f64(*kc),
+            crate::hydrology::crop::KcCurve::ByDay(table) => format_vec_as_multiline_table(&table.get_values_as_vec(), 2, 4),
+        };
+        ini_doc.set_property(section_name.as_str(), "kc", kc.as_str());
+        if let Some(days) = crop.season_len {
+            ini_doc.set_property(section_name.as_str(), "season_len", days.to_string().as_str());
+        }
     }
 
     // [fn] definitions re-emit from their original signature key and body text,

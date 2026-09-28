@@ -165,6 +165,9 @@ mod test_regulated_user_supply_outlets;
 // Storage: the order it places, and what is en route to a target level
 mod test_storage_order_results;
 
+// [crop.*] sections
+mod test_crop_sections;
+
 // Field node: the soil water balance
 mod test_field_soil;
 
