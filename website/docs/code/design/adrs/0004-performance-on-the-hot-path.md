@@ -450,3 +450,17 @@ citing them when a trade is proposed.
   That the shared dispatch is the mechanism behind test 4 moving is a
   guess: no disassembly was compared. One machine, one CPU (Apple M5).
   Sources: `25267c90` and `9f7f2f5d` on `feat/user-supply-outlets`.
+- *2026-09-28* — tenth data point for §3.4, a quiet one. The field node
+  was rewritten for crops: a `Vec` of crop slots, a layered soil profile
+  and a fallow partition in the struct, which still came out smaller (1,056 to 960
+  bytes) once the field-level recorders left, and a longer
+  flow phase. `NodeEnum`'s stride stayed 4,064 (the storage node's), so no
+  other node's layout moved, and the shared dispatch gained nothing but a
+  larger arm for a variant the speed models do not contain. Interleaved
+  runs, 15 reps, median simulation time against `main` (`7941635e`): +0.2%,
+  +1.1%, −1.1% on tests 2, 4 and 5, the noise floor. The field's own cost
+  was not measured: no speed model has one, and a field's work is a few
+  partitions' arithmetic per step where the ordering system and the storage
+  solver are the hot path. Recorded so that the next reader knows the stride
+  was checked and where the field stands. One machine, one CPU (Apple M5).
+  Source: `7c93b0f0` on `feat/field-phase-3`.
