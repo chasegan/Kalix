@@ -13,7 +13,7 @@ use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
 use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
-use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, field_node::FieldNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode, Node};
+use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, field_node::{FieldNode, CropSlot, crop_slot_property, MAX_CROPS}, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode, Node};
 use crate::hydrology::rainfall_runoff::gr4j::Gr4Variant;
 use crate::hydrology::rainfall_runoff::awbm::AwbmVariant;
 use crate::nodes::storage_node::OutletDefinition;
@@ -1125,6 +1125,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 "field" => {
                     let mut n = FieldNode::new();
                     n.name = node_name.to_string();
+                    // Crop slot properties, `crop_N` and its `crop_N_...`, in any order: (N, suffix, value, line)
+                    let mut slot_props: Vec<(usize, &str, String, usize)> = Vec::new();
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
                         let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
@@ -1137,24 +1139,18 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "ds_2" {
                             vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_2_OUTLET, INLET))
-                        } else if name_lower == "order" {
-                            n.order_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "rain" {
                             n.rain_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "evap" {
                             n.evap_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-                        } else if name_lower == "kc" {
-                            n.kc_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "area" {
                             n.area = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: area must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
-                        } else if name_lower == "capacity" {
-                            n.capacity = v.parse::<f64>()
-                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: capacity must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
+                        } else if name_lower == "available_water" {
+                            n.available_water = v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: available_water must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
                         } else if name_lower == "initial_depletion" {
                             n.initial_depletion = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: initial_depletion must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
@@ -1167,13 +1163,44 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "efficiency" {
                             n.efficiency = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: efficiency must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
-                        } else if name_lower == "p" {
-                            n.p = v.parse::<f64>()
-                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: p must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
+                        } else if name_lower == "fallow" {
+                            let idx = model.crops.get_idx(v)
+                                .ok_or_else(|| KalixIoError::Validate(format!("Error on line {}: No crop '{}' is declared for the fallow of node '{}' (a [crop.{}] section)", ini_property.line_number, v, node_name, v)))?;
+                            n.fallow = Some(model.crops.get(idx).clone());
+                        } else if let Some((slot_n, suffix)) = crop_slot_property(&name_lower) {
+                            if slot_n < 1 || slot_n > MAX_CROPS {
+                                return Err(KalixIoError::Validate(format!("Error on line {}: '{}' for node '{}': crop slots are numbered crop_1 to crop_{}", ini_property.line_number, name, node_name, MAX_CROPS)));
+                            }
+                            slot_props.push((slot_n, suffix, v.to_string(), ini_property.line_number));
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                                ini_property.line_number, name, node_name)));
                         }
+                    }
+                    // Build the slots in order, without gaps
+                    let n_slots = slot_props.iter().map(|p| p.0).max().unwrap_or(0);
+                    for slot_n in 1..=n_slots {
+                        let props: Vec<&(usize, &str, String, usize)> = slot_props.iter().filter(|p| p.0 == slot_n).collect();
+                        let Some(crop_prop) = props.iter().find(|p| p.1.is_empty()) else {
+                            let line = props.first().map(|p| p.3).unwrap_or(ini_section.line_number);
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Node '{}' has crop_{} properties but no crop_{} = <crop>; slots are numbered from 1 without gaps", line, node_name, slot_n, slot_n)));
+                        };
+                        let idx = model.crops.get_idx(&crop_prop.2)
+                            .ok_or_else(|| KalixIoError::Validate(format!("Error on line {}: No crop '{}' is declared for crop_{} of node '{}' (a [crop.{}] section)", crop_prop.3, crop_prop.2, slot_n, node_name, crop_prop.2)))?;
+                        let mut slot = CropSlot::new(model.crops.get(idx).clone());
+                        for p in &props {
+                            if p.1.is_empty() { continue; }
+                            let input = DynamicInput::from_string(&p.2, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", p.3, e)))?;
+                            match p.1 {
+                                "_plant" => slot.plant_input = input,
+                                "_plant_area" => slot.plant_area_input = input,
+                                "_order" => slot.order_input = input,
+                                "_viable_area" => slot.viable_area_input = Some(input),
+                                other => unreachable!("crop_slot_property only returns CROP_SLOT_PROPERTIES, got {other}"),
+                            }
+                        }
+                        n.slots.push(slot);
                     }
                     NodeEnum::FieldNode(n)
                 }
@@ -1799,14 +1826,24 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 ini_doc.set_property(section_name.as_str(), "area", format_f64(n.area).as_str());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_input.to_string());
-                ini_doc.set_property(section_name.as_str(), "capacity", format_f64(n.capacity).as_str());
+                ini_doc.set_property(section_name.as_str(), "available_water", format_f64(n.available_water).as_str());
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "initial_depletion", &format_f64(n.initial_depletion), "0");
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "kc", &n.kc_input.to_string());
-                set_property_unless_default(&mut ini_doc, section_name.as_str(), "p", &format_f64(n.p), "0.5");
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "efficiency", &format_f64(n.efficiency), "1");
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "interception", &format_f64(n.interception), "0.2");
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "return_fraction", &format_f64(n.return_fraction), "0");
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "order", &n.order_input.to_string());
+                if let Some(fallow) = &n.fallow {
+                    ini_doc.set_property(section_name.as_str(), "fallow", fallow.name.as_str());
+                }
+                for (i, slot) in n.slots.iter().enumerate() {
+                    let key = |suffix: &str| format!("crop_{}{suffix}", i + 1);
+                    ini_doc.set_property(section_name.as_str(), &key(""), slot.crop.name.as_str());
+                    set_property_if_not_empty(&mut ini_doc, section_name.as_str(), &key("_plant"), &slot.plant_input.to_string());
+                    set_property_if_not_empty(&mut ini_doc, section_name.as_str(), &key("_plant_area"), &slot.plant_area_input.to_string());
+                    set_property_if_not_empty(&mut ini_doc, section_name.as_str(), &key("_order"), &slot.order_input.to_string());
+                    if let Some(viable) = &slot.viable_area_input {
+                        ini_doc.set_property(section_name.as_str(), &key("_viable_area"), viable.to_string().as_str());
+                    }
+                }
             }
         }
     }

@@ -380,15 +380,10 @@
       }
     },
     "field": {
-      "description": "Irrigated field: a root-zone soil store that orders water to meet its deficit",
+      "description": "Irrigated field: paddocks under crops on a layered soil, each ordering water to meet its deficit",
       "allowed_outputs": [
-        "depletion",
-        "orders_en_route",
-        "order",
-        "order_due",
+        "fallow_depletion",
         "usflow",
-        "ks",
-        "kc",
         "et",
         "et_vol",
         "rain",
@@ -404,24 +399,70 @@
         "ds_1",
         "ds_2",
         "area",
-        "efficiency"
+        "efficiency",
+        "crop_1_area",
+        "crop_1_days",
+        "crop_1_depletion",
+        "crop_1_ks",
+        "crop_1_order",
+        "crop_1_order_due",
+        "crop_1_orders_en_route",
+        "crop_2_area",
+        "crop_2_days",
+        "crop_2_depletion",
+        "crop_2_ks",
+        "crop_2_order",
+        "crop_2_order_due",
+        "crop_2_orders_en_route",
+        "crop_3_area",
+        "crop_3_days",
+        "crop_3_depletion",
+        "crop_3_ks",
+        "crop_3_order",
+        "crop_3_order_due",
+        "crop_3_orders_en_route",
+        "crop_4_area",
+        "crop_4_days",
+        "crop_4_depletion",
+        "crop_4_ks",
+        "crop_4_order",
+        "crop_4_order_due",
+        "crop_4_orders_en_route"
       ],
       "required_params": [
         "type",
         "loc",
         "area",
-        "capacity"
+        "available_water",
+        "fallow"
       ],
       "optional_params": [
         "rain",
         "evap",
-        "kc",
-        "p",
         "efficiency",
         "interception",
         "return_fraction",
         "initial_depletion",
-        "order"
+        "crop_1",
+        "crop_1_plant",
+        "crop_1_plant_area",
+        "crop_1_order",
+        "crop_1_viable_area",
+        "crop_2",
+        "crop_2_plant",
+        "crop_2_plant_area",
+        "crop_2_order",
+        "crop_2_viable_area",
+        "crop_3",
+        "crop_3_plant",
+        "crop_3_plant_area",
+        "crop_3_order",
+        "crop_3_viable_area",
+        "crop_4",
+        "crop_4_plant",
+        "crop_4_plant_area",
+        "crop_4_order",
+        "crop_4_viable_area"
       ],
       "dsnode_params": [
         "ds_1",
@@ -442,11 +483,6 @@
           "min": 0,
           "description": "Field area [km2]"
         },
-        "capacity": {
-          "type": "number",
-          "min": 0,
-          "description": "Water the root zone holds between full and empty [mm]"
-        },
         "rain": {
           "type": "function_expression",
           "description": "Rainfall [mm] (data reference, constant, or expression)"
@@ -454,16 +490,6 @@
         "evap": {
           "type": "function_expression",
           "description": "Reference evapotranspiration [mm], the reference the kc values were derived for"
-        },
-        "kc": {
-          "type": "function_expression",
-          "description": "Crop coefficient (constant, table on sim.day_of_year, or expression)"
-        },
-        "p": {
-          "type": "number",
-          "min": 0,
-          "max": 1,
-          "description": "Depletion fraction: stress begins beyond p x capacity (default 0.5)"
         },
         "efficiency": {
           "type": "number",
@@ -485,11 +511,96 @@
         "initial_depletion": {
           "type": "number",
           "min": 0,
-          "description": "Depletion at the start of the run [mm] (default 0, full)"
+          "description": "How far below full every layer of the soil starts, over the whole profile [mm], default 0"
         },
-        "order": {
+        "available_water": {
+          "type": "number",
+          "min": 0,
+          "description": "Water the soil holds between full and empty, per metre of soil [mm/m]"
+        },
+        "fallow": {
+          "type": "string",
+          "description": "The crop that covers what is not planted: the name of a [crop.*] section"
+        },
+        "crop_1": {
+          "type": "string",
+          "description": "The crop in slot 1: the name of a [crop.*] section"
+        },
+        "crop_1_plant": {
           "type": "function_expression",
-          "description": "The irrigation rule: the order placed upstream [ML]. Omitted, the field is rain-fed"
+          "description": "Plants crop_1 when true, taking area from the fallow"
+        },
+        "crop_1_plant_area": {
+          "type": "function_expression",
+          "description": "Area planted [km2], read on the day crop_1_plant fires; capped at the fallow's area"
+        },
+        "crop_1_order": {
+          "type": "function_expression",
+          "description": "The irrigation rule for crop_1, in ML; omitted, the crop is rain-fed"
+        },
+        "crop_1_viable_area": {
+          "type": "function_expression",
+          "description": "Each day in the ground, crop_1's area becomes min(area, value) [km2]; 0 is death. Omitted, a crop whose stress coefficient starts the day at 0.05 or below dies"
+        },
+        "crop_2": {
+          "type": "string",
+          "description": "The crop in slot 2: the name of a [crop.*] section"
+        },
+        "crop_2_plant": {
+          "type": "function_expression",
+          "description": "Plants crop_2 when true, taking area from the fallow"
+        },
+        "crop_2_plant_area": {
+          "type": "function_expression",
+          "description": "Area planted [km2], read on the day crop_2_plant fires; capped at the fallow's area"
+        },
+        "crop_2_order": {
+          "type": "function_expression",
+          "description": "The irrigation rule for crop_2, in ML; omitted, the crop is rain-fed"
+        },
+        "crop_2_viable_area": {
+          "type": "function_expression",
+          "description": "Each day in the ground, crop_2's area becomes min(area, value) [km2]; 0 is death. Omitted, a crop whose stress coefficient starts the day at 0.05 or below dies"
+        },
+        "crop_3": {
+          "type": "string",
+          "description": "The crop in slot 3: the name of a [crop.*] section"
+        },
+        "crop_3_plant": {
+          "type": "function_expression",
+          "description": "Plants crop_3 when true, taking area from the fallow"
+        },
+        "crop_3_plant_area": {
+          "type": "function_expression",
+          "description": "Area planted [km2], read on the day crop_3_plant fires; capped at the fallow's area"
+        },
+        "crop_3_order": {
+          "type": "function_expression",
+          "description": "The irrigation rule for crop_3, in ML; omitted, the crop is rain-fed"
+        },
+        "crop_3_viable_area": {
+          "type": "function_expression",
+          "description": "Each day in the ground, crop_3's area becomes min(area, value) [km2]; 0 is death. Omitted, a crop whose stress coefficient starts the day at 0.05 or below dies"
+        },
+        "crop_4": {
+          "type": "string",
+          "description": "The crop in slot 4: the name of a [crop.*] section"
+        },
+        "crop_4_plant": {
+          "type": "function_expression",
+          "description": "Plants crop_4 when true, taking area from the fallow"
+        },
+        "crop_4_plant_area": {
+          "type": "function_expression",
+          "description": "Area planted [km2], read on the day crop_4_plant fires; capped at the fallow's area"
+        },
+        "crop_4_order": {
+          "type": "function_expression",
+          "description": "The irrigation rule for crop_4, in ML; omitted, the crop is rain-fed"
+        },
+        "crop_4_viable_area": {
+          "type": "function_expression",
+          "description": "Each day in the ground, crop_4's area becomes min(area, value) [km2]; 0 is death. Omitted, a crop whose stress coefficient starts the day at 0.05 or below dies"
         }
       }
     },

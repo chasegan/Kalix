@@ -17,6 +17,7 @@
 //! guard.
 
 use crate::io::ini_model_io_versions::ini_doc_model_io_0_0_1::NODE_STATIC_F64_PROPERTIES;
+use crate::nodes::field_node::{CROP_SLOT_OUTPUTS, CROP_SLOT_PROPERTIES, MAX_CROPS};
 use serde_json::Value;
 use std::collections::BTreeSet;
 
@@ -57,11 +58,19 @@ fn literals_after(hay: &str, prefix: &str) -> BTreeSet<String> {
     out
 }
 
-/// `name` is `ds_<digits><suffix>` — the shape of every name family the engine derives.
-fn is_ds_family(name: &str, suffix: &str) -> bool {
-    let Some(rest) = name.strip_prefix("ds_") else { return false };
+/// `name` is `<prefix><digits><suffix>` — the shape of every name family the engine
+/// derives: `ds_N...` on any node with numbered outlets, `crop_N...` on a field.
+fn is_family(name: &str, prefix: &str, suffix: &str) -> bool {
+    let Some(rest) = name.strip_prefix(prefix) else { return false };
     let digits = rest.chars().take_while(|c| c.is_ascii_digit()).count();
     digits > 0 && &rest[digits..] == suffix
+}
+
+fn is_ds_family(name: &str, suffix: &str) -> bool { is_family(name, "ds_", suffix) }
+
+/// The field's crop slot families, `crop_N<suffix>`, one set for properties and one for outputs
+fn is_crop_family(name: &str, suffixes: &[&str]) -> bool {
+    suffixes.iter().any(|suffix| is_family(name, "crop_", suffix))
 }
 
 /// The parser's node-type arms: (type, accepted literal names, accepted `ds_N<suffix>` families).
@@ -116,7 +125,20 @@ fn linter_schema_lists_exactly_the_properties_the_parser_accepts() {
         }
         for p in listed.difference(literals) {
             if families.iter().any(|f| is_ds_family(p, f)) { continue; }
+            if node_type == "field" && is_crop_family(p, &CROP_SLOT_PROPERTIES) { continue; }
             failures.push(format!("{node_type}: schema lists '{p}' but the parser rejects it as an unexpected parameter"));
+        }
+        if node_type == "field" {
+            // The families are accepted by crop_slot_property(), not by literal: the schema
+            // must list every member the parser accepts
+            for n in 1..=MAX_CROPS {
+                for suffix in CROP_SLOT_PROPERTIES {
+                    let p = format!("crop_{n}{suffix}");
+                    if !listed.contains(&p) {
+                        failures.push(format!("field: parser accepts '{p}' but the schema does not list it"));
+                    }
+                }
+            }
         }
     }
     for node_type in schema.keys() {
@@ -145,7 +167,19 @@ fn linter_schema_lists_exactly_the_outputs_each_node_records() {
         }
         for o in allowed.difference(&recorded) {
             if families.iter().any(|f| is_ds_family(o, f)) { continue; }
+            if *node_type == "field" && is_crop_family(o, &CROP_SLOT_OUTPUTS) { continue; }
             failures.push(format!("{node_type}: schema allows output '{o}' but the node never records it"));
+        }
+        if *node_type == "field" {
+            // Registered in a loop over CROP_SLOT_OUTPUTS: the schema must list every member
+            for n in 1..=MAX_CROPS {
+                for suffix in CROP_SLOT_OUTPUTS {
+                    let o = format!("crop_{n}{suffix}");
+                    if !allowed.contains(&o) {
+                        failures.push(format!("field: records '{o}' but the schema's allowed_outputs omits it"));
+                    }
+                }
+            }
         }
     }
     assert!(failures.is_empty(), "linter schema and node recorders disagree on outputs:\n  {}", failures.join("\n  "));

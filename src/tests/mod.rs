@@ -167,6 +167,7 @@ mod test_storage_order_results;
 
 // [crop.*] sections
 mod test_crop_sections;
+mod test_field_crops;
 
 // Field node: the soil water balance
 mod test_field_soil;

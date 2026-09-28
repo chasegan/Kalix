@@ -4,3 +4,4 @@ pub mod routing;
 pub mod accounts;
 pub mod allocation_systems;
 pub mod crop;
+pub mod soil;
