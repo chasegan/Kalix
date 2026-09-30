@@ -677,7 +677,10 @@
         "ds_1",
         "ds_1_order",
         "x",
-        "typical_regulated_flow"
+        "typical_regulated_flow",
+        "evap",
+        "area",
+        "loss"
       ],
       "required_params": [
         "type",
@@ -689,7 +692,9 @@
         "n_divs",
         "x",
         "typical_regulated_flow",
-        "nlm"
+        "nlm",
+        "evap",
+        "loss_table"
       ],
       "dsnode_params": [
         "ds_1"
@@ -732,6 +737,14 @@
           "type": "number_sequence",
           "count": 2,
           "description": "Nonlinear muskingum parameters: two comma-separated numbers"
+        },
+        "evap": {
+          "type": "function_expression",
+          "description": "Evaporation in mm, >= 0 (data reference, constant, or expression); requires loss_table"
+        },
+        "loss_table": {
+          "type": "string",
+          "description": "Reach losses table: flow ML, dead storage volume ML, area km2 (optional header row); requires evap"
         }
       }
     },

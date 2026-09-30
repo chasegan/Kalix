@@ -717,6 +717,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 "routing" => {
                     let mut n = RoutingNode::new();
                     n.name = node_name.to_string();
+
+                    // Local flags to keep track of whether the dead storage/loss feature is correctly
+                    // specified 
+                    let mut defined_evap = false;
+                    let mut defined_loss_table = false; 
+
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
                         let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
@@ -766,6 +772,15 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             let index_flows: Vec<f64> = (0..nrows).map(|r| table.get_value(r, 0)).collect();
                             let index_times: Vec<f64> = (0..nrows).map(|r| table.get_value(r, 1)).collect();
                             n.set_routing_table(index_flows, index_times);
+                        } else if name_lower == "evap" {
+                            defined_evap = true; 
+                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "loss_table" {
+                            defined_loss_table = true; 
+                            n.loss_table = Table::from_csv_string(v, 3, false)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse loss table for node '{}': {}",
+                                                     ini_property.line_number, node_name, e)))?;
                         } else if name_lower == "typical_regulated_flow" {
                             n.typical_regulated_flow = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
@@ -774,6 +789,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                               ini_property.line_number, name, node_name)));
                         }
+                    }
+                    // Verification - ensure properties that must be defined together are indeed together
+                    if !(defined_evap == defined_loss_table) {
+                        return Err(KalixIoError::Validate(format!("Error on line {}: `evap` and `loss_table` must be specified together for node '{}'",
+                                ini_section.line_number, node_name
+                        )))
                     }
                     NodeEnum::RoutingNode(n)
                 }
@@ -1620,6 +1641,11 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                         ini_doc.set_property(section_name.as_str(), "pwl", pwl_values_str.as_str());
                     }
                 }
+                // Reach losses: the parser requires evap and loss_table together; both are empty when unset.
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
+                let loss_table_values = n.loss_table.get_values_as_vec();
+                let loss_table_str = format_vec_as_multiline_table(&loss_table_values, n.loss_table.ncols(), 4);
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "loss_table", loss_table_str.as_str());
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "typical_regulated_flow", &n.typical_regulated_flow.to_string(), "0");
             }
             NodeEnum::SacramentoNode(n) => {
