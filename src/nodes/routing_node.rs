@@ -297,67 +297,66 @@ impl Node for RoutingNode {
         self.lag_sto_used = self.lag + 1;
         self.lag_iter_index = 0;
 
-        // Init for NLM routing
-        if matches!(self.routing_method, StorageRoutingMethod::LagPlusNLM) {
-            // Convert step_size (seconds) to days. On the configure-time pass step_size
-            // is still 0; fall back to 1 day. initialise() is called again from
-            // initialize_network() once step_size is set, which overwrites these values
-            // before run_flow_phase ever fires.
-            let dt_days = if data_cache.step_size == 0 {
-                1.0
-            } else {
-                data_cache.step_size as f64 / 86400.0
-            };
-            // k applies per-division (convention matching other NLM implementations).
-            // Total reach storage at steady state is n_divs * k * Q^m.
-            self.nlm_k_working_units = self.nlm_k * 1e-3
-                                     * (1.0 / (86.4 * dt_days)).powf(self.nlm_m);
-            let one_minus_x = 1.0 - self.x;
-            self.nlm_one_minus_x = one_minus_x;
-            self.nlm_inv_one_minus_x = if self.x_is_unity { 0.0 } else { 1.0 / one_minus_x };
-            self.nlm_a = self.nlm_k_working_units * one_minus_x;
-            self.nlm_m_minus_1 = self.nlm_m - 1.0;
-            self.nlm_qref_array.fill(0.0);
-        }
-        
-        // Init for PWL routing
-        if matches!(self.routing_method, StorageRoutingMethod::LagPlusPWL) {
-            // Initialise pwl segment parameters
-            let d = self.n_divs as f64;
-            let mut temp_v = 0.0;
-            for i in 0..self.pwl_segs {
+        match self.routing_method {
+            StorageRoutingMethod::LagPlusNLM => {
+                // Convert step_size (seconds) to days. On the configure-time pass step_size
+                // is still 0; fall back to 1 day. initialise() is called again from
+                // initialize_network() once step_size is set, which overwrites these values
+                // before run_flow_phase ever fires.
+                let dt_days = if data_cache.step_size == 0 {
+                    1.0
+                } else {
+                    data_cache.step_size as f64 / 86400.0
+                };
+                // k applies per-division (convention matching other NLM implementations).
+                // Total reach storage at steady state is n_divs * k * Q^m.
+                self.nlm_k_working_units = self.nlm_k * 1e-3
+                                         * (1.0 / (86.4 * dt_days)).powf(self.nlm_m);
+                let one_minus_x = 1.0 - self.x;
+                self.nlm_one_minus_x = one_minus_x;
+                self.nlm_inv_one_minus_x = if self.x_is_unity { 0.0 } else { 1.0 / one_minus_x };
+                self.nlm_a = self.nlm_k_working_units * one_minus_x;
+                self.nlm_m_minus_1 = self.nlm_m - 1.0;
+                self.nlm_qref_array.fill(0.0);
+            },
+            StorageRoutingMethod::LagPlusPWL => {
+                // Initialise pwl segment parameters
+                let d = self.n_divs as f64;
+                let mut temp_v = 0.0;
+                for i in 0..self.pwl_segs {
 
-                //Calculate the parameters of pwl segment i
-                let q1 = self.pwl_qq[i];
-                let q2 = self.pwl_qq[i+1];
-                let t1 = self.pwl_tt[i] / d;
-                let t2 = self.pwl_tt[i+1] / d;
-                let a = 0.5 * (t2 - t1) / (q2 - q1);
-                let b = t1 - q1 * (t2 - t1) / (q2 - q1);
-                let c = temp_v - a*q1*q1 - b*q1;
-                let v1 = temp_v;
-                let v2 = a*q2*q2 + b*q2 + c;
-                temp_v = v2;
+                    //Calculate the parameters of pwl segment i
+                    let q1 = self.pwl_qq[i];
+                    let q2 = self.pwl_qq[i+1];
+                    let t1 = self.pwl_tt[i] / d;
+                    let t2 = self.pwl_tt[i+1] / d;
+                    let a = 0.5 * (t2 - t1) / (q2 - q1);
+                    let b = t1 - q1 * (t2 - t1) / (q2 - q1);
+                    let c = temp_v - a*q1*q1 - b*q1;
+                    let v1 = temp_v;
+                    let v2 = a*q2*q2 + b*q2 + c;
+                    temp_v = v2;
 
-                //Put the above into the table of segment parameters
-                self.seg_par_v1[i] = v1;
-                self.seg_par_v2[i] = v2;
-                self.seg_par_q1[i] = q1;
-                self.seg_par_q2[i] = q2;
-                self.seg_par_t1[i] = t1;
-                self.seg_par_t2[i] = t2;
-                self.seg_par_aa[i] = a;
-                self.seg_par_bb[i] = b;
-                self.seg_par_cc[i] = c;
-            }
+                    //Put the above into the table of segment parameters
+                    self.seg_par_v1[i] = v1;
+                    self.seg_par_v2[i] = v2;
+                    self.seg_par_q1[i] = q1;
+                    self.seg_par_q2[i] = q2;
+                    self.seg_par_t1[i] = t1;
+                    self.seg_par_t2[i] = t2;
+                    self.seg_par_aa[i] = a;
+                    self.seg_par_bb[i] = b;
+                    self.seg_par_cc[i] = c;
+                }
 
-            //Saturation point for out-of-table reference flows (see run_flow_phase).
-            if self.pwl_segs > 0 {
-                self.pwl_q_max = self.seg_par_q2[self.pwl_segs - 1];
-                self.pwl_v_max = self.seg_par_v2[self.pwl_segs - 1];
-            } else {
-                self.pwl_q_max = 0.0;
-                self.pwl_v_max = 0.0;
+                //Saturation point for out-of-table reference flows (see run_flow_phase).
+                if self.pwl_segs > 0 {
+                    self.pwl_q_max = self.seg_par_q2[self.pwl_segs - 1];
+                    self.pwl_v_max = self.seg_par_v2[self.pwl_segs - 1];
+                } else {
+                    self.pwl_q_max = 0.0;
+                    self.pwl_v_max = 0.0;
+                }
             }
         }
 
