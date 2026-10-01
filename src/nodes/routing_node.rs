@@ -565,8 +565,11 @@ impl Node for RoutingNode {
         self.div_sto_array.fill(0.0);
 
         // Init for dead storage and loss feature
-        // Verified that evap & loss table defined together so sufficient to check only one.
+        // evap and loss_table go together: evap alone fails in build_loss_lookups (no rows).
         self.using_reach_losses = !matches!(self.evap_mm_input, DynamicInput::None { .. });
+        if !self.using_reach_losses && self.loss_table.nrows() > 0 {
+            return Err(format!("Error in node '{}'. `evap` and `loss_table` must be specified together.", self.name));
+        }
         if self.using_reach_losses {
             self.build_loss_lookups()?;
             // The reach starts with its dead pool full.
