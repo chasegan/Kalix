@@ -66,16 +66,23 @@ fn build_area_segments(points: impl Iterator<Item = (f64, f64)>, n_divs: f64, se
     }
 }
 
-/// Per-division area at `x`. Linear scan: loss tables are a handful of rows.
-/// `segs` must be non-empty.
+/// The segment holding a root - the last one before the first whose start is
+/// `past_root` - and the segment after it, if any. Linear scan: loss tables are
+/// a handful of rows. `segs` must be non-empty.
 #[inline(always)]
-fn area_at(segs: &[AreaSegment], x: f64) -> f64 {
+fn segment_holding_root(segs: &[AreaSegment], past_root: impl Fn(&AreaSegment) -> bool) -> (&AreaSegment, Option<&AreaSegment>) {
     let mut s = &segs[0];
     for next in &segs[1..] {
-        if next.x_lo > x { break; }
+        if past_root(next) { return (s, Some(next)); }
         s = next;
     }
-    s.area(x)
+    (s, None)
+}
+
+/// Per-division area at `x`. `segs` must be non-empty.
+#[inline(always)]
+fn area_at(segs: &[AreaSegment], x: f64) -> f64 {
+    segment_holding_root(segs, |next| next.x_lo > x).0.area(x)
 }
 
 #[derive(Default, Clone)]
@@ -378,11 +385,7 @@ impl RoutingNode {
         let x = self.x;
         let one_minus_x = 1.0 - x;
         let segs = &self.div_area_by_flow;
-        let mut s = &segs[0];
-        for next in &segs[1..] {
-            if next.x_lo - x * qin - one_minus_x * (w - evap_mm * next.a_lo) > 0.0 { break; }
-            s = next;
-        }
+        let (s, _) = segment_holding_root(segs, |next| next.x_lo - x * qin - one_minus_x * (w - evap_mm * next.a_lo) > 0.0);
         let qout = (w - evap_mm * (s.a_lo + s.slope * (x * qin - s.x_lo))) / (1.0 + evap_mm * s.slope * one_minus_x);
         let area = s.area(x * qin + one_minus_x * qout);
         (area, evap_mm * area)
@@ -704,11 +707,7 @@ impl RoutingNode {
     #[inline(always)]
     fn still_water(&mut self, vpqin: f64, evap_mm: f64) -> f64 {
         let segs = &self.div_area_by_dead_vol;
-        let mut s = &segs[0];
-        for next in &segs[1..] {
-            if next.x_lo + evap_mm * next.a_lo > vpqin { break; }
-            s = next;
-        }
+        let (s, _) = segment_holding_root(segs, |next| next.x_lo + evap_mm * next.a_lo > vpqin);
         let vf_solved = ((vpqin - evap_mm * (s.a_lo - s.slope * s.x_lo)) / (1.0 + evap_mm * s.slope)).max(0.0);
         let area = s.area(vf_solved);
         self.loss += vpqin - vf_solved;
@@ -840,14 +839,10 @@ impl RoutingNode {
             } else {
                 // The root's area segment: the last whose start has F <= 0.
                 let segs = &self.div_area_by_flow;
-                let mut k = 0;
-                for (j, next) in segs.iter().enumerate().skip(1) {
-                    if next.nlm_base + e1 * next.a_lo - b0 > 0.0 { break; }
-                    k = j;
-                }
-                let s = segs[k];
+                let (s, above) = segment_holding_root(segs, |next| next.nlm_base + e1 * next.a_lo - b0 > 0.0);
+                let s = *s;
                 let mut lo = s.x_lo.max(y0);
-                let mut hi = segs.get(k + 1).map_or(f64::INFINITY, |next| next.x_lo);
+                let mut hi = above.map_or(f64::INFINITY, |next| next.x_lo);
 
                 // A is linear on the segment: f(y) = a y^m + c1 y - b1. Newton inside [lo, hi],
                 // bisecting when a step leaves the bracket.
