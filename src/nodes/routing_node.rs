@@ -312,6 +312,17 @@ impl RoutingNode {
         }
 
         let n_zero = (0..nrows).take_while(|&r| t.get_value(r, FLOW) == 0.0).count();
+        // The pool is full whenever there is flow, so flowing rows must repeat the full dead volume.
+        let dead_max = t.get_value(n_zero - 1, DSVO);
+        for r in n_zero..nrows {
+            if t.get_value(r, DSVO) != dead_max {
+                return Err(format!(
+                    "Error in node '{}'. Loss table dead storage volume above zero flow must equal the largest zero-flow value, {} (violation at row {}).",
+                    self.name, dead_max, r + 1
+                ));
+            }
+        }
+
         let d = self.n_divs as f64;
         build_area_segments((0..n_zero).map(|r| (t.get_value(r, DSVO) / d, t.get_value(r, AREA))), d, &mut self.div_area_by_dead_vol);
         build_area_segments((n_zero - 1..nrows).map(|r| (t.get_value(r, FLOW), t.get_value(r, AREA))), d, &mut self.div_area_by_flow);
