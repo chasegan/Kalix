@@ -829,18 +829,30 @@ impl RoutingNode {
         let vi = self.div_sto_array[i];   //initial storage volume for this division
         let mut qout = 0.0;               //variable to hold outflow
         let mut vf = 0.0;                 //variable to hold final storage volume
+        // Reach losses: the dead share held while flowing, and the flowing loss at
+        // the end-of-step area. All zero without the feature, so the arithmetic is unchanged.
+        let dead = if USING_REACH_LOSSES { self.div_dead_max } else { 0.0 };
+        let mut area = 0.0;
+        let mut loss = 0.0; // Note: under USING_REACH_LOSSES = false, constant and compiled out in release builds
         'segments: {
             if self.x_is_unity {
                 //For x=1, reference flow "qr" equals inflow.
                 let qr = qin;
+                if USING_REACH_LOSSES {
+                    // q_ref is known up front, so the end-of-step area needs no solve.
+                    area = area_at(&self.div_area_by_flow, qr);
+                    loss = evap_mm * area;
+                }
                 for j in 0..self.pwl_segs {
                     if (qr >= self.seg_par_q1[j]) && (qr <= self.seg_par_q2[j]) {
                         vf = self.seg_par_aa[j] * qr * qr + self.seg_par_bb[j] * qr + self.seg_par_cc[j];
-                        qout = vi + qin - vf;
+                        if USING_REACH_LOSSES { vf += dead; }
+                        qout = vi + qin - vf - loss;
                         break 'segments;
                     }
                 }
             } else {
+                // TODO reach losses for x<1: dead share and loss inside the quadratic; set area and loss.
                 //For x<1, reference flow "qr" is not known a priori.
                 let inv_one_minus_x = self.inv_one_minus_x;
                 for j in 0..self.pwl_segs {
@@ -873,13 +885,18 @@ impl RoutingNode {
                 self.name, qin, vi
             );
             vf = self.pwl_v_max;
-            qout = vi + qin - vf;
+            if USING_REACH_LOSSES { vf += dead; }
+            qout = vi + qin - vf - loss;
         }
 
         //Do not allow water to flow upstream.
         if qout < 0.0 {
             qout = 0.0;
-            vf = vi + qin;
+            // With reach losses the division keeps its water less the loss, taken at the storage held.
+            vf = if USING_REACH_LOSSES { self.still_water(vi + qin, evap_mm) } else { vi + qin };
+        } else if USING_REACH_LOSSES {
+            self.loss += loss;
+            self.area += area;
         }
 
         //The new storage volume for this division is vf.
