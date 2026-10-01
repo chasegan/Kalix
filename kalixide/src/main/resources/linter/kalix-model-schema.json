@@ -744,7 +744,7 @@
         },
         "loss_table": {
           "type": "string",
-          "description": "Reach losses table: flow ML, dead storage volume ML, area km2 (optional header row); first row must be 0, 0, 0; requires evap"
+          "description": "Reach losses table: flow ML, dead storage volume ML, area km2 (optional header row); first row must be 0, 0, 0; flows above zero strictly increasing; requires evap"
         }
       }
     },

@@ -292,6 +292,13 @@ impl RoutingNode {
                     self.name, r + 1
                 ));
             }
+            // Flow is solved across for x < 1, so area cannot step against it. Zero-flow rows may repeat.
+            if r > 0 && q > 0.0 && q == t.get_value(r - 1, FLOW) {
+                return Err(format!(
+                    "Error in node '{}'. Loss table flows above zero must be strictly increasing (violation at row {}).",
+                    self.name, r + 1
+                ));
+            }
         }
 
         // Validate that areas are non-decreasing (the still-water solve's segment scan relies on it)
