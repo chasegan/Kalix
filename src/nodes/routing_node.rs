@@ -23,6 +23,8 @@ struct AreaSegment {
     x_lo: f64,
     a_lo: f64,
     slope: f64,
+    /// NLM flow lookups only: nlm_a * x_lo^m + x_lo, the constant part of the balance residual at x_lo.
+    nlm_base: f64,
 }
 
 impl AreaSegment {
@@ -57,9 +59,9 @@ fn build_area_segments(points: impl Iterator<Item = (f64, f64)>, n_divs: f64, se
             Some(last) if last.x_lo == x => last.a_lo = a,
             Some(last) => {
                 last.slope = (a - last.a_lo) / (x - last.x_lo);
-                segs.push(AreaSegment { x_lo: x, a_lo: a, slope: 0.0 });
+                segs.push(AreaSegment { x_lo: x, a_lo: a, slope: 0.0, nlm_base: 0.0 });
             }
-            None => segs.push(AreaSegment { x_lo: x, a_lo: a, slope: 0.0 }),
+            None => segs.push(AreaSegment { x_lo: x, a_lo: a, slope: 0.0, nlm_base: 0.0 }),
         }
     }
 }
@@ -327,6 +329,11 @@ impl RoutingNode {
         build_area_segments((0..n_zero).map(|r| (t.get_value(r, DSVO) / d, t.get_value(r, AREA))), d, &mut self.div_area_by_dead_vol);
         build_area_segments((n_zero - 1..nrows).map(|r| (t.get_value(r, FLOW), t.get_value(r, AREA))), d, &mut self.div_area_by_flow);
         self.div_dead_max = t.get_value(n_zero - 1, DSVO) / d;
+        if matches!(self.routing_method, StorageRoutingMethod::LagPlusNLM) {
+            for s in &mut self.div_area_by_flow {
+                s.nlm_base = self.nlm_a * s.x_lo.powf(self.nlm_m) + s.x_lo;
+            }
+        }
 
         // PWL: cut each routing segment wherever an area breakpoint falls inside it.
         let mut merged = std::mem::take(&mut self.pwl_loss_segs);
@@ -835,7 +842,7 @@ impl RoutingNode {
                 let segs = &self.div_area_by_flow;
                 let mut k = 0;
                 for (j, next) in segs.iter().enumerate().skip(1) {
-                    if a * next.x_lo.powf(m) + next.x_lo + e1 * next.a_lo - b0 > 0.0 { break; }
+                    if next.nlm_base + e1 * next.a_lo - b0 > 0.0 { break; }
                     k = j;
                 }
                 let s = segs[k];
