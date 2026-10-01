@@ -721,6 +721,7 @@ impl RoutingNode {
     }
 
     /// Core node logic - run once per time step.
+    #[inline(never)]
     fn route_divisions(&mut self, flow_out_of_lag_reach: f64, evap_mm: f64) {
         // Checked once per step; each branch runs one instantiation.
         if self.using_reach_losses {
