@@ -93,7 +93,7 @@ pub struct RoutingNode {
     nlm_k_working_units: f64, //nlm_k converted so that storage_ML = nlm_k_working_units * flow_ML_per_day^m
     nlm_a: f64,                //precomputed: nlm_k_working_units * (1 - x)
     nlm_one_minus_x: f64,      //precomputed: 1 - x
-    nlm_inv_one_minus_x: f64,  //precomputed: 1 / (1 - x); 0 when x_is_unity
+    inv_one_minus_x: f64,      //precomputed: 1 / (1 - x); 0 when x_is_unity (NLM and PWL)
     nlm_m_minus_1: f64,        //precomputed: m - 1
     pwl_segs: usize,    //number of segments defined in the seg_par_xx arrays
     pwl_qq: [f64; 32],  //pwl routing definition - index flows, supporting up to 32 points
@@ -330,6 +330,7 @@ impl Node for RoutingNode {
         self.loss = 0.0;
         self.area = 0.0;
         self.x_is_unity = self.x > 0.999999;
+        self.inv_one_minus_x = if self.x_is_unity { 0.0 } else { 1.0 / (1.0 - self.x) };
 
         // Validate array bounds
         if self.lag >= self.lag_sto_array.len() {
@@ -429,7 +430,6 @@ impl Node for RoutingNode {
                                          * (1.0 / (86.4 * dt_days)).powf(self.nlm_m);
                 let one_minus_x = 1.0 - self.x;
                 self.nlm_one_minus_x = one_minus_x;
-                self.nlm_inv_one_minus_x = if self.x_is_unity { 0.0 } else { 1.0 / one_minus_x };
                 self.nlm_a = self.nlm_k_working_units * one_minus_x;
                 self.nlm_m_minus_1 = self.nlm_m - 1.0;
                 self.nlm_qref_array.fill(0.0);
@@ -715,7 +715,7 @@ impl RoutingNode {
         let m = self.nlm_m;
         let a = self.nlm_a;
         let one_minus_x = self.nlm_one_minus_x;
-        let inv_one_minus_x = self.nlm_inv_one_minus_x;
+        let inv_one_minus_x = self.inv_one_minus_x;
         let m_minus_1 = self.nlm_m_minus_1;
         const NLM_TOL_ABS: f64 = 1.0e-12;
         const NLM_TOL_REL: f64 = 1.0e-10;
@@ -840,7 +840,7 @@ impl RoutingNode {
                 }
             } else {
                 //For x<1, reference flow "qr" is not known a priori.
-                let inv_one_minus_x = 1.0 / (1.0 - self.x);
+                let inv_one_minus_x = self.inv_one_minus_x;
                 for j in 0..self.pwl_segs {
                     let a = self.seg_par_aa[j];
                     let b = self.seg_par_bb[j] + inv_one_minus_x;
