@@ -23,6 +23,8 @@ struct AreaSegment {
     x_lo: f64,
     a_lo: f64,
     slope: f64,
+    /// a_lo - slope * x_lo, so area = intercept + slope * x.
+    intercept: f64,
     /// NLM flow lookups only: nlm_a * x_lo^m + x_lo, the constant part of the balance residual at x_lo.
     nlm_base: f64,
 }
@@ -31,7 +33,7 @@ impl AreaSegment {
     /// Area at `x` on this segment's line (no range check).
     #[inline(always)]
     fn area(&self, x: f64) -> f64 {
-        self.a_lo + (x - self.x_lo) * self.slope
+        self.intercept + self.slope * x
     }
 }
 
@@ -59,10 +61,13 @@ fn build_area_segments(points: impl Iterator<Item = (f64, f64)>, n_divs: f64, se
             Some(last) if last.x_lo == x => last.a_lo = a,
             Some(last) => {
                 last.slope = (a - last.a_lo) / (x - last.x_lo);
-                segs.push(AreaSegment { x_lo: x, a_lo: a, slope: 0.0, nlm_base: 0.0 });
+                segs.push(AreaSegment { x_lo: x, a_lo: a, slope: 0.0, intercept: 0.0, nlm_base: 0.0 });
             }
-            None => segs.push(AreaSegment { x_lo: x, a_lo: a, slope: 0.0, nlm_base: 0.0 }),
+            None => segs.push(AreaSegment { x_lo: x, a_lo: a, slope: 0.0, intercept: 0.0, nlm_base: 0.0 }),
         }
+    }
+    for s in segs.iter_mut() {
+        s.intercept = s.a_lo - s.slope * s.x_lo;
     }
 }
 
@@ -386,7 +391,7 @@ impl RoutingNode {
         let one_minus_x = 1.0 - x;
         let segs = &self.div_area_by_flow;
         let (s, _) = segment_holding_root(segs, |next| next.x_lo - x * qin - one_minus_x * (w - evap_mm * next.a_lo) > 0.0);
-        let qout = (w - evap_mm * (s.a_lo + s.slope * (x * qin - s.x_lo))) / (1.0 + evap_mm * s.slope * one_minus_x);
+        let qout = (w - evap_mm * (s.intercept + s.slope * x * qin)) / (1.0 + evap_mm * s.slope * one_minus_x);
         let area = s.area(x * qin + one_minus_x * qout);
         (area, evap_mm * area)
     }
@@ -708,7 +713,7 @@ impl RoutingNode {
     fn still_water(&mut self, vpqin: f64, evap_mm: f64) -> f64 {
         let segs = &self.div_area_by_dead_vol;
         let (s, _) = segment_holding_root(segs, |next| next.x_lo + evap_mm * next.a_lo > vpqin);
-        let vf_solved = ((vpqin - evap_mm * (s.a_lo - s.slope * s.x_lo)) / (1.0 + evap_mm * s.slope)).max(0.0);
+        let vf_solved = ((vpqin - evap_mm * s.intercept) / (1.0 + evap_mm * s.slope)).max(0.0);
         let area = s.area(vf_solved);
         self.loss += vpqin - vf_solved;
         self.area += area;
@@ -847,7 +852,7 @@ impl RoutingNode {
                 // A is linear on the segment: f(y) = a y^m + c1 y - b1. Newton inside [lo, hi],
                 // bisecting when a step leaves the bracket.
                 let c1 = 1.0 + e1 * s.slope;
-                let b1 = b0 - e1 * (s.a_lo - s.slope * s.x_lo);
+                let b1 = b0 - e1 * s.intercept;
                 let qref_prev = self.nlm_qref_array[i];
                 let guess = if qref_prev > 0.0 { qref_prev } else { qin.max(1.0e-9) };
                 let mut y = if guess > lo && guess < hi { guess } else if hi.is_finite() { 0.5 * (lo + hi) } else { lo.max(1.0e-9) };
@@ -961,7 +966,7 @@ impl RoutingNode {
                         let a = s.aa;
                         let b = s.bb + inv_one_minus_x + evap_mm * s.area.slope;
                         let c = s.cc - (vi - dead) - qin * inv_one_minus_x
-                            + evap_mm * (s.area.a_lo - s.area.slope * s.area.x_lo);
+                            + evap_mm * s.area.intercept;
                         let qr = quadratic_plus(a, b, c);
                         if (!qr.is_nan()) && (qr >= s.q1 && qr <= s.q2) {
                             area = s.area.area(qr);
