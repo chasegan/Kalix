@@ -785,6 +785,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.typical_regulated_flow = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
+                        } else if matches!(name_lower.as_str(), "loss_rate" | "dead_storage") {
+                            // Deprecated (0.4.5 alpha) — helpful error. `matches!`, not the usual equality test, so the linter-schema test doesn't count these as accepted.
+                            return Err(KalixIoError::Validate(format!("Error on line {}: The routing property '{}' is deprecated (node '{}'). \
+                                Reach losses and dead storage are now defined with 'evap' and 'loss_table' \
+                                (flow, dead storage volume, area).", ini_property.line_number, name, node_name)));
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                               ini_property.line_number, name, node_name)));
