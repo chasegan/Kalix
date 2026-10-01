@@ -594,6 +594,30 @@ impl RoutingNode {
         Ok(idx)
     }
 
+    /// No outflow: the division keeps `vpqin` (its storage plus inflow) less the loss.
+    /// Solve via Backward Euler on dead storage and area
+    ///     vf = vpqin - E * A(vf)
+    /// A is linear on each segment, so
+    ///     vf = (vpqin - E * (a_lo - slope * x_lo)) / (1 + E * slope)
+    /// on the segment holding the root.
+    /// g(v) = v + E * A(v) - vpqin is monotone increasing in v subject to (E >= 0, A non-decreasing),
+    /// so the root's segment is the last whose start has g <= 0.
+    /// Adds to the step's loss and area; returns the storage held.
+    #[inline(always)]
+    fn still_water(&mut self, vpqin: f64, evap_mm: f64) -> f64 {
+        let segs = &self.div_area_by_dead_vol;
+        let mut s = &segs[0];
+        for next in &segs[1..] {
+            if next.x_lo + evap_mm * next.a_lo > vpqin { break; }
+            s = next;
+        }
+        let vf_solved = ((vpqin - evap_mm * (s.a_lo - s.slope * s.x_lo)) / (1.0 + evap_mm * s.slope)).max(0.0);
+        let area = s.area(vf_solved);
+        self.loss += vpqin - vf_solved;
+        self.area += area;
+        vf_solved
+    }
+
     /// Core node logic - run once per time step.
     fn route_divisions(&mut self, flow_out_of_lag_reach: f64, evap_mm: f64) {
         // Checked once per step; each branch runs one instantiation.
@@ -662,24 +686,7 @@ impl RoutingNode {
             let qf_unclamped = qin + vi - vf_flowing - loss_flowing;
             let (qout, vf) = if qf_unclamped < 0.0 {
                 // --- Non-flowing regime ---
-                // No outflow from this branch. Solve via Backward Euler on dead storage and area
-                //     vf = (vi+qin) - E * A(vf)
-                // A is linear on each segment, so 
-                //     vf = ((vi+qin) - E * (a_lo - slope * x_lo)) / (1 + E * slope)
-                // on the segment holding the root. 
-                // g(v) = v + E * A(v) - vpqin is monotone increasing in v subject to (E >= 0, A non-decreasing), 
-                // so the root's segment is the last whose start has g <= 0.
-                let vpqin = vi + qin;
-                let segs = &self.div_area_by_dead_vol;
-                let mut s = &segs[0];
-                for next in &segs[1..] {
-                    if next.x_lo + evap_mm * next.a_lo > vpqin { break; }
-                    s = next;
-                }
-                let vf_solved = ((vpqin - evap_mm * (s.a_lo - s.slope * s.x_lo)) / (1.0 + evap_mm * s.slope)).max(0.0);
-                self.loss += vpqin - vf_solved;
-                self.area += s.area(vf_solved);
-                (0.0, vf_solved)
+                (0.0, self.still_water(vi + qin, evap_mm))
             } else {
                 // --- Flowing regime --- 
                 self.loss += loss_flowing;
@@ -713,47 +720,105 @@ impl RoutingNode {
         const NLM_TOL_ABS: f64 = 1.0e-12;
         const NLM_TOL_REL: f64 = 1.0e-10;
         const NLM_MAX_ITER: usize = 8;
+        const NLM_MAX_ITER_BRACKETED: usize = 50;
 
         let vi = self.div_sto_array[i];
-        let b = one_minus_x * vi + qin;
 
-        if b <= 0.0 {
-            // Empty division with no inflow; nothing to solve.
-            self.div_sto_array[i] = 0.0;
-            self.nlm_qref_array[i] = 0.0;
-            return 0.0;
-        }
+        if USING_REACH_LOSSES {
+            // Balance in y = q_ref, pool included and the loss at the end-of-step area:
+            //     F(y) = a y^m + y + (1-x) E A(y) - b0 = 0,
+            //     b0 = (1-x)(vi - D_d) + qin.
+            // F is monotone increasing (E >= 0, A non-decreasing). Outflow is
+            // (y - x qin) / (1-x), so there is outflow iff the root is at or
+            // above y0 = x qin, i.e. F(y0) <= 0.
+            let e1 = one_minus_x * evap_mm;
+            let b0 = one_minus_x * (vi - self.div_dead_max) + qin;
+            let y0 = x * qin;
+            let flowing = a * y0.powf(m) + y0 + e1 * area_at(&self.div_area_by_flow, y0) - b0 <= 0.0;
+            if !flowing {
+                self.nlm_qref_array[i] = 0.0;
+                self.div_sto_array[i] = self.still_water(vi + qin, evap_mm);
+                0.0
+            } else {
+                // The root's area segment: the last whose start has F <= 0.
+                let segs = &self.div_area_by_flow;
+                let mut k = 0;
+                for (j, next) in segs.iter().enumerate().skip(1) {
+                    if a * next.x_lo.powf(m) + next.x_lo + e1 * next.a_lo - b0 > 0.0 { break; }
+                    k = j;
+                }
+                let s = segs[k];
+                let mut lo = s.x_lo.max(y0);
+                let mut hi = segs.get(k + 1).map_or(f64::INFINITY, |next| next.x_lo);
 
-        // Warm-start from previous timestep's q_ref for this division;
-        // fall back to qin (steady-state guess) on the first step.
-        let qref_prev = self.nlm_qref_array[i];
-        let mut y = if qref_prev > 0.0 { qref_prev } else { qin.max(1.0e-9) };
+                // A is linear on the segment: f(y) = a y^m + c1 y - b1. Newton inside [lo, hi],
+                // bisecting when a step leaves the bracket.
+                let c1 = 1.0 + e1 * s.slope;
+                let b1 = b0 - e1 * (s.a_lo - s.slope * s.x_lo);
+                let qref_prev = self.nlm_qref_array[i];
+                let guess = if qref_prev > 0.0 { qref_prev } else { qin.max(1.0e-9) };
+                let mut y = if guess > lo && guess < hi { guess } else if hi.is_finite() { 0.5 * (lo + hi) } else { lo.max(1.0e-9) };
+                for _ in 0..NLM_MAX_ITER_BRACKETED {
+                    let ym1 = y.powf(m_minus_1);
+                    let f = a * y * ym1 + c1 * y - b1;
+                    if f < 0.0 { lo = y } else { hi = y }
+                    let dy = f / (a * m * ym1 + c1);
+                    let y_new = y - dy;
+                    y = if y_new >= lo && y_new <= hi { y_new } else { 0.5 * (lo + hi) };
+                    if dy.abs() < NLM_TOL_ABS + NLM_TOL_REL * y { break; }
+                }
 
-        // Newton iteration. f is strictly monotonic on y > 0, so
-        // convergence is robust from any positive start; warm-start
-        // typically gets us within ~1% of the root in 2-3 iterations.
-        for _ in 0..NLM_MAX_ITER {
-            let ym1 = y.powf(m_minus_1);   // y^(m-1)  -- the one powf in the loop
-            let ym = y * ym1;              // y^m  via one extra multiply
-            let f = a * ym + y - b;
-            let fp = a * m * ym1 + 1.0;
-            let dy = f / fp;
-            let y_new = y - dy;
-            // Safeguarded update: never let y go non-positive (would NaN the next powf for m<1).
-            y = if y_new > 0.0 { y_new } else { 0.5 * y };
-            if dy.abs() < NLM_TOL_ABS + NLM_TOL_REL * y { break; }
-        }
-
-        self.nlm_qref_array[i] = y;
-        let new_qout_raw = (y - x * qin) * inv_one_minus_x;
-        let (qout, vf) = if new_qout_raw < 0.0 {
-            // No upstream flow allowed; absorb inflow into storage.
-            (0.0, vi + qin)
+                self.nlm_qref_array[i] = y;
+                let qout = ((y - x * qin) * inv_one_minus_x).max(0.0);
+                let area = s.area(y);
+                let loss = evap_mm * area;
+                self.loss += loss;
+                self.area += area;
+                // Storage from the balance, so the division closes exactly.
+                self.div_sto_array[i] = vi + qin - qout - loss;
+                qout
+            }
         } else {
-            (new_qout_raw, vi + qin - new_qout_raw)
-        };
-        self.div_sto_array[i] = vf;
-        qout
+            let b = one_minus_x * vi + qin;
+
+            if b <= 0.0 {
+                // Empty division with no inflow; nothing to solve.
+                self.div_sto_array[i] = 0.0;
+                self.nlm_qref_array[i] = 0.0;
+                return 0.0;
+            }
+
+            // Warm-start from previous timestep's q_ref for this division;
+            // fall back to qin (steady-state guess) on the first step.
+            let qref_prev = self.nlm_qref_array[i];
+            let mut y = if qref_prev > 0.0 { qref_prev } else { qin.max(1.0e-9) };
+
+            // Newton iteration. f is strictly monotonic on y > 0, so
+            // convergence is robust from any positive start; warm-start
+            // typically gets us within ~1% of the root in 2-3 iterations.
+            for _ in 0..NLM_MAX_ITER {
+                let ym1 = y.powf(m_minus_1);   // y^(m-1)  -- the one powf in the loop
+                let ym = y * ym1;              // y^m  via one extra multiply
+                let f = a * ym + y - b;
+                let fp = a * m * ym1 + 1.0;
+                let dy = f / fp;
+                let y_new = y - dy;
+                // Safeguarded update: never let y go non-positive (would NaN the next powf for m<1).
+                y = if y_new > 0.0 { y_new } else { 0.5 * y };
+                if dy.abs() < NLM_TOL_ABS + NLM_TOL_REL * y { break; }
+            }
+
+            self.nlm_qref_array[i] = y;
+            let new_qout_raw = (y - x * qin) * inv_one_minus_x;
+            let (qout, vf) = if new_qout_raw < 0.0 {
+                // No upstream flow allowed; absorb inflow into storage.
+                (0.0, vi + qin)
+            } else {
+                (new_qout_raw, vi + qin - new_qout_raw)
+            };
+            self.div_sto_array[i] = vf;
+            qout
+        }
     }
 
     /// PWL routing for division `i` given inflow `qin`; updates its storage and returns its outflow.
