@@ -569,6 +569,8 @@ impl Node for RoutingNode {
         self.using_reach_losses = !matches!(self.evap_mm_input, DynamicInput::None { .. });
         if self.using_reach_losses {
             self.build_loss_lookups()?;
+            // The reach starts with its dead pool full.
+            self.div_sto_array[..self.n_divs].fill(self.div_dead_max);
         }
 
         // Initialize result recorders
