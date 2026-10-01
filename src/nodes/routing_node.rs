@@ -276,8 +276,9 @@ impl RoutingNode {
         if nrows == 0 {
             return Err(format!("Error in node '{}'. Loss table has no rows.", self.name));
         }
-        if t.get_value(0, FLOW) != 0.0 {
-            return Err(format!("Error in node '{}'. Loss table must begin with flow = 0.", self.name));
+        // An all-zero first row anchors the dead-volume lookup at the origin, so area never extrapolates below it.
+        if t.get_value(0, FLOW) != 0.0 || t.get_value(0, DSVO) != 0.0 || t.get_value(0, AREA) != 0.0 {
+            return Err(format!("Error in node '{}'. Loss table must begin with flow = 0, dead storage volume = 0, area = 0.", self.name));
         }
         for r in 0..nrows {
             let (q, v, a) = (t.get_value(r, FLOW), t.get_value(r, DSVO), t.get_value(r, AREA));
