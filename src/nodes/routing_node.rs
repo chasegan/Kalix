@@ -440,7 +440,9 @@ impl Node for RoutingNode {
                 let mut temp_v = 0.0;
                 for i in 0..self.pwl_segs {
 
-                    //Calculate the parameters of pwl segment i
+                    // Calculate the parameters of pwl segment i
+                    // The storage volume is the integral of the travel time
+                    // over flow i.e. quadratic in flow.
                     let q1 = self.pwl_qq[i];
                     let q2 = self.pwl_qq[i+1];
                     let t1 = self.pwl_tt[i] / d;
@@ -842,6 +844,10 @@ impl RoutingNode {
                 //For x<1, reference flow "qr" is not known a priori.
                 let inv_one_minus_x = self.inv_one_minus_x;
                 for j in 0..self.pwl_segs {
+                    // Solve the mass balance equation:
+                    //     vi + qin = V(qr) + qout,   qout = (qr - x * qin) / (1-x),
+                    // with V(qr) = aa * qr^2 + bb * qr + cc on segment j, i.e. the quadratic
+                    //     aa * qr^2 + (bb + 1/(1-x)) * qr + (cc - vi - qin/(1-x)) = 0.
                     let a = self.seg_par_aa[j];
                     let b = self.seg_par_bb[j] + inv_one_minus_x;
                     let c = self.seg_par_cc[j] - vi - qin * inv_one_minus_x;
