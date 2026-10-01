@@ -33,6 +33,19 @@ impl AreaSegment {
     }
 }
 
+/// A PWL routing segment cut at the area table's breakpoints, so over [q1, q2] the
+/// routing storage is one quadratic and the area one line. Built at initialise
+/// for PWL nodes with reach losses.
+#[derive(Default, Clone, Copy)]
+struct PwlLossSegment {
+    q1: f64,
+    q2: f64,
+    aa: f64,
+    bb: f64,
+    cc: f64,
+    area: AreaSegment,
+}
+
 /// Builds a per-division area lookup from (x, reach area) points with ascending x.
 /// Areas are divided by `n_divs`; where x repeats the last point wins. The final
 /// segment is flat, so the area holds at the last point beyond the table.
@@ -144,6 +157,7 @@ pub struct RoutingNode {
     div_area_by_flow: Vec<AreaSegment>,      // flowing range: flow -> area, from the last zero-flow row up
     div_area_by_dead_vol: Vec<AreaSegment>,  // zero-flow rows: dead volume -> area
     div_dead_max: f64,                       // dead storage in a full division
+    pwl_loss_segs: Vec<PwlLossSegment>,      // PWL segments cut at area breakpoints (PWL nodes only)
     loss: f64,                               // reach loss this step (ML), summed over divisions
     area: f64,                               // reach area this step (km2), summed over divisions
 
@@ -294,7 +308,58 @@ impl RoutingNode {
         build_area_segments((0..n_zero).map(|r| (t.get_value(r, DSVO) / d, t.get_value(r, AREA))), d, &mut self.div_area_by_dead_vol);
         build_area_segments((n_zero - 1..nrows).map(|r| (t.get_value(r, FLOW), t.get_value(r, AREA))), d, &mut self.div_area_by_flow);
         self.div_dead_max = t.get_value(n_zero - 1, DSVO) / d;
+
+        // PWL: cut each routing segment wherever an area breakpoint falls inside it.
+        let mut merged = std::mem::take(&mut self.pwl_loss_segs);
+        merged.clear();
+        let area_segs = &self.div_area_by_flow;
+        for j in 0..self.pwl_segs {
+            let (q1, q2) = (self.seg_par_q1[j], self.seg_par_q2[j]);
+            for (k, s) in area_segs.iter().enumerate() {
+                let s_hi = area_segs.get(k + 1).map_or(f64::INFINITY, |next| next.x_lo);
+                let (lo, hi) = (q1.max(s.x_lo), q2.min(s_hi));
+                if hi > lo {
+                    merged.push(PwlLossSegment {
+                        q1: lo, q2: hi,
+                        aa: self.seg_par_aa[j], bb: self.seg_par_bb[j], cc: self.seg_par_cc[j],
+                        area: *s,
+                    });
+                }
+            }
+        }
+        self.pwl_loss_segs = merged;
         Ok(())
+    }
+
+    /// PWL routing storage of one division at reference flow `q`; saturates above the table.
+    fn pwl_storage_at(&self, q: f64) -> f64 {
+        for j in 0..self.pwl_segs {
+            if (q >= self.seg_par_q1[j]) && (q <= self.seg_par_q2[j]) {
+                return self.seg_par_aa[j] * q * q + self.seg_par_bb[j] * q + self.seg_par_cc[j];
+            }
+        }
+        self.pwl_v_max
+    }
+
+    /// Flowing loss above the PWL table (or with no table), where the end storage `vf`
+    /// is fixed and only the outflow carries the loss:
+    ///     qout = (vi + qin - vf) - E * A(q_r),   q_r = x * qin + (1-x) * qout.
+    /// On an area segment A is linear, so
+    ///     qout = (w - E * (a_lo + slope * (x * qin - x_lo))) / (1 + E * slope * (1-x)),   w = vi + qin - vf.
+    /// g(q) = q - x * qin - (1-x) * (w - E * A(q)) rises with q, so the root's segment
+    /// is the last whose start has g <= 0. Returns (area, loss).
+    fn loss_above_table(&self, w: f64, qin: f64, evap_mm: f64) -> (f64, f64) {
+        let x = self.x;
+        let one_minus_x = 1.0 - x;
+        let segs = &self.div_area_by_flow;
+        let mut s = &segs[0];
+        for next in &segs[1..] {
+            if next.x_lo - x * qin - one_minus_x * (w - evap_mm * next.a_lo) > 0.0 { break; }
+            s = next;
+        }
+        let qout = (w - evap_mm * (s.a_lo + s.slope * (x * qin - s.x_lo))) / (1.0 + evap_mm * s.slope * one_minus_x);
+        let area = s.area(x * qin + one_minus_x * qout);
+        (area, evap_mm * area)
     }
 
     /// Calculate the node storage by adding up all water volumes in the
@@ -852,24 +917,52 @@ impl RoutingNode {
                     }
                 }
             } else {
-                // TODO reach losses for x<1: dead share and loss inside the quadratic; set area and loss.
                 //For x<1, reference flow "qr" is not known a priori.
                 let inv_one_minus_x = self.inv_one_minus_x;
-                for j in 0..self.pwl_segs {
-                    // Solve the mass balance equation:
-                    //     vi + qin = V(qr) + qout,   qout = (qr - x * qin) / (1-x),
-                    // with V(qr) = aa * qr^2 + bb * qr + cc on segment j, i.e. the quadratic
-                    //     aa * qr^2 + (bb + 1/(1-x)) * qr + (cc - vi - qin/(1-x)) = 0.
-                    let a = self.seg_par_aa[j];
-                    let b = self.seg_par_bb[j] + inv_one_minus_x;
-                    let c = self.seg_par_cc[j] - vi - qin * inv_one_minus_x;
-                    let qr = quadratic_plus(a, b, c);
+                if USING_REACH_LOSSES {
+                    // As below, with the pool and the loss at the end-of-step area:
+                    //     vi + qin = dead + V(qr) + qout + E * A(qr),
+                    // on a merged segment, where V is one quadratic and A = a_lo + slope * (qr - x_lo):
+                    //     aa * qr^2 + (bb + 1/(1-x) + E * slope) * qr
+                    //         + (cc - (vi - dead) - qin/(1-x) + E * (a_lo - slope * x_lo)) = 0.
+                    // First the zero-outflow balance (qr = x * qin): if the division can't fill
+                    // its pool, storage and loss there, it doesn't flow and qout < 0 sends it to
+                    // the still-water solve below. Otherwise the root is in a segment or above the table.
+                    let q0 = self.x * qin;
+                    qout = vi + qin - (dead + self.pwl_storage_at(q0)) - evap_mm * area_at(&self.div_area_by_flow, q0);
+                    if qout < 0.0 { break 'segments; }
+                    for s in &self.pwl_loss_segs {
+                        let a = s.aa;
+                        let b = s.bb + inv_one_minus_x + evap_mm * s.area.slope;
+                        let c = s.cc - (vi - dead) - qin * inv_one_minus_x
+                            + evap_mm * (s.area.a_lo - s.area.slope * s.area.x_lo);
+                        let qr = quadratic_plus(a, b, c);
+                        if (!qr.is_nan()) && (qr >= s.q1 && qr <= s.q2) {
+                            area = s.area.area(qr);
+                            loss = evap_mm * area;
+                            qout = (qr - qin * self.x) * inv_one_minus_x;
+                            // Storage from the balance, so the division closes exactly.
+                            vf = vi + qin - qout - loss;
+                            break 'segments;
+                        }
+                    }
+                } else {
+                    for j in 0..self.pwl_segs {
+                        // Solve the mass balance equation:
+                        //     vi + qin = V(qr) + qout,   qout = (qr - x * qin) / (1-x),
+                        // with V(qr) = aa * qr^2 + bb * qr + cc on segment j, i.e. the quadratic
+                        //     aa * qr^2 + (bb + 1/(1-x)) * qr + (cc - vi - qin/(1-x)) = 0.
+                        let a = self.seg_par_aa[j];
+                        let b = self.seg_par_bb[j] + inv_one_minus_x;
+                        let c = self.seg_par_cc[j] - vi - qin * inv_one_minus_x;
+                        let qr = quadratic_plus(a, b, c);
 
-                    //Check if qr is within the segment and if so finalise solution
-                    if (!qr.is_nan()) && (qr >= self.seg_par_q1[j] && qr <= self.seg_par_q2[j]) {
-                        qout = (qr - qin * self.x) * inv_one_minus_x;
-                        vf = vi + qin - qout;
-                        break 'segments;
+                        //Check if qr is within the segment and if so finalise solution
+                        if (!qr.is_nan()) && (qr >= self.seg_par_q1[j] && qr <= self.seg_par_q2[j]) {
+                            qout = (qr - qin * self.x) * inv_one_minus_x;
+                            vf = vi + qin - qout;
+                            break 'segments;
+                        }
                     }
                 }
             }
@@ -878,15 +971,21 @@ impl RoutingNode {
             //table (travel time is flat beyond the last row), so storage
             //saturates at V(q_max) and the balance goes downstream. For a
             //lag-only node (no table) this reduces to pass-through.
+            vf = self.pwl_v_max;
+            if USING_REACH_LOSSES {
+                vf += dead;
+                // x = 1 set the loss above; for x < 1 it depends on the outflow, so solve for it.
+                if !self.x_is_unity {
+                    (area, loss) = self.loss_above_table(vi + qin - vf, qin, evap_mm);
+                }
+            }
+            qout = vi + qin - vf - loss;
             debug_assert!(
                 self.pwl_segs == 0
-                    || self.x * qin + (1.0 - self.x) * (vi + qin - self.pwl_v_max) >= self.pwl_q_max,
+                    || self.x * qin + (1.0 - self.x) * qout >= self.pwl_q_max,
                 "Node '{}': PWL segment fall-through below the top of the table (qin = {}, vi = {}).",
                 self.name, qin, vi
             );
-            vf = self.pwl_v_max;
-            if USING_REACH_LOSSES { vf += dead; }
-            qout = vi + qin - vf - loss;
         }
 
         //Do not allow water to flow upstream.
