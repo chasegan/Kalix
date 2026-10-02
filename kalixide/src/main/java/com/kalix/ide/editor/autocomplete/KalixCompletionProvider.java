@@ -363,8 +363,9 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             addCompletion(new BasicCompletion(this, "bilinear = true",
                     null,
                     "<html><b>bilinear</b> <i>(optional)</i><br><br>"
-                            + "Enable bilinear interpolation across columns and rows of a 2D table.<br>"
-                            + "Default <code>false</code>.</html>"));
+                            + "2D tables only. Interpolate between column keys as well as row keys,<br>"
+                            + "clamped at the ends of both.<br>"
+                            + "Default <code>false</code> (the column key must match exactly).</html>"));
         } else if ("kalix".equals(sectionName)) {
             SectionDefinition kalixSection = schema.getSection("kalix");
             if (kalixSection != null && kalixSection.properties != null) {
@@ -562,10 +563,21 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
                     null,
                     "<html><b>" + callSignature + "</b>"
                             + "<br><br>Lookup table: " + tableName
-                            + "<br>Shape: " + (is2d ? "2D (exact-match column by default; bilinear when enabled clamped at ends)" : "1D (interpolated, clamped at ends)")
+                            + "<br>Shape: " + tableShape(is2d, entry.getValue())
                             + "</html>");
             addCompletion(completion);
         }
+    }
+
+    private String tableShape(boolean is2d, INIModelParser.Section tableSection) {
+        if (!is2d) {
+            return "1D (interpolated, clamped at ends)";
+        }
+        INIModelParser.Property bilinear = tableSection.getProperties().get("bilinear");
+        if (bilinear != null && "true".equals(bilinear.getValue().trim())) {
+            return "2D (bilinear, clamped at ends)";
+        }
+        return "2D (exact-match column, interpolated row)";
     }
 
     private boolean tableIs2d(INIModelParser.Section tableSection) {
