@@ -53,6 +53,7 @@ mod test_tid;
 
 #[cfg(test)]
 mod test_node_routing;
+mod test_node_routing_reach_losses;
 
 #[cfg(test)]
 mod test_unit_hydrograph;
