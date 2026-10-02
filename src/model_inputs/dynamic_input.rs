@@ -2782,19 +2782,12 @@ fn lower_table_call(
             }
             let row_key = args.pop().unwrap();
             let col_key = args.pop().unwrap();
-            if t.is_bilinear() {
-                Ok(OptimizedExpressionNode::Lookup2DBilinear {
-                    table: t.clone(),
-                    col_key: Box::new(col_key),
-                    row_key: Box::new(row_key),
-                })
+            let (table, col_key, row_key) = (t.clone(), Box::new(col_key), Box::new(row_key));
+            Ok(if t.is_bilinear() {
+                OptimizedExpressionNode::Lookup2DBilinear { table, col_key, row_key }
             } else {
-                Ok(OptimizedExpressionNode::Lookup2D {
-                    table: t.clone(),
-                    col_key: Box::new(col_key),
-                    row_key: Box::new(row_key),
-                })
-            }
+                OptimizedExpressionNode::Lookup2D { table, col_key, row_key }
+            })
         }
     }
 }
