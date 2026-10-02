@@ -121,7 +121,10 @@ impl LookupTable2D {
 
     /// Interpolate down the columns bracketing the key and interpolate between
     /// those results. Clamps at both table edges.
-    #[inline]
+    // Kept out of line: inlined into `evaluate` it grew that function by a
+    // fifth and cost models with no bilinear table 3-4% (ADR-0004 §3.4,
+    // 2026-09-15 amendment).
+    #[inline(never)]
     pub fn lookup_bilinear(&self, col_key: f64, row_key: f64) -> f64 {
         if col_key.is_nan() {
             return f64::NAN;
