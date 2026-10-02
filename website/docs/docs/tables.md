@@ -24,8 +24,8 @@ reference_flow = table.rating(node.reach_5.dsflow)
 Tables come in two forms:
 
 - **1D tables** interpolate linearly between (x, y) breakpoints.
-- **2D tables** select a column by exact key match by default, then interpolate
-  down that column. They can optionally use bilinear interpolation across both axes.
+- **2D tables** select a column by exact key match, then interpolate down
+  that column. With `bilinear = true` they interpolate across both axes.
 
 Tables are global: define one once and reference it from as many expressions
 as you like. The `[table.*]` section can appear anywhere in the model file.
@@ -102,25 +102,51 @@ By default the lookup works in two steps:
     match reliably. Avoid computing a column key with arithmetic that can
     introduce floating-point error (e.g. `volume / 300`): a value of
     `6.9999999…` will not match a key of `7`, and the run will stop with an
-    error showing the offending value.
+    error showing the offending value. For a continuous column key, use
+    [bilinear interpolation](#bilinear-interpolation).
 
 ### Bilinear interpolation
 
-Set `bilinear = true` to interpolate across both the column and row axes:
+Set `bilinear = true` when the column key is a continuous quantity, not a
+label, and the table should interpolate between column keys as well as
+between row keys:
 
 ```ini
-[table.pump_rating]
+# Gate discharge by upstream level (columns) and gate opening (rows)
+[table.gate_flow]
 n_cols = 4
 bilinear = true
-values = volume\month, 1,    2,    3,
-         0,            0,    0,    0,
-         500,          1.0,  1.2,  1.5,
-         2000,         4.0,  4.8,  6.0,
+values = opening\level, 10,  12,  15,
+         0,             0,   0,   0,
+         0.5,           20,  30,  45,
+         1.0,           50,  80,  120,
 ```
 
-With bilinear interpolation enabled, the first argument no longer needs to exactly match a column key. Kalix interpolates down the two surrounding columns using the row key, then interpolates between those results using the column key.
+```ini
+flow = table.gate_flow(node.weir_pool.level, const.gate_opening)
+```
 
-Values outside either axis are clamped to the nearest table edge. The default is `bilinear = false`, which preserves exact column matching.
+Kalix interpolates down the two columns either side of the column key, using
+the row key, then interpolates between those two results using the column
+key. For a level of 13 and an opening of 0.75: the level-12 column gives 55,
+the level-15 column gives 82.5, and 13 is a third of the way from 12 to 15,
+so the result is 64.17.
+
+A bilinear table differs from the default in three ways:
+
+- **There is no exact-match error.** A column key between two column keys is
+  interpolated, and one beyond the first or last column key takes that
+  column. If a missed key should stop the run, leave `bilinear` off.
+- **Both axes clamp.** Outside the table on either axis the nearest edge
+  value is returned, never an extrapolation.
+- **NaN in gives NaN out,** for either argument, as for 1D tables.
+
+A column key that exactly equals one of the table's column keys returns
+exactly what the same table returns without `bilinear`.
+
+`bilinear` takes `true` or `false`, in lowercase, and defaults to `false`.
+It applies to 2D tables only: `bilinear = true` on a 1D table is an error at
+model load.
 
 ### The corner label
 
@@ -179,4 +205,5 @@ model ever runs.
 | Malformed values (bad number, wrong count, non-ascending keys) | Model load (and live in the IDE) |
 | Unknown table name in an expression | Model load |
 | Wrong number of arguments (1D takes 1, 2D takes 2) | Model load |
-| 2D column key with no exact match when `bilinear = false` | During simulation, with table name, value, and available keys |
+| `bilinear = true` on a 1D table, or a value other than `true` or `false` | Model load (and live in the IDE) |
+| 2D column key with no exact match (unless the table sets `bilinear = true`) | During simulation, with table name, value, and available keys |
