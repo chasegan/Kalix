@@ -86,9 +86,11 @@ Call a 2D table with two arguments — the **column key** first, then the
 
 ```ini
 release = table.pump_rating(sim.month, node.dam.volume)
+```
 
-The lookup works in two steps:
-1. **Column selection is an exact match by default.** The first argument must
+By default the lookup works in two steps:
+
+1. **Column selection is an exact match.** The first argument must
    exactly equal one of the column keys. If it doesn't, the simulation stops
    with an error naming the table, the offending value, and the available keys.
 2. **Row lookup interpolates** down the selected column, with the same
