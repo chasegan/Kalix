@@ -94,6 +94,20 @@ fn clamped_lerp(xs: &[f64], ys: &[f64], x: f64) -> f64 {
     ys[i - 1] + (x - x0) * (ys[i] - ys[i - 1]) / (x1 - x0)
 }
 
+/// Number of keys below `x`: the partition point of strictly-ascending keys.
+///
+/// A short key set is counted without branching, because each compare is
+/// then independent of the others, where a binary search chains load,
+/// compare and select. Longer sets fall back to the binary search.
+#[inline(always)]
+fn count_below(keys: &[f64], x: f64) -> usize {
+    if keys.len() <= 32 {
+        keys.iter().map(|k| (*k < x) as usize).sum::<usize>()
+    } else {
+        keys.partition_point(|k| *k < x)
+    }
+}
+
 impl LookupTable1D {
     /// Interpolate the table at `x`, clamping to the endpoint values outside
     /// the table range.
@@ -119,42 +133,73 @@ impl LookupTable2D {
         clamped_lerp(&self.row_keys, column, row_key)
     }
 
-    /// Interpolate down the columns bracketing the key and interpolate between
-    /// those results. Clamps at both table edges.
+    /// Bilinear lookup: interpolate down the two columns bracketing `col_key`
+    /// at `row_key`, then between those two results. Clamps at every edge;
+    /// NaN in either key gives NaN.
+    ///
+    /// Both columns share `row_keys`, so the row bracket is found once. The
+    /// arithmetic on each axis is that of `clamped_lerp`, in the same order.
     // Kept out of line: inlined into `evaluate` it grew that function by a
     // fifth and cost models with no bilinear table 3-4% (ADR-0004 §3.4,
     // 2026-09-15 amendment).
     #[inline(never)]
     pub fn lookup_bilinear(&self, col_key: f64, row_key: f64) -> f64 {
-        if col_key.is_nan() {
-            return f64::NAN;
+        let ck = &self.col_keys[..];
+        let rk = &self.row_keys[..];
+        let v = &self.values[..];
+        let ncols = ck.len();
+        let n = rk.len();
+
+        // Column bracket: `u` is the upper column and `u - 1` the lower.
+        // `!(x > lo)` is true for NaN as well as for the low clamp, so the
+        // ordinary path pays one compare for both.
+        let (u, col_interior) = if !(col_key > ck[0]) {
+            if col_key.is_nan() {
+                return f64::NAN;
+            }
+            (0, false)
+        } else if col_key >= ck[ncols - 1] {
+            (ncols - 1, false)
+        } else {
+            (count_below(ck, col_key), true)
+        };
+
+        // Row bracket: `i` is the upper row and `i - 1` the lower.
+        let (i, row_interior) = if !(row_key > rk[0]) {
+            if row_key.is_nan() {
+                return f64::NAN;
+            }
+            (0, false)
+        } else if row_key >= rk[n - 1] {
+            (n - 1, false)
+        } else {
+            (count_below(rk, row_key), true)
+        };
+
+        match (col_interior, row_interior) {
+            (false, false) => v[u * n + i],
+            (false, true) => {
+                let (x0, x1) = (rk[i - 1], rk[i]);
+                let c = &v[u * n..(u + 1) * n];
+                c[i - 1] + (row_key - x0) * (c[i] - c[i - 1]) / (x1 - x0)
+            }
+            (true, false) => {
+                let l = u - 1;
+                let (lv, uv) = (v[l * n + i], v[u * n + i]);
+                lv + (col_key - ck[l]) * (uv - lv) / (ck[u] - ck[l])
+            }
+            (true, true) => {
+                let l = u - 1;
+                let (x0, x1) = (rk[i - 1], rk[i]);
+                let dx = row_key - x0;
+                let w = x1 - x0;
+                let lo = &v[l * n..u * n];
+                let hi = &v[u * n..(u + 1) * n];
+                let lv = lo[i - 1] + dx * (lo[i] - lo[i - 1]) / w;
+                let uv = hi[i - 1] + dx * (hi[i] - hi[i - 1]) / w;
+                lv + (col_key - ck[l]) * (uv - lv) / (ck[u] - ck[l])
+            }
         }
-
-        let ncols = self.col_keys.len();
-        let nrows = self.row_keys.len();
-
-        if col_key <= self.col_keys[0] {
-            let column = &self.values[..nrows];
-            return clamped_lerp(&self.row_keys, column, row_key);
-        }
-
-        if col_key >= self.col_keys[ncols - 1] {
-            let column = &self.values[(ncols - 1) * nrows..ncols * nrows];
-            return clamped_lerp(&self.row_keys, column, row_key);
-        }
-
-        let upper = self.col_keys.partition_point(|key| *key < col_key);
-        let lower = upper - 1;
-
-        let lower_column = &self.values[lower * nrows..upper * nrows];
-        let upper_column = &self.values[upper * nrows..(upper + 1) * nrows];
-
-        let lower_value = clamped_lerp(&self.row_keys, lower_column, row_key);
-        let upper_value = clamped_lerp(&self.row_keys, upper_column, row_key);
-
-        lower_value
-            + (col_key - self.col_keys[lower]) * (upper_value - lower_value)
-                / (self.col_keys[upper] - self.col_keys[lower])
     }
 
     pub fn is_bilinear(&self) -> bool {
