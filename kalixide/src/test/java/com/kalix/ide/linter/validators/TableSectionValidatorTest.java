@@ -80,6 +80,29 @@ class TableSectionValidatorTest {
         assertHasIssue("[table.t]\nn_cols = 1\nvalues = 0, 0, 1, 1\n", "n_cols must be at least 2");
     }
 
+    @Test
+    @DisplayName("bilinear accepts true or false on a 2D table")
+    void testValidBilinear() {
+        assertNoIssues("[table.t]\nn_cols = 3\nbilinear = true\nvalues = x, 1, 2, 0, 5, 6\n");
+        assertNoIssues("[table.t]\nbilinear = true\nn_cols = 3\nvalues = x, 1, 2, 0, 5, 6\n");
+        assertNoIssues("[table.t]\nn_cols = 3\nbilinear = false\nvalues = x, 1, 2, 0, 5, 6\n");
+        assertNoIssues("[table.t]\nbilinear = false\nvalues = 0, 0, 1, 1\n");
+    }
+
+    @Test
+    @DisplayName("Bad bilinear values should be flagged")
+    void testBadBilinear() {
+        assertHasIssue("[table.t]\nn_cols = 3\nbilinear = yes\nvalues = x, 1, 2, 0, 5, 6\n", "bilinear must be 'true' or 'false'");
+        assertHasIssue("[table.t]\nn_cols = 3\nbilinear = True\nvalues = x, 1, 2, 0, 5, 6\n", "bilinear must be 'true' or 'false'");
+    }
+
+    @Test
+    @DisplayName("bilinear = true on a 1D table should be flagged, whatever the property order")
+    void testBilinearOn1dTable() {
+        assertHasIssue("[table.t]\nbilinear = true\nvalues = 0, 0, 1, 1\n", "bilinear applies only to 2D tables");
+        assertHasIssue("[table.t]\nbilinear = true\nn_cols = 2\nvalues = 0, 0, 1, 1\n", "bilinear applies only to 2D tables");
+    }
+
     // ==================== Data grid validation ====================
 
     @Test

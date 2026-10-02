@@ -118,6 +118,9 @@ fn test_1d_parse_errors() {
     assert!(LookupTable::from_ini_data("t", "stage, flow", 2, false).is_err());
     // ncols below 2
     assert!(LookupTable::from_ini_data("t", "0, 0", 1, false).is_err());
+    // bilinear has no meaning on a 1D table
+    let err = LookupTable::from_ini_data("t", "0, 0, 1, 1", 2, true).unwrap_err();
+    assert!(err.contains("bilinear applies only to 2D tables"), "{}", err);
 }
 
 // -------------------------------------------------------------------------------------

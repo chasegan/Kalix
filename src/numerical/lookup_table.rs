@@ -248,6 +248,9 @@ impl LookupTable {
         let tokens: Vec<&str> = trimmed.split(',').map(str::trim).collect();
 
         if ncols == 2 {
+            if bilinear {
+                return Err(format!("Table 'table.{}': bilinear applies only to 2D tables (n_cols greater than 2)", name));
+            }
             Self::parse_1d(name, &tokens)
         } else {
             Self::parse_2d(name, &tokens, ncols, bilinear)
