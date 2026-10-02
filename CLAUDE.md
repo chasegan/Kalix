@@ -23,9 +23,10 @@ modellers. Its values, held in balance and not as a ranking: free and open
 hydrology, correctness first (§2.3); obsessive about speed on the engine's hot
 path (§2.4); built for serious practitioners (§2.5); clarity wherever speed
 isn't the point, including the language we use (§2.6); forward-thinking but
-grounded in real use (§2.7). §3 says which value leads when they collide —
-speed on the hot path, yielding only to correctness; clarity everywhere else;
-transparency never traded for convenience.
+grounded in real use (§2.7); less is more — Kalix stays small on purpose
+(§2.8). §3 says which value leads when they collide — speed on the hot path,
+yielding only to correctness; clarity everywhere else; transparency never
+traded for convenience; less is more.
 
 Do not flatten Kalix to a single slogan, and do not let the part of the
 platform you are working on today close your mind to the rest.

@@ -79,6 +79,12 @@ Adding something that makes another user's model slower is a sin, and
 your penance shall be to spend time looking for ways to make the engine run 
 their model faster than ever.
 
+The devil is in the details. Speed is rarely lost in one place; it is lost a
+branch, an allocation, a bounds check and a stack spill at a time, each too
+small to notice on its own. Speed is kept the same way, so the details of the
+hot path get the same attention as its design, and a change to it is
+measured, not assumed.
+
 ### 2.5 Built for serious practitioners
 
 Kalix is for expert modellers who want flexibility and control. We 
@@ -108,6 +114,16 @@ when they serve real modelling needs, not for novelty's sake. New features
 should be grounded in real use-cases. Features will not be added to cover
 invented needs.
 
+### 2.8 Less is more
+
+Every feature, setting and keyword Kalix carries is carried forever: by every
+modeller who must know it to read a model file, and by the engine, the IDE,
+the linter and the docs that must support it. These costs compound as
+features combine. So Kalix stays small on purpose. A thing is added when it
+is better than what can already be written, not because it is possible and
+not because it is convenient; and once Kalix has one way of doing something,
+a second way must justify itself against the first. If in doubt, leave it out.
+
 ## 3. When values collide
 
 With good design, the values in §2 are usually achieved together. This section
@@ -124,6 +140,8 @@ is for the times they cannot be.
   that wants to rearrange or rewrite a model does so in the file, visibly.
 - **A real need outranks an elegant idea (§2.7).** However good a feature
   looks, it waits until a use-case exists.
+- **Less is more (§2.8).** Needing a feature is not enough to get it added.
+  If Kalix can already do the job, the new way has to be clearly better.
 - **Values outrank money (§2.1).** Funding orders the queue; it never buys 
   a change that runs counter to the values of the project.
 
