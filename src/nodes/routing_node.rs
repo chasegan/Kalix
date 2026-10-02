@@ -563,7 +563,7 @@ impl<const USING_REACH_LOSS: bool> Node for RoutingNode<USING_REACH_LOSS> {
                     self.seg_par_cc[i] = c;
                 }
 
-                //Saturation point for out-of-table reference flows (see run_flow_phase).
+                //Saturation point for out-of-table reference flows (see route_division_pwl).
                 if self.pwl_segs > 0 {
                     self.pwl_q_max = self.seg_par_q2[self.pwl_segs - 1];
                     self.pwl_v_max = self.seg_par_v2[self.pwl_segs - 1];
@@ -577,8 +577,17 @@ impl<const USING_REACH_LOSS: bool> Node for RoutingNode<USING_REACH_LOSS> {
         // Init PWL and NLM storage array
         self.div_sto_array.fill(0.0);
 
-        if !USING_REACH_LOSS && self.loss_table.nrows() > 0 {
+        // The variant must match what is configured; the reader guarantees it, a node built in code may not.
+        let has_evap = !matches!(self.evap_mm_input, DynamicInput::None { .. });
+        let has_loss_table = self.loss_table.nrows() > 0;
+        if has_evap != has_loss_table {
             return Err(format!("Error in node '{}'. `evap` and `loss_table` must be specified together.", self.name));
+        }
+        if has_evap != USING_REACH_LOSS {
+            return Err(format!(
+                "Error in node '{}'. A routing node with `evap` and `loss_table` must be NodeEnum::RoutingNodeReachLosses, and one without must be NodeEnum::RoutingNode.",
+                self.name
+            ));
         }
         if USING_REACH_LOSS {
             self.build_loss_lookups()?;
@@ -620,7 +629,8 @@ impl<const USING_REACH_LOSS: bool> Node for RoutingNode<USING_REACH_LOSS> {
             data_cache.add_value_at_index(idx, self.usflow);
         }
         
-        let evap_mm = self.evap_mm_input.get_value(data_cache);
+        // Without reach losses there is no evap to read; the recorder still gets zeros.
+        let evap_mm = if USING_REACH_LOSS { self.evap_mm_input.get_value(data_cache) } else { 0.0 };
         if let Some(idx) = self.recorder_idx_evap {
             data_cache.add_value_at_index(idx, evap_mm);
         }
@@ -907,7 +917,7 @@ impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
     #[inline(always)]
     fn route_division_pwl(&mut self, i: usize, qin: f64, evap_mm: f64) -> f64 {
         let vi = self.div_sto_array[i];   //initial storage volume for this division
-        let mut qout = 0.0;               //variable to hold outflow
+        let mut qout: f64;                //variable to hold outflow
         let mut vf = 0.0;                 //variable to hold final storage volume
         // Reach losses: the dead share held while flowing, and the flowing loss at
         // the end-of-step area. All zero without the feature, so the arithmetic is unchanged.
