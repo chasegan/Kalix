@@ -62,6 +62,31 @@ class RainfallRunoffParamsDefinitionTest {
     }
 
     @Test
+    void gr4jsgParamListsAreRegisteredInEngineOrder() {
+        TablePropertyRegistry registry = TablePropertyRegistry.getInstance();
+
+        TablePropertyDefinition params = registry.findHandler("gr4jsg", "params", "1500, 4, 65, 0.38");
+        assertNotNull(params, "no params table view registered for gr4jsg");
+        assertArrayEquals(new String[] {"x1", "x2", "x3", "x4"}, params.getRowNames());
+
+        String snowValue = "0.5, 0, 3.38, 1.3, 3";
+        TablePropertyDefinition snow = registry.findHandler("gr4jsg", "snow_params", snowValue);
+        assertNotNull(snow, "no snow_params table view registered for gr4jsg");
+        assertArrayEquals(new String[] {"tfrac", "taccum", "m_rainfall", "base_rainfall", "m_nonrainfall"},
+                snow.getRowNames());
+        assertEquals(5, snow.getValuesPerLine());
+        assertEquals("3.38", snow.parseValues(snowValue)[2][0]);
+
+        String iceValue = "100000, 6, 0, 0.5, 0";
+        TablePropertyDefinition ice = registry.findHandler("gr4jsg", "ice_params", iceValue);
+        assertNotNull(ice, "no ice_params table view registered for gr4jsg");
+        assertArrayEquals(new String[] {"initial_ice", "ddfi", "tmelt", "return_flow", "accumulation"},
+                ice.getRowNames());
+        assertEquals(5, ice.getValuesPerLine());
+        assertEquals("100000", ice.parseValues(iceValue)[0][0]);
+    }
+
+    @Test
     void rainLinearCombinationIsRegisteredForBothNodes() {
         String rain = "0.4 * data.a.by_name.rain + 0.6 * data.b.by_name.rain";
         assertNotNull(TablePropertyRegistry.getInstance().findHandler("awbm", "rain", rain));

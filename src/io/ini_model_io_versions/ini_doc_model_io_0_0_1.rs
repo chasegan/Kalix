@@ -13,7 +13,7 @@ use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
 use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
-use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, field_node::FieldNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode, Node};
+use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, field_node::FieldNode, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode, gr4jsg_node::Gr4jsgNode, Node};
 use crate::hydrology::rainfall_runoff::gr4j::Gr4Variant;
 use crate::hydrology::rainfall_runoff::awbm::AwbmVariant;
 use crate::nodes::storage_node::OutletDefinition;
@@ -54,6 +54,7 @@ pub(crate) const NODE_STATIC_F64_PROPERTIES: &[(&str, &str)] = &[
     ("sacramento", "area"),
     ("awbm", "area"),
     ("surm", "area"),
+    ("gr4jsg", "area"),
     ("routing", "x"),
     ("routing", "typical_regulated_flow"),
     ("routing", "dead_storage"),
@@ -559,6 +560,79 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         }
                     }
                     NodeEnum::Gr4jNode(n)
+                }
+                "gr4jsg" => {
+                    let mut n = Gr4jsgNode::new();
+                    n.name = node_name.to_string();
+                    for (name, ini_property) in ini_section.properties {
+                        let name_lower = name.to_lowercase();
+                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
+                        if name_lower == "loc" {
+                            n.location = Location::from_str(v)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "type" {
+                            // Skipping this
+                        } else if name_lower == "ds_1" {
+                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
+                        } else if name_lower == "evap" {
+                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "rain" {
+                            n.rain_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "tmax" {
+                            n.tmax_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "tmin" {
+                            n.tmin_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "area" {
+                            n.area_km2 = v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                                     ini_property.line_number, name, node_name)))?;
+                        } else if name_lower == "params" {
+                            let params = csv_string_to_f64_vec(v)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                            if params.len() != 4 {
+                                return Err(KalixIoError::Parse(format!("Error on line {}: GR4JSG params must have 4 values, got {}",
+                                                   ini_property.line_number, params.len())));
+                            }
+                            n.gr4jsg_model.gr4j.x1 = params[0];
+                            n.gr4jsg_model.gr4j.x2 = params[1];
+                            n.gr4jsg_model.gr4j.x3 = params[2];
+                            n.gr4jsg_model.gr4j.x4 = params[3];
+                        } else if name_lower == "snow_params" {
+                            let params = csv_string_to_f64_vec(v)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                            if params.len() != 5 {
+                                return Err(KalixIoError::Parse(format!("Error on line {}: GR4JSG snow_params must have 5 values, got {}",
+                                                   ini_property.line_number, params.len())));
+                            }
+                            n.gr4jsg_model.tfrac = params[0];
+                            n.gr4jsg_model.taccum = params[1];
+                            n.gr4jsg_model.m_rainfall = params[2];
+                            n.gr4jsg_model.base_rainfall = params[3];
+                            n.gr4jsg_model.m_nonrainfall = params[4];
+                        } else if name_lower == "ice_params" {
+                            // Declaring ice_params is what gives the node a glacier.
+                            let params = csv_string_to_f64_vec(v)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                            if params.len() != 5 {
+                                return Err(KalixIoError::Parse(format!("Error on line {}: GR4JSG ice_params must have 5 values, got {}",
+                                                   ini_property.line_number, params.len())));
+                            }
+                            n.gr4jsg_model.glacier = true;
+                            n.gr4jsg_model.initial_ice = params[0];
+                            n.gr4jsg_model.ddfi = params[1];
+                            n.gr4jsg_model.tmelt = params[2];
+                            n.gr4jsg_model.return_flow = params[3];
+                            n.gr4jsg_model.accumulation = params[4];
+                        } else {
+                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                              ini_property.line_number, name, node_name)));
+                        }
+                    }
+                    NodeEnum::Gr4jsgNode(n)
                 }
                 "awbm" => {
                     let mut n = AwbmNode::new();
@@ -1573,6 +1647,26 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 ini_doc.set_property(section_name.as_str(), "area", n.area_km2.to_string().as_str());
                 let params_str = format!("{}, {}, {}, {}", n.gr4j_model.x1, n.gr4j_model.x2, n.gr4j_model.x3, n.gr4j_model.x4);
                 ini_doc.set_property(section_name.as_str(), "params", params_str.as_str());
+            }
+            NodeEnum::Gr4jsgNode(n) => {
+                let section_name = format!("node.{}", n.name);
+                let m = &n.gr4jsg_model;
+                ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
+                ini_doc.set_property(section_name.as_str(), "type", "gr4jsg");
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "rain", &n.rain_mm_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "tmax", &n.tmax_input.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "tmin", &n.tmin_input.to_string());
+                ini_doc.set_property(section_name.as_str(), "area", n.area_km2.to_string().as_str());
+                let params_str = format!("{}, {}, {}, {}", m.gr4j.x1, m.gr4j.x2, m.gr4j.x3, m.gr4j.x4);
+                ini_doc.set_property(section_name.as_str(), "params", params_str.as_str());
+                let snow_params_str = format!("{}, {}, {}, {}, {}", m.tfrac, m.taccum, m.m_rainfall, m.base_rainfall, m.m_nonrainfall);
+                ini_doc.set_property(section_name.as_str(), "snow_params", snow_params_str.as_str());
+                // Only a node with a glacier has an ice_params line.
+                if m.glacier {
+                    let ice_params_str = format!("{}, {}, {}, {}, {}", m.initial_ice, m.ddfi, m.tmelt, m.return_flow, m.accumulation);
+                    ini_doc.set_property(section_name.as_str(), "ice_params", ice_params_str.as_str());
+                }
             }
             NodeEnum::AwbmNode(n) => {
                 let section_name = format!("node.{}", n.name);

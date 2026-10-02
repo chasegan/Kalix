@@ -201,6 +201,28 @@
         "params": {"type": "number_sequence", "description": "AWBM parameters: a1, a2, c1, c2, c3, bfi, k_base, k_surf (8 values); with variant = two_tap: a1, a2, c1, c2, c3, inf_base, gw_sat, gw_max, k_base, k2, h_gw (11 values)"}
       }
     },
+    "gr4jsg": {
+      "description": "GR4JSG rainfall-runoff model: GR4J with snow and, optionally, a glacier",
+      "allowed_outputs": [
+        "usflow", "runoff_volume", "runoff_depth", "dsflow", "ds_1", "ds_1_order", "rain", "evap", "area",
+        "production_store", "routing_store", "snow_store", "snowfall", "snow_melt", "ice_store", "ice_melt"
+      ],
+      "required_params": ["type", "loc", "area", "rain", "evap", "tmax", "tmin", "params", "snow_params"],
+      "optional_params": ["ice_params"],
+      "dsnode_params": ["ds_1"],
+      "parameters": {
+        "type": {"type": "literal", "value": "gr4jsg"},
+        "loc": {"type": "coordinates", "format": "float,float"},
+        "area": {"type": "number", "min": 0, "description": "Catchment area"},
+        "rain": {"type": "function_expression", "description": "Precipitation input (data reference, constant, or expression)"},
+        "evap": {"type": "function_expression", "description": "Evaporation input (data reference, constant, or expression)"},
+        "tmax": {"type": "function_expression", "description": "Daily maximum temperature of the catchment in °C (data reference, constant, or expression)"},
+        "tmin": {"type": "function_expression", "description": "Daily minimum temperature of the catchment in °C (data reference, constant, or expression)"},
+        "params": {"type": "number_sequence", "count": 4, "description": "GR4J parameters: x1, x2, x3, x4"},
+        "snow_params": {"type": "number_sequence", "count": 5, "description": "Snow parameters: tfrac, taccum, m_rainfall, base_rainfall, m_nonrainfall"},
+        "ice_params": {"type": "number_sequence", "count": 5, "description": "Glacier parameters: initial_ice, ddfi, tmelt, return_flow, accumulation. Declaring this line gives the node a glacier."}
+      }
+    },
     "surm": {
       "description": "Simple Urban Rainfall-Runoff Model",
       "allowed_outputs": [

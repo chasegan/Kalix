@@ -10,6 +10,7 @@ pub mod gauge_node;
 pub mod loss_node;
 pub mod splitter_node;
 pub mod gr4j_node;
+pub mod gr4jsg_node;
 pub mod inflow_node;
 pub mod storage_node;
 pub mod regulated_user_node;
