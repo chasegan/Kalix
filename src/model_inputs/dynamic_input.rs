@@ -344,8 +344,9 @@ pub enum OptimizedExpressionNode {
         row_key: Box<OptimizedExpressionNode>,
     },
 
-    /// Variant 2D lookup table (`table.<name>(col_key, row_key)`): bilinear
-    /// clamped interpolation down rows and across columns
+    /// Named 2D lookup table with `bilinear = true`
+    /// (`table.<name>(col_key, row_key)`): clamped linear interpolation down
+    /// the two bracketing columns, then between them. No exact-match panic.
     Lookup2DBilinear {
         table: Arc<LookupTable2D>,
         col_key: Box<OptimizedExpressionNode>,

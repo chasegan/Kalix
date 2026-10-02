@@ -15,8 +15,11 @@
 ///   followed by `n_cols - 1` column keys; each following row is a row key and
 ///   `n_cols - 1` values. The first argument selects a column by **exact
 ///   match** (panics with context otherwise); the second interpolates down
-///   that column with the same clamped-linear rule as 1D. When `bilinear = true`,
-///   the lookup becomes bilinear interpolation over the surrounding four cells.
+///   that column with the same clamped-linear rule as 1D.
+/// - **2D with `bilinear = true`**: the first argument is interpolated too.
+///   The lookup interpolates down the two columns bracketing the column key,
+///   then between those two results. Both axes clamp, and there is no
+///   exact-match panic.
 ///
 /// Line breaks carry no meaning in the `values` property: a table may be
 /// written on one line or spread over many continuation lines.
@@ -38,21 +41,24 @@ pub struct LookupTable1D {
 }
 
 /// A 2D lookup table: exact-match column selection, then clamped linear
-/// interpolation down the selected column.
+/// interpolation down the selected column; or, when `bilinear` is set,
+/// clamped linear interpolation on both axes.
 #[derive(Debug, Clone)]
 pub struct LookupTable2D {
     /// Bare table name (without the `table.` prefix), used in error messages.
     name: String,
     /// The non-numeric corner marker from the key row, preserved for serialization.
     corner: String,
-    /// Column keys (top row), strictly ascending. Matched exactly.
+    /// Column keys (top row), strictly ascending. Matched exactly, or
+    /// interpolated when `bilinear` is set.
     col_keys: Vec<f64>,
     /// Row keys (first column), strictly ascending. Interpolated.
     row_keys: Vec<f64>,
     /// Values stored column-major (`values[c * nrows + r]`) so the
     /// interpolation walk down a selected column is contiguous in memory.
     values: Vec<f64>,
-    /// Selects the bilinear variant during expression lowering.
+    /// From `bilinear = true`. Read at expression lowering, which picks the
+    /// `Lookup2DBilinear` node; never read by a lookup (ADR-0009 §4).
     bilinear: bool,
 }
 

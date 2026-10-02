@@ -106,7 +106,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     }
                     "bilinear" => {
                         bilinear = ini_property.value.trim().parse::<bool>()
-                            .map_err(|_| KalixIoError::Parse(format!("Error on line {}: bilinear for table '{}' must be a true or false, got '{}'",
+                            .map_err(|_| KalixIoError::Parse(format!("Error on line {}: bilinear for table '{}' must be true or false, got '{}'",
                                                  ini_property.line_number, table_name, ini_property.value)))?;
                     }
                     "values" => values = Some(ini_property.value.as_str()),
