@@ -145,10 +145,8 @@ impl LookupTable2D {
     ///
     /// Both columns share `row_keys`, so the row bracket is found once. The
     /// arithmetic on each axis is that of `clamped_lerp`, in the same order.
-    // Kept out of line: inlined into `evaluate` it grew that function by a
-    // fifth and cost models with no bilinear table 3-4% (ADR-0004 §3.4,
-    // 2026-09-15 amendment).
-    #[inline(never)]
+    // Inlined into `lookup_bilinear_with`, which is how the engine reaches it.
+    #[inline(always)]
     pub fn lookup_bilinear(&self, col_key: f64, row_key: f64) -> f64 {
         let ck = &self.col_keys[..];
         let rk = &self.row_keys[..];
@@ -209,6 +207,21 @@ impl LookupTable2D {
                 lv + (col_key - ck[l]) * (uv - lv) / (ck[u] - ck[l])
             }
         }
+    }
+
+    /// `lookup_bilinear` on the keys that `keys` returns: the form the
+    /// expression evaluator calls, passing the evaluation of its two
+    /// arguments as the closure.
+    // This is the shape that measured fast for tables with `bilinear` and
+    // free for tables without (ADR-0004 §3.4, §4). Inlined into `evaluate`,
+    // the lookup grew that function by a fifth and cost models with no
+    // bilinear table 3-4%. As a function of two keys called from `evaluate`
+    // it cost them nothing, but ran models that use it 3-33% slower than
+    // this does. Why is not established; the code is the same.
+    #[inline(never)]
+    pub fn lookup_bilinear_with(&self, keys: impl FnOnce() -> (f64, f64)) -> f64 {
+        let (col_key, row_key) = keys();
+        self.lookup_bilinear(col_key, row_key)
     }
 
     pub fn is_bilinear(&self) -> bool {

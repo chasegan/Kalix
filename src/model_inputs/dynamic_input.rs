@@ -552,7 +552,7 @@ impl OptimizedExpressionNode {
             }
 
             OptimizedExpressionNode::Lookup2DBilinear { table, col_key, row_key } => {
-                table.lookup_bilinear(col_key.evaluate(data_cache), row_key.evaluate(data_cache))
+                table.lookup_bilinear_with(|| (col_key.evaluate(data_cache), row_key.evaluate(data_cache)))
             }
         }
     }
