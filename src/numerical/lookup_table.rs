@@ -161,7 +161,10 @@ impl LookupTable2D {
         } else if col_key >= ck[ncols - 1] {
             (ncols - 1, false)
         } else {
-            (count_below(ck, col_key), true)
+            // A key that equals a column key takes that column alone, so
+            // the result is exactly what the exact-match lookup returns.
+            let u = count_below(ck, col_key);
+            (u, ck[u] != col_key)
         };
 
         // Row bracket: `i` is the upper row and `i - 1` the lower.
