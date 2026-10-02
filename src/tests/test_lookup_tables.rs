@@ -626,3 +626,104 @@ values = x, 1, 2,
     }
     assert!(!model2.data_cache.tables.get("plain").expect("plain survives round-trip").is_bilinear());
 }
+
+// -------------------------------------------------------------------------------------
+// Bracket search across table sizes
+// -------------------------------------------------------------------------------------
+
+/// Clamped linear interpolation by a plain scan, with the arithmetic in the
+/// lookup's order, so a correct lookup matches it bit for bit.
+fn reference_lerp(xs: &[f64], ys: &[f64], x: f64) -> f64 {
+    let n = xs.len();
+    if x <= xs[0] {
+        return ys[0];
+    }
+    if x >= xs[n - 1] {
+        return ys[n - 1];
+    }
+    let i = (1..n).find(|i| xs[*i] >= x).unwrap();
+    ys[i - 1] + (x - xs[i - 1]) * (ys[i] - ys[i - 1]) / (xs[i] - xs[i - 1])
+}
+
+/// `n` unevenly spaced ascending keys.
+fn sized_keys(n: usize) -> Vec<f64> {
+    (0..n).map(|i| i as f64 * 1.5 + (i % 3) as f64 * 0.25).collect()
+}
+
+/// Every key, a point either side of it, a point between it and the next, and
+/// points beyond both ends.
+fn probes(keys: &[f64]) -> Vec<f64> {
+    let mut xs = vec![keys[0] - 10.0, keys[keys.len() - 1] + 10.0];
+    for (i, k) in keys.iter().enumerate() {
+        xs.extend([*k, k - 1e-9, k + 1e-9]);
+        if i + 1 < keys.len() {
+            xs.push(k + 0.37 * (keys[i + 1] - k));
+        }
+    }
+    xs
+}
+
+/// Lookups find their bracket by counting in a short key set and by binary
+/// search in a long one. The sizes here sit either side of the widths the
+/// count is vectorised in and either side of the cutoff between the two
+/// (128 keys), and run well past it.
+const BRACKET_SIZES: [usize; 12] = [2, 3, 7, 8, 9, 16, 33, 127, 128, 129, 200, 300];
+
+#[test]
+fn test_1d_lookup_matches_reference_at_every_table_size() {
+    for n in BRACKET_SIZES {
+        let xs = sized_keys(n);
+        let ys: Vec<f64> = xs.iter().map(|x| (x * 0.7).sin() * 100.0).collect();
+        let data = xs.iter().zip(&ys).map(|(x, y)| format!("{}, {}", x, y)).collect::<Vec<_>>().join(", ");
+        let t = parse_1d(&data);
+        for x in probes(&xs) {
+            let expected = reference_lerp(&xs, &ys, x);
+            let got = lookup_1d(&t, x);
+            assert_eq!(got.to_bits(), expected.to_bits(), "{} keys at x = {}: got {}, expected {}", n, x, got, expected);
+        }
+        assert!(lookup_1d(&t, f64::NAN).is_nan());
+    }
+}
+
+#[test]
+fn test_2d_lookups_match_reference_at_every_table_size() {
+    // The same key set on both axes, so each size exercises the column
+    // search and the row search, for the exact-match and bilinear lookups.
+    for n in BRACKET_SIZES {
+        let keys = sized_keys(n);
+        let cell = |c: usize, r: usize| ((c * 31 + r * 17) % 101) as f64 * 0.5 - 7.0;
+        let mut data = format!("x, {}", keys.iter().map(|k| k.to_string()).collect::<Vec<_>>().join(", "));
+        for (r, row_key) in keys.iter().enumerate() {
+            data += &format!(", {}", row_key);
+            for c in 0..n {
+                data += &format!(", {}", cell(c, r));
+            }
+        }
+        let exact = parse_2d(&data, n + 1);
+        let bilinear = parse_2d_bilinear(&data, n + 1);
+        let column = |c: usize| (0..n).map(|r| cell(c, r)).collect::<Vec<f64>>();
+
+        // A few rows are enough to cover the row search at each size.
+        let row_probes: Vec<f64> = probes(&keys).into_iter().step_by(1 + n / 8).collect();
+        for row_key in &row_probes {
+            // Exact-match lookup at every column key
+            for (c, col_key) in keys.iter().enumerate() {
+                let expected = reference_lerp(&keys, &column(c), *row_key);
+                let got = lookup_2d(&exact, *col_key, *row_key);
+                assert_eq!(got.to_bits(), expected.to_bits(), "{} keys, exact-match at ({}, {})", n, col_key, row_key);
+            }
+            // Bilinear lookup: down each column, then across
+            let down: Vec<f64> = (0..n).map(|c| reference_lerp(&keys, &column(c), *row_key)).collect();
+            for col_key in probes(&keys) {
+                let expected = reference_lerp(&keys, &down, col_key);
+                let got = lookup_2d_bilinear(&bilinear, col_key, *row_key);
+                // At a column key the bilinear lookup returns the column itself.
+                let expected = match keys.iter().position(|k| *k == col_key) {
+                    Some(c) => down[c],
+                    None => expected,
+                };
+                assert_eq!(got.to_bits(), expected.to_bits(), "{} keys, bilinear at ({}, {}): got {}, expected {}", n, col_key, row_key, got, expected);
+            }
+        }
+    }
+}

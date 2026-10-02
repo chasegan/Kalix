@@ -18,6 +18,10 @@ The three models each emphasise a different part of the engine's hot path:
                         lag+PWL routing, and seasonal regulated users, joining
                         into a common trunk. Emphasises the ordering phase and
                         the storage backward-Euler solver.
+  6_unregulated_users_with_tables - the network of models 2 and 3 with every
+                        pump capacity a lookup table call: a 1D rating, an
+                        exact-match monthly rule, a bilinear surface, and the
+                        three combined. Emphasises the table lookups.
 
 Deterministic: fixed seeds, so regenerating produces identical files.
 The generated .ini and .csv files are committed; do not hand-edit them —
@@ -110,6 +114,9 @@ class ModelBuilder:
     def node(self, name, node_type, x, y, props):
         self.lines += [f"[node.{name}]", f"loc = {x:.1f}, {y:.1f}", f"type = {node_type}"]
         self.lines += props + [""]
+
+    def section(self, text):
+        self.lines += text.strip("\n").split("\n") + [""]
 
     def output(self, ref):
         self.outputs.append(ref)
@@ -215,7 +222,7 @@ def pump_props(rng, style, head_gauge):
 CONTROL_DEMAND = 18.6  # scalar demand for the no-functions control model
 
 
-def build_unregulated(folder_name, title, with_functions):
+def build_unregulated(folder_name, title, pumps=None, tables=None):
     folder = HERE / folder_name
     folder.mkdir(exist_ok=True)
 
@@ -244,9 +251,9 @@ def build_unregulated(folder_name, title, with_functions):
         for u in range(USERS_PER_REACH):
             name = f"r{r}_user{u}"
             nxt = f"r{r}_user{u + 1}" if u + 1 < USERS_PER_REACH else f"conf{r // 2}"
-            if with_functions:
+            if pumps:
                 props = ["demand = 999999999"]
-                props += pump_props(rng, (r * USERS_PER_REACH + u) % 5, gauge)
+                props += pumps(rng, r * USERS_PER_REACH + u, gauge)
             else:
                 props = [f"demand = {CONTROL_DEMAND}"]
             props += [f"ds_1 = {nxt}"]
@@ -263,6 +270,9 @@ def build_unregulated(folder_name, title, with_functions):
         m.node(f"sink{c}", "blackhole", c * 80 + 20, 180, [])
         m.output(f"node.{gauge}.ds_1")
 
+    if tables:
+        m.section(tables)
+
     for r in (0, 3):
         m.output(f"node.r{r}_user5.diversion")
         m.output(f"node.r{r}_user5.ds_1")
@@ -275,7 +285,6 @@ def build_model_2():
     build_unregulated(
         "2_unregulated_users",
         "Speed test 2: unregulated users with scalar demands (control for test 3)",
-        with_functions=False,
     )
 
 
@@ -283,7 +292,69 @@ def build_model_3():
     build_unregulated(
         "3_unregulated_users_with_functions",
         "Speed test 3: unregulated users with pump capacity functions",
-        with_functions=True,
+        pumps=lambda rng, i, gauge: pump_props(rng, i % 5, gauge),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Model 6: unregulated users with lookup tables
+# ---------------------------------------------------------------------------
+
+# Sizes typical of real models: a rating of nine breakpoints, a monthly rule
+# of twelve columns, and a small surface keyed by two flows.
+LOOKUP_TABLES = """
+[table.rate]
+values = flow, cap,
+         0,    0,
+         20,   2,
+         50,   8,
+         100,  15,
+         250,  22,
+         600,  30,
+         1500, 41,
+         5000, 55,
+
+[table.rule]
+n_cols = 13
+values = flow\\month, 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,
+         0,          0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+         30,         5,  5,  4,  3,  2,  1,  1,  2,  3,  4,  5,  5,
+         100,        20, 20, 18, 15, 12, 10, 10, 12, 15, 18, 20, 20,
+         400,        35, 35, 30, 28, 25, 20, 20, 25, 28, 30, 35, 35,
+         1500,       50, 50, 45, 40, 35, 30, 30, 35, 40, 45, 50, 50,
+         100000,     60, 60, 55, 50, 45, 40, 40, 45, 50, 55, 60, 60,
+
+[table.share]
+n_cols = 7
+bilinear = true
+values = flow\\head, 0,  25, 75, 150, 400, 2000,
+         0,         0,  0,  0,  0,   0,   0,
+         20,        0,  1,  2,  3,   4,   4,
+         60,        0,  3,  6,  9,   12,  14,
+         200,       0,  6,  12, 20,  28,  32,
+         800,       0,  8,  18, 30,  44,  52,
+         5000,      0,  10, 22, 38,  58,  70,
+"""
+
+
+def table_pump_props(i, head_gauge):
+    """Pump expressions that are table lookups: a 1D rating, an exact-match
+    monthly rule, a bilinear surface, and the three combined."""
+    rate = "table.rate(this.usflow)"
+    rule = "table.rule(sim.month, this.usflow)"
+    share = f"table.share(node.{head_gauge}.dsflow, this.usflow)"
+    return [[f"pump = {rate}"],
+            [f"pump = {rule}"],
+            [f"pump = {share}"],
+            [f"pump = max(0, min({rate}, {rule}) - 0.1 * {share})"]][i % 4]
+
+
+def build_model_6():
+    build_unregulated(
+        "6_unregulated_users_with_tables",
+        "Speed test 6: unregulated users with pump capacities from lookup tables",
+        pumps=lambda rng, i, gauge: table_pump_props(i, gauge),
+        tables=LOOKUP_TABLES,
     )
 
 
@@ -540,4 +611,5 @@ if __name__ == "__main__":
     build_model_3()
     build_model_4()
     build_model_5()
-    print("Generated speed test models 1-5.")
+    build_model_6()
+    print("Generated speed test models 1-6.")

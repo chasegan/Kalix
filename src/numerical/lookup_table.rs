@@ -93,12 +93,19 @@ fn clamped_lerp(xs: &[f64], ys: &[f64], x: f64) -> f64 {
         return ys[n - 1];
     }
     // First index with xs[i] >= x; the guards above bound i to 1..=n-1 for
-    // ordinary x. For NaN every comparison is false and partition_point
+    // ordinary x. For NaN every comparison is false and count_below
     // returns 0, so clamp to 1 and let the arithmetic yield NaN.
-    let i = xs.partition_point(|k| *k < x).max(1);
+    let i = count_below(xs, x).max(1);
     let (x0, x1) = (xs[i - 1], xs[i]);
     ys[i - 1] + (x - x0) * (ys[i] - ys[i - 1]) / (x1 - x0)
 }
+
+/// Key sets up to this length are bracketed by counting; longer ones by
+/// binary search. Measured on models whose every lookup hits a table of 2 to
+/// 1,024 keys (Apple M5): counting was 15-34% faster from 4 to 192 keys,
+/// level at 256, and slower from 384. Half the crossover leaves room for
+/// CPUs with narrower vectors (ADR-0004 §4).
+const COUNT_BELOW_MAX_KEYS: usize = 128;
 
 /// Number of keys below `x`: the partition point of strictly-ascending keys.
 ///
@@ -107,7 +114,7 @@ fn clamped_lerp(xs: &[f64], ys: &[f64], x: f64) -> f64 {
 /// compare and select. Longer sets fall back to the binary search.
 #[inline(always)]
 fn count_below(keys: &[f64], x: f64) -> usize {
-    if keys.len() <= 32 {
+    if keys.len() <= COUNT_BELOW_MAX_KEYS {
         keys.iter().map(|k| (*k < x) as usize).sum::<usize>()
     } else {
         keys.partition_point(|k| *k < x)
@@ -230,7 +237,7 @@ impl LookupTable2D {
 
     #[inline]
     fn find_column(&self, key: f64) -> usize {
-        let i = self.col_keys.partition_point(|k| *k < key);
+        let i = count_below(&self.col_keys, key);
         if i < self.col_keys.len() && self.col_keys[i] == key {
             return i;
         }
