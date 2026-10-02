@@ -16,6 +16,10 @@
 ///   `n_cols - 1` values. The first argument selects a column by **exact
 ///   match** (panics with context otherwise); the second interpolates down
 ///   that column with the same clamped-linear rule as 1D.
+/// - **2D with `bilinear = true`**: the first argument is interpolated too.
+///   The lookup interpolates down the two columns bracketing the column key,
+///   then between those two results. Both axes clamp, and there is no
+///   exact-match panic.
 ///
 /// Line breaks carry no meaning in the `values` property: a table may be
 /// written on one line or spread over many continuation lines.
@@ -37,20 +41,25 @@ pub struct LookupTable1D {
 }
 
 /// A 2D lookup table: exact-match column selection, then clamped linear
-/// interpolation down the selected column.
+/// interpolation down the selected column; or, when `bilinear` is set,
+/// clamped linear interpolation on both axes.
 #[derive(Debug, Clone)]
 pub struct LookupTable2D {
     /// Bare table name (without the `table.` prefix), used in error messages.
     name: String,
     /// The non-numeric corner marker from the key row, preserved for serialization.
     corner: String,
-    /// Column keys (top row), strictly ascending. Matched exactly.
+    /// Column keys (top row), strictly ascending. Matched exactly, or
+    /// interpolated when `bilinear` is set.
     col_keys: Vec<f64>,
     /// Row keys (first column), strictly ascending. Interpolated.
     row_keys: Vec<f64>,
     /// Values stored column-major (`values[c * nrows + r]`) so the
     /// interpolation walk down a selected column is contiguous in memory.
     values: Vec<f64>,
+    /// From `bilinear = true`. Read at expression lowering, which picks the
+    /// `Lookup2DBilinear` node; never read by a lookup (ADR-0009 §4).
+    bilinear: bool,
 }
 
 /// A parsed, validated lookup table of either dimensionality.
@@ -91,6 +100,20 @@ fn clamped_lerp(xs: &[f64], ys: &[f64], x: f64) -> f64 {
     ys[i - 1] + (x - x0) * (ys[i] - ys[i - 1]) / (x1 - x0)
 }
 
+/// Number of keys below `x`: the partition point of strictly-ascending keys.
+///
+/// A short key set is counted without branching, because each compare is
+/// then independent of the others, where a binary search chains load,
+/// compare and select. Longer sets fall back to the binary search.
+#[inline(always)]
+fn count_below(keys: &[f64], x: f64) -> usize {
+    if keys.len() <= 32 {
+        keys.iter().map(|k| (*k < x) as usize).sum::<usize>()
+    } else {
+        keys.partition_point(|k| *k < x)
+    }
+}
+
 impl LookupTable1D {
     /// Interpolate the table at `x`, clamping to the endpoint values outside
     /// the table range.
@@ -114,6 +137,95 @@ impl LookupTable2D {
         let nrows = self.row_keys.len();
         let column = &self.values[c * nrows..(c + 1) * nrows];
         clamped_lerp(&self.row_keys, column, row_key)
+    }
+
+    /// Bilinear lookup: interpolate down the two columns bracketing `col_key`
+    /// at `row_key`, then between those two results. Clamps at every edge;
+    /// NaN in either key gives NaN.
+    ///
+    /// Both columns share `row_keys`, so the row bracket is found once. The
+    /// arithmetic on each axis is that of `clamped_lerp`, in the same order.
+    // Inlined into `lookup_bilinear_with`, which is how the engine reaches it.
+    #[inline(always)]
+    pub fn lookup_bilinear(&self, col_key: f64, row_key: f64) -> f64 {
+        let ck = &self.col_keys[..];
+        let rk = &self.row_keys[..];
+        let v = &self.values[..];
+        let ncols = ck.len();
+        let n = rk.len();
+
+        // Column bracket: `u` is the upper column and `u - 1` the lower.
+        // `!(x > lo)` is true for NaN as well as for the low clamp, so the
+        // ordinary path pays one compare for both.
+        let (u, col_interior) = if !(col_key > ck[0]) {
+            if col_key.is_nan() {
+                return f64::NAN;
+            }
+            (0, false)
+        } else if col_key >= ck[ncols - 1] {
+            (ncols - 1, false)
+        } else {
+            // A key that equals a column key takes that column alone, so
+            // the result is exactly what the exact-match lookup returns.
+            let u = count_below(ck, col_key);
+            (u, ck[u] != col_key)
+        };
+
+        // Row bracket: `i` is the upper row and `i - 1` the lower.
+        let (i, row_interior) = if !(row_key > rk[0]) {
+            if row_key.is_nan() {
+                return f64::NAN;
+            }
+            (0, false)
+        } else if row_key >= rk[n - 1] {
+            (n - 1, false)
+        } else {
+            (count_below(rk, row_key), true)
+        };
+
+        match (col_interior, row_interior) {
+            (false, false) => v[u * n + i],
+            (false, true) => {
+                let (x0, x1) = (rk[i - 1], rk[i]);
+                let c = &v[u * n..(u + 1) * n];
+                c[i - 1] + (row_key - x0) * (c[i] - c[i - 1]) / (x1 - x0)
+            }
+            (true, false) => {
+                let l = u - 1;
+                let (lv, uv) = (v[l * n + i], v[u * n + i]);
+                lv + (col_key - ck[l]) * (uv - lv) / (ck[u] - ck[l])
+            }
+            (true, true) => {
+                let l = u - 1;
+                let (x0, x1) = (rk[i - 1], rk[i]);
+                let dx = row_key - x0;
+                let w = x1 - x0;
+                let lo = &v[l * n..u * n];
+                let hi = &v[u * n..(u + 1) * n];
+                let lv = lo[i - 1] + dx * (lo[i] - lo[i - 1]) / w;
+                let uv = hi[i - 1] + dx * (hi[i] - hi[i - 1]) / w;
+                lv + (col_key - ck[l]) * (uv - lv) / (ck[u] - ck[l])
+            }
+        }
+    }
+
+    /// `lookup_bilinear` on the keys that `keys` returns: the form the
+    /// expression evaluator calls, passing the evaluation of its two
+    /// arguments as the closure.
+    // This is the shape that measured fast for tables with `bilinear` and
+    // free for tables without (ADR-0004 §3.4, §4). Inlined into `evaluate`,
+    // the lookup grew that function by a fifth and cost models with no
+    // bilinear table 3-4%. As a function of two keys called from `evaluate`
+    // it cost them nothing, but ran models that use it 3-33% slower than
+    // this does. Why is not established; the code is the same.
+    #[inline(never)]
+    pub fn lookup_bilinear_with(&self, keys: impl FnOnce() -> (f64, f64)) -> f64 {
+        let (col_key, row_key) = keys();
+        self.lookup_bilinear(col_key, row_key)
+    }
+
+    pub fn is_bilinear(&self) -> bool {
+        self.bilinear
     }
 
     #[inline]
@@ -141,7 +253,7 @@ impl LookupTable {
     /// `[table.<name>]` section. `n_cols = 2` produces a 1D table, `n_cols > 2`
     /// a 2D table. Cold path: every structural error is rejected here so the
     /// lookup methods never need to.
-    pub fn from_ini_data(name: &str, data: &str, ncols: usize) -> Result<LookupTable, String> {
+    pub fn from_ini_data(name: &str, data: &str, ncols: usize, bilinear: bool) -> Result<LookupTable, String> {
         if ncols < 2 {
             return Err(format!("Table 'table.{}': n_cols must be at least 2, got {}", name, ncols));
         }
@@ -155,9 +267,12 @@ impl LookupTable {
         let tokens: Vec<&str> = trimmed.split(',').map(str::trim).collect();
 
         if ncols == 2 {
+            if bilinear {
+                return Err(format!("Table 'table.{}': bilinear applies only to 2D tables (n_cols greater than 2)", name));
+            }
             Self::parse_1d(name, &tokens)
         } else {
-            Self::parse_2d(name, &tokens, ncols)
+            Self::parse_2d(name, &tokens, ncols, bilinear)
         }
     }
 
@@ -204,7 +319,7 @@ impl LookupTable {
         })))
     }
 
-    fn parse_2d(name: &str, tokens: &[&str], ncols: usize) -> Result<LookupTable, String> {
+    fn parse_2d(name: &str, tokens: &[&str], ncols: usize, bilinear: bool) -> Result<LookupTable, String> {
         // The key row: a non-numeric corner marker, then ncols-1 column keys.
         // Requiring the corner keeps every row ncols wide, so a well-formed
         // table's total element count is an exact multiple of ncols.
@@ -253,6 +368,7 @@ impl LookupTable {
             col_keys,
             row_keys,
             values,
+            bilinear,
         })))
     }
 
@@ -277,6 +393,13 @@ impl LookupTable {
         match self {
             LookupTable::OneD(_) => 1,
             LookupTable::TwoD(_) => 2,
+        }
+    }
+
+    pub fn is_bilinear(&self) -> bool {
+        match self {
+            LookupTable::OneD(_) => false,
+            LookupTable::TwoD(t) => t.bilinear,
         }
     }
 

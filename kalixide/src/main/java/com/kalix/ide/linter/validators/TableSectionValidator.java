@@ -17,7 +17,8 @@ import java.util.regex.Pattern;
  * modeller sees the problem in the editor rather than at model load:</p>
  * <ul>
  *   <li>Table names: lowercase letters, digits, underscores; no dots</li>
- *   <li>Allowed properties: {@code values} (required) and {@code n_cols} (integer &ge; 2, default 2)</li>
+ *   <li>Allowed properties: {@code values} (required), {@code n_cols} (integer &ge; 2, default 2)
+ *       and {@code bilinear} (true or false, default false; true only on a 2D table)</li>
  *   <li>1D (n_cols = 2): rows of (x, y) with an optional two-label text header;
  *       x values strictly ascending</li>
  *   <li>2D (n_cols &gt; 2): non-numeric corner marker, then column keys; each row is
@@ -54,9 +55,10 @@ public class TableSectionValidator implements ValidationStrategy {
                     ValidationRule.Severity.ERROR, "invalid_table_name");
         }
 
-        // Properties: only n_cols and values are recognised
+        // Properties: only n_cols, values and bilinear are recognised
         int nCols = 2;
         INIModelParser.Property valuesProp = null;
+        INIModelParser.Property bilinearTrueProp = null;
         for (INIModelParser.Property prop : section.getProperties().values()) {
             switch (prop.getKey()) {
                 case "n_cols":
@@ -75,16 +77,33 @@ public class TableSectionValidator implements ValidationStrategy {
                         return;
                     }
                     break;
+                case "bilinear":
+                    String bilinear = prop.getValue().trim();
+                    if (!bilinear.equals("true") && !bilinear.equals("false")) {
+                        result.addIssue(prop.getLineNumber(),
+                                "bilinear must be 'true' or 'false', got '" + bilinear + "'",
+                                ValidationRule.Severity.ERROR, "invalid_table_bilinear");
+                    } else if (bilinear.equals("true")) {
+                        bilinearTrueProp = prop;
+                    }
+                    break;
                 case "values":
                     valuesProp = prop;
                     break;
                 default:
                     result.addIssue(prop.getLineNumber(),
                             "Unexpected property '" + prop.getKey() + "' in [" + sectionName
-                                    + "] (allowed: values, n_cols)",
+                                    + "] (allowed: values, n_cols, bilinear)",
                             ValidationRule.Severity.ERROR, "unexpected_table_property");
                     break;
             }
+        }
+
+        // Checked after the loop: bilinear may be written before n_cols
+        if (bilinearTrueProp != null && nCols == 2) {
+            result.addIssue(bilinearTrueProp.getLineNumber(),
+                    "bilinear applies only to 2D tables (n_cols greater than 2)",
+                    ValidationRule.Severity.ERROR, "invalid_table_bilinear");
         }
 
         if (valuesProp == null) {

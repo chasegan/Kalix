@@ -360,6 +360,12 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
                     "<html><b>n_cols</b> <i>(optional)</i><br><br>"
                             + "Grid width, row-key column included.<br>"
                             + "Default 2 (a 1D table); greater than 2 declares a 2D table.</html>"));
+            addCompletion(new BasicCompletion(this, "bilinear = true",
+                    null,
+                    "<html><b>bilinear</b> <i>(optional)</i><br><br>"
+                            + "2D tables only. Interpolate between column keys as well as row keys,<br>"
+                            + "clamped at the ends of both.<br>"
+                            + "Default <code>false</code> (the column key must match exactly).</html>"));
         } else if ("kalix".equals(sectionName)) {
             SectionDefinition kalixSection = schema.getSection("kalix");
             if (kalixSection != null && kalixSection.properties != null) {
@@ -557,10 +563,21 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
                     null,
                     "<html><b>" + callSignature + "</b>"
                             + "<br><br>Lookup table: " + tableName
-                            + "<br>Shape: " + (is2d ? "2D (exact-match column, interpolated row)" : "1D (interpolated, clamped at ends)")
+                            + "<br>Shape: " + tableShape(is2d, entry.getValue())
                             + "</html>");
             addCompletion(completion);
         }
+    }
+
+    private String tableShape(boolean is2d, INIModelParser.Section tableSection) {
+        if (!is2d) {
+            return "1D (interpolated, clamped at ends)";
+        }
+        INIModelParser.Property bilinear = tableSection.getProperties().get("bilinear");
+        if (bilinear != null && "true".equals(bilinear.getValue().trim())) {
+            return "2D (bilinear, clamped at ends)";
+        }
+        return "2D (exact-match column, interpolated row)";
     }
 
     private boolean tableIs2d(INIModelParser.Section tableSection) {
