@@ -31,6 +31,7 @@ const NODE_SOURCES: &[(&str, &str)] = &[
     ("field", include_str!("../nodes/field_node.rs")),
     ("gauge", include_str!("../nodes/gauge_node.rs")),
     ("gr4j", include_str!("../nodes/gr4j_node.rs")),
+    ("gr4jsg", include_str!("../nodes/gr4jsg_node.rs")),
     ("inflow", include_str!("../nodes/inflow_node.rs")),
     ("loss", include_str!("../nodes/loss_node.rs")),
     ("order_control", include_str!("../nodes/order_control_node.rs")),

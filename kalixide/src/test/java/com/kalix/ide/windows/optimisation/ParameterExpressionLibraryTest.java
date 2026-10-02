@@ -31,6 +31,11 @@ class ParameterExpressionLibraryTest {
     /** {@code src/nodes/gr4j_node.rs} — GR4J's fixed parameters. */
     private static final List<String> GR4J_PARAMS = List.of("x1", "x2", "x3", "x4");
 
+    /** {@code src/nodes/gr4jsg_node.rs} — GR4JSG's parameters, with a glacier ({@code ice_params}). */
+    private static final List<String> GR4JSG_PARAMS = List.of(
+            "x1", "x2", "x3", "x4", "tfrac", "taccum", "m_rainfall", "base_rainfall", "m_nonrainfall",
+            "ddfi", "tmelt", "return_flow", "accumulation");
+
     /** {@code src/nodes/sacramento_node.rs} — Sacramento's fixed parameters. */
     private static final List<String> SACRAMENTO_PARAMS = List.of(
             "adimp", "lzfpm", "lzfsm", "lzpk", "lzsk", "lztwm",
@@ -51,7 +56,7 @@ class ParameterExpressionLibraryTest {
 
     /**
      * {@code src/nodes/rainfall_weights.rs} — appended to the rainfall-runoff
-     * nodes (GR4J, Sacramento, AWBM, SURM) when the rain input is a
+     * nodes (GR4J, GR4JSG, Sacramento, AWBM, SURM) when the rain input is a
      * LinearCombination: a bias plus n-1 distribution params.
      */
     private static final List<String> RAINFALL_PARAMS = List.of(
@@ -69,11 +74,13 @@ class ParameterExpressionLibraryTest {
     private static List<String> allEngineNodeParams() {
         List<String> names = new ArrayList<>();
         for (String p : GR4J_PARAMS) names.add("node.mygr4j." + p);
+        for (String p : GR4JSG_PARAMS) names.add("node.mygr4jsg." + p);
         for (String p : SACRAMENTO_PARAMS) names.add("node.mysac." + p);
         for (String p : AWBM_PARAMS) names.add("node.myawbm." + p);
         for (String p : AWBM_TWO_TAP_PARAMS) names.add("node.mytwotap." + p);
         for (String p : SURM_PARAMS) names.add("node.mysurm." + p);
         for (String p : RAINFALL_PARAMS) names.add("node.mygr4j." + p);
+        for (String p : RAINFALL_PARAMS) names.add("node.mygr4jsg." + p);
         for (String p : RAINFALL_PARAMS) names.add("node.mysac." + p);
         for (String p : RAINFALL_PARAMS) names.add("node.myawbm." + p);
         for (String p : RAINFALL_PARAMS) names.add("node.mysurm." + p);

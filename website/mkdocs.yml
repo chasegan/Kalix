@@ -149,6 +149,7 @@ nav:
               - Gauge: docs/gauge.md
               - Field: docs/field.md
               - GR4J: docs/gr4j.md
+              - GR4JSG: docs/gr4jsg.md
               - Inflow: docs/inflow.md
               - Loss: docs/loss.md
               - Order control: docs/order-control.md

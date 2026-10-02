@@ -22,6 +22,7 @@ public class NodeThemeShapeTest {
         assertEquals(NodeTheme.NodeShape.WATER_DROP, theme.getShapeForNodeType("sacramento"));
         assertEquals(NodeTheme.NodeShape.WATER_DROP, theme.getShapeForNodeType("awbm"));
         assertEquals(NodeTheme.NodeShape.WATER_DROP, theme.getShapeForNodeType("surm"));
+        assertEquals(NodeTheme.NodeShape.WATER_DROP, theme.getShapeForNodeType("gr4jsg"));
         assertEquals(NodeTheme.NodeShape.PODIUM, theme.getShapeForNodeType("regulated_user"));
         assertEquals(NodeTheme.NodeShape.PODIUM, theme.getShapeForNodeType("unregulated_user"));
         assertEquals(NodeTheme.NodeShape.TRIANGLE_UP, theme.getShapeForNodeType("storage"));

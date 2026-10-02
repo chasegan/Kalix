@@ -16,6 +16,10 @@ mod test_gr4h_variant;
 #[cfg(test)]
 mod test_gr4h_validation;
 
+// GR4JSG: validation against Fors, and the node's model-file surface
+#[cfg(test)]
+mod test_gr4jsg;
+
 #[cfg(test)]
 mod test_node_inflow;
 

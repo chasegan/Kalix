@@ -1183,6 +1183,7 @@ impl Model {
             "gr4j",
             "awbm",
             "surm",
+            "gr4jsg",
             "regulated_user",
             "unregulated_user",
             "field",

@@ -181,6 +181,13 @@ impl Gr4j {
         //Return the total flow
         qr + qd
     }
+
+    /// Water held in the two unit hydrographs (mm). For water-balance tests.
+    /// Element 0 has already left as this step's outflow.
+    #[cfg(test)]
+    pub(super) fn uh_storage(&self) -> f64 {
+        self.uh1.iter().skip(1).sum::<f64>() + self.uh2.iter().skip(1).sum::<f64>()
+    }
 }
 
 /**
@@ -203,7 +210,7 @@ fn s_curves1(t: usize, x4: f64, exp: f64) -> f64 {
  * Unit hydrograph ordinates for UH2 derived from S-curves.
  * `exp` is the variant-specific shape exponent (2.5 for GR4J, 1.25 for GR4H).
  */
-fn s_curves2(t: usize, x4: f64, exp: f64) -> f64 {
+pub(super) fn s_curves2(t: usize, x4: f64, exp: f64) -> f64 {
     let t_f64 = t as f64;
     // Guards 0/0 -> NaN when x4 is zero; `t` is unsigned, so t == 0 is the whole case.
     if t == 0 {
