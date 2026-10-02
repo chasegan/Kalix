@@ -62,7 +62,7 @@ fn test_inflow_node_with_timeseries() {
 // OptimisableComponent tests
 // ============================================================================
 
-fn pwl_node() -> RoutingNode {
+fn pwl_node() -> RoutingNode<false> {
     let mut r = RoutingNode::new();
     r.name = "pwl_reach".to_string();
     // 4 points -> pwl_segs = 3 -> params pwl_tt_0 to pwl_tt_3
@@ -71,7 +71,7 @@ fn pwl_node() -> RoutingNode {
     r
 }
 
-fn nlm_node() -> RoutingNode {
+fn nlm_node() -> RoutingNode<false> {
     let mut r = RoutingNode::new();
     r.name = "nlm_reach".to_string();
     r.set_k(100.0);
@@ -92,7 +92,7 @@ fn test_nlm_node_lists_muskingum_params() {
     assert_eq!(nlm_node().list_params(), vec!["nlm_k", "nlm_m"]);
     // Lag-only (no table, k = 0) lands in the NLM bucket: calibrating k onto
     // it is how a modeller gives it NLM routing.
-    let mut lag_only = RoutingNode::new();
+    let mut lag_only = RoutingNode::<false>::new();
     lag_only.set_lag(3);
     assert_eq!(lag_only.list_params(), vec!["nlm_k", "nlm_m"]);
 }

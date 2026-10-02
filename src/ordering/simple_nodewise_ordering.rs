@@ -185,6 +185,7 @@ impl SimpleNodewiseOrderingSystem {
                 NodeEnum::Gr4jNode(_) |
                 NodeEnum::InflowNode(_) |
                 NodeEnum::RoutingNode(_) |
+                NodeEnum::RoutingNodeReachLosses(_) |
                 NodeEnum::SacramentoNode(_) |
                 NodeEnum::AwbmNode(_) |
                 NodeEnum::SurmNode(_) => {}
@@ -431,6 +432,10 @@ impl SimpleNodewiseOrderingSystem {
                     node.run_order_phase(data_cache, account_manager);
                     node.dsorders[0]
                 }
+                NodeEnum::RoutingNodeReachLosses(node) => {
+                    node.run_order_phase(data_cache, account_manager);
+                    node.dsorders[0]
+                }
                 NodeEnum::SacramentoNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
                     node.dsorders[0]
@@ -496,6 +501,7 @@ fn zone_role(node: &NodeEnum, outlet: u8) -> ZoneRole {
         NodeEnum::Gr4jNode(_) |
         NodeEnum::InflowNode(_) |
         NodeEnum::RoutingNode(_) |
+        NodeEnum::RoutingNodeReachLosses(_) |
         NodeEnum::SacramentoNode(_) |
         NodeEnum::OrderControlNode(_) |
         NodeEnum::AwbmNode(_) |
@@ -508,6 +514,7 @@ fn zone_role(node: &NodeEnum, outlet: u8) -> ZoneRole {
 fn routing_lag(node: &NodeEnum) -> f64 {
     match node {
         NodeEnum::RoutingNode(n) => n.estimate_total_lag(n.typical_regulated_flow),
+        NodeEnum::RoutingNodeReachLosses(n) => n.estimate_total_lag(n.typical_regulated_flow),
         NodeEnum::BlackholeNode(_) |
         NodeEnum::ConfluenceNode(_) |
         NodeEnum::GaugeNode(_) |
@@ -544,6 +551,7 @@ fn can_originate_orders(node: &NodeEnum) -> bool {
         NodeEnum::Gr4jNode(_) |
         NodeEnum::InflowNode(_) |
         NodeEnum::RoutingNode(_) |
+        NodeEnum::RoutingNodeReachLosses(_) |
         NodeEnum::SacramentoNode(_) |
         NodeEnum::AwbmNode(_) |
         NodeEnum::SurmNode(_) => false,
@@ -568,6 +576,7 @@ fn named_order_pathways(node: &NodeEnum) -> [Option<usize>; 2] {
         NodeEnum::Gr4jNode(_) |
         NodeEnum::InflowNode(_) |
         NodeEnum::RoutingNode(_) |
+        NodeEnum::RoutingNodeReachLosses(_) |
         NodeEnum::SacramentoNode(_) |
         NodeEnum::StorageNode(_) |
         NodeEnum::OrderControlNode(_) |

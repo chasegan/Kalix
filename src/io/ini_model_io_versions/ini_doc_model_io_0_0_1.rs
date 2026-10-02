@@ -715,93 +715,93 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     NodeEnum::LossNode(n)
                 }
                 "routing" => {
-                    let mut n = RoutingNode::new();
-                    n.name = node_name.to_string();
-
-                    // Local flags to keep track of whether the dead storage/loss feature is correctly
-                    // specified 
-                    let mut defined_evap = false;
-                    let mut defined_loss_table = false; 
-
-                    for (name, ini_property) in ini_section.properties {
-                        let name_lower = name.to_lowercase();
-                        let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
-                        if name_lower == "loc" {
-                            n.location = Location::from_str(v)
-                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-                        } else if name_lower == "type" {
-                            // Skipping this
-                        } else if name_lower == "ds_1" {
-                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
-                        } else if name_lower == "lag" {
-                            n.set_lag(v.parse::<usize>()
-                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
-                                                     ini_property.line_number, name, node_name)))?);
-                        } else if name_lower == "n_divs" {
-                            n.set_divs(v.parse::<usize>()
-                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
-                                                     ini_property.line_number, name, node_name)))?);
-                        } else if name_lower == "x" {
-                            let parsed_x = v.parse::<f64>()
-                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
-                                                     ini_property.line_number, name, node_name)))?;
-                            n.set_x(parsed_x);
-                        } else if name_lower == "nlm" {
-                            let all_values = csv_string_to_f64_vec(v)
-                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-                            if all_values.len() < 2 {
-                                return Err(KalixIoError::Parse(format!("Error on line {}: Expected k and m values.", ini_property.line_number)));
-                            }
-                            n.set_k(all_values[0]);
-                            n.set_m(all_values[1]);
-                        } else if name_lower == "pwl" {
-                            // A two-column table (index flow, travel time), read like every
-                            // other node table so an optional header row is accepted (issue #266:
-                            // the IDE's table editor writes one, and the engine rejected it).
-                            let table = Table::from_csv_string(v, 2, false)
-                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse pwl table for node '{}': {}",
-                                                   ini_property.line_number, node_name, e)))?;
-                            let nrows = table.nrows();
-                            if nrows > 32 {
-                                return Err(KalixIoError::Parse(format!("Error on line {}: Pwl table must contain no more than 32 rows but found {}",
-                                                   ini_property.line_number, nrows)));
-                            } else if nrows < 1 {
-                                return Err(KalixIoError::Parse(format!("Error on line {}: Pwl table must contain at least one row",
-                                                   ini_property.line_number)));
-                            }
-                            let index_flows: Vec<f64> = (0..nrows).map(|r| table.get_value(r, 0)).collect();
-                            let index_times: Vec<f64> = (0..nrows).map(|r| table.get_value(r, 1)).collect();
-                            n.set_routing_table(index_flows, index_times);
-                        } else if name_lower == "evap" {
-                            defined_evap = true; 
-                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-                        } else if name_lower == "loss_table" {
-                            defined_loss_table = true; 
-                            n.loss_table = Table::from_csv_string(v, 3, false)
-                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse loss table for node '{}': {}",
-                                                     ini_property.line_number, node_name, e)))?;
-                        } else if name_lower == "typical_regulated_flow" {
-                            n.typical_regulated_flow = v.parse::<f64>()
-                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
-                                                     ini_property.line_number, name, node_name)))?;
-                        } else if name_lower == "loss_rate" || name_lower == "dead_storage" { // linter-schema: rejected
-                            // Deprecated (0.4.5 alpha) — helpful error.
-                            return Err(KalixIoError::Validate(format!("Error on line {}: The routing property '{}' is deprecated (node '{}'). \
-                                Reach losses and dead storage are now defined with 'evap' and 'loss_table' \
-                                (flow, dead storage volume, area).", ini_property.line_number, name, node_name)));
-                        } else {
-                            return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
-                                              ini_property.line_number, name, node_name)));
-                        }
-                    }
-                    // Verification - ensure properties that must be defined together are indeed together
-                    if !(defined_evap == defined_loss_table) {
+                    // evap and loss_table go together, and pick the node variant.
+                    let defined_evap = ini_section.properties.keys().any(|k| k.eq_ignore_ascii_case("evap"));
+                    let defined_loss_table = ini_section.properties.keys().any(|k| k.eq_ignore_ascii_case("loss_table"));
+                    if defined_evap != defined_loss_table {
                         return Err(KalixIoError::Validate(format!("Error on line {}: `evap` and `loss_table` must be specified together for node '{}'",
                                 ini_section.line_number, node_name
                         )))
                     }
-                    NodeEnum::RoutingNode(n)
+                    // One reader for both variants; a macro, as the two node types differ.
+                    macro_rules! read_routing_node {
+                        ($variant:ident) => {{
+                            let mut n = RoutingNode::new();
+                            n.name = node_name.to_string();
+                            for (name, ini_property) in ini_section.properties {
+                                let name_lower = name.to_lowercase();
+                                let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
+                                if name_lower == "loc" {
+                                    n.location = Location::from_str(v)
+                                        .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                                } else if name_lower == "type" {
+                                    // Skipping this
+                                } else if name_lower == "ds_1" {
+                                    vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
+                                } else if name_lower == "lag" {
+                                    n.set_lag(v.parse::<usize>()
+                                        .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
+                                                             ini_property.line_number, name, node_name)))?);
+                                } else if name_lower == "n_divs" {
+                                    n.set_divs(v.parse::<usize>()
+                                        .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
+                                                             ini_property.line_number, name, node_name)))?);
+                                } else if name_lower == "x" {
+                                    let parsed_x = v.parse::<f64>()
+                                        .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                                             ini_property.line_number, name, node_name)))?;
+                                    n.set_x(parsed_x);
+                                } else if name_lower == "nlm" {
+                                    let all_values = csv_string_to_f64_vec(v)
+                                        .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                                    if all_values.len() < 2 {
+                                        return Err(KalixIoError::Parse(format!("Error on line {}: Expected k and m values.", ini_property.line_number)));
+                                    }
+                                    n.set_k(all_values[0]);
+                                    n.set_m(all_values[1]);
+                                } else if name_lower == "pwl" {
+                                    // A two-column table (index flow, travel time), read like every
+                                    // other node table so an optional header row is accepted (issue #266:
+                                    // the IDE's table editor writes one, and the engine rejected it).
+                                    let table = Table::from_csv_string(v, 2, false)
+                                        .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse pwl table for node '{}': {}",
+                                                           ini_property.line_number, node_name, e)))?;
+                                    let nrows = table.nrows();
+                                    if nrows > 32 {
+                                        return Err(KalixIoError::Parse(format!("Error on line {}: Pwl table must contain no more than 32 rows but found {}",
+                                                           ini_property.line_number, nrows)));
+                                    } else if nrows < 1 {
+                                        return Err(KalixIoError::Parse(format!("Error on line {}: Pwl table must contain at least one row",
+                                                           ini_property.line_number)));
+                                    }
+                                    let index_flows: Vec<f64> = (0..nrows).map(|r| table.get_value(r, 0)).collect();
+                                    let index_times: Vec<f64> = (0..nrows).map(|r| table.get_value(r, 1)).collect();
+                                    n.set_routing_table(index_flows, index_times);
+                                } else if name_lower == "evap" {
+                                    n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                        .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                                } else if name_lower == "loss_table" {
+                                    n.loss_table = Table::from_csv_string(v, 3, false)
+                                        .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse loss table for node '{}': {}",
+                                                             ini_property.line_number, node_name, e)))?;
+                                } else if name_lower == "typical_regulated_flow" {
+                                    n.typical_regulated_flow = v.parse::<f64>()
+                                        .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
+                                                             ini_property.line_number, name, node_name)))?;
+                                } else if name_lower == "loss_rate" || name_lower == "dead_storage" { // linter-schema: rejected
+                                    // Deprecated (0.4.5 alpha) — helpful error.
+                                    return Err(KalixIoError::Validate(format!("Error on line {}: The routing property '{}' is deprecated (node '{}'). \
+                                        Reach losses and dead storage are now defined with 'evap' and 'loss_table' \
+                                        (flow, dead storage volume, area).", ini_property.line_number, name, node_name)));
+                                } else {
+                                    return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
+                                                      ini_property.line_number, name, node_name)));
+                                }
+                            }
+                            NodeEnum::$variant(n)
+                        }};
+                    }
+                    if defined_evap { read_routing_node!(RoutingNodeReachLosses) } else { read_routing_node!(RoutingNode) }
                 }
                 "sacramento" => {
                     let mut n = SacramentoNode::new();
@@ -1625,34 +1625,8 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "table", loss_table_str.as_str());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "loss_rate", &n.loss_rate.to_string());
             }
-            NodeEnum::RoutingNode(n) => {
-                let section_name = format!("node.{}", n.name);
-                ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
-                ini_doc.set_property(section_name.as_str(), "type", "routing");
-                if n.get_divs() != 1 { ini_doc.set_property(section_name.as_str(), "n_divs", n.get_divs().to_string().as_str()); }
-                if n.get_x() != 0.0 { ini_doc.set_property(section_name.as_str(), "x", n.get_x().to_string().as_str()); }
-                if n.get_lag() != 0 { ini_doc.set_property(section_name.as_str(), "lag", n.get_lag().to_string().as_str()); }
-                // NLM and PWL are mutually exclusive (see RoutingNode::initialise,
-                // which errors if both are set). Emit whichever this node uses, keyed
-                // off the same discriminator the node uses, so we never write both.
-                if n.uses_nlm() {
-                    let m = n.get_m();
-                    let k = n.get_k();
-                    set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "nlm", format!("{}, {}", k, m).as_str());
-                } else {
-                    let pwl_values = n.get_routing_table_as_vec();
-                    if pwl_values.len() > 0 {
-                        let pwl_values_str = format_vec_as_multiline_table(pwl_values.as_slice(), 2, 4);
-                        ini_doc.set_property(section_name.as_str(), "pwl", pwl_values_str.as_str());
-                    }
-                }
-                // Reach losses: the parser requires evap and loss_table together; both are empty when unset.
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
-                let loss_table_values = n.loss_table.get_values_as_vec();
-                let loss_table_str = format_vec_as_multiline_table(&loss_table_values, n.loss_table.ncols(), 4);
-                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "loss_table", loss_table_str.as_str());
-                set_property_unless_default(&mut ini_doc, section_name.as_str(), "typical_regulated_flow", &n.typical_regulated_flow.to_string(), "0");
-            }
+            NodeEnum::RoutingNode(n) => render_routing_node(&mut ini_doc, n),
+            NodeEnum::RoutingNodeReachLosses(n) => render_routing_node(&mut ini_doc, n),
             NodeEnum::SacramentoNode(n) => {
                 let section_name = format!("node.{}", n.name);
                 ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
@@ -2212,4 +2186,34 @@ fn sections_canonically_equal(a: &IniSection, b: &IniSection) -> bool {
         }
     }
     true
+}
+
+/// Writes a routing node section; the same properties for both variants.
+fn render_routing_node<const USING_REACH_LOSS: bool>(ini_doc: &mut IniDocument, n: &RoutingNode<USING_REACH_LOSS>) {
+    let section_name = format!("node.{}", n.name);
+    ini_doc.set_property(section_name.as_str(), "loc", n.location.to_string().as_str());
+    ini_doc.set_property(section_name.as_str(), "type", "routing");
+    if n.get_divs() != 1 { ini_doc.set_property(section_name.as_str(), "n_divs", n.get_divs().to_string().as_str()); }
+    if n.get_x() != 0.0 { ini_doc.set_property(section_name.as_str(), "x", n.get_x().to_string().as_str()); }
+    if n.get_lag() != 0 { ini_doc.set_property(section_name.as_str(), "lag", n.get_lag().to_string().as_str()); }
+    // NLM and PWL are mutually exclusive (see RoutingNode::initialise,
+    // which errors if both are set). Emit whichever this node uses, keyed
+    // off the same discriminator the node uses, so we never write both.
+    if n.uses_nlm() {
+        let m = n.get_m();
+        let k = n.get_k();
+        set_property_if_not_empty(ini_doc, section_name.as_str(), "nlm", format!("{}, {}", k, m).as_str());
+    } else {
+        let pwl_values = n.get_routing_table_as_vec();
+        if pwl_values.len() > 0 {
+            let pwl_values_str = format_vec_as_multiline_table(pwl_values.as_slice(), 2, 4);
+            ini_doc.set_property(section_name.as_str(), "pwl", pwl_values_str.as_str());
+        }
+    }
+    // Reach losses: the parser requires evap and loss_table together; both are empty when unset.
+    set_property_if_not_empty(ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
+    let loss_table_values = n.loss_table.get_values_as_vec();
+    let loss_table_str = format_vec_as_multiline_table(&loss_table_values, n.loss_table.ncols(), 4);
+    set_property_if_not_empty(ini_doc, section_name.as_str(), "loss_table", loss_table_str.as_str());
+    set_property_unless_default(ini_doc, section_name.as_str(), "typical_regulated_flow", &n.typical_regulated_flow.to_string(), "0");
 }

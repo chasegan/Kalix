@@ -100,7 +100,7 @@ pub enum StorageRoutingMethod {
 }
 
 #[derive(Default, Clone)]
-pub struct RoutingNode {
+pub struct RoutingNode<const USING_REACH_LOSS: bool> {
     pub name: String,
     pub location: Location,
     pub mbal: f64,
@@ -165,8 +165,6 @@ pub struct RoutingNode {
     /// Evaporation (mm). Assumed >= 0: the still-water solve divides by 1 + E * slope.
     pub evap_mm_input: DynamicInput,
     pub loss_table: Table, 
-    /// Using the evaporative losses/dead storage feature? Defined at initialisation time.
-    using_reach_losses: bool,
     // Per-division lookups built from loss_table at initialise; areas and dead volumes divided by n_divs.
     div_area_by_flow: Vec<AreaSegment>,      // flowing range: flow -> area, from the last zero-flow row up
     div_area_by_dead_vol: Vec<AreaSegment>,  // zero-flow rows: dead volume -> area
@@ -186,10 +184,10 @@ pub struct RoutingNode {
     recorder_idx_loss: Option<usize>
 }
 
-impl RoutingNode {
+impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
 
     /// Base constructor
-    pub fn new() -> RoutingNode {
+    pub fn new() -> RoutingNode<USING_REACH_LOSS> {
         RoutingNode {
             name: "".to_string(),
             routing_method: StorageRoutingMethod::LagPlusPWL,
@@ -416,7 +414,7 @@ impl RoutingNode {
 }
 
 
-impl Node for RoutingNode {
+impl<const USING_REACH_LOSS: bool> Node for RoutingNode<USING_REACH_LOSS> {
     single_outlet_node_impls!();
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String>{
@@ -579,13 +577,10 @@ impl Node for RoutingNode {
         // Init PWL and NLM storage array
         self.div_sto_array.fill(0.0);
 
-        // Init for dead storage and loss feature
-        // evap and loss_table go together: evap alone fails in build_loss_lookups (no rows).
-        self.using_reach_losses = !matches!(self.evap_mm_input, DynamicInput::None { .. });
-        if !self.using_reach_losses && self.loss_table.nrows() > 0 {
+        if !USING_REACH_LOSS && self.loss_table.nrows() > 0 {
             return Err(format!("Error in node '{}'. `evap` and `loss_table` must be specified together.", self.name));
         }
-        if self.using_reach_losses {
+        if USING_REACH_LOSS {
             self.build_loss_lookups()?;
             // The reach starts with its dead pool full.
             self.div_sto_array[..self.n_divs].fill(self.div_dead_max);
@@ -671,7 +666,7 @@ impl Node for RoutingNode {
 // OptimisableComponent Implementation
 // ============================================================================
 
-impl RoutingNode {
+impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
     /// Whether this node's optimisable parameters are the PWL travel times
     /// (as opposed to the NLM pair). Keys off `pwl_segs` rather than
     /// `uses_nlm()`: the routing table is structural (the optimiser never
@@ -723,19 +718,9 @@ impl RoutingNode {
     /// Core node logic - run once per time step.
     #[inline(never)]
     fn route_divisions(&mut self, flow_out_of_lag_reach: f64, evap_mm: f64) {
-        // Checked once per step; each branch runs one instantiation.
-        if self.using_reach_losses {
-            self.route_divisions_with::<true>(flow_out_of_lag_reach, evap_mm)
-        } else {
-            self.route_divisions_with::<false>(flow_out_of_lag_reach, evap_mm)
-        }
-    }
-
-    /// Routes the flow out of the lag reach through every division.
-    fn route_divisions_with<const USING_REACH_LOSSES: bool>(&mut self, flow_out_of_lag_reach: f64, evap_mm: f64) {
         // PWL or NLM routing second
         let mut qout = flow_out_of_lag_reach; //ingested into the first division
-        if USING_REACH_LOSSES {
+        if USING_REACH_LOSS {
             self.loss = 0.0;
             self.area = 0.0;
         }
@@ -743,22 +728,20 @@ impl RoutingNode {
             StorageRoutingMethod::LagPlusNLM => {
                 if self.x_is_unity {
                     for i in 0..self.n_divs {
-                        qout = self.route_division_nlm_unity::<USING_REACH_LOSSES>(i, qout, evap_mm);
+                        qout = self.route_division_nlm_unity(i, qout, evap_mm);
                     }
                 } else {
                     for i in 0..self.n_divs {
-                        qout = self.route_division_nlm_general::<USING_REACH_LOSSES>(i, qout, evap_mm);
+                        qout = self.route_division_nlm_general(i, qout, evap_mm);
                     }
                 }
             }
             StorageRoutingMethod::LagPlusPWL => {
                 for i in 0..self.n_divs {
-                    qout = self.route_division_pwl::<USING_REACH_LOSSES>(i, qout, evap_mm);
+                    qout = self.route_division_pwl(i, qout, evap_mm);
                 }
             }
         }
-
-        // Final answer
         self.dsflow_primary = qout;
     }
 
@@ -773,11 +756,11 @@ impl RoutingNode {
     /// so there is outflow only once the pool is full. Otherwise q_out = 0 and the
     /// storage held is solved by backward Euler with area taken from the storage.
     #[inline(always)]
-    fn route_division_nlm_unity<const USING_REACH_LOSSES: bool>(&mut self, i: usize, qin: f64, evap_mm: f64) -> f64 {
+    fn route_division_nlm_unity(&mut self, i: usize, qin: f64, evap_mm: f64) -> f64 {
         let vi = self.div_sto_array[i];
         let vf_unclamped = self.nlm_k_working_units * qin.powf(self.nlm_m);
 
-        if USING_REACH_LOSSES {
+        if USING_REACH_LOSS {
             // div_sto_array holds the division's total storage, dead pool included.
             // Flowing, the pool is full: vf = D_d + V(qin).
             let vf_flowing = self.div_dead_max + vf_unclamped;
@@ -813,7 +796,7 @@ impl RoutingNode {
     /// NLM, general x < 1: Newton solve A*y^m + y = b for y = q_ref.
     /// Routes division `i` given inflow `qin`; updates its storage and returns its outflow.
     #[inline(always)]
-    fn route_division_nlm_general<const USING_REACH_LOSSES: bool>(&mut self, i: usize, qin: f64, evap_mm: f64) -> f64 {
+    fn route_division_nlm_general(&mut self, i: usize, qin: f64, evap_mm: f64) -> f64 {
         let x = self.x;
         let m = self.nlm_m;
         let a = self.nlm_a;
@@ -827,7 +810,7 @@ impl RoutingNode {
 
         let vi = self.div_sto_array[i];
 
-        if USING_REACH_LOSSES {
+        if USING_REACH_LOSS {
             // Balance in y = q_ref, pool included and the loss at the end-of-step area:
             //     F(y) = a y^m + y + (1-x) E A(y) - b0 = 0,
             //     b0 = (1-x)(vi - D_d) + qin.
@@ -922,20 +905,20 @@ impl RoutingNode {
 
     /// PWL routing for division `i` given inflow `qin`; updates its storage and returns its outflow.
     #[inline(always)]
-    fn route_division_pwl<const USING_REACH_LOSSES: bool>(&mut self, i: usize, qin: f64, evap_mm: f64) -> f64 {
+    fn route_division_pwl(&mut self, i: usize, qin: f64, evap_mm: f64) -> f64 {
         let vi = self.div_sto_array[i];   //initial storage volume for this division
         let mut qout = 0.0;               //variable to hold outflow
         let mut vf = 0.0;                 //variable to hold final storage volume
         // Reach losses: the dead share held while flowing, and the flowing loss at
         // the end-of-step area. All zero without the feature, so the arithmetic is unchanged.
-        let dead = if USING_REACH_LOSSES { self.div_dead_max } else { 0.0 };
+        let dead = if USING_REACH_LOSS { self.div_dead_max } else { 0.0 };
         let mut area = 0.0;
-        let mut loss = 0.0; // Note: under USING_REACH_LOSSES = false, constant and compiled out in release builds
+        let mut loss = 0.0; // Note: under USING_REACH_LOSS = false, constant and compiled out in release builds
         'segments: {
             if self.x_is_unity {
                 //For x=1, reference flow "qr" equals inflow.
                 let qr = qin;
-                if USING_REACH_LOSSES {
+                if USING_REACH_LOSS {
                     // q_ref is known up front, so the end-of-step area needs no solve.
                     area = area_at(&self.div_area_by_flow, qr);
                     loss = evap_mm * area;
@@ -943,7 +926,7 @@ impl RoutingNode {
                 for j in 0..self.pwl_segs {
                     if (qr >= self.seg_par_q1[j]) && (qr <= self.seg_par_q2[j]) {
                         vf = self.seg_par_aa[j] * qr * qr + self.seg_par_bb[j] * qr + self.seg_par_cc[j];
-                        if USING_REACH_LOSSES { vf += dead; }
+                        if USING_REACH_LOSS { vf += dead; }
                         qout = vi + qin - vf - loss;
                         break 'segments;
                     }
@@ -951,7 +934,7 @@ impl RoutingNode {
             } else {
                 //For x<1, reference flow "qr" is not known a priori.
                 let inv_one_minus_x = self.inv_one_minus_x;
-                if USING_REACH_LOSSES {
+                if USING_REACH_LOSS {
                     // As below, with the pool and the loss at the end-of-step area:
                     //     vi + qin = dead + V(qr) + qout + E * A(qr),
                     // on a merged segment, where V is one quadratic and A = a_lo + slope * (qr - x_lo):
@@ -1004,7 +987,7 @@ impl RoutingNode {
             //saturates at V(q_max) and the balance goes downstream. For a
             //lag-only node (no table) this reduces to pass-through.
             vf = self.pwl_v_max;
-            if USING_REACH_LOSSES {
+            if USING_REACH_LOSS {
                 vf += dead;
                 // x = 1 set the loss above; for x < 1 it depends on the outflow, so solve for it.
                 if !self.x_is_unity {
@@ -1024,8 +1007,8 @@ impl RoutingNode {
         if qout < 0.0 {
             qout = 0.0;
             // With reach losses the division keeps its water less the loss, taken at the storage held.
-            vf = if USING_REACH_LOSSES { self.still_water(vi + qin, evap_mm) } else { vi + qin };
-        } else if USING_REACH_LOSSES {
+            vf = if USING_REACH_LOSS { self.still_water(vi + qin, evap_mm) } else { vi + qin };
+        } else if USING_REACH_LOSS {
             self.loss += loss;
             self.area += area;
         }
@@ -1036,7 +1019,7 @@ impl RoutingNode {
     }
 }
 
-impl OptimisableComponent for RoutingNode {
+impl<const USING_REACH_LOSS: bool> OptimisableComponent for RoutingNode<USING_REACH_LOSS> {
     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
         // Only the active mode's parameters are accepted, mirroring
         // list_params. Value validation (tt >= 0, k >= 0, m in (0, 5]) stays

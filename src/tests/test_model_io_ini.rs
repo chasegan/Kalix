@@ -267,7 +267,7 @@ fn test_routing_reach_losses_round_trip() {
 
     fn reach_losses(model: &crate::model::Model, name: &str) -> (String, Vec<f64>) {
         for node in &model.nodes {
-            if let crate::nodes::NodeEnum::RoutingNode(n) = node {
+            if let crate::nodes::NodeEnum::RoutingNodeReachLosses(n) = node {
                 if n.name == name {
                     return (n.evap_mm_input.to_string(), n.loss_table.get_values_as_vec());
                 }
@@ -281,8 +281,10 @@ fn test_routing_reach_losses_round_trip() {
 
     // Force both routing sections to re-render canonically.
     for node in &mut model.nodes {
-        if let crate::nodes::NodeEnum::RoutingNode(n) = node {
-            n.set_lag(n.get_lag() + 1);
+        match node {
+            crate::nodes::NodeEnum::RoutingNode(n) => n.set_lag(n.get_lag() + 1),
+            crate::nodes::NodeEnum::RoutingNodeReachLosses(n) => n.set_lag(n.get_lag() + 1),
+            _ => {}
         }
     }
 
