@@ -209,3 +209,9 @@ test_date,commit_sha,commit_dirty,commit_date,kalix_version,user,hostname,os,cpu
 2026-10-03T09:38:15,eae5e00a,false,2026-10-03T09:35:00+10:00,0.4.6,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),4_regulated_system,7,34.6,35.0,0.27,5.0,16.0,55.6
 2026-10-03T09:38:15,eae5e00a,false,2026-10-03T09:35:00+10:00,0.4.6,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),5_ordering_confluences,5,49.8,51.3,0.86,9.8,14.6,74.9
 2026-10-03T09:38:15,eae5e00a,false,2026-10-03T09:35:00+10:00,0.4.6,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),6_unregulated_users_with_tables,7,62.7,63.5,0.45,5.1,12.3,80.2
+2026-10-04T08:29:51,d86d8e30,true,2026-10-04T08:29:25+10:00,0.4.6,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),1_sacramento_long,15,3.8,3.8,0.19,7.0,12.7,23.9
+2026-10-04T08:29:51,d86d8e30,true,2026-10-04T08:29:25+10:00,0.4.6,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),2_unregulated_users,7,20.8,20.8,0.31,5.0,9.2,35.0
+2026-10-04T08:29:51,d86d8e30,true,2026-10-04T08:29:25+10:00,0.4.6,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),3_unregulated_users_with_functions,7,50.6,51.5,0.58,5.3,10.8,67.0
+2026-10-04T08:29:51,d86d8e30,true,2026-10-04T08:29:25+10:00,0.4.6,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),4_regulated_system,7,35.3,35.5,0.55,5.2,16.4,57.0
+2026-10-04T08:29:51,d86d8e30,true,2026-10-04T08:29:25+10:00,0.4.6,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),5_ordering_confluences,5,50.5,51.2,2.35,10.0,14.5,75.7
+2026-10-04T08:29:51,d86d8e30,true,2026-10-04T08:29:25+10:00,0.4.6,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),6_unregulated_users_with_tables,7,64.6,65.6,0.56,5.4,12.5,82.7
