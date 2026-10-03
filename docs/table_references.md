@@ -57,6 +57,11 @@ flow = table.rating(node.reach_5.dsflow)
 is linearly interpolated; outside the table range the nearest endpoint value
 is returned. NaN input produces NaN output.
 
+**Table values are returned exactly.** At a breakpoint the table returns the
+value written there, bit for bit; between two breakpoints the result never
+leaves the range of those two values. A bilinear table returns the cell at a
+grid point and stays within the four surrounding cells between grid points.
+
 ## Defining a 2D Table
 
 A 2D table is a grid. Declare its width with `n_cols` (the row-key column is

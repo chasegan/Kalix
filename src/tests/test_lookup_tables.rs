@@ -627,6 +627,97 @@ values = x, 1, 2,
     assert!(!model2.data_cache.tables.get("plain").expect("plain survives round-trip").is_bilinear());
 }
 
+#[test]
+fn test_lookups_return_the_table_value_at_a_key() {
+    // Interpolating to a breakpoint with a weight of one is not exact in
+    // doubles: 0.1 + 0.1 * (0 - 0.1) / 0.1 is -1.4e-17. A key that matches
+    // must return the cell, so a zero in the table is a zero out of it.
+    let t = parse_1d("0, 0.1,  0.1, 0,  1.1, 7");
+    assert_eq!(lookup_1d(&t, 0.1).to_bits(), 0.0f64.to_bits());
+    let t = parse_1d("0, 0.3,  0.7, 0.9,  2.5, 5");
+    assert_eq!(lookup_1d(&t, 0.7).to_bits(), 0.9f64.to_bits());
+
+    // The same on the row axis of both 2D lookups, and on the bilinear
+    // column axis, with a cell that interpolation gets wrong.
+    let grid = "x, 1, 2, 3,  0, 0.1, 0.2, 0.3,  0.1, 0, 0.9, 0,  1.1, 7, 5, 7";
+    let exact = parse_2d(grid, 4);
+    let bilinear = parse_2d_bilinear(grid, 4);
+    assert_eq!(lookup_2d(&exact, 1.0, 0.1).to_bits(), 0.0f64.to_bits());
+    assert_eq!(lookup_2d(&exact, 2.0, 0.1).to_bits(), 0.9f64.to_bits());
+    assert_eq!(lookup_2d_bilinear(&bilinear, 1.0, 0.1).to_bits(), 0.0f64.to_bits());
+    assert_eq!(lookup_2d_bilinear(&bilinear, 2.0, 0.1).to_bits(), 0.9f64.to_bits());
+    assert_eq!(lookup_2d_bilinear(&bilinear, 3.0, 0.1).to_bits(), 0.0f64.to_bits());
+    // Between column keys at a row key: the row's cells, interpolated.
+    assert_eq!(lookup_2d_bilinear(&bilinear, 1.5, 0.1), 0.45);
+}
+
+#[test]
+fn test_lookups_stay_within_the_neighbouring_values() {
+    // Between two breakpoints the rounded arithmetic can land an ulp past
+    // either value. The lookups hold the result between them, so a table
+    // of non-negative values never returns a negative number, and a
+    // monotone table stays monotone. Decimal keys and values, as typed.
+    let mut seed: u64 = 7;
+    let mut next = || { seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); (seed >> 11) as f64 / (1u64 << 53) as f64 };
+    let mut outside = 0usize;
+    for _ in 0..20_000 {
+        let x0 = (next() * 1000.0).round() / 10.0;
+        let x1 = x0 + ((next() * 500.0).round() + 1.0) / 100.0;
+        let y0 = (next() * 2000.0 - 1000.0).round() / 100.0;
+        let y1 = (next() * 2000.0 - 1000.0).round() / 100.0;
+        let t = parse_1d(&format!("{}, {}, {}, {}", x0, y0, x1, y1));
+        let (lo, hi) = (y0.min(y1), y0.max(y1));
+        for x in [x1 - (x1 - x0) * 1e-12, x0 + (x1 - x0) * next(), f64::from_bits(x1.to_bits() - 1)] {
+            let y = lookup_1d(&t, x);
+            if y < lo || y > hi { outside += 1; }
+        }
+    }
+    assert_eq!(outside, 0, "lookups outside their bracket's values");
+
+    // The same bound on each 2D path: the exact-match lookup down a column,
+    // and the bilinear lookup down a column at a column key, across a row
+    // at a row key, and in the interior, against its four corner cells.
+    let mut outside = [0usize; 4];
+    for _ in 0..20_000 {
+        let c0 = (next() * 1000.0).round() / 10.0;
+        let c1 = c0 + ((next() * 500.0).round() + 1.0) / 100.0;
+        let r0 = (next() * 1000.0).round() / 10.0;
+        let r1 = r0 + ((next() * 500.0).round() + 1.0) / 100.0;
+        let cells: Vec<f64> = (0..4).map(|_| (next() * 2000.0 - 1000.0).round() / 100.0).collect();
+        let grid = format!("x, {}, {},  {}, {}, {},  {}, {}, {}", c0, c1, r0, cells[0], cells[1], r1, cells[2], cells[3]);
+        let exact = parse_2d(&grid, 3);
+        let bilinear = parse_2d_bilinear(&grid, 3);
+        let within = |y: f64, vals: &[f64]| {
+            let lo = vals.iter().cloned().fold(f64::INFINITY, f64::min);
+            let hi = vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            y >= lo && y <= hi
+        };
+        let row_mid = r0 + (r1 - r0) * next();
+        let col_mid = c0 + (c1 - c0) * next();
+        for row_key in [row_mid, f64::from_bits(r1.to_bits() - 1)] {
+            if !within(lookup_2d(&exact, c0, row_key), &[cells[0], cells[2]]) { outside[0] += 1; }
+            if !within(lookup_2d_bilinear(&bilinear, c1, row_key), &[cells[1], cells[3]]) { outside[1] += 1; }
+            for col_key in [col_mid, f64::from_bits(c1.to_bits() - 1)] {
+                if !within(lookup_2d_bilinear(&bilinear, col_key, r0), &[cells[0], cells[1]]) { outside[2] += 1; }
+                if !within(lookup_2d_bilinear(&bilinear, col_key, row_key), &cells) { outside[3] += 1; }
+            }
+        }
+    }
+    assert_eq!(outside, [0, 0, 0, 0], "2D lookups outside their cells: [exact-match column, bilinear column, bilinear row, bilinear interior]");
+
+    // The interior overshoot is rare, about one probe in a million above,
+    // so two found cases are pinned: without the clamp the first returns
+    // -6.870000000000001 against a lowest cell of -6.87, the second
+    // 9.940000000000001 against a highest of 9.94.
+    let t = parse_2d_bilinear("x, 44.1, 46.65,  1.2, 2.0, -3.17,  3.7199999999999998, -6.87, -6.85", 3);
+    let y = lookup_2d_bilinear(&t, f64::from_bits(44.1f64.to_bits() + 1), f64::from_bits(3.7199999999999998f64.to_bits() - 1));
+    assert!(y >= -6.87, "got {}", y);
+    let t = parse_2d_bilinear("x, 0.7, 3.3099999999999996,  9.4, -7.2, 9.36,  12.82, -7.97, 9.94", 3);
+    let y = lookup_2d_bilinear(&t, f64::from_bits(3.3099999999999996f64.to_bits() - 1), f64::from_bits(12.82f64.to_bits() - 1));
+    assert!(y <= 9.94, "got {}", y);
+    assert!(lookup_1d(&parse_1d("0, 0.1, 0.1, 0, 1.1, 7"), f64::NAN).is_nan());
+}
+
 // -------------------------------------------------------------------------------------
 // Bracket search across table sizes
 // -------------------------------------------------------------------------------------
@@ -642,7 +733,11 @@ fn reference_lerp(xs: &[f64], ys: &[f64], x: f64) -> f64 {
         return ys[n - 1];
     }
     let i = (1..n).find(|i| xs[*i] >= x).unwrap();
-    ys[i - 1] + (x - xs[i - 1]) * (ys[i] - ys[i - 1]) / (xs[i] - xs[i - 1])
+    if xs[i] == x {
+        return ys[i];
+    }
+    let y = ys[i - 1] + (x - xs[i - 1]) * (ys[i] - ys[i - 1]) / (xs[i] - xs[i - 1]);
+    y.max(ys[i - 1].min(ys[i])).min(ys[i - 1].max(ys[i]))
 }
 
 /// `n` unevenly spaced ascending keys.
@@ -717,12 +812,11 @@ fn test_2d_lookups_match_reference_at_every_table_size() {
             for col_key in probes(&keys) {
                 let expected = reference_lerp(&keys, &down, col_key);
                 let got = lookup_2d_bilinear(&bilinear, col_key, *row_key);
-                // At a column key the bilinear lookup returns the column itself.
-                let expected = match keys.iter().position(|k| *k == col_key) {
-                    Some(c) => down[c],
-                    None => expected,
-                };
-                assert_eq!(got.to_bits(), expected.to_bits(), "{} keys, bilinear at ({}, {}): got {}, expected {}", n, col_key, row_key, got, expected);
+                // The lookup holds its result within the four corner cells
+                // where this reference holds each step within its own two
+                // values, so the two can differ by an ulp between grid points.
+                assert!((got - expected).abs() <= 2.0 * f64::EPSILON * expected.abs().max(1.0),
+                    "{} keys, bilinear at ({}, {}): got {}, expected {}", n, col_key, row_key, got, expected);
             }
         }
     }
