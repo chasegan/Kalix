@@ -50,6 +50,12 @@ Between breakpoints the value is linearly interpolated. **Outside the table
 range the nearest endpoint value is returned** — clamped, never extrapolated.
 NaN in gives NaN out.
 
+Two things hold exactly, not just to rounding: at a breakpoint the table
+returns the value written there, and between two breakpoints it never
+returns a value outside those two. So a table of non-negative values never
+returns a negative number, however the keys and values round in floating
+point.
+
 An optional text header row (exactly two non-numeric labels) is allowed for
 readability:
 
@@ -141,8 +147,10 @@ A bilinear table differs from the default in three ways:
   value is returned, never an extrapolation.
 - **NaN in gives NaN out,** for either argument, as for 1D tables.
 
-A column key that exactly equals one of the table's column keys returns
-exactly what the same table returns without `bilinear`.
+At a grid point — a column key and a row key that both match — a bilinear
+table returns the cell written there, and a column key that matches returns
+exactly what the same table returns without `bilinear`. Between grid points
+the result never leaves the range of the four cells around it.
 
 `bilinear` takes `true` or `false`, in lowercase, and defaults to `false`.
 It applies to 2D tables only: `bilinear = true` on a 1D table is an error at
