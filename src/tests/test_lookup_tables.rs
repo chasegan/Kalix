@@ -627,6 +627,30 @@ values = x, 1, 2,
     assert!(!model2.data_cache.tables.get("plain").expect("plain survives round-trip").is_bilinear());
 }
 
+#[test]
+fn test_lookups_return_the_table_value_at_a_key() {
+    // Interpolating to a breakpoint with a weight of one is not exact in
+    // doubles: 0.1 + 0.1 * (0 - 0.1) / 0.1 is -1.4e-17. A key that matches
+    // must return the cell, so a zero in the table is a zero out of it.
+    let t = parse_1d("0, 0.1,  0.1, 0,  1.1, 7");
+    assert_eq!(lookup_1d(&t, 0.1).to_bits(), 0.0f64.to_bits());
+    let t = parse_1d("0, 0.3,  0.7, 0.9,  2.5, 5");
+    assert_eq!(lookup_1d(&t, 0.7).to_bits(), 0.9f64.to_bits());
+
+    // The same on the row axis of both 2D lookups, and on the bilinear
+    // column axis, with a cell that interpolation gets wrong.
+    let grid = "x, 1, 2, 3,  0, 0.1, 0.2, 0.3,  0.1, 0, 0.9, 0,  1.1, 7, 5, 7";
+    let exact = parse_2d(grid, 4);
+    let bilinear = parse_2d_bilinear(grid, 4);
+    assert_eq!(lookup_2d(&exact, 1.0, 0.1).to_bits(), 0.0f64.to_bits());
+    assert_eq!(lookup_2d(&exact, 2.0, 0.1).to_bits(), 0.9f64.to_bits());
+    assert_eq!(lookup_2d_bilinear(&bilinear, 1.0, 0.1).to_bits(), 0.0f64.to_bits());
+    assert_eq!(lookup_2d_bilinear(&bilinear, 2.0, 0.1).to_bits(), 0.9f64.to_bits());
+    assert_eq!(lookup_2d_bilinear(&bilinear, 3.0, 0.1).to_bits(), 0.0f64.to_bits());
+    // Between column keys at a row key: the row's cells, interpolated.
+    assert_eq!(lookup_2d_bilinear(&bilinear, 1.5, 0.1), 0.45);
+}
+
 // -------------------------------------------------------------------------------------
 // Bracket search across table sizes
 // -------------------------------------------------------------------------------------
@@ -642,6 +666,9 @@ fn reference_lerp(xs: &[f64], ys: &[f64], x: f64) -> f64 {
         return ys[n - 1];
     }
     let i = (1..n).find(|i| xs[*i] >= x).unwrap();
+    if xs[i] == x {
+        return ys[i];
+    }
     ys[i - 1] + (x - xs[i - 1]) * (ys[i] - ys[i - 1]) / (xs[i] - xs[i - 1])
 }
 
@@ -717,11 +744,6 @@ fn test_2d_lookups_match_reference_at_every_table_size() {
             for col_key in probes(&keys) {
                 let expected = reference_lerp(&keys, &down, col_key);
                 let got = lookup_2d_bilinear(&bilinear, col_key, *row_key);
-                // At a column key the bilinear lookup returns the column itself.
-                let expected = match keys.iter().position(|k| *k == col_key) {
-                    Some(c) => down[c],
-                    None => expected,
-                };
                 assert_eq!(got.to_bits(), expected.to_bits(), "{} keys, bilinear at ({}, {}): got {}, expected {}", n, col_key, row_key, got, expected);
             }
         }

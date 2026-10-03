@@ -77,8 +77,9 @@ pub enum LookupTable {
 /// Clamped linear interpolation over strictly-ascending breakpoints.
 ///
 /// Outside the range of `xs` the endpoint value is returned (no
-/// extrapolation). NaN propagates: a NaN `x` yields NaN. A single-breakpoint
-/// table is a constant everywhere.
+/// extrapolation). At a breakpoint the table's own value is returned, bit
+/// for bit. NaN propagates: a NaN `x` yields NaN. A single-breakpoint table
+/// is a constant everywhere.
 #[inline]
 fn clamped_lerp(xs: &[f64], ys: &[f64], x: f64) -> f64 {
     let n = xs.len();
@@ -86,18 +87,28 @@ fn clamped_lerp(xs: &[f64], ys: &[f64], x: f64) -> f64 {
         // Degenerate single-row table: constant everywhere, but NaN still propagates.
         return if x.is_nan() { f64::NAN } else { ys[0] };
     }
-    if x <= xs[0] {
+    // `!(x > lo)` is true for NaN as well as for the low clamp, so the
+    // ordinary path pays one compare for both.
+    if !(x > xs[0]) {
+        if x.is_nan() {
+            return f64::NAN;
+        }
         return ys[0];
     }
     if x >= xs[n - 1] {
         return ys[n - 1];
     }
-    // First index with xs[i] >= x; the guards above bound i to 1..=n-1 for
-    // ordinary x. For NaN every comparison is false and count_below
-    // returns 0, so clamp to 1 and let the arithmetic yield NaN.
-    let i = count_below(xs, x).max(1);
+    // First index with xs[i] >= x; the guards above bound i to 1..=n-1.
+    let i = count_below(xs, x);
+    // A key that matches takes its own value. Interpolating to it with a
+    // weight of one does not always give it: 0.1 + 0.1 * (0 - 0.1) / 0.1 is
+    // -1.4e-17 in doubles, not 0.
+    if xs[i] == x {
+        return ys[i];
+    }
     let (x0, x1) = (xs[i - 1], xs[i]);
-    ys[i - 1] + (x - x0) * (ys[i] - ys[i - 1]) / (x1 - x0)
+    let (y0, y1) = (ys[i - 1], ys[i]);
+    y0 + (x - x0) * (y1 - y0) / (x1 - x0)
 }
 
 /// Key sets up to this length are bracketed by counting; longer ones by
@@ -187,7 +198,9 @@ impl LookupTable2D {
         } else if row_key >= rk[n - 1] {
             (n - 1, false)
         } else {
-            (count_below(rk, row_key), true)
+            // As on the column axis: a matching row key takes its own row.
+            let i = count_below(rk, row_key);
+            (i, rk[i] != row_key)
         };
 
         match (col_interior, row_interior) {
