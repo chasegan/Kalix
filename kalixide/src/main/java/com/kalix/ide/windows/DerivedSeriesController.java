@@ -48,6 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
@@ -279,12 +280,17 @@ class DerivedSeriesController {
     }
 
     /** Why {@code name} can't be used for a derived series of each origin, or {@code null}. */
+    private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_]+");
+
     private String nameProblem(String name, List<SourceRef> origins) {
         if (name.isEmpty()) {
             return "Enter a name.";
         }
-        if (name.contains(".") || name.chars().anyMatch(Character::isWhitespace)) {
-            return "A derived series name can't contain dots or spaces.";
+        // The dataset identifier rule: the name is a part of a dotted series name, a column
+        // header in a saved CSV and a field in a Pixie .pxt, where a comma or quote breaks
+        // the file (and the filter's * ? / " ! would meet its grammar).
+        if (!NAME.matcher(name).matches()) {
+            return "A derived series name can have letters, digits and underscores only.";
         }
         for (DerivedSeriesInfo existing : derivedSeries.values()) {
             if (existing.name().equals(name) && origins.contains(existing.origin)) {
