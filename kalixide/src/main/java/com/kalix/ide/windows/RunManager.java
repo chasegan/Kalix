@@ -895,13 +895,23 @@ public class RunManager extends JFrame {
 
     /**
      * Checks {@code refs} in the outputs tree, in addition to what is already checked, so
-     * the target tab plots them. Refs with no visible node (e.g. hidden by the filter) are
-     * skipped.
+     * the target tab plots them. If the filter hides any of them it is cleared first;
+     * returns whether it was.
      */
-    void checkOutputsSeries(Set<SeriesRef> refs) {
+    boolean checkOutputsSeries(Set<SeriesRef> refs) {
         List<TreePath> paths = new ArrayList<>();
         searchAndCollectPaths((DefaultMutableTreeNode) timeseriesTreeModel.getRoot(), refs, paths);
+        boolean filterCleared = false;
+        if (paths.size() < refs.size() && outputsTreeBuilder.isFiltered()) {
+            // The filter that narrowed the inputs would hide what was made from them, and
+            // a series the user cannot see is one they will think was not created.
+            treeFilterManager.clearFilter();
+            paths.clear();
+            searchAndCollectPaths((DefaultMutableTreeNode) timeseriesTreeModel.getRoot(), refs, paths);
+            filterCleared = true;
+        }
         timeseriesTree.addCheckedPaths(paths);
+        return filterCleared;
     }
 
     /**

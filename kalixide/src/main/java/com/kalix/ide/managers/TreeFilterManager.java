@@ -41,6 +41,8 @@ public class TreeFilterManager {
     private final Runnable onFilterChanged;
     private Timer debounceTimer;
     private SeriesFilter applied = SeriesFilter.NONE;
+    /** The text {@link #applied} came from, so re-applying the same text rebuilds nothing. */
+    private String appliedText = "";
 
     public TreeFilterManager(Runnable onFilterChanged) {
         this.onFilterChanged = onFilterChanged;
@@ -58,8 +60,13 @@ public class TreeFilterManager {
         return applied;
     }
 
+    /** Clears the box and applies the empty filter at once, not after the debounce. */
     public void clearFilter() {
+        if (debounceTimer != null) {
+            debounceTimer.stop();
+        }
         filterField.setText("");
+        apply("");
     }
 
     private JTextField createFilterField() {
@@ -134,7 +141,11 @@ public class TreeFilterManager {
         }
         filterField.putClientProperty(FlatClientProperties.OUTLINE, null);
         filterField.setToolTipText(SYNTAX_TOOLTIP);
+        if (text.strip().equals(appliedText)) {
+            return;
+        }
         applied = parsed;
+        appliedText = text.strip();
         onFilterChanged.run();
     }
 

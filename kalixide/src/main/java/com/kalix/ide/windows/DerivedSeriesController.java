@@ -489,9 +489,10 @@ class DerivedSeriesController {
                 sourceTree.expandPath(path.getParentPath());
             }
             sourceTree.addCheckedPaths(newPaths);
-            window.checkOutputsSeries(newRefs);
+            boolean filterCleared = window.checkOutputsSeries(newRefs);
             status("Created derived." + name + " for " + origins.size()
-                + (origins.size() == 1 ? " source" : " sources"));
+                + (origins.size() == 1 ? " source" : " sources")
+                + (filterCleared ? "; the filter was cleared to show it" : ""));
         }
     }
 

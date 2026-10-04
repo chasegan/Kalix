@@ -55,7 +55,23 @@ class TreeFilterManagerTest {
         assertFalse(m.isShowingError());
         assertSame(SeriesFilter.NONE, m.getFilter());
         assertFalse(m.getFilter().isActive());
-        assertEquals(1, rebuilds.get());
+        assertEquals(0, rebuilds.get(), "the tree already shows the unfiltered state");
+    }
+
+    @Test
+    void reapplyingTheSameTextRebuildsNothingAndClearingAppliesAtOnce() {
+        AtomicInteger rebuilds = new AtomicInteger();
+        TreeFilterManager m = new TreeFilterManager(rebuilds::incrementAndGet);
+        m.apply("inflow");
+        m.apply("inflow ");
+        m.apply("inflow");
+        assertEquals(1, rebuilds.get(), "the same filter again is not a rebuild");
+
+        m.clearFilter();
+        assertSame(SeriesFilter.NONE, m.getFilter());
+        assertEquals(2, rebuilds.get(), "clearing applies without waiting for the debounce");
+        m.apply("");
+        assertEquals(2, rebuilds.get());
     }
 
     @Test
