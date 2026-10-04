@@ -335,3 +335,12 @@ this document.
   title is an item and §2.2 applies.
 - *2026-07-23* — §4 gained the empty-space clause: a right-click on no item
   acts on the containing folder, and can never rename or delete it.
+- *2026-10-04* — tooltips follow §2.1 and §2.3: sentence case, and say
+  what the control does without naming the control, since the pointer is
+  already on it. §2.7 does not apply: a tooltip has no accelerator slot,
+  so it is the one place a shortcut may appear in the text, in parentheses
+  at the end (`Zoom in (+)`). Harvested from the Run Manager's filter box
+  (#443): "Show series matching every term. * and ? are wildcards (whole
+  parts), ! excludes, /.../ is a regex, "..." keeps spaces." Existing
+  tooltips are not re-cut by this entry; it is the standard the next one
+  is held to.
