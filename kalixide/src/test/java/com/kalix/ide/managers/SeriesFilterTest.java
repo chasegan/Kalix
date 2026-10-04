@@ -163,7 +163,10 @@ class SeriesFilterTest {
         // A ! with a space after it would turn the exclusion into an inclusion.
         assertMessage("Put the term straight after !", "! inflow");
         assertMessage("Put the term straight after !", "inflow ! dummy");
-        assertThrows(SeriesFilter.SyntaxException.class, () -> SeriesFilter.parse("/(/"));
+        assertMessage("Invalid regex: ( without )", "/(/");
+        assertMessage("Invalid regex: [ without ]", "/[a/");
+        assertMessage("In a regex, * and ? repeat what comes before them. For a wildcard, leave out the slashes", "/*inflow*/");
+        assertMessage("Invalid regex: Dangling meta character '+'", "/+/");
         assertThrows(SeriesFilter.SyntaxException.class, () -> SeriesFilter.parse("!/"));
     }
 

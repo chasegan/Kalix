@@ -157,8 +157,26 @@ public final class SeriesFilter {
         try {
             return Pattern.compile(body, FLAGS);
         } catch (PatternSyntaxException e) {
-            throw new SyntaxException("Invalid regex: " + e.getDescription());
+            throw new SyntaxException(regexProblem(body, e));
         }
+    }
+
+    /**
+     * The reason a regex did not compile, in the user's terms where Java's are not: a
+     * leading {@code *} is almost always a wildcard typed between slashes by habit.
+     */
+    private static String regexProblem(String body, PatternSyntaxException e) {
+        String description = e.getDescription();
+        if (body.startsWith("*") || body.startsWith("?")) {
+            return "In a regex, * and ? repeat what comes before them. For a wildcard, leave out the slashes";
+        }
+        if (description.startsWith("Unclosed character class")) {
+            return "Invalid regex: [ without ]";
+        }
+        if (description.startsWith("Unclosed group")) {
+            return "Invalid regex: ( without )";
+        }
+        return "Invalid regex: " + description;
     }
 
     /** Compiles a plain (substring) or wildcard (part-aligned) term. */
