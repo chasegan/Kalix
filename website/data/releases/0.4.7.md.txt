@@ -9,4 +9,4 @@ assets:
 pip: "pip install kalix==0.4.7"
 ---
 
-- New! [Filter the Run Manager's Timeseries tree](https://kalix.org/docs/ide/#filtering-the-timeseries-tree) with wildcards (`inflow_*.ds_1`), regular expressions (`/…/`) and exclusions (`!dummy_*`). Terms separated by spaces must all match, and each is matched against the whole series name or its source.
+- Changed: the [Run Manager's Timeseries filter](https://kalix.org/docs/ide/#filtering-the-timeseries-tree) now matches the full series name (`inflow_3.ds_1` works), and accepts wildcards (`inflow_*.ds_1`), regular expressions (`/…/`) and exclusions (`!dummy`). Several space-separated terms must all match, and a term also matches the run or file name. Text that doesn't parse turns the box red and keeps the last filter that worked.
