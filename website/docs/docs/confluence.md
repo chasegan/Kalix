@@ -12,13 +12,13 @@ The confluence node can be used to merge flow pathways. The node is otherwise pa
 [node.walker_confluence]
 type = confluence
 loc = 20, 30
-regulated = river_arm            ; orders go up the river arm, by name
+regulated = river_arm            # orders go up the river arm, by name
 ds_1 = my_other_node
 
 [node.two_dam_junction]
 type = confluence
 loc = 40, 30
-regulated = north_arm, south_arm ; split: 70% of orders up the north arm
+regulated = north_arm, south_arm # split: 70% of orders up the north arm
 harmony_fraction = 0.7
 ds_1 = another_node
 ```

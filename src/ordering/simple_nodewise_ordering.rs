@@ -155,8 +155,8 @@ impl SimpleNodewiseOrderingSystem {
                     }
                 }
                 NodeEnum::FieldNode(node) => {
-                    node.order_travel_time = travel_time;
-                    node.order_buffer = FifoBuffer::new(travel_time);
+                    // Each crop slot holds its own orders for the field's travel time
+                    node.set_order_travel_time(travel_time);
                 }
                 NodeEnum::OrderControlNode(node) => {
                     node.sent_order_buffer = FifoBuffer::new(travel_time);

@@ -17,6 +17,14 @@ start = 2020-01-01
 end = 2020-01-10
 {head}
 
+[crop.bare]
+root_depth = 1000
+kc = 0
+
+[crop.thirsty]
+root_depth = 1000
+kc = 0
+
 [node.dam]
 type = storage
 loc = 0, 10
@@ -50,10 +58,15 @@ ds_1 = paddock
 [node.paddock]
 type = field
 area = 1
-capacity = 1000
+available_water = 1000
 initial_depletion = 1000
+fallow = bare
+crop_1 = thirsty
+crop_1_plant = 1
+crop_1_plant_area = 1
+crop_1_viable_area = this.area
 loc = 10, 50
-order = {field_order}
+crop_1_order = {field_order}
 ds_1 = outlet
 
 [node.outlet]
@@ -74,7 +87,7 @@ node.pump.dsflow
 node.pump.diversion
 node.pump.diversion_regulated
 node.paddock.usflow
-node.paddock.order_due
+node.paddock.crop_1_order_due
 node.paddock.supply
 node.outlet.usflow
 "#)
@@ -134,7 +147,7 @@ fn test_outlet_order_is_held_for_the_users_travel_time() {
     assert_eq!(series(&mut model, "node.pump.ds_2_order_due")[..5], [0.0, 0.0, 5.0, 5.0, 5.0]);
     assert_eq!(series(&mut model, "node.pump.usflow")[..5], [0.0, 0.0, 5.0, 5.0, 5.0]);
     assert_eq!(series(&mut model, "node.pump.ds_2")[..5], [0.0, 0.0, 5.0, 5.0, 5.0], "diverted as it arrives");
-    assert_eq!(series(&mut model, "node.paddock.order_due")[..5], [0.0, 0.0, 0.0, 5.0, 5.0]);
+    assert_eq!(series(&mut model, "node.paddock.crop_1_order_due")[..5], [0.0, 0.0, 0.0, 5.0, 5.0]);
     assert_eq!(series(&mut model, "node.paddock.usflow")[..5], [0.0, 0.0, 0.0, 5.0, 5.0], "and received as it falls due");
     assert_eq!(series(&mut model, "node.paddock.supply")[..5], [0.0, 0.0, 0.0, 5.0, 5.0]);
     assert_eq!(series(&mut model, "node.pump.ds_1")[..5], [0.0; 5], "nothing passes the user undiverted");
@@ -196,6 +209,14 @@ fn test_an_on_farm_storage_between_the_user_and_the_field() {
 start = 2020-01-01
 end = 2020-01-08
 
+[crop.bare]
+root_depth = 1000
+kc = 0
+
+[crop.thirsty]
+root_depth = 1000
+kc = 0
+
 [node.dam]
 type = storage
 loc = 0, 0
@@ -235,10 +256,15 @@ ds_1 = paddock
 type = field
 loc = 10, 40
 area = 1
-capacity = 1000
+available_water = 1000
 initial_depletion = 1000
 interception = 0
-order = 10
+fallow = bare
+crop_1 = thirsty
+crop_1_plant = 1
+crop_1_plant_area = 1
+crop_1_viable_area = this.area
+crop_1_order = 10
 ds_1 = outlet
 
 [node.outlet]

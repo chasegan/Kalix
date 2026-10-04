@@ -59,12 +59,12 @@ accounts = name,  size, initial, pair,
 
 [acc.pools]
 accounts = name,     size,
-           smith_co, 250,       ; size = the carryover cap
+           smith_co, 250,       # size = the carryover cap
 
 [ras.carryover]
 targets = acc.pools
 trigger = start_water_year(7)
-action  = set(0.9 * self.pair.balance)   ; pool = 0.9 x smith's remaining balance
+action  = set(0.9 * self.pair.balance)   # pool = 0.9 x smith's remaining balance
 ```
 
 ## Referencing accounts from nodes

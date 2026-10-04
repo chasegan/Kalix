@@ -10,6 +10,7 @@ import com.kalix.ide.linter.validators.NodeOrderingValidator;
 import com.kalix.ide.linter.validators.NodeValidator;
 import com.kalix.ide.linter.validators.ReferenceValidator;
 import com.kalix.ide.linter.validators.SectionValidator;
+import com.kalix.ide.linter.validators.CropSectionValidator;
 import com.kalix.ide.linter.validators.TableSectionValidator;
 import com.kalix.ide.linter.validators.UniqueNameValidator;
 import com.kalix.ide.linter.validators.ValidationStrategy;
@@ -35,6 +36,7 @@ public class ModelLinter {
         this.validators = Arrays.asList(
             new SectionValidator(),
             new TableSectionValidator(),
+            new CropSectionValidator(),
             new FnSectionValidator(),
             new VarSectionValidator(),
             new FileValidator(),

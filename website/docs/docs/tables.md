@@ -78,7 +78,7 @@ column keys. Every following row is a row key and its values. Both key sets
 must be strictly ascending.
 
 ```ini
-; Pump rate by month (columns) and storage volume (rows)
+# Pump rate by month (columns) and storage volume (rows)
 [table.pump_rating]
 n_cols = 4
 values = volume\month, 1,    2,    3,

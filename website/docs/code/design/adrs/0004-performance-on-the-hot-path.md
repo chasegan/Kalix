@@ -450,3 +450,40 @@ citing them when a trade is proposed.
   That the shared dispatch is the mechanism behind test 4 moving is a
   guess: no disassembly was compared. One machine, one CPU (Apple M5).
   Sources: `25267c90` and `9f7f2f5d` on `feat/user-supply-outlets`.
+- *2026-09-28*, amended *2026-10-04* — tenth data point for §3.4, a quiet
+  one. The field node was rewritten for crops: a `Vec` of crop slots, a
+  layered soil profile and a fallow partition in the struct, which still
+  came out smaller (1,056 to 960 bytes at `7c93b0f0`, 992 once
+  `curve_number` and its two derived curves were added in `a3d72866`)
+  because the field-level recorders left, and a longer flow phase.
+  `NodeEnum`'s stride stayed 4,064 (the routing node's) throughout, so no
+  other node's layout moved, and the shared dispatch gained nothing but a
+  larger arm for a variant the speed models 1 to 5 do not contain.
+  Interleaved runs against `main` (`7941635e`), median wall time of
+  `simulate`: at `7c93b0f0`, 15 reps, +0.2%, +1.1%, −1.1% on tests 2, 4
+  and 5; at the branch head after the review fixes, three sessions, −1.1%,
+  +0.9%, +0.5% (11 reps, a reviewer's run), +1.5%, +0.4%, +2.3% (15 reps)
+  and +0.9% and +1.3% on tests 2 and 5 (25 reps; by minimum +0.8% and
+  +0.7%). Sign-inconsistent across sessions at a size that two of three
+  put inside ±1.5%: the noise floor as this ADR has used the words, with
+  the honest note that the last session leaned positive. One machine, one
+  CPU (Apple M5).
+- *2026-10-04* — eleventh data point, and a benchmark for §4. The field's
+  own cost had never been measured because no speed model contained one.
+  Speed test 7 now does: 25 farm storages each supplying four fields, 100
+  fields with one crop apiece on the IDE template's order rule, 20 years
+  daily (730,500 field-steps). Against the same network with gauges in
+  place of the fields, interleaved, 11 reps, median simulation time from
+  `-p`: 53.7 ms against 12.9 ms (sd 0.5 and 0.2), so 56 ns per field-step
+  with the order rule. A reviewer's throwaway models in the same session
+  put the field's own code at about 16 ns per step plus 13 ns per crop
+  slot, with the rest the order expression's two offset reads through the
+  evaluator, which is what speed test 3 exists to measure; a tabled kc
+  cost about 4 ns per in-ground crop-step against a constant. Nothing in
+  the flow phase allocates, the cold work (`planting`, `level_pour`) is
+  out of line by attribute, and the `Option` the curve number is carried
+  in is one predictable branch per partition per step, measured at the
+  noise floor on the field model (+0.2 ns) and left as it is rather than
+  monomorphised, per the 2026-09-22 entry's lesson about a second
+  instantiation in the arm. Sources: `34de721e` and the two commits after
+  it on `feat/field-phase-3`.
