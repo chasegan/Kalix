@@ -117,11 +117,10 @@ class SeriesFilterTest {
     }
 
     @Test
-    void spacesInNamesCanBeQuotedEscapedOrMatchedInARegex() throws Exception {
+    void spacesInNamesCanBeQuotedOrMatchedInARegex() throws Exception {
         // The engine accepts node names with spaces.
         assertTrue(matches("\"qu art\"", "node.qu art.ds_1"));
-        assertTrue(matches("qu\\ art", "node.qu art.ds_1"));
-        assertFalse(matches("qu\\ art", "node.quart.ds_1"));
+        assertFalse(matches("\"qu art\"", "node.quart.ds_1"));
         assertTrue(matches("\"qu art.*\"", "node.qu art.ds_1"));
         assertTrue(matches("/qu art/", "node.qu art.ds_1"));
         assertTrue(matches("/a b|inflow/", "node.inflow_3.ds_1"));
@@ -132,11 +131,17 @@ class SeriesFilterTest {
     }
 
     @Test
-    void quotesMakeTextNotRegexAndBackslashesAreDropped() throws Exception {
+    void quotesMakeTextNotRegexAndABackslashIsOrdinaryOutsideARegex() throws Exception {
         assertTrue(SeriesFilter.parse("\"/x\"").matches("node.a.ds_1", "dir/x.csv"));
         assertTrue(SeriesFilter.parse("\"/\"").matches("node.a.ds_1", "dir/x.csv"));
-        assertTrue(matches("\"a\\\"b\"", "node.a\"b.ds_1"));
         assertTrue(matches("inflow\\", "node.inflow\\.ds_1"));
+        assertTrue(matches("a\\b", "node.a\\b.ds_1"));
+        assertFalse(matches("a\\b", "node.ab.ds_1"));
+        assertTrue(matches("x\\*", "node.x\\y.ds_1"));
+        assertFalse(matches("x\\*", "node.xy.ds_1"));
+        // Only inside a regex does a backslash escape the closing slash.
+        assertTrue(matches("/x\\/y/", "node.x/y.ds_1"));
+        assertTrue(matches("/a\\\\/", "node.a\\.ds_1"));
     }
 
     @Test

@@ -8,10 +8,10 @@ import java.util.regex.PatternSyntaxException;
 /**
  * The parsed text of the Timeseries tree filter (#397).
  *
- * <p>Spaces (or any whitespace) separate terms, except inside {@code "..."} or {@code /.../}, or after a
- * backslash (node names may contain spaces). A backslash also stops a {@code "} or
- * {@code /} from closing its term; outside a regex it is dropped, keeping the character
- * after it. A closing quote or slash must be followed by a space or the end. A leading
+ * <p>Spaces (or any whitespace) separate terms, except inside {@code "..."} or
+ * {@code /.../}. Inside a regex a backslash stops a {@code /} from closing it; elsewhere a
+ * backslash is an ordinary character. A closing quote or slash must be followed by a
+ * space or the end. A leading
  * {@code !} makes a term exclude; a trailing lone {@code !} or a {@code ""} is ignored as
  * half-typed, and a {@code !} followed by a space is an error.
  * A series shows if all include terms match it (or there are none) and no exclude term
@@ -73,7 +73,7 @@ public final class SeriesFilter {
         char open = text.charAt(i);
         if (open == '"' || open == '/') {
             boolean quoted = open == '"';
-            int close = findUnescaped(open, text, i + 1);
+            int close = quoted ? text.indexOf('"', i + 1) : regexEnd(text, i + 1);
             if (close < 0) {
                 throw new SyntaxException(quoted
                     ? "Quote not closed: end it with \""
@@ -87,8 +87,8 @@ public final class SeriesFilter {
             }
             return new Term(exclude, quoted ? Kind.TEXT : Kind.REGEX, text.substring(i + 1, close), rest);
         }
-        int end = findUnescaped(' ', text, i);
-        if (end < 0) end = text.length();
+        int end = i;
+        while (end < text.length() && !Character.isWhitespace(text.charAt(end))) end++;
         return new Term(exclude, Kind.TEXT, text.substring(i, end), text.substring(end));
     }
 
@@ -96,7 +96,7 @@ public final class SeriesFilter {
     private static Pattern parseTerm(Term term) throws SyntaxException {
         return term.kind() == Kind.REGEX
             ? regex(term.body())
-            : plainOrWildcard(unescape(term.body()));
+            : plainOrWildcard(term.body());
     }
 
     /** Parses the whole filter text; see the class comment for the syntax. */
@@ -137,33 +137,19 @@ public final class SeriesFilter {
     }
 
     /**
-     * Index of the first unescaped {@code delimiter} at or after {@code from}, or -1.
-     * A backslash skips the character after it; a whitespace delimiter matches any whitespace.
+     * Index of the slash that closes a regex opened before {@code from}, or -1. A
+     * backslash skips the character after it, so {@code \/} stays inside the regex.
      */
-    private static int findUnescaped(char delimiter, String text, int from) {
-        boolean anyWhitespace = Character.isWhitespace(delimiter);
+    private static int regexEnd(String text, int from) {
         for (int j = from; j < text.length(); j++) {
             char c = text.charAt(j);
             if (c == '\\') {
                 j++;
-            } else if (c == delimiter || (anyWhitespace && Character.isWhitespace(c))) {
+            } else if (c == '/') {
                 return j;
             }
         }
         return -1;
-    }
-
-    /** Drops each backslash, keeping the character after it (a trailing one stays). */
-    private static String unescape(String s) {
-        StringBuilder sb = new StringBuilder(s.length());
-        for (int j = 0; j < s.length(); j++) {
-            char c = s.charAt(j);
-            if (c == '\\' && j + 1 < s.length()) {
-                c = s.charAt(++j);
-            }
-            sb.append(c);
-        }
-        return sb.toString();
     }
 
     /** Compiles a regex term's {@code body}, the text between its slashes. */

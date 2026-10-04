@@ -116,7 +116,7 @@ Type in the box above the **Timeseries** tree to show only the series you want. 
 | `inflow_*.ds_1` | `ds_1` of every node named `inflow_…`. `*` matches anything, dots included; `?` matches one character. |
 | `inflow ds_1` | `ds_1` of every inflow node. Spaces separate terms, and a series shows only if it matches all of them. |
 | `*.inflow_* !dummy_*` | Every inflow node except the dummies. `!` excludes whatever a term matches. `!dummy_*` on its own shows everything else. |
-| `"qu art"` or `qu\ art` | A name with a space in it. Quotes, or a backslash before the space, keep it one term. Wildcards still work inside quotes. |
+| `"qu art"` | A name with a space in it: quotes keep it one term. Wildcards still work inside quotes. |
 | `/inflow_[34]\.ds_1$/` | A regular expression, written between slashes. It may contain spaces; write `\/` for a slash. |
 | `Run_2` | Series from any run whose name contains `Run_2`, so `Run_20` too. `/^Run_2$/` picks Run_2 alone, and `Run_2 inflow` narrows to its inflow series. |
 
