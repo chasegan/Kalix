@@ -744,7 +744,27 @@ public class CommandExecutor {
         String body = String.join("\n", template.lines())
             .replace("%%X%%", String.format(Locale.ROOT, "%.2f", x))
             .replace("%%Y%%", String.format(Locale.ROOT, "%.2f", y));
-        return "[node." + uniqueName + "]\n" + body;
+        return "[node." + uniqueName + "]\n" + body + carriedSections(template, editor.getText());
+    }
+
+    /**
+     * The sections a template carries that {@code text} does not already declare, as
+     * INI text to follow the node (empty when there are none to add). A section counts
+     * as present when a header line names it, in any case and with any indentation, so
+     * a second field reuses the crops the first one brought.
+     */
+    static String carriedSections(NodeTemplateCatalog.NodeTemplate template, String text) {
+        StringBuilder out = new StringBuilder();
+        for (NodeTemplateCatalog.CarriedSection section : template.sections()) {
+            java.util.regex.Pattern header = java.util.regex.Pattern.compile(
+                "^\\s*\\[\\s*" + java.util.regex.Pattern.quote(section.name()) + "\\s*\\]",
+                java.util.regex.Pattern.MULTILINE | java.util.regex.Pattern.CASE_INSENSITIVE);
+            if (text != null && header.matcher(text).find()) {
+                continue;
+            }
+            out.append("\n\n[").append(section.name()).append("]\n").append(String.join("\n", section.lines()));
+        }
+        return out.toString();
     }
 
     /**

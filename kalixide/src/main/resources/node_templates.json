@@ -100,12 +100,29 @@
         "rain = 0 #expression, mm",
         "evap = 0 #expression, mm",
         "efficiency = 0.8",
-        "fallow = fallow #a [crop.*] section",
+        "fallow = bare_soil #a [crop.*] section",
         "crop_1 = cotton #a [crop.*] section",
         "crop_1_plant = sim.month == 10 && sim.day == 15",
         "crop_1_plant_area = this.area #km2",
         "crop_1_order = this.crop_1_area[-1, 0] * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]"
-      ]
+      ],
+      "sections": {
+        "crop.bare_soil": [
+          "root_depth = 600 #mm, how deep the fallow ground dries",
+          "kc = 0.4 #bare-soil evaporation factor"
+        ],
+        "crop.cotton": [
+          "root_depth = 900 #mm",
+          "p = 0.65",
+          "kc = Day, Kc, #by days since planting",
+          "     0,   0.35,",
+          "     30,  0.35,",
+          "     70,  1.20,",
+          "     130, 1.20,",
+          "     180, 0.60,",
+          "season_len = 180 #days from planting to harvest"
+        ]
+      }
     },
     "regulated_user": {
       "label": "Regulated user",
