@@ -54,7 +54,7 @@ class TreeFilterManagerTest {
         m.apply("");
         assertFalse(m.isShowingError());
         assertSame(SeriesFilter.NONE, m.getFilter());
-        assertFalse(m.isFiltering());
+        assertFalse(m.getFilter().isActive());
         assertEquals(1, rebuilds.get());
     }
 
@@ -63,9 +63,9 @@ class TreeFilterManagerTest {
         TreeFilterManager m = new TreeFilterManager(() -> { });
         m.apply("inflow !");
         assertFalse(m.isShowingError());
-        assertTrue(m.isFiltering());
+        assertTrue(m.getFilter().isActive());
         m.apply("!");
         assertFalse(m.isShowingError());
-        assertFalse(m.isFiltering());
+        assertFalse(m.getFilter().isActive());
     }
 }

@@ -488,7 +488,6 @@ public class RunManager extends JFrame {
             this,
             timeseriesTree,
             timeseriesTreeModel,
-            treeFilterManager,
             outputsTreeBuilder,
             tabManager,
             plotDataSet,

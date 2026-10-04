@@ -58,10 +58,6 @@ public class TreeFilterManager {
         return applied;
     }
 
-    public boolean isFiltering() {
-        return applied.isActive();
-    }
-
     public void clearFilter() {
         filterField.setText("");
     }

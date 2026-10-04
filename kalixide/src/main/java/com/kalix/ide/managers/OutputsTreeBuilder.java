@@ -108,6 +108,11 @@ public class OutputsTreeBuilder {
         this.filter = (filter == null) ? SeriesFilter.NONE : filter;
     }
 
+    /** Whether the tree is currently narrowed by a filter. */
+    public boolean isFiltered() {
+        return filter.isActive();
+    }
+
     /**
      * Updates the tree with a list of selected sources (runs and/or datasets).
      * Automatically handles single vs multi-source tree strategies.
