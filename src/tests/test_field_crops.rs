@@ -78,6 +78,7 @@ node.paddock.usflow
 node.paddock.et
 node.paddock.et_vol
 node.paddock.rain_vol
+node.paddock.intercepted
 node.paddock.excess
 node.paddock.supply
 node.paddock.escape
@@ -397,4 +398,64 @@ fn test_a_standing_trigger_replants_on_the_day_of_harvest() {
     let mut model = run(&ini);
     assert_eq!(s(&mut model, "crop_1_days")[..5], [0.0, 1.0, 0.0, 1.0, 0.0]);
     assert_eq!(s(&mut model, "crop_1_area")[..5], [1.0; 5]);
+}
+
+#[test]
+fn test_kc_is_read_from_the_crops_table_by_days_since_planting() {
+    // kc 0 on the planting day, 1 the next, 1 after: ET is 0 on day 2 (days = 0) and
+    // evap x area from day 3
+    let ini = rig("", "evap = 4\ncrop_1 = shallow\ncrop_1_plant = var.day.n == 2\ncrop_1_plant_area = 1")
+        .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 0, 0, 1, 1, 2, 1\n");
+    let mut model = run(&ini);
+    assert_eq!(s(&mut model, "crop_1_days")[1..4], [0.0, 1.0, 2.0]);
+    assert_eq!(s(&mut model, "et_vol")[1..4], [0.0, 4.0, 4.0]);
+    assert_eq!(s(&mut model, "et")[2], 1.0, "4 mm over 1 of 4 km2: 1 mm over the field");
+}
+
+#[test]
+fn test_two_slots_firing_the_same_day_plant_lower_first_and_the_fallow_caps_the_second() {
+    let mut model = run(&rig("", "crop_1 = shallow\ncrop_1_plant = var.day.n == 2\ncrop_1_plant_area = 3\ncrop_2 = deep\ncrop_2_plant = var.day.n == 2\ncrop_2_plant_area = 3"));
+    assert_eq!(s(&mut model, "crop_1_area")[1], 3.0);
+    assert_eq!(s(&mut model, "crop_2_area")[1], 1.0, "what the fallow had left");
+}
+
+#[test]
+fn test_interception_comes_off_what_the_storm_leaves() {
+    // Dry fallow, CN 85, evap 10 with the default 0.2 interception: 50 mm of rain sheds
+    // 6.32 mm, then 2 mm is intercepted from the remainder, and 41.68 mm infiltrates
+    let ini = rig("", "initial_depletion = 50\nevap = 10\nrain = if(var.day.n == 2, 50, 0)\ncurve_number = 85").replace("interception = 0\n", "");
+    let mut model = run(&ini);
+    assert_close(s(&mut model, "intercepted")[1], 2.0, "mm, the same over the whole fallow");
+    assert_close(s(&mut model, "fallow_depletion")[1], 50.0 - (50.0 - 6.323638637769316 - 2.0), "what reached the soil");
+}
+
+#[test]
+fn test_a_curve_number_needs_a_daily_step() {
+    // The step is daily by construction today, so the guard is reached by setting the cache's
+    // step directly and initialising the network as a run does
+    let mut model = IniModelIO::read_model_string(&rig("", "curve_number = 85")).expect("loads");
+    model.configure().expect("configures: the step is not known yet");
+    model.data_cache.set_start_and_stepsize(model.configuration.sim_start_timestamp, 3600);
+    let err = model.initialize_network().err().unwrap_or_default();
+    assert!(err.contains("defined for daily rain totals"), "got: {err}");
+}
+
+#[test]
+fn test_a_rerun_of_the_same_model_repeats_itself() {
+    let ini = rig("", "evap = 5\nrain = if(var.day.n == 4, 30, 0)\ncrop_1 = shallow\ncrop_1_plant = var.day.n == 2\ncrop_1_plant_area = 2\ncrop_1_order = this.crop_1_area[-1, 0] * this.crop_1_depletion[-1, 0]")
+        .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 1\nseason_len = 5\n");
+    let mut model = run(&ini);
+    let first: Vec<Vec<f64>> = ["crop_1_area", "crop_1_depletion", "fallow_depletion", "excess", "supply"].iter().map(|k| s(&mut model, k)).collect();
+    model.run().expect("second run");
+    let second: Vec<Vec<f64>> = ["crop_1_area", "crop_1_depletion", "fallow_depletion", "excess", "supply"].iter().map(|k| s(&mut model, k)).collect();
+    for (a, b) in first.iter().zip(second.iter()) {
+        assert!(a.iter().zip(b.iter()).all(|(x, y)| x == y || (x.is_nan() && y.is_nan())), "a rerun differs");
+    }
+}
+
+#[test]
+fn test_a_negative_viable_area_stops_the_run() {
+    let ini = rig("", "crop_1 = shallow\ncrop_1_plant = var.day.n == 1\ncrop_1_plant_area = 1\ncrop_1_viable_area = if(var.day.n == 3, -1, 1)");
+    let err = std::panic::catch_unwind(|| run(&ini)).err().map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default()).unwrap_or_default();
+    assert!(err.contains("crop viable_area rule for 'shallow' gave -1"), "got: {err}");
 }

@@ -256,7 +256,7 @@ fn test_depletion_is_the_end_of_step_state() {
     assert_eq!(s(&mut model, "order")[0], 0.0, "nothing to read on the first step");
     assert_eq!(s(&mut model, "order")[1], s(&mut model, "depletion")[0]);
     let err = load_err(&rig(0, "evap = 5\nkc = 1\norder = this.crop_1_depletion"));
-    assert!(err.contains("no value yet") && err.contains("this.crop_1_depletion[-1, 0.0]") || err.contains("[-1, 0.0]"), "got: {err}");
+    assert!(err.contains("no value yet") && err.contains("[-1, 0.0]"), "got: {err}");
 }
 
 #[test]
