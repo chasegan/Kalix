@@ -335,6 +335,14 @@ fn test_curve_number_validation_and_round_trip() {
 }
 
 #[test]
+fn test_a_fallow_with_a_kc_table_is_refused() {
+    let ini = rig("", "").replace("[crop.bare]\nroot_depth = 500\nkc = 0\n", "[crop.bare]\nroot_depth = 500\nkc = 0, 0.2, 100, 0.5\n");
+    let mut model = IniModelIO::read_model_string(&ini).expect("loads");
+    let err = model.configure().map(|_| ()).and_then(|_| model.run()).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(err.contains("The fallow's kc must be a number"), "got: {err}");
+}
+
+#[test]
 fn test_a_planting_rule_that_gives_no_number_stops_the_run() {
     // NaN is not true, and not an area: both stop the run naming the field and the crop,
     // as a viable_area rule does, rather than planting the whole fallow

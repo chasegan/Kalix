@@ -166,7 +166,6 @@ pub struct FieldNode {
     pub dsorders: [f64; MAX_DS_LINKS],
     profile: Profile,
     fallow_partition: Partition,
-    fallow_days: u32,
     planting_done: bool,            // this step's planting ran in the order phase
     cn_dry: f64,                    // the curve numbers at wilting point and at field capacity (CN1, CN3)
     cn_wet: f64,
@@ -390,6 +389,10 @@ impl Node for FieldNode {
         let Some(fallow) = &self.fallow else {
             return Err(format!("Error in node '{}'. A field needs a fallow: the crop that covers what is not planted (fallow = <crop>).", self.name));
         };
+        // The fallow is never planted, so days since planting mean nothing to it
+        if matches!(fallow.kc, crate::hydrology::crop::KcCurve::ByDay(_)) {
+            return Err(format!("Error in node '{}'. The fallow's kc must be a number, not a table by days since planting: a fallow is never planted (crop '{}').", self.name, fallow.name));
+        }
         if self.slots.len() > MAX_CROPS {
             return Err(format!("Error in node '{}'. A field holds at most {} crop slots.", self.name, MAX_CROPS));
         }
@@ -418,7 +421,6 @@ impl Node for FieldNode {
         self.dsflow_primary = 0.0;
         self.dsflow_return = 0.0;
         self.fallow_partition = Partition::new(&self.profile, fallow.root_depth, self.area, self.initial_depletion);
-        self.fallow_days = 0;
         self.planting_done = false;
         for slot in &mut self.slots {
             slot.partition = Partition::new(&self.profile, slot.crop.root_depth, 0.0, self.initial_depletion);
@@ -548,8 +550,7 @@ impl Node for FieldNode {
         let mut excess = 0.0;
         {
             let fallow = self.fallow.as_ref().expect("initialise checked the fallow");
-            let kc = fallow.kc.at(self.fallow_days as f64);
-            self.fallow_days += 1;
+            let kc = fallow.kc.at(0.0); // a number: initialise refused a table
             let runoff_mm = curve.map_or(0.0, |(dry, wet)| curve_number_runoff(dry, wet, &self.fallow_partition, rain_mm));
             let intercepted_mm = (rain_mm - runoff_mm).min(self.interception * evap_mm);
             let (_, et_mm, excess_mm) = soil_day(&self.profile, &mut self.fallow_partition, fallow.p, kc, evap_mm, rain_mm - runoff_mm - intercepted_mm);
