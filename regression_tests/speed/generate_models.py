@@ -534,10 +534,85 @@ def build_model_5():
     (folder / "bench.json").write_text('{"repeats": 5}\n')
 
 
+def build_model_6():
+    """Fields: 25 farm storages, each supplying four irrigated fields with one
+    crop apiece, 20 years daily. Exists so a change to the field node can be
+    timed against a model that is mostly fields (ADR-0004 §4); nothing else in
+    the suite contains one. The order rules are the IDE template's, so the
+    expression evaluator's share (two offset reads per crop per step) is the
+    same as a real farm model carries."""
+    folder = HERE / "6_fields"
+    folder.mkdir(exist_ok=True)
+
+    rng = random.Random(606)
+    dates = daily_dates(1990, 20)
+    rain, pet = synth_climate(dates, rng)
+    write_csv(folder / "climate.csv", dates, [("rain", rain), ("pet", pet)])
+    cols = [(f"inflow_{i + 1}", synth_flow(dates, rng, scale=rng.uniform(40, 120)))
+            for i in range(5)]
+    write_csv(folder / "inflows.csv", dates, cols)
+
+    m = ModelBuilder("Speed test 6: farm storages supplying 100 fields with crops")
+    m.inputs("climate.csv", "inflows.csv")
+    m.lines += [
+        "[crop.cotton]", "root_depth = 900", "p = 0.65",
+        "kc = Day, Kc,", "     0,   0.35,", "     30,  0.35,", "     70,  1.2,", "     130, 1.2,", "     180, 0.6,",
+        "season_len = 180", "",
+        "[crop.lucerne]", "root_depth = 1200", "p = 0.55", "kc = 0.95", "",
+        "[crop.fallow]", "root_depth = 600", "kc = 0.4", "",
+    ]
+    for f in range(25):
+        x = (f % 5) * 40.0
+        y = (f // 5) * 60.0
+        m.node(f"s{f}_inflow", "inflow", x, y, [
+            f"inflow = data.inflows_csv.by_index.{f % 5 + 1}",
+            f"ds_1 = s{f}_dam",
+        ])
+        outlets = [f"ds_{k + 1}_outlet = 0, 500" for k in range(4)]
+        links = [f"ds_{k + 1} = s{f}_field{k}" for k in range(4)]
+        m.node(f"s{f}_dam", "storage", x, y + 10,
+               storage_props(3_000 + f * 100, initial_fraction=0.9) + outlets + links)
+        for k in range(4):
+            cotton = (f + k) % 2 == 0
+            area = rng.uniform(1.0, 4.0)
+            props = [
+                f"area = {area:.2f}",
+                f"available_water = {rng.choice([120, 150, 180])}",
+                "rain = data.climate_csv.by_name.rain",
+                "evap = data.climate_csv.by_name.pet",
+                f"efficiency = {rng.choice([0.7, 0.8, 0.9])}",
+                "fallow = fallow",
+            ]
+            if cotton:
+                props += [
+                    "crop_1 = cotton",
+                    "crop_1_plant = sim.month == 10 && sim.day == 15",
+                    "crop_1_plant_area = this.area",
+                ]
+            else:
+                props += [
+                    "crop_1 = lucerne",
+                    "crop_1_plant = sim.year == 1990 && sim.month == 3 && sim.day == 1",
+                    "crop_1_plant_area = this.area",
+                ]
+            props += [
+                "crop_1_order = this.crop_1_area[-1, 0] * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]",
+                f"ds_1 = s{f}_sink",
+            ]
+            m.node(f"s{f}_field{k}", "field", x + 5 + k * 8, y + 25, props)
+        m.node(f"s{f}_sink", "blackhole", x + 15, y + 40, [])
+    m.output("node.s0_dam.volume")
+    m.output("node.s0_field0.crop_1_depletion")
+    m.output("node.s24_field3.supply")
+    m.write(folder / "kalix.ini")
+    (folder / "bench.json").write_text('{"repeats": 7}\n')
+
+
 if __name__ == "__main__":
     build_model_1()
     build_model_2()
     build_model_3()
     build_model_4()
     build_model_5()
-    print("Generated speed test models 1-5.")
+    build_model_6()
+    print("Generated speed test models 1-6.")
