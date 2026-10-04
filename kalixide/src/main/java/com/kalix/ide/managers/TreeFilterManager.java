@@ -1,5 +1,6 @@
 package com.kalix.ide.managers;
 
+import com.formdev.flatlaf.FlatClientProperties;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
@@ -29,6 +30,7 @@ public class TreeFilterManager {
 
     private static final int DEBOUNCE_DELAY_MS = 150;
     private static final int CLEAR_ICON_SIZE = 12;
+    private static final String PLACEHOLDER = "Filter...";
     private static final String SYNTAX_TOOLTIP =
         "Show series matching every term. * and ? are wildcards, ! excludes, /.../ is a regex, \"...\" keeps spaces.";
 
@@ -65,7 +67,7 @@ public class TreeFilterManager {
 
     private JTextField createFilterField() {
         JTextField field = new JTextField();
-        field.putClientProperty("JTextField.placeholderText", "Filter...");
+        field.putClientProperty(FlatClientProperties.PLACEHOLDER_TEXT, PLACEHOLDER);
         field.setToolTipText(SYNTAX_TOOLTIP);
 
         field.getDocument().addDocumentListener(new DocumentListener() {
@@ -112,25 +114,40 @@ public class TreeFilterManager {
         if (debounceTimer != null && debounceTimer.isRunning()) {
             debounceTimer.stop();
         }
-        debounceTimer = new Timer(DEBOUNCE_DELAY_MS, e -> applyFilterText());
+        debounceTimer = new Timer(DEBOUNCE_DELAY_MS, e -> apply(filterField.getText()));
         debounceTimer.setRepeats(false);
         debounceTimer.start();
     }
 
-    private void applyFilterText() {
-        String text = filterField.getText();
+    /**
+     * Applies {@code text} as the filter: a parse error outlines the field and
+     * puts the reason in its tooltip, leaving the last valid filter in place;
+     * valid text clears both and tells the caller to rebuild. Package-private
+     * so tests can drive it without the debounce timer.
+     */
+    void apply(String text) {
         clearButton.setVisible(!text.isBlank());
         SeriesFilter parsed;
         try {
             parsed = SeriesFilter.parse(text);
         } catch (SeriesFilter.SyntaxException ex) {
-            filterField.putClientProperty("JComponent.outline", "error");
+            filterField.putClientProperty(FlatClientProperties.OUTLINE, FlatClientProperties.OUTLINE_ERROR);
             filterField.setToolTipText(ex.getMessage());
             return;
         }
-        filterField.putClientProperty("JComponent.outline", null);
+        filterField.putClientProperty(FlatClientProperties.OUTLINE, null);
         filterField.setToolTipText(SYNTAX_TOOLTIP);
         applied = parsed;
         onFilterChanged.run();
+    }
+
+    /** The field's tooltip: the syntax summary, or the reason the text does not parse. */
+    String getTooltip() {
+        return filterField.getToolTipText();
+    }
+
+    /** Whether the field is outlined as an error. */
+    boolean isShowingError() {
+        return FlatClientProperties.OUTLINE_ERROR.equals(filterField.getClientProperty(FlatClientProperties.OUTLINE));
     }
 }
