@@ -8,7 +8,6 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DefaultLabelResolverTest {
 
@@ -29,7 +28,7 @@ class DefaultLabelResolverTest {
     @Test
     void derivedSeriesNameIsProjectedNotTakenFromBaseName() {
         runNames.put(1L, "Run_1");
-        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new RunSource(1), null));
+        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new RunSource(1)));
         DerivedSeries ref = new DerivedSeries(7);
 
         assertEquals("derived.sum_1", resolver.nameFor(ref));
@@ -39,11 +38,11 @@ class DefaultLabelResolverTest {
 
     @Test
     void derivedSeriesRenameChangesLabelButNotIdentity() {
-        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new LastSource(), null));
+        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new LastSource()));
         DerivedSeries ref = new DerivedSeries(7);
         String keyBefore = ref.baseName();
 
-        derivedSeries.put(7L, new DerivedSeriesLabel("inflows", new LastSource(), null));
+        derivedSeries.put(7L, new DerivedSeriesLabel("inflows", new LastSource()));
 
         assertEquals("derived.inflows [Last]", resolver.labelFor(ref));
         assertEquals(keyBefore, new DerivedSeries(7).baseName());
@@ -52,21 +51,9 @@ class DefaultLabelResolverTest {
     @Test
     void liveOriginFollowsRunRename() {
         runNames.put(1L, "Run_1");
-        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new RunSource(1), null));
+        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new RunSource(1)));
         runNames.put(1L, "baseline");
         assertEquals("baseline", resolver.sourceLabel(new DerivedSeries(7)));
-    }
-
-    @Test
-    void removedOriginShowsFrozenNameMarkedRemoved() {
-        String path = new File("data", "flows.csv").getAbsolutePath();
-        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new DatasetSource(path), "flows.csv"));
-        assertEquals("flows.csv (removed)", resolver.sourceLabel(new DerivedSeries(7)));
-
-        // Frozen means frozen: a run of the same id reappearing in the lookup is ignored.
-        runNames.put(1L, "Run_1");
-        derivedSeries.put(8L, new DerivedSeriesLabel("sum_2", new RunSource(1), "old_name"));
-        assertEquals("old_name (removed)", resolver.sourceLabel(new DerivedSeries(8)));
     }
 
     @Test
@@ -75,9 +62,11 @@ class DefaultLabelResolverTest {
     }
 
     @Test
-    void derivedSeriesOfDerivedSeriesIsRejected() {
-        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new DerivedSeriesSource(6), null));
-        assertThrows(IllegalStateException.class, () -> resolver.sourceLabel(new DerivedSeries(7)));
+    void derivedSeriesOriginThatIsItselfDerivedIsShownAsUnknown() {
+        // Creation never builds one; the resolver's contract is to make a missing identity
+        // obvious, never to throw inside a tree cell.
+        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new DerivedSeriesSource(6)));
+        assertEquals("?", resolver.sourceLabel(new DerivedSeries(7)));
     }
 
     @Test

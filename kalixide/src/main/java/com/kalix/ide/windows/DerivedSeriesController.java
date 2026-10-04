@@ -49,6 +49,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
@@ -84,8 +85,6 @@ class DerivedSeriesController {
     private final Consumer<String> statusUpdater;
 
     private final Map<Long, DerivedSeriesInfo> derivedSeries = new LinkedHashMap<>();
-    // An origin's last display name, recorded when it is removed.
-    private final Map<SourceRef, String> removedOriginLabels = new HashMap<>();
     private long nextId = 1;
     // The Last generation whose derived series are fully recomputed.
     private long recomputedGeneration;
@@ -467,8 +466,7 @@ class DerivedSeriesController {
             }
             // An origin removed while this one read would never be labelled removed.
             for (SourceRef origin : origins) {
-                if (!(origin instanceof LastSource) && !removedOriginLabels.containsKey(origin)
-                        && !window.hasSourceNode(origin)) {
+                if (!(origin instanceof LastSource) && !window.hasSourceNode(origin)) {
                     fail("A source was removed while derived." + name + " was being created.");
                     return;
                 }
@@ -813,11 +811,15 @@ class DerivedSeriesController {
                 + ". They keep their values, but any of Last can no longer be recomputed:\n  "
                 + String.join("\n  ", dependents);
         }
-        if (!DialogUtils.showConfirmation(window, message,
-                toDelete.size() == 1 ? "Delete Derived series" : "Delete Derived series")) {
+        if (!DialogUtils.showConfirmation(window, message, "Delete Derived Series")) {
             return;
         }
+        deleteNow(toDelete);
+        status("Deleted " + what);
+    }
 
+    /** Deletes {@code toDelete} without asking. */
+    private void deleteNow(List<DerivedSeriesInfo> toDelete) {
         // One source-tree change: one outputs rebuild and one undo step for the lot
         window.changeSourceTree(() -> {
             for (DerivedSeriesInfo info : toDelete) {
@@ -827,11 +829,9 @@ class DerivedSeriesController {
                 derivedSeries.remove(info.id);
                 if (group.getChildCount() == 0) {
                     window.removeSourceNode(derivedSeriesNode, group.getUserObject());
-                    removedOriginLabels.remove(info.origin);
                 }
             }
         });
-        status("Deleted " + what);
     }
 
     /** The source-tree tooltip for a derived series: what it sums, and why it is unavailable. */
@@ -882,21 +882,19 @@ class DerivedSeriesController {
     }
 
     /**
-     * Records {@code origin}'s last display name as it is removed. Its derived series stay,
-     * labelled {@code "<lastLabel> (removed)"}.
+     * Deletes the derived series of {@code origin}, which has just been removed: a derived
+     * series does not outlive its source, as the source's other series do not. Called once
+     * the source tree has finished changing. {@code label} is the source's last display
+     * name, for the status line.
      */
-    void onOriginRemoved(SourceRef origin, String lastLabel) {
-        if (hasDerivedSeriesOf(origin)) {
-            removedOriginLabels.put(origin, lastLabel);
-            refreshOriginLabels();
+    void onOriginRemoved(SourceRef origin, String label) {
+        List<DerivedSeriesInfo> gone = derivedSeriesOf(origin);
+        if (gone.isEmpty()) {
+            return;
         }
-    }
-
-    /** Forgets a removal when the same dataset is loaded again: its derived series are live again. */
-    void onOriginLoaded(SourceRef origin) {
-        if (removedOriginLabels.remove(origin) != null && hasDerivedSeriesOf(origin)) {
-            refreshOriginLabels();
-        }
+        deleteNow(gone);
+        status("Deleted the derived series of " + label + ": "
+            + gone.stream().map(DerivedSeriesInfo::name).collect(Collectors.joining(", ")));
     }
 
     /**
@@ -907,14 +905,6 @@ class DerivedSeriesController {
         if (hasDerivedSeriesOf(origin)) {
             refreshGroupNodes();
         }
-    }
-
-    /** Redraws every label that names an origin, after one is removed or loaded again. */
-    private void refreshOriginLabels() {
-        refreshGroupNodes();
-        // Rebuilt, not repainted: rows keep the widths cached for the old labels
-        window.rebuildOutputsTree();
-        tabManager.updateAllTabs(false);
     }
 
     private void refreshGroupNodes() {
@@ -961,8 +951,7 @@ class DerivedSeriesController {
     /** The label lookup for {@link DefaultLabelResolver}; {@code null} for an unknown id. */
     DerivedSeriesLabel labelFor(long id) {
         DerivedSeriesInfo info = derivedSeries.get(id);
-        return info == null ? null
-            : new DerivedSeriesLabel(info.name(), info.origin, removedOriginLabels.get(info.origin));
+        return info == null ? null : new DerivedSeriesLabel(info.name(), info.origin);
     }
 
     /**
@@ -995,7 +984,7 @@ class DerivedSeriesController {
     }
 
     private String originLabel(SourceRef origin) {
-        return labelResolver.originLabel(origin, removedOriginLabels.get(origin));
+        return labelResolver.originLabel(origin);
     }
 
     private void error(String message) {

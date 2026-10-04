@@ -644,7 +644,6 @@ public class RunManager extends JFrame {
      * Used by DatasetLoaderManager.
      */
     private void onDatasetLoaded(File file) {
-        derivedSeriesController.onOriginLoaded(new DatasetSource(file.getAbsolutePath()));
         // Refresh the tree to show the newly loaded dataset
         refreshRuns();
     }

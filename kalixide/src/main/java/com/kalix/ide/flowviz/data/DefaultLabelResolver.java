@@ -26,7 +26,6 @@ public final class DefaultLabelResolver implements LabelResolver {
     private static final String UNKNOWN = "?";
 
     /** Appended to a derived series' origin label once that origin has been removed. */
-    static final String REMOVED_SUFFIX = " (removed)";
 
     private final LongFunction<String> runNameLookup;
     private final LongFunction<DerivedSeriesLabel> derivedLookup;
@@ -73,27 +72,19 @@ public final class DefaultLabelResolver implements LabelResolver {
         };
     }
 
-    /**
-     * The label of the source a derived series was summed from: projected live while that
-     * source exists, so a run rename carries through, and frozen at its last display
-     * name, marked removed, once it does not.
-     */
+    /** The label of the source a derived series was summed from, projected live. */
     public String originLabel(DerivedSeriesLabel label) {
-        return originLabel(label.origin(), label.removedOriginLabel());
+        return originLabel(label.origin());
     }
 
     /** {@link #originLabel(DerivedSeriesLabel)} for an origin alone, e.g. its group node. */
-    public String originLabel(SourceRef origin, String removedOriginLabel) {
-        if (removedOriginLabel != null) {
-            return removedOriginLabel + REMOVED_SUFFIX;
-        }
+    public String originLabel(SourceRef origin) {
         return switch (origin) {
             case RunSource r -> runLabel(r.runId());
             case LastSource l -> "Last";
             case DatasetSource d -> datasetLabel(d.datasetId());
-            // Derived series of derived series are out of scope; creation never builds one.
-            case DerivedSeriesSource s -> throw new IllegalStateException(
-                "Derived series origin cannot itself be a derived series: " + s);
+            // Creation never makes a derived series whose origin is a derived series.
+            case DerivedSeriesSource s -> UNKNOWN;
         };
     }
 

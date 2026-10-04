@@ -247,9 +247,13 @@ class RunTreeController {
 
                 // Clean up tracking maps (single-shot removal via the bookkeeping)
                 boolean lastWasRemoved = false;
+                List<RunInfoImpl> removedRuns = new ArrayList<>();
                 for (String sessionKey : sessionsToRemove) {
                     lastWasRemoved |= lastRunTracker.isLastSession(sessionKey);
-                    removeRunData(sessions.remove(sessionKey));
+                    RunInfoImpl removed = removeRunData(sessions.remove(sessionKey));
+                    if (removed != null) {
+                        removedRuns.add(removed);
+                    }
                 }
 
                 // Last is a standing subscription to "whichever run is newest": if its
@@ -282,6 +286,12 @@ class RunTreeController {
                     children[i] = removedChildren.get(order.get(i));
                 }
                 treeModel.nodesWereRemoved(currentRunsNode, indices, children);
+
+                // After the tree has finished changing: the derived series of a removed run
+                // go with it, and deleting them rebuilds the outputs tree.
+                for (RunInfoImpl removed : removedRuns) {
+                    sourceRemoved.accept(new RunSource(removed.getRunId()), removed.getRunName());
+                }
             }
         });
     }
@@ -411,9 +421,10 @@ class RunTreeController {
      * {@link RunManager#removeLoadedDataset} - without it a day of modelling retains
      * every removed run's series (multi-decade double[]s) until application exit.
      */
-    private void removeRunData(DefaultMutableTreeNode runNode) {
+    /** Purges a removed run's series and cache; returns its run info, or null for a non-run node. */
+    private RunInfoImpl removeRunData(DefaultMutableTreeNode runNode) {
         if (runNode == null || !(runNode.getUserObject() instanceof RunInfoImpl runInfo)) {
-            return;
+            return null;
         }
 
         long runId = runInfo.getRunId();
@@ -426,7 +437,6 @@ class RunTreeController {
         }
         // runIds are never reused, so no tab should try to restore this source again.
         window.purgeSeries(refs, new RunSource(runId));
-        sourceRemoved.accept(new RunSource(runId), runInfo.getRunName());
 
         // Clear by UID, not session key: the session has already left the session
         // manager, so key-based lookup cannot reach these entries any more.
@@ -434,5 +444,6 @@ class RunTreeController {
         if (kalixcliUid != null) {
             timeSeriesRequestManager.clearCacheForKalixcliUid(kalixcliUid);
         }
+        return runInfo;
     }
 }
