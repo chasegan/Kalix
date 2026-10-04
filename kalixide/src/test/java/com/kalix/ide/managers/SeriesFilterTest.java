@@ -42,6 +42,9 @@ class SeriesFilterTest {
         assertTrue(matches("*flow_*.ds_1", "node.inflow_3.ds_1"));
         assertTrue(matches("ds_?", "node.inflow_3.ds_1"));
         assertFalse(matches("ds_?", "node.inflow_3.ds_10"));
+        // ? stays within a part: only * crosses a dot.
+        assertFalse(matches("a?b", "node.a.b"));
+        assertTrue(matches("a?b", "node.a_b.ds_1"));
         assertTrue(matches("Node.*", "node.inflow_3.ds_1"));
     }
 

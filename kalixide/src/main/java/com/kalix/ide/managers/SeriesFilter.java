@@ -20,7 +20,7 @@ import java.util.regex.PatternSyntaxException;
  *   <li><b>plain</b> text, bare or quoted, is a substring match; quoting never makes a
  *       regex, so {@code "/x"} looks for {@code /x};</li>
  *   <li>a <b>wildcard</b> term, bare or quoted ({@code *} any run, dots included;
- *       {@code ?} one character), is part-aligned: it must start and end on a dot
+ *       {@code ?} one character within a part), is part-aligned: it must start and end on a dot
  *       boundary, so {@code inflow_*.ds_1} matches {@code node.inflow_3.ds_1} but not
  *       {@code node.inflow_3.ds_10};</li>
  *   <li>a <b>regex</b> is written {@code /.../}, may contain spaces, and uses {@code \/}
@@ -183,7 +183,7 @@ public final class SeriesFilter {
                     sb.append(Pattern.quote(literal.toString()));
                     literal.setLength(0);
                 }
-                sb.append(c == '*' ? ".*" : ".");
+                sb.append(c == '*' ? ".*" : "[^.]");
             } else {
                 literal.append(c);
             }
