@@ -130,22 +130,22 @@ The filter only changes what the tree shows. Ticking a folder while filtering ti
 
 A **derived series** is the point-by-point sum of series from one source: a run, the **Last run**, or a loaded dataset. Use one to total the flows through several nodes, or the demands of a group of users.
 
-**Creating a derived series.** In the **Timeseries** tree, either select the series to sum and right-click **New series from selection > Total…**, or tick them and right-click **New series from checked > Total…**. Then give it a name (a suggestion such as `total_1` is filled in). Each menu appears once there are at least two series to sum. Ticking suits "all but a few": tick everything, then untick the ones to leave out.
+**Making one.** In the **Timeseries** tree, either select the series to sum and right-click **Sum selected…**, or tick them and right-click **Sum checked…**. Then give it a name: letters, digits and underscores (a suggestion such as `sum_1` is filled in). Both items are greyed until there are at least two series to sum. Ticking suits "all but a few": tick everything, then untick the ones to leave out.
 
-- Selecting (or ticking) a folder such as `node.mygr4j` sums every series under it, as the tree shows it. Use the filter to narrow what is summed, for example to every `ds_1`.
-- When the selected series come from several sources (for example `Run_1` and `Run_2`), Kalix makes one derived series per source, each summing that source's series. Every source must include every selected series.
-- A derived series can be summed into another derived series of the same source.
+- Selecting (or ticking) a folder such as `node.mygr4j` sums every series under it, as the tree shows it. Use the filter to narrow what is summed, for example to every `ds_1`; only series the tree currently shows are summed.
+- When the selected series come from several sources (for example `Run_1` and `Run_2`), Kalix makes one derived series per source, each summing that source's series, so totals can be compared across runs. Every source must include every selected series, so series from a run and from a loaded dataset can't be summed together.
+- A derived series can be an input to another derived series of the same source.
 - The series must have identical timestamps. A point missing in any input is missing in the sum.
 
-Derived series appear under **Derived series** in the Run Manager's source tree, grouped by source, and as `derived.<name>` in the **Timeseries** tree, where they plot like any other series. Hover over a derived series to see what it sums.
+Derived series appear under **Derived series** in the Run Manager's source tree, grouped by source, and as `derived.<name>` in the **Timeseries** tree, where they plot like any other series. The new series is ticked and plotted for you; if the filter would have hidden it, the filter is cleared. Hover over a derived series in the source tree to see what it sums.
 
-**Derived series of Last run** are recomputed whenever a new run completes. If the new run can't supply an input (a series is missing, say), the derived series is cleared and its row in the statistics view says why; it comes back when a later run can.
+`derived.` is a Run Manager label, not a model namespace: a model expression can't refer to `derived.sum_1`. To have the model itself record a total, define it in a [`[var.*]` block](vars.md).
 
-**Removing a source keeps its derived series.** You can load a dataset, make a derived series, then remove the dataset and keep only the derived series for comparison. Its group is then labelled, for example, `flows.csv (removed)`.
+**Derived series of Last run** are recomputed whenever a new run completes, inputs before anything made from them. If the new run can't supply an input (a series is missing, say), the derived series is cleared and its row in the statistics view says why; it comes back when a later run can. If the run that is Last is removed, Last moves to the newest remaining run and its derived series follow.
 
-**Managing derived series.** Right-click a derived series in the source tree to **Show component series** (a window listing its inputs, one per line, ready to copy), or to **Save…**, **Rename…** or **Delete** it. Right-click a group to save or delete all of its derived series, or **Derived series** itself to delete every derived series. Choose **Save derived series…** in the **Timeseries** tree to save the selected ones together. Derived series save as CSV, zipped CSV or Pixie, one column per derived series.
+**A derived series lasts as long as its source.** Removing a run or a dataset removes its derived series too, as it does the run's other series. To keep a total past its source, save it first. Derived series also last only for the session.
 
-Derived series last for the session; save them to keep them. A dataset with a column named exactly like an existing derived series (`derived.<name>`) can't be loaded until one of the two is renamed or removed.
+**Managing derived series.** Right-click a derived series in the source tree to **Copy inputs** (its inputs to the clipboard, one per line), or to **Save…**, **Rename…** or **Delete** it. Right-click a group to save or delete all of its derived series, or **Derived series** itself to delete every derived series. Derived series save as CSV, zipped CSV or Pixie, one column per derived series.
 
 ## Docking
 
