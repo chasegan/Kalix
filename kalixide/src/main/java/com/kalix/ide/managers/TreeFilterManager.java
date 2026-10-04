@@ -30,9 +30,10 @@ public class TreeFilterManager {
 
     private static final int DEBOUNCE_DELAY_MS = 150;
     private static final int CLEAR_ICON_SIZE = 12;
-    private static final String PLACEHOLDER = "Filter...";
+    private static final String PLACEHOLDER = "Filter, e.g. inflow_* !dummy";
     private static final String SYNTAX_TOOLTIP =
-        "Show series matching every term. * and ? are wildcards, ! excludes, /.../ is a regex, \"...\" keeps spaces.";
+        "Show series matching every term. * and ? are wildcards (whole parts), ! excludes, "
+            + "/.../ is a regex, \"...\" keeps spaces.";
 
     private final JTextField filterField;
     private final JButton clearButton;
