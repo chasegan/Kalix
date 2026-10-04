@@ -187,7 +187,8 @@ impl SimpleNodewiseOrderingSystem {
                 NodeEnum::RoutingNode(_) |
                 NodeEnum::SacramentoNode(_) |
                 NodeEnum::AwbmNode(_) |
-                NodeEnum::SurmNode(_) => {}
+                NodeEnum::SurmNode(_) |
+                NodeEnum::Gr4jsgNode(_) => {}
             }
         }
         Ok(())
@@ -427,6 +428,10 @@ impl SimpleNodewiseOrderingSystem {
                     node.run_order_phase(data_cache, account_manager);
                     node.dsorders[0]
                 }
+                NodeEnum::Gr4jsgNode(node) => {
+                    node.run_order_phase(data_cache, account_manager);
+                    node.dsorders[0]
+                }
                 NodeEnum::RoutingNode(node) => {
                     node.run_order_phase(data_cache, account_manager);
                     node.dsorders[0]
@@ -499,7 +504,8 @@ fn zone_role(node: &NodeEnum, outlet: u8) -> ZoneRole {
         NodeEnum::SacramentoNode(_) |
         NodeEnum::OrderControlNode(_) |
         NodeEnum::AwbmNode(_) |
-        NodeEnum::SurmNode(_) => ZoneRole::Continues,
+        NodeEnum::SurmNode(_) |
+        NodeEnum::Gr4jsgNode(_) => ZoneRole::Continues,
     }
 }
 
@@ -522,7 +528,8 @@ fn routing_lag(node: &NodeEnum) -> f64 {
         NodeEnum::StorageNode(_) |
         NodeEnum::OrderControlNode(_) |
         NodeEnum::AwbmNode(_) |
-        NodeEnum::SurmNode(_) => 0.0,
+        NodeEnum::SurmNode(_) |
+        NodeEnum::Gr4jsgNode(_) => 0.0,
     }
 }
 
@@ -546,7 +553,8 @@ fn can_originate_orders(node: &NodeEnum) -> bool {
         NodeEnum::RoutingNode(_) |
         NodeEnum::SacramentoNode(_) |
         NodeEnum::AwbmNode(_) |
-        NodeEnum::SurmNode(_) => false,
+        NodeEnum::SurmNode(_) |
+        NodeEnum::Gr4jsgNode(_) => false,
     }
 }
 
@@ -572,7 +580,8 @@ fn named_order_pathways(node: &NodeEnum) -> [Option<usize>; 2] {
         NodeEnum::StorageNode(_) |
         NodeEnum::OrderControlNode(_) |
         NodeEnum::AwbmNode(_) |
-        NodeEnum::SurmNode(_) => [None, None],
+        NodeEnum::SurmNode(_) |
+        NodeEnum::Gr4jsgNode(_) => [None, None],
     }
 }
 

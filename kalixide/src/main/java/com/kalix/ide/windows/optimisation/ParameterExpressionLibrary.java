@@ -19,6 +19,17 @@ public class ParameterExpressionLibrary {
         Map.entry("x3", "lin_range(g(#),1,500)"),
         Map.entry("x4", "lin_range(g(#),0.5,4)"),
 
+        // GR4JSG snow and glacier parameters (ranges follow the DPIE Source plugin)
+        Map.entry("tfrac", "lin_range(g(#),0,1)"),
+        Map.entry("taccum", "lin_range(g(#),-3,3)"),
+        Map.entry("m_rainfall", "lin_range(g(#),0,4)"),
+        Map.entry("base_rainfall", "lin_range(g(#),0,3)"),
+        Map.entry("m_nonrainfall", "lin_range(g(#),0,4.5)"),
+        Map.entry("ddfi", "lin_range(g(#),0,10)"),
+        Map.entry("tmelt", "lin_range(g(#),-3,3)"),
+        Map.entry("return_flow", "lin_range(g(#),0.5,180)"),
+        Map.entry("accumulation", "lin_range(g(#),0,10)"),
+
         // Rainfall factor parameters (node-agnostic)
         Map.entry("rf_bias", "lin_range(g(#),0.7,1.3)"),
         Map.entry("rf_d", "lin_range(g(#),0.001,0.999)"),

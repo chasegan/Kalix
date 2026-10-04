@@ -3,6 +3,9 @@ package com.kalix.ide.tableview;
 import com.kalix.ide.tableview.definitions.AwbmParamsDefinition;
 import com.kalix.ide.tableview.definitions.AwbmTwoTapParamsDefinition;
 import com.kalix.ide.tableview.definitions.Gr4jParamsDefinition;
+import com.kalix.ide.tableview.definitions.Gr4jsgIceParamsDefinition;
+import com.kalix.ide.tableview.definitions.Gr4jsgParamsDefinition;
+import com.kalix.ide.tableview.definitions.Gr4jsgSnowParamsDefinition;
 import com.kalix.ide.tableview.definitions.LinearCombinationDataRefDefinition;
 import com.kalix.ide.tableview.definitions.LossTableDefinition;
 import com.kalix.ide.tableview.definitions.RoutingPwlDefinition;
@@ -48,6 +51,9 @@ public class TablePropertyRegistry {
     private void registerBuiltInDefinitions() {
         register(new SacramentoParamsDefinition());
         register(new Gr4jParamsDefinition());
+        register(new Gr4jsgParamsDefinition());
+        register(new Gr4jsgSnowParamsDefinition());
+        register(new Gr4jsgIceParamsDefinition());
         register(new AwbmTwoTapParamsDefinition()); // eleven values (variant = two_tap); registered first, see class doc
         register(new AwbmParamsDefinition());
         register(new SurmParamsDefinition());
@@ -57,9 +63,10 @@ public class TablePropertyRegistry {
         register(new LossTableDefinition());
 
         // Rainfall-runoff nodes accept a linear combination of data references
-        // as the "rain" input; one definition class covers all four node types.
+        // as the "rain" input; one definition class covers all five node types.
         register(new LinearCombinationDataRefDefinition("sacramento", "rain"));
         register(new LinearCombinationDataRefDefinition("gr4j", "rain"));
+        register(new LinearCombinationDataRefDefinition("gr4jsg", "rain"));
         register(new LinearCombinationDataRefDefinition("awbm", "rain"));
         register(new LinearCombinationDataRefDefinition("surm", "rain"));
     }

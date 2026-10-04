@@ -149,6 +149,7 @@ nav:
               - Gauge: docs/gauge.md
               - Field: docs/field.md
               - GR4J: docs/gr4j.md
+              - GR4JSG: docs/gr4jsg.md
               - Inflow: docs/inflow.md
               - Loss: docs/loss.md
               - Order control: docs/order-control.md
@@ -215,6 +216,7 @@ nav:
               - "0006 Expression naming": code/design/adrs/0006-expression-naming.md
               - "0007 File-tree colour": code/design/adrs/0007-file-tree-colour.md
               - "0008 Ordering knowledge in exhaustive matches": code/design/adrs/0008-ordering-knowledge-in-exhaustive-matches.md
+              - "0009 Options: faster or clearer": code/design/adrs/0009-options-faster-or-clearer.md
           - Website:
               - code/design/website/index.md
               - Todo: code/design/website/todo.md

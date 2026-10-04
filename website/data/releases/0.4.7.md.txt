@@ -9,6 +9,7 @@ assets:
 pip: "pip install kalix==0.4.7"
 ---
 
+- Changed: the [Run Manager's Timeseries filter](https://kalix.org/docs/ide/#filtering-the-timeseries-tree) now matches the full series name (`inflow_3.ds_1` works), and accepts wildcards (`inflow_*.ds_1`), regular expressions (`/…/`) and exclusions (`!dummy`). Several space-separated terms must all match, and a term also matches the run or file name. Text that doesn't parse turns the box red and keeps the last filter that worked.
 - New! [Aggregate series](https://kalix.org/docs/ide/#aggregate-series) in the Run Manager: the point-by-point sum of series from a run, the Last run, or a loaded dataset. Select or tick series in the Timeseries tree and choose `New series from selection > Total…` or `New series from checked > Total…`.
     - Series from several sources make one aggregate per source; selecting a folder sums everything under it, narrowed by the filter.
     - Aggregates of Last run are recomputed when a new run completes.

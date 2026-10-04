@@ -1,31 +1,33 @@
 ==================================
 MASS BALANCE REPORT
 ==================================
-  Node count: 7
+  Node count: 9
   Timesteps: 7305
   Stepsize (s): 86400
   Period: 1990-01-01T00:00:00.000Z, 2009-12-31T00:00:00.000Z
   Note: units are ML/timestep
 
 INFLOW NODES
+  returns, 0.21053002053388084
   river, 766.3839835728953
 
 UNREGULATED_USER NODES
   pump, 0
 
 FIELD NODES
-  furrow, -8.542552713405685
-  pivot, -3.5580323294547163
+  furrow, -9.120867761806988
+  pivot, -3.789066826374625
 
 STORAGE NODES
-  ofs, -1.0121229295003424
+  ofs, -1.0121229295003455
 
 GAUGE NODES
   junction, 0
 
 BLACKHOLE NODES
-  sink, -753.271275600536
+  drain, -0.21053002053388084
+  sink, -752.4619260552142
 
 ----------------------------------
-TOTAL = -0.0000000000014779288903810084
+TOTAL = -0.0000000000009094947017729282
 ----------------------------------

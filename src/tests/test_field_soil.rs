@@ -9,7 +9,7 @@
 use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
 
-const ALL: &str = "node.paddock.depletion\nnode.paddock.orders_en_route\nnode.paddock.order\nnode.paddock.order_due\nnode.paddock.usflow\nnode.paddock.ks\nnode.paddock.kc\nnode.paddock.et\nnode.paddock.et_vol\nnode.paddock.rain\nnode.paddock.rain_vol\nnode.paddock.evap\nnode.paddock.excess\nnode.paddock.supply\nnode.paddock.escape\nnode.paddock.bypass\nnode.paddock.dsflow\nnode.paddock.ds_1";
+const ALL: &str = "node.paddock.depletion\nnode.paddock.orders_en_route\nnode.paddock.order\nnode.paddock.order_due\nnode.paddock.usflow\nnode.paddock.ks\nnode.paddock.kc\nnode.paddock.et\nnode.paddock.et_vol\nnode.paddock.rain\nnode.paddock.rain_vol\nnode.paddock.intercepted\nnode.paddock.evap\nnode.paddock.excess\nnode.paddock.supply\nnode.paddock.escape\nnode.paddock.bypass\nnode.paddock.return_flow\nnode.paddock.dsflow\nnode.paddock.ds_1\nnode.paddock.ds_2";
 
 /// A supply storage above the field, `river_lag` steps of routing between,
 /// and a gauge below. `{FIELD}` is the field's properties after area and capacity.
@@ -45,6 +45,7 @@ type = field
 loc = 0, 20
 area = 2
 capacity = 100
+interception = 0
 {field}
 ds_1 = outlet
 
@@ -90,13 +91,16 @@ fn assert_balance_closes(model: &mut Model) {
         s(model, "depletion"), s(model, "rain_vol"), s(model, "et_vol"), s(model, "excess"),
         s(model, "supply"), s(model, "escape"), s(model, "bypass"), s(model, "usflow"), s(model, "ds_1"));
     let area = 2.0;
+    let intercepted = s(model, "intercepted");
+    let return_flow = s(model, "return_flow");
     for t in 1..dep.len() {
         // depletion is recorded at the end of the step, so the change in water held over step t
         // is -(dep[t] - dep[t-1]) x area
         let d_held = -(dep[t] - dep[t - 1]) * area;
-        assert_close(rain[t] + supply[t] - escape[t], et[t] + excess[t] + d_held, &format!("soil balance on step {t}"));
+        assert_close(rain[t] - intercepted[t] * area + supply[t] - escape[t], et[t] + excess[t] + d_held, &format!("soil balance on step {t}"));
         assert_close(usflow[t], supply[t] + bypass[t], &format!("usflow on step {t}"));
-        assert_close(ds_1[t], bypass[t] + excess[t], &format!("ds_1 on step {t}"));
+        assert_close(ds_1[t] + return_flow[t], bypass[t] + excess[t], &format!("ds_1 + ds_2 on step {t}"));
+        assert_close(s(model, "ds_2")[t], return_flow[t], &format!("ds_2 on step {t}"));
     }
 }
 
@@ -226,6 +230,115 @@ fn test_depletion_is_the_end_of_step_state() {
 }
 
 #[test]
+fn test_interception_takes_the_first_of_the_rain() {
+    // Rain reaches the soil only beyond interception x evap: with evap 4 and the default 0.2,
+    // the first 0.8 mm of a day's rain is intercepted and lost. 3 mm of rain puts 2.2 on the
+    // soil; 0.5 mm is intercepted entirely.
+    let mut model = run(&rig(0, "evap = 4\nkc = 0\ninitial_depletion = 50\nrain = if(var.day.n == 1, 3, if(var.day.n == 2, 0.5, 0))").replace("interception = 0\n", ""));
+    assert_eq!(s(&mut model, "rain")[..2], [3.0, 0.5]);
+    assert_close(s(&mut model, "intercepted")[0], 0.8, "day 1");
+    assert_close(s(&mut model, "depletion")[0], 47.8, "50 - (3 - 0.8)");
+    assert_close(s(&mut model, "intercepted")[1], 0.5, "day 2: all of it");
+    assert_close(s(&mut model, "depletion")[1], 47.8, "nothing reached the soil");
+    assert_balance_closes(&mut model);
+    // Written as 0, rain is taken as given
+    let mut model = run(&rig(0, "evap = 4\nkc = 0\ninitial_depletion = 50\nrain = 3"));
+    assert_eq!(s(&mut model, "intercepted")[0], 0.0);
+    assert_eq!(s(&mut model, "depletion")[0], 47.0);
+}
+
+#[test]
+fn test_return_flow_is_the_share_of_excess_the_farm_catches() {
+    // 100 ML ordered against 42 mm of room (84 ML): 16 bypassed, and bypass goes down ds_1
+    // whole. Day 2: 8 mm of excess (16 ML); with return_fraction 0.75, 12 leaves on ds_2 as
+    // return flow and 4 goes down ds_1 with the bypass. Nothing is lost.
+    let mut model = run(&rig(0, "evap = 2\nkc = 1\np = 0.5\ninitial_depletion = 40\nrain = if(var.day.n == 2, 10, 0)\norder = 100\nreturn_fraction = 0.75"));
+    assert_eq!(s(&mut model, "bypass")[0], 16.0);
+    assert_eq!(s(&mut model, "return_flow")[0], 0.0, "no excess, nothing to return");
+    assert_eq!(s(&mut model, "ds_1")[0], 16.0, "bypass is not subject to the fraction");
+    assert_eq!(s(&mut model, "excess")[1], 16.0);
+    assert_eq!(s(&mut model, "bypass")[1], 100.0);
+    assert_eq!(s(&mut model, "return_flow")[1], 12.0, "16 x 0.75");
+    assert_eq!(s(&mut model, "ds_2")[1], 12.0);
+    assert_eq!(s(&mut model, "ds_1")[1], 104.0, "bypass + the other 4");
+    assert_eq!(s(&mut model, "dsflow")[1], 116.0);
+    assert_balance_closes(&mut model);
+}
+
+#[test]
+fn test_runoff_returns_to_the_farm_storage_next_step() {
+    // The loop a farm model writes: the caught runoff leaves on ds_2 into a blackhole, and an
+    // inflow node above the storage recreates it one step later. The field is defined below
+    // the storage, so the offset is what makes it possible; the mass balance pairs the two by
+    // name.
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-05
+
+[var.day]
+phase = ras
+n = var.day.n[-1, 0] + 1
+
+[node.returns]
+type = inflow
+loc = 0, 0
+inflow = node.paddock.return_flow[-1, 0]
+ds_1 = dam
+
+[node.dam]
+type = storage
+loc = 0, 10
+initial_volume = 5000
+dimensions = Level [m], Volume [ML], Area [km2], Spill [ML],
+             0.0      , 0.0        , 0.0       , 0.0,
+             1.0      , 10000.0    , 0.1       , 0.0,
+             2.0      , 20000.0    , 0.1       , 1.0E9,
+ds_1_outlet = 0, 10000
+ds_1 = paddock
+
+[node.paddock]
+type = field
+loc = 0, 20
+area = 2
+capacity = 100
+interception = 0
+return_fraction = 0.8
+rain = if(var.day.n == 1, 30, 0)
+ds_1 = river
+ds_2 = drain
+
+[node.drain]
+type = blackhole
+loc = 10, 30
+
+[node.river]
+type = gauge
+loc = 0, 30
+
+[outputs]
+node.returns.dsflow
+node.paddock.excess
+node.paddock.ds_1
+node.paddock.ds_2
+node.drain.usflow
+node.dam.volume
+"#;
+    let mut model = run(ini);
+    // Day 1: 30 mm on a full profile is 60 ML of excess: 48 out ds_2 to the drain, 12 down ds_1;
+    // day 2: the 48 arrives at the dam
+    assert_eq!(series(&mut model, "node.paddock.excess")[0], 60.0);
+    assert_eq!(series(&mut model, "node.paddock.ds_2")[0], 48.0);
+    assert_eq!(series(&mut model, "node.drain.usflow")[0], 48.0, "the blackhole takes what the inflow node recreates");
+    assert_eq!(series(&mut model, "node.paddock.ds_1")[0], 12.0, "the rest goes on to the river");
+    assert_eq!(series(&mut model, "node.returns.dsflow")[..2], [0.0, 48.0]);
+    assert_eq!(series(&mut model, "node.dam.volume")[..2], [5000.0, 5048.0]);
+    let same_step = ini.replace("return_flow[-1, 0]", "return_flow");
+    let err = load_err(&same_step);
+    assert!(err.contains("no value yet"), "a same-step loop is refused: {err}");
+}
+
+#[test]
 fn test_field_validation() {
     assert!(load_err(&rig(0, "capacity = 0")).contains("capacity must be a positive number"));
     assert!(load_err(&rig(0, "efficiency = 0")).contains("efficiency must be greater than 0"));
@@ -238,17 +351,17 @@ fn test_field_validation() {
 
 #[test]
 fn test_field_round_trips_every_property() {
-    let ini = rig(0, "evap = 4\nrain = 1\nkc = 0.9\np = 0.6\ninitial_depletion = 20\nefficiency = 0.8\norder = 5");
+    let ini = rig(0, "evap = 4\nrain = 1\nkc = 0.9\np = 0.6\ninitial_depletion = 20\nefficiency = 0.8\nreturn_fraction = 0.7\norder = 5");
     let model = IniModelIO::read_model_string(&ini).expect("model should load");
     let rendered = IniModelIO::model_to_string(&model);
-    for line in ["area = 2", "capacity = 100", "evap = 4", "rain = 1", "kc = 0.9", "p = 0.6", "initial_depletion = 20", "efficiency = 0.8", "order = 5"] {
+    for line in ["area = 2", "capacity = 100", "evap = 4", "rain = 1", "kc = 0.9", "p = 0.6", "initial_depletion = 20", "efficiency = 0.8", "interception = 0", "return_fraction = 0.7", "order = 5"] {
         assert!(rendered.contains(line), "'{line}' survives save:\n{rendered}");
     }
     let reloaded = IniModelIO::read_model_string(&rendered).expect("canonical render should re-load");
     assert_eq!(IniModelIO::model_to_string(&reloaded), rendered);
     // Defaults are not written
-    let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig(0, "")).unwrap());
-    for key in ["p =", "efficiency =", "initial_depletion ="] {
+    let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig(0, "").replace("interception = 0\n", "")).unwrap());
+    for key in ["p =", "efficiency =", "interception =", "return_fraction =", "initial_depletion ="] {
         assert!(!plain.contains(key), "default '{key}' is not written:\n{plain}");
     }
 }

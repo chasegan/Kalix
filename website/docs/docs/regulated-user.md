@@ -161,7 +161,7 @@ The node on a supply outlet places its orders with the user, and they become the
 
 - The orders arriving on the supply outlets are added to the user's own `order`. The total is capped by the user's accounts, where it has them, and scaled by `order_factor`, and that is the order the network sees: `order_factor × (order + ds_2_order + ds_3_order + ds_4_order)`. The `order` result stays the user's own order.
 - The user holds each accepted order for its own travel time, as it does its own (`ds_2_order_due`). When the ordered water reaches the user it diverts it and sends it down the outlet. If there is routing between the user and the node below, that node's travel time is longer than the user's by that much, and the water arrives there on the step its order falls due.
-- The links below a supply outlet are part of the same regulated zone as the user, with travel time counted from the same supply.
+- The links below a supply outlet are part of the same regulated zone as the user, with travel time counted from the same supply. So an on-farm [storage](storage.md) on a supply outlet, holding a `target_level`, orders through the user too: `user.ds_2 → storage → field` fills the storage from the river and supplies the field from the storage, with no more written than that.
 
 When the user cannot divert everything that is due — the flow is short, or the pump capacity or the account balance limits the take — the supply outlets are served first, `ds_2` then `ds_3` then `ds_4`, and the user's own order takes what is left. The same order applies when the accounts cap the order as it is placed. `opportunistic_demand` is the user's own, and is served last.
 

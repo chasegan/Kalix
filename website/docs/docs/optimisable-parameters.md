@@ -22,7 +22,7 @@ There are two families of address:
 | Address | Meaning |
 | --- | --- |
 | `const.<name>` | A model constant from the `[const]` section |
-| `node.<name>.<param>` | A parameter of a named node. Supported by `gr4j`, `sacramento`, `awbm`, `surm` and `routing` nodes |
+| `node.<name>.<param>` | A parameter of a named node. Supported by `gr4j`, `gr4jsg`, `sacramento`, `awbm`, `surm` and `routing` nodes |
 
 KalixIDE lists every valid address for the loaded model (via the engine's `get_optimisable_params` command), which is the quickest way to discover what a given model exposes.
 
@@ -58,6 +58,29 @@ const.scale = lin_range(g(1), 0.5, 2.0)
 | `x4` | Unit hydrograph base time (days) | 0.0001 – 4, linear |
 
 The ranges above are the ones used in Kalix's own calibration examples; the [GR4J node page](gr4j.md) discusses the broader literature bounds. GR4J nodes whose rainfall input is a linear combination of stations also expose the [rainfall input parameters](#rainfall-input-parameters-rf_bias-rf_di) below.
+
+## GR4JSG nodes (`type = gr4jsg`)
+
+Every GR4JSG node exposes the four GR4J parameters (`x1` to `x4`, as above) and the five snow parameters. The ranges below are those of the Source plugin the model comes from; see the [GR4JSG node page](gr4jsg.md) for what each parameter means.
+
+| Parameter | Description | Common search range |
+| --- | --- | --- |
+| `tfrac` | Weight on `tmax` in the representative temperature | 0 – 1, linear |
+| `taccum` | Temperature below which precipitation is snow (°C) | −3 – 3, linear |
+| `m_rainfall` | Melt rate on a day with rain (mm/°C/day) | 0 – 4, linear |
+| `base_rainfall` | Base melt on a day with rain (mm/day) | 0 – 3, linear |
+| `m_nonrainfall` | Melt rate on a day without rain (mm/°C/day) | 0 – 4.5, linear |
+
+A node with a glacier (an `ice_params` line) exposes four more. A node without one does not have them, and addressing one there is a configuration error.
+
+| Parameter | Description | Common search range |
+| --- | --- | --- |
+| `ddfi` | Ice degree-day factor (mm/°C/day) | 0 – 10, linear |
+| `tmelt` | Temperature above which ice melts (°C) | −3 – 3, linear |
+| `return_flow` | Time base of the ice-melt unit hydrograph (days) | 0.5 – 180, linear |
+| `accumulation` | Constant gain to the ice store (mm/day) | 0 – 10, linear |
+
+`initial_ice` is not optimisable. Lapse rates are written in the node's `tmax` and `tmin` expressions, so calibrate them as [constants](#constants-const). GR4JSG nodes whose rainfall input is a linear combination of stations also expose the [rainfall input parameters](#rainfall-input-parameters-rf_bias-rf_di) below.
 
 ## Sacramento nodes (`type = sacramento`)
 
@@ -185,7 +208,7 @@ node.reach_4.pwl_tt_3 = lin_range(g(4), 0, 10)
 
 ## Rainfall input parameters (`rf_bias`, `rf_d<i>`)
 
-When a rainfall-runoff node's (GR4J, Sacramento, AWBM or SURM) `rain` input is a **linear combination of stations** (`rain = w1 * data.a + w2 * data.b + ...`), two derived parameter families become available on the node:
+When a rainfall-runoff node's (GR4J, GR4JSG, Sacramento, AWBM or SURM) `rain` input is a **linear combination of stations** (`rain = w1 * data.a + w2 * data.b + ...`), two derived parameter families become available on the node:
 
 | Parameter | Meaning | Common search range |
 | --- | --- | --- |

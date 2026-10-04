@@ -1,11 +1,15 @@
-use super::{recorder, single_outlet_node_impls, Node};
+use super::{recorder, Node};
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
 use crate::numerical::fifo_buffer::FifoBuffer;
 
-const MAX_DS_LINKS: usize = 1;
+const MAX_DS_LINKS: usize = 2;
+
+/// ds_1 carries bypass and the river's share of the runoff; ds_2 carries the farm's share, return_flow.
+pub const DS_1_OUTLET: u8 = 0;
+pub const DS_2_OUTLET: u8 = 1;
 
 /// An irrigated field: a root-zone soil store that dries by evapotranspiration,
 /// fills with rain and irrigation, and orders water upstream to meet its
@@ -20,8 +24,9 @@ const MAX_DS_LINKS: usize = 1;
 ///
 /// Working in mm over the field's `area`: 1 mm × 1 km² = 1 ML.
 ///
-/// A field's outlets are drains, not delivery paths: they carry bypass and
-/// excess back to the river. So the links leaving a field are not regulated
+/// A field's outlets are drains, not delivery paths: ds_1 carries bypass and
+/// the river's share of the runoff, ds_2 the share the farm catches
+/// (return_flow). So the links leaving a field are not regulated
 /// (the ordering system's `zone_role`): no order travels up them, and the
 /// travel time to the field is no part of the travel time to anything below
 /// it. The field sends its own order upstream and nothing else.
@@ -38,6 +43,8 @@ pub struct FieldNode {
     pub capacity: f64,              // mm the root zone holds between full and empty
     pub initial_depletion: f64,     // mm
     pub efficiency: f64,            // share of supply that reaches the soil; the rest escapes
+    pub interception: f64,          // fraction of evap that rain must exceed to reach the soil (FAO-56: 0.2)
+    pub return_fraction: f64,       // share of the excess that the farm catches: it goes down ds_2 as return_flow
     pub rain_input: DynamicInput,   // mm
     pub evap_input: DynamicInput,   // mm, the reference the kc values were derived for
     pub kc_input: DynamicInput,     // crop coefficient. PHASE1-PLACEHOLDER: one crop, on the field
@@ -55,6 +62,7 @@ pub struct FieldNode {
     order_due: f64,
     usflow: f64,
     dsflow_primary: f64,
+    dsflow_return: f64,
 
     // Recorders
     recorder_idx_depletion: Option<usize>,
@@ -68,13 +76,16 @@ pub struct FieldNode {
     recorder_idx_et_vol: Option<usize>,
     recorder_idx_rain: Option<usize>,
     recorder_idx_rain_vol: Option<usize>,
+    recorder_idx_intercepted: Option<usize>,
     recorder_idx_evap: Option<usize>,
     recorder_idx_excess: Option<usize>,
     recorder_idx_supply: Option<usize>,
     recorder_idx_escape: Option<usize>,
     recorder_idx_bypass: Option<usize>,
+    recorder_idx_return_flow: Option<usize>,
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
+    recorder_idx_ds_2: Option<usize>,
 }
 
 
@@ -85,6 +96,8 @@ impl FieldNode {
         Self {
             name: "".to_string(),
             efficiency: 1.0,
+            interception: 0.2,
+            return_fraction: 0.0,
             p: 0.5,
             rain_input: DynamicInput::default(),
             evap_input: DynamicInput::default(),
@@ -97,7 +110,33 @@ impl FieldNode {
 }
 
 impl Node for FieldNode {
-    single_outlet_node_impls!();
+    fn add_usflow(&mut self, flow: f64, _inlet: u8) {
+        self.usflow += flow;
+    }
+
+    fn remove_dsflow(&mut self, outlet: u8) -> f64 {
+        match outlet {
+            DS_1_OUTLET => {
+                let outflow = self.dsflow_primary;
+                self.dsflow_primary = 0.0;
+                outflow
+            }
+            DS_2_OUTLET => {
+                let outflow = self.dsflow_return;
+                self.dsflow_return = 0.0;
+                outflow
+            }
+            _ => 0.0,
+        }
+    }
+
+    fn get_mass_balance(&self) -> f64 {
+        self.mbal
+    }
+
+    fn dsorders_mut(&mut self) -> &mut [f64] {
+        &mut self.dsorders
+    }
 
     fn initialise(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) -> Result<(), String> {
         // Checks
@@ -113,6 +152,12 @@ impl Node for FieldNode {
         if !(self.efficiency > 0.0 && self.efficiency <= 1.0) {
             return Err(format!("Error in node '{}'. efficiency must be greater than 0 and at most 1, got {}.", self.name, self.efficiency));
         }
+        if !(self.interception >= 0.0 && self.interception.is_finite()) {
+            return Err(format!("Error in node '{}'. interception must be a non-negative number, got {}.", self.name, self.interception));
+        }
+        if !(self.return_fraction >= 0.0 && self.return_fraction <= 1.0) {
+            return Err(format!("Error in node '{}'. return_fraction must be between 0 and 1, got {}.", self.name, self.return_fraction));
+        }
         if !(self.p >= 0.0 && self.p < 1.0) {
             return Err(format!("Error in node '{}'. p must be at least 0 and less than 1, got {}.", self.name, self.p));
         }
@@ -121,6 +166,7 @@ impl Node for FieldNode {
         self.mbal = 0.0;
         self.usflow = 0.0;
         self.dsflow_primary = 0.0;
+        self.dsflow_return = 0.0;
         self.depletion = self.initial_depletion;
 
         // Reset order state, so a rerun of the same model object starts clean.
@@ -145,13 +191,16 @@ impl Node for FieldNode {
         self.recorder_idx_et_vol = recorder(data_cache, &self.name, "et_vol");
         self.recorder_idx_rain = recorder(data_cache, &self.name, "rain");
         self.recorder_idx_rain_vol = recorder(data_cache, &self.name, "rain_vol");
+        self.recorder_idx_intercepted = recorder(data_cache, &self.name, "intercepted");
         self.recorder_idx_evap = recorder(data_cache, &self.name, "evap");
         self.recorder_idx_excess = recorder(data_cache, &self.name, "excess");
         self.recorder_idx_supply = recorder(data_cache, &self.name, "supply");
         self.recorder_idx_escape = recorder(data_cache, &self.name, "escape");
         self.recorder_idx_bypass = recorder(data_cache, &self.name, "bypass");
+        self.recorder_idx_return_flow = recorder(data_cache, &self.name, "return_flow");
         self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
         self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
+        self.recorder_idx_ds_2 = recorder(data_cache, &self.name, "ds_2");
 
         // Return
         Ok(())
@@ -206,8 +255,11 @@ impl Node for FieldNode {
         let et_mm = (ks * kc * evap_mm).min(self.capacity - self.depletion);
         self.depletion += et_mm;
 
-        // 3. Rain goes on the soil; what would take depletion below zero leaves as excess
-        self.depletion -= rain_mm;
+        // 3. Rain goes on the soil, less what the canopy intercepts and evaporates (FAO-56:
+        //    a share of the day's reference evapotranspiration, 0.2 by default). What would
+        //    take depletion below zero leaves as excess.
+        let intercepted_mm = rain_mm.min(self.interception * evap_mm);
+        self.depletion -= rain_mm - intercepted_mm;
         let mut excess_mm = 0.0;
         if self.depletion < 0.0 {
             excess_mm = -self.depletion;
@@ -222,11 +274,17 @@ impl Node for FieldNode {
         self.depletion -= (supply - escape) / self.area;
         let bypass = self.usflow - supply;
 
-        // Water leaves down ds_1. mbal is emitted minus received, as on a storage:
-        // rain, evapotranspiration, escape and the change in water held all show through it.
+        // Water leaves on two links and nothing is lost here. ds_1: the bypass, which the
+        // irrigator did not take, and the river's share of the runoff. ds_2: the share the farm
+        // catches, return_flow, for the modeller to drain, or to feed back to the farm storage
+        // through an inflow node above it (`inflow = node.<field>.return_flow[-1, 0]`). mbal is
+        // emitted minus received, as on a storage: rain, evapotranspiration, escape and the
+        // change in water held all show through it.
         let excess = excess_mm * self.area;
-        self.dsflow_primary = bypass + excess;
-        self.mbal += self.dsflow_primary - self.usflow;
+        let return_flow = excess * self.return_fraction;
+        self.dsflow_primary = bypass + excess - return_flow;
+        self.dsflow_return = return_flow;
+        self.mbal += self.dsflow_primary + self.dsflow_return - self.usflow;
 
         // Record results. depletion is the state at the end of the step, as a storage's
         // volume is.
@@ -257,6 +315,9 @@ impl Node for FieldNode {
         if let Some(idx) = self.recorder_idx_evap {
             data_cache.add_value_at_index(idx, evap_mm);
         }
+        if let Some(idx) = self.recorder_idx_intercepted {
+            data_cache.add_value_at_index(idx, intercepted_mm);
+        }
         if let Some(idx) = self.recorder_idx_excess {
             data_cache.add_value_at_index(idx, excess);
         }
@@ -269,11 +330,17 @@ impl Node for FieldNode {
         if let Some(idx) = self.recorder_idx_bypass {
             data_cache.add_value_at_index(idx, bypass);
         }
+        if let Some(idx) = self.recorder_idx_return_flow {
+            data_cache.add_value_at_index(idx, return_flow);
+        }
         if let Some(idx) = self.recorder_idx_dsflow {
-            data_cache.add_value_at_index(idx, self.dsflow_primary);
+            data_cache.add_value_at_index(idx, self.dsflow_primary + self.dsflow_return); //Total dsflow, both outlets
         }
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
+        }
+        if let Some(idx) = self.recorder_idx_ds_2 {
+            data_cache.add_value_at_index(idx, self.dsflow_return);
         }
 
         // Reset upstream inflow for next timestep

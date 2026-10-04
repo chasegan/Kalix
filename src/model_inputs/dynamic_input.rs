@@ -343,6 +343,15 @@ pub enum OptimizedExpressionNode {
         col_key: Box<OptimizedExpressionNode>,
         row_key: Box<OptimizedExpressionNode>,
     },
+
+    /// Named 2D lookup table with `bilinear = true`
+    /// (`table.<name>(col_key, row_key)`): clamped linear interpolation down
+    /// the two bracketing columns, then between them. No exact-match panic.
+    Lookup2DBilinear {
+        table: Arc<LookupTable2D>,
+        col_key: Box<OptimizedExpressionNode>,
+        row_key: Box<OptimizedExpressionNode>,
+    },
 }
 
 /// Accumulator operation for the variadic built-ins.
@@ -541,6 +550,10 @@ impl OptimizedExpressionNode {
             OptimizedExpressionNode::Lookup2D { table, col_key, row_key } => {
                 table.lookup(col_key.evaluate(data_cache), row_key.evaluate(data_cache))
             }
+
+            OptimizedExpressionNode::Lookup2DBilinear { table, col_key, row_key } => {
+                table.lookup_bilinear_with(|| (col_key.evaluate(data_cache), row_key.evaluate(data_cache)))
+            }
         }
     }
 
@@ -597,6 +610,10 @@ impl OptimizedExpressionNode {
             }
             OptimizedExpressionNode::Lookup1D { arg, .. } => arg.validate_reads(data_cache),
             OptimizedExpressionNode::Lookup2D { col_key, row_key, .. } => {
+                col_key.validate_reads(data_cache);
+                row_key.validate_reads(data_cache);
+            }
+            OptimizedExpressionNode::Lookup2DBilinear { col_key, row_key, .. } => {
                 col_key.validate_reads(data_cache);
                 row_key.validate_reads(data_cache);
             }
@@ -660,6 +677,10 @@ impl OptimizedExpressionNode {
             }
             OptimizedExpressionNode::Lookup1D { arg, .. } => arg.advance_state(data_cache),
             OptimizedExpressionNode::Lookup2D { col_key, row_key, .. } => {
+                col_key.advance_state(data_cache);
+                row_key.advance_state(data_cache);
+            }
+            OptimizedExpressionNode::Lookup2DBilinear { col_key, row_key, .. } => {
                 col_key.advance_state(data_cache);
                 row_key.advance_state(data_cache);
             }
@@ -2300,6 +2321,9 @@ fn uses_calendar_flags(node: &OptimizedExpressionNode) -> bool {
         OptimizedExpressionNode::Lookup2D { col_key, row_key, .. } => {
             uses_calendar_flags(col_key) || uses_calendar_flags(row_key)
         }
+        OptimizedExpressionNode::Lookup2DBilinear { col_key, row_key, .. } => {
+            uses_calendar_flags(col_key) || uses_calendar_flags(row_key)
+        }
     }
 }
 
@@ -2758,10 +2782,11 @@ fn lower_table_call(
             }
             let row_key = args.pop().unwrap();
             let col_key = args.pop().unwrap();
-            Ok(OptimizedExpressionNode::Lookup2D {
-                table: t.clone(),
-                col_key: Box::new(col_key),
-                row_key: Box::new(row_key),
+            let (table, col_key, row_key) = (t.clone(), Box::new(col_key), Box::new(row_key));
+            Ok(if t.is_bilinear() {
+                OptimizedExpressionNode::Lookup2DBilinear { table, col_key, row_key }
+            } else {
+                OptimizedExpressionNode::Lookup2D { table, col_key, row_key }
             })
         }
     }

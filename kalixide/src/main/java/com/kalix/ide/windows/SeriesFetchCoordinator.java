@@ -15,7 +15,6 @@ import com.kalix.ide.managers.DatasetLoaderManager;
 import com.kalix.ide.managers.DatasetSeriesSource;
 import com.kalix.ide.managers.OutputsTreeBuilder;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
-import com.kalix.ide.managers.TreeFilterManager;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,7 +55,6 @@ class SeriesFetchCoordinator {
     private final RunManager window;
     private final JCheckboxTree timeseriesTree;
     private final DefaultTreeModel timeseriesTreeModel;
-    private final TreeFilterManager treeFilterManager;
     private final OutputsTreeBuilder outputsTreeBuilder;
     private final VisualizationTabManager tabManager;
     private final DataSet plotDataSet;
@@ -88,7 +86,6 @@ class SeriesFetchCoordinator {
     SeriesFetchCoordinator(RunManager window,
                            JCheckboxTree timeseriesTree,
                            DefaultTreeModel timeseriesTreeModel,
-                           TreeFilterManager treeFilterManager,
                            OutputsTreeBuilder outputsTreeBuilder,
                            VisualizationTabManager tabManager,
                            DataSet plotDataSet,
@@ -101,7 +98,6 @@ class SeriesFetchCoordinator {
         this.window = window;
         this.timeseriesTree = timeseriesTree;
         this.timeseriesTreeModel = timeseriesTreeModel;
-        this.treeFilterManager = treeFilterManager;
         this.outputsTreeBuilder = outputsTreeBuilder;
         this.tabManager = tabManager;
         this.plotDataSet = plotDataSet;
@@ -145,7 +141,7 @@ class SeriesFetchCoordinator {
 
         TreePath[] checkedPaths = timeseriesTree.getCheckedPaths();
 
-        if (checkedPaths.length == 0 && !treeFilterManager.isFiltering()) {
+        if (checkedPaths.length == 0 && !outputsTreeBuilder.isFiltered()) {
             // Clear the target tab's series when nothing is checked
             tabManager.setTargetTabSelectedSeries(new LinkedHashSet<>());
             return;
@@ -159,7 +155,7 @@ class SeriesFetchCoordinator {
         }
 
         // If no valid leaves found, clear the target tab
-        if (allLeaves.isEmpty() && !treeFilterManager.isFiltering()) {
+        if (allLeaves.isEmpty() && !outputsTreeBuilder.isFiltered()) {
             tabManager.setTargetTabSelectedSeries(new LinkedHashSet<>());
             return;
         }
@@ -179,7 +175,7 @@ class SeriesFetchCoordinator {
         Set<SeriesRef> currentTabSeries = tabManager.getTargetTabSelectedSeries();
 
         // Preserve series hidden by filter.
-        if (treeFilterManager.isFiltering()) {
+        if (outputsTreeBuilder.isFiltered()) {
             Set<SeriesRef> visibleRefs = getVisibleSeriesKeys();
             for (SeriesRef ref : currentTabSeries) {
                 if (!visibleRefs.contains(ref)) {
