@@ -42,7 +42,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -54,7 +53,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -86,8 +84,7 @@ class DerivedSeriesController {
     private final SeriesFetchCoordinator fetchCoordinator;
     private final Consumer<String> statusUpdater;
 
-    private final Map<Long, DerivedSeriesInfo> derivedSeries = new LinkedHashMap<>();
-    private long nextId = 1;
+    private final DerivedSeriesStore derivedSeries = new DerivedSeriesStore();
     // The Last generation whose derived series are fully recomputed.
     private long recomputedGeneration;
 
@@ -277,32 +274,16 @@ class DerivedSeriesController {
     }
 
     private String suggestName(List<SourceRef> origins) {
-        int n = 1;
-        while (nameProblem("sum_" + n, origins) != null) {
-            n++;
-        }
-        return "sum_" + n;
+        return derivedSeries.suggestName(origins);
     }
 
     /** Why {@code name} can't be used for a derived series of each origin, or {@code null}. */
-    private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_]+");
-
     private String nameProblem(String name, List<SourceRef> origins) {
-        if (name.isEmpty()) {
-            return "Enter a name.";
+        DerivedSeriesStore.NameProblem problem = derivedSeries.nameProblem(name, origins);
+        if (problem == null) {
+            return null;
         }
-        // The dataset identifier rule: the name is a part of a dotted series name, a column
-        // header in a saved CSV and a field in a Pixie .pxt, where a comma or quote breaks
-        // the file (and the filter's * ? / " ! would meet its grammar).
-        if (!NAME.matcher(name).matches()) {
-            return "A derived series name can have letters, digits and underscores only.";
-        }
-        for (DerivedSeriesInfo existing : derivedSeries.values()) {
-            if (existing.name().equals(name) && origins.contains(existing.origin)) {
-                return originLabel(existing.origin) + " already has a derived series named \"" + name + "\".";
-            }
-        }
-        return null;
+        return problem.taken() == null ? problem.message() : originLabel(problem.taken().origin) + problem.message();
     }
 
     /** One origin's inputs, ready to be read one at a time. */
@@ -494,7 +475,7 @@ class DerivedSeriesController {
             Set<SeriesRef> newRefs = new LinkedHashSet<>();
             for (int i = 0; i < plans.size(); i++) {
                 Plan plan = plans.get(i);
-                DerivedSeriesInfo info = new DerivedSeriesInfo(nextId++, plan.origin(), name, plan.inputs(),
+                DerivedSeriesInfo info = new DerivedSeriesInfo(derivedSeries.nextId(), plan.origin(), name, plan.inputs(),
                     plan.pixieBacked(), sums.get(i));
                 newPaths.add(register(info));
                 newRefs.add(info.ref());
@@ -576,8 +557,7 @@ class DerivedSeriesController {
      */
     void onLastChanged() {
         LastSource last = new LastSource();
-        List<DerivedSeriesInfo> targets = derivedSeries.values().stream()
-            .filter(a -> a.origin.equals(last)).toList();
+        List<DerivedSeriesInfo> targets = derivedSeries.of(last);
         if (targets.isEmpty()) {
             recomputedGeneration = lastRunTracker.getGeneration();
             return;
@@ -673,7 +653,7 @@ class DerivedSeriesController {
             JPopupMenu menu = new JPopupMenu();
             JMenuItem deleteAll = new JMenuItem("Delete all", MenuIcons.delete());
             deleteAll.setEnabled(!derivedSeries.isEmpty());
-            deleteAll.addActionListener(e -> delete(List.copyOf(derivedSeries.values()),
+            deleteAll.addActionListener(e -> delete(List.copyOf(derivedSeries.all()),
                 "all " + derivedSeries.size() + " derived series"));
             menu.add(deleteAll);
             return menu;
@@ -741,7 +721,7 @@ class DerivedSeriesController {
     }
 
     private List<DerivedSeriesInfo> derivedSeriesOf(SourceRef origin) {
-        return derivedSeries.values().stream().filter(a -> a.origin.equals(origin)).toList();
+        return derivedSeries.of(origin);
     }
 
     /**
@@ -819,13 +799,7 @@ class DerivedSeriesController {
         if (toDelete.isEmpty()) {
             return;
         }
-        Set<DerivedSeriesInfo.Input> deleted = new HashSet<>();
-        for (DerivedSeriesInfo info : toDelete) {
-            deleted.add(new DerivedSeriesInfo.DerivedSeriesInput(info.id));
-        }
-        List<String> dependents = derivedSeries.values().stream()
-            .filter(a -> !deleted.contains(new DerivedSeriesInfo.DerivedSeriesInput(a.id))
-                && a.inputs.stream().anyMatch(deleted::contains))
+        List<String> dependents = derivedSeries.dependentsOf(toDelete).stream()
             .map(a -> labelResolver.labelFor(a.ref())).toList();
         String message = "Delete " + what + "?";
         if (!dependents.isEmpty()) {
@@ -954,18 +928,12 @@ class DerivedSeriesController {
     }
 
     private boolean hasDerivedSeriesOf(SourceRef origin) {
-        return derivedSeries.values().stream().anyMatch(a -> a.origin.equals(origin));
+        return derivedSeries.hasAnyOf(origin);
     }
 
     /** Point counts of the derived series made from Pixie data, for the Pixie memory budget. */
     Map<SeriesRef, Integer> pixieBackedPoints() {
-        Map<SeriesRef, Integer> points = new HashMap<>();
-        for (DerivedSeriesInfo info : derivedSeries.values()) {
-            if (info.pixieBacked && info.values() != null) {
-                points.put(info.ref(), info.values().getPointCount());
-            }
-        }
-        return points;
+        return derivedSeries.pixieBackedPoints();
     }
 
     /** The label lookup for {@link DefaultLabelResolver}; {@code null} for an unknown id. */
@@ -979,7 +947,7 @@ class DerivedSeriesController {
      * creating the group if this is the origin's first derived series. Returns its tree path.
      */
     private TreePath register(DerivedSeriesInfo info) {
-        derivedSeries.put(info.id, info);
+        derivedSeries.add(info);
 
         DefaultMutableTreeNode group = groupNodeFor(info.origin);
         DefaultMutableTreeNode node = new DefaultMutableTreeNode(info);
