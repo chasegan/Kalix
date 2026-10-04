@@ -35,6 +35,8 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
+import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -48,12 +50,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * The Run Manager's user-created derived series: the sum of chosen series from one source,
@@ -668,8 +670,8 @@ class DerivedSeriesController {
             return null;
         }
         JPopupMenu menu = new JPopupMenu();
-        JMenuItem show = new JMenuItem("Show component series");
-        show.addActionListener(e -> showComponents(info));
+        JMenuItem show = new JMenuItem("Copy inputs");
+        show.addActionListener(e -> copyInputs(info));
         menu.add(show);
         JMenuItem save = new JMenuItem("Save…");
         save.addActionListener(e -> save(List.of(info), labelResolver.labelFor(info.ref())));
@@ -829,7 +831,7 @@ class DerivedSeriesController {
 
     /** The source-tree tooltip for a derived series: what it sums, and why it is unavailable. */
     String recipe(DerivedSeriesInfo info) {
-        List<String> names = componentNames(info);
+        List<String> names = inputNames(info);
         int shown = Math.min(names.size(), RECIPE_LINES);
         StringBuilder html = new StringBuilder("<html>Sum of:");
         for (String name : names.subList(0, shown)) {
@@ -845,19 +847,37 @@ class DerivedSeriesController {
     }
 
     /** Opens the derived series' inputs, one per line, in a text window they can be copied from. */
-    private void showComponents(DerivedSeriesInfo info) {
-        MinimalEditorWindow editor = new MinimalEditorWindow(String.join("\n", componentNames(info)) + "\n");
-        editor.setTitle(labelResolver.labelFor(info.ref()));
-        editor.setVisible(true);
+    /** Puts the input names on the clipboard, one per line; the hover tooltip is the view. */
+    private void copyInputs(DerivedSeriesInfo info) {
+        List<String> names = inputNames(info);
+        Toolkit.getDefaultToolkit().getSystemClipboard()
+            .setContents(new StringSelection(String.join("\n", names) + "\n"), null);
+        status("Copied " + names.size() + (names.size() == 1 ? " input" : " inputs") + " of "
+            + labelResolver.nameFor(info.ref()));
     }
 
     /** A derived series' inputs by their current names. */
-    private List<String> componentNames(DerivedSeriesInfo info) {
+    /**
+     * The names of {@code info}'s inputs. An input that is itself a derived series is
+     * followed by its own inputs in parentheses, one level deep, so the recipe still
+     * shows what was summed (Manifesto §2.2).
+     */
+    private List<String> inputNames(DerivedSeriesInfo info) {
         return info.inputs.stream().map(input -> switch (input) {
             case DerivedSeriesInfo.SeriesInput series -> series.name();
             case DerivedSeriesInfo.DerivedSeriesInput derived -> {
                 DerivedSeriesInfo source = derivedSeries.get(derived.derivedId());
-                yield source != null ? labelResolver.nameFor(source.ref()) : "(deleted derived series)";
+                if (source == null) {
+                    yield "(deleted derived series)";
+                }
+                String own = source.inputs.stream().map(i -> switch (i) {
+                    case DerivedSeriesInfo.SeriesInput series -> series.name();
+                    case DerivedSeriesInfo.DerivedSeriesInput d -> {
+                        DerivedSeriesInfo inner = derivedSeries.get(d.derivedId());
+                        yield inner != null ? labelResolver.nameFor(inner.ref()) : "(deleted derived series)";
+                    }
+                }).collect(Collectors.joining(", "));
+                yield labelResolver.nameFor(source.ref()) + " (" + own + ")";
             }
         }).toList();
     }
