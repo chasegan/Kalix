@@ -48,6 +48,11 @@ class OutputsTreeBuilderTest {
         builder.setFilter(SeriesFilter.parse(text));
     }
 
+    private DefaultMutableTreeNode onlyChild() {
+        assertEquals(1, root.getChildCount(), "the tree should hold one row");
+        return (DefaultMutableTreeNode) root.getChildAt(0);
+    }
+
     private Set<SeriesRef> refsInTree() {
         Set<SeriesRef> refs = new HashSet<>();
         var nodes = root.depthFirstEnumeration();
@@ -76,6 +81,12 @@ class OutputsTreeBuilderTest {
         filter("nomatch");
         builder.updateTree(List.of(1L, 2L), List.of());
         assertTrue(refsInTree().isEmpty(), "filter should have hidden every series");
+        assertEquals(OutputsTreeBuilder.NO_MATCH_MESSAGE, onlyChild().getUserObject());
+        assertTrue(OutputsTreeBuilder.isSpecialMessageNode(onlyChild()));
+
+        filter("nomatch");
+        builder.updateTree(List.of(1L), List.of());
+        assertEquals(OutputsTreeBuilder.NO_MATCH_MESSAGE, onlyChild().getUserObject(), "single-source tree");
 
         filter("node.b");  // matches across tree levels
         builder.updateTree(List.of(1L, 2L), List.of());

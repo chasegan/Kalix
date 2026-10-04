@@ -62,6 +62,8 @@ public class OutputsTreeBuilder {
 
     /** Placeholder shown in the outputs tree when no run or dataset is selected. */
     public static final String SELECT_SOURCES_MESSAGE = "Select one or more datasets";
+    /** Shown when the filter is valid but no series of the checked sources matches it. */
+    static final String NO_MATCH_MESSAGE = "No series match the filter";
 
     // Tree components
     private final JTree timeseriesTree;
@@ -249,6 +251,10 @@ public class OutputsTreeBuilder {
 
         if (seriesNames != null && !seriesNames.isEmpty()) {
             List<String> shown = matchingSeries(source, seriesNames);
+            if (shown.isEmpty()) {
+                root.add(new DefaultMutableTreeNode(NO_MATCH_MESSAGE));
+                return;
+            }
             shown.sort(naturalCompareCallback::apply);
             for (String seriesName : shown) {
                 // Create standalone leaf node with showSeriesName=true (shows "ds_1 [Run_1]")
@@ -287,6 +293,10 @@ public class OutputsTreeBuilder {
 
         if (!anyOutputs) {
             root.add(new DefaultMutableTreeNode("No outputs available from selected sources"));
+            return;
+        }
+        if (seriesAvailability.isEmpty()) {
+            root.add(new DefaultMutableTreeNode(NO_MATCH_MESSAGE));
             return;
         }
 
@@ -484,6 +494,7 @@ public class OutputsTreeBuilder {
                variableName.equals("No outputs available from selected runs") ||
                variableName.equals("No outputs available from selected sources") ||
                variableName.equals("No series available from this dataset") ||
+               variableName.equals(NO_MATCH_MESSAGE) ||
                variableName.equals(SELECT_SOURCES_MESSAGE);
     }
 
