@@ -113,16 +113,16 @@ Type in the box above the **Timeseries** tree to show only the series you want. 
 | You type | Shows |
 |----------|-------|
 | `inflow` | Every series whose name or source contains `inflow`. |
-| `inflow_*.ds_1` | `ds_1` of every node named `inflow_…`. `*` matches anything, dots included; `?` matches one character. |
-| `inflow ds_1` | `ds_1` of every inflow node. Spaces separate terms, and a series shows only if it matches all of them. |
-| `*.inflow_* !dummy_*` | Every inflow node except the dummies. `!` excludes whatever a term matches. `!dummy_*` on its own shows everything else. |
+| `inflow_*.ds_1` | `ds_1` of every node named `inflow_…`. `*` matches anything, dots included; `?` matches one character other than a dot. |
+| `inflow *.ds_1` | `ds_1`, and not `ds_10`, of every inflow node. Spaces separate terms, and a series shows only if it matches all of them. |
+| `inflow !dummy` | Every inflow series except those with `dummy` in the name. `!` excludes whatever a term matches. `!dummy` on its own shows everything else. |
 | `"qu art"` | A name with a space in it: quotes keep it one term. Wildcards still work inside quotes. |
-| `/inflow_[34]\.ds_1$/` | A regular expression, written between slashes. It may contain spaces; write `\/` for a slash. |
-| `Run_2` | Series from any run whose name contains `Run_2`, so `Run_20` too. `/^Run_2$/` picks Run_2 alone, and `Run_2 inflow` narrows to its inflow series. |
+| `/inflow_[34]\.ds_1$/` | A regular expression (regex), written between slashes. It may contain spaces; write `\/` for a slash. |
+| `Run_2` | Series whose name or source contains `Run_2`, so the run `Run_20` too. `/^Run_2$/` picks Run_2 alone, and `Run_2 inflow` narrows to its inflow series. |
 
-A term with `*` or `?` must match whole parts of the name, between dots: `inflow_*.ds_1` matches `node.inflow_3.ds_1` but not `node.inflow_3.ds_10`. A term without them matches anywhere, as `ds_1` does in both.
+A term with `*` or `?` must match whole parts of the name, between dots: `inflow_*.ds_1` matches `node.inflow_3.ds_1` but not `node.inflow_3.ds_10`. A term without them matches anywhere: `ds_1` matches both.
 
-If the filter doesn't make sense (a quote or regular expression left open, or an unclosed bracket in a regular expression), the box turns red and its tooltip says why. The tree keeps the last filter that worked until you fix it.
+If the filter doesn't make sense (a quote or regex left open, a `!` with a space after it, or an unclosed bracket in a regex), the box turns red and its tooltip says why. The tree keeps the last filter that worked until you fix it. A filter that is fine but matches nothing shows "No series match the filter".
 
 The filter only changes what the tree shows. Ticking a folder while filtering ticks just the series you can see, which makes it quick to plot every match. Series you ticked before filtering stay plotted even when the filter hides them.
 
