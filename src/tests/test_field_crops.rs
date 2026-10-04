@@ -351,3 +351,23 @@ fn test_a_planting_rule_that_gives_no_number_stops_the_run() {
     let mut model = run(&rig("", "crop_1 = shallow\ncrop_1_plant = 1\ncrop_1_plant_area = if(var.day.n < 3, 0, 1)"));
     assert_eq!(s(&mut model, "crop_1_area")[..3], [0.0, 0.0, 1.0]);
 }
+
+#[test]
+fn test_a_field_outside_every_regulated_zone_plants_irrigates_and_records_no_orders() {
+    // An inflow feeds the field directly: no storage, no zone, no order phase. The crop is
+    // planted all the same (at the start of the flow phase), takes what arrives up to its
+    // room, and its order results are zero rather than missing.
+    let ini = rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = var.day.n == 2\ncrop_1_plant_area = 1\ncrop_1_order = 100")
+        .replace("[node.dam]\ntype = storage\nloc = 0, 0\ninitial_volume = 5000\ndimensions = Level [m], Volume [ML], Area [km2], Spill [ML],\n             0.0      , 0.0        , 0.0       , 0.0,\n             1.0      , 10000.0    , 0.1       , 0.0,\n             2.0      , 20000.0    , 0.1       , 1.0E9,\nds_1_outlet = 0, 10000\nds_1 = paddock", "[node.dam]\ntype = inflow\nloc = 0, 0\ninflow = 20\nds_1 = paddock");
+    let mut model = run(&ini);
+    let n = s(&mut model, "usflow").len();
+    assert_eq!(s(&mut model, "crop_1_area")[..3], [0.0, 1.0, 1.0], "planted on day 2 in the flow phase");
+    assert_eq!(s(&mut model, "crop_1_order").len(), n, "the series exists and is as long as the rest");
+    assert!(s(&mut model, "crop_1_order").iter().all(|v| *v == 0.0), "no order phase, no order");
+    assert_eq!(s(&mut model, "crop_1_order_due").len(), n);
+    assert_eq!(s(&mut model, "crop_1_orders_en_route").len(), n);
+    // Day 2: planted full, dries 5; nothing due, so the 20 arriving is a forced watering
+    // poured into the crop's 5 mm of room: 5 ML taken, 15 bypass
+    assert_eq!(s(&mut model, "supply")[1], 5.0);
+    assert_eq!(s(&mut model, "bypass")[1], 15.0);
+}

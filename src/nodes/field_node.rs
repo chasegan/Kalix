@@ -511,11 +511,27 @@ impl Node for FieldNode {
         }
 
         // 1. Planting first, so the day's fluxes use the day's areas: already done if the
-        //    field had an order phase today
-        if self.planting_done {
+        //    field had an order phase today. A field outside every regulated zone has none:
+        //    it places no order, and its order results are written here as zero, so that
+        //    the series exist and are as long as every other.
+        let had_order_phase = self.planting_done;
+        if had_order_phase {
             self.planting_done = false;
-        } else if !self.slots.is_empty() {
-            self.planting(data_cache);
+        } else {
+            if !self.slots.is_empty() {
+                self.planting(data_cache);
+            }
+            for slot in &self.slots {
+                if let Some(idx) = slot.recorder_idx[4] {
+                    data_cache.add_value_at_index(idx, 0.0);
+                }
+                if let Some(idx) = slot.recorder_idx[5] {
+                    data_cache.add_value_at_index(idx, 0.0);
+                }
+                if let Some(idx) = slot.recorder_idx[6] {
+                    data_cache.add_value_at_index(idx, 0.0);
+                }
+            }
         }
 
         // Get the driving data
