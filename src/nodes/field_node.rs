@@ -257,12 +257,22 @@ impl FieldNode {
                 }
             }
         }
-        // Planting: lower slots first; a slot in the ground does not fire
+        // Planting: lower slots first; a slot in the ground does not fire. A slot that left
+        // the ground above, by harvest or abandonment, is empty here and may plant again today.
+        // A rule that gives no number has broken: it stops the run, as viable_area does.
         for slot in &mut self.slots {
             if slot.in_ground { continue; }
-            if slot.plant_input.get_value(data_cache) == 0.0 { continue; }
-            let area = slot.plant_area_input.get_value(data_cache).min(self.fallow_partition.area);
-            if !(area > 0.0) { continue; }
+            let trigger = slot.plant_input.get_value(data_cache);
+            if trigger.is_nan() {
+                panic!("Field '{}': crop plant rule for '{}' gave NaN; it must be true or false", self.name, slot.crop.name);
+            }
+            if trigger == 0.0 { continue; }
+            let wanted = slot.plant_area_input.get_value(data_cache);
+            if !(wanted >= 0.0) {
+                panic!("Field '{}': crop plant_area rule for '{}' gave {}; it must be a non-negative area in km2", self.name, slot.crop.name, wanted);
+            }
+            let area = wanted.min(self.fallow_partition.area);
+            if area <= 0.0 { continue; }
             transfer(&self.profile, &mut self.fallow_partition, &mut slot.partition, area);
             slot.in_ground = true;
             slot.days = 0;

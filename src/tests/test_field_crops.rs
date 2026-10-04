@@ -333,3 +333,21 @@ fn test_curve_number_validation_and_round_trip() {
     let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig("", "")).unwrap());
     assert!(!plain.contains("curve_number"), "absent stays absent");
 }
+
+#[test]
+fn test_a_planting_rule_that_gives_no_number_stops_the_run() {
+    // NaN is not true, and not an area: both stop the run naming the field and the crop,
+    // as a viable_area rule does, rather than planting the whole fallow
+    let nan_trigger = rig("", "crop_1 = shallow\ncrop_1_plant = 0 / 0\ncrop_1_plant_area = 1");
+    let err = std::panic::catch_unwind(|| run(&nan_trigger)).err().map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default()).unwrap_or_default();
+    assert!(err.contains("Field 'paddock': crop plant rule for 'shallow' gave NaN"), "got: {err}");
+    let nan_area = rig("", "crop_1 = shallow\ncrop_1_plant = 1\ncrop_1_plant_area = 0 / 0");
+    let err = std::panic::catch_unwind(|| run(&nan_area)).err().map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default()).unwrap_or_default();
+    assert!(err.contains("crop plant_area rule for 'shallow' gave NaN"), "got: {err}");
+    let negative_area = rig("", "crop_1 = shallow\ncrop_1_plant = 1\ncrop_1_plant_area = -1");
+    let err = std::panic::catch_unwind(|| run(&negative_area)).err().map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default()).unwrap_or_default();
+    assert!(err.contains("gave -1; it must be a non-negative area"), "got: {err}");
+    // A zero area plants nothing and the trigger is read again next day
+    let mut model = run(&rig("", "crop_1 = shallow\ncrop_1_plant = 1\ncrop_1_plant_area = if(var.day.n < 3, 0, 1)"));
+    assert_eq!(s(&mut model, "crop_1_area")[..3], [0.0, 0.0, 1.0]);
+}
