@@ -1,44 +1,45 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="500" viewBox="0 0 900 500" font-family="IBM Plex Sans, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#1a232b">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" font-family="IBM Plex Sans, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#1a232b">
   <defs>
     <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#52606b"/></marker>
   </defs>
   <style>
     .fallow { fill:#e8d9bd; stroke:#1a232b; stroke-width:1.2; }
     .crop   { fill:#d7e8c6; stroke:#2f6b4f; stroke-width:1.2; }
-    .lbl { font-size:14px; }
-    .small { font-size:12px; fill:#52606b; }
-    .mono { font-family: IBM Plex Mono, Menlo, Consolas, monospace; font-size:12px; }
+    .lbl { font-size:15px; }
+    .small { font-size:13px; fill:#52606b; }
+    .mono { font-family: IBM Plex Mono, Menlo, Consolas, monospace; font-size:12.5px; }
     .mv { stroke:#52606b; stroke-width:1.8; fill:none; marker-end:url(#a); }
   </style>
   <text x="40" y="30" class="lbl" font-weight="600">The field is 4 km². Every km² is in exactly one partition, and its water goes with it.</text>
-  <text x="40" y="48" class="small">Depletions are mm below full in each partition's root bucket. The numbers are from the engine's own tests.</text>
+  <text x="40" y="48" class="small">Rows are end-of-day states, as the results record them: mm below full in each partition's root bucket.</text>
+  <text x="40" y="65" class="small">The numbers are from the engine's own tests. The fallow here has kc = 0, so it never dries; it is never watered.</text>
 
   <!-- day 1 -->
-  <text x="40" y="100" class="lbl">day 1</text>
+  <text x="100" y="100" text-anchor="end" class="lbl">end of day 2</text>
   <rect x="110" y="78" width="440" height="40" class="fallow"/>
   <text x="330" y="103" text-anchor="middle" class="mono">fallow · 4 km² · 10 mm</text>
-  <text x="570" y="103" class="small">all fallow to begin with</text>
+  <text x="570" y="103" class="small">all fallow so far</text>
 
   <path class="mv" d="M330,122 L330,150"/>
-  <text x="344" y="134" class="small">crop_1_plant fires;</text>
-  <text x="344" y="148" class="small">crop_1_plant_area = 1</text>
+  <text x="344" y="134" class="small">start of day 3: crop_1_plant fires, crop_1_plant_area = 1;</text>
+  <text x="344" y="150" class="small">the crop takes 1 km² at the fallow's 10 mm, then dries 4 mm</text>
 
   <!-- day 3 -->
-  <text x="40" y="192" class="lbl">day 3</text>
+  <text x="100" y="192" text-anchor="end" class="lbl">end of day 3</text>
   <rect x="110" y="168" width="330" height="40" class="fallow"/>
   <text x="275" y="193" text-anchor="middle" class="mono">fallow · 3 km² · 10 mm</text>
   <rect x="440" y="168" width="110" height="40" class="crop"/>
   <text x="495" y="186" text-anchor="middle" class="mono">crop_1 · 1 km²</text>
-  <text x="495" y="201" text-anchor="middle" class="mono">10 mm</text>
-  <text x="570" y="187" class="small">the crop starts as wet as the</text>
-  <text x="570" y="201" class="small">ground it was planted into</text>
+  <text x="495" y="201" text-anchor="middle" class="mono">14 mm</text>
+  <text x="570" y="187" class="small">planted as wet as the ground</text>
+  <text x="570" y="201" class="small">it was planted into, 10 mm</text>
 
   <path class="mv" d="M330,212 L330,240"/>
-  <text x="344" y="224" class="small">three days of growing: the crop</text>
-  <text x="344" y="238" class="small">dries 4 mm a day, the bare fallow does not</text>
+  <text x="344" y="224" class="small">days 4 and 5: the crop dries</text>
+  <text x="344" y="238" class="small">another 4 mm each day</text>
 
   <!-- day 5 -->
-  <text x="40" y="282" class="lbl">day 5</text>
+  <text x="100" y="282" text-anchor="end" class="lbl">end of day 5</text>
   <rect x="110" y="258" width="330" height="40" class="fallow"/>
   <text x="275" y="283" text-anchor="middle" class="mono">fallow · 3 km² · 10 mm</text>
   <rect x="440" y="258" width="110" height="40" class="crop"/>
@@ -48,11 +49,11 @@
   <text x="570" y="291" class="small">its own bucket</text>
 
   <path class="mv" d="M330,302 L330,330"/>
-  <text x="344" y="314" class="small">harvest at season_len, or abandonment</text>
-  <text x="344" y="328" class="small">by crop_N_viable_area: the land goes back</text>
+  <text x="344" y="314" class="small">start of day 6: harvest at season_len (or abandonment</text>
+  <text x="344" y="328" class="small">by crop_N_viable_area); the land goes back</text>
 
   <!-- day 6 -->
-  <text x="40" y="372" class="lbl">day 6</text>
+  <text x="100" y="372" text-anchor="end" class="lbl">end of day 6</text>
   <rect x="110" y="348" width="440" height="40" class="fallow"/>
   <text x="330" y="373" text-anchor="middle" class="mono">fallow · 4 km² · 13 mm</text>
   <text x="570" y="367" class="small">mixed by area:</text>
@@ -62,4 +63,5 @@
   <text x="40" y="450" class="small">Area is never created: a planting takes at most what the fallow has that day; two slots firing together plant in order, lower slot first.</text>
   <text x="40" y="468" class="small">Water is never created or lost in a move: the giver's wetness is unchanged, the receiver's is the area-weighted mix, layer by layer.</text>
   <text x="40" y="486" class="small">The fallow is never irrigated and never planted: it receives land at harvest and abandonment, and gives it up at planting.</text>
+  <text x="40" y="506" class="small">The layer below the roots is 10 mm down everywhere here, and no move touches it; see the layers diagram for a move that does.</text>
 </svg>

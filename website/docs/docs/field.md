@@ -207,7 +207,7 @@ In this order:
    the fallow, at most what the fallow has. Every move carries area with its water, layer by
    layer, in proportion to area: the giver's wetness does not change, and the receiver's is the
    area-weighted mix. Where a root zone shrinks (a deep crop's land going to a shallower
-   fallow) the bucket's water is spread evenly over the layers it covered and the deeper ones
+   fallow) the bucket's water is spread to one wetness over the layers it covered, each taking its share by capacity, and the deeper ones
    keep it; where it grows, the new bucket pools the layers it reaches, with whatever each held.
    Nothing is created or lost in a move.
 2. **Stress**, for each partition, from the depletion `D` of its bucket at the start of the day:
@@ -335,7 +335,8 @@ the account.
 ![A 4 km² field over six days: all fallow; 1 km² planted from the fallow at the fallow's wetness; the crop drying while the fallow does not; the land returned at harvest and the depletions mixed by area](../assets/docs-nodes-field/land-moves.svg)
 
 *Land moves with its water. The fallow gives up area at planting and takes it back at harvest or
-abandonment; every move mixes depletions by area, layer by layer, so nothing is created or lost.* A perennial is planted once and stays (`crop_1_plant = sim.year == 1990 && sim.month
+abandonment; every move mixes depletions by area, layer by layer, so nothing is created or lost.*
+ A perennial is planted once and stays (`crop_1_plant = sim.year == 1990 && sim.month
 == 3 && sim.day == 1`, with no `season_len` on the crop). Several slots may be in the ground at
 once: a winter crop in one and a summer crop in another, or the same crop in two slots planted a
 month apart.
