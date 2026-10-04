@@ -161,6 +161,9 @@ class DerivedSeriesController {
         }
 
         List<SourceRef> origins = List.copyOf(selection.keySet());
+        // Taken before the prompt: the name dialog is modal but the EDT keeps running,
+        // so a run can complete while it is open. The generation lets finish() see that.
+        long lastGeneration = lastRunTracker.getGeneration();
         String name = promptForName(origins);
         if (name == null) {
             return;
@@ -189,8 +192,8 @@ class DerivedSeriesController {
             return;
         }
 
-        status("Creating derived series." + name + "…");
-        new Creation(name, plans, lastRunTracker.getGeneration()).next();
+        status("Creating derived." + name + "…");
+        new Creation(name, plans, lastGeneration).next();
     }
 
     /** One origin's selected inputs, keyed by display name, and where its series are read. */
@@ -348,8 +351,10 @@ class DerivedSeriesController {
 
     private Read seriesRead(SourceRef origin, Object source, String name) throws CannotRead {
         if (source instanceof RunInfoImpl run) {
-            // A Last alias holds the Last run's session, so no alias resolution is needed.
-            SessionManager.KalixSession session = run.getSession();
+            // A Last alias is replaced when a run completes, and the leaf may hold the old
+            // one, so Last is resolved through the tracker, as the fetch coordinator does.
+            RunInfoImpl current = run.isLastAlias() ? lastRunTracker.getLastRunInfo() : run;
+            SessionManager.KalixSession session = current == null ? null : current.getSession();
             if (session == null) {
                 throw new CannotRead(originLabel(origin) + " has no session to read from.");
             }
@@ -451,14 +456,14 @@ class DerivedSeriesController {
         private void finish() {
             List<SourceRef> origins = plans.stream().map(Plan::origin).toList();
             if (origins.contains(new LastSource()) && lastRunTracker.getGeneration() != lastGeneration) {
-                fail("The last run changed while derived series." + name + " was being created. Try again.");
+                fail("The last run changed while derived." + name + " was being created. Try again.");
                 return;
             }
             // An origin removed while this one read would never be labelled removed.
             for (SourceRef origin : origins) {
                 if (!(origin instanceof LastSource) && !removedOriginLabels.containsKey(origin)
                         && !window.hasSourceNode(origin)) {
-                    fail("A source was removed while derived series." + name + " was being created.");
+                    fail("A source was removed while derived." + name + " was being created.");
                     return;
                 }
             }
@@ -485,7 +490,7 @@ class DerivedSeriesController {
             }
             sourceTree.addCheckedPaths(newPaths);
             window.checkOutputsSeries(newRefs);
-            status("Created derived series." + name + " for " + origins.size()
+            status("Created derived." + name + " for " + origins.size()
                 + (origins.size() == 1 ? " source" : " sources"));
         }
     }
