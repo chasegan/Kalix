@@ -20,19 +20,19 @@ the soil, drains down `ds_1`; the share of the runoff the farm catches leaves on
 The field has a **fallow**, which is what is not planted, and up to four **crop slots**. A crop
 is declared once, in a `[crop.*]` section: what is true of the plant wherever it grows. A slot's
 properties are the farmer's decisions for that crop: when to plant, how much, how to irrigate,
-when to give up. Planting takes area from the fallow; harvest gives it back.
+when to abandon it. Planting takes area from the fallow; harvest gives it back.
 
 ```ini
 [crop.cotton]
-root_depth = 900                    ; mm
+root_depth = 900                    # mm
 p = 0.65
-kc = Day, Kc,                       ; by days since planting
+kc = Day, Kc,                       # by days since planting
      0,   0.35,
      30,  0.35,
      70,  1.20,
      130, 1.20,
      180, 0.60,
-season_len = 180                    ; harvested this many days after planting
+season_len = 180                    # harvested this many days after planting
 
 [crop.fallow]
 root_depth = 600
@@ -41,8 +41,8 @@ kc = 0.4
 [node.paddock]
 type = field
 loc = 30, 40
-area = 4.2                          ; km2
-available_water = 150               ; mm of water per m of soil
+area = 4.2                          # km2
+available_water = 150               # mm of water per m of soil
 rain = data.climate_csv.by_name.rain
 evap = data.climate_csv.by_name.et0
 efficiency = 0.8
@@ -91,10 +91,10 @@ dries.
 | initial\_depletion (optional) | How far below full the soil starts, over the whole profile to the deepest roots [mm], every layer alike. Default 0, a full profile top to bottom. Example: `initial_depletion = 20` |
 | curve\_number (optional) | The USDA-NRCS curve number for storm runoff off the paddock surface: the tabled value for average antecedent conditions (CN2), by cover and hydrologic soil group. Each day the curve is chosen between the dry and wet ones by each partition's wetness, so a crop held near full sheds more than the dry fallow beside it. Omitted, rain runs off only when the profile is full. Rain only, never irrigation; daily steps only. See [Storm runoff](#storm-runoff). Example: `curve_number = 85` |
 | crop\_N (optional) | The crop in slot N, for N from 1 to 4: the name of a `[crop.*]` section. Slots are numbered without gaps. Example: `crop_1 = cotton` |
-| crop\_N\_plant (compulsory with crop\_N) | An expression, read every day the slot is empty: true plants the crop, taking area from the fallow with its water. A slot already in the ground does not fire; where two fire the same day, the lower N plants first. A trigger that stays true plants again on the day of a harvest or an abandonment, into the land just returned to the fallow. Example: `crop_1_plant = sim.month == 10 && sim.day == 15` |
+| crop\_N\_plant (compulsory with crop\_N) | An expression, read every day the slot is empty, in the order phase (see step 1 of [How the node works](#how-the-node-works)): true plants the crop, taking area from the fallow with its water. A slot already in the ground does not fire; where two fire the same day, the lower N plants first. A trigger that stays true plants again on the day of a harvest or an abandonment, into the land just returned to the fallow. Example: `crop_1_plant = sim.month == 10 && sim.day == 15` |
 | crop\_N\_plant\_area (compulsory with crop\_N) | The area planted [km²], read on the day the trigger fires, capped at the fallow's area that day. Example: `crop_1_plant_area = min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8)` |
 | crop\_N\_order (optional) | The irrigation rule for this crop: the order it places upstream each step [ML]. An expression, read only while the crop is in the ground; see [The irrigation rule](#the-irrigation-rule). Omitted, the crop is rain-fed. |
-| crop\_N\_viable\_area (optional) | An expression, read every day the crop is in the ground: the area becomes `min(area, value)` [km²], and what leaves goes back to the fallow with its water. Zero is death. Omitted, the built-in rule applies: a crop whose stress coefficient is 0.05 or below at the start of the day dies, and its area returns to the fallow. Writing any expression replaces that rule entirely. A negative or non-numeric value stops the run. |
+| crop\_N\_viable\_area (optional) | An expression, read every day the crop is in the ground, in the order phase: the area becomes `min(area, value)` [km²], and what leaves goes back to the fallow with its water. Zero is death. Omitted, the built-in rule applies: a crop whose stress coefficient is 0.05 or below at the start of the day dies, and its area returns to the fallow. Writing any expression replaces that rule entirely. A negative or non-numeric value stops the run. |
 | ds\_1 (optional) | Name of the downstream node on the river: `bypass` and the river's share of the runoff drain down it. Example: `ds_1 = river` |
 | ds\_2 (optional) | Name of the node the caught runoff (`return_flow`) drains to: a blackhole when it is pumped back to the farm storage through an inflow node, a tailwater dam, or a drain. Example: `ds_2 = drain` |
 
@@ -105,7 +105,7 @@ dries.
 | crop\_N\_area | The area under slot N's crop at the end of the step [km²]; 0 when nothing is in the ground |
 | crop\_N\_days | Days since planting, 0 on the day it is planted; not a number when nothing is in the ground |
 | crop\_N\_depletion | How far the crop's root zone is below full at the end of the step [mm]: 0 is full, the bucket's capacity is empty. A state, reported at the end of the step like a storage's `volume`; the irrigation rule reads the previous step's value, `this.crop_N_depletion[-1, 0]`, the soil at the start of today. Not a number when nothing is in the ground |
-| crop\_N\_ks | The crop's stress coefficient this step, 0 to 1, from the depletion at the start of the day |
+| crop\_N\_ks | The crop's stress coefficient this step, 0 to 1, from the depletion at the start of the day. Not a number when nothing is in the ground |
 | crop\_N\_order | The order slot N placed this step [ML] |
 | crop\_N\_order\_due | The order placed earlier for slot N that is due to arrive this step [ML] |
 | crop\_N\_orders\_en\_route | Water on its way to slot N at the end of the step [ML]: ordered, today's order included, and not yet arrived. Zero without travel time from the supply. A state, like `crop_N_depletion`; the irrigation rule reads `this.crop_N_orders_en_route[-1, 0]` |
@@ -115,7 +115,7 @@ dries.
 | et\_vol | Evapotranspiration [ML]: `et × area` |
 | rain | The value of the `rain` expression [mm] |
 | rain\_vol | Rain on the field [ML]: `rain × area` |
-| intercepted | Rain that did not reach the soil [mm]: `min(rain, interception × evap)` |
+| intercepted | Rain that did not reach the soil [mm]: `min(rain − storm runoff, interception × evap)` on each partition, averaged over the field by area |
 | evap | The value of the `evap` expression [mm] |
 | excess | All the rain the paddocks shed [ML]: storm runoff off the surface where a `curve_number` is set, and the overflow of a profile full to the deepest roots. Split between `ds_1` and `ds_2` by `return_fraction` |
 | supply | The water the field takes from what arrives [ML] |
@@ -141,7 +141,7 @@ reference evapotranspiration.
 2. **The bucket.** The root zone is a column of soil of depth Z_r. Between full (field capacity)
    and empty (wilting point) it holds a depth of water TAW = θ_cap · Z_r, where θ_cap is the
    soil's water-holding capacity as a fraction (0.1–0.3 is typical). In Kalix θ_cap is the
-   field's `available_water` and Z_r the crop's `root_depth`.
+   field's `available_water` / 1000 (150 mm/m is 0.15) and Z_r the crop's `root_depth`.
 3. **The state: depletion.** D is how far the bucket is below full, in mm. D = 0 is full and
    D = TAW is empty. This is the crop's `crop_N_depletion`.
 4. **What the crop wants.** A well-watered crop uses E_c = K_c · E₀, where the crop coefficient
@@ -190,7 +190,11 @@ the field nothing draws, so water that passes is gone.
 
 In this order:
 
-1. **Planting**, so that the day's orders and fluxes use the day's areas. Harvest: a crop whose
+1. **Planting**, so that the day's orders and fluxes use the day's areas. The rules it reads
+   (`crop_N_plant`, `crop_N_plant_area`, `crop_N_viable_area`) are read in the order phase,
+   like `crop_N_order`, before any node's flow phase has run, so they see the previous step's
+   values (`[-1, 0]`); a field outside every regulated zone has no order phase and reads them
+   at the start of its flow phase instead. Harvest: a crop whose
    days since planting reach its `season_len` goes back to the fallow. Abandonment: a crop's
    area becomes `min(area, crop_N_viable_area)`, or 0 under the built-in rule when its stress
    coefficient at the start of the day is 0.05 or below; what leaves goes to the fallow.
@@ -215,7 +219,8 @@ In this order:
    runoff as `excess`.
 5. **Irrigation.** Each crop in the ground takes from what arrives up to its own `order_due`,
    and no more than its bucket has room for after the rain, allowing for the share that
-   escapes: `room / efficiency`. Water arriving beyond the orders is a forced watering the
+   escapes: `room / efficiency`; when there is not enough for every order, lower slots are
+   served first. Water arriving beyond the orders is a forced watering the
    modeller intended: it is poured over the crops in the ground so as to level their depletion,
    driest first, each again capped by its room. The fallow is never irrigated. What no crop can
    take is `bypass`. Of what is taken, `escape = supply × (1 − efficiency)` and the rest
@@ -251,8 +256,9 @@ runoff  = (rain − 0.2 S)² / (rain + 0.8 S)   when rain > 0.2 S, else 0
 CN1 and CN3 are the standard dry and wet curves (`CN2 / (2.334 − 0.01334 CN2)` and
 `CN2 / (0.4036 + 0.005964 CN2)`), and choosing the day's curve by soil wetness is what APSIM,
 HowLeaky and pyfao56 do; the tabled initial abstraction of 0.2 S is kept because the tables are
-defined on it. Runoff is taken from the gross rain before interception, so a modeller who
-wants the two not to overlap writes `interception = 0`. Irrigation never runs through it:
+defined on it. Runoff is taken from the gross rain, and interception from what is left:
+`intercepted = min(rain − runoff, interception × evap)` on each partition. Irrigation never
+runs through it:
 application losses are `efficiency`. The method is defined on daily rain totals, and a model
 with another step refuses it at load.
 
@@ -301,7 +307,7 @@ crop_1_order = if(this.crop_1_depletion[-1, 0] >= 100, 0, this.crop_1_area[-1, 0
 the field. Without it, a rule that orders the deficit places the same order every day until the
 first delivery lands.
 
-#### Planting, harvest and giving up
+#### Planting, harvest and abandonment
 
 `crop_N_plant` is read every day the slot is empty, and plants when true. A date is the common
 trigger; the water in hand decides the area:
@@ -319,7 +325,7 @@ once: a winter crop in one and a summer crop in another, or the same crop in two
 month apart.
 
 Harvest is `season_len` days after planting, the whole area back to the fallow with its water.
-Giving up is `crop_N_viable_area`: each day the crop keeps at most that area, so it can only
+Abandonment is `crop_N_viable_area`: each day the crop keeps at most that area, so it can only
 fall. Written against the crop's own state it is a rule for abandoning a failing crop, and 0 is
 death:
 
@@ -336,12 +342,12 @@ along a flattening curve, and that default is slow to arrive; a written rule can
 A field orders like a regulated user: its order travels upstream to the supply, and the field
 acts on it after its travel time (see [Ordering](ordering.md)). The order decides what is released
 for the field; what the crops take is decided by the soil, from whatever arrives. So a field
-outside any regulated zone, on an unregulated creek say, never places an order (and its
-`crop_N_order` and `crop_N_order_due` results are not written), but irrigates from what reaches
-it all the same.
+outside any regulated zone, on an unregulated creek say, never places an order (its
+`crop_N_order`, `crop_N_order_due` and `crop_N_orders_en_route` results are zero), but
+irrigates from what reaches it all the same, and plants at the start of its flow phase.
 
 The links leaving a field are not regulated. A field's outlets carry bypass and runoff away: they
-are drains, not delivery paths. No order travels up it, and the travel time to the
+are drains, not delivery paths. No order travels up them, and the travel time to the
 field is no part of the travel time to anything below it.
 
 #### Returning runoff to the farm storage
@@ -370,8 +376,8 @@ ds_1 = paddock
 type = field
 ...
 return_fraction = 0.8
-ds_1 = river        ; bypass and the runoff the farm does not catch
-ds_2 = drain        ; the caught runoff, recreated at `returns` next step
+ds_1 = river        # bypass and the runoff the farm does not catch
+ds_2 = drain        # the caught runoff, recreated at `returns` next step
 
 [node.drain]
 type = blackhole
