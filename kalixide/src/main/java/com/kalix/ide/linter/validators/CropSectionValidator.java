@@ -30,6 +30,8 @@ public class CropSectionValidator implements ValidationStrategy {
 
     private static final Pattern VALID_CROP_NAME = Pattern.compile("^[a-z][a-z0-9_]*$");
 
+    private static final Pattern CROP_SLOT_KEY = Pattern.compile("^crop_([1-9][0-9]*)(|_plant|_plant_area|_order|_viable_area)$");
+
     @Override
     public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
         for (Map.Entry<String, INIModelParser.Section> entry : model.getSections().entrySet()) {
@@ -37,6 +39,67 @@ public class CropSectionValidator implements ValidationStrategy {
             if (sectionName.startsWith("crop.")) {
                 validateCropSection(sectionName, entry.getValue(), result);
             }
+        }
+        for (INIModelParser.NodeSection node : model.getAllNodeSections()) {
+            if ("field".equalsIgnoreCase(node.getNodeType())) {
+                validateFieldCropReferences(node, model, result);
+            }
+        }
+    }
+
+    /**
+     * A field's {@code fallow} and {@code crop_N} name a declared [crop.*] section, every
+     * {@code crop_N} comes with its {@code crop_N_plant} and {@code crop_N_plant_area}, and
+     * the slots are numbered from 1 without gaps: the engine's load-time rules for a field.
+     */
+    private void validateFieldCropReferences(INIModelParser.NodeSection node, INIModelParser.ParsedModel model, ValidationResult result) {
+        java.util.Map<Integer, java.util.Set<String>> slots = new java.util.TreeMap<>();
+        java.util.Map<Integer, Integer> slotLines = new java.util.HashMap<>();
+        for (INIModelParser.Property prop : node.getProperties().values()) {
+            String key = prop.getKey().toLowerCase();
+            if (key.equals("fallow")) {
+                checkCropDeclared(prop, "the fallow", model, result);
+                continue;
+            }
+            java.util.regex.Matcher m = CROP_SLOT_KEY.matcher(key);
+            if (!m.matches()) continue;
+            int n = Integer.parseInt(m.group(1));
+            String suffix = m.group(2);
+            slots.computeIfAbsent(n, k -> new java.util.HashSet<>()).add(suffix);
+            slotLines.putIfAbsent(n, prop.getLineNumber());
+            if (suffix.isEmpty()) {
+                checkCropDeclared(prop, "crop_" + n, model, result);
+            }
+        }
+        int expected = 1;
+        for (java.util.Map.Entry<Integer, java.util.Set<String>> slot : slots.entrySet()) {
+            int n = slot.getKey();
+            int line = slotLines.get(n);
+            if (n != expected) {
+                result.addIssue(line, "Node '" + node.getNodeName() + "' has crop_" + n + " but no crop_" + expected
+                        + "; slots are numbered from 1 without gaps", ValidationRule.Severity.ERROR, "crop_slot_gap");
+                return;
+            }
+            expected++;
+            if (!slot.getValue().contains("")) {
+                result.addIssue(line, "Node '" + node.getNodeName() + "' has crop_" + n + " properties but no crop_" + n + " = <crop>",
+                        ValidationRule.Severity.ERROR, "crop_slot_missing_crop");
+                continue;
+            }
+            for (String needed : new String[] {"_plant", "_plant_area"}) {
+                if (!slot.getValue().contains(needed)) {
+                    result.addIssue(line, "crop_" + n + " needs crop_" + n + needed + " (" + (needed.equals("_plant") ? "the rule that plants it" : "the area planted, in km2") + ")",
+                            ValidationRule.Severity.ERROR, "crop_slot_incomplete");
+                }
+            }
+        }
+    }
+
+    private void checkCropDeclared(INIModelParser.Property prop, String what, INIModelParser.ParsedModel model, ValidationResult result) {
+        String name = prop.getValue().trim();
+        if (!model.getSections().containsKey("crop." + name.toLowerCase())) {
+            result.addIssue(prop.getLineNumber(), "No crop '" + name + "' is declared for " + what + " (a [crop." + name + "] section)",
+                    ValidationRule.Severity.ERROR, "undeclared_crop");
         }
     }
 
@@ -58,7 +121,7 @@ public class CropSectionValidator implements ValidationStrategy {
         boolean hasKc = false;
         for (INIModelParser.Property prop : section.getProperties().values()) {
             String value = prop.getValue().trim();
-            switch (prop.getKey()) {
+            switch (prop.getKey().toLowerCase()) {
                 case "root_depth":
                     hasRootDepth = true;
                     if (!isFiniteNumber(value) || Double.parseDouble(value) <= 0) {
