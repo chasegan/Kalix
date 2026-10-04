@@ -102,7 +102,7 @@ action  = set(min(self.balance, table.co_limit(self.size)))
 [ras.event_topup]
 targets = acc.entitlements
 trigger = node.gauge1.dsflow[-1, 0] > 500
-action  = credit(clamp(80, 0, self.size - self.balance))   ; per-account headroom
+action  = credit(clamp(80, 0, self.size - self.balance))   # per-account headroom
 ```
 
 | Field | Reads |
@@ -130,9 +130,9 @@ write off on the conditions the plan names, reset the entitlements:
 
 ```ini
 [ras.co_grant]
-targets = acc.pools                       ; pool size = the carryover cap
+targets = acc.pools                       # pool size = the carryover cap
 trigger = start_water_year(7)
-action  = set(fn.grant() * 0.9 * self.pair.balance)   ; fn.grant(): 0 in a denial year
+action  = set(fn.grant() * 0.9 * self.pair.balance)   # fn.grant(): 0 in a denial year
 
 [ras.co_writeoff_spill]
 targets = acc.pools
@@ -142,7 +142,7 @@ action  = set_empty
 [ras.ent_reset]
 targets = acc.entitlements
 trigger = start_water_year(7)
-action  = reset_allocation                ; after the grant, in file order
+action  = reset_allocation                # after the grant, in file order
 ```
 
 A zero grant *sets* the pool to zero — a write-off, not a skip — and `set()`

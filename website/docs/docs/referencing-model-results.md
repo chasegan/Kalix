@@ -80,16 +80,16 @@ node.<name>.<output>[offset, default_value]
 **Examples:**
 
 ```
-; Yesterday's downstream flow (default to 0 if at simulation start)
+# Yesterday's downstream flow (default to 0 if at simulation start)
 node.catchment.dsflow[-1, 0.0]
 
-; Storage volume from 7 days ago
+# Storage volume from 7 days ago
 node.reservoir.volume[-7, 1000.0]
 
-; Calculate daily change in storage
+# Calculate daily change in storage
 node.reservoir.volume - node.reservoir.volume[-1, 0.0]
 
-; Conditional based on previous flow
+# Conditional based on previous flow
 if(node.catchment.dsflow > node.catchment.dsflow[-1, 0.0], 1, 0)
 ```
 
@@ -116,7 +116,7 @@ area = 250
 
 [node.pump]
 type = unregulated_user
-; Scale demand by catchment area elsewhere in the model
+# Scale demand by catchment area elsewhere in the model
 demand = 0.05 * node.my_catchment.area
 ```
 
