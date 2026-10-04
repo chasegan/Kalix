@@ -138,7 +138,7 @@ public class SeasonalMaskButton extends JButton {
      * so a selection that masks nothing - none, or all twelve - can never look active.
      */
     private void showMode(SeasonalMaskMode current) {
-        boolean active = current instanceof SeasonalMaskMode.Enabled;
+        boolean active = isActive(current);
         setSelected(active);
         setIcon(FontIcon.of(active ? ICON_ACTIVE : ICON_INACTIVE, iconSize));
     }
@@ -148,10 +148,19 @@ public class SeasonalMaskButton extends JButton {
      * value, an undo, a tab reset - where there is no user selection to preserve.
      */
     private void syncMenu(SeasonalMaskMode current) {
-        boolean active = current instanceof SeasonalMaskMode.Enabled;
+        boolean active = isActive(current);
         allItem.setSelected(!active);
         for (var entry : monthItems.entrySet()) {
             entry.getValue().setSelected(active && current.includes(entry.getKey()));
         }
+    }
+
+    /** Whether a mode masks anything, so lights the button and unticks "All". */
+    private static boolean isActive(SeasonalMaskMode mode) {
+        return switch (mode) {
+            case null -> false;
+            case SeasonalMaskMode.Disabled ignored -> false;
+            case SeasonalMaskMode.Enabled ignored -> true;
+        };
     }
 }

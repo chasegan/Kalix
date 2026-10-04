@@ -116,16 +116,16 @@ public class OutputsTreeBuilder {
     }
 
     /**
-     * Updates the tree with a list of selected sources (runs and/or datasets).
+     * Updates the tree with the selected sources (runs, derived series and/or datasets).
      * Automatically handles single vs multi-source tree strategies.
      */
-    public void updateTree(List<Object> selectedRuns, List<Object> selectedDatasets) {
-        if (selectedRuns.isEmpty() && selectedDatasets.isEmpty()) {
+    public void updateTree(List<Object> sources) {
+        if (sources.isEmpty()) {
             showEmptyTree(SELECT_SOURCES_MESSAGE);
             return;
         }
 
-        updateTreeForMultipleSources(selectedRuns, selectedDatasets);
+        updateTreeForSources(sources);
     }
 
     /**
@@ -161,28 +161,17 @@ public class OutputsTreeBuilder {
     }
 
     /**
-     * Updates the timeseries tree for multiple selected sources (runs and/or datasets).
+     * Updates the timeseries tree for the selected sources.
      * Series available in multiple sources become parent nodes with source children.
      * Series available in only one source become simple leaf nodes.
      */
-    private void updateTreeForMultipleSources(List<Object> selectedRuns, List<Object> selectedDatasets) {
+    private void updateTreeForSources(List<Object> sources) {
         // Remember current expansion state
         List<TreePath> expandedPaths = new ArrayList<>();
-        boolean hadDatasetPaths = false;  // Track if previous tree had "file" nodes
         for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
             TreePath path = timeseriesTree.getPathForRow(i);
             if (timeseriesTree.isExpanded(path)) {
                 expandedPaths.add(path);
-                // Check if this path contains "file" node (dataset tree)
-                for (Object component : path.getPath()) {
-                    if (component instanceof DefaultMutableTreeNode) {
-                        Object userObj = ((DefaultMutableTreeNode) component).getUserObject();
-                        if (userObj instanceof String && "file".equals(userObj)) {
-                            hadDatasetPaths = true;
-                            break;
-                        }
-                    }
-                }
             }
         }
 
@@ -190,18 +179,10 @@ public class OutputsTreeBuilder {
         root.removeAllChildren();
 
         // If only one source selected, use simplified structure
-        boolean isDatasetTree = false;
-        if (selectedRuns.size() + selectedDatasets.size() == 1) {
-            if (selectedRuns.size() == 1) {
-                updateTreeSingleSource(root, selectedRuns.get(0));
-            } else {
-                updateTreeSingleSource(root, selectedDatasets.get(0));
-                isDatasetTree = true;
-            }
+        if (sources.size() == 1) {
+            updateTreeSingleSource(root, sources.get(0));
         } else {
-            // Build multi-source hybrid tree
-            updateTreeMultiSource(root, selectedRuns, selectedDatasets);
-            isDatasetTree = !selectedDatasets.isEmpty();  // Has datasets if any selected
+            updateTreeMultiSource(root, sources);
         }
 
         timeseriesTreeModel.reload();
@@ -212,7 +193,6 @@ public class OutputsTreeBuilder {
         }
 
         // Expansion logic
-        boolean switchedContext = (isDatasetTree != hadDatasetPaths);
         if (filter.isActive()) {
             // Filter active - expand all to show matches in context
             for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
@@ -227,17 +207,25 @@ public class OutputsTreeBuilder {
                 }
             }
             preFilterExpansionState = null;
-        } else if (expandedPaths.isEmpty() || switchedContext) {
-            // First time or switched context - expand all nodes
+        } else if (expandedPaths.isEmpty()) {
+            // First time - expand all nodes
             for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
                 timeseriesTree.expandRow(i);
             }
         } else {
-            // Restore previous expansion state (same context)
+            // Restore previous expansion state
+            boolean restored = false;
             for (TreePath expandedPath : expandedPaths) {
                 TreePath newPath = findEquivalentPath(expandedPath);
                 if (newPath != null) {
                     timeseriesTree.expandPath(newPath);
+                    restored = true;
+                }
+            }
+            // Nothing carried over (e.g. a source with unrelated names) - expand all
+            if (!restored) {
+                for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
+                    timeseriesTree.expandRow(i);
                 }
             }
         }
@@ -271,17 +259,12 @@ public class OutputsTreeBuilder {
     /**
      * Populates the tree for multiple sources (runs and/or datasets) using smart hybrid structure.
      */
-    private void updateTreeMultiSource(DefaultMutableTreeNode root, List<Object> selectedRuns, List<Object> selectedDatasets) {
-        // Map: series name -> list of sources (RunInfo or LoadedDatasetInfo) that have this series
+    private void updateTreeMultiSource(DefaultMutableTreeNode root, List<Object> sources) {
+        // Map: series name -> list of sources that have this series
         Map<String, List<Object>> seriesAvailability = new LinkedHashMap<>();
 
-        // Collect all series from all selected sources
-        List<Object> allSources = new ArrayList<>();
-        allSources.addAll(selectedRuns);
-        allSources.addAll(selectedDatasets);
-
         boolean anyOutputs = false;
-        for (Object source : allSources) {
+        for (Object source : sources) {
             List<String> seriesNames = getSeriesNamesCallback.apply(source);
             if (seriesNames != null && !seriesNames.isEmpty()) {
                 anyOutputs = true;
@@ -506,7 +489,9 @@ public class OutputsTreeBuilder {
      * levels ({@code inflow_*.ds_1}); the label is resolved once per source.
      */
     private List<String> matchingSeries(Object source, List<String> seriesNames) {
-        if (!filter.isActive()) return seriesNames;
+        // Always a fresh list: the caller sorts it, and the callback's list may be
+        // immutable (a derived series offers List.of) or owned by the source.
+        if (!filter.isActive()) return new ArrayList<>(seriesNames);
         String sourceLabel = sourceLabelOf(source, seriesNames.get(0));
         return seriesNames.stream()
             .filter(seriesName -> filter.matches(seriesName, sourceLabel))

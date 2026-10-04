@@ -60,9 +60,12 @@ public class TimeSeriesAggregator {
             return original;
         }
         if (period == AggregationPeriod.ORIGINAL) {
-            return seasonalMaskMode instanceof SeasonalMaskMode.Enabled
-                ? TimeSeriesMasker.createSeasonalMask(original, seasonalMaskMode).apply(original)
-                : original;
+            return switch (seasonalMaskMode) {
+                case null -> original;
+                case SeasonalMaskMode.Disabled ignored -> original;
+                case SeasonalMaskMode.Enabled ignored ->
+                    TimeSeriesMasker.createSeasonalMask(original, seasonalMaskMode).apply(original);
+            };
         }
 
         if (period == AggregationPeriod.DAILY) {
@@ -112,8 +115,11 @@ public class TimeSeriesAggregator {
         Buckets buckets,
         SeasonalMaskMode seasonalMaskMode
     ) {
-        Set<Month> selectedMonths = seasonalMaskMode instanceof SeasonalMaskMode.Enabled(Set<Month> months)
-            ? months : null;
+        Set<Month> selectedMonths = switch (seasonalMaskMode) {
+            case null -> null;
+            case SeasonalMaskMode.Disabled ignored -> null;
+            case SeasonalMaskMode.Enabled(Set<Month> months) -> months;
+        };
         long[] timestamps = original.getTimestamps();
         double[] values = original.getValues();
         boolean[] validPoints = original.getValidPoints();

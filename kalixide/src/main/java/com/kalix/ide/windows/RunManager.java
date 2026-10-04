@@ -3,8 +3,12 @@ package com.kalix.ide.windows;
 import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
+import com.kalix.ide.flowviz.data.DerivedSeriesLabel;
+import com.kalix.ide.flowviz.data.DerivedSeries;
+import com.kalix.ide.flowviz.data.DerivedSeriesSource;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DatasetSource;
+import com.kalix.ide.flowviz.data.DefaultLabelResolver;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.LastSeries;
 import com.kalix.ide.flowviz.data.LastSource;
@@ -42,6 +46,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import javax.swing.tree.TreeNode;
 import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 import java.awt.BorderLayout;
@@ -49,8 +54,11 @@ import java.awt.Point;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -77,7 +85,8 @@ import java.util.function.Consumer;
  * ├── Last run          → Most recently completed run (updates automatically)
  * ├── Current runs      → All runs in current session (Run_1, Run_2, ...)
  * ├── Run library       → Saved runs (future feature)
- * └── Loaded datasets   → Imported CSV/Pixie files
+ * ├── Loaded datasets   → Imported CSV/Pixie files
+ * └── Derived series  → User-created derived series, grouped by origin (Run_1 > sum_1)
  * </pre>
  *
  * <h2>Data Flow</h2>
@@ -86,7 +95,7 @@ import java.util.function.Consumer;
  *   <li>Timeseries tree is rebuilt with available outputs → {@link OutputsTreeBuilder#updateTree}</li>
  *   <li>User checks series in timeseries tree → {@link SeriesFetchCoordinator#onOutputsTreeCheckedChanged}</li>
  *   <li>Data is fetched via {@link TimeSeriesRequestManager} (cached by kalixcliUid:seriesName)</li>
- *   <li>Data is added to shared {@link DataSet} pool → {@link #addSeriesToPool}</li>
+ *   <li>Data is added to shared {@link DataSet} pool → {@link #publishSeries}</li>
  *   <li>All plot tabs are updated → {@link VisualizationTabManager#updateAllTabs}</li>
  * </ol>
  *
@@ -103,7 +112,7 @@ import java.util.function.Consumer;
  *
  * <h2>Window collaborators</h2>
  * This class is the window shell (layout, wiring, delegation). The run bookkeeping and
- * data orchestration live in three same-package collaborators:
+ * data orchestration live in four same-package collaborators:
  * <ul>
  *   <li>{@link RunTreeController} - session discovery/status/removal, run naming,
  *       rename and programmatic selection</li>
@@ -111,6 +120,8 @@ import java.util.function.Consumer;
  *       refreshing plotted "[Last]" series when a run completes</li>
  *   <li>{@link SeriesFetchCoordinator} - timeseries-tree selection diffing, cache
  *       probes, async fetches into the pool, and the selection-update guard</li>
+ *   <li>{@link DerivedSeriesController} - user-created derived series: creating,
+ *       holding and recomputing them, and their "Derived series" tree nodes</li>
  * </ul>
  *
  * @see OutputsTreeBuilder
@@ -129,7 +140,7 @@ public class RunManager extends JFrame {
     private static java.util.function.Supplier<String> editorTextSupplier;
 
     // === DATA SOURCE TREE (left-top) ===
-    // Shows: Last run, Current runs, Run library, Loaded datasets
+    // Shows: Last run, Current runs, Run library, Loaded datasets, Derived series
     // Selection triggers rebuild of timeseries tree
     private JCheckboxTree timeseriesSourceTree;
     private DefaultTreeModel treeModel;
@@ -138,6 +149,7 @@ public class RunManager extends JFrame {
     private DefaultMutableTreeNode currentRunsNode;
     private DefaultMutableTreeNode libraryNode;
     private DefaultMutableTreeNode loadedDatasetsNode;
+    private DefaultMutableTreeNode derivedSeriesNode;
 
     // === TIMESERIES TREE (left-bottom) ===
     // Shows hierarchical output series from selected sources
@@ -180,12 +192,13 @@ public class RunManager extends JFrame {
     private SeriesFetchCoordinator fetchCoordinator;
     private LastRunTracker lastRunTracker;
     private RunTreeController runTreeController;
+    private DerivedSeriesController derivedSeriesController;
 
     // Single point of authority for projecting SeriesRef → display label.
     // Consumed by stats tables, legends, and the outputs tree so that the user-visible
     // string for a run-derived series tracks the current run name automatically.
-    private final LabelResolver labelResolver =
-        new com.kalix.ide.flowviz.data.DefaultLabelResolver(this::runNameForId);
+    private final DefaultLabelResolver labelResolver =
+        new DefaultLabelResolver(this::runNameForId, this::derivedLabel);
 
     /**
      * Private constructor for singleton pattern.
@@ -311,11 +324,13 @@ public class RunManager extends JFrame {
         currentRunsNode = new DefaultMutableTreeNode("Current runs");
         libraryNode = new DefaultMutableTreeNode("Run library");
         loadedDatasetsNode = new DefaultMutableTreeNode("Loaded datasets");
+        derivedSeriesNode = new DefaultMutableTreeNode("Derived series");
 
         rootNode.add(lastRunNode);
         rootNode.add(currentRunsNode);
         rootNode.add(libraryNode);
         rootNode.add(loadedDatasetsNode);
+        rootNode.add(derivedSeriesNode);
 
         treeModel = new DefaultTreeModel(rootNode);
         timeseriesSourceTree = new JCheckboxTree(treeModel) {
@@ -338,6 +353,8 @@ public class RunManager extends JFrame {
                         return uid;
                     } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo datasetInfo) {
                         return datasetInfo.file.getAbsolutePath();
+                    } else if (userObject instanceof DerivedSeriesInfo derived) {
+                        return derivedSeriesController.recipe(derived);
                     }
                 }
                 return null;
@@ -495,7 +512,8 @@ public class RunManager extends JFrame {
             timeSeriesRequestManager,
             datasetSeriesSources,
             () -> lastRunTracker.getGeneration(),
-            () -> lastRunTracker.getLastRunInfo()
+            () -> lastRunTracker.getLastRunInfo(),
+            () -> derivedSeriesController.pixieBackedPoints()
         );
         lastRunTracker = new LastRunTracker(
             this,
@@ -514,11 +532,27 @@ public class RunManager extends JFrame {
             currentRunsNode,
             tabManager,
             plotDataSet,
-            seriesSlotManager,
             timeSeriesRequestManager,
             lastRunTracker,
-            fetchCoordinator
+            fetchCoordinator,
+            (source, label) -> derivedSeriesController.onOriginRemoved(source, label)
         );
+        derivedSeriesController = new DerivedSeriesController(
+            this,
+            timeseriesSourceTree,
+            timeseriesTree,
+            treeModel,
+            derivedSeriesNode,
+            tabManager,
+            plotDataSet,
+            timeSeriesRequestManager,
+            labelResolver,
+            datasetSeriesSources,
+            lastRunTracker,
+            fetchCoordinator,
+            statusUpdater
+        );
+        lastRunTracker.addLastChangeListener(derivedSeriesController::onLastChanged);
 
         // DatasetLoaderManager - handles dataset file loading
         datasetLoaderManager = new DatasetLoaderManager(
@@ -542,7 +576,7 @@ public class RunManager extends JFrame {
             () -> editorTextSupplier != null ? editorTextSupplier.get() : null,        // Editor text supplier
             runTreeController.sessionToRunNameView(),  // Session to run name map (live)
             this::refreshRuns,                // Refresh callback
-            runTreeController::renameRun,     // Rename delegate (validation + propagation)
+            this::renameRun,                  // Rename delegate (validation + propagation)
             this::removeLoadedDataset         // Remove-dataset delegate (pool/cache/tab cleanup)
         );
 
@@ -550,9 +584,17 @@ public class RunManager extends JFrame {
         runContextMenuManager.setupRunTreeContextMenu();
         // Top-level categories that support "Remove all". Last run holds a single alias to the
         // most-recent run's session, so removing it removes that one run (same as its "Remove").
+        runContextMenuManager.setNodeMenuProvider(derivedSeriesController::contextMenuFor);
         runContextMenuManager.setRemovableCategories(
             lastRunNode, currentRunsNode, libraryNode, loadedDatasetsNode);
-        runContextMenuManager.setupOutputsTreeContextMenu(this::expandAllFromSelected,
+        DerivedSeriesController derivedSeries = derivedSeriesController;
+        runContextMenuManager.setupOutputsTreeContextMenu(
+            List.of(
+                new RunContextMenuManager.ConditionalItem("Sum selected…",
+                    derivedSeries::createFromSelected, derivedSeries::selectionHasSeriesToSum),
+                new RunContextMenuManager.ConditionalItem("Sum checked…",
+                    derivedSeries::createFromChecked, derivedSeries::checkedHasSeriesToSum)),
+                                                          this::expandAllFromSelected,
                                                           this::collapseAllFromSelected,
                                                           this::showChecked,
                                                           this::showSelected
@@ -560,7 +602,7 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Gets series names from a source (RunInfo or LoadedDatasetInfo).
+     * Gets series names from a source (RunInfo, LoadedDatasetInfo, or DerivedSeriesInfo).
      * Used by OutputsTreeBuilder.
      */
     private List<String> getSeriesNamesFromSource(Object source) {
@@ -572,6 +614,8 @@ public class RunManager extends JFrame {
             return Collections.emptyList();
         } else if (source instanceof DatasetLoaderManager.LoadedDatasetInfo) {
             return getSeriesNamesFromDataset((DatasetLoaderManager.LoadedDatasetInfo) source);
+        } else if (source instanceof DerivedSeriesInfo derived) {
+            return List.of(labelResolver.nameFor(derived.ref()));
         }
         return Collections.emptyList();
     }
@@ -601,6 +645,15 @@ public class RunManager extends JFrame {
     private void onDatasetLoaded() {
         // Refresh the tree to show the newly loaded dataset
         refreshRuns();
+    }
+
+    /** Renames a run; its derived series' group labels follow. See {@link RunTreeController#renameRun}. */
+    private String renameRun(RunContextMenuManager.RunInfo runInfo, String newName) {
+        String error = runTreeController.renameRun(runInfo, newName);
+        if (error == null) {
+            derivedSeriesController.onOriginRenamed(sourceRefForNode(runInfo));
+        }
+        return error;
     }
 
 
@@ -800,6 +853,65 @@ public class RunManager extends JFrame {
         runTreeController.refreshRuns();
     }
 
+    /** The model's folder, where save dialogs start; {@code null} if no model is open. */
+    File baseDirectory() {
+        return baseDirectorySupplier != null ? baseDirectorySupplier.get() : null;
+    }
+
+    /**
+     * Rebuilds the outputs tree after a label it is built from changed (a rename), keeping
+     * the target tab's series checked.
+     */
+    void rebuildOutputsTree() {
+        fetchCoordinator.beginProgrammaticUpdate();
+        try {
+            updateOutputsTree();
+            restoreTreeChecksForSeries(tabManager.getTargetTabSelectedSeries());
+        } finally {
+            fetchCoordinator.endProgrammaticUpdate();
+        }
+    }
+
+    /**
+     * Runs {@code change} to the source tree's checks as one check change: one outputs-tree
+     * rebuild and one history entry, however many nodes it touches.
+     */
+    void changeSourceTree(Runnable change) {
+        fetchCoordinator.beginProgrammaticUpdate();
+        try {
+            change.run();
+        } finally {
+            fetchCoordinator.endProgrammaticUpdate();
+        }
+        onSourceTreeCheckedChanged();
+    }
+
+    /** Whether the source tree has a node for {@code ref}. */
+    boolean hasSourceNode(SourceRef ref) {
+        return pathForSourceRef(ref) != null;
+    }
+
+    /**
+     * Checks {@code refs} in the outputs tree, in addition to what is already checked, so
+     * the target tab plots them. If the filter hides any of them it is cleared first;
+     * returns whether it was.
+     */
+    boolean checkOutputsSeries(Set<SeriesRef> refs) {
+        List<TreePath> paths = new ArrayList<>();
+        searchAndCollectPaths((DefaultMutableTreeNode) timeseriesTreeModel.getRoot(), refs, paths);
+        boolean filterCleared = false;
+        if (paths.size() < refs.size() && outputsTreeBuilder.isFiltered()) {
+            // The filter that narrowed the inputs would hide what was made from them, and
+            // a series the user cannot see is one they will think was not created.
+            treeFilterManager.clearFilter();
+            paths.clear();
+            searchAndCollectPaths((DefaultMutableTreeNode) timeseriesTreeModel.getRoot(), refs, paths);
+            filterCleared = true;
+        }
+        timeseriesTree.addCheckedPaths(paths);
+        return filterCleared;
+    }
+
     /**
      * Recursively searches tree nodes for matching series keys and collects their paths.
      */
@@ -843,16 +955,13 @@ public class RunManager extends JFrame {
      * resulting ref is cached on the leaf so subsequent lookups don't re-project.
      */
     private SeriesRef refForSource(String seriesName, Object source) {
-        if (source instanceof RunInfoImpl runInfo) {
-            if (runInfo.isLastAlias()) {
-                return new LastSeries(seriesName);
-            }
-            return new RunSeries(runInfo.getRunId(), seriesName);
-        }
-        if (source instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
-            return new DatasetSeries(info.file.getAbsolutePath(), seriesName);
-        }
-        return null;
+        return switch (sourceRefForNode(source)) {
+            case RunSource r -> new RunSeries(r.runId(), seriesName);
+            case LastSource l -> new LastSeries(seriesName);
+            case DatasetSource d -> new DatasetSeries(d.datasetId(), seriesName);
+            case DerivedSeriesSource a -> new DerivedSeries(a.derivedId());
+            case null -> null;
+        };
     }
 
     /**
@@ -894,11 +1003,7 @@ public class RunManager extends JFrame {
      * emptied the plot on any source change while filtering (#431).</p>
      */
     void reconcileTabSeriesWithSources(Set<SeriesRef> tabSeries) {
-        List<Object> checkedRuns = new ArrayList<>();
-        List<Object> checkedDatasets = new ArrayList<>();
-        collectCheckedSources(checkedRuns, checkedDatasets);
-        List<Object> checkedSources = new ArrayList<>(checkedRuns);
-        checkedSources.addAll(checkedDatasets);
+        List<Object> checkedSources = checkedSources();
 
         // Find series that need to be removed from the tab
         Set<SeriesRef> seriesToRemove = new HashSet<>(tabSeries);
@@ -927,6 +1032,11 @@ public class RunManager extends JFrame {
      */
     private String runNameForId(long runId) {
         return runTreeController.runNameForId(runId);
+    }
+
+    /** The derived series lookup for {@link DefaultLabelResolver}. */
+    private DerivedSeriesLabel derivedLabel(long derivedId) {
+        return derivedSeriesController.labelFor(derivedId);
     }
 
     /**
@@ -989,32 +1099,26 @@ public class RunManager extends JFrame {
      * Updates the timeseries tree based on current run tree selection.
      */
     void updateOutputsTree() {
-        List<Object> checkedRuns = new ArrayList<>();
-        List<Object> checkedDatasets = new ArrayList<>();
-        collectCheckedSources(checkedRuns, checkedDatasets);
-
-        if (checkedRuns.isEmpty() && checkedDatasets.isEmpty()) {
-            outputsTreeBuilder.showEmptyTree(OutputsTreeBuilder.SELECT_SOURCES_MESSAGE);
-        } else {
-            outputsTreeBuilder.updateTree(checkedRuns, checkedDatasets);
-        }
+        outputsTreeBuilder.updateTree(checkedSources());
     }
 
     /**
-     * Collects the RunInfo and LoadedDatasetInfo objects currently checked in the data
-     * source tree. Category paths (auto-checked parents) are neither, and are skipped.
+     * The RunInfo, DerivedSeriesInfo and LoadedDatasetInfo objects currently checked in the data
+     * source tree, datasets last. Category paths (auto-checked parents) are none, and are skipped.
      */
-    private void collectCheckedSources(List<Object> checkedRuns, List<Object> checkedDatasets) {
+    private List<Object> checkedSources() {
+        List<Object> sources = new ArrayList<>();
         for (TreePath path : timeseriesSourceTree.getCheckedPaths()) {
-            DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
-            Object userObject = node.getUserObject();
-
-            if (userObject instanceof RunContextMenuManager.RunInfo) {
-                checkedRuns.add(userObject);
-            } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
-                checkedDatasets.add(userObject);
+            Object userObject = ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
+            if (userObject instanceof RunContextMenuManager.RunInfo
+                    || userObject instanceof DerivedSeriesInfo
+                    || userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
+                sources.add(userObject);
             }
         }
+        // Keeps the old order under a shared series: runs and derived series, then datasets.
+        sources.sort(Comparator.comparing(s -> s instanceof DatasetLoaderManager.LoadedDatasetInfo));
+        return sources;
     }
 
     /**
@@ -1026,12 +1130,13 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Adds a series to the shared data pool under the given {@link SeriesRef}.
-     * The data's legacy name field is ignored — identity comes from the ref.
-     * Legend and visibility are managed per-tab via VisualizationTabManager.
+     * Adds a series to the shared data pool under the given {@link SeriesRef} and refreshes
+     * its rows in the stats tabs. The data's legacy name field is ignored — identity comes
+     * from the ref. Legend and visibility are managed per-tab via VisualizationTabManager.
      */
-    void addSeriesToPool(SeriesRef ref, TimeSeriesData timeSeriesData) {
+    void publishSeries(SeriesRef ref, TimeSeriesData timeSeriesData) {
         plotDataSet.addSeries(ref, timeSeriesData);
+        tabManager.updateSeriesInStatsTabsWithAggregation(ref, timeSeriesData);
     }
 
     /**
@@ -1054,37 +1159,12 @@ public class RunManager extends JFrame {
             }
         }
 
-        // Drop them from the shared pool, the per-context cache, and slot assignment.
-        for (SeriesRef ref : refs) {
-            plotDataSet.removeSeries(ref);
-            seriesSlotManager.removeSlot(ref);
-        }
         datasetSeriesSources.keySet().removeIf(dsRef -> dsRef.datasetId().equals(absPath));
 
-        // Remove the tree node FIRST, exactly as run removal does (RunTreeController
-        // removes paths before removeRunData). If the dataset was checked, removePath
-        // fires the tick listener synchronously: its snapshot+reconcile prunes the
-        // dataset's sources AND series from the active tab in ONE history entry.
-        // Running the scrubs first pushed while the record still held the dead
-        // source, and the listener then pushed again without it — two entries
-        // differing only in sources, making the first Undo a visible no-op.
-        for (int i = 0; i < loadedDatasetsNode.getChildCount(); i++) {
-            DefaultMutableTreeNode child = (DefaultMutableTreeNode) loadedDatasetsNode.getChildAt(i);
-            var path = child.getPath();
-            if (child.getUserObject() == info) {
-                timeseriesSourceTree.removePath(new TreePath(path));
-                loadedDatasetsNode.remove(i);
-                treeModel.nodesWereRemoved(loadedDatasetsNode, new int[]{i}, new Object[]{child});
-                break;
-            }
-        }
-
-        // Strip them from every tab's selection, legend, visible-series, and stats,
-        // and forget the dataset from every tab's recorded source context. For the
-        // active tab these are no-ops (the listener above already did both, and the
-        // duplicate push dedupes); background tabs are scrubbed silently by design.
-        tabManager.removeSeriesFromAllTabs(refs);
-        tabManager.removeSourceFromAllTabs(new DatasetSource(absPath));
+        // Node first, exactly as run removal does: see removeSourceNode.
+        removeSourceNode(loadedDatasetsNode, info);
+        purgeSeries(refs, new DatasetSource(absPath));
+        derivedSeriesController.onOriginRemoved(new DatasetSource(absPath), info.fileName);
 
         if (statusUpdater != null) {
             statusUpdater.accept("Removed dataset: " + info.fileName);
@@ -1092,16 +1172,55 @@ public class RunManager extends JFrame {
     }
 
     /**
+     * Removes the child of {@code parent} holding {@code userObject} from the source tree.
+     *
+     * <p>Call before {@link #purgeSeries}. If the source was checked, removePath fires the
+     * tick listener synchronously: its snapshot+reconcile prunes the source AND its series
+     * from the active tab in ONE history entry. Purging first pushed while the record still
+     * held the dead source, and the listener then pushed again without it — two entries
+     * differing only in sources, making the first Undo a visible no-op.</p>
+     */
+    void removeSourceNode(DefaultMutableTreeNode parent, Object userObject) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
+            if (child.getUserObject() == userObject) {
+                timeseriesSourceTree.removePath(new TreePath(child.getPath()));
+                parent.remove(i);
+                treeModel.nodesWereRemoved(parent, new int[]{i}, new Object[]{child});
+                return;
+            }
+        }
+    }
+
+    /**
+     * Drops {@code refs} from the shared pool, their colour slots and every tab, and forgets
+     * {@code source} from every tab's recorded source context. For the active tab the tab
+     * scrubs are no-ops after {@link #removeSourceNode} (its listener already did both);
+     * background tabs are scrubbed silently by design.
+     */
+    void purgeSeries(List<SeriesRef> refs, SourceRef source) {
+        for (SeriesRef ref : refs) {
+            plotDataSet.removeSeries(ref);
+            seriesSlotManager.removeSlot(ref);
+        }
+        tabManager.removeSeriesFromAllTabs(refs);
+        tabManager.removeSourceFromAllTabs(source);
+    }
+
+    /**
      * Projects a source-tree node's user object to its stable {@link SourceRef}
      * identity, or {@code null} for anything that isn't a data source (category
      * headers, the root).
      */
-    private SourceRef sourceRefForNode(Object userObject) {
+    SourceRef sourceRefForNode(Object userObject) {
         if (userObject instanceof RunInfoImpl runInfo) {
             return runInfo.isLastAlias() ? new LastSource() : new RunSource(runInfo.getRunId());
         }
         if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
             return new DatasetSource(info.file.getAbsolutePath());
+        }
+        if (userObject instanceof DerivedSeriesInfo derived) {
+            return new DerivedSeriesSource(derived.id);
         }
         return null;
     }
@@ -1175,11 +1294,14 @@ public class RunManager extends JFrame {
             case LastSource ignored -> lastRunNode;
             case RunSource ignored -> currentRunsNode;
             case DatasetSource ignored -> loadedDatasetsNode;
+            case DerivedSeriesSource ignored -> derivedSeriesNode;
         };
-        for (int i = 0; i < parent.getChildCount(); i++) {
-            DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
-            if (ref.equals(sourceRefForNode(child.getUserObject()))) {
-                return new TreePath(child.getPath());
+        // Traverse all descendants; derived series sit a level further down.
+        Enumeration<TreeNode> nodes = parent.preorderEnumeration();
+        while (nodes.hasMoreElements()) {
+            DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes.nextElement();
+            if (node != parent && ref.equals(sourceRefForNode(node.getUserObject()))) {
+                return new TreePath(node.getPath());
             }
         }
         return null;
