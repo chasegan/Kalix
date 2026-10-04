@@ -507,10 +507,21 @@ public class OutputsTreeBuilder {
      */
     private List<String> matchingSeries(Object source, List<String> seriesNames) {
         if (!filter.isActive()) return seriesNames;
-        String sourceLabel = labelResolver.sourceLabel(refForSource.apply(seriesNames.get(0), source));
+        String sourceLabel = sourceLabelOf(source, seriesNames.get(0));
         return seriesNames.stream()
             .filter(seriesName -> filter.matches(seriesName, sourceLabel))
             .collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    /**
+     * The label the tree shows for {@code source}, or null for a source of unknown
+     * type. Every series of a source projects to the same label, so any one of
+     * its series will do; it goes through a ref so that the resolver stays the
+     * only author of labels (ADR-0003 §2.3).
+     */
+    private String sourceLabelOf(Object source, String anySeriesName) {
+        SeriesRef ref = refForSource.apply(anySeriesName, source);
+        return ref == null ? null : labelResolver.sourceLabel(ref);
     }
 
     // ========== Inner Classes ==========
