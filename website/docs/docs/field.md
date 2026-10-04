@@ -334,7 +334,8 @@ crop_1_viable_area = if(this.crop_1_ks[-1, 0] < 0.2, 0, this.crop_1_area[-1, 0])
 ```
 
 With no rule written, the field applies its own: a crop whose stress coefficient is 0.05 or below
-at the start of the day dies. Because stress reduces evapotranspiration, a dry bucket empties
+at the start of the day dies. We have included a default, because crops aren't immortal.
+Because stress reduces evapotranspiration, a dry bucket empties
 along a flattening curve, and that default is slow to arrive; a written rule can be quicker.
 
 #### Ordering
