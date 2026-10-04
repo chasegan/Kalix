@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600" font-family="IBM Plex Sans, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#1a232b">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="684" viewBox="0 0 900 684" font-family="IBM Plex Sans, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#1a232b">
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2a6a97"/></marker>
     <marker id="arrow-grey" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6f7d88"/></marker>
@@ -13,84 +13,95 @@
     .small { font-size:13px; fill:#52606b; }
     .mono { font-family: IBM Plex Mono, Menlo, Consolas, monospace; font-size:12.5px; }
     .step { font-size:12px; fill:#ffffff; font-weight:600; }
+    .air { font-size:13px; fill:#96631a; }
   </style>
 
-  <!-- surface -->
-  <line x1="30" y1="262" x2="750" y2="262" stroke="#cdd6de" stroke-width="1.5"/>
-  <text x="34" y="256" class="small">surface</text>
+  <!-- the air: everything amber leaves the model here -->
+  <text x="40" y="30" class="air" font-weight="600">to the air</text>
+  <text x="40" y="47" class="air">vapour leaves the model</text>
+  <line x1="40" y1="56" x2="860" y2="56" stroke="#e6d3a6" stroke-width="1" stroke-dasharray="3 4"/>
 
-  <!-- rain: runoff is taken first, interception from what is left -->
-  <text x="300" y="34" class="lbl" font-weight="600">rain</text>
-  <path class="wl" d="M312,42 L312,252"/>
-  <path class="w" d="M312,252 L312,254"/>
-  <path class="w" d="M312,86 C312,120 420,100 500,140 L765,140"/>
-  <text x="520" y="84" class="lbl">storm runoff</text>
-  <text x="520" y="101" class="small">taken first, from the gross rain; only with a</text>
-  <text x="520" y="117" class="small">curve_number, and by the bucket's wetness</text>
-  <path class="v" d="M312,165 C335,165 345,150 370,146"/>
-  <text x="378" y="152" class="lbl">intercepted</text>
-  <text x="378" y="169" class="mono">min(rain − runoff, interception × evap)</text>
-  <text x="230" y="215" class="small">what reaches</text>
-  <text x="230" y="231" class="small">the soil</text>
-  <circle cx="290" cy="245" r="9" fill="#2a6a97"/><text x="290" y="249" text-anchor="middle" class="step">4</text>
+  <!-- surface -->
+  <line x1="40" y1="282" x2="750" y2="282" stroke="#cdd6de" stroke-width="1.5"/>
+  <text x="44" y="276" class="small">surface</text>
+
+  <!-- rain, with storm runoff taken first and interception from what is left -->
+  <text x="300" y="86" class="lbl" font-weight="600">rain</text>
+  <path class="wl" d="M312,94 L312,272"/>
+  <path class="w" d="M312,272 L312,274"/>
+  <path class="w" d="M312,120 C312,150 420,135 500,172 L765,172"/>
+  <text x="520" y="118" class="lbl">storm runoff</text>
+  <text x="520" y="135" class="small">taken first, from the gross rain; only with a</text>
+  <text x="520" y="151" class="small">curve_number, and by the bucket's wetness</text>
+  <path class="v" d="M312,190 C280,190 250,180 250,150 L250,66"/>
+  <text x="120" y="112" class="lbl">intercepted</text>
+  <text x="120" y="129" class="small">wets the canopy and</text>
+  <text x="120" y="145" class="small">evaporates</text>
+  <text x="60" y="176" class="mono">min(rain − runoff,</text>
+  <text x="60" y="192" class="mono">    interception × evap)</text>
+  <text x="330" y="235" class="small">what reaches the soil</text>
+  <circle cx="290" cy="262" r="10" fill="#2a6a97"/><text x="290" y="266" text-anchor="middle" class="step">4</text>
+
+  <!-- evapotranspiration -->
+  <path class="v" d="M470,288 L470,66"/>
+  <text x="482" y="222" class="lbl">evapotranspiration</text>
+  <text x="482" y="239" class="mono">ks × kc × evap</text>
+  <text x="482" y="256" class="small">at most the water held</text>
+  <circle cx="440" cy="262" r="10" fill="#96631a"/><text x="440" y="266" text-anchor="middle" class="step">2–3</text>
 
   <!-- irrigation -->
-  <text x="30" y="300" class="lbl" font-weight="600">irrigation</text>
-  <text x="30" y="318" class="small">up to the crop's order due,</text>
-  <text x="30" y="334" class="small">or its share of water beyond</text>
-  <text x="30" y="350" class="small">the orders; never more than</text>
-  <text x="30" y="366" class="small">the bucket has room for</text>
-  <path class="w" d="M42,376 L42,392 L236,392"/>
-  <circle cx="110" cy="392" r="9" fill="#2a6a97"/><text x="110" y="396" text-anchor="middle" class="step">5</text>
-  <path class="g" d="M170,392 C182,392 182,418 182,434"/>
-  <text x="30" y="458" class="lbl">escape</text>
-  <text x="30" y="475" class="mono">supply × (1 − efficiency)</text>
-  <text x="30" y="492" class="small">leaves the model here</text>
+  <text x="40" y="322" class="lbl" font-weight="600">irrigation</text>
+  <text x="40" y="340" class="small">up to the crop's order due,</text>
+  <text x="40" y="356" class="small">or its share of water beyond</text>
+  <text x="40" y="372" class="small">the orders; never more than</text>
+  <text x="40" y="388" class="small">the bucket has room for</text>
+  <path class="w" d="M52,398 L52,414 L236,414"/>
+  <circle cx="120" cy="414" r="10" fill="#2a6a97"/><text x="120" y="418" text-anchor="middle" class="step">5</text>
+  <path class="g" d="M180,414 C192,414 192,440 192,456"/>
+  <text x="40" y="480" class="lbl">escape</text>
+  <text x="40" y="497" class="mono">supply × (1 − efficiency)</text>
+  <text x="40" y="514" class="small">spray, drift, delivery loss:</text>
+  <text x="40" y="530" class="small">leaves the model here</text>
 
-  <!-- root bucket: green is the root zone, as in the other diagrams -->
-  <rect x="240" y="268" width="320" height="160" fill="#d7e8c6" stroke="#2f6b4f" stroke-width="1.6"/>
-  <rect x="241" y="316" width="318" height="111" fill="#bcd6e8"/>
-  <line x1="241" y1="316" x2="559" y2="316" stroke="#2a6a97" stroke-width="1.5"/>
-  <text x="250" y="288" class="lbl" font-weight="600">root bucket</text>
-  <text x="352" y="288" class="small">holds TAW between full and empty</text>
-  <text x="250" y="306" class="mono">TAW = available_water × root_depth / 1000</text>
-  <text x="250" y="414" class="small">the plants and the irrigator work this</text>
-  <path d="M568,270 L576,270 L576,314 L568,314" fill="none" stroke="#1a232b" stroke-width="1.2"/>
-  <text x="584" y="282" class="lbl">depletion</text>
-  <text x="584" y="299" class="small">0 when full,</text>
-  <text x="584" y="314" class="small">TAW when empty</text>
-  <path d="M568,318 L576,318 L576,426 L568,426" fill="none" stroke="#1a232b" stroke-width="1.2"/>
-  <text x="584" y="376" class="lbl">water held</text>
+  <!-- root bucket -->
+  <rect x="240" y="290" width="320" height="160" fill="#d7e8c6" stroke="#2f6b4f" stroke-width="1.6"/>
+  <rect x="241" y="338" width="318" height="111" fill="#bcd6e8"/>
+  <line x1="241" y1="338" x2="559" y2="338" stroke="#2a6a97" stroke-width="1.5"/>
+  <text x="250" y="310" class="lbl" font-weight="600">root bucket</text>
+  <text x="352" y="310" class="small">holds TAW between full and empty</text>
+  <text x="250" y="328" class="mono">TAW = available_water × root_depth / 1000</text>
+  <text x="250" y="436" class="small">the plants and the irrigator work this</text>
+  <path d="M568,292 L576,292 L576,336 L568,336" fill="none" stroke="#1a232b" stroke-width="1.2"/>
+  <text x="584" y="304" class="lbl">depletion</text>
+  <text x="584" y="321" class="small">0 when full,</text>
+  <text x="584" y="336" class="small">TAW when empty</text>
+  <path d="M568,340 L576,340 L576,448 L568,448" fill="none" stroke="#1a232b" stroke-width="1.2"/>
+  <text x="584" y="398" class="lbl">water held</text>
 
-  <!-- ET -->
-  <path class="v" d="M470,268 L470,196"/>
-  <text x="480" y="208" class="lbl">evapotranspiration</text>
-  <text x="480" y="225" class="mono">ks × kc × evap</text>
-  <text x="480" y="241" class="small">at most the water held</text>
-  <circle cx="446" cy="248" r="10" fill="#96631a"/><text x="446" y="252" text-anchor="middle" class="step">2–3</text>
-
-  <!-- layers below -->
-  <rect x="240" y="444" width="320" height="42" fill="#e8d9bd" stroke="#1a232b" stroke-width="1.5"/>
-  <rect x="241" y="462" width="318" height="23" fill="#bcd6e8"/>
-  <text x="250" y="459" class="small">layer below the roots · its own depletion</text>
-  <rect x="240" y="500" width="320" height="42" fill="#e8d9bd" stroke="#1a232b" stroke-width="1.5"/>
-  <rect x="241" y="512" width="318" height="29" fill="#bcd6e8"/>
-  <text x="250" y="515" class="small">next layer · its own depletion</text>
-  <text x="240" y="568" class="small">below the deepest roots on the field, nothing draws</text>
-  <path class="w" d="M360,428 L360,444"/>
-  <path class="w" d="M360,486 L360,500"/>
-  <text x="372" y="497" class="small">overflow fills each layer in turn</text>
-  <path class="w" d="M560,521 L765,521"/>
-  <text x="755" y="544" text-anchor="end" class="small">past the last layer</text>
+  <!-- layers below the roots, with room for the overflow arrows to be arrows -->
+  <path class="w" d="M360,450 L360,484"/>
+  <text x="372" y="472" class="small">overflow, when the bucket would be more than full</text>
+  <rect x="240" y="486" width="320" height="42" fill="#e8d9bd" stroke="#1a232b" stroke-width="1.5"/>
+  <rect x="241" y="504" width="318" height="23" fill="#bcd6e8"/>
+  <text x="250" y="501" class="small">layer below the roots · its own depletion</text>
+  <path class="w" d="M360,528 L360,562"/>
+  <text x="372" y="550" class="small">then the next, in turn</text>
+  <rect x="240" y="564" width="320" height="42" fill="#e8d9bd" stroke="#1a232b" stroke-width="1.5"/>
+  <rect x="241" y="576" width="318" height="29" fill="#bcd6e8"/>
+  <text x="250" y="579" class="small">next layer · its own depletion</text>
+  <path class="w" d="M560,585 L765,585"/>
+  <text x="755" y="606" text-anchor="end" class="small">past the last layer</text>
+  <text x="240" y="632" class="small">below the deepest roots on the field, nothing draws</text>
+  <text x="240" y="652" class="small">The numbers are steps 2 to 5 of "How the node works".</text>
+  <text x="240" y="670" class="small">Step 1, planting, moves land rather than water: it is the land diagram.</text>
 
   <!-- excess channel -->
-  <rect x="768" y="130" width="122" height="410" fill="#e9f1f7" stroke="#bcd6e8" rx="6"/>
-  <text x="829" y="158" text-anchor="middle" class="lbl" font-weight="600">excess</text>
-  <text x="829" y="177" text-anchor="middle" class="small">all the rain the</text>
-  <text x="829" y="193" text-anchor="middle" class="small">paddock sheds</text>
-  <text x="829" y="482" text-anchor="middle" class="small">split by</text>
-  <text x="829" y="500" text-anchor="middle" class="mono">return_fraction</text>
-  <path class="w" d="M829,540 L829,566"/>
-  <text x="829" y="586" text-anchor="middle" class="small">ds_1 river · ds_2 farm</text>
-  <text x="240" y="590" class="small">the numbers are the steps of "How the node works"</text>
+  <rect x="768" y="160" width="122" height="450" fill="#e9f1f7" stroke="#bcd6e8" rx="6"/>
+  <text x="829" y="190" text-anchor="middle" class="lbl" font-weight="600">excess</text>
+  <text x="829" y="209" text-anchor="middle" class="small">all the rain the</text>
+  <text x="829" y="225" text-anchor="middle" class="small">paddock sheds</text>
+  <text x="829" y="552" text-anchor="middle" class="small">split by</text>
+  <text x="829" y="570" text-anchor="middle" class="mono">return_fraction</text>
+  <path class="w" d="M829,610 L829,634"/>
+  <text x="829" y="654" text-anchor="middle" class="small">ds_1 river · ds_2 farm</text>
 </svg>
