@@ -1,7 +1,8 @@
-// Tests for the field node SKELETON: a water demand that places orders
-// upstream (as a regulated user does), takes its order from what arrives, and
-// passes the rest to ds_1, which is a drain: the links leaving a field are
-// not regulated. There is no soil store yet.
+// Tests for the field as a water demand: it places orders upstream (as a
+// regulated user does), takes its order from what arrives, and passes the
+// rest to ds_1, which is a drain: the links leaving a field are not
+// regulated. The rigs grow one bottomless crop (a 1000 mm bucket, empty at
+// the start, kept alive by a viable_area rule) so every order is taken.
 
 use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
@@ -42,6 +43,7 @@ fallow = bare
 crop_1 = thirsty
 crop_1_plant = 1
 crop_1_plant_area = 1
+crop_1_viable_area = this.area
 loc = 0, 20
 {field}
 ds_1 = outlet
@@ -174,6 +176,7 @@ fallow = bare
 crop_1 = thirsty
 crop_1_plant = 1
 crop_1_plant_area = 1
+crop_1_viable_area = this.area
 loc = 10, 30
 crop_1_order = 3
 ds_1 = junction

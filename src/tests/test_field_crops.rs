@@ -371,3 +371,15 @@ fn test_a_field_outside_every_regulated_zone_plants_irrigates_and_records_no_ord
     assert_eq!(s(&mut model, "supply")[1], 5.0);
     assert_eq!(s(&mut model, "bypass")[1], 15.0);
 }
+
+#[test]
+fn test_a_standing_trigger_replants_on_the_day_of_harvest() {
+    // season_len 2 and a trigger that is always true: the crop is harvested at the start of
+    // every third day and planted again the same morning, so its area never shows a gap and
+    // days runs 0, 1, 0, 1, ...
+    let ini = rig("", "evap = 0\ncrop_1 = shallow\ncrop_1_plant = 1\ncrop_1_plant_area = 1")
+        .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 1\nseason_len = 2\n");
+    let mut model = run(&ini);
+    assert_eq!(s(&mut model, "crop_1_days")[..5], [0.0, 1.0, 0.0, 1.0, 0.0]);
+    assert_eq!(s(&mut model, "crop_1_area")[..5], [1.0; 5]);
+}
