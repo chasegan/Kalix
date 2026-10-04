@@ -12,7 +12,8 @@ import java.util.regex.PatternSyntaxException;
  * backslash (node names may contain spaces). A backslash also stops a {@code "} or
  * {@code /} from closing its term; outside a regex it is dropped, keeping the character
  * after it. A closing quote or slash must be followed by a space or the end. A leading
- * {@code !} makes a term exclude; a lone {@code !} or {@code ""} is ignored as half-typed.
+ * {@code !} makes a term exclude; a trailing lone {@code !} or a {@code ""} is ignored as
+ * half-typed, and a {@code !} followed by a space is an error.
  * A series shows if all include terms match it (or there are none) and no exclude term
  * does. Each term is tested against the series name and, separately, the source label,
  * ignoring case:</p>
@@ -63,6 +64,11 @@ public final class SeriesFilter {
         int i = exclude ? 1 : 0;
         if (i == text.length()) {
             return new Term(exclude, Kind.TEXT, "", "");
+        }
+        // A trailing lone ! is half-typed and skipped; one followed by a space would
+        // silently include what the user meant to exclude.
+        if (exclude && Character.isWhitespace(text.charAt(i))) {
+            throw new SyntaxException("Put the term straight after !");
         }
         char open = text.charAt(i);
         if (open == '"' || open == '/') {

@@ -145,8 +145,6 @@ class SeriesFilterTest {
         assertTrue(matches("inflow\tds_1", "node.inflow_3.ds_1"));
         assertTrue(matches("  /inflow/   ds_1  ", "node.inflow_3.ds_1"));
         assertTrue(matches("inflow !", "node.inflow_3.ds_1"));
-        assertTrue(matches("! inflow", "node.inflow_3.ds_1"));
-        assertFalse(matches("! inflow", "node.gr4j_1.ds_1"));
         assertSame(SeriesFilter.NONE, SeriesFilter.parse("\"\""));
     }
 
@@ -157,6 +155,9 @@ class SeriesFilterTest {
         assertMessage("Put a space after the closing / of a regex, or write \\/ for a slash inside it", "/a/b");
         assertMessage("Put a space after the closing / of a regex, or write \\/ for a slash inside it", "/[/]/");
         assertMessage("Put a space after the closing quote", "\"a\"b");
+        // A ! with a space after it would turn the exclusion into an inclusion.
+        assertMessage("Put the term straight after !", "! inflow");
+        assertMessage("Put the term straight after !", "inflow ! dummy");
         assertThrows(SeriesFilter.SyntaxException.class, () -> SeriesFilter.parse("/(/"));
         assertThrows(SeriesFilter.SyntaxException.class, () -> SeriesFilter.parse("!/"));
     }
