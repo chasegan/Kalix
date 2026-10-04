@@ -99,6 +99,23 @@ fn soil_day(profile: &Profile, partition: &mut Partition, p: f64, kc: f64, evap_
     (ks, et_mm, excess_mm)
 }
 
+/// Storm runoff off a partition's surface from a day's rain, by the USDA-NRCS curve
+/// number: S = 254 (100/CN − 1) mm of retention, runoff once the rain exceeds the initial
+/// abstraction 0.2 S. The day's curve sits between the dry one (CN1, at wilting point) and
+/// the wet one (CN3, at field capacity) by the root bucket's wetness, as APSIM chooses it.
+/// Rain only: irrigation never runs through it.
+fn curve_number_runoff(cn_dry: f64, cn_wet: f64, partition: &Partition, rain_mm: f64) -> f64 {
+    let wetness = (1.0 - partition.root_depletion / partition.root_capacity).clamp(0.0, 1.0);
+    let cn = cn_dry + (cn_wet - cn_dry) * wetness;
+    let s = 254.0 * (100.0 / cn - 1.0);
+    let initial_abstraction = 0.2 * s;
+    if rain_mm > initial_abstraction {
+        (rain_mm - initial_abstraction).powi(2) / (rain_mm + 0.8 * s)
+    } else {
+        0.0
+    }
+}
+
 /// An irrigated field: paddocks under crops that dry by evapotranspiration,
 /// fill with rain and irrigation, and order water upstream to meet their
 /// deficits. Each crop's root zone is the FAO-56 daily depletion balance with
@@ -135,6 +152,7 @@ pub struct FieldNode {
     pub efficiency: f64,            // share of supply that reaches the soil at all; the rest escapes
     pub interception: f64,          // fraction of evap that rain must exceed to reach the soil (FAO-56: 0.2)
     pub return_fraction: f64,       // share of the excess that the farm catches: it goes down ds_2 as return_flow
+    pub curve_number: Option<f64>,  // USDA-NRCS CN2 for storm runoff off the paddock surface; None, saturation excess only
     pub rain_input: DynamicInput,   // mm
     pub evap_input: DynamicInput,   // mm, the reference the kc values were derived for
     pub fallow: Option<Crop>,       // the crop that covers what is not planted; required
@@ -150,6 +168,8 @@ pub struct FieldNode {
     fallow_partition: Partition,
     fallow_days: u32,
     planting_done: bool,            // this step's planting ran in the order phase
+    cn_dry: f64,                    // the curve numbers at wilting point and at field capacity (CN1, CN3)
+    cn_wet: f64,
     usflow: f64,
     dsflow_primary: f64,
     dsflow_return: f64,
@@ -344,6 +364,19 @@ impl Node for FieldNode {
         if !(self.return_fraction >= 0.0 && self.return_fraction <= 1.0) {
             return Err(format!("Error in node '{}'. return_fraction must be between 0 and 1, got {}.", self.name, self.return_fraction));
         }
+        if let Some(cn) = self.curve_number {
+            if !(cn > 0.0 && cn <= 100.0) {
+                return Err(format!("Error in node '{}'. curve_number must be greater than 0 and at most 100, got {}.", self.name, cn));
+            }
+            // The curve number method is defined on daily rain totals. step_size is 0 on the
+            // configure-time pass and set when the network is initialised.
+            if data_cache.step_size != 0 && data_cache.step_size != 86400 {
+                return Err(format!("Error in node '{}'. curve_number is defined for daily rain totals; the model's step is {} seconds.", self.name, data_cache.step_size));
+            }
+            // The dry and wet curves from the tabled average one, as APSIM derives them
+            self.cn_dry = cn / (2.334 - 0.01334 * cn);
+            self.cn_wet = cn / (0.4036 + 0.005964 * cn);
+        }
         let Some(fallow) = &self.fallow else {
             return Err(format!("Error in node '{}'. A field needs a fallow: the crop that covers what is not planted (fallow = <crop>).", self.name));
         };
@@ -479,29 +512,37 @@ impl Node for FieldNode {
         let rain_mm = self.rain_input.get_value(data_cache).max(0.0);
         let evap_mm = self.evap_input.get_value(data_cache).max(0.0);
 
-        // 2. Each partition runs its day on its own bucket. Rain goes on the soil less what
-        //    the canopy intercepts and evaporates (FAO-56: a share of the day's reference
-        //    evapotranspiration, 0.2 by default), the same over every partition.
-        let intercepted_mm = rain_mm.min(self.interception * evap_mm);
-        let effective_rain_mm = rain_mm - intercepted_mm;
+        // 2. Each partition runs its day on its own bucket. With a curve number, the storm
+        //    runoff off the surface comes first, by the partition's wetness. Then rain goes on
+        //    the soil less what the canopy intercepts and evaporates (FAO-56: a share of the
+        //    day's reference evapotranspiration, 0.2 by default).
+        let curve = self.curve_number.map(|_| (self.cn_dry, self.cn_wet));
+        let mut intercepted_ml = 0.0;
         let mut et_ml = 0.0;
         let mut excess = 0.0;
         {
             let fallow = self.fallow.as_ref().expect("initialise checked the fallow");
             let kc = fallow.kc.at(self.fallow_days as f64);
             self.fallow_days += 1;
-            let (_, et_mm, excess_mm) = soil_day(&self.profile, &mut self.fallow_partition, fallow.p, kc, evap_mm, effective_rain_mm);
+            let runoff_mm = curve.map_or(0.0, |(dry, wet)| curve_number_runoff(dry, wet, &self.fallow_partition, rain_mm));
+            let intercepted_mm = (rain_mm - runoff_mm).min(self.interception * evap_mm);
+            let (_, et_mm, excess_mm) = soil_day(&self.profile, &mut self.fallow_partition, fallow.p, kc, evap_mm, rain_mm - runoff_mm - intercepted_mm);
+            intercepted_ml += intercepted_mm * self.fallow_partition.area;
             et_ml += et_mm * self.fallow_partition.area;
-            excess += excess_mm * self.fallow_partition.area;
+            excess += (runoff_mm + excess_mm) * self.fallow_partition.area;
         }
         for slot in &mut self.slots {
             if !slot.in_ground { continue; }
             let kc = slot.crop.kc.at(slot.days as f64);
-            let (ks, et_mm, excess_mm) = soil_day(&self.profile, &mut slot.partition, slot.crop.p, kc, evap_mm, effective_rain_mm);
+            let runoff_mm = curve.map_or(0.0, |(dry, wet)| curve_number_runoff(dry, wet, &slot.partition, rain_mm));
+            let intercepted_mm = (rain_mm - runoff_mm).min(self.interception * evap_mm);
+            let (ks, et_mm, excess_mm) = soil_day(&self.profile, &mut slot.partition, slot.crop.p, kc, evap_mm, rain_mm - runoff_mm - intercepted_mm);
             slot.ks = ks;
+            intercepted_ml += intercepted_mm * slot.partition.area;
             et_ml += et_mm * slot.partition.area;
-            excess += excess_mm * slot.partition.area;
+            excess += (runoff_mm + excess_mm) * slot.partition.area;
         }
+        let intercepted_mm = intercepted_ml / self.area;
 
         // 3. Irrigation. Each crop in the ground takes up to its own order due, no more than
         //    its root zone has room for after the rain, allowing for the share that escapes
@@ -522,6 +563,8 @@ impl Node for FieldNode {
         let supply = self.usflow - bypass;
         let escape = supply * (1.0 - self.efficiency);
 
+        // excess is all the rain the paddocks shed: storm runoff off the surface, and the
+        // overflow of a full profile.
         // Water leaves on two links and nothing is lost here. ds_1: the bypass, which the
         // irrigator did not take, and the river's share of the runoff. ds_2: the share the farm
         // catches, return_flow, for the modeller to drain, or to feed back to the farm storage

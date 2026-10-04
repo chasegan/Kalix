@@ -1163,6 +1163,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "efficiency" {
                             n.efficiency = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: efficiency must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
+                        } else if name_lower == "curve_number" {
+                            n.curve_number = Some(v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: curve_number must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?);
                         } else if name_lower == "fallow" {
                             let idx = model.crops.get_idx(v)
                                 .ok_or_else(|| KalixIoError::Validate(format!("Error on line {}: No crop '{}' is declared for the fallow of node '{}' (a [crop.{}] section)", ini_property.line_number, v, node_name, v)))?;
@@ -1831,6 +1834,9 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "efficiency", &format_f64(n.efficiency), "1");
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "interception", &format_f64(n.interception), "0.2");
                 set_property_unless_default(&mut ini_doc, section_name.as_str(), "return_fraction", &format_f64(n.return_fraction), "0");
+                if let Some(cn) = n.curve_number {
+                    ini_doc.set_property(section_name.as_str(), "curve_number", format_f64(cn).as_str());
+                }
                 if let Some(fallow) = &n.fallow {
                     ini_doc.set_property(section_name.as_str(), "fallow", fallow.name.as_str());
                 }

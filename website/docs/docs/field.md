@@ -89,6 +89,7 @@ dries.
 | interception (optional) | Rain reaches the soil only beyond this fraction of the day's `evap`; the rest wets the canopy and evaporates (`intercepted`). Default 0.2, FAO-56's interception loss. Write `0` to take rain as given. Example: `interception = 0.2` |
 | return\_fraction (optional) | The share of the field's runoff (`excess`) that the farm's drains catch. It leaves on `ds_2` as `return_flow`; the rest goes down `ds_1` with the bypass. Default 0. See [Returning runoff to the farm storage](#returning-runoff-to-the-farm-storage). Example: `return_fraction = 0.8` |
 | initial\_depletion (optional) | How far below full the soil starts, over the whole profile to the deepest roots [mm], every layer alike. Default 0, a full profile top to bottom. Example: `initial_depletion = 20` |
+| curve\_number (optional) | The USDA-NRCS curve number for storm runoff off the paddock surface: the tabled value for average antecedent conditions (CN2), by cover and hydrologic soil group. Each day the curve is chosen between the dry and wet ones by each partition's wetness, so a crop held near full sheds more than the dry fallow beside it. Omitted, rain runs off only when the profile is full. Rain only, never irrigation; daily steps only. See [Storm runoff](#storm-runoff). Example: `curve_number = 85` |
 | crop\_N (optional) | The crop in slot N, for N from 1 to 4: the name of a `[crop.*]` section. Slots are numbered without gaps. Example: `crop_1 = cotton` |
 | crop\_N\_plant (compulsory with crop\_N) | An expression, read every day the slot is empty: true plants the crop, taking area from the fallow with its water. A slot already in the ground does not fire; where two fire the same day, the lower N plants first. A trigger that stays true plants again the day after a harvest. Example: `crop_1_plant = sim.month == 10 && sim.day == 15` |
 | crop\_N\_plant\_area (compulsory with crop\_N) | The area planted [km²], read on the day the trigger fires, capped at the fallow's area that day. Example: `crop_1_plant_area = min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8)` |
@@ -116,7 +117,7 @@ dries.
 | rain\_vol | Rain on the field [ML]: `rain × area` |
 | intercepted | Rain that did not reach the soil [mm]: `min(rain, interception × evap)` |
 | evap | The value of the `evap` expression [mm] |
-| excess | Rain the soil could not hold, to the bottom of the deepest roots [ML]: the runoff, split between `ds_1` and `ds_2` by `return_fraction` |
+| excess | All the rain the paddocks shed [ML]: storm runoff off the surface where a `curve_number` is set, and the overflow of a profile full to the deepest roots. Split between `ds_1` and `ds_2` by `return_fraction` |
 | supply | The water the field takes from what arrives [ML] |
 | escape | The share of `supply` that does not reach the soil [ML], which leaves the model here |
 | bypass | The water that arrives and is not taken [ML], passed down `ds_1` whole: the irrigator would have refused it at the pump |
@@ -207,9 +208,11 @@ In this order:
 3. **Evapotranspiration.** `et = ks × kc × evap`, no more than the water the bucket holds, with
    `kc` from the crop's curve at its days since planting (the fallow's counts from the start of
    the run).
-4. **Rain** goes on every partition, less `intercepted = min(rain, interception × evap)`. What
-   would take a bucket below zero drains into the layers below it, filling each in turn; what
-   passes the last layer leaves as `excess`.
+4. **Rain.** With a `curve_number`, each partition first sheds storm runoff by its own
+   wetness (see [Storm runoff](#storm-runoff)). The rest goes on the soil, less
+   `intercepted = min(rain, interception × evap)`. What would take a bucket below zero drains
+   into the layers below it, filling each in turn; what passes the last layer leaves with the
+   runoff as `excess`.
 5. **Irrigation.** Each crop in the ground takes from what arrives up to its own `order_due`,
    and no more than its bucket has room for after the rain, allowing for the share that
    escapes: `room / efficiency`. Water arriving beyond the orders is a forced watering the
@@ -228,6 +231,33 @@ running off a bucket that irrigation has just filled. Effective rainfall is `rai
 water held is every partition's buckets and layers; the results show the buckets
 (`crop_N_depletion`, `fallow_depletion`), and the layers below the roots hold the rest. Nothing
 leaves the field except on its links, as evapotranspiration, intercepted rain or escape.
+
+#### Storm runoff
+
+Without a curve number a paddock sheds rain only by saturation excess: when the whole profile,
+to the deepest roots, is full. That is how the FAO-56 bucket works, and how NSW's river system
+models estimate runoff from cropped areas. The curve number adds the other mechanism, rain the
+surface cannot take in a storm, by the USDA-NRCS method that the irrigation industry's own
+assessments use. With `curve_number` set to the tabled CN2 for the cover and hydrologic soil
+group, each partition each day:
+
+```
+wetness = 1 − D / TAW                      the root bucket, 0 at wilting point, 1 at field capacity
+CN      = CN1 + (CN3 − CN1) × wetness      between the dry and wet curves derived from CN2
+S       = 254 × (100 / CN − 1)             mm of retention
+runoff  = (rain − 0.2 S)² / (rain + 0.8 S)   when rain > 0.2 S, else 0
+```
+
+CN1 and CN3 are the standard dry and wet curves (`CN2 / (2.334 − 0.01334 CN2)` and
+`CN2 / (0.4036 + 0.005964 CN2)`), and choosing the day's curve by soil wetness is what APSIM,
+HowLeaky and pyfao56 do; the tabled initial abstraction of 0.2 S is kept because the tables are
+defined on it. Runoff is taken from the gross rain before interception, so a modeller who
+wants the two not to overlap writes `interception = 0`. Irrigation never runs through it:
+application losses are `efficiency`. The method is defined on daily rain totals, and a model
+with another step refuses it at load.
+
+A field's runoff is not a catchment's. If the field's area also lies inside a rainfall-runoff
+node's catchment, both will generate runoff from the same rain.
 
 #### The irrigation rule
 
@@ -388,6 +418,16 @@ choice is not in FAO-56, the reference it follows is given.
 - Raes, D., Steduto, P., Hsiao, T.C. and Fereres, E. (2026). *AquaCrop Reference Manual, version
   7.3*, Chapter 3. Drainage is zero at or below field capacity (§3.7), which is why the layers
   keep their water; its convex stress curves (§3.2) are the alternative to FAO-56's linear Ks.
+- USDA-NRCS (2004). *National Engineering Handbook, Part 630 Hydrology, Chapter 10: Estimation
+  of direct runoff from storm rainfall.* The curve number method and its tables. Hawkins, R.H.,
+  Jiang, R., Woodward, D.E., Hjelmfelt, A.T. and Van Mullem, J.A. (2002), *Runoff curve number
+  method: examination of the initial abstraction ratio*, for the case that 0.05 S fits event
+  data better than the tabled 0.2 S.
+- APSIM Initiative. *SoilWat module*, runoff: the daily curve number interpolated between the
+  dry and wet curves by soil wetness, the form the field follows. NSW Department of Planning,
+  Industry and Environment (2019). *Assessment of the additional cropped area rainfall runoff
+  occurring due to irrigation*: the saturation-excess store of the NSW river models beside the
+  consultants' curve-number estimates for the same farms.
 - eWater. *Source Scientific Reference Guide: Irrigator Demand Model.* The fallow as a crop with
   its own depth and coefficient, the planting decision as an authored rule, the effective-rain
   form of interception, and crop death under sustained stress. Its assumption that the soil

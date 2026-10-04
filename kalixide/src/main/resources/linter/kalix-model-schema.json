@@ -443,6 +443,7 @@
         "interception",
         "return_fraction",
         "initial_depletion",
+        "curve_number",
         "crop_1",
         "crop_1_plant",
         "crop_1_plant_area",
@@ -512,6 +513,12 @@
           "type": "number",
           "min": 0,
           "description": "How far below full every layer of the soil starts, over the whole profile [mm], default 0"
+        },
+        "curve_number": {
+          "type": "number",
+          "min": 0,
+          "max": 100,
+          "description": "USDA-NRCS curve number (CN2, average antecedent condition) for storm runoff off the paddock surface; omitted, rain runs off only when the profile is full. Daily steps only"
         },
         "available_water": {
           "type": "number",

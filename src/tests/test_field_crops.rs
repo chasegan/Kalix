@@ -272,3 +272,64 @@ fn test_field_with_crops_round_trips() {
     assert_eq!(IniModelIO::model_to_string(&reloaded), rendered);
 }
 
+
+#[test]
+fn test_a_curve_number_sheds_storm_rain_by_the_paddocks_wetness() {
+    // All fallow (no slots), 4 km2 rooted to 500 mm at 100 mm/m: a 50 mm bucket. CN2 = 85, so
+    // the dry curve is 85 / (2.334 − 0.01334 × 85) = 70.83 and the wet one
+    // 85 / (0.4036 + 0.005964 × 85) = 93.35. 50 mm of rain on day 2.
+    let dry = "initial_depletion = 50\nrain = if(var.day.n == 2, 50, 0)\ncurve_number = 85";
+    let mut model = run(&rig("", dry));
+    // Bone dry: wetness 0, CN 70.83, S = 254 (100/70.83 − 1) = 104.6, initial abstraction 20.9,
+    // runoff (50 − 20.9)² / (50 + 83.7) = 6.32 mm. The other 43.68 mm go into the 50 mm room.
+    assert_close(s(&mut model, "excess")[1], 6.323638637769316 * 4.0, "storm runoff from a dry paddock, ML");
+    assert_close(s(&mut model, "fallow_depletion")[1], 50.0 - (50.0 - 6.323638637769316), "the rest infiltrated");
+    // Full: wetness 1, CN 93.35, S = 18.1, runoff 33.37 mm; the rest overflows a full profile,
+    // so all 50 mm leave
+    let wet = "rain = if(var.day.n == 2, 50, 0)\ncurve_number = 85";
+    let mut model = run(&rig("", wet));
+    assert_close(s(&mut model, "excess")[1], 50.0 * 4.0, "runoff and overflow together");
+    assert_close(s(&mut model, "fallow_depletion")[1], 0.0, "still full");
+    // Below the initial abstraction nothing runs off: 10 mm on the dry paddock all infiltrates
+    let small = "initial_depletion = 50\nrain = if(var.day.n == 2, 10, 0)\ncurve_number = 85";
+    let mut model = run(&rig("", small));
+    assert_eq!(s(&mut model, "excess")[1], 0.0);
+    assert_close(s(&mut model, "fallow_depletion")[1], 40.0, "all 10 mm in");
+    // Without a curve number the same dry paddock takes all 50 mm
+    let mut model = run(&rig("", "initial_depletion = 50\nrain = if(var.day.n == 2, 50, 0)"));
+    assert_eq!(s(&mut model, "excess")[1], 0.0);
+}
+
+#[test]
+fn test_irrigation_never_runs_through_the_curve_number_and_wet_crops_shed_more() {
+    // crop_1, 1 km2, kept full by a standing order; the 3 km2 fallow starts 50 mm down and
+    // nothing dries (evap 0). Day 3: 50 mm of rain. The crop sheds by the wet curve, the
+    // fallow by the dry one, and the irrigation delivered on day 2 shed nothing at all.
+    // (viable_area = 1 keeps the crop alive through its bone-dry first day.)
+    let field = "initial_depletion = 50\nevap = 0\nrain = if(var.day.n == 3, 50, 0)\ncurve_number = 85\ncrop_1 = shallow\ncrop_1_plant = var.day.n == 1\ncrop_1_plant_area = 1\ncrop_1_order = if(var.day.n == 2, 50, 0)\ncrop_1_viable_area = 1";
+    let mut model = run(&rig("", field));
+    assert_eq!(s(&mut model, "usflow")[1], 50.0);
+    assert_eq!(s(&mut model, "supply")[1], 50.0, "1 km2 x 50 mm of room, all taken");
+    assert_eq!(s(&mut model, "excess")[1], 0.0, "irrigation does not run off");
+    assert_eq!(s(&mut model, "crop_1_depletion")[1], 0.0);
+    // Day 3: the crop is full, so 33.37 mm run off it and the rest overflows: 50 mm x 1 km2.
+    // The fallow is dry: 6.32 mm x 3 km2.
+    assert_close(s(&mut model, "excess")[2], 50.0 * 1.0 + 6.323638637769316 * 3.0, "wet crop and dry fallow");
+    assert_close(s(&mut model, "fallow_depletion")[2], 6.323638637769316, "the fallow took the rest");
+    // The balance still closes: rain in = et + excess + change in what the buckets hold
+    let held = |m: &mut Model, t: usize| -(s(m, "crop_1_area")[t] * s(m, "crop_1_depletion")[t] + (4.0 - s(m, "crop_1_area")[t]) * s(m, "fallow_depletion")[t]);
+    field_balance_closes(&mut model, held);
+}
+
+#[test]
+fn test_curve_number_validation_and_round_trip() {
+    let mut bad = IniModelIO::read_model_string(&rig("", "curve_number = 0")).expect("loads");
+    let err = bad.configure().map(|_| ()).and_then(|_| bad.run()).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(err.contains("curve_number must be greater than 0 and at most 100"), "got: {err}");
+    let ini = rig("", "curve_number = 78");
+    let model = IniModelIO::read_model_string(&ini).expect("model should load");
+    let rendered = IniModelIO::model_to_string(&model);
+    assert!(rendered.contains("curve_number = 78"), "survives save:\n{rendered}");
+    let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig("", "")).unwrap());
+    assert!(!plain.contains("curve_number"), "absent stays absent");
+}
