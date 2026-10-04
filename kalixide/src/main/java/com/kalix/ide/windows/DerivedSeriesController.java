@@ -323,7 +323,11 @@ class DerivedSeriesController {
      * {@code pixieBackedLength} is its size if it is Pixie data at all. Both are 0 otherwise.
      */
     private record Read(String name, Supplier<CompletableFuture<TimeSeriesData>> read,
-                        int decodePoints, long pixieBackedLength) {
+                        int decodePoints, long pixieBackedLength, Runnable afterUse) {
+        Read(String name, Supplier<CompletableFuture<TimeSeriesData>> read,
+             int decodePoints, long pixieBackedLength) {
+            this(name, read, decodePoints, pixieBackedLength, () -> { });
+        }
     }
 
     /** Why an input can't be read; the message is ready to show. */
@@ -359,7 +363,12 @@ class DerivedSeriesController {
                 throw new CannotRead(originLabel(origin) + " has no session to read from.");
             }
             String sessionKey = session.getSessionKey();
-            return new Read(name, () -> timeSeriesRequestManager.requestTimeSeries(sessionKey, name), 0, 0);
+            // A run series fetched for the sum alone is dropped from the request cache once
+            // added, or a total of hundreds of nodes would hold hundreds of series the user
+            // never ticked for the life of the run. One already cached stays cached.
+            boolean cached = timeSeriesRequestManager.getTimeSeriesFromCache(sessionKey, name) != null;
+            return new Read(name, () -> timeSeriesRequestManager.requestTimeSeries(sessionKey, name), 0, 0,
+                cached ? () -> { } : () -> timeSeriesRequestManager.forgetCompleted(sessionKey, name));
         }
         if (source instanceof DatasetLoaderManager.LoadedDatasetInfo dataset) {
             String datasetId = dataset.file.getAbsolutePath();
@@ -538,6 +547,8 @@ class DerivedSeriesController {
             } catch (IllegalArgumentException e) {
                 failed.accept(where + " " + e.getMessage());
                 return;
+            } finally {
+                reads.get(index).afterUse().run();
             }
             index++;
             next();
