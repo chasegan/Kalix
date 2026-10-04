@@ -50,6 +50,7 @@ fn test_crop_validation_names_the_crop_and_the_line() {
     assert!(load_err(&model_with("[crop.cotton]\nroot_depth = 900\np = 1\nkc = 1")).contains("p must be at least 0 and less than 1"));
     assert!(load_err(&model_with("[crop.cotton]\nroot_depth = 900\nkc = 0, 0.3, 30, 0.5, 20, 1.0")).contains("kc table days must increase"));
     assert!(load_err(&model_with("[crop.cotton]\nroot_depth = 900\nkc = 0, 0.3, 30")).contains("as a number or a two-column table"));
+    assert!(load_err(&model_with("[crop.cotton]\nroot_depth = 900\nkc = Day, 0.3, 30, 0.5")).contains("starts with one label, 'Day'"));
     assert!(load_err(&model_with("[crop.cotton]\nroot_depth = 900\nkc = 1\nseason_len = 0")).contains("season_len must be at least 1 day"));
     assert!(load_err(&model_with("[crop.cotton]\nroot_depth = 900\nkc = 1\nseason_len = 90.5")).contains("season_len must be a whole number of days"));
     assert!(load_err(&model_with("[crop.cotton]\nroot_depth = 900\nkc = 1\nyield = 2")).contains("Unexpected property 'yield' in section '[crop.cotton]'"));

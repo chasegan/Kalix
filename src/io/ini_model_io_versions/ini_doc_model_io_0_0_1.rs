@@ -142,6 +142,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 "kc" => kc = Some(if let Ok(constant) = v.parse::<f64>() {
                     crate::hydrology::crop::KcCurve::Constant(constant)
                 } else {
+                    // A table's header, if any, is two labels: a label beside a number would
+                    // otherwise be read as a header and the number lost with it
+                    let cells: Vec<&str> = v.trim_end_matches(|c: char| c == ',' || c.is_whitespace()).split(',').map(|c| c.trim()).collect();
+                    if cells.len() >= 2 && cells[0].parse::<f64>().is_err() && cells[1].parse::<f64>().is_ok() {
+                        return Err(KalixIoError::Parse(format!("Error on line {}: kc for crop '{}' starts with one label, '{}'; a table's header is two labels (days, kc) or none", ini_property.line_number, crop_name, cells[0])));
+                    }
                     crate::hydrology::crop::KcCurve::ByDay(Table::from_csv_string(v, 2, false)
                         .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse kc for crop '{}' as a number or a two-column table: {}", ini_property.line_number, crop_name, e)))?)
                 }),
