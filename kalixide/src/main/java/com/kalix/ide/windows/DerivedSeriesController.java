@@ -858,27 +858,13 @@ class DerivedSeriesController {
     }
 
     /** A derived series' inputs by their current names. */
-    /**
-     * The names of {@code info}'s inputs. An input that is itself a derived series is
-     * followed by its own inputs in parentheses, one level deep, so the recipe still
-     * shows what was summed (Manifesto §2.2).
-     */
+    /** The names of {@code info}'s inputs; an input that is itself a derived series by its name. */
     private List<String> inputNames(DerivedSeriesInfo info) {
         return info.inputs.stream().map(input -> switch (input) {
             case DerivedSeriesInfo.SeriesInput series -> series.name();
             case DerivedSeriesInfo.DerivedSeriesInput derived -> {
                 DerivedSeriesInfo source = derivedSeries.get(derived.derivedId());
-                if (source == null) {
-                    yield "(deleted derived series)";
-                }
-                String own = source.inputs.stream().map(i -> switch (i) {
-                    case DerivedSeriesInfo.SeriesInput series -> series.name();
-                    case DerivedSeriesInfo.DerivedSeriesInput d -> {
-                        DerivedSeriesInfo inner = derivedSeries.get(d.derivedId());
-                        yield inner != null ? labelResolver.nameFor(inner.ref()) : "(deleted derived series)";
-                    }
-                }).collect(Collectors.joining(", "));
-                yield labelResolver.nameFor(source.ref()) + " (" + own + ")";
+                yield source != null ? labelResolver.nameFor(source.ref()) : "(deleted derived series)";
             }
         }).toList();
     }
