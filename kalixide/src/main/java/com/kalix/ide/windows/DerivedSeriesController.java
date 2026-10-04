@@ -418,13 +418,16 @@ class DerivedSeriesController {
 
     /** The Pixie memory check for {@code plans}, or {@code null} if none reads Pixie data. */
     private String pixieRefusal(List<Plan> plans) {
-        long newPoints = 0;
+        long newPoints = pixiePoints(plans);
         int longestInput = 0;
         for (Plan plan : plans) {
-            newPoints += plan.pixieLength();
             longestInput = Math.max(longestInput, plan.longestDecode());
         }
         return newPoints == 0 ? null : fetchCoordinator.pixieDerivedRefusal(newPoints, longestInput);
+    }
+
+    private static long pixiePoints(List<Plan> plans) {
+        return plans.stream().mapToLong(Plan::pixieLength).sum();
     }
 
     /**
@@ -443,6 +446,7 @@ class DerivedSeriesController {
             this.name = name;
             this.plans = plans;
             this.lastGeneration = lastGeneration;
+            fetchCoordinator.reserveDerivedPixiePoints(pixiePoints(plans));
         }
 
         void next() {
@@ -457,7 +461,7 @@ class DerivedSeriesController {
                     planIndex++;
                     next();
                 },
-                problem -> fail("derived." + name + " was not created: " + problem + ".")
+                problem -> end("derived." + name + " was not created: " + problem + ".")
             ).next();
         }
 
@@ -465,20 +469,20 @@ class DerivedSeriesController {
         private void finish() {
             List<SourceRef> origins = plans.stream().map(Plan::origin).toList();
             if (origins.contains(new LastSource()) && lastRunTracker.getGeneration() != lastGeneration) {
-                fail("The last run changed while derived." + name + " was being created. Try again.");
+                end("The last run changed while derived." + name + " was being created. Try again.");
                 return;
             }
             // An origin removed while this one read would never be labelled removed.
             for (SourceRef origin : origins) {
                 if (!(origin instanceof LastSource) && !window.hasSourceNode(origin)) {
-                    fail("A source was removed while derived." + name + " was being created.");
+                    end("A source was removed while derived." + name + " was being created.");
                     return;
                 }
             }
             // Re-checked: another creation may have taken the name while this one read.
             String problem = nameProblem(name, origins);
             if (problem != null) {
-                fail(problem);
+                end(problem);
                 return;
             }
 
@@ -497,10 +501,17 @@ class DerivedSeriesController {
                 sourceTree.expandPath(path.getParentPath());
             }
             sourceTree.addCheckedPaths(newPaths);
+            fetchCoordinator.releaseDerivedPixiePoints(pixiePoints(plans));
             boolean filterCleared = window.checkOutputsSeries(newRefs);
             status("Created derived." + name + " for " + origins.size()
                 + (origins.size() == 1 ? " source" : " sources")
                 + (filterCleared ? "; the filter was cleared to show it" : ""));
+        }
+
+        /** Ends the creation without a derived series: the reserved budget goes back. */
+        private void end(String message) {
+            fetchCoordinator.releaseDerivedPixiePoints(pixiePoints(plans));
+            fail(message);
         }
     }
 

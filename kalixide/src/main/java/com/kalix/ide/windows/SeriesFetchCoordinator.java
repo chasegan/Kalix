@@ -69,6 +69,8 @@ class SeriesFetchCoordinator {
      * complete must not pass because the pool does not show them yet.
      */
     private final Map<DatasetSeries, Integer> pendingPixiePoints = new HashMap<>();
+    /** Pixie points of derived series being created, counted until each creation ends. */
+    private long reservedDerivedPixiePoints;
     /**
      * Defers to {@link LastRunTracker#getGeneration()}. Captured at fetch-issue time so
      * async responses for "[Last]" series can be dropped when a newer run has become Last.
@@ -395,6 +397,19 @@ class SeriesFetchCoordinator {
      * {@code newPoints} for the new derived series, plus one input of {@code longestInput}
      * points decoded at a time, on top of the Pixie data already held.
      */
+    /**
+     * Counts {@code points} of Pixie data towards the budget while a derived series is being
+     * created, so a second creation or a tick that overlaps it sees them; released by
+     * {@link #releaseDerivedPixiePoints} when the creation ends either way.
+     */
+    void reserveDerivedPixiePoints(long points) {
+        reservedDerivedPixiePoints += points;
+    }
+
+    void releaseDerivedPixiePoints(long points) {
+        reservedDerivedPixiePoints -= points;
+    }
+
     String pixieDerivedRefusal(long newPoints, int longestInput) {
         PixieTally tally = pixieInUse();
         tally.points += newPoints + longestInput;
@@ -415,7 +430,8 @@ class SeriesFetchCoordinator {
     /**
      * The Pixie data held now: every Pixie series in the pool (by its decoded point count,
      * so one from a since-changed file still counts), every one still being decoded for an
-     * earlier tick ({@link #pendingPixiePoints}), and every derived series made from Pixie data.
+     * earlier tick ({@link #pendingPixiePoints}), every derived series made from Pixie data,
+     * and those still being created from it.
      */
     private PixieTally pixieInUse() {
         PixieTally tally = new PixieTally();
@@ -429,6 +445,7 @@ class SeriesFetchCoordinator {
             tally.add(pending.getKey(), pending.getValue());
         }
         pixieDerivedPoints.get().forEach(tally::add);
+        tally.points += reservedDerivedPixiePoints;
         return tally;
     }
 
