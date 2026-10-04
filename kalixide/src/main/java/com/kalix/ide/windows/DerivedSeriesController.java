@@ -296,13 +296,6 @@ class DerivedSeriesController {
                 return originLabel(existing.origin) + " already has a derived series named \"" + name + "\".";
             }
         }
-        String full = DerivedSeries.NAME_PREFIX + name;
-        for (DatasetSeries column : datasetSeriesSources.keySet()) {
-            if (column.baseName().equals(full)) {
-                return "A loaded dataset (" + labelResolver.sourceLabel(column)
-                    + ") has a column named \"" + full + "\".";
-            }
-        }
         return null;
     }
 
@@ -915,26 +908,6 @@ class DerivedSeriesController {
 
     private boolean hasDerivedSeriesOf(SourceRef origin) {
         return derivedSeries.values().stream().anyMatch(a -> a.origin.equals(origin));
-    }
-
-    /**
-     * Why a dataset with these series names must not load, or {@code null}: no column may
-     * share a derived series' full name, or the outputs tree would merge the two.
-     */
-    String datasetNameClash(List<String> seriesNames) {
-        Map<String, DerivedSeriesInfo> byFullName = new HashMap<>();
-        for (DerivedSeriesInfo info : derivedSeries.values()) {
-            byFullName.putIfAbsent(DerivedSeries.NAME_PREFIX + info.name(), info);
-        }
-        for (String name : seriesNames) {
-            DerivedSeriesInfo info = name.startsWith(DerivedSeries.NAME_PREFIX) ? byFullName.get(name) : null;
-            if (info != null) {
-                return "This dataset has a column named \"" + name + "\", the same as a derived series of "
-                    + originLabel(info.origin) + ".\n\nRename or delete the derived series, or rename the"
-                    + " column, then load the dataset again.";
-            }
-        }
-        return null;
     }
 
     /** Point counts of the derived series made from Pixie data, for the Pixie memory budget. */

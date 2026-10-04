@@ -561,8 +561,7 @@ public class RunManager extends JFrame {
             loadedDatasetsNode,               // Tree node
             treeModel,                        // Tree model
             statusUpdater,                    // Status updater
-            this::onDatasetLoaded,            // Callback after load
-            names -> derivedSeriesController.datasetNameClash(names)  // Refuse derived-name clashes
+            this::onDatasetLoaded             // Callback after load
         );
 
         // RunContextMenuManager - handles context menus
@@ -643,7 +642,7 @@ public class RunManager extends JFrame {
      * Callback invoked after a dataset is loaded.
      * Used by DatasetLoaderManager.
      */
-    private void onDatasetLoaded(File file) {
+    private void onDatasetLoaded() {
         // Refresh the tree to show the newly loaded dataset
         refreshRuns();
     }
