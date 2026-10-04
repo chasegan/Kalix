@@ -630,7 +630,7 @@ def build_model_7():
         "kc = Day, Kc,", "     0,   0.35,", "     30,  0.35,", "     70,  1.2,", "     130, 1.2,", "     180, 0.6,",
         "season_len = 180", "",
         "[crop.lucerne]", "root_depth = 1200", "p = 0.55", "kc = 0.95", "",
-        "[crop.fallow]", "root_depth = 600", "kc = 0.4", "",
+        "[crop.bare_soil]", "root_depth = 600", "kc = 0.4", "",
     ]
     for f in range(25):
         x = (f % 5) * 40.0
@@ -652,7 +652,7 @@ def build_model_7():
                 "rain = data.climate_csv.by_name.rain",
                 "evap = data.climate_csv.by_name.pet",
                 f"efficiency = {rng.choice([0.7, 0.8, 0.9])}",
-                "fallow = fallow",
+                "fallow = bare_soil",
             ]
             if cotton:
                 props += [

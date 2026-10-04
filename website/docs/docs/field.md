@@ -34,7 +34,7 @@ kc = Day, Kc,                       # by days since planting
      180, 0.60,
 season_len = 180                    # harvested this many days after planting
 
-[crop.fallow]
+[crop.bare_soil]
 root_depth = 600
 kc = 0.4
 
@@ -46,7 +46,7 @@ available_water = 150               # mm of water per m of soil
 rain = data.climate_csv.by_name.rain
 evap = data.climate_csv.by_name.et0
 efficiency = 0.8
-fallow = fallow
+fallow = bare_soil
 crop_1 = cotton
 crop_1_plant = sim.month == 10 && sim.day == 15
 crop_1_plant_area = min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8)
@@ -82,7 +82,7 @@ dries.
 | loc (compulsory) | The location of the node in cartesian coordinates. Example: `loc = 30, 40` |
 | area (compulsory) | The area of the field [km²]. 1 mm over 1 km² is 1 ML, so 4.2 km² is 420 ha. Readable in expressions as `this.area`. Example: `area = 4.2` |
 | available\_water (compulsory) | The water the soil holds between full (field capacity) and empty (wilting point), per metre of soil [mm/m] (FAO-56 Table 19: sand 60 to 100, loam 130 to 180, clay 120 to 200). A crop's bucket holds this times its root depth. Example: `available_water = 150` |
-| fallow (compulsory) | The crop that covers what is not planted: the name of a `[crop.*]` section. Example: `fallow = fallow` |
+| fallow (compulsory) | The crop that covers what is not planted: the name of a `[crop.*]` section. Example: `fallow = bare_soil` |
 | rain (optional) | Rainfall on the field [mm]. Omitted, no rain falls. Example: `rain = data.climate_csv.by_name.rain` |
 | evap (optional) | Reference evapotranspiration [mm], the reference the crops' `kc` values were derived for (ET₀ for FAO-56 coefficients). Omitted, nothing evaporates. Example: `evap = data.climate_csv.by_name.et0` |
 | efficiency (optional) | The share of the water supplied that reaches the soil at all. The rest is `escape` (spray evaporation, wind drift, delivery loss, tailwater the field does not keep) and leaves the model here. Never percolation, which the soil's layers model. Readable as `this.efficiency`. Default 1. Example: `efficiency = 0.8` |
