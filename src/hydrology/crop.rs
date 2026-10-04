@@ -18,8 +18,8 @@ pub enum KcCurve {
 }
 
 impl KcCurve {
-    /// The coefficient `days` after planting. Cold enough not to matter: one
-    /// crop partition, one lookup per step.
+    /// The coefficient `days` after planting: one table lookup per crop
+    /// partition per step, a few nanoseconds (ADR-0004 data point of 2026-10-04).
     pub fn at(&self, days: f64) -> f64 {
         match self {
             KcCurve::Constant(kc) => *kc,

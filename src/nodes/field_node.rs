@@ -223,6 +223,7 @@ impl FieldNode {
     /// the order phase where the field has one (a crop planted today orders
     /// today), and failing that at the start of the flow phase, so a field
     /// outside every regulated zone sees the same day.
+    #[inline(never)]
     fn planting(&mut self, data_cache: &mut DataCache) {
         for slot in &mut self.slots {
             if !slot.in_ground { continue; }
@@ -586,7 +587,7 @@ impl Node for FieldNode {
         if remaining > 0.0 {
             remaining -= self.level_pour(remaining);
         }
-        let bypass = remaining;
+        let bypass = remaining.max(0.0); // the pour's division can overshoot by an ulp
         let supply = self.usflow - bypass;
         let escape = supply * (1.0 - self.efficiency);
 

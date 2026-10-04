@@ -1,6 +1,8 @@
 //! The soil under a field, kept as layers so that water below one crop's roots
-//! is still there for the next (`root-zone-mass-balance.md`, decided
-//! 2026-09-28).
+//! is still there for the next. The reasoning and the references are in the
+//! field page of the user docs (website/docs/docs/field.md, "How the node
+//! works" and "References"): FAO-56's root zone does not drain below field
+//! capacity, and USDA-ARS's pyfao56 keeps the same depletion-below-the-roots.
 //!
 //! The layers' boundaries are the field's distinct root depths, fallow
 //! included, so every crop's root zone is a whole number of layers. Each
