@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="580" viewBox="0 0 900 580" font-family="IBM Plex Sans, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#1a232b">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2a6a97"/></marker>
+    <marker id="arrow-grey" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6f7d88"/></marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2f6b4f"/></marker>
+  </defs>
+  <style>
+    .w { stroke:#2a6a97; stroke-width:2.2; fill:none; marker-end:url(#arrow); }
+    .g { stroke:#6f7d88; stroke-width:2; fill:none; marker-end:url(#arrow-grey); stroke-dasharray:5 4; }
+    .et { stroke:#2f6b4f; stroke-width:2.2; fill:none; marker-end:url(#arrow-green); }
+    .lbl { font-size:14px; }
+    .small { font-size:12px; fill:#52606b; }
+    .mono { font-family: IBM Plex Mono, Menlo, Consolas, monospace; font-size:12px; }
+  </style>
+
+  <!-- surface -->
+  <line x1="40" y1="250" x2="760" y2="250" stroke="#cdd6de" stroke-width="1.5"/>
+  <text x="44" y="244" class="small">surface</text>
+
+  <!-- rain -->
+  <text x="330" y="34" class="lbl" font-weight="600">rain</text>
+  <path class="w" d="M340,42 L340,110"/>
+  <path class="et" d="M340,78 C360,78 370,58 390,48"/>
+  <text x="398" y="50" class="lbl">intercepted</text>
+  <text x="398" y="66" class="mono">min(rain − runoff, interception × evap)</text>
+  <path class="w" d="M340,110 C340,150 450,120 530,160 L770,160"/>
+  <text x="460" y="120" class="lbl">storm runoff</text>
+  <text x="460" y="136" class="small">only with a curve_number, by the bucket's wetness</text>
+  <path class="w" d="M340,110 L340,240"/>
+  <text x="262" y="190" class="small">what reaches</text>
+  <text x="262" y="205" class="small">the soil</text>
+
+  <!-- irrigation -->
+  <text x="40" y="292" class="lbl" font-weight="600">irrigation</text>
+  <text x="40" y="308" class="small">up to the crop's order due,</text>
+  <text x="40" y="322" class="small">capped by its room</text>
+  <path class="w" d="M52,332 L52,352 L258,352"/>
+  <path class="g" d="M140,352 C150,352 150,380 150,398"/>
+  <text x="40" y="420" class="lbl">escape</text>
+  <text x="40" y="436" class="mono">supply × (1 − efficiency)</text>
+  <text x="40" y="452" class="small">leaves the model here</text>
+
+  <!-- root bucket -->
+  <rect x="260" y="255" width="300" height="160" fill="#e8d9bd" stroke="#1a232b" stroke-width="1.5"/>
+  <rect x="261" y="300" width="298" height="114" fill="#bcd6e8"/>
+  <line x1="261" y1="300" x2="559" y2="300" stroke="#2a6a97" stroke-width="1.5"/>
+  <text x="270" y="273" class="lbl" font-weight="600">root bucket</text>
+  <text x="370" y="273" class="small">holds TAW between full and empty</text>
+  <text x="270" y="291" class="mono">TAW = available_water × root_depth / 1000</text>
+  <text x="270" y="400" class="small">the plants and the irrigator work this</text>
+  <!-- brackets -->
+  <path d="M568,257 L576,257 L576,298 L568,298" fill="none" stroke="#1a232b" stroke-width="1.2"/>
+  <text x="584" y="268" class="lbl">depletion</text>
+  <text x="584" y="284" class="small">0 when full,</text>
+  <text x="584" y="298" class="small">TAW when empty</text>
+  <path d="M568,302 L576,302 L576,413 L568,413" fill="none" stroke="#1a232b" stroke-width="1.2"/>
+  <text x="584" y="362" class="lbl">water held</text>
+
+  <!-- ET -->
+  <path class="et" d="M480,255 L480,180"/>
+  <text x="490" y="200" class="lbl">evapotranspiration</text>
+  <text x="490" y="216" class="mono">ks × kc × evap</text>
+
+  <!-- layers below -->
+  <rect x="260" y="430" width="300" height="40" fill="#e8d9bd" stroke="#1a232b" stroke-width="1.5"/>
+  <rect x="261" y="447" width="298" height="22" fill="#bcd6e8"/>
+  <text x="270" y="445" class="small">layer below the roots · its own depletion</text>
+  <rect x="260" y="485" width="300" height="40" fill="#e8d9bd" stroke="#1a232b" stroke-width="1.5"/>
+  <rect x="261" y="496" width="298" height="28" fill="#bcd6e8"/>
+  <text x="270" y="500" class="small">next layer · its own depletion</text>
+  <text x="260" y="548" class="small">below the deepest roots on the field, nothing draws</text>
+
+  <path class="w" d="M375,415 L375,430"/>
+  <path class="w" d="M375,470 L375,485"/>
+  <text x="386" y="481" class="small">overflow fills each layer in turn</text>
+  <path class="w" d="M560,505 L770,505"/>
+  <text x="760" y="528" text-anchor="end" class="small">past the last layer</text>
+
+  <!-- excess channel -->
+  <rect x="770" y="150" width="100" height="370" fill="#e9f1f7" stroke="#bcd6e8" rx="6"/>
+  <text x="820" y="176" text-anchor="middle" class="lbl" font-weight="600">excess</text>
+  <text x="820" y="194" text-anchor="middle" class="small">all the rain</text>
+  <text x="820" y="208" text-anchor="middle" class="small">the paddock sheds</text>
+  <text x="820" y="468" text-anchor="middle" class="small">split by</text>
+  <text x="820" y="484" text-anchor="middle" class="mono">return_fraction</text>
+  <path class="w" d="M820,520 L820,548"/>
+  <text x="820" y="566" text-anchor="middle" class="small">ds_1 river · ds_2 farm</text>
+</svg>

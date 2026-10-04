@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="842" viewBox="0 0 900 842" font-family="IBM Plex Sans, system-ui, -apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#1a232b">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#52606b"/></marker>
+  </defs>
+  <style>
+    .soil { fill:#e8d9bd; stroke:#1a232b; stroke-width:1.2; }
+    .bucket { fill:#d7e8c6; stroke:#2f6b4f; stroke-width:1.6; }
+    .lbl { font-size:14px; }
+    .small { font-size:12px; fill:#52606b; }
+    .mono { font-family: IBM Plex Mono, Menlo, Consolas, monospace; font-size:12px; }
+    .mv { stroke:#52606b; stroke-width:1.8; fill:none; marker-end:url(#a); }
+    .axis { stroke:#cdd6de; stroke-width:1; }
+  </style>
+
+  <!-- PANEL 1: structure -->
+  <text x="40" y="30" class="lbl" font-weight="600">One set of layers for the whole field</text>
+  <text x="40" y="48" class="small">The boundaries are the field's distinct root depths, fallow included. Each partition has one bucket for its roots,</text>
+  <text x="40" y="64" class="small">and one depletion for each layer below them.</text>
+
+  <text x="40" y="78" class="small">depth, mm</text>
+  <line class="axis" x1="110" y1="90" x2="560" y2="90"/>
+  <text x="100" y="94" text-anchor="end" class="small">0</text>
+  <line class="axis" x1="110" y1="210" x2="560" y2="210"/>
+  <text x="100" y="214" text-anchor="end" class="small">600</text>
+  <line class="axis" x1="110" y1="270" x2="560" y2="270"/>
+  <text x="100" y="274" text-anchor="end" class="small">900</text>
+  <line class="axis" x1="110" y1="330" x2="560" y2="330"/>
+  <text x="100" y="334" text-anchor="end" class="small">1200</text>
+
+  <text x="180" y="80" text-anchor="middle" class="lbl">fallow</text>
+  <rect x="130" y="90" width="100" height="120" class="bucket"/>
+  <text x="180" y="154" text-anchor="middle" class="small">bucket</text>
+  <rect x="130" y="210" width="100" height="60" class="soil"/>
+  <text x="180" y="244" text-anchor="middle" class="small">layer</text>
+  <rect x="130" y="270" width="100" height="60" class="soil"/>
+  <text x="180" y="304" text-anchor="middle" class="small">layer</text>
+  <text x="180" y="352" text-anchor="middle" class="mono">root_depth = 600</text>
+
+  <text x="320" y="80" text-anchor="middle" class="lbl">cotton</text>
+  <rect x="270" y="90" width="100" height="180" class="bucket"/>
+  <text x="320" y="184" text-anchor="middle" class="small">bucket</text>
+  <rect x="270" y="270" width="100" height="60" class="soil"/>
+  <text x="320" y="304" text-anchor="middle" class="small">layer</text>
+  <text x="320" y="352" text-anchor="middle" class="mono">root_depth = 900</text>
+
+  <text x="460" y="80" text-anchor="middle" class="lbl">lucerne</text>
+  <rect x="410" y="90" width="100" height="240" class="bucket"/>
+  <text x="460" y="214" text-anchor="middle" class="small">bucket</text>
+  <text x="460" y="352" text-anchor="middle" class="mono">root_depth = 1200</text>
+
+  <text x="590" y="110" class="small">Every day, each bucket dries by</text>
+  <text x="590" y="126" class="small">evapotranspiration and fills with rain</text>
+  <text x="590" y="142" class="small">and irrigation. The layers are untouched.</text>
+  <text x="590" y="172" class="small">When a bucket would overfill, the overflow</text>
+  <text x="590" y="188" class="small">fills its layers in turn; past the last</text>
+  <text x="590" y="204" class="small">layer it is excess.</text>
+  <text x="590" y="234" class="small">Nothing dries a layer below the roots.</text>
+  <text x="590" y="250" class="small">Water left there is still there for the</text>
+  <text x="590" y="266" class="small">next crop, and at field capacity it does</text>
+  <text x="590" y="282" class="small">not drain (FAO-56, AquaCrop).</text>
+  <text x="590" y="312" class="small">Below the deepest roots on the field</text>
+  <text x="590" y="328" class="small">nothing draws, so water that passes is gone.</text>
+
+  <!-- PANEL 2: harvest -->
+  <text x="40" y="410" class="lbl" font-weight="600">At harvest, cotton's land goes back to the fallow, water and all</text>
+  <text x="40" y="428" class="small">Cotton's bucket is spread evenly over the layers it covered. Then each layer mixes with the fallow's in proportion to area,</text>
+  <text x="40" y="444" class="small">and the fallow's root layers pool into its bucket. Depletions in mm.</text>
+
+  <line class="axis" x1="110" y1="482" x2="860" y2="482"/>
+  <text x="100" y="486" text-anchor="end" class="small">0</text>
+  <line class="axis" x1="110" y1="572" x2="860" y2="572"/>
+  <text x="100" y="576" text-anchor="end" class="small">600</text>
+  <line class="axis" x1="110" y1="617" x2="860" y2="617"/>
+  <text x="100" y="621" text-anchor="end" class="small">900</text>
+  <line class="axis" x1="110" y1="662" x2="860" y2="662"/>
+  <text x="100" y="666" text-anchor="end" class="small">1200</text>
+
+  <!-- cotton before -->
+  <text x="175" y="472" text-anchor="middle" class="small">cotton, 1 km²</text>
+  <rect x="130" y="482" width="90" height="135" class="bucket"/>
+  <text x="175" y="554" text-anchor="middle" class="mono">40</text>
+  <rect x="130" y="617" width="90" height="45" class="soil"/>
+  <text x="175" y="644" text-anchor="middle" class="mono">10</text>
+
+  <path class="mv" d="M228,570 L262,570"/>
+  <text x="245" y="560" text-anchor="middle" class="small">spread</text>
+
+  <!-- spread -->
+  <text x="315" y="472" text-anchor="middle" class="small">the same water, by layer</text>
+  <rect x="270" y="482" width="90" height="90" class="soil"/>
+  <text x="315" y="531" text-anchor="middle" class="mono">20</text>
+  <rect x="270" y="572" width="90" height="45" class="soil"/>
+  <text x="315" y="599" text-anchor="middle" class="mono">20</text>
+  <rect x="270" y="617" width="90" height="45" class="soil"/>
+  <text x="315" y="644" text-anchor="middle" class="mono">10</text>
+
+  <text x="420" y="574" text-anchor="middle" class="lbl">+</text>
+
+  <!-- fallow before -->
+  <text x="525" y="472" text-anchor="middle" class="small">fallow, 3 km²</text>
+  <rect x="480" y="482" width="90" height="90" class="bucket"/>
+  <text x="525" y="531" text-anchor="middle" class="mono">10</text>
+  <rect x="480" y="572" width="90" height="45" class="soil"/>
+  <text x="525" y="599" text-anchor="middle" class="mono">0</text>
+  <rect x="480" y="617" width="90" height="45" class="soil"/>
+  <text x="525" y="644" text-anchor="middle" class="mono">10</text>
+
+  <path class="mv" d="M580,570 L640,570"/>
+  <text x="610" y="560" text-anchor="middle" class="small">mix by area</text>
+
+  <!-- fallow after -->
+  <text x="735" y="472" text-anchor="middle" class="small">fallow, 4 km²</text>
+  <rect x="690" y="482" width="90" height="90" class="bucket"/>
+  <text x="735" y="531" text-anchor="middle" class="mono">12.5</text>
+  <rect x="690" y="572" width="90" height="45" class="soil"/>
+  <text x="735" y="599" text-anchor="middle" class="mono">5</text>
+  <rect x="690" y="617" width="90" height="45" class="soil"/>
+  <text x="735" y="644" text-anchor="middle" class="mono">10</text>
+
+  <text x="130" y="694" class="small">Top 600 mm: (3 × 10 + 1 × 20) / 4 = 12.5, in the fallow's bucket. 600 to 900: (3 × 0 + 1 × 20) / 4 = 5, kept below</text>
+  <text x="130" y="710" class="small">the fallow's roots, where the next cotton crop will find it. Planting is the reverse: the new crop's bucket pools</text>
+  <text x="130" y="726" class="small">the layers it reaches, with whatever each held.</text>
+
+  <text x="40" y="762" class="lbl" font-weight="600">Why layers</text>
+  <text x="40" y="782" class="small">A single bucket per crop would have to invent the water below one crop's roots when a deeper crop followed, or lose it when a shallower one did.</text>
+  <text x="40" y="800" class="small">Source assumes the subsoil is always at field capacity; its balance cannot close across a planting. The layers conserve water by construction,</text>
+  <text x="40" y="818" class="small">and the soil module's tests check every move.</text>
+</svg>
