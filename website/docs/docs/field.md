@@ -364,7 +364,31 @@ in the model, on `ds_1` and `ds_2`.
 
 ## References
 
-Allen, R.G., Pereira, L.S., Raes, D. and Smith, M. (1998). *Crop evapotranspiration — Guidelines for
-computing crop water requirements.* FAO Irrigation and Drainage Paper 56. Chapter 8, the root-zone
-water balance and the stress coefficient Ks; Table 19 for available water by soil texture and
-Table 22 for crop depletion fractions.
+The field is the FAO-56 root-zone water balance, with a layered soil below the roots. Where a
+choice is not in FAO-56, the reference it follows is given.
+
+- Allen, R.G., Pereira, L.S., Raes, D. and Smith, M. (1998). *Crop evapotranspiration: Guidelines
+  for computing crop water requirements.* FAO Irrigation and Drainage Paper 56. Chapter 8 is the
+  root-zone depletion balance (equations 82 to 88): total and readily available water, the
+  linear stress coefficient Ks (equation 84), and deep percolation as the overflow of a root
+  zone at field capacity (equation 88). Table 19 gives available water by soil texture, Table 22
+  root depths and depletion fractions by crop. Chapter 7 is the origin of the interception rule:
+  wettings under about 0.2 × ET₀ evaporate without reaching the root zone.
+- Pereira, L.S., Allen, R.G., Paredes, P., López-Urrea, R., Raes, D., Smith, M., Kilic, A. and
+  Salman, M. (2025). *Crop evapotranspiration: Guidelines for computing crop water requirements.
+  Second edition, revised 2025.* FAO Irrigation and Drainage Paper 56 Rev.1. Updated Kc and Kcb
+  tables, depletion fractions for vegetable, field and tree crops, and the same TAW, RAW, p and
+  Ks framework.
+- Thorp, K.R. (2022). pyfao56: FAO-56 evapotranspiration in Python. *SoftwareX* 19, 101208; and
+  Thorp, K.R. et al. (2024), version 1.3.0, *SoftwareX* 26, 101724. USDA-ARS's reference
+  implementation. Its depletion to the maximum root depth, with the soil below the roots filled
+  by what the root zone cannot hold and untouched by evapotranspiration, is the same structure
+  as the field's layers; irrigation losses there are likewise taken off the applied water and
+  never counted as percolation.
+- Raes, D., Steduto, P., Hsiao, T.C. and Fereres, E. (2026). *AquaCrop Reference Manual, version
+  7.3*, Chapter 3. Drainage is zero at or below field capacity (§3.7), which is why the layers
+  keep their water; its convex stress curves (§3.2) are the alternative to FAO-56's linear Ks.
+- eWater. *Source Scientific Reference Guide: Irrigator Demand Model.* The fallow as a crop with
+  its own depth and coefficient, the planting decision as an authored rule, the effective-rain
+  form of interception, and crop death under sustained stress. Its assumption that the soil
+  below the fallow's roots is at field capacity is the one the field does not make.
