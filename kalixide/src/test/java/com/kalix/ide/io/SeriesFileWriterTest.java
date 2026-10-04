@@ -2,6 +2,7 @@ package com.kalix.ide.io;
 
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
+import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -40,6 +41,21 @@ class SeriesFileWriterTest {
         File written = SeriesFileWriter.write(oneSeries(), dir.resolve("out.csv.zip").toFile(), null, null, true);
         assertEquals("out.csv.zip", written.getName());
         assertTrue(written.isFile());
+    }
+
+    @Test
+    void twoSeriesWithOneLabelKeepTwoCsvColumns() throws IOException {
+        // Two files of the same name, each with a flow column, project to the same label.
+        DataSet data = new DataSet();
+        data.addSeries(new DatasetSeries("/a/flows.csv", "flow"),
+            new TimeSeriesData(new long[]{0, DAY_MS}, new double[]{1.0, 2.0}));
+        data.addSeries(new DatasetSeries("/b/flows.csv", "flow"),
+            new TimeSeriesData(new long[]{0, DAY_MS}, new double[]{9.0, 8.0}));
+        LabelResolver sameLabel = ref -> "flow [flows.csv]";
+        File written = SeriesFileWriter.write(data, dir.resolve("out.csv").toFile(), null, sameLabel, true);
+        String[] lines = Files.readString(written.toPath()).split("\\R");
+        assertTrue(lines[0].endsWith("flow [flows.csv],flow [flows.csv] (2)"), lines[0]);
+        assertTrue(lines[1].endsWith(",1.0,9.0") || lines[1].endsWith(",1,9"), lines[1]);
     }
 
     @Test
