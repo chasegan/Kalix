@@ -9,7 +9,7 @@ package com.kalix.ide.flowviz.data;
  *   <li>{@link RunSeries} → {@code "node.x.ds_1 [Run_3]"} (current run name in brackets)</li>
  *   <li>{@link LastSeries} → {@code "node.x.ds_1 [Last]"}</li>
  *   <li>{@link DatasetSeries} → {@code "flow [mydata.csv]"} (short filename in brackets)</li>
- *   <li>{@link AggregateSeries} → {@code "aggregate.total_1 [Run_3]"} (current name, and the
+ *   <li>{@link DerivedSeries} → {@code "derived.sum_1 [Run_3]"} (current name, and the
  *       source it was summed from)</li>
  * </ul>
  *
@@ -29,12 +29,12 @@ public interface LabelResolver {
 
     /**
      * Returns the series-name portion of the label — the text before the brackets in
-     * {@link #labelFor(SeriesRef)} (e.g. {@code "node.x.ds_1"}, {@code "aggregate.total_1"}).
+     * {@link #labelFor(SeriesRef)} (e.g. {@code "node.x.ds_1"}, {@code "derived.sum_1"}).
      * Display code uses this rather than {@link SeriesRef#baseName()}, which for an
-     * {@link AggregateSeries} is an internal key, not a name.
+     * {@link DerivedSeries} is an internal key, not a name.
      *
      * <p>Default returns {@link SeriesRef#baseName()}, correct for resolvers that never
-     * see aggregates.</p>
+     * see derived series.</p>
      */
     default String nameFor(SeriesRef ref) {
         return ref.baseName();

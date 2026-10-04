@@ -39,7 +39,7 @@ class OutputsTreeBuilderTest {
     private final OutputsTreeBuilder builder = new OutputsTreeBuilder(
         tree,
         model,
-        // Immutable, as RunManager returns for an aggregate: the builder must not sort in place.
+        // Immutable, as RunManager returns for a derived series: the builder must not sort in place.
         source -> OUTPUTS.getOrDefault(source, List.of()),
         String::compareTo,
         (seriesName, source) -> new RunSeries((Long) source, seriesName),

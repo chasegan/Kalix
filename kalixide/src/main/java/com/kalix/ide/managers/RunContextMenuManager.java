@@ -79,7 +79,7 @@ public class RunContextMenuManager {
     // "Run library", "Loaded datasets"). Set by the owner via setRemovableCategories.
     private final Set<DefaultMutableTreeNode> removableCategories = new HashSet<>();
 
-    // Menus for node kinds this manager doesn't know (e.g. aggregates): user object -> menu,
+    // Menus for node kinds this manager doesn't know (e.g. derived series): user object -> menu,
     // or null for none. Set by the owner via setNodeMenuProvider.
     private Function<Object, JPopupMenu> nodeMenuProvider = userObject -> null;
 

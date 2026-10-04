@@ -13,9 +13,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class DefaultLabelResolverTest {
 
     private final Map<Long, String> runNames = new HashMap<>();
-    private final Map<Long, AggregateLabel> aggregates = new HashMap<>();
+    private final Map<Long, DerivedSeriesLabel> derivedSeries = new HashMap<>();
     private final DefaultLabelResolver resolver =
-        new DefaultLabelResolver(runNames::get, aggregates::get);
+        new DefaultLabelResolver(runNames::get, derivedSeries::get);
 
     @Test
     void existingVariantsKeepTheirBaseNameAsName() {
@@ -27,62 +27,62 @@ class DefaultLabelResolverTest {
     }
 
     @Test
-    void aggregateNameIsProjectedNotTakenFromBaseName() {
+    void derivedSeriesNameIsProjectedNotTakenFromBaseName() {
         runNames.put(1L, "Run_1");
-        aggregates.put(7L, new AggregateLabel("sum_1", new RunSource(1), null));
-        AggregateSeries ref = new AggregateSeries(7);
+        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new RunSource(1), null));
+        DerivedSeries ref = new DerivedSeries(7);
 
-        assertEquals("aggregate.sum_1", resolver.nameFor(ref));
-        assertEquals("aggregate.sum_1 [Run_1]", resolver.labelFor(ref));
+        assertEquals("derived.sum_1", resolver.nameFor(ref));
+        assertEquals("derived.sum_1 [Run_1]", resolver.labelFor(ref));
         assertFalse(resolver.labelFor(ref).contains(ref.baseName()));
     }
 
     @Test
-    void aggregateRenameChangesLabelButNotIdentity() {
-        aggregates.put(7L, new AggregateLabel("sum_1", new LastSource(), null));
-        AggregateSeries ref = new AggregateSeries(7);
+    void derivedSeriesRenameChangesLabelButNotIdentity() {
+        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new LastSource(), null));
+        DerivedSeries ref = new DerivedSeries(7);
         String keyBefore = ref.baseName();
 
-        aggregates.put(7L, new AggregateLabel("inflows", new LastSource(), null));
+        derivedSeries.put(7L, new DerivedSeriesLabel("inflows", new LastSource(), null));
 
-        assertEquals("aggregate.inflows [Last]", resolver.labelFor(ref));
-        assertEquals(keyBefore, new AggregateSeries(7).baseName());
+        assertEquals("derived.inflows [Last]", resolver.labelFor(ref));
+        assertEquals(keyBefore, new DerivedSeries(7).baseName());
     }
 
     @Test
     void liveOriginFollowsRunRename() {
         runNames.put(1L, "Run_1");
-        aggregates.put(7L, new AggregateLabel("sum_1", new RunSource(1), null));
+        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new RunSource(1), null));
         runNames.put(1L, "baseline");
-        assertEquals("baseline", resolver.sourceLabel(new AggregateSeries(7)));
+        assertEquals("baseline", resolver.sourceLabel(new DerivedSeries(7)));
     }
 
     @Test
     void removedOriginShowsFrozenNameMarkedRemoved() {
         String path = new File("data", "flows.csv").getAbsolutePath();
-        aggregates.put(7L, new AggregateLabel("sum_1", new DatasetSource(path), "flows.csv"));
-        assertEquals("flows.csv (removed)", resolver.sourceLabel(new AggregateSeries(7)));
+        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new DatasetSource(path), "flows.csv"));
+        assertEquals("flows.csv (removed)", resolver.sourceLabel(new DerivedSeries(7)));
 
         // Frozen means frozen: a run of the same id reappearing in the lookup is ignored.
         runNames.put(1L, "Run_1");
-        aggregates.put(8L, new AggregateLabel("sum_2", new RunSource(1), "old_name"));
-        assertEquals("old_name (removed)", resolver.sourceLabel(new AggregateSeries(8)));
+        derivedSeries.put(8L, new DerivedSeriesLabel("sum_2", new RunSource(1), "old_name"));
+        assertEquals("old_name (removed)", resolver.sourceLabel(new DerivedSeries(8)));
     }
 
     @Test
-    void unknownAggregateFallsBackToQuestionMark() {
-        assertEquals("aggregate.? [?]", resolver.labelFor(new AggregateSeries(99)));
+    void unknownDerivedSeriesFallsBackToQuestionMark() {
+        assertEquals("derived.? [?]", resolver.labelFor(new DerivedSeries(99)));
     }
 
     @Test
-    void aggregateOfAggregateIsRejected() {
-        aggregates.put(7L, new AggregateLabel("sum_1", new AggregateSource(6), null));
-        assertThrows(IllegalStateException.class, () -> resolver.sourceLabel(new AggregateSeries(7)));
+    void derivedSeriesOfDerivedSeriesIsRejected() {
+        derivedSeries.put(7L, new DerivedSeriesLabel("sum_1", new DerivedSeriesSource(6), null));
+        assertThrows(IllegalStateException.class, () -> resolver.sourceLabel(new DerivedSeries(7)));
     }
 
     @Test
-    void singleArgumentResolverHasNoAggregates() {
+    void singleArgumentResolverHasNoDerivedSeries() {
         DefaultLabelResolver runsOnly = new DefaultLabelResolver(id -> null);
-        assertEquals("aggregate.? [?]", runsOnly.labelFor(new AggregateSeries(1)));
+        assertEquals("derived.? [?]", runsOnly.labelFor(new DerivedSeries(1)));
     }
 }

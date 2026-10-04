@@ -3,9 +3,9 @@ package com.kalix.ide.windows;
 import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
-import com.kalix.ide.flowviz.data.AggregateLabel;
-import com.kalix.ide.flowviz.data.AggregateSeries;
-import com.kalix.ide.flowviz.data.AggregateSource;
+import com.kalix.ide.flowviz.data.DerivedSeriesLabel;
+import com.kalix.ide.flowviz.data.DerivedSeries;
+import com.kalix.ide.flowviz.data.DerivedSeriesSource;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DatasetSource;
 import com.kalix.ide.flowviz.data.DefaultLabelResolver;
@@ -86,7 +86,7 @@ import java.util.function.Consumer;
  * ├── Current runs      → All runs in current session (Run_1, Run_2, ...)
  * ├── Run library       → Saved runs (future feature)
  * ├── Loaded datasets   → Imported CSV/Pixie files
- * └── Aggregate series  → User-created aggregates, grouped by origin (Run_1 > total_1)
+ * └── Derived series  → User-created derived series, grouped by origin (Run_1 > total_1)
  * </pre>
  *
  * <h2>Data Flow</h2>
@@ -120,8 +120,8 @@ import java.util.function.Consumer;
  *       refreshing plotted "[Last]" series when a run completes</li>
  *   <li>{@link SeriesFetchCoordinator} - timeseries-tree selection diffing, cache
  *       probes, async fetches into the pool, and the selection-update guard</li>
- *   <li>{@link AggregatedSeriesController} - user-created aggregates: creating,
- *       holding and recomputing them, and their "Aggregate series" tree nodes</li>
+ *   <li>{@link DerivedSeriesController} - user-created derived series: creating,
+ *       holding and recomputing them, and their "Derived series" tree nodes</li>
  * </ul>
  *
  * @see OutputsTreeBuilder
@@ -140,7 +140,7 @@ public class RunManager extends JFrame {
     private static java.util.function.Supplier<String> editorTextSupplier;
 
     // === DATA SOURCE TREE (left-top) ===
-    // Shows: Last run, Current runs, Run library, Loaded datasets, Aggregate series
+    // Shows: Last run, Current runs, Run library, Loaded datasets, Derived series
     // Selection triggers rebuild of timeseries tree
     private JCheckboxTree timeseriesSourceTree;
     private DefaultTreeModel treeModel;
@@ -149,7 +149,7 @@ public class RunManager extends JFrame {
     private DefaultMutableTreeNode currentRunsNode;
     private DefaultMutableTreeNode libraryNode;
     private DefaultMutableTreeNode loadedDatasetsNode;
-    private DefaultMutableTreeNode aggregateSeriesNode;
+    private DefaultMutableTreeNode derivedSeriesNode;
 
     // === TIMESERIES TREE (left-bottom) ===
     // Shows hierarchical output series from selected sources
@@ -192,13 +192,13 @@ public class RunManager extends JFrame {
     private SeriesFetchCoordinator fetchCoordinator;
     private LastRunTracker lastRunTracker;
     private RunTreeController runTreeController;
-    private AggregatedSeriesController aggregatedSeriesController;
+    private DerivedSeriesController derivedSeriesController;
 
     // Single point of authority for projecting SeriesRef → display label.
     // Consumed by stats tables, legends, and the outputs tree so that the user-visible
     // string for a run-derived series tracks the current run name automatically.
     private final DefaultLabelResolver labelResolver =
-        new DefaultLabelResolver(this::runNameForId, this::aggregateLabel);
+        new DefaultLabelResolver(this::runNameForId, this::derivedLabel);
 
     /**
      * Private constructor for singleton pattern.
@@ -324,13 +324,13 @@ public class RunManager extends JFrame {
         currentRunsNode = new DefaultMutableTreeNode("Current runs");
         libraryNode = new DefaultMutableTreeNode("Run library");
         loadedDatasetsNode = new DefaultMutableTreeNode("Loaded datasets");
-        aggregateSeriesNode = new DefaultMutableTreeNode("Aggregate series");
+        derivedSeriesNode = new DefaultMutableTreeNode("Derived series");
 
         rootNode.add(lastRunNode);
         rootNode.add(currentRunsNode);
         rootNode.add(libraryNode);
         rootNode.add(loadedDatasetsNode);
-        rootNode.add(aggregateSeriesNode);
+        rootNode.add(derivedSeriesNode);
 
         treeModel = new DefaultTreeModel(rootNode);
         timeseriesSourceTree = new JCheckboxTree(treeModel) {
@@ -353,8 +353,8 @@ public class RunManager extends JFrame {
                         return uid;
                     } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo datasetInfo) {
                         return datasetInfo.file.getAbsolutePath();
-                    } else if (userObject instanceof AggregateInfo aggregate) {
-                        return aggregatedSeriesController.recipe(aggregate);
+                    } else if (userObject instanceof DerivedSeriesInfo derived) {
+                        return derivedSeriesController.recipe(derived);
                     }
                 }
                 return null;
@@ -513,7 +513,7 @@ public class RunManager extends JFrame {
             datasetSeriesSources,
             () -> lastRunTracker.getGeneration(),
             () -> lastRunTracker.getLastRunInfo(),
-            () -> aggregatedSeriesController.pixieBackedPoints()
+            () -> derivedSeriesController.pixieBackedPoints()
         );
         lastRunTracker = new LastRunTracker(
             this,
@@ -535,14 +535,14 @@ public class RunManager extends JFrame {
             timeSeriesRequestManager,
             lastRunTracker,
             fetchCoordinator,
-            (source, label) -> aggregatedSeriesController.onOriginRemoved(source, label)
+            (source, label) -> derivedSeriesController.onOriginRemoved(source, label)
         );
-        aggregatedSeriesController = new AggregatedSeriesController(
+        derivedSeriesController = new DerivedSeriesController(
             this,
             timeseriesSourceTree,
             timeseriesTree,
             treeModel,
-            aggregateSeriesNode,
+            derivedSeriesNode,
             tabManager,
             plotDataSet,
             timeSeriesRequestManager,
@@ -552,7 +552,7 @@ public class RunManager extends JFrame {
             fetchCoordinator,
             statusUpdater
         );
-        lastRunTracker.addLastChangeListener(aggregatedSeriesController::onLastChanged);
+        lastRunTracker.addLastChangeListener(derivedSeriesController::onLastChanged);
 
         // DatasetLoaderManager - handles dataset file loading
         datasetLoaderManager = new DatasetLoaderManager(
@@ -562,7 +562,7 @@ public class RunManager extends JFrame {
             treeModel,                        // Tree model
             statusUpdater,                    // Status updater
             this::onDatasetLoaded,            // Callback after load
-            names -> aggregatedSeriesController.datasetNameClash(names)  // Refuse aggregate-name clashes
+            names -> derivedSeriesController.datasetNameClash(names)  // Refuse derived-name clashes
         );
 
         // RunContextMenuManager - handles context menus
@@ -585,21 +585,21 @@ public class RunManager extends JFrame {
         runContextMenuManager.setupRunTreeContextMenu();
         // Top-level categories that support "Remove all". Last run holds a single alias to the
         // most-recent run's session, so removing it removes that one run (same as its "Remove").
-        runContextMenuManager.setNodeMenuProvider(aggregatedSeriesController::contextMenuFor);
+        runContextMenuManager.setNodeMenuProvider(derivedSeriesController::contextMenuFor);
         runContextMenuManager.setRemovableCategories(
             lastRunNode, currentRunsNode, libraryNode, loadedDatasetsNode);
-        AggregatedSeriesController aggregates = aggregatedSeriesController;
+        DerivedSeriesController derivedSeries = derivedSeriesController;
         runContextMenuManager.setupOutputsTreeContextMenu(
-            List.of(new RunContextMenuManager.OptionalItem("Save aggregates…",
-                aggregates::saveSelectedAggregates, aggregates::selectionHasAggregates)),
+            List.of(new RunContextMenuManager.OptionalItem("Save derived series…",
+                derivedSeries::saveSelectedDerivedSeries, derivedSeries::selectionHasDerivedSeries)),
             // Submenus leave room for aggregation methods beyond Total (#397).
             List.of(
                 new RunContextMenuManager.OptionalSubmenu("New series from selection",
-                    List.of(new RunContextMenuManager.SubmenuItem("Total…", aggregates::createFromSelected)),
-                    aggregates::selectionHasSeriesToSum),
+                    List.of(new RunContextMenuManager.SubmenuItem("Total…", derivedSeries::createFromSelected)),
+                    derivedSeries::selectionHasSeriesToSum),
                 new RunContextMenuManager.OptionalSubmenu("New series from checked",
-                    List.of(new RunContextMenuManager.SubmenuItem("Total…", aggregates::createFromChecked)),
-                    aggregates::checkedHasSeriesToSum)),
+                    List.of(new RunContextMenuManager.SubmenuItem("Total…", derivedSeries::createFromChecked)),
+                    derivedSeries::checkedHasSeriesToSum)),
                                                           this::expandAllFromSelected,
                                                           this::collapseAllFromSelected,
                                                           this::showChecked,
@@ -608,7 +608,7 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Gets series names from a source (RunInfo, LoadedDatasetInfo, or AggregateInfo).
+     * Gets series names from a source (RunInfo, LoadedDatasetInfo, or DerivedSeriesInfo).
      * Used by OutputsTreeBuilder.
      */
     private List<String> getSeriesNamesFromSource(Object source) {
@@ -620,8 +620,8 @@ public class RunManager extends JFrame {
             return Collections.emptyList();
         } else if (source instanceof DatasetLoaderManager.LoadedDatasetInfo) {
             return getSeriesNamesFromDataset((DatasetLoaderManager.LoadedDatasetInfo) source);
-        } else if (source instanceof AggregateInfo aggregate) {
-            return List.of(labelResolver.nameFor(aggregate.ref()));
+        } else if (source instanceof DerivedSeriesInfo derived) {
+            return List.of(labelResolver.nameFor(derived.ref()));
         }
         return Collections.emptyList();
     }
@@ -649,16 +649,16 @@ public class RunManager extends JFrame {
      * Used by DatasetLoaderManager.
      */
     private void onDatasetLoaded(File file) {
-        aggregatedSeriesController.onOriginLoaded(new DatasetSource(file.getAbsolutePath()));
+        derivedSeriesController.onOriginLoaded(new DatasetSource(file.getAbsolutePath()));
         // Refresh the tree to show the newly loaded dataset
         refreshRuns();
     }
 
-    /** Renames a run; its aggregates' group labels follow. See {@link RunTreeController#renameRun}. */
+    /** Renames a run; its derived series' group labels follow. See {@link RunTreeController#renameRun}. */
     private String renameRun(RunContextMenuManager.RunInfo runInfo, String newName) {
         String error = runTreeController.renameRun(runInfo, newName);
         if (error == null) {
-            aggregatedSeriesController.onOriginRenamed(sourceRefForNode(runInfo));
+            derivedSeriesController.onOriginRenamed(sourceRefForNode(runInfo));
         }
         return error;
     }
@@ -956,7 +956,7 @@ public class RunManager extends JFrame {
             case RunSource r -> new RunSeries(r.runId(), seriesName);
             case LastSource l -> new LastSeries(seriesName);
             case DatasetSource d -> new DatasetSeries(d.datasetId(), seriesName);
-            case AggregateSource a -> new AggregateSeries(a.aggregateId());
+            case DerivedSeriesSource a -> new DerivedSeries(a.derivedId());
             case null -> null;
         };
     }
@@ -1031,9 +1031,9 @@ public class RunManager extends JFrame {
         return runTreeController.runNameForId(runId);
     }
 
-    /** The aggregate lookup for {@link DefaultLabelResolver}. */
-    private AggregateLabel aggregateLabel(long aggregateId) {
-        return aggregatedSeriesController.labelFor(aggregateId);
+    /** The derived series lookup for {@link DefaultLabelResolver}. */
+    private DerivedSeriesLabel derivedLabel(long derivedId) {
+        return derivedSeriesController.labelFor(derivedId);
     }
 
     /**
@@ -1100,7 +1100,7 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * The RunInfo, AggregateInfo and LoadedDatasetInfo objects currently checked in the data
+     * The RunInfo, DerivedSeriesInfo and LoadedDatasetInfo objects currently checked in the data
      * source tree, datasets last. Category paths (auto-checked parents) are none, and are skipped.
      */
     private List<Object> checkedSources() {
@@ -1108,12 +1108,12 @@ public class RunManager extends JFrame {
         for (TreePath path : timeseriesSourceTree.getCheckedPaths()) {
             Object userObject = ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
             if (userObject instanceof RunContextMenuManager.RunInfo
-                    || userObject instanceof AggregateInfo
+                    || userObject instanceof DerivedSeriesInfo
                     || userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                 sources.add(userObject);
             }
         }
-        // Keeps the old order under a shared series: runs and aggregates, then datasets.
+        // Keeps the old order under a shared series: runs and derived series, then datasets.
         sources.sort(Comparator.comparing(s -> s instanceof DatasetLoaderManager.LoadedDatasetInfo));
         return sources;
     }
@@ -1161,7 +1161,7 @@ public class RunManager extends JFrame {
         // Node first, exactly as run removal does: see removeSourceNode.
         removeSourceNode(loadedDatasetsNode, info);
         purgeSeries(refs, new DatasetSource(absPath));
-        aggregatedSeriesController.onOriginRemoved(new DatasetSource(absPath), info.fileName);
+        derivedSeriesController.onOriginRemoved(new DatasetSource(absPath), info.fileName);
 
         if (statusUpdater != null) {
             statusUpdater.accept("Removed dataset: " + info.fileName);
@@ -1216,8 +1216,8 @@ public class RunManager extends JFrame {
         if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo info) {
             return new DatasetSource(info.file.getAbsolutePath());
         }
-        if (userObject instanceof AggregateInfo aggregate) {
-            return new AggregateSource(aggregate.id);
+        if (userObject instanceof DerivedSeriesInfo derived) {
+            return new DerivedSeriesSource(derived.id);
         }
         return null;
     }
@@ -1291,9 +1291,9 @@ public class RunManager extends JFrame {
             case LastSource ignored -> lastRunNode;
             case RunSource ignored -> currentRunsNode;
             case DatasetSource ignored -> loadedDatasetsNode;
-            case AggregateSource ignored -> aggregateSeriesNode;
+            case DerivedSeriesSource ignored -> derivedSeriesNode;
         };
-        // Traverse all descendants; aggregates sit a level further down.
+        // Traverse all descendants; derived series sit a level further down.
         Enumeration<TreeNode> nodes = parent.preorderEnumeration();
         while (nodes.hasMoreElements()) {
             DefaultMutableTreeNode node = (DefaultMutableTreeNode) nodes.nextElement();

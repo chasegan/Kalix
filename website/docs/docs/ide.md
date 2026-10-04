@@ -126,26 +126,26 @@ If the filter doesn't make sense (a quote or regex left open, a `!` with a space
 
 The filter only changes what the tree shows. Ticking a folder while filtering ticks just the series you can see, which makes it quick to plot every match. Series you ticked before filtering stay plotted even when the filter hides them.
 
-### Aggregate series
+### Derived series
 
-An **aggregate** is the point-by-point sum of series from one source: a run, the **Last run**, or a loaded dataset. Use one to total the flows through several nodes, or the demands of a group of users.
+A **derived series** is the point-by-point sum of series from one source: a run, the **Last run**, or a loaded dataset. Use one to total the flows through several nodes, or the demands of a group of users.
 
-**Creating an aggregate.** In the **Timeseries** tree, either select the series to sum and right-click **New series from selection > Total…**, or tick them and right-click **New series from checked > Total…**. Then give it a name (a suggestion such as `total_1` is filled in). Each menu appears once there are at least two series to sum. Ticking suits "all but a few": tick everything, then untick the ones to leave out.
+**Creating a derived series.** In the **Timeseries** tree, either select the series to sum and right-click **New series from selection > Total…**, or tick them and right-click **New series from checked > Total…**. Then give it a name (a suggestion such as `total_1` is filled in). Each menu appears once there are at least two series to sum. Ticking suits "all but a few": tick everything, then untick the ones to leave out.
 
 - Selecting (or ticking) a folder such as `node.mygr4j` sums every series under it, as the tree shows it. Use the filter to narrow what is summed, for example to every `ds_1`.
-- When the selected series come from several sources (for example `Run_1` and `Run_2`), Kalix makes one aggregate per source, each summing that source's series. Every source must include every selected series.
-- An aggregate can be summed into another aggregate of the same source.
+- When the selected series come from several sources (for example `Run_1` and `Run_2`), Kalix makes one derived series per source, each summing that source's series. Every source must include every selected series.
+- A derived series can be summed into another derived series of the same source.
 - The series must have identical timestamps. A point missing in any input is missing in the sum.
 
-Aggregates appear under **Aggregate series** in the Run Manager's source tree, grouped by source, and as `aggregate.<name>` in the **Timeseries** tree, where they plot like any other series. Hover over an aggregate to see what it sums.
+Derived series appear under **Derived series** in the Run Manager's source tree, grouped by source, and as `derived.<name>` in the **Timeseries** tree, where they plot like any other series. Hover over a derived series to see what it sums.
 
-**Aggregates of Last run** are recomputed whenever a new run completes. If the new run can't supply an input (a series is missing, say), the aggregate is cleared and its row in the statistics view says why; it comes back when a later run can.
+**Derived series of Last run** are recomputed whenever a new run completes. If the new run can't supply an input (a series is missing, say), the derived series is cleared and its row in the statistics view says why; it comes back when a later run can.
 
-**Removing a source keeps its aggregates.** You can load a dataset, make an aggregate, then remove the dataset and keep only the aggregate for comparison. Its group is then labelled, for example, `flows.csv (removed)`.
+**Removing a source keeps its derived series.** You can load a dataset, make a derived series, then remove the dataset and keep only the derived series for comparison. Its group is then labelled, for example, `flows.csv (removed)`.
 
-**Managing aggregates.** Right-click an aggregate in the source tree to **Show component series** (a window listing its inputs, one per line, ready to copy), or to **Save…**, **Rename…** or **Delete** it. Right-click a group to save or delete all of its aggregates, or **Aggregate series** itself to delete every aggregate. Choose **Save aggregates…** in the **Timeseries** tree to save the selected ones together. Aggregates save as CSV, zipped CSV or Pixie, one column per aggregate.
+**Managing derived series.** Right-click a derived series in the source tree to **Show component series** (a window listing its inputs, one per line, ready to copy), or to **Save…**, **Rename…** or **Delete** it. Right-click a group to save or delete all of its derived series, or **Derived series** itself to delete every derived series. Choose **Save derived series…** in the **Timeseries** tree to save the selected ones together. Derived series save as CSV, zipped CSV or Pixie, one column per derived series.
 
-Aggregates last for the session; save them to keep them. A dataset with a column named exactly like an existing aggregate (`aggregate.<name>`) can't be loaded until one of the two is renamed or removed.
+Derived series last for the session; save them to keep them. A dataset with a column named exactly like an existing derived series (`derived.<name>`) can't be loaded until one of the two is renamed or removed.
 
 ## Docking
 

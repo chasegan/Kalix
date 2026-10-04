@@ -116,7 +116,7 @@ public class OutputsTreeBuilder {
     }
 
     /**
-     * Updates the tree with the selected sources (runs, aggregates and/or datasets).
+     * Updates the tree with the selected sources (runs, derived series and/or datasets).
      * Automatically handles single vs multi-source tree strategies.
      */
     public void updateTree(List<Object> sources) {

@@ -1,18 +1,18 @@
 package com.kalix.ide.windows;
 
-import com.kalix.ide.flowviz.data.AggregateSeries;
+import com.kalix.ide.flowviz.data.DerivedSeries;
 import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 
 import java.util.List;
 
 /**
- * One user-created aggregate: its identity, its recipe, and its values. The source-tree
- * user object for an aggregate, as {@code LoadedDatasetInfo} is for a dataset. EDT-only.
+ * One user-created derived series: its identity, its recipe, and its values. The source-tree
+ * user object for a derived series, as {@code LoadedDatasetInfo} is for a dataset. EDT-only.
  */
-final class AggregateInfo {
+final class DerivedSeriesInfo {
 
-    /** One input to an aggregate: a series of its origin, or another aggregate of it. */
+    /** One input to a derived series: a series of its origin, or another derived series of it. */
     sealed interface Input {
     }
 
@@ -20,8 +20,8 @@ final class AggregateInfo {
     record SeriesInput(String name) implements Input {
     }
 
-    /** Another aggregate of the same origin, by id, so a rename doesn't break the recipe. */
-    record AggregateInput(long aggregateId) implements Input {
+    /** Another derived series of the same origin, by id, so a rename doesn't break the recipe. */
+    record DerivedSeriesInput(long derivedId) implements Input {
     }
 
     final long id;
@@ -29,14 +29,14 @@ final class AggregateInfo {
     final SourceRef origin;
     /** The recipe: what was summed, as resolved at creation. */
     final List<Input> inputs;
-    /** Made from Pixie data, directly or through an input aggregate: counts towards the Pixie budget. */
+    /** Made from Pixie data, directly or through an input derived series: counts towards the Pixie budget. */
     final boolean pixieBacked;
 
     private String name;
     private TimeSeriesData values;
     private String unavailableReason;
 
-    AggregateInfo(long id, SourceRef origin, String name, List<Input> inputs,
+    DerivedSeriesInfo(long id, SourceRef origin, String name, List<Input> inputs,
                   boolean pixieBacked, TimeSeriesData values) {
         this.id = id;
         this.origin = origin;
@@ -46,8 +46,8 @@ final class AggregateInfo {
         this.values = values;
     }
 
-    AggregateSeries ref() {
-        return new AggregateSeries(id);
+    DerivedSeries ref() {
+        return new DerivedSeries(id);
     }
 
     String name() {

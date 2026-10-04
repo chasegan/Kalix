@@ -3,9 +3,9 @@ package com.kalix.ide.windows;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.VisualizationTabManager;
-import com.kalix.ide.flowviz.data.AggregateLabel;
-import com.kalix.ide.flowviz.data.AggregateSeries;
-import com.kalix.ide.flowviz.data.AggregateSource;
+import com.kalix.ide.flowviz.data.DerivedSeriesLabel;
+import com.kalix.ide.flowviz.data.DerivedSeries;
+import com.kalix.ide.flowviz.data.DerivedSeriesSource;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DefaultLabelResolver;
@@ -54,17 +54,17 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
- * The Run Manager's user-created aggregates: the sum of chosen series from one source,
- * shown in the data source tree (Aggregate series &gt; origin &gt; name) and as
- * {@code aggregate.<name>} in the outputs tree.
+ * The Run Manager's user-created derived series: the sum of chosen series from one source,
+ * shown in the data source tree (Derived series &gt; origin &gt; name) and as
+ * {@code derived.<name>} in the outputs tree.
  *
- * <p>Owns each aggregate's values, independently of the source they were summed from,
- * so an aggregate outlives the removal of that source. Aggregates of the "Last" alias
+ * <p>Owns each derived series' values, independently of the source they were summed from,
+ * so a derived series outlives the removal of that source. Derived series of the "Last" alias
  * are recomputed when Last changes; all others are fixed at creation. EDT-only.</p>
  */
-class AggregatedSeriesController {
+class DerivedSeriesController {
 
-    private static final String TITLE = "New Aggregate";
+    private static final String TITLE = "New derived series";
     // Inputs listed in the recipe tooltip before "… and N more".
     private static final int RECIPE_LINES = 20;
 
@@ -72,7 +72,7 @@ class AggregatedSeriesController {
     private final JCheckboxTree sourceTree;
     private final JCheckboxTree outputsTree;
     private final DefaultTreeModel treeModel;
-    private final DefaultMutableTreeNode aggregateSeriesNode;
+    private final DefaultMutableTreeNode derivedSeriesNode;
     private final VisualizationTabManager tabManager;
     private final DataSet plotDataSet;
     private final TimeSeriesRequestManager timeSeriesRequestManager;
@@ -82,19 +82,19 @@ class AggregatedSeriesController {
     private final SeriesFetchCoordinator fetchCoordinator;
     private final Consumer<String> statusUpdater;
 
-    private final Map<Long, AggregateInfo> aggregates = new LinkedHashMap<>();
+    private final Map<Long, DerivedSeriesInfo> derivedSeries = new LinkedHashMap<>();
     // An origin's last display name, recorded when it is removed.
     private final Map<SourceRef, String> removedOriginLabels = new HashMap<>();
     private long nextId = 1;
-    // The Last generation whose aggregates are fully recomputed.
+    // The Last generation whose derived series are fully recomputed.
     private long recomputedGeneration;
 
-    AggregatedSeriesController(
+    DerivedSeriesController(
         RunManager window,
         JCheckboxTree sourceTree,
         JCheckboxTree outputsTree,
         DefaultTreeModel treeModel,
-        DefaultMutableTreeNode aggregateSeriesNode,
+        DefaultMutableTreeNode derivedSeriesNode,
         VisualizationTabManager tabManager,
         DataSet plotDataSet,
         TimeSeriesRequestManager timeSeriesRequestManager,
@@ -108,7 +108,7 @@ class AggregatedSeriesController {
         this.sourceTree = sourceTree;
         this.outputsTree = outputsTree;
         this.treeModel = treeModel;
-        this.aggregateSeriesNode = aggregateSeriesNode;
+        this.derivedSeriesNode = derivedSeriesNode;
         this.tabManager = tabManager;
         this.plotDataSet = plotDataSet;
         this.timeSeriesRequestManager = timeSeriesRequestManager;
@@ -146,11 +146,11 @@ class AggregatedSeriesController {
     }
 
     /**
-     * Creates one aggregate per origin covered by {@code leaves}, each the sum of that
+     * Creates one derived series per origin covered by {@code leaves}, each the sum of that
      * origin's series among them.
      *
      * <p>A node contributes every series leaf under it, as the tree currently shows it (so
-     * the filter narrows what an in-between node sums). An aggregate counts as a series of
+     * the filter narrows what an in-between node sums). A derived series counts as a series of
      * its own origin. Every origin must contribute the same series. All-or-nothing: if any
      * input fails, nothing is created.</p>
      */
@@ -181,28 +181,28 @@ class AggregatedSeriesController {
             error(refusal);
             return;
         }
-        // Last's aggregates hold the previous run's values until their recompute ends.
+        // Last's derived series hold the previous run's values until their recompute ends.
         if (recomputedGeneration != lastRunTracker.getGeneration() && plans.stream().anyMatch(p ->
                 p.origin() instanceof LastSource
-                    && p.inputs().stream().anyMatch(i -> i instanceof AggregateInfo.AggregateInput))) {
-            error("The aggregates of the last run are still being recomputed. Try again when they are done.");
+                    && p.inputs().stream().anyMatch(i -> i instanceof DerivedSeriesInfo.DerivedSeriesInput))) {
+            error("The derived series of the last run are still being recomputed. Try again when they are done.");
             return;
         }
 
-        status("Creating aggregate." + name + "…");
+        status("Creating derived series." + name + "…");
         new Creation(name, plans, lastRunTracker.getGeneration()).next();
     }
 
     /** One origin's selected inputs, keyed by display name, and where its series are read. */
     private static final class OriginInputs {
-        /** The run or dataset tree object; {@code null} if every input is an aggregate. */
+        /** The run or dataset tree object; {@code null} if every input is a derived series. */
         Object source;
-        final Map<String, AggregateInfo.Input> inputs = new LinkedHashMap<>();
+        final Map<String, DerivedSeriesInfo.Input> inputs = new LinkedHashMap<>();
     }
 
     /**
      * {@code leaves} grouped by origin, or {@code null} (after telling the user why) if they
-     * can't make an aggregate.
+     * can't make a derived series.
      */
     private Map<SourceRef, OriginInputs> inputsByOrigin(List<OutputsTreeBuilder.SeriesLeafNode> leaves,
                                                        String noneMessage) {
@@ -238,14 +238,14 @@ class AggregatedSeriesController {
 
     private void addLeaf(Map<SourceRef, OriginInputs> selection, Map<Object, SourceRef> originOfSource,
                          OutputsTreeBuilder.SeriesLeafNode leaf) {
-        if (leaf.source instanceof AggregateInfo aggregate) {
-            selection.computeIfAbsent(aggregate.origin, o -> new OriginInputs()).inputs
-                .putIfAbsent(leaf.seriesName, new AggregateInfo.AggregateInput(aggregate.id));
+        if (leaf.source instanceof DerivedSeriesInfo derived) {
+            selection.computeIfAbsent(derived.origin, o -> new OriginInputs()).inputs
+                .putIfAbsent(leaf.seriesName, new DerivedSeriesInfo.DerivedSeriesInput(derived.id));
         } else {
             SourceRef originRef = originOfSource.computeIfAbsent(leaf.source, window::sourceRefForNode);
             OriginInputs origin = selection.computeIfAbsent(originRef, o -> new OriginInputs());
             origin.source = leaf.source;
-            origin.inputs.putIfAbsent(leaf.seriesName, new AggregateInfo.SeriesInput(leaf.seriesName));
+            origin.inputs.putIfAbsent(leaf.seriesName, new DerivedSeriesInfo.SeriesInput(leaf.seriesName));
         }
     }
 
@@ -253,7 +253,7 @@ class AggregatedSeriesController {
     private String promptForName(List<SourceRef> origins) {
         String name = suggestName(origins);
         while (true) {
-            name = (String) JOptionPane.showInputDialog(window, "Aggregate name:", TITLE,
+            name = (String) JOptionPane.showInputDialog(window, "Derived series name:", TITLE,
                 JOptionPane.PLAIN_MESSAGE, null, null, name);
             if (name == null) {
                 return null;
@@ -275,20 +275,20 @@ class AggregatedSeriesController {
         return "total_" + n;
     }
 
-    /** Why {@code name} can't be used for an aggregate of each origin, or {@code null}. */
+    /** Why {@code name} can't be used for a derived series of each origin, or {@code null}. */
     private String nameProblem(String name, List<SourceRef> origins) {
         if (name.isEmpty()) {
             return "Enter a name.";
         }
         if (name.contains(".") || name.chars().anyMatch(Character::isWhitespace)) {
-            return "An aggregate name can't contain dots or spaces.";
+            return "A derived series name can't contain dots or spaces.";
         }
-        for (AggregateInfo existing : aggregates.values()) {
+        for (DerivedSeriesInfo existing : derivedSeries.values()) {
             if (existing.name().equals(name) && origins.contains(existing.origin)) {
-                return originLabel(existing.origin) + " already has an aggregate named \"" + name + "\".";
+                return originLabel(existing.origin) + " already has a derived series named \"" + name + "\".";
             }
         }
-        String full = AggregateSeries.NAME_PREFIX + name;
+        String full = DerivedSeries.NAME_PREFIX + name;
         for (DatasetSeries column : datasetSeriesSources.keySet()) {
             if (column.baseName().equals(full)) {
                 return "A loaded dataset (" + labelResolver.sourceLabel(column)
@@ -299,13 +299,13 @@ class AggregatedSeriesController {
     }
 
     /** One origin's inputs, ready to be read one at a time. */
-    private record Plan(SourceRef origin, List<AggregateInfo.Input> inputs, List<Read> reads) {
-        /** Made from Pixie data, directly or through an input aggregate. */
+    private record Plan(SourceRef origin, List<DerivedSeriesInfo.Input> inputs, List<Read> reads) {
+        /** Made from Pixie data, directly or through an input derived series. */
         boolean pixieBacked() {
             return pixieLength() > 0;
         }
 
-        /** The aggregate's point count if Pixie-backed, else 0. */
+        /** The derived series' point count if Pixie-backed, else 0. */
         long pixieLength() {
             return reads.stream().mapToLong(Read::pixieBackedLength).max().orElse(0);
         }
@@ -332,15 +332,15 @@ class AggregatedSeriesController {
 
     /**
      * Plans the reads for one origin's inputs, from {@code source} (a run or dataset tree
-     * object, or {@code null} if every input is an aggregate). Run series are requested,
-     * Pixie series decoded, and input aggregates looked up, only when their turn comes.
+     * object, or {@code null} if every input is a derived series). Run series are requested,
+     * Pixie series decoded, and input derived series looked up, only when their turn comes.
      */
-    private Plan plan(SourceRef origin, Object source, List<AggregateInfo.Input> inputs) throws CannotRead {
+    private Plan plan(SourceRef origin, Object source, List<DerivedSeriesInfo.Input> inputs) throws CannotRead {
         List<Read> reads = new ArrayList<>();
-        for (AggregateInfo.Input input : inputs) {
+        for (DerivedSeriesInfo.Input input : inputs) {
             reads.add(switch (input) {
-                case AggregateInfo.SeriesInput series -> seriesRead(origin, source, series.name());
-                case AggregateInfo.AggregateInput aggregate -> aggregateRead(origin, aggregate.aggregateId());
+                case DerivedSeriesInfo.SeriesInput series -> seriesRead(origin, source, series.name());
+                case DerivedSeriesInfo.DerivedSeriesInput derived -> derivedRead(origin, derived.derivedId());
             });
         }
         return new Plan(origin, inputs, reads);
@@ -378,10 +378,10 @@ class AggregatedSeriesController {
         throw new CannotRead("Unsupported source: " + source);
     }
 
-    private Read aggregateRead(SourceRef origin, long aggregateId) throws CannotRead {
-        AggregateInfo input = aggregates.get(aggregateId);
+    private Read derivedRead(SourceRef origin, long derivedId) throws CannotRead {
+        DerivedSeriesInfo input = derivedSeries.get(derivedId);
         if (input == null) {
-            throw new CannotRead(originLabel(origin) + ": an input aggregate was deleted.");
+            throw new CannotRead(originLabel(origin) + ": an input derived series was deleted.");
         }
         String name = labelResolver.nameFor(input.ref());
         TimeSeriesData values = input.values();
@@ -389,13 +389,13 @@ class AggregatedSeriesController {
             throw new CannotRead(originLabel(origin) + ": " + name + " is unavailable ("
                 + input.unavailableReason() + ").");
         }
-        return new Read(name, () -> currentValues(aggregateId), 0,
+        return new Read(name, () -> currentValues(derivedId), 0,
             input.pixieBacked ? values.getPointCount() : 0);
     }
 
-    /** An aggregate's values as of now, so a plan never pins an older array. */
-    private CompletableFuture<TimeSeriesData> currentValues(long aggregateId) {
-        AggregateInfo input = aggregates.get(aggregateId);
+    /** A derived series' values as of now, so a plan never pins an older array. */
+    private CompletableFuture<TimeSeriesData> currentValues(long derivedId) {
+        DerivedSeriesInfo input = derivedSeries.get(derivedId);
         TimeSeriesData values = input != null ? input.values() : null;
         return values != null ? CompletableFuture.completedFuture(values)
             : CompletableFuture.failedFuture(new IllegalStateException(
@@ -410,7 +410,7 @@ class AggregatedSeriesController {
             newPoints += plan.pixieLength();
             longestInput = Math.max(longestInput, plan.longestDecode());
         }
-        return newPoints == 0 ? null : fetchCoordinator.pixieAggregateRefusal(newPoints, longestInput);
+        return newPoints == 0 ? null : fetchCoordinator.pixieDerivedRefusal(newPoints, longestInput);
     }
 
     /**
@@ -443,22 +443,22 @@ class AggregatedSeriesController {
                     planIndex++;
                     next();
                 },
-                problem -> fail("aggregate." + name + " was not created: " + problem + ".")
+                problem -> fail("derived." + name + " was not created: " + problem + ".")
             ).next();
         }
 
-        /** Registers every origin's aggregate, or none of them. */
+        /** Registers every origin's derived series, or none of them. */
         private void finish() {
             List<SourceRef> origins = plans.stream().map(Plan::origin).toList();
             if (origins.contains(new LastSource()) && lastRunTracker.getGeneration() != lastGeneration) {
-                fail("The last run changed while aggregate." + name + " was being created. Try again.");
+                fail("The last run changed while derived series." + name + " was being created. Try again.");
                 return;
             }
             // An origin removed while this one read would never be labelled removed.
             for (SourceRef origin : origins) {
                 if (!(origin instanceof LastSource) && !removedOriginLabels.containsKey(origin)
                         && !window.hasSourceNode(origin)) {
-                    fail("A source was removed while aggregate." + name + " was being created.");
+                    fail("A source was removed while derived series." + name + " was being created.");
                     return;
                 }
             }
@@ -473,7 +473,7 @@ class AggregatedSeriesController {
             Set<SeriesRef> newRefs = new LinkedHashSet<>();
             for (int i = 0; i < plans.size(); i++) {
                 Plan plan = plans.get(i);
-                AggregateInfo info = new AggregateInfo(nextId++, plan.origin(), name, plan.inputs(),
+                DerivedSeriesInfo info = new DerivedSeriesInfo(nextId++, plan.origin(), name, plan.inputs(),
                     plan.pixieBacked(), sums.get(i));
                 newPaths.add(register(info));
                 newRefs.add(info.ref());
@@ -485,7 +485,7 @@ class AggregatedSeriesController {
             }
             sourceTree.addCheckedPaths(newPaths);
             window.checkOutputsSeries(newRefs);
-            status("Created aggregate." + name + " for " + origins.size()
+            status("Created derived series." + name + " for " + origins.size()
                 + (origins.size() == 1 ? " source" : " sources"));
         }
     }
@@ -540,12 +540,12 @@ class AggregatedSeriesController {
     }
 
     /**
-     * Recomputes every aggregate of the Last alias from the new Last run. Registered as a
+     * Recomputes every derived series of the Last alias from the new Last run. Registered as a
      * {@link LastRunTracker} listener: runs whenever Last changes, including to no run.
      */
     void onLastChanged() {
         LastSource last = new LastSource();
-        List<AggregateInfo> targets = aggregates.values().stream()
+        List<DerivedSeriesInfo> targets = derivedSeries.values().stream()
             .filter(a -> a.origin.equals(last)).toList();
         if (targets.isEmpty()) {
             recomputedGeneration = lastRunTracker.getGeneration();
@@ -553,7 +553,7 @@ class AggregatedSeriesController {
         }
         RunInfoImpl lastRun = lastRunTracker.getLastRunInfo();
         if (lastRun == null) {
-            for (AggregateInfo target : targets) {
+            for (DerivedSeriesInfo target : targets) {
                 apply(target, null, "There is no last run.");
             }
             recomputedGeneration = lastRunTracker.getGeneration();
@@ -564,16 +564,16 @@ class AggregatedSeriesController {
     }
 
     /**
-     * One recompute of Last's aggregates, in creation order so that an input aggregate is
+     * One recompute of Last's derived series, in creation order so that an input derived series is
      * always recomputed before those made from it. Superseded, and stopped, by a newer Last.
      */
     private final class Recompute {
-        private final List<AggregateInfo> targets;
+        private final List<DerivedSeriesInfo> targets;
         private final RunInfoImpl lastRun;
         private final long generation;
         private int index;
 
-        Recompute(List<AggregateInfo> targets, RunInfoImpl lastRun, long generation) {
+        Recompute(List<DerivedSeriesInfo> targets, RunInfoImpl lastRun, long generation) {
             this.targets = targets;
             this.lastRun = lastRun;
             this.generation = generation;
@@ -585,7 +585,7 @@ class AggregatedSeriesController {
                 tabManager.updateAllTabs(false);
                 return;
             }
-            AggregateInfo target = targets.get(index);
+            DerivedSeriesInfo target = targets.get(index);
             Plan plan;
             try {
                 plan = plan(target.origin, lastRun, target.inputs);
@@ -599,12 +599,12 @@ class AggregatedSeriesController {
             ).next();
         }
 
-        private void done(AggregateInfo target, TimeSeriesData sum, String problem) {
+        private void done(DerivedSeriesInfo target, TimeSeriesData sum, String problem) {
             if (lastRunTracker.getGeneration() != generation) {
                 return; // a newer Last has started its own recompute
             }
             // Deleted meanwhile: publishing would put an orphan back in the pool
-            if (aggregates.get(target.id) == target) {
+            if (derivedSeries.get(target.id) == target) {
                 apply(target, sum, problem);
                 if (problem != null) {
                     status(labelResolver.labelFor(target.ref()) + " could not be recomputed: " + problem);
@@ -616,10 +616,10 @@ class AggregatedSeriesController {
     }
 
     /**
-     * Sets an aggregate's values in the pool and stats tabs, or clears them there with
+     * Sets a derived series' values in the pool and stats tabs, or clears them there with
      * {@code reason}. The caller redraws the plot tabs once when done.
      */
-    private void apply(AggregateInfo target, TimeSeriesData values, String reason) {
+    private void apply(DerivedSeriesInfo target, TimeSeriesData values, String reason) {
         SeriesRef ref = target.ref();
         if (values != null) {
             target.setValues(values);
@@ -632,36 +632,36 @@ class AggregatedSeriesController {
     }
 
     /**
-     * The source-tree right-click menu for an aggregate, an origin's group or the top-level
+     * The source-tree right-click menu for a derived series, an origin's group or the top-level
      * node, or {@code null}
      * for any other node. Context-specific, modify, then destructive, each in its own block
      * (ADR-0002 §1).
      */
     JPopupMenu contextMenuFor(Object userObject) {
-        if (userObject == aggregateSeriesNode.getUserObject()) {
+        if (userObject == derivedSeriesNode.getUserObject()) {
             JPopupMenu menu = new JPopupMenu();
             JMenuItem deleteAll = new JMenuItem("Delete all", MenuIcons.delete());
-            deleteAll.setEnabled(!aggregates.isEmpty());
-            deleteAll.addActionListener(e -> delete(List.copyOf(aggregates.values()),
-                "all " + aggregates.size() + " aggregates"));
+            deleteAll.setEnabled(!derivedSeries.isEmpty());
+            deleteAll.addActionListener(e -> delete(List.copyOf(derivedSeries.values()),
+                "all " + derivedSeries.size() + " derived series"));
             menu.add(deleteAll);
             return menu;
         }
         if (userObject instanceof OriginGroup group) {
             JPopupMenu menu = new JPopupMenu();
             JMenuItem save = new JMenuItem("Save…");
-            save.addActionListener(e -> save(aggregatesOf(group.origin), "aggregates " + group));
+            save.addActionListener(e -> save(derivedSeriesOf(group.origin), "derived series " + group));
             menu.add(save);
             menu.addSeparator();
             JMenuItem deleteAll = new JMenuItem("Delete all", MenuIcons.delete());
             deleteAll.addActionListener(e -> {
-                List<AggregateInfo> ofGroup = aggregatesOf(group.origin);
-                delete(ofGroup, "all " + ofGroup.size() + " aggregates of " + group);
+                List<DerivedSeriesInfo> ofGroup = derivedSeriesOf(group.origin);
+                delete(ofGroup, "all " + ofGroup.size() + " derived series of " + group);
             });
             menu.add(deleteAll);
             return menu;
         }
-        if (!(userObject instanceof AggregateInfo info)) {
+        if (!(userObject instanceof DerivedSeriesInfo info)) {
             return null;
         }
         JPopupMenu menu = new JPopupMenu();
@@ -682,26 +682,26 @@ class AggregatedSeriesController {
         return menu;
     }
 
-    /** Whether the outputs-tree selection includes an aggregate, so it can be saved. */
-    boolean selectionHasAggregates() {
-        return selectedLeaves().stream().anyMatch(leaf -> leaf.source instanceof AggregateInfo);
+    /** Whether the outputs-tree selection includes a derived series, so it can be saved. */
+    boolean selectionHasDerivedSeries() {
+        return selectedLeaves().stream().anyMatch(leaf -> leaf.source instanceof DerivedSeriesInfo);
     }
 
     /**
-     * Saves the aggregates selected in the outputs tree to one file. Refuses a selection that
+     * Saves the derived series selected in the outputs tree to one file. Refuses a selection that
      * also holds run or dataset series, rather than silently leaving them out.
      */
-    void saveSelectedAggregates() {
-        Set<AggregateInfo> selected = new LinkedHashSet<>();
+    void saveSelectedDerivedSeries() {
+        Set<DerivedSeriesInfo> selected = new LinkedHashSet<>();
         for (OutputsTreeBuilder.SeriesLeafNode leaf : selectedLeaves()) {
-            if (!(leaf.source instanceof AggregateInfo aggregate)) {
-                error("Only aggregates can be saved here: " + labelResolver.labelFor(leaf.ref)
+            if (!(leaf.source instanceof DerivedSeriesInfo derived)) {
+                error("Only derived series can be saved here: " + labelResolver.labelFor(leaf.ref)
                     + " is not one. Save a run's results from its own menu.");
                 return;
             }
-            selected.add(aggregate);
+            selected.add(derived);
         }
-        save(List.copyOf(selected), "aggregates");
+        save(List.copyOf(selected), "derived series");
     }
 
     /** Every series leaf under the outputs-tree selection, as the tree shows it. */
@@ -731,24 +731,24 @@ class AggregatedSeriesController {
         return leaves;
     }
 
-    private List<AggregateInfo> aggregatesOf(SourceRef origin) {
-        return aggregates.values().stream().filter(a -> a.origin.equals(origin)).toList();
+    private List<DerivedSeriesInfo> derivedSeriesOf(SourceRef origin) {
+        return derivedSeries.values().stream().filter(a -> a.origin.equals(origin)).toList();
     }
 
     /**
-     * Saves {@code toSave} to one file, CSV, zipped CSV or Pixie, one column per aggregate
+     * Saves {@code toSave} to one file, CSV, zipped CSV or Pixie, one column per derived series
      * named by its label, as a run's "Save results" offers. The dialog suggests a name
      * made from {@code suggestion}.
      */
-    private void save(List<AggregateInfo> toSave, String suggestion) {
+    private void save(List<DerivedSeriesInfo> toSave, String suggestion) {
         List<String> unavailable = toSave.stream().filter(a -> a.values() == null)
             .map(a -> labelResolver.labelFor(a.ref())).toList();
         if (!unavailable.isEmpty()) {
-            error("Nothing was saved. These aggregates are unavailable:\n  " + String.join("\n  ", unavailable));
+            error("Nothing was saved. These derived series are unavailable:\n  " + String.join("\n  ", unavailable));
             return;
         }
         Optional<File> chosen = KalixFileDialog.saveFile(window)
-            .title("Save Aggregates")
+            .title("Save derived series")
             .startIn(window.baseDirectory())
             .suggestedName(suggestion.replaceAll("[^A-Za-z0-9._-]+", "_").replaceAll("^_+|_+$", "") + ".csv")
             .filters(
@@ -760,24 +760,24 @@ class AggregatedSeriesController {
             return;
         }
         DataSet data = new DataSet();
-        for (AggregateInfo info : toSave) {
+        for (DerivedSeriesInfo info : toSave) {
             data.addSeries(info.ref(), info.values());
         }
         try {
             File written = SeriesFileWriter.write(data, chosen.get(), null, labelResolver,
                 PreferenceKeys.FLOWVIZ_PRECISION64.get());
-            status("Saved " + toSave.size() + (toSave.size() == 1 ? " aggregate" : " aggregates")
+            status("Saved " + toSave.size() + (toSave.size() == 1 ? " derived series" : " derived series")
                 + " to " + written.getName());
         } catch (IOException | IllegalArgumentException e) {
-            DialogUtils.showError(window, "Could not save the aggregates: " + e.getMessage(), "Save Aggregates");
+            DialogUtils.showError(window, "Could not save the derived series: " + e.getMessage(), "Save derived series");
         }
     }
 
-    /** Prompts for a new name, valid within the aggregate's origin, and applies it. */
-    private void rename(AggregateInfo info) {
+    /** Prompts for a new name, valid within the derived series' origin, and applies it. */
+    private void rename(DerivedSeriesInfo info) {
         String name = info.name();
         while (true) {
-            name = (String) JOptionPane.showInputDialog(window, "Aggregate name:", "Rename Aggregate",
+            name = (String) JOptionPane.showInputDialog(window, "Derived series name:", "Rename Derived series",
                 JOptionPane.PLAIN_MESSAGE, null, null, name);
             if (name == null) {
                 return;
@@ -802,19 +802,19 @@ class AggregatedSeriesController {
 
     /**
      * Deletes {@code toDelete} ({@code what} names it in the dialog) after confirming, naming
-     * any other aggregates made from them: they keep their values, but those of Last fail on
-     * their next recompute. Deleting a group's last aggregate removes the group.
+     * any other derived series made from them: they keep their values, but those of Last fail on
+     * their next recompute. Deleting a group's last derived series removes the group.
      */
-    private void delete(List<AggregateInfo> toDelete, String what) {
+    private void delete(List<DerivedSeriesInfo> toDelete, String what) {
         if (toDelete.isEmpty()) {
             return;
         }
-        Set<AggregateInfo.Input> deleted = new HashSet<>();
-        for (AggregateInfo info : toDelete) {
-            deleted.add(new AggregateInfo.AggregateInput(info.id));
+        Set<DerivedSeriesInfo.Input> deleted = new HashSet<>();
+        for (DerivedSeriesInfo info : toDelete) {
+            deleted.add(new DerivedSeriesInfo.DerivedSeriesInput(info.id));
         }
-        List<String> dependents = aggregates.values().stream()
-            .filter(a -> !deleted.contains(new AggregateInfo.AggregateInput(a.id))
+        List<String> dependents = derivedSeries.values().stream()
+            .filter(a -> !deleted.contains(new DerivedSeriesInfo.DerivedSeriesInput(a.id))
                 && a.inputs.stream().anyMatch(deleted::contains))
             .map(a -> labelResolver.labelFor(a.ref())).toList();
         String message = "Delete " + what + "?";
@@ -824,19 +824,19 @@ class AggregatedSeriesController {
                 + String.join("\n  ", dependents);
         }
         if (!DialogUtils.showConfirmation(window, message,
-                toDelete.size() == 1 ? "Delete Aggregate" : "Delete Aggregates")) {
+                toDelete.size() == 1 ? "Delete Derived series" : "Delete Derived series")) {
             return;
         }
 
         // One source-tree change: one outputs rebuild and one undo step for the lot
         window.changeSourceTree(() -> {
-            for (AggregateInfo info : toDelete) {
+            for (DerivedSeriesInfo info : toDelete) {
                 DefaultMutableTreeNode group = (DefaultMutableTreeNode) nodeFor(info).getParent();
                 window.removeSourceNode(group, info);
-                window.purgeSeries(List.of(info.ref()), new AggregateSource(info.id));
-                aggregates.remove(info.id);
+                window.purgeSeries(List.of(info.ref()), new DerivedSeriesSource(info.id));
+                derivedSeries.remove(info.id);
                 if (group.getChildCount() == 0) {
-                    window.removeSourceNode(aggregateSeriesNode, group.getUserObject());
+                    window.removeSourceNode(derivedSeriesNode, group.getUserObject());
                     removedOriginLabels.remove(info.origin);
                 }
             }
@@ -844,8 +844,8 @@ class AggregatedSeriesController {
         status("Deleted " + what);
     }
 
-    /** The source-tree tooltip for an aggregate: what it sums, and why it is unavailable. */
-    String recipe(AggregateInfo info) {
+    /** The source-tree tooltip for a derived series: what it sums, and why it is unavailable. */
+    String recipe(DerivedSeriesInfo info) {
         List<String> names = componentNames(info);
         int shown = Math.min(names.size(), RECIPE_LINES);
         StringBuilder html = new StringBuilder("<html>Sum of:");
@@ -861,26 +861,26 @@ class AggregatedSeriesController {
         return html.append("</html>").toString();
     }
 
-    /** Opens the aggregate's inputs, one per line, in a text window they can be copied from. */
-    private void showComponents(AggregateInfo info) {
+    /** Opens the derived series' inputs, one per line, in a text window they can be copied from. */
+    private void showComponents(DerivedSeriesInfo info) {
         MinimalEditorWindow editor = new MinimalEditorWindow(String.join("\n", componentNames(info)) + "\n");
         editor.setTitle(labelResolver.labelFor(info.ref()));
         editor.setVisible(true);
     }
 
-    /** An aggregate's inputs by their current names. */
-    private List<String> componentNames(AggregateInfo info) {
+    /** A derived series' inputs by their current names. */
+    private List<String> componentNames(DerivedSeriesInfo info) {
         return info.inputs.stream().map(input -> switch (input) {
-            case AggregateInfo.SeriesInput series -> series.name();
-            case AggregateInfo.AggregateInput aggregate -> {
-                AggregateInfo source = aggregates.get(aggregate.aggregateId());
-                yield source != null ? labelResolver.nameFor(source.ref()) : "(deleted aggregate)";
+            case DerivedSeriesInfo.SeriesInput series -> series.name();
+            case DerivedSeriesInfo.DerivedSeriesInput derived -> {
+                DerivedSeriesInfo source = derivedSeries.get(derived.derivedId());
+                yield source != null ? labelResolver.nameFor(source.ref()) : "(deleted derived series)";
             }
         }).toList();
     }
 
     /** The source-tree node holding {@code info}. */
-    private DefaultMutableTreeNode nodeFor(AggregateInfo info) {
+    private DefaultMutableTreeNode nodeFor(DerivedSeriesInfo info) {
         DefaultMutableTreeNode group = groupNodeFor(info.origin);
         for (int i = 0; i < group.getChildCount(); i++) {
             DefaultMutableTreeNode child = (DefaultMutableTreeNode) group.getChildAt(i);
@@ -892,19 +892,19 @@ class AggregatedSeriesController {
     }
 
     /**
-     * Records {@code origin}'s last display name as it is removed. Its aggregates stay,
+     * Records {@code origin}'s last display name as it is removed. Its derived series stay,
      * labelled {@code "<lastLabel> (removed)"}.
      */
     void onOriginRemoved(SourceRef origin, String lastLabel) {
-        if (hasAggregatesOf(origin)) {
+        if (hasDerivedSeriesOf(origin)) {
             removedOriginLabels.put(origin, lastLabel);
             refreshOriginLabels();
         }
     }
 
-    /** Forgets a removal when the same dataset is loaded again: its aggregates are live again. */
+    /** Forgets a removal when the same dataset is loaded again: its derived series are live again. */
     void onOriginLoaded(SourceRef origin) {
-        if (removedOriginLabels.remove(origin) != null && hasAggregatesOf(origin)) {
+        if (removedOriginLabels.remove(origin) != null && hasDerivedSeriesOf(origin)) {
             refreshOriginLabels();
         }
     }
@@ -914,7 +914,7 @@ class AggregatedSeriesController {
      * rebuilt the outputs tree and redrew the tabs.
      */
     void onOriginRenamed(SourceRef origin) {
-        if (hasAggregatesOf(origin)) {
+        if (hasDerivedSeriesOf(origin)) {
             refreshGroupNodes();
         }
     }
@@ -928,39 +928,39 @@ class AggregatedSeriesController {
     }
 
     private void refreshGroupNodes() {
-        for (int i = 0; i < aggregateSeriesNode.getChildCount(); i++) {
-            treeModel.nodeChanged(aggregateSeriesNode.getChildAt(i));
+        for (int i = 0; i < derivedSeriesNode.getChildCount(); i++) {
+            treeModel.nodeChanged(derivedSeriesNode.getChildAt(i));
         }
     }
 
-    private boolean hasAggregatesOf(SourceRef origin) {
-        return aggregates.values().stream().anyMatch(a -> a.origin.equals(origin));
+    private boolean hasDerivedSeriesOf(SourceRef origin) {
+        return derivedSeries.values().stream().anyMatch(a -> a.origin.equals(origin));
     }
 
     /**
      * Why a dataset with these series names must not load, or {@code null}: no column may
-     * share an aggregate's full name, or the outputs tree would merge the two.
+     * share a derived series' full name, or the outputs tree would merge the two.
      */
     String datasetNameClash(List<String> seriesNames) {
-        Map<String, AggregateInfo> byFullName = new HashMap<>();
-        for (AggregateInfo info : aggregates.values()) {
-            byFullName.putIfAbsent(AggregateSeries.NAME_PREFIX + info.name(), info);
+        Map<String, DerivedSeriesInfo> byFullName = new HashMap<>();
+        for (DerivedSeriesInfo info : derivedSeries.values()) {
+            byFullName.putIfAbsent(DerivedSeries.NAME_PREFIX + info.name(), info);
         }
         for (String name : seriesNames) {
-            AggregateInfo info = name.startsWith(AggregateSeries.NAME_PREFIX) ? byFullName.get(name) : null;
+            DerivedSeriesInfo info = name.startsWith(DerivedSeries.NAME_PREFIX) ? byFullName.get(name) : null;
             if (info != null) {
-                return "This dataset has a column named \"" + name + "\", the same as an aggregate of "
-                    + originLabel(info.origin) + ".\n\nRename or delete the aggregate, or rename the"
+                return "This dataset has a column named \"" + name + "\", the same as a derived series of "
+                    + originLabel(info.origin) + ".\n\nRename or delete the derived series, or rename the"
                     + " column, then load the dataset again.";
             }
         }
         return null;
     }
 
-    /** Point counts of the aggregates made from Pixie data, for the Pixie memory budget. */
+    /** Point counts of the derived series made from Pixie data, for the Pixie memory budget. */
     Map<SeriesRef, Integer> pixieBackedPoints() {
         Map<SeriesRef, Integer> points = new HashMap<>();
-        for (AggregateInfo info : aggregates.values()) {
+        for (DerivedSeriesInfo info : derivedSeries.values()) {
             if (info.pixieBacked && info.values() != null) {
                 points.put(info.ref(), info.values().getPointCount());
             }
@@ -969,18 +969,18 @@ class AggregatedSeriesController {
     }
 
     /** The label lookup for {@link DefaultLabelResolver}; {@code null} for an unknown id. */
-    AggregateLabel labelFor(long id) {
-        AggregateInfo info = aggregates.get(id);
+    DerivedSeriesLabel labelFor(long id) {
+        DerivedSeriesInfo info = derivedSeries.get(id);
         return info == null ? null
-            : new AggregateLabel(info.name(), info.origin, removedOriginLabels.get(info.origin));
+            : new DerivedSeriesLabel(info.name(), info.origin, removedOriginLabels.get(info.origin));
     }
 
     /**
-     * Registers an aggregate and adds it to the source tree under its origin's group,
-     * creating the group if this is the origin's first aggregate. Returns its tree path.
+     * Registers a derived series and adds it to the source tree under its origin's group,
+     * creating the group if this is the origin's first derived series. Returns its tree path.
      */
-    private TreePath register(AggregateInfo info) {
-        aggregates.put(info.id, info);
+    private TreePath register(DerivedSeriesInfo info) {
+        derivedSeries.put(info.id, info);
 
         DefaultMutableTreeNode group = groupNodeFor(info.origin);
         DefaultMutableTreeNode node = new DefaultMutableTreeNode(info);
@@ -991,16 +991,16 @@ class AggregatedSeriesController {
 
     /** The group node for {@code origin}, created and inserted if absent. */
     private DefaultMutableTreeNode groupNodeFor(SourceRef origin) {
-        for (int i = 0; i < aggregateSeriesNode.getChildCount(); i++) {
-            DefaultMutableTreeNode child = (DefaultMutableTreeNode) aggregateSeriesNode.getChildAt(i);
+        for (int i = 0; i < derivedSeriesNode.getChildCount(); i++) {
+            DefaultMutableTreeNode child = (DefaultMutableTreeNode) derivedSeriesNode.getChildAt(i);
             if (child.getUserObject() instanceof OriginGroup g && g.origin.equals(origin)) {
                 return child;
             }
         }
         DefaultMutableTreeNode group = new DefaultMutableTreeNode(new OriginGroup(origin));
-        aggregateSeriesNode.add(group);
-        treeModel.nodesWereInserted(aggregateSeriesNode,
-            new int[]{aggregateSeriesNode.getChildCount() - 1});
+        derivedSeriesNode.add(group);
+        treeModel.nodesWereInserted(derivedSeriesNode,
+            new int[]{derivedSeriesNode.getChildCount() - 1});
         return group;
     }
 
@@ -1013,7 +1013,7 @@ class AggregatedSeriesController {
     }
 
     private void fail(String message) {
-        status("Aggregate not created");
+        status("Derived series not created");
         error(message);
     }
 

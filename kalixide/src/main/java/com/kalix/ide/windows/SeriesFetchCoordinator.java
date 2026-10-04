@@ -76,8 +76,8 @@ class SeriesFetchCoordinator {
     private final LongSupplier lastRunGeneration;
     /** Defers to {@link LastRunTracker#getLastRunInfo()} for resolving the Last alias. */
     private final Supplier<RunInfoImpl> lastRunInfoSupplier;
-    /** Point counts of aggregates made from Pixie data, which count towards the budget. */
-    private final Supplier<Map<SeriesRef, Integer>> pixieAggregatePoints;
+    /** Point counts of derived series made from Pixie data, which count towards the budget. */
+    private final Supplier<Map<SeriesRef, Integer>> pixieDerivedPoints;
 
     // Depth of nested programmatic tree-update sections. Listeners stay suppressed while
     // any section is open. A counter rather than a boolean so that nesting is safe.
@@ -94,7 +94,7 @@ class SeriesFetchCoordinator {
                            Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources,
                            LongSupplier lastRunGeneration,
                            Supplier<RunInfoImpl> lastRunInfoSupplier,
-                           Supplier<Map<SeriesRef, Integer>> pixieAggregatePoints) {
+                           Supplier<Map<SeriesRef, Integer>> pixieDerivedPoints) {
         this.window = window;
         this.timeseriesTree = timeseriesTree;
         this.timeseriesTreeModel = timeseriesTreeModel;
@@ -106,7 +106,7 @@ class SeriesFetchCoordinator {
         this.datasetSeriesSources = datasetSeriesSources;
         this.lastRunGeneration = lastRunGeneration;
         this.lastRunInfoSupplier = lastRunInfoSupplier;
-        this.pixieAggregatePoints = pixieAggregatePoints;
+        this.pixieDerivedPoints = pixieDerivedPoints;
     }
 
     /** Returns whether a programmatic tree update is in progress. */
@@ -209,13 +209,13 @@ class SeriesFetchCoordinator {
 
             if (leaf.source instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                 datasetRefs.add(ref);
-            } else if (leaf.source instanceof AggregateInfo aggregate) {
+            } else if (leaf.source instanceof DerivedSeriesInfo derived) {
                 // Held by the controller, as loaded datasets are by datasetSeriesSources.
-                TimeSeriesData values = aggregate.values();
+                TimeSeriesData values = derived.values();
                 if (values != null) {
                     window.publishSeries(ref, values);
                 } else {
-                    tabManager.addErrorSeriesInStatsTabs(ref, aggregate.unavailableReason());
+                    tabManager.addErrorSeriesInStatsTabs(ref, derived.unavailableReason());
                 }
             } else {
                 RunInfoImpl runInfo = (RunInfoImpl) leaf.source;
@@ -391,11 +391,11 @@ class SeriesFetchCoordinator {
     }
 
     /**
-     * Why creating aggregates from Pixie data must not go ahead, or {@code null} if it fits:
-     * {@code newPoints} for the new aggregates, plus one input of {@code longestInput}
+     * Why creating derived series from Pixie data must not go ahead, or {@code null} if it fits:
+     * {@code newPoints} for the new derived series, plus one input of {@code longestInput}
      * points decoded at a time, on top of the Pixie data already held.
      */
-    String pixieAggregateRefusal(long newPoints, int longestInput) {
+    String pixieDerivedRefusal(long newPoints, int longestInput) {
         PixieTally tally = pixieInUse();
         tally.points += newPoints + longestInput;
         tally.longest = Math.max(tally.longest, longestInput);
@@ -407,7 +407,7 @@ class SeriesFetchCoordinator {
         return String.format(
             "Summing these Pixie series would bring the Pixie data held by the Run Manager to"
                 + " about %s, more than the %s it allows (half the IDE's memory).%n%n"
-                + "Nothing was created. Remove a Pixie dataset, or an aggregate made from one,"
+                + "Nothing was created. Remove a Pixie dataset, or a derived series made from one,"
                 + " to free memory.",
             PixieStore.formatBytes(estimate), PixieStore.formatBytes(budget));
     }
@@ -415,7 +415,7 @@ class SeriesFetchCoordinator {
     /**
      * The Pixie data held now: every Pixie series in the pool (by its decoded point count,
      * so one from a since-changed file still counts), every one still being decoded for an
-     * earlier tick ({@link #pendingPixiePoints}), and every aggregate made from Pixie data.
+     * earlier tick ({@link #pendingPixiePoints}), and every derived series made from Pixie data.
      */
     private PixieTally pixieInUse() {
         PixieTally tally = new PixieTally();
@@ -428,7 +428,7 @@ class SeriesFetchCoordinator {
         for (Map.Entry<DatasetSeries, Integer> pending : pendingPixiePoints.entrySet()) {
             tally.add(pending.getKey(), pending.getValue());
         }
-        pixieAggregatePoints.get().forEach(tally::add);
+        pixieDerivedPoints.get().forEach(tally::add);
         return tally;
     }
 

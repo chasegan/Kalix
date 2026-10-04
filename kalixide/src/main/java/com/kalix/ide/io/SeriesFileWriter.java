@@ -14,7 +14,7 @@ import java.util.List;
 /**
  * Writes a data set's series as CSV, zipped CSV or Pixie, chosen by the file's extension
  * (the extension is the format, as in every Kalix save dialog). Shared by the plot's
- * "Save Data" and the Run Manager's aggregate save.
+ * "Save Data" and the Run Manager's derived series save.
  */
 public final class SeriesFileWriter {
 
