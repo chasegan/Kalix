@@ -175,7 +175,11 @@ class DerivedSeriesController {
         try {
             for (Map.Entry<SourceRef, OriginInputs> entry : selection.entrySet()) {
                 OriginInputs selected = entry.getValue();
-                plans.add(plan(entry.getKey(), selected.source, List.copyOf(selected.inputs.values())));
+                // Summed in name order, not click order: floating-point addition is not
+                // associative, so the same inputs then give the same bits in every source.
+                List<DerivedSeriesInfo.Input> inputs = selected.inputs.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey()).map(Map.Entry::getValue).toList();
+                plans.add(plan(entry.getKey(), selected.source, inputs));
             }
         } catch (CannotRead e) {
             error(e.getMessage());
@@ -234,7 +238,7 @@ class DerivedSeriesController {
             }
         }
         if (!missing.isEmpty()) {
-            error("Each source must include every selected series. Not selected:\n  "
+            error("Each source must include every selected series. Missing from:\n  "
                 + String.join("\n  ", missing));
             return null;
         }
@@ -749,7 +753,8 @@ class DerivedSeriesController {
         List<String> unavailable = toSave.stream().filter(a -> a.values() == null)
             .map(a -> labelResolver.labelFor(a.ref())).toList();
         if (!unavailable.isEmpty()) {
-            error("Nothing was saved. These derived series are unavailable:\n  " + String.join("\n  ", unavailable));
+            DialogUtils.showWarning(window, "Nothing was saved. These derived series are unavailable:\n  "
+                + String.join("\n  ", unavailable), "Save derived series");
             return;
         }
         Optional<File> chosen = KalixFileDialog.saveFile(window)
