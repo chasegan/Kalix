@@ -120,12 +120,12 @@ class DerivedSeriesController {
         this.recomputedGeneration = lastRunTracker.getGeneration();
     }
 
-    /** "New series from selection > Total…": sums the outputs-tree selection. */
+    /** "Sum selected…": sums the outputs-tree selection. */
     void createFromSelected() {
         create(selectedLeaves(), "Select the series to sum in the Timeseries tree.");
     }
 
-    /** "New series from checked > Total…": sums the series ticked in the outputs tree. */
+    /** "Sum checked…": sums the series ticked in the outputs tree. */
     void createFromChecked() {
         create(checkedLeaves(), "Tick the series to sum in the Timeseries tree.");
     }
@@ -269,10 +269,10 @@ class DerivedSeriesController {
 
     private String suggestName(List<SourceRef> origins) {
         int n = 1;
-        while (nameProblem("total_" + n, origins) != null) {
+        while (nameProblem("sum_" + n, origins) != null) {
             n++;
         }
-        return "total_" + n;
+        return "sum_" + n;
     }
 
     /** Why {@code name} can't be used for a derived series of each origin, or {@code null}. */
@@ -680,28 +680,6 @@ class DerivedSeriesController {
         delete.addActionListener(e -> delete(List.of(info), labelResolver.labelFor(info.ref())));
         menu.add(delete);
         return menu;
-    }
-
-    /** Whether the outputs-tree selection includes a derived series, so it can be saved. */
-    boolean selectionHasDerivedSeries() {
-        return selectedLeaves().stream().anyMatch(leaf -> leaf.source instanceof DerivedSeriesInfo);
-    }
-
-    /**
-     * Saves the derived series selected in the outputs tree to one file. Refuses a selection that
-     * also holds run or dataset series, rather than silently leaving them out.
-     */
-    void saveSelectedDerivedSeries() {
-        Set<DerivedSeriesInfo> selected = new LinkedHashSet<>();
-        for (OutputsTreeBuilder.SeriesLeafNode leaf : selectedLeaves()) {
-            if (!(leaf.source instanceof DerivedSeriesInfo derived)) {
-                error("Only derived series can be saved here: " + labelResolver.labelFor(leaf.ref)
-                    + " is not one. Save a run's results from its own menu.");
-                return;
-            }
-            selected.add(derived);
-        }
-        save(List.copyOf(selected), "derived series");
     }
 
     /** Every series leaf under the outputs-tree selection, as the tree shows it. */

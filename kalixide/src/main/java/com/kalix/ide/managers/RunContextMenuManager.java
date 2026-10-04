@@ -248,67 +248,30 @@ public class RunContextMenuManager {
         });
     }
 
-    /** A menu entry shown only while {@code applies} holds. */
-    public sealed interface OptionalEntry permits OptionalItem, OptionalSubmenu {
-        String label();
-
-        BooleanSupplier applies();
-    }
-
-    /** A menu item shown only while {@code applies} holds. */
-    public record OptionalItem(String label, Runnable action, BooleanSupplier applies)
-        implements OptionalEntry {
-    }
-
-    /** A submenu of {@code items}, shown only while {@code applies} holds. */
-    public record OptionalSubmenu(String label, List<SubmenuItem> items, BooleanSupplier applies)
-        implements OptionalEntry {
-    }
-
-    /** An item of an {@link OptionalSubmenu}. */
-    public record SubmenuItem(String label, Runnable action) {
+    /** A menu item enabled only while {@code enabledWhen} holds; it stays visible, greyed, so the user learns it exists (ADR-0002 §4). */
+    public record ConditionalItem(String label, Runnable action, BooleanSupplier enabledWhen) {
     }
 
     /**
-     * Adds {@code items} and a separator after them; returns what updates their visibility
-     * when the menu opens.
+     * Adds {@code items} and a separator after them; returns what refreshes their
+     * enabled state when the menu opens.
      */
-    private static Runnable addOptionalBlock(JPopupMenu menu, List<? extends OptionalEntry> items) {
+    private static Runnable addConditionalBlock(JPopupMenu menu, List<ConditionalItem> items) {
         List<JMenuItem> menuItems = new ArrayList<>();
-        for (OptionalEntry item : items) {
-            JMenuItem menuItem = switch (item) {
-                case OptionalItem single -> {
-                    JMenuItem m = new JMenuItem(single.label());
-                    m.addActionListener(e -> single.action().run());
-                    yield m;
-                }
-                case OptionalSubmenu submenu -> {
-                    JMenu m = new JMenu(submenu.label());
-                    for (SubmenuItem child : submenu.items()) {
-                        JMenuItem childItem = new JMenuItem(child.label());
-                        childItem.addActionListener(e -> child.action().run());
-                        m.add(childItem);
-                    }
-                    yield m;
-                }
-            };
+        for (ConditionalItem item : items) {
+            JMenuItem menuItem = new JMenuItem(item.label());
+            menuItem.addActionListener(e -> item.action().run());
             menu.add(menuItem);
             menuItems.add(menuItem);
         }
-        JSeparator separator = new JSeparator();
-        menu.add(separator);
+        menu.add(new JSeparator());
         return () -> {
-            boolean any = false;
             for (int i = 0; i < items.size(); i++) {
-                boolean show = items.get(i).applies().getAsBoolean();
-                menuItems.get(i).setVisible(show);
-                any |= show;
+                menuItems.get(i).setEnabled(items.get(i).enabledWhen().getAsBoolean());
             }
-            separator.setVisible(any);
         };
     }
 
-    /** Supplies the right-click menu for node kinds this manager doesn't handle itself. */
     public void setNodeMenuProvider(Function<Object, JPopupMenu> provider) {
         this.nodeMenuProvider = provider;
     }
@@ -341,25 +304,23 @@ public class RunContextMenuManager {
     }
 
     /**
-     * Sets up the context menu for the outputs tree: the {@code contextItems} and
-     * {@code createItems} blocks, then the view/state block (ADR-0002 §1). Optional items
-     * are hidden when they don't apply, and a block with none showing loses its separator
-     * (§4). All items delegate to their callbacks.
+     * Sets up the context menu for the outputs tree: the {@code createItems} block, then
+     * the view/state block (ADR-0002 §1). Create items stay visible and are greyed when
+     * they don't apply, so the user learns they exist (§4). All items delegate to their
+     * callbacks.
      */
-    public void setupOutputsTreeContextMenu(List<OptionalItem> contextItems,
-                                            List<OptionalEntry> createItems,
+
+    public void setupOutputsTreeContextMenu(List<ConditionalItem> createItems,
                                             Runnable expandAllCallback,
                                             Runnable collapseAllCallback,
                                             Runnable showCheckedCallback,
                                             Runnable showSelectedCallback) {
         JPopupMenu contextMenu = new JPopupMenu();
-        List<Runnable> refreshers = new ArrayList<>();
-        refreshers.add(addOptionalBlock(contextMenu, contextItems));
-        refreshers.add(addOptionalBlock(contextMenu, createItems));
+        Runnable refreshCreateItems = addConditionalBlock(contextMenu, createItems);
         contextMenu.addPopupMenuListener(new PopupMenuListener() {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
-                refreshers.forEach(Runnable::run);
+                refreshCreateItems.run();
             }
 
             @Override

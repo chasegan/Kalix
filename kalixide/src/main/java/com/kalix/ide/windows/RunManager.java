@@ -86,7 +86,7 @@ import java.util.function.Consumer;
  * ├── Current runs      → All runs in current session (Run_1, Run_2, ...)
  * ├── Run library       → Saved runs (future feature)
  * ├── Loaded datasets   → Imported CSV/Pixie files
- * └── Derived series  → User-created derived series, grouped by origin (Run_1 > total_1)
+ * └── Derived series  → User-created derived series, grouped by origin (Run_1 > sum_1)
  * </pre>
  *
  * <h2>Data Flow</h2>
@@ -590,16 +590,11 @@ public class RunManager extends JFrame {
             lastRunNode, currentRunsNode, libraryNode, loadedDatasetsNode);
         DerivedSeriesController derivedSeries = derivedSeriesController;
         runContextMenuManager.setupOutputsTreeContextMenu(
-            List.of(new RunContextMenuManager.OptionalItem("Save derived series…",
-                derivedSeries::saveSelectedDerivedSeries, derivedSeries::selectionHasDerivedSeries)),
-            // Submenus leave room for aggregation methods beyond Total (#397).
             List.of(
-                new RunContextMenuManager.OptionalSubmenu("New series from selection",
-                    List.of(new RunContextMenuManager.SubmenuItem("Total…", derivedSeries::createFromSelected)),
-                    derivedSeries::selectionHasSeriesToSum),
-                new RunContextMenuManager.OptionalSubmenu("New series from checked",
-                    List.of(new RunContextMenuManager.SubmenuItem("Total…", derivedSeries::createFromChecked)),
-                    derivedSeries::checkedHasSeriesToSum)),
+                new RunContextMenuManager.ConditionalItem("Sum selected…",
+                    derivedSeries::createFromSelected, derivedSeries::selectionHasSeriesToSum),
+                new RunContextMenuManager.ConditionalItem("Sum checked…",
+                    derivedSeries::createFromChecked, derivedSeries::checkedHasSeriesToSum)),
                                                           this::expandAllFromSelected,
                                                           this::collapseAllFromSelected,
                                                           this::showChecked,
