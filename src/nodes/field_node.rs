@@ -685,6 +685,7 @@ pub fn crop_slot_property(name_lower: &str) -> Option<(usize, &'static str)> {
     let digits = rest.chars().take_while(|c| c.is_ascii_digit()).count();
     if digits == 0 { return None; }
     let n: usize = rest[..digits].parse().ok()?;
+    if n.to_string() != rest[..digits] { return None; } // crop_01 is not a slot
     let suffix = CROP_SLOT_PROPERTIES.iter().find(|s| **s == &rest[digits..])?;
     Some((n, suffix))
 }

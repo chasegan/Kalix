@@ -335,6 +335,13 @@ fn test_curve_number_validation_and_round_trip() {
 }
 
 #[test]
+fn test_a_slot_number_with_a_leading_zero_is_not_a_slot() {
+    let ini = rig("", "crop_01 = shallow\ncrop_01_plant = 1\ncrop_01_plant_area = 1");
+    let err = IniModelIO::read_model_string(&ini).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(err.contains("Unexpected parameter 'crop_01'"), "got: {err}");
+}
+
+#[test]
 fn test_a_fallow_with_a_kc_table_is_refused() {
     let ini = rig("", "").replace("[crop.bare]\nroot_depth = 500\nkc = 0\n", "[crop.bare]\nroot_depth = 500\nkc = 0, 0.2, 100, 0.5\n");
     let mut model = IniModelIO::read_model_string(&ini).expect("loads");
