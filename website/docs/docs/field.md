@@ -346,15 +346,17 @@ month apart.
 
 Harvest is `season_len` days after planting, the whole area back to the fallow with its water.
 Abandonment is `crop_N_viable_area`: each day the crop keeps at most that area, so it can only
-fall. Written against the crop's own state it is a rule for abandoning a failing crop, and 0 is
-death:
+fall. Any value at or above the area keeps the crop whole, so a rule that only ever kills can
+return a large number on the days it does not. Written against the crop's own state it is a rule
+for abandoning a failing crop, and 0 is death:
 
 ```ini
-crop_1_viable_area = if(this.crop_1_ks < 0.2, 0, this.crop_1_area[-1, 0])
+crop_1_viable_area = if(this.crop_1_ks < 0.2, 0, 9e9)
 ```
 
-A viable-area rule is read before the day's areas are settled, so in it the area carries the
-offset, `this.crop_N_area[-1, 0]`; in an order rule, which runs after planting, it does not.
+A rule that cuts a crop back by a share reads its area, and a viable-area rule is read before
+the day's areas are settled, so there the area carries the offset, `this.crop_N_area[-1, 0]`; in
+an order rule, which runs after planting, it does not.
 The stress coefficient is the other way about: today's opening `ks` is written the moment it
 is computed, just before the rule reads it, so `this.crop_N_ks` with no offset is today's, the
 same number the built-in rule uses, and `this.crop_N_ks[-1, 0]` would be a day late.
