@@ -103,7 +103,7 @@ dries.
 | crop\_N\_area | The area under slot N's crop today [km²]; 0 when nothing is in the ground. Written when planting runs, before any order rule, so `this.crop_N_area` with no offset is today's area |
 | crop\_N\_days | Days since planting, 0 on the day it is planted; not a number when nothing is in the ground. Written when planting runs, like `crop_N_area` |
 | crop\_N\_depletion | How far the crop's root zone is below full at the end of the step [mm]: 0 is full, the bucket's capacity is empty. A state, reported at the end of the step like a storage's `volume`; the irrigation rule reads the previous step's value, `this.crop_N_depletion[-1, 0]`, the soil at the start of today. Not a number when nothing is in the ground |
-| crop\_N\_ks | The crop's stress coefficient this step, 0 to 1, from the depletion at the start of the day. Not a number when nothing is in the ground |
+| crop\_N\_ks | The crop's stress coefficient this step, 0 to 1, from the depletion at the start of the day. Written the moment it is computed, before the viable-area rule reads it, so `this.crop_N_ks` with no offset is today's. On the morning a crop is abandoned it is the stress that was read; not a number when nothing stands at the start of the day |
 | crop\_N\_order | The order slot N placed this step [ML] |
 | crop\_N\_order\_due | The order placed earlier for slot N that is due to arrive this step [ML] |
 | crop\_N\_orders\_en\_route | Water on its way to slot N at the end of the step [ML]: ordered, today's order included, and not yet arrived. Zero without travel time from the supply. A state, like `crop_N_depletion`; the irrigation rule reads `this.crop_N_orders_en_route[-1, 0]` |
@@ -350,11 +350,14 @@ fall. Written against the crop's own state it is a rule for abandoning a failing
 death:
 
 ```ini
-crop_1_viable_area = if(this.crop_1_ks[-1, 0] < 0.2, 0, this.crop_1_area[-1, 0])
+crop_1_viable_area = if(this.crop_1_ks < 0.2, 0, this.crop_1_area[-1, 0])
 ```
 
 A viable-area rule is read before the day's areas are settled, so in it the area carries the
 offset, `this.crop_N_area[-1, 0]`; in an order rule, which runs after planting, it does not.
+The stress coefficient is the other way about: today's opening `ks` is written the moment it
+is computed, just before the rule reads it, so `this.crop_N_ks` with no offset is today's, the
+same number the built-in rule uses, and `this.crop_N_ks[-1, 0]` would be a day late.
 
 With no rule written, the field applies its own: a crop whose stress coefficient is 0.05 or below
 at the start of the day dies. We have included a default, because crops aren't immortal.

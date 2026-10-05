@@ -525,3 +525,29 @@ fn test_todays_area_is_readable_in_an_order_rule_because_planting_writes_it_firs
     assert_eq!(s(&mut model, "crop_1_plant").len(), n);
     assert_eq!(s(&mut model, "crop_1_area")[..3], [0.0, 1.0, 1.0]);
 }
+
+#[test]
+fn test_todays_opening_stress_is_readable_in_a_viable_area_rule() {
+    // ks is written the moment it is computed for the day, before the viability rule reads
+    // it, so `this.crop_1_ks` with no offset is today's opening stress: a written rule at
+    // the built-in threshold kills the crop on the same morning the built-in rule would.
+    // 50 mm bucket, planted 48.5 down on day 1 (ks = 1.5/25 = 0.06), drying 0.06 x 5 that
+    // day: ks opens at 0.048 on day 2, below 0.05.
+    let mut built_in = run(&rig("", "initial_depletion = 48.5\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 1, 0)"));
+    let mut written = run(&rig("", "initial_depletion = 48.5\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 1, 0)\ncrop_1_viable_area = if(this.crop_1_ks <= 0.05, 0, this.crop_1_area[-1, 0])"));
+    assert_eq!(s(&mut built_in, "crop_1_area")[..3], [1.0, 0.0, 0.0]);
+    assert_eq!(s(&mut written, "crop_1_area")[..3], [1.0, 0.0, 0.0], "same morning as the built-in rule");
+    assert!((s(&mut written, "crop_1_ks")[0] - 0.06).abs() < 1e-12);
+    assert!((s(&mut written, "crop_1_ks")[1] - 0.048).abs() < 1e-12, "the morning it dies, the stress that killed it is recorded");
+    assert!(s(&mut written, "crop_1_ks")[2].is_nan(), "then nothing stands");
+    // Yesterday's ks is a day late: on day 2 it reads 0.06 and the crop lives one more day
+    let mut late = run(&rig("", "initial_depletion = 48.5\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 1, 0)\ncrop_1_viable_area = if(this.crop_1_ks[-1, 1] <= 0.05, 0, this.crop_1_area[-1, 0])"));
+    assert_eq!(s(&mut late, "crop_1_area")[..4], [1.0, 1.0, 0.0, 0.0]);
+    // A field outside every zone writes ks once a step too
+    let ini = rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 1, 0)")
+        .replace("[node.dam]\ntype = storage\nloc = 0, 0\ninitial_volume = 5000\ndimensions = Level [m], Volume [ML], Area [km2], Spill [ML],\n             0.0      , 0.0        , 0.0       , 0.0,\n             1.0      , 10000.0    , 0.1       , 0.0,\n             2.0      , 20000.0    , 0.1       , 1.0E9,\nds_1_outlet = 0, 10000\nds_1 = paddock", "[node.dam]\ntype = inflow\nloc = 0, 0\ninflow = 0\nds_1 = paddock");
+    let mut model = run(&ini);
+    let ks = s(&mut model, "crop_1_ks");
+    assert_eq!(ks.len(), s(&mut model, "usflow").len());
+    assert!(ks[0].is_nan() && ks[1] == 1.0);
+}

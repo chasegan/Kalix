@@ -47,6 +47,7 @@ pub struct CropSlot {
     order_buffer: FifoBuffer,
     plant_read: f64,                      // what the plant rule gave today; NaN when it was not read
     viable_read: f64,                     // what the viable_area rule gave today, or the built-in rule's area; NaN when not read
+    ks_written: bool,                     // today's opening ks has been recorded (planting writes it as soon as it is known)
 
     // Recorders, in the order of CROP_SLOT_OUTPUTS
     recorder_idx: [Option<usize>; CROP_SLOT_OUTPUTS.len()],
@@ -68,6 +69,7 @@ impl CropSlot {
             order_buffer: FifoBuffer::default(),
             plant_read: f64::NAN,
             viable_read: f64::NAN,
+            ks_written: false,
             recorder_idx: [None; CROP_SLOT_OUTPUTS.len()],
         }
     }
@@ -236,6 +238,7 @@ impl FieldNode {
         for slot in &mut self.slots {
             slot.plant_read = f64::NAN;
             slot.viable_read = f64::NAN;
+            slot.ks_written = false;
         }
         for slot in &mut self.slots {
             if !slot.in_ground { continue; }
@@ -249,8 +252,14 @@ impl FieldNode {
                     continue;
                 }
             }
-            // Viability: the area can only fall; what leaves goes to the fallow with its water
+            // Viability: the area can only fall; what leaves goes to the fallow with its water.
+            // Today's opening stress is recorded before the rule reads it, so a rule reads it
+            // as `this.crop_N_ks`, the same number the built-in rule uses.
             slot.ks = slot.stress();
+            if let Some(idx) = slot.recorder_idx[3] {
+                data_cache.add_value_at_index(idx, slot.ks);
+            }
+            slot.ks_written = true;
             let viable_area = match &slot.viable_area_input {
                 Some(input) => {
                     let value = input.get_value(data_cache);
@@ -287,11 +296,20 @@ impl FieldNode {
             slot.in_ground = true;
             slot.days = 0;
             slot.ks = slot.stress();
+            if let Some(idx) = slot.recorder_idx[3] {
+                data_cache.add_value_at_index(idx, slot.ks);
+            }
+            slot.ks_written = true;
         }
         // The day's areas and days are settled: record them now. A slot not in the ground
-        // has no area and no days.
+        // has no area, no days and no stress.
         for slot in &self.slots {
             let (area, days) = if slot.in_ground { (slot.partition.area, slot.days as f64) } else { (0.0, f64::NAN) };
+            if !slot.ks_written {
+                if let Some(idx) = slot.recorder_idx[3] {
+                    data_cache.add_value_at_index(idx, f64::NAN);
+                }
+            }
             if let Some(idx) = slot.recorder_idx[0] {
                 data_cache.add_value_at_index(idx, area);
             }
@@ -458,6 +476,7 @@ impl Node for FieldNode {
             slot.order_buffer = FifoBuffer::default();
             slot.plant_read = f64::NAN;
             slot.viable_read = f64::NAN;
+            slot.ks_written = false;
         }
 
         // Reset order state, so a rerun of the same model object starts clean.
@@ -631,16 +650,13 @@ impl Node for FieldNode {
         self.dsflow_return = return_flow;
         self.mbal += self.dsflow_primary + self.dsflow_return - self.usflow;
 
-        // Record results. States are as they stand at the end of the step, as a storage's
-        // volume is (area, days and the rules were written by `planting`). A slot not in
+        // Record results. Depletion is as it stands at the end of the step, as a storage's
+        // volume is (area, days, ks and the rules were written by `planting`). A slot not in
         // the ground has no state.
         for slot in &self.slots {
-            let (depletion, ks) = if slot.in_ground { (slot.partition.root_depletion, slot.ks) } else { (f64::NAN, f64::NAN) };
+            let depletion = if slot.in_ground { slot.partition.root_depletion } else { f64::NAN };
             if let Some(idx) = slot.recorder_idx[2] {
                 data_cache.add_value_at_index(idx, depletion);
-            }
-            if let Some(idx) = slot.recorder_idx[3] {
-                data_cache.add_value_at_index(idx, ks);
             }
         }
         if let Some(idx) = self.recorder_idx_fallow_depletion {
