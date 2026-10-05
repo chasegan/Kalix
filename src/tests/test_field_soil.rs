@@ -67,8 +67,7 @@ available_water = 100
 interception = 0
 fallow = grass
 crop_1 = grass
-crop_1_plant = 1
-crop_1_plant_area = 2
+crop_1_plant = 2
 {props}
 ds_1 = outlet
 
@@ -386,9 +385,9 @@ fn test_field_validation() {
     let no_such_crop = rig(0, "").replace("crop_1 = grass", "crop_1 = lucerne");
     let err = IniModelIO::read_model_string(&no_such_crop).err().expect("should not load").to_string();
     assert!(err.contains("No crop 'lucerne' is declared for crop_1"), "got: {err}");
-    let no_plant = rig(0, "").replace("crop_1_plant = 1\n", "");
+    let no_plant = rig(0, "").replace("crop_1_plant = 2\n", "");
     assert!(load_err(&no_plant).contains("crop_1 needs crop_1_plant"));
-    let gap = rig(0, "crop_3 = grass\ncrop_3_plant = 1\ncrop_3_plant_area = 1");
+    let gap = rig(0, "crop_3 = grass\ncrop_3_plant = 1");
     let err = IniModelIO::read_model_string(&gap).err().expect("should not load").to_string();
     assert!(err.contains("crop_2 properties but no crop_2") || err.contains("without gaps"), "got: {err}");
     let no_area = rig(0, "").replace("\narea = 2\n", "\n");
@@ -400,7 +399,7 @@ fn test_field_round_trips_every_property() {
     let ini = rig(0, "evap = 4\nrain = 1\nkc = 0.9\np = 0.6\ninitial_depletion = 20\nefficiency = 0.8\nreturn_fraction = 0.7\norder = 5");
     let model = IniModelIO::read_model_string(&ini).expect("model should load");
     let rendered = IniModelIO::model_to_string(&model);
-    for line in ["area = 2", "available_water = 100", "evap = 4", "rain = 1", "kc = 0.9", "p = 0.6", "initial_depletion = 20", "efficiency = 0.8", "interception = 0", "return_fraction = 0.7", "fallow = grass", "crop_1 = grass", "crop_1_plant = 1", "crop_1_plant_area = 2", "crop_1_order = 5"] {
+    for line in ["area = 2", "available_water = 100", "evap = 4", "rain = 1", "kc = 0.9", "p = 0.6", "initial_depletion = 20", "efficiency = 0.8", "interception = 0", "return_fraction = 0.7", "fallow = grass", "crop_1 = grass", "crop_1_plant = 2", "crop_1_order = 5"] {
         assert!(rendered.contains(line), "'{line}' survives save:\n{rendered}");
     }
     let reloaded = IniModelIO::read_model_string(&rendered).expect("canonical render should re-load");

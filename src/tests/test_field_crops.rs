@@ -73,6 +73,9 @@ node.paddock.crop_2_days
 node.paddock.crop_2_depletion
 node.paddock.crop_2_ks
 node.paddock.crop_2_order
+node.paddock.crop_1_plant
+node.paddock.crop_1_viable_area
+node.paddock.crop_2_plant
 node.paddock.fallow_depletion
 node.paddock.usflow
 node.paddock.et
@@ -126,7 +129,7 @@ fn test_planting_takes_area_from_the_fallow_with_its_water_and_harvest_gives_it_
     // Day 3: 1 km2 of the shallow crop is planted; the fallow is bare so nothing has
     // dried, and the crop's bucket is 10 mm down, like the fallow's. It dries 4 mm a day
     // for 3 days (days 0, 1, 2 since planting) and is harvested on day 6 as days reaches 3.
-    let ini = rig("", "initial_depletion = 20\nevap = 4\ncrop_1 = shallow\ncrop_1_plant = var.day.n == 3\ncrop_1_plant_area = 1\ncrop_2 = deep\ncrop_2_plant = 0\ncrop_2_plant_area = 1")
+    let ini = rig("", "initial_depletion = 20\nevap = 4\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 3, 1, 0)\ncrop_2 = deep\ncrop_2_plant = 0")
         .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 1\nseason_len = 3\n");
     let mut model = run(&ini);
     let area = s(&mut model, "crop_1_area");
@@ -158,7 +161,7 @@ fn test_each_crop_orders_for_its_own_deficit_and_takes_only_its_own_order() {
     // yesterday's closing deficit. Day 1: nothing to read, no orders; each closes 5 down.
     // Day 2: each orders 5 ML; each takes its own 5 with 0.5 mm... no: 5 ML over 1 km2 is
     // 5 mm, refilling exactly; then dries 5 again. The dam sees the sum.
-    let mut model = run(&rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = 1\ncrop_1_plant_area = 1\ncrop_1_order = this.crop_1_area[-1, 0] * this.crop_1_depletion[-1, 0]\ncrop_2 = deep\ncrop_2_plant = 1\ncrop_2_plant_area = 1\ncrop_2_order = this.crop_2_area[-1, 0] * this.crop_2_depletion[-1, 0]"));
+    let mut model = run(&rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = 1\ncrop_1_order = this.crop_1_area[-1, 0] * this.crop_1_depletion[-1, 0]\ncrop_2 = deep\ncrop_2_plant = 1\ncrop_2_order = this.crop_2_area[-1, 0] * this.crop_2_depletion[-1, 0]"));
     assert_eq!(s(&mut model, "crop_1_order")[..3], [0.0, 5.0, 5.0]);
     assert_eq!(s(&mut model, "crop_2_order")[..3], [0.0, 5.0, 5.0]);
     let dam_order = {
@@ -181,7 +184,7 @@ fn test_water_beyond_the_orders_is_poured_over_the_driest_crop_first() {
     // day 2. Day 2: both open 5 down and dry to 10 before the water is applied. crop_1 takes
     // min(30, its room of 10) = 10. The other 20 is a forced watering: crop_2, now the drier,
     // gets 10 to level the two at 0, and the last 10, with no room anywhere, is bypass.
-    let mut model = run(&rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = 1\ncrop_1_plant_area = 1\ncrop_1_order = if(var.day.n >= 2, 30, 0)\ncrop_2 = deep\ncrop_2_plant = 1\ncrop_2_plant_area = 1"));
+    let mut model = run(&rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = 1\ncrop_1_order = if(var.day.n >= 2, 30, 0)\ncrop_2 = deep\ncrop_2_plant = 1"));
     assert_eq!(s(&mut model, "usflow")[1], 30.0);
     assert_eq!(s(&mut model, "supply")[1], 20.0);
     assert_eq!(s(&mut model, "bypass")[1], 10.0);
@@ -191,7 +194,7 @@ fn test_water_beyond_the_orders_is_poured_over_the_driest_crop_first() {
     // at the start: 10 in the shallow crop's bucket, 20 in the deep one's. Day 1 closes at
     // 15 and 25; day 2 dries them to 20 and 30, crop_1 takes its 20, and the other 10 brings
     // crop_2 from 30 to 20: nothing bypasses.
-    let mut model = run(&rig("", "initial_depletion = 20\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = 1\ncrop_1_plant_area = 1\ncrop_1_order = if(var.day.n >= 2, 30, 0)\ncrop_2 = deep\ncrop_2_plant = 1\ncrop_2_plant_area = 1"));
+    let mut model = run(&rig("", "initial_depletion = 20\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = 1\ncrop_1_order = if(var.day.n >= 2, 30, 0)\ncrop_2 = deep\ncrop_2_plant = 1"));
     assert_eq!(s(&mut model, "crop_1_depletion")[..2], [15.0, 0.0]);
     assert_eq!(s(&mut model, "crop_2_depletion")[..2], [25.0, 20.0]);
     assert_eq!(s(&mut model, "supply")[1], 30.0);
@@ -203,13 +206,13 @@ fn test_the_fallow_is_never_irrigated_and_forced_water_with_no_crop_is_bypass() 
     // Slots that never plant: all fallow, over a profile of two layers (the deep crop's
     // roots give it the second). A field with no slot in the ground places no order and
     // takes nothing; the fallow is never irrigated.
-    let mut model = run(&rig("", "initial_depletion = 20\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = 0\ncrop_1_plant_area = 1\ncrop_1_order = 10\ncrop_2 = deep\ncrop_2_plant = 0\ncrop_2_plant_area = 1"));
+    let mut model = run(&rig("", "initial_depletion = 20\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = 0\ncrop_1_order = 10\ncrop_2 = deep\ncrop_2_plant = 0"));
     assert_eq!(s(&mut model, "crop_1_order")[3], 0.0, "not in the ground, not evaluated");
     assert_eq!(s(&mut model, "usflow")[3], 0.0);
     assert_eq!(s(&mut model, "fallow_depletion")[3], 10.0, "bare ground with kc 0 never dries");
     // Rain on the fallow overflows into the layer below before it leaves as excess: the top
     // 500 mm is 10 down and the layer below 10 down; 15 mm fills the top and 5 goes below
-    let mut model = run(&rig("", "initial_depletion = 20\nrain = if(var.day.n == 2, 15, if(var.day.n == 3, 30, 0))\ncrop_1 = shallow\ncrop_1_plant = 0\ncrop_1_plant_area = 1\ncrop_2 = deep\ncrop_2_plant = 0\ncrop_2_plant_area = 1"));
+    let mut model = run(&rig("", "initial_depletion = 20\nrain = if(var.day.n == 2, 15, if(var.day.n == 3, 30, 0))\ncrop_1 = shallow\ncrop_1_plant = 0\ncrop_2 = deep\ncrop_2_plant = 0"));
     assert_eq!(s(&mut model, "fallow_depletion")[1], 0.0);
     assert_eq!(s(&mut model, "excess")[1], 0.0, "5 mm went to the layer below");
     assert_eq!(s(&mut model, "excess")[2], (30.0 - 5.0) * 4.0, "day 3: 5 more fills the layer, 25 mm over 4 km2 leaves");
@@ -226,7 +229,7 @@ fn test_water_below_one_crops_roots_is_there_for_the_next() {
     // (20 down to 8): no excess. Day 9, 60 mm: the bucket takes 10, the layer its last 8,
     // and 42 mm over 4 km2 leaves. Without the layer's memory the whole 12 would have left
     // on day 8.
-    let ini = rig("", "evap = 10\ncrop_1 = deep\ncrop_1_plant = var.day.n == 1\ncrop_1_plant_area = 4\ncrop_2 = shallow\ncrop_2_plant = var.day.n == 7\ncrop_2_plant_area = 4\nrain = if(var.day.n == 8, 50, if(var.day.n == 9, 60, 0))")
+    let ini = rig("", "evap = 10\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_2 = shallow\ncrop_2_plant = if(var.day.n == 7, 4, 0)\nrain = if(var.day.n == 8, 50, if(var.day.n == 9, 60, 0))")
         .replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 1000\nkc = 1\nseason_len = 4\n");
     let mut model = run(&ini);
     assert_eq!(s(&mut model, "crop_1_depletion")[..4], [10.0, 20.0, 30.0, 40.0]);
@@ -248,13 +251,13 @@ fn test_a_stressed_crop_dies_by_the_built_in_rule_and_a_written_rule_replaces_it
     // ks opens at 0, the crop is planted on day 1 and dies on day 2 at the start of the day,
     // its area back to the fallow. (A trigger that is always true would plant it again the
     // same morning: the rule plants whenever no crop is in the ground.)
-    let mut model = run(&rig("", "initial_depletion = 50\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = var.day.n == 1\ncrop_1_plant_area = 1"));
+    let mut model = run(&rig("", "initial_depletion = 50\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 1, 0)"));
     let area = s(&mut model, "crop_1_area");
     assert_eq!(area[..3], [1.0, 0.0, 0.0], "planted on day 1, dead on day 2");
     assert_eq!(s(&mut model, "crop_1_ks")[0], 0.0);
     // A written rule replaces the built-in one entirely: this crop keeps 0.5 km2 whatever
     // its stress, and never dies
-    let mut model = run(&rig("", "initial_depletion = 50\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = var.day.n == 1\ncrop_1_plant_area = 1\ncrop_1_viable_area = 0.5"));
+    let mut model = run(&rig("", "initial_depletion = 50\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 1, 0)\ncrop_1_viable_area = 0.5"));
     let area = s(&mut model, "crop_1_area");
     assert_eq!(area[..3], [1.0, 0.5, 0.5], "half the area abandoned on day 2, the rest stays");
     assert_eq!(s(&mut model, "crop_1_ks")[5], 0.0, "stressed but alive");
@@ -262,10 +265,10 @@ fn test_a_stressed_crop_dies_by_the_built_in_rule_and_a_written_rule_replaces_it
 
 #[test]
 fn test_field_with_crops_round_trips() {
-    let ini = rig("season_len = 120", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = sim.month == 10\ncrop_1_plant_area = 1.5\ncrop_1_order = 10\ncrop_1_viable_area = 2\ncrop_2 = deep\ncrop_2_plant = 0\ncrop_2_plant_area = 1");
+    let ini = rig("season_len = 120", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = if(sim.month == 10, 1.5, 0)\ncrop_1_order = 10\ncrop_1_viable_area = 2\ncrop_2 = deep\ncrop_2_plant = 0");
     let model = IniModelIO::read_model_string(&ini).expect("model should load");
     let rendered = IniModelIO::model_to_string(&model);
-    for line in ["fallow = bare", "crop_1 = shallow", "crop_1_plant = sim.month == 10", "crop_1_plant_area = 1.5", "crop_1_order = 10", "crop_1_viable_area = 2", "crop_2 = deep", "crop_2_plant = 0", "season_len = 120"] {
+    for line in ["fallow = bare", "crop_1 = shallow", "crop_1_plant = if(sim.month == 10, 1.5, 0)", "crop_1_order = 10", "crop_1_viable_area = 2", "crop_2 = deep", "crop_2_plant = 0", "season_len = 120"] {
         assert!(rendered.contains(line), "'{line}' survives save:\n{rendered}");
     }
     assert!(!rendered.contains("crop_2_order ="), "an unset rule is not written");
@@ -307,7 +310,7 @@ fn test_irrigation_never_runs_through_the_curve_number_and_wet_crops_shed_more()
     // nothing dries (evap 0). Day 3: 50 mm of rain. The crop sheds by the wet curve, the
     // fallow by the dry one, and the irrigation delivered on day 2 shed nothing at all.
     // (viable_area = 1 keeps the crop alive through its bone-dry first day.)
-    let field = "initial_depletion = 50\nevap = 0\nrain = if(var.day.n == 3, 50, 0)\ncurve_number = 85\ncrop_1 = shallow\ncrop_1_plant = var.day.n == 1\ncrop_1_plant_area = 1\ncrop_1_order = if(var.day.n == 2, 50, 0)\ncrop_1_viable_area = 1";
+    let field = "initial_depletion = 50\nevap = 0\nrain = if(var.day.n == 3, 50, 0)\ncurve_number = 85\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 1, 0)\ncrop_1_order = if(var.day.n == 2, 50, 0)\ncrop_1_viable_area = 1";
     let mut model = run(&rig("", field));
     assert_eq!(s(&mut model, "usflow")[1], 50.0);
     assert_eq!(s(&mut model, "supply")[1], 50.0, "1 km2 x 50 mm of room, all taken");
@@ -337,7 +340,7 @@ fn test_curve_number_validation_and_round_trip() {
 
 #[test]
 fn test_a_slot_number_with_a_leading_zero_is_not_a_slot() {
-    let ini = rig("", "crop_01 = shallow\ncrop_01_plant = 1\ncrop_01_plant_area = 1");
+    let ini = rig("", "crop_01 = shallow\ncrop_01_plant = 1");
     let err = IniModelIO::read_model_string(&ini).err().map(|e| e.to_string()).unwrap_or_default();
     assert!(err.contains("Unexpected parameter 'crop_01'"), "got: {err}");
 }
@@ -352,19 +355,16 @@ fn test_a_fallow_with_a_kc_table_is_refused() {
 
 #[test]
 fn test_a_planting_rule_that_gives_no_number_stops_the_run() {
-    // NaN is not true, and not an area: both stop the run naming the field and the crop,
-    // as a viable_area rule does, rather than planting the whole fallow
-    let nan_trigger = rig("", "crop_1 = shallow\ncrop_1_plant = 0 / 0\ncrop_1_plant_area = 1");
-    let err = std::panic::catch_unwind(|| run(&nan_trigger)).err().map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default()).unwrap_or_default();
+    // NaN is not an area, nor is a negative: both stop the run naming the field and the
+    // crop, as a viable_area rule does, rather than planting the whole fallow
+    let nan = rig("", "crop_1 = shallow\ncrop_1_plant = 0 / 0");
+    let err = std::panic::catch_unwind(|| run(&nan)).err().map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default()).unwrap_or_default();
     assert!(err.contains("Field 'paddock': crop plant rule for 'shallow' gave NaN"), "got: {err}");
-    let nan_area = rig("", "crop_1 = shallow\ncrop_1_plant = 1\ncrop_1_plant_area = 0 / 0");
-    let err = std::panic::catch_unwind(|| run(&nan_area)).err().map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default()).unwrap_or_default();
-    assert!(err.contains("crop plant_area rule for 'shallow' gave NaN"), "got: {err}");
-    let negative_area = rig("", "crop_1 = shallow\ncrop_1_plant = 1\ncrop_1_plant_area = -1");
-    let err = std::panic::catch_unwind(|| run(&negative_area)).err().map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default()).unwrap_or_default();
-    assert!(err.contains("gave -1; it must be a non-negative area"), "got: {err}");
-    // A zero area plants nothing and the trigger is read again next day
-    let mut model = run(&rig("", "crop_1 = shallow\ncrop_1_plant = 1\ncrop_1_plant_area = if(var.day.n < 3, 0, 1)"));
+    let negative = rig("", "crop_1 = shallow\ncrop_1_plant = -1");
+    let err = std::panic::catch_unwind(|| run(&negative)).err().map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default()).unwrap_or_default();
+    assert!(err.contains("gave -1; it must be the area to plant"), "got: {err}");
+    // Zero plants nothing and the rule is read again next day
+    let mut model = run(&rig("", "crop_1 = shallow\ncrop_1_plant = if(var.day.n < 3, 0, 1)"));
     assert_eq!(s(&mut model, "crop_1_area")[..3], [0.0, 0.0, 1.0]);
 }
 
@@ -373,7 +373,7 @@ fn test_a_field_outside_every_regulated_zone_plants_irrigates_and_records_no_ord
     // An inflow feeds the field directly: no storage, no zone, no order phase. The crop is
     // planted all the same (at the start of the flow phase), takes what arrives up to its
     // room, and its order results are zero rather than missing.
-    let ini = rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = var.day.n == 2\ncrop_1_plant_area = 1\ncrop_1_order = 100")
+    let ini = rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 1, 0)\ncrop_1_order = 100")
         .replace("[node.dam]\ntype = storage\nloc = 0, 0\ninitial_volume = 5000\ndimensions = Level [m], Volume [ML], Area [km2], Spill [ML],\n             0.0      , 0.0        , 0.0       , 0.0,\n             1.0      , 10000.0    , 0.1       , 0.0,\n             2.0      , 20000.0    , 0.1       , 1.0E9,\nds_1_outlet = 0, 10000\nds_1 = paddock", "[node.dam]\ntype = inflow\nloc = 0, 0\ninflow = 20\nds_1 = paddock");
     let mut model = run(&ini);
     let n = s(&mut model, "usflow").len();
@@ -393,7 +393,7 @@ fn test_a_standing_trigger_replants_on_the_day_of_harvest() {
     // season_len 2 and a trigger that is always true: the crop is harvested at the start of
     // every third day and planted again the same morning, so its area never shows a gap and
     // days runs 0, 1, 0, 1, ...
-    let ini = rig("", "evap = 0\ncrop_1 = shallow\ncrop_1_plant = 1\ncrop_1_plant_area = 1")
+    let ini = rig("", "evap = 0\ncrop_1 = shallow\ncrop_1_plant = 1")
         .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 1\nseason_len = 2\n");
     let mut model = run(&ini);
     assert_eq!(s(&mut model, "crop_1_days")[..5], [0.0, 1.0, 0.0, 1.0, 0.0]);
@@ -404,7 +404,7 @@ fn test_a_standing_trigger_replants_on_the_day_of_harvest() {
 fn test_kc_is_read_from_the_crops_table_by_days_since_planting() {
     // kc 0 on the planting day, 1 the next, 1 after: ET is 0 on day 2 (days = 0) and
     // evap x area from day 3
-    let ini = rig("", "evap = 4\ncrop_1 = shallow\ncrop_1_plant = var.day.n == 2\ncrop_1_plant_area = 1")
+    let ini = rig("", "evap = 4\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 1, 0)")
         .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 0, 0, 1, 1, 2, 1\n");
     let mut model = run(&ini);
     assert_eq!(s(&mut model, "crop_1_days")[1..4], [0.0, 1.0, 2.0]);
@@ -414,7 +414,7 @@ fn test_kc_is_read_from_the_crops_table_by_days_since_planting() {
 
 #[test]
 fn test_two_slots_firing_the_same_day_plant_lower_first_and_the_fallow_caps_the_second() {
-    let mut model = run(&rig("", "crop_1 = shallow\ncrop_1_plant = var.day.n == 2\ncrop_1_plant_area = 3\ncrop_2 = deep\ncrop_2_plant = var.day.n == 2\ncrop_2_plant_area = 3"));
+    let mut model = run(&rig("", "crop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 3, 0)\ncrop_2 = deep\ncrop_2_plant = if(var.day.n == 2, 3, 0)"));
     assert_eq!(s(&mut model, "crop_1_area")[1], 3.0);
     assert_eq!(s(&mut model, "crop_2_area")[1], 1.0, "what the fallow had left");
 }
@@ -442,7 +442,7 @@ fn test_a_curve_number_needs_a_daily_step() {
 
 #[test]
 fn test_a_rerun_of_the_same_model_repeats_itself() {
-    let ini = rig("", "evap = 5\nrain = if(var.day.n == 4, 30, 0)\ncrop_1 = shallow\ncrop_1_plant = var.day.n == 2\ncrop_1_plant_area = 2\ncrop_1_order = this.crop_1_area[-1, 0] * this.crop_1_depletion[-1, 0]")
+    let ini = rig("", "evap = 5\nrain = if(var.day.n == 4, 30, 0)\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 2, 0)\ncrop_1_order = this.crop_1_area[-1, 0] * this.crop_1_depletion[-1, 0]")
         .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 1\nseason_len = 5\n");
     let mut model = run(&ini);
     let first: Vec<Vec<f64>> = ["crop_1_area", "crop_1_depletion", "fallow_depletion", "excess", "supply"].iter().map(|k| s(&mut model, k)).collect();
@@ -455,7 +455,50 @@ fn test_a_rerun_of_the_same_model_repeats_itself() {
 
 #[test]
 fn test_a_negative_viable_area_stops_the_run() {
-    let ini = rig("", "crop_1 = shallow\ncrop_1_plant = var.day.n == 1\ncrop_1_plant_area = 1\ncrop_1_viable_area = if(var.day.n == 3, -1, 1)");
+    let ini = rig("", "crop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 1, 0)\ncrop_1_viable_area = if(var.day.n == 3, -1, 1)");
     let err = std::panic::catch_unwind(|| run(&ini)).err().map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default()).unwrap_or_default();
     assert!(err.contains("crop viable_area rule for 'shallow' gave -1"), "got: {err}");
+}
+
+#[test]
+fn test_the_planting_and_viability_rules_are_recorded_as_read() {
+    // crop_1 plants 1 km2 on day 2 and is abandoned by a rule on day 4; crop_2 never plants.
+    // crop_N_plant is the rule's value on the days the slot is empty and not a number while
+    // the crop stands; crop_N_viable_area is the rule's value while it stands, and the
+    // built-in rule's area when no rule is written.
+    let ini = rig("", "evap = 0\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 1, 0)\ncrop_1_viable_area = if(var.day.n == 4, 0, 5)\ncrop_2 = deep\ncrop_2_plant = 0");
+    let mut model = run(&ini);
+    let plant = s(&mut model, "crop_1_plant");
+    assert_eq!(plant[0], 0.0, "read and gave 0");
+    assert_eq!(plant[1], 1.0, "read and gave 1: planted");
+    assert!(plant[2].is_nan(), "not read while the crop stands");
+    assert_eq!(plant[3], 0.0, "read again the day it was abandoned");
+    let viable = s(&mut model, "crop_1_viable_area");
+    assert!(viable[0].is_nan() && viable[1].is_nan(), "nothing to keep viable before the crop stands");
+    assert_eq!(viable[2], 5.0, "the rule's value, uncapped");
+    assert_eq!(viable[3], 0.0, "the day it was abandoned");
+    assert!(viable[4].is_nan());
+    assert_eq!(s(&mut model, "crop_2_plant")[..3], [0.0, 0.0, 0.0], "a slot that never plants is read every day");
+    // With no rule written, the built-in rule's area is what is recorded: the crop's own
+    // area while it lives, 0 the morning it dies
+    let mut model = run(&rig("", "initial_depletion = 50\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 1, 0)"));
+    let viable = s(&mut model, "crop_1_viable_area");
+    assert!(viable[0].is_nan(), "planted this morning: the rule is read from tomorrow");
+    assert_eq!(viable[1], 0.0, "the built-in rule: dead at ks 0");
+}
+
+#[test]
+fn test_a_perennial_is_planted_once_and_stays() {
+    // No season_len: planted on day 2 and never harvested; its plant rule is not read again
+    // while it stands, and its kc table holds its last value past the end
+    // (10 mm of rain a day keeps the bucket full, so stress never enters into it)
+    let ini = rig("", "evap = 10\nrain = 10\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 2, 4, 0)")
+        .replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 1000\nkc = 0, 0.5, 2, 1.0\n");
+    let mut model = run(&ini);
+    let area = s(&mut model, "crop_1_area");
+    assert!(area[1..].iter().all(|a| *a == 4.0), "in the ground from day 2 to the end: {area:?}");
+    assert!(s(&mut model, "crop_1_plant")[2..].iter().all(|v| v.is_nan()), "the plant rule is not read while it stands");
+    assert_eq!(s(&mut model, "et_vol")[1], 20.0, "kc 0.5 on its first day");
+    assert_eq!(s(&mut model, "et_vol")[3], 40.0, "kc 1.0 from day 2 of its life");
+    assert_eq!(s(&mut model, "et_vol")[8], 40.0, "and held there past the end of the table");
 }

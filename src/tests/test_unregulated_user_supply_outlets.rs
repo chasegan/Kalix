@@ -49,7 +49,6 @@ initial_depletion = 1000
 fallow = bare
 crop_1 = thirsty
 crop_1_plant = 1
-crop_1_plant_area = 1
 crop_1_viable_area = this.area
 loc = 10, 50
 crop_1_order = {field_order}

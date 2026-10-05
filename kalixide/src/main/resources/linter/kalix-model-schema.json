@@ -429,6 +429,8 @@
         "crop_1_order",
         "crop_1_order_due",
         "crop_1_orders_en_route",
+        "crop_1_plant",
+        "crop_1_viable_area",
         "crop_2_area",
         "crop_2_days",
         "crop_2_depletion",
@@ -436,6 +438,8 @@
         "crop_2_order",
         "crop_2_order_due",
         "crop_2_orders_en_route",
+        "crop_2_plant",
+        "crop_2_viable_area",
         "crop_3_area",
         "crop_3_days",
         "crop_3_depletion",
@@ -443,13 +447,17 @@
         "crop_3_order",
         "crop_3_order_due",
         "crop_3_orders_en_route",
+        "crop_3_plant",
+        "crop_3_viable_area",
         "crop_4_area",
         "crop_4_days",
         "crop_4_depletion",
         "crop_4_ks",
         "crop_4_order",
         "crop_4_order_due",
-        "crop_4_orders_en_route"
+        "crop_4_orders_en_route",
+        "crop_4_plant",
+        "crop_4_viable_area"
       ],
       "required_params": [
         "type",
@@ -468,22 +476,18 @@
         "curve_number",
         "crop_1",
         "crop_1_plant",
-        "crop_1_plant_area",
         "crop_1_order",
         "crop_1_viable_area",
         "crop_2",
         "crop_2_plant",
-        "crop_2_plant_area",
         "crop_2_order",
         "crop_2_viable_area",
         "crop_3",
         "crop_3_plant",
-        "crop_3_plant_area",
         "crop_3_order",
         "crop_3_viable_area",
         "crop_4",
         "crop_4_plant",
-        "crop_4_plant_area",
         "crop_4_order",
         "crop_4_viable_area"
       ],
@@ -557,11 +561,7 @@
         },
         "crop_1_plant": {
           "type": "function_expression",
-          "description": "Plants crop_1 when true, taking area from the fallow"
-        },
-        "crop_1_plant_area": {
-          "type": "function_expression",
-          "description": "Area planted [km2], read on the day crop_1_plant fires; capped at the fallow's area"
+          "description": "The area of crop_1 to plant today [km2], read every day the slot is empty: above zero plants it, capped at the fallow's area; 0 plants nothing"
         },
         "crop_1_order": {
           "type": "function_expression",
@@ -577,11 +577,7 @@
         },
         "crop_2_plant": {
           "type": "function_expression",
-          "description": "Plants crop_2 when true, taking area from the fallow"
-        },
-        "crop_2_plant_area": {
-          "type": "function_expression",
-          "description": "Area planted [km2], read on the day crop_2_plant fires; capped at the fallow's area"
+          "description": "The area of crop_2 to plant today [km2], read every day the slot is empty: above zero plants it, capped at the fallow's area; 0 plants nothing"
         },
         "crop_2_order": {
           "type": "function_expression",
@@ -597,11 +593,7 @@
         },
         "crop_3_plant": {
           "type": "function_expression",
-          "description": "Plants crop_3 when true, taking area from the fallow"
-        },
-        "crop_3_plant_area": {
-          "type": "function_expression",
-          "description": "Area planted [km2], read on the day crop_3_plant fires; capped at the fallow's area"
+          "description": "The area of crop_3 to plant today [km2], read every day the slot is empty: above zero plants it, capped at the fallow's area; 0 plants nothing"
         },
         "crop_3_order": {
           "type": "function_expression",
@@ -617,11 +609,7 @@
         },
         "crop_4_plant": {
           "type": "function_expression",
-          "description": "Plants crop_4 when true, taking area from the fallow"
-        },
-        "crop_4_plant_area": {
-          "type": "function_expression",
-          "description": "Area planted [km2], read on the day crop_4_plant fires; capped at the fallow's area"
+          "description": "The area of crop_4 to plant today [km2], read every day the slot is empty: above zero plants it, capped at the fallow's area; 0 plants nothing"
         },
         "crop_4_order": {
           "type": "function_expression",

@@ -1283,7 +1283,6 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", p.3, e)))?;
                             match p.1 {
                                 "_plant" => slot.plant_input = input,
-                                "_plant_area" => slot.plant_area_input = input,
                                 "_order" => slot.order_input = input,
                                 "_viable_area" => slot.viable_area_input = Some(input),
                                 other => unreachable!("crop_slot_property only returns CROP_SLOT_PROPERTIES, got {other}"),
@@ -1950,7 +1949,6 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                     let key = |suffix: &str| format!("crop_{}{suffix}", i + 1);
                     ini_doc.set_property(section_name.as_str(), &key(""), slot.crop.name.as_str());
                     set_property_if_not_empty(&mut ini_doc, section_name.as_str(), &key("_plant"), &slot.plant_input.to_string());
-                    set_property_if_not_empty(&mut ini_doc, section_name.as_str(), &key("_plant_area"), &slot.plant_area_input.to_string());
                     set_property_if_not_empty(&mut ini_doc, section_name.as_str(), &key("_order"), &slot.order_input.to_string());
                     if let Some(viable) = &slot.viable_area_input {
                         ini_doc.set_property(section_name.as_str(), &key("_viable_area"), viable.to_string().as_str());

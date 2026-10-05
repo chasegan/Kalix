@@ -91,12 +91,12 @@ class CropSectionValidatorTest {
     @DisplayName("A field's fallow and crop slots must name declared crops, and slots must be complete and unbroken")
     void testFieldCropReferences() {
         String crops = "[crop.bare]\nroot_depth = 500\nkc = 0\n\n[crop.cotton]\nroot_depth = 900\nkc = 1\n\n";
-        assertNoIssues(crops + "[node.f]\ntype = field\nloc = 0, 0\narea = 1\navailable_water = 100\nfallow = bare\ncrop_1 = cotton\ncrop_1_plant = 1\ncrop_1_plant_area = 1\n");
+        assertNoIssues(crops + "[node.f]\ntype = field\nloc = 0, 0\narea = 1\navailable_water = 100\nfallow = bare\ncrop_1 = cotton\ncrop_1_plant = 1\n");
         assertHasIssue(crops + "[node.f]\ntype = field\nloc = 0, 0\nfallow = lucerne\n", "No crop 'lucerne' is declared for the fallow");
-        assertHasIssue(crops + "[node.f]\ntype = field\nloc = 0, 0\nfallow = bare\ncrop_1 = lucerne\ncrop_1_plant = 1\ncrop_1_plant_area = 1\n", "No crop 'lucerne' is declared for crop_1");
-        assertHasIssue(crops + "[node.f]\ntype = field\nloc = 0, 0\nfallow = bare\ncrop_1 = cotton\ncrop_1_plant_area = 1\n", "crop_1 needs crop_1_plant");
-        assertHasIssue(crops + "[node.f]\ntype = field\nloc = 0, 0\nfallow = bare\ncrop_2 = cotton\ncrop_2_plant = 1\ncrop_2_plant_area = 1\n", "has crop_2 but no crop_1");
-        assertHasIssue(crops + "[node.f]\ntype = field\nloc = 0, 0\nfallow = bare\ncrop_1_plant = 1\ncrop_1_plant_area = 1\n", "crop_1 properties but no crop_1 = <crop>");
+        assertHasIssue(crops + "[node.f]\ntype = field\nloc = 0, 0\nfallow = bare\ncrop_1 = lucerne\ncrop_1_plant = 1\n", "No crop 'lucerne' is declared for crop_1");
+        assertHasIssue(crops + "[node.f]\ntype = field\nloc = 0, 0\nfallow = bare\ncrop_1 = cotton\ncrop_1_order = 5\n", "crop_1 needs crop_1_plant");
+        assertHasIssue(crops + "[node.f]\ntype = field\nloc = 0, 0\nfallow = bare\ncrop_2 = cotton\ncrop_2_plant = 1\n", "has crop_2 but no crop_1");
+        assertHasIssue(crops + "[node.f]\ntype = field\nloc = 0, 0\nfallow = bare\ncrop_1_plant = 1\n", "crop_1 properties but no crop_1 = <crop>");
     }
 
     @Test

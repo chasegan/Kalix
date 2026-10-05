@@ -18,10 +18,10 @@ pub const MAX_CROPS: usize = 4;
 
 /// The properties of a crop slot, after `crop_N`: the parser accepts each and
 /// the linter schema lists each, for N in 1..=MAX_CROPS
-pub const CROP_SLOT_PROPERTIES: [&str; 5] = ["", "_plant", "_plant_area", "_order", "_viable_area"];
+pub const CROP_SLOT_PROPERTIES: [&str; 4] = ["", "_plant", "_order", "_viable_area"];
 
 /// The results of a crop slot, after `crop_N`
-pub const CROP_SLOT_OUTPUTS: [&str; 7] = ["_area", "_days", "_depletion", "_ks", "_order", "_order_due", "_orders_en_route"];
+pub const CROP_SLOT_OUTPUTS: [&str; 9] = ["_area", "_days", "_depletion", "_ks", "_order", "_order_due", "_orders_en_route", "_plant", "_viable_area"];
 
 /// A crop whose stress coefficient at the start of the day is this or below dies,
 /// when the slot has no viable_area rule of its own (Source's rule)
@@ -33,8 +33,7 @@ const DEATH_KS: f64 = 0.05;
 #[derive(Clone)]
 pub struct CropSlot {
     pub crop: Crop,
-    pub plant_input: DynamicInput,        // true plants, taking area from the fallow
-    pub plant_area_input: DynamicInput,   // km2, read on the day the trigger fires
+    pub plant_input: DynamicInput,        // km2 to plant today, read while the slot is empty; 0 plants nothing
     pub order_input: DynamicInput,        // the irrigation rule, in ML; omitted, rain-fed
     pub viable_area_input: Option<DynamicInput>, // the area becomes min(area, value); absent, the built-in rule
 
@@ -46,6 +45,8 @@ pub struct CropSlot {
     order_value: f64,
     order_due: f64,
     order_buffer: FifoBuffer,
+    plant_read: f64,                      // what the plant rule gave today; NaN when it was not read
+    viable_read: f64,                     // what the viable_area rule gave today, or the built-in rule's area; NaN when not read
 
     // Recorders, in the order of CROP_SLOT_OUTPUTS
     recorder_idx: [Option<usize>; CROP_SLOT_OUTPUTS.len()],
@@ -56,7 +57,6 @@ impl CropSlot {
         Self {
             crop,
             plant_input: DynamicInput::default(),
-            plant_area_input: DynamicInput::default(),
             order_input: DynamicInput::default(),
             viable_area_input: None,
             partition: Partition::default(),
@@ -66,6 +66,8 @@ impl CropSlot {
             order_value: 0.0,
             order_due: 0.0,
             order_buffer: FifoBuffer::default(),
+            plant_read: f64::NAN,
+            viable_read: f64::NAN,
             recorder_idx: [None; CROP_SLOT_OUTPUTS.len()],
         }
     }
@@ -226,6 +228,10 @@ impl FieldNode {
     #[inline(never)]
     fn planting(&mut self, data_cache: &mut DataCache) {
         for slot in &mut self.slots {
+            slot.plant_read = f64::NAN;
+            slot.viable_read = f64::NAN;
+        }
+        for slot in &mut self.slots {
             if !slot.in_ground { continue; }
             slot.days += 1;
             // Harvest: season_len days after planting, the whole crop goes back to the fallow
@@ -249,6 +255,7 @@ impl FieldNode {
                 }
                 None => if slot.ks <= DEATH_KS { 0.0 } else { slot.partition.area },
             };
+            slot.viable_read = viable_area;
             if viable_area < slot.partition.area {
                 let leaving = slot.partition.area - viable_area;
                 transfer(&self.profile, &mut slot.partition, &mut self.fallow_partition, leaving);
@@ -257,19 +264,16 @@ impl FieldNode {
                 }
             }
         }
-        // Planting: lower slots first; a slot in the ground does not fire. A slot that left
-        // the ground above, by harvest or abandonment, is empty here and may plant again today.
-        // A rule that gives no number has broken: it stops the run, as viable_area does.
+        // Planting: the rule gives the area to plant today, 0 for none. Lower slots first; a
+        // slot in the ground is not read. A slot that left the ground above, by harvest or
+        // abandonment, is empty here and may plant again today. A rule that gives no number,
+        // or a negative one, has broken: it stops the run, as viable_area does.
         for slot in &mut self.slots {
             if slot.in_ground { continue; }
-            let trigger = slot.plant_input.get_value(data_cache);
-            if trigger.is_nan() {
-                panic!("Field '{}': crop plant rule for '{}' gave NaN; it must be true or false", self.name, slot.crop.name);
-            }
-            if trigger == 0.0 { continue; }
-            let wanted = slot.plant_area_input.get_value(data_cache);
+            let wanted = slot.plant_input.get_value(data_cache);
+            slot.plant_read = wanted;
             if !(wanted >= 0.0) {
-                panic!("Field '{}': crop plant_area rule for '{}' gave {}; it must be a non-negative area in km2", self.name, slot.crop.name, wanted);
+                panic!("Field '{}': crop plant rule for '{}' gave {}; it must be the area to plant in km2, 0 for none", self.name, slot.crop.name, wanted);
             }
             let area = wanted.min(self.fallow_partition.area);
             if area <= 0.0 { continue; }
@@ -400,10 +404,7 @@ impl Node for FieldNode {
         for (i, slot) in self.slots.iter().enumerate() {
             let n = i + 1;
             if matches!(slot.plant_input, DynamicInput::None { .. }) {
-                return Err(format!("Error in node '{}'. crop_{n} needs crop_{n}_plant: the rule that plants it.", self.name));
-            }
-            if matches!(slot.plant_area_input, DynamicInput::None { .. }) {
-                return Err(format!("Error in node '{}'. crop_{n} needs crop_{n}_plant_area: the area planted, in km2.", self.name));
+                return Err(format!("Error in node '{}'. crop_{n} needs crop_{n}_plant: the area to plant each day, in km2, 0 for none.", self.name));
             }
         }
 
@@ -431,6 +432,8 @@ impl Node for FieldNode {
             slot.order_value = 0.0;
             slot.order_due = 0.0;
             slot.order_buffer = FifoBuffer::default();
+            slot.plant_read = f64::NAN;
+            slot.viable_read = f64::NAN;
         }
 
         // Reset order state, so a rerun of the same model object starts clean.
@@ -623,6 +626,13 @@ impl Node for FieldNode {
             }
             if let Some(idx) = slot.recorder_idx[3] {
                 data_cache.add_value_at_index(idx, ks);
+            }
+            // The rules as read today: not a number on a day a rule was not read
+            if let Some(idx) = slot.recorder_idx[7] {
+                data_cache.add_value_at_index(idx, slot.plant_read);
+            }
+            if let Some(idx) = slot.recorder_idx[8] {
+                data_cache.add_value_at_index(idx, slot.viable_read);
             }
         }
         if let Some(idx) = self.recorder_idx_fallow_depletion {

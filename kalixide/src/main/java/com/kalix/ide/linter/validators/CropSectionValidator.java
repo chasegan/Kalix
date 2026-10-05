@@ -30,7 +30,7 @@ public class CropSectionValidator implements ValidationStrategy {
 
     private static final Pattern VALID_CROP_NAME = Pattern.compile("^[a-z][a-z0-9_]*$");
 
-    private static final Pattern CROP_SLOT_KEY = Pattern.compile("^crop_([1-9][0-9]*)(|_plant|_plant_area|_order|_viable_area)$");
+    private static final Pattern CROP_SLOT_KEY = Pattern.compile("^crop_([1-9][0-9]*)(|_plant|_order|_viable_area)$");
 
     @Override
     public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
@@ -49,7 +49,7 @@ public class CropSectionValidator implements ValidationStrategy {
 
     /**
      * A field's {@code fallow} and {@code crop_N} name a declared [crop.*] section, every
-     * {@code crop_N} comes with its {@code crop_N_plant} and {@code crop_N_plant_area}, and
+     * {@code crop_N} comes with its {@code crop_N_plant}, and
      * the slots are numbered from 1 without gaps: the engine's load-time rules for a field.
      */
     private void validateFieldCropReferences(INIModelParser.NodeSection node, INIModelParser.ParsedModel model, ValidationResult result) {
@@ -86,11 +86,9 @@ public class CropSectionValidator implements ValidationStrategy {
                         ValidationRule.Severity.ERROR, "crop_slot_missing_crop");
                 continue;
             }
-            for (String needed : new String[] {"_plant", "_plant_area"}) {
-                if (!slot.getValue().contains(needed)) {
-                    result.addIssue(line, "crop_" + n + " needs crop_" + n + needed + " (" + (needed.equals("_plant") ? "the rule that plants it" : "the area planted, in km2") + ")",
-                            ValidationRule.Severity.ERROR, "crop_slot_incomplete");
-                }
+            if (!slot.getValue().contains("_plant")) {
+                result.addIssue(line, "crop_" + n + " needs crop_" + n + "_plant (the area to plant each day, in km2, 0 for none)",
+                        ValidationRule.Severity.ERROR, "crop_slot_incomplete");
             }
         }
     }

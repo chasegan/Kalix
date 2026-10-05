@@ -657,14 +657,12 @@ def build_model_7():
             if cotton:
                 props += [
                     "crop_1 = cotton",
-                    "crop_1_plant = sim.month == 10 && sim.day == 15",
-                    "crop_1_plant_area = this.area",
+                    "crop_1_plant = if(sim.month == 10 && sim.day == 15, this.area, 0)",
                 ]
             else:
                 props += [
                     "crop_1 = lucerne",
-                    "crop_1_plant = sim.year == 1990 && sim.month == 3 && sim.day == 1",
-                    "crop_1_plant_area = this.area",
+                    "crop_1_plant = if(sim.year == 1990 && sim.month == 3 && sim.day == 1, this.area, 0)",
                 ]
             props += [
                 "crop_1_order = this.crop_1_area[-1, 0] * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]",

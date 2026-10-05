@@ -21,8 +21,8 @@
   <text x="570" y="103" class="small">all fallow so far</text>
 
   <path class="mv" d="M330,122 L330,150"/>
-  <text x="344" y="134" class="small">start of day 3: crop_1_plant fires, crop_1_plant_area = 1;</text>
-  <text x="344" y="150" class="small">the crop takes 1 km² at the fallow's 10 mm, then dries 4 mm</text>
+  <text x="344" y="134" class="small">start of day 3: crop_1_plant gives 1 km²;</text>
+  <text x="344" y="150" class="small">the crop takes it at the fallow's 10 mm, then dries 4 mm</text>
 
   <!-- day 3 -->
   <text x="100" y="192" text-anchor="end" class="lbl">end of day 3</text>

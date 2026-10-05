@@ -48,8 +48,7 @@ evap = data.climate_csv.by_name.et0
 efficiency = 0.8
 fallow = bare_soil
 crop_1 = cotton
-crop_1_plant = sim.month == 10 && sim.day == 15
-crop_1_plant_area = min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8)
+crop_1_plant = if(sim.month == 10 && sim.day == 15, min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8), 0)
 crop_1_order = this.crop_1_area[-1, 0] * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]
 ds_1 = drain
 ```
@@ -91,8 +90,7 @@ dries.
 | initial\_depletion (optional) | How far below full the soil starts, over the whole profile to the deepest roots [mm], every layer alike. Default 0, a full profile top to bottom. Example: `initial_depletion = 20` |
 | curve\_number (optional) | The USDA-NRCS curve number for storm runoff off the paddock surface: the tabled value for average antecedent conditions (CN2), by cover and hydrologic soil group. Each day the curve is chosen between the dry and wet ones by each partition's wetness, so a crop held near full sheds more than the dry fallow beside it. Omitted, rain runs off only when the profile is full. Rain only, never irrigation; daily steps only. See [Storm runoff](#storm-runoff). Example: `curve_number = 85` |
 | crop\_N (optional) | The crop in slot N, for N from 1 to 4: the name of a `[crop.*]` section. Slots are numbered without gaps. Example: `crop_1 = cotton` |
-| crop\_N\_plant (compulsory with crop\_N) | An expression, read every day the slot is empty, in the order phase (see step 1 of [How the node works](#how-the-node-works)): true plants the crop, taking area from the fallow with its water. A slot already in the ground does not fire; where two fire the same day, the lower N plants first. A trigger that stays true plants again on the day of a harvest or an abandonment, into the land just returned to the fallow. Example: `crop_1_plant = sim.month == 10 && sim.day == 15` |
-| crop\_N\_plant\_area (compulsory with crop\_N) | The area planted [km²], read on the day the trigger fires, capped at the fallow's area that day. Example: `crop_1_plant_area = min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8)` |
+| crop\_N\_plant (compulsory with crop\_N) | The area of the crop to plant today [km²]: an expression, read every day the slot is empty, in the order phase (see step 1 of [How the node works](#how-the-node-works)). Above zero plants the crop on that much land, capped at the fallow's area that day, taking it from the fallow with its water; zero plants nothing. A slot with a crop in the ground is not read; where two slots plant the same day, the lower N goes first. A rule that gives an area every day plants again on the day of a harvest or an abandonment, into the land just returned to the fallow. Negative or not a number stops the run. Example: `crop_1_plant = if(sim.month == 10 && sim.day == 15, min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8), 0)` |
 | crop\_N\_order (optional) | The irrigation rule for this crop: the order it places upstream each step [ML]. An expression, read only while the crop is in the ground; see [The irrigation rule](#the-irrigation-rule). Omitted, the crop is rain-fed. |
 | crop\_N\_viable\_area (optional) | An expression, read every day the crop is in the ground, in the order phase: the area becomes `min(area, value)` [km²], and what leaves goes back to the fallow with its water. Zero is death. Omitted, the built-in rule applies: a crop whose stress coefficient is 0.05 or below at the start of the day dies, and its area returns to the fallow. Writing any expression replaces that rule entirely. A negative or non-numeric value stops the run. |
 | ds\_1 (optional) | Name of the downstream node on the river: `bypass` and the river's share of the runoff drain down it. Example: `ds_1 = river` |
@@ -109,6 +107,8 @@ dries.
 | crop\_N\_order | The order slot N placed this step [ML] |
 | crop\_N\_order\_due | The order placed earlier for slot N that is due to arrive this step [ML] |
 | crop\_N\_orders\_en\_route | Water on its way to slot N at the end of the step [ML]: ordered, today's order included, and not yet arrived. Zero without travel time from the supply. A state, like `crop_N_depletion`; the irrigation rule reads `this.crop_N_orders_en_route[-1, 0]` |
+| crop\_N\_plant | What the planting rule gave today [km²], before the cap at the fallow's area; not a number on a day it was not read, which is every day a crop stands in the slot |
+| crop\_N\_viable\_area | What the viable-area rule gave today [km²], or, with no rule written, the area the built-in rule allows: the crop's own area, or 0 the morning it dies. Not a number on a day it was not read: when nothing stands in the slot, and on a harvest day |
 | fallow\_depletion | How far the fallow's root zone is below full at the end of the step [mm] |
 | usflow | Upstream flow: the water that arrives at the field [ML] |
 | et | Evapotranspiration over the whole field [mm]: the partitions' `ks × kc × evap`, each no more than the water its bucket holds, weighted by area |
@@ -165,7 +165,7 @@ reference evapotranspiration.
    A refill trigger holds the order back until D reaches a threshold, then fills to T. In Kalix
    the rule is the crop's `crop_N_order` expression; see [The irrigation rule](#the-irrigation-rule).
 8. **Planting and area.** On the plant date the area is set, from a number, a series, or the
-   water available (`crop_N_plant`, `crop_N_plant_area`). The new crop's bucket starts as wet
+   water available (`crop_N_plant`). The new crop's bucket starts as wet
    as the ground it is planted into, to its own root depth. Area can later be reduced, never
    increased, with the surplus going back to the fallow (`crop_N_viable_area`); at harvest
    (`season_len`) all of it goes back. The fallow is itself a crop with no irrigation and a
@@ -196,14 +196,14 @@ left there, below the fallow's roots, until the next deep-rooted crop reaches it
 In this order:
 
 1. **Planting**, so that the day's orders and fluxes use the day's areas. The rules it reads
-   (`crop_N_plant`, `crop_N_plant_area`, `crop_N_viable_area`) are read in the order phase,
+   (`crop_N_plant`, `crop_N_viable_area`) are read in the order phase,
    like `crop_N_order`, before any node's flow phase has run, so they see the previous step's
    values (`[-1, 0]`); a field outside every regulated zone has no order phase and reads them
    at the start of its flow phase instead. Harvest: a crop whose
    days since planting reach its `season_len` goes back to the fallow. Abandonment: a crop's
    area becomes `min(area, crop_N_viable_area)`, or 0 under the built-in rule when its stress
    coefficient at the start of the day is 0.05 or below; what leaves goes to the fallow.
-   Planting: a slot with no crop whose `crop_N_plant` is true takes `crop_N_plant_area` from
+   Planting: a slot with no crop whose `crop_N_plant` is above zero takes that much from
    the fallow, at most what the fallow has. Every move carries area with its water, layer by
    layer, in proportion to area: the giver's wetness does not change, and the receiver's is the
    area-weighted mix. Where a root zone shrinks (a deep crop's land going to a shallower
@@ -320,13 +320,13 @@ first delivery lands.
 
 #### Planting, harvest and abandonment
 
-`crop_N_plant` is read every day the slot is empty, and plants when true. A date is the common
-trigger; the water in hand decides the area:
+`crop_N_plant` is read every day the slot is empty, and is the area to plant today: zero on
+most days, and on the planting day as much as the farmer decides. A date is the common trigger;
+the water in hand decides the area:
 
 ```ini
 crop_1 = cotton
-crop_1_plant = sim.month == 10 && sim.day == 15
-crop_1_plant_area = min(this.area, 0.01 * (node.ofs.volume[-1, 0] + acc.farm.closing_balance[-1, 0]) / 8)
+crop_1_plant = if(sim.month == 10 && sim.day == 15, min(this.area, 0.01 * (node.ofs.volume[-1, 0] + acc.farm.closing_balance[-1, 0]) / 8), 0)
 ```
 
 The `0.01` turns hectares into km²; this line plants a hectare for every 8 ML in the storage and
@@ -336,8 +336,9 @@ the account.
 
 *Land moves with its water. The fallow gives up area at planting and takes it back at harvest or
 abandonment; every move mixes depletions by area, layer by layer, so nothing is created or lost.*
- A perennial is planted once and stays (`crop_1_plant = sim.year == 1990 && sim.month
-== 3 && sim.day == 1`, with no `season_len` on the crop). Several slots may be in the ground at
+ A perennial is planted once and stays (`crop_1_plant = if(sim.year == 1990 && sim.month
+== 3 && sim.day == 1, this.area, 0)`, with no `season_len` on the crop; a rule on a recurring
+date would replant it after a death). Several slots may be in the ground at
 once: a winter crop in one and a summer crop in another, or the same crop in two slots planted a
 month apart.
 
