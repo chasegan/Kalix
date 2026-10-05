@@ -502,3 +502,26 @@ fn test_a_perennial_is_planted_once_and_stays() {
     assert_eq!(s(&mut model, "et_vol")[3], 40.0, "kc 1.0 from day 2 of its life");
     assert_eq!(s(&mut model, "et_vol")[8], 40.0, "and held there past the end of the table");
 }
+
+#[test]
+fn test_todays_area_is_readable_in_an_order_rule_because_planting_writes_it_first() {
+    // Area, days and the two rules are written when planting runs, before any order rule,
+    // so `this.crop_1_area` with no offset is today's area: the crop orders on the day it
+    // goes in. Planted on day 2, 1 km2, 20 mm down: it orders 20 ML that morning.
+    let mut model = run(&rig("", "initial_depletion = 20\nevap = 0\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 1, 0)\ncrop_1_order = this.crop_1_area * this.crop_1_depletion[-1, 0]"));
+    assert_eq!(s(&mut model, "crop_1_order")[1], 0.0, "day 2: the area is 1 but yesterday's depletion is not a number, read as 0");
+    let mut model = run(&rig("", "initial_depletion = 20\nevap = 0\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 1, 0)\ncrop_1_order = this.crop_1_area * 20"));
+    assert_eq!(s(&mut model, "crop_1_order")[..3], [0.0, 20.0, 20.0], "ordered the morning it was planted");
+    assert_eq!(s(&mut model, "crop_1_area")[..3], [0.0, 1.0, 1.0]);
+    assert_eq!(s(&mut model, "crop_1_depletion")[1], 0.0, "and the order arrived the same day");
+    // Outside a regulated zone planting runs in the flow phase and the series are still
+    // written once a step, as long as every other
+    let ini = rig("", "crop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 1, 0)")
+        .replace("[node.dam]\ntype = storage\nloc = 0, 0\ninitial_volume = 5000\ndimensions = Level [m], Volume [ML], Area [km2], Spill [ML],\n             0.0      , 0.0        , 0.0       , 0.0,\n             1.0      , 10000.0    , 0.1       , 0.0,\n             2.0      , 20000.0    , 0.1       , 1.0E9,\nds_1_outlet = 0, 10000\nds_1 = paddock", "[node.dam]\ntype = inflow\nloc = 0, 0\ninflow = 0\nds_1 = paddock");
+    let mut model = run(&ini);
+    let n = s(&mut model, "usflow").len();
+    assert_eq!(s(&mut model, "crop_1_area").len(), n);
+    assert_eq!(s(&mut model, "crop_1_days").len(), n);
+    assert_eq!(s(&mut model, "crop_1_plant").len(), n);
+    assert_eq!(s(&mut model, "crop_1_area")[..3], [0.0, 1.0, 1.0]);
+}

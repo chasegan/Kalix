@@ -49,7 +49,7 @@ efficiency = 0.8
 fallow = bare_soil
 crop_1 = cotton
 crop_1_plant = if(sim.month == 10 && sim.day == 15, min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8), 0)
-crop_1_order = this.crop_1_area[-1, 0] * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]
+crop_1_order = this.crop_1_area * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]
 ds_1 = drain
 ```
 
@@ -100,8 +100,8 @@ dries.
 
 | Result | Description |
 | --- | --- |
-| crop\_N\_area | The area under slot N's crop at the end of the step [km²]; 0 when nothing is in the ground |
-| crop\_N\_days | Days since planting, 0 on the day it is planted; not a number when nothing is in the ground |
+| crop\_N\_area | The area under slot N's crop today [km²]; 0 when nothing is in the ground. Written when planting runs, before any order rule, so `this.crop_N_area` with no offset is today's area |
+| crop\_N\_days | Days since planting, 0 on the day it is planted; not a number when nothing is in the ground. Written when planting runs, like `crop_N_area` |
 | crop\_N\_depletion | How far the crop's root zone is below full at the end of the step [mm]: 0 is full, the bucket's capacity is empty. A state, reported at the end of the step like a storage's `volume`; the irrigation rule reads the previous step's value, `this.crop_N_depletion[-1, 0]`, the soil at the start of today. Not a number when nothing is in the ground |
 | crop\_N\_ks | The crop's stress coefficient this step, 0 to 1, from the depletion at the start of the day. Not a number when nothing is in the ground |
 | crop\_N\_order | The order slot N placed this step [ML] |
@@ -285,18 +285,20 @@ needs:
 - `this.crop_N_depletion[-1, 0]`, the crop's soil at the start of today [mm];
 - `this.crop_N_orders_en_route[-1, 0]`, what was ordered for it before today and has not arrived
   before today [ML], which includes what arrives today;
-- `this.crop_N_area[-1, 0]` [km²], and `this.area` and `this.efficiency`.
+- `this.crop_N_area` [km²], today's area, which planting settled before any order rule
+  runs, so it needs no offset; and `this.area` and `this.efficiency`.
 
-These are states, reported at the end of each step as a storage's `volume` is, so the rule
-reads the previous step's value; the `0` is what it reads on the first step, before any value
-exists. The rule is read only while the crop is in the ground; a slot with nothing planted orders
-nothing.
+The depletion and the orders en route are states, reported at the end of each step as a
+storage's `volume` is, so the rule reads the previous step's value; the `0` is what it reads
+on the first step, before any value exists. The area is written when planting runs, so a crop
+orders on the morning it goes in. The rule is read only while the crop is in the ground; a
+slot with nothing planted orders nothing.
 
 The rule the IDE template carries tops the soil up to a target depletion of 40 mm, at most 120 mm
 in a day, grossed up for escape, less what is already on its way:
 
 ```ini
-crop_1_order = this.crop_1_area[-1, 0] * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]
+crop_1_order = this.crop_1_area * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]
 ```
 
 `order` means what it means everywhere in Kalix, the order placed on the network; the field
@@ -305,13 +307,13 @@ allowance for escape is in the line. Other rules are one line each. A refill tri
 to a target once the depletion passes a threshold:
 
 ```ini
-crop_1_order = if(this.crop_1_depletion[-1, 0] >= 60, this.crop_1_area[-1, 0] * (this.crop_1_depletion[-1, 0] - 20) / this.efficiency, 0)
+crop_1_order = if(this.crop_1_depletion[-1, 0] >= 60, this.crop_1_area * (this.crop_1_depletion[-1, 0] - 20) / this.efficiency, 0)
 ```
 
 Stopping irrigation once the soil is past the point of saving the crop:
 
 ```ini
-crop_1_order = if(this.crop_1_depletion[-1, 0] >= 100, 0, this.crop_1_area[-1, 0] * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0])
+crop_1_order = if(this.crop_1_depletion[-1, 0] >= 100, 0, this.crop_1_area * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0])
 ```
 
 `this.crop_N_orders_en_route[-1, 0]` matters where there is travel time between the supply and
@@ -350,6 +352,9 @@ death:
 ```ini
 crop_1_viable_area = if(this.crop_1_ks[-1, 0] < 0.2, 0, this.crop_1_area[-1, 0])
 ```
+
+A viable-area rule is read before the day's areas are settled, so in it the area carries the
+offset, `this.crop_N_area[-1, 0]`; in an order rule, which runs after planting, it does not.
 
 With no rule written, the field applies its own: a crop whose stress coefficient is 0.05 or below
 at the start of the day dies. We have included a default, because crops aren't immortal.

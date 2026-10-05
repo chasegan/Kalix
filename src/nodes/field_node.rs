@@ -225,6 +225,12 @@ impl FieldNode {
     /// the order phase where the field has one (a crop planted today orders
     /// today), and failing that at the start of the flow phase, so a field
     /// outside every regulated zone sees the same day.
+    ///
+    /// It runs exactly once a step, so the results it settles are written
+    /// here, whichever phase that is: area, days, and the two rules as read.
+    /// Written this early, `this.crop_N_area` with no offset reads today's
+    /// area in an order rule, as Kalix records values as soon as they are
+    /// known.
     #[inline(never)]
     fn planting(&mut self, data_cache: &mut DataCache) {
         for slot in &mut self.slots {
@@ -281,6 +287,24 @@ impl FieldNode {
             slot.in_ground = true;
             slot.days = 0;
             slot.ks = slot.stress();
+        }
+        // The day's areas and days are settled: record them now. A slot not in the ground
+        // has no area and no days.
+        for slot in &self.slots {
+            let (area, days) = if slot.in_ground { (slot.partition.area, slot.days as f64) } else { (0.0, f64::NAN) };
+            if let Some(idx) = slot.recorder_idx[0] {
+                data_cache.add_value_at_index(idx, area);
+            }
+            if let Some(idx) = slot.recorder_idx[1] {
+                data_cache.add_value_at_index(idx, days);
+            }
+            // The rules as read today: not a number on a day a rule was not read
+            if let Some(idx) = slot.recorder_idx[7] {
+                data_cache.add_value_at_index(idx, slot.plant_read);
+            }
+            if let Some(idx) = slot.recorder_idx[8] {
+                data_cache.add_value_at_index(idx, slot.viable_read);
+            }
         }
     }
 
@@ -608,31 +632,15 @@ impl Node for FieldNode {
         self.mbal += self.dsflow_primary + self.dsflow_return - self.usflow;
 
         // Record results. States are as they stand at the end of the step, as a storage's
-        // volume is. A slot not in the ground has no area and no state.
+        // volume is (area, days and the rules were written by `planting`). A slot not in
+        // the ground has no state.
         for slot in &self.slots {
-            let (area, days, depletion, ks) = if slot.in_ground {
-                (slot.partition.area, slot.days as f64, slot.partition.root_depletion, slot.ks)
-            } else {
-                (0.0, f64::NAN, f64::NAN, f64::NAN)
-            };
-            if let Some(idx) = slot.recorder_idx[0] {
-                data_cache.add_value_at_index(idx, area);
-            }
-            if let Some(idx) = slot.recorder_idx[1] {
-                data_cache.add_value_at_index(idx, days);
-            }
+            let (depletion, ks) = if slot.in_ground { (slot.partition.root_depletion, slot.ks) } else { (f64::NAN, f64::NAN) };
             if let Some(idx) = slot.recorder_idx[2] {
                 data_cache.add_value_at_index(idx, depletion);
             }
             if let Some(idx) = slot.recorder_idx[3] {
                 data_cache.add_value_at_index(idx, ks);
-            }
-            // The rules as read today: not a number on a day a rule was not read
-            if let Some(idx) = slot.recorder_idx[7] {
-                data_cache.add_value_at_index(idx, slot.plant_read);
-            }
-            if let Some(idx) = slot.recorder_idx[8] {
-                data_cache.add_value_at_index(idx, slot.viable_read);
             }
         }
         if let Some(idx) = self.recorder_idx_fallow_depletion {

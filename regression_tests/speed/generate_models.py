@@ -665,7 +665,7 @@ def build_model_7():
                     "crop_1_plant = if(sim.year == 1990 && sim.month == 3 && sim.day == 1, this.area, 0)",
                 ]
             props += [
-                "crop_1_order = this.crop_1_area[-1, 0] * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]",
+                "crop_1_order = this.crop_1_area * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]",
                 f"ds_1 = s{f}_sink",
             ]
             m.node(f"s{f}_field{k}", "field", x + 5 + k * 8, y + 25, props)

@@ -103,7 +103,7 @@
         "fallow = bare_soil #a [crop.*] section",
         "crop_1 = cotton #a [crop.*] section",
         "crop_1_plant = if(sim.month == 10 && sim.day == 15, this.area, 0) #km2 to plant today, 0 for none",
-        "crop_1_order = this.crop_1_area[-1, 0] * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]"
+        "crop_1_order = this.crop_1_area * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]"
       ],
       "sections": {
         "crop.bare_soil": [
