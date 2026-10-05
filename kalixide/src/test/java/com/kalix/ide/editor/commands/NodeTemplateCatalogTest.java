@@ -71,6 +71,32 @@ class NodeTemplateCatalogTest {
         assertEquals("Unregulated user", unregulated.label());
     }
 
+    /**
+     * A field refers to crops by name and cannot load without them, so its template
+     * carries the two sections its lines name. Each is a legal [crop.*] section.
+     */
+    @Test
+    void fieldTemplateCarriesTheCropsItNames() {
+        NodeTemplate field = NodeTemplateCatalog.byId("field");
+        assertNotNull(field);
+        Set<String> carried = new HashSet<>();
+        for (NodeTemplateCatalog.CarriedSection section : field.sections()) {
+            carried.add(section.name());
+            assertTrue(section.name().matches("crop\\.[a-z][a-z0-9_]*"), "carried section name: " + section.name());
+            assertTrue(section.lines().stream().anyMatch(l -> l.startsWith("root_depth =")), section.name() + " needs root_depth");
+            assertTrue(section.lines().stream().anyMatch(l -> l.startsWith("kc =")), section.name() + " needs kc");
+            for (String line : section.lines()) {
+                assertFalse(line.trim().startsWith("["), "carried section '" + section.name() + "' carries a header line: " + line);
+            }
+        }
+        for (String line : field.lines()) {
+            if (line.startsWith("fallow =") || line.startsWith("crop_1 =")) {
+                String name = line.split("=")[1].trim().split("\\s+")[0];
+                assertTrue(carried.contains("crop." + name), "the field names crop '" + name + "' but does not carry it");
+            }
+        }
+    }
+
     /** The header is generated from the id, so no template may carry one. */
     @Test
     void noTemplateCarriesItsOwnSectionHeader() {

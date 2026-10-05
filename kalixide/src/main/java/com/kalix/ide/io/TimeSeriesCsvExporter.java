@@ -13,7 +13,8 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 
 /**
@@ -144,21 +145,24 @@ public class TimeSeriesCsvExporter {
      */
     private static void exportDataToCsv(DataSet dataSet, File file, PlotType plotType,
                                         LabelResolver labelResolver) throws IOException {
-        // Build (header → data) pairs in pool insertion order. The header is the ref's
-        // projected label.
-        LinkedHashMap<String, TimeSeriesData> labeled = new LinkedHashMap<>();
+        // One column per series, in pool insertion order, headed by the ref's projected
+        // label. Two series can share a label (the same derived-series name from two
+        // files of the same name, say); a second column with a header already used is
+        // headed "label (2)", never dropped.
+        List<String> headers = new ArrayList<>();
+        List<TimeSeriesData> allSeries = new ArrayList<>();
+        Map<String, Integer> usesOfLabel = new HashMap<>();
         for (SeriesRef ref : dataSet.getSeriesRefs()) {
             TimeSeriesData data = dataSet.getSeries(ref);
             if (data == null) continue;
             String label = labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
-            labeled.put(label, data);
+            int uses = usesOfLabel.merge(label, 1, Integer::sum);
+            headers.add(uses == 1 ? label : label + " (" + uses + ")");
+            allSeries.add(data);
         }
-        if (labeled.isEmpty()) {
+        if (headers.isEmpty()) {
             return;
         }
-
-        List<String> headers = new ArrayList<>(labeled.keySet());
-        List<TimeSeriesData> allSeries = new ArrayList<>(labeled.values());
 
         boolean isExceedance = (plotType == PlotType.EXCEEDANCE);
 

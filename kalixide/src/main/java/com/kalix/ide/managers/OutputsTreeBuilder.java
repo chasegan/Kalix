@@ -62,6 +62,8 @@ public class OutputsTreeBuilder {
 
     /** Placeholder shown in the outputs tree when no run or dataset is selected. */
     public static final String SELECT_SOURCES_MESSAGE = "Select one or more datasets";
+    /** Shown when the filter is valid but no series of the checked sources matches it. */
+    static final String NO_MATCH_MESSAGE = "No series match the filter";
 
     // Tree components
     private final JTree timeseriesTree;
@@ -74,7 +76,7 @@ public class OutputsTreeBuilder {
     private final LabelResolver labelResolver;  // Projects refs to display labels
 
     // Filter state
-    private String filterText = "";
+    private SeriesFilter filter = SeriesFilter.NONE;
     private List<TreePath> preFilterExpansionState = null;
 
     /**
@@ -101,28 +103,29 @@ public class OutputsTreeBuilder {
     }
 
     /**
-     * Sets the filter text. When non-empty, only nodes matching the filter
-     * (case-insensitive) and their ancestors are shown after rebuild.
+     * Sets the filter. When active, only series it matches, and their ancestors,
+     * are shown after rebuild.
      */
-    public void setFilterText(String filterText) {
-        this.filterText = (filterText == null) ? "" : filterText.trim();
+    public void setFilter(SeriesFilter filter) {
+        this.filter = (filter == null) ? SeriesFilter.NONE : filter;
     }
 
-    public String getFilterText() {
-        return filterText;
+    /** Whether the tree is currently narrowed by a filter. */
+    public boolean isFiltered() {
+        return filter.isActive();
     }
 
     /**
-     * Updates the tree with a list of selected sources (runs and/or datasets).
+     * Updates the tree with the selected sources (runs, derived series and/or datasets).
      * Automatically handles single vs multi-source tree strategies.
      */
-    public void updateTree(List<Object> selectedRuns, List<Object> selectedDatasets) {
-        if (selectedRuns.isEmpty() && selectedDatasets.isEmpty()) {
+    public void updateTree(List<Object> sources) {
+        if (sources.isEmpty()) {
             showEmptyTree(SELECT_SOURCES_MESSAGE);
             return;
         }
 
-        updateTreeForMultipleSources(selectedRuns, selectedDatasets);
+        updateTreeForSources(sources);
     }
 
     /**
@@ -158,28 +161,17 @@ public class OutputsTreeBuilder {
     }
 
     /**
-     * Updates the timeseries tree for multiple selected sources (runs and/or datasets).
+     * Updates the timeseries tree for the selected sources.
      * Series available in multiple sources become parent nodes with source children.
      * Series available in only one source become simple leaf nodes.
      */
-    private void updateTreeForMultipleSources(List<Object> selectedRuns, List<Object> selectedDatasets) {
+    private void updateTreeForSources(List<Object> sources) {
         // Remember current expansion state
         List<TreePath> expandedPaths = new ArrayList<>();
-        boolean hadDatasetPaths = false;  // Track if previous tree had "file" nodes
         for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
             TreePath path = timeseriesTree.getPathForRow(i);
             if (timeseriesTree.isExpanded(path)) {
                 expandedPaths.add(path);
-                // Check if this path contains "file" node (dataset tree)
-                for (Object component : path.getPath()) {
-                    if (component instanceof DefaultMutableTreeNode) {
-                        Object userObj = ((DefaultMutableTreeNode) component).getUserObject();
-                        if (userObj instanceof String && "file".equals(userObj)) {
-                            hadDatasetPaths = true;
-                            break;
-                        }
-                    }
-                }
             }
         }
 
@@ -187,33 +179,21 @@ public class OutputsTreeBuilder {
         root.removeAllChildren();
 
         // If only one source selected, use simplified structure
-        boolean isDatasetTree = false;
-        if (selectedRuns.size() + selectedDatasets.size() == 1) {
-            if (selectedRuns.size() == 1) {
-                updateTreeSingleSource(root, selectedRuns.get(0));
-            } else {
-                updateTreeSingleSource(root, selectedDatasets.get(0));
-                isDatasetTree = true;
-            }
+        if (sources.size() == 1) {
+            updateTreeSingleSource(root, sources.get(0));
         } else {
-            // Build multi-source hybrid tree
-            updateTreeMultiSource(root, selectedRuns, selectedDatasets);
-            isDatasetTree = !selectedDatasets.isEmpty();  // Has datasets if any selected
+            updateTreeMultiSource(root, sources);
         }
-
-        // Apply filter pruning before reload
-        pruneNonMatchingNodes(root);
 
         timeseriesTreeModel.reload();
 
         // Save pre-filter expansion state when first entering filter mode
-        if (!filterText.isEmpty() && preFilterExpansionState == null) {
+        if (filter.isActive() && preFilterExpansionState == null) {
             preFilterExpansionState = new ArrayList<>(expandedPaths);
         }
 
         // Expansion logic
-        boolean switchedContext = (isDatasetTree != hadDatasetPaths);
-        if (!filterText.isEmpty()) {
+        if (filter.isActive()) {
             // Filter active - expand all to show matches in context
             for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
                 timeseriesTree.expandRow(i);
@@ -227,17 +207,25 @@ public class OutputsTreeBuilder {
                 }
             }
             preFilterExpansionState = null;
-        } else if (expandedPaths.isEmpty() || switchedContext) {
-            // First time or switched context - expand all nodes
+        } else if (expandedPaths.isEmpty()) {
+            // First time - expand all nodes
             for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
                 timeseriesTree.expandRow(i);
             }
         } else {
-            // Restore previous expansion state (same context)
+            // Restore previous expansion state
+            boolean restored = false;
             for (TreePath expandedPath : expandedPaths) {
                 TreePath newPath = findEquivalentPath(expandedPath);
                 if (newPath != null) {
                     timeseriesTree.expandPath(newPath);
+                    restored = true;
+                }
+            }
+            // Nothing carried over (e.g. a source with unrelated names) - expand all
+            if (!restored) {
+                for (int i = 0; i < timeseriesTree.getRowCount(); i++) {
+                    timeseriesTree.expandRow(i);
                 }
             }
         }
@@ -250,8 +238,13 @@ public class OutputsTreeBuilder {
         List<String> seriesNames = getSeriesNamesCallback.apply(source);
 
         if (seriesNames != null && !seriesNames.isEmpty()) {
-            seriesNames.sort(naturalCompareCallback::apply);
-            for (String seriesName : seriesNames) {
+            List<String> shown = matchingSeries(source, seriesNames);
+            if (shown.isEmpty()) {
+                root.add(new DefaultMutableTreeNode(NO_MATCH_MESSAGE));
+                return;
+            }
+            shown.sort(naturalCompareCallback::apply);
+            for (String seriesName : shown) {
                 // Create standalone leaf node with showSeriesName=true (shows "ds_1 [Run_1]")
                 SeriesLeafNode leafNode = new SeriesLeafNode(seriesName, source, true);
                 DefaultMutableTreeNode node = new DefaultMutableTreeNode(leafNode);
@@ -266,26 +259,27 @@ public class OutputsTreeBuilder {
     /**
      * Populates the tree for multiple sources (runs and/or datasets) using smart hybrid structure.
      */
-    private void updateTreeMultiSource(DefaultMutableTreeNode root, List<Object> selectedRuns, List<Object> selectedDatasets) {
-        // Map: series name -> list of sources (RunInfo or LoadedDatasetInfo) that have this series
+    private void updateTreeMultiSource(DefaultMutableTreeNode root, List<Object> sources) {
+        // Map: series name -> list of sources that have this series
         Map<String, List<Object>> seriesAvailability = new LinkedHashMap<>();
 
-        // Collect all series from all selected sources
-        List<Object> allSources = new ArrayList<>();
-        allSources.addAll(selectedRuns);
-        allSources.addAll(selectedDatasets);
-
-        for (Object source : allSources) {
+        boolean anyOutputs = false;
+        for (Object source : sources) {
             List<String> seriesNames = getSeriesNamesCallback.apply(source);
-            if (seriesNames != null) {
-                for (String seriesName : seriesNames) {
+            if (seriesNames != null && !seriesNames.isEmpty()) {
+                anyOutputs = true;
+                for (String seriesName : matchingSeries(source, seriesNames)) {
                     seriesAvailability.computeIfAbsent(seriesName, k -> new ArrayList<>()).add(source);
                 }
             }
         }
 
-        if (seriesAvailability.isEmpty()) {
+        if (!anyOutputs) {
             root.add(new DefaultMutableTreeNode("No outputs available from selected sources"));
+            return;
+        }
+        if (seriesAvailability.isEmpty()) {
+            root.add(new DefaultMutableTreeNode(NO_MATCH_MESSAGE));
             return;
         }
 
@@ -483,61 +477,36 @@ public class OutputsTreeBuilder {
                variableName.equals("No outputs available from selected runs") ||
                variableName.equals("No outputs available from selected sources") ||
                variableName.equals("No series available from this dataset") ||
+               variableName.equals(NO_MATCH_MESSAGE) ||
                variableName.equals(SELECT_SOURCES_MESSAGE);
     }
 
     // ========== Filtering ==========
 
     /**
-     * Removes nodes that don't match the current filter text.
-     * Parent/intermediate nodes are kept if any descendant matches.
-     * Called after the tree is fully built but before reload().
+     * The series of {@code source} the filter shows (all of them, as is, when no filter is
+     * active). Each is matched on its full name and the source label, so patterns can span
+     * levels ({@code inflow_*.ds_1}); the label is resolved once per source.
      */
-    private void pruneNonMatchingNodes(DefaultMutableTreeNode parent) {
-        if (filterText.isEmpty()) return;
-
-        String lowerFilter = filterText.toLowerCase();
-
-        // Work backwards to avoid index shifting during removal
-        for (int i = parent.getChildCount() - 1; i >= 0; i--) {
-            DefaultMutableTreeNode child = (DefaultMutableTreeNode) parent.getChildAt(i);
-            if (!nodeMatchesFilter(child)) {
-                parent.remove(i);
-            } else if (child.getUserObject() instanceof String && !isSpecialMessageNode(child)) {
-                // If this node's own text matches, keep all descendants intact
-                String nodeText = child.getUserObject().toString().toLowerCase();
-                if (!nodeText.contains(lowerFilter)) {
-                    // Node kept only because of matching descendants - prune non-matching children
-                    pruneNonMatchingNodes(child);
-                    if (child.getChildCount() == 0) {
-                        parent.remove(i);
-                    }
-                }
-            }
-        }
+    private List<String> matchingSeries(Object source, List<String> seriesNames) {
+        // Always a fresh list: the caller sorts it, and the callback's list may be
+        // immutable (a derived series offers List.of) or owned by the source.
+        if (!filter.isActive()) return new ArrayList<>(seriesNames);
+        String sourceLabel = sourceLabelOf(source, seriesNames.get(0));
+        return seriesNames.stream()
+            .filter(seriesName -> filter.matches(seriesName, sourceLabel))
+            .collect(Collectors.toCollection(ArrayList::new));
     }
 
     /**
-     * Checks if a node or any of its descendants matches the current filter.
-     * Matches against display text (toString()), case-insensitive.
+     * The label the tree shows for {@code source}, or null for a source of unknown
+     * type. Every series of a source projects to the same label, so any one of
+     * its series will do; it goes through a ref so that the resolver stays the
+     * only author of labels (ADR-0003 §2.3).
      */
-    private boolean nodeMatchesFilter(DefaultMutableTreeNode node) {
-        if (filterText.isEmpty()) return true;
-
-        String lowerFilter = filterText.toLowerCase();
-        Object userObject = node.getUserObject();
-
-        if (userObject != null && userObject.toString().toLowerCase().contains(lowerFilter)) {
-            return true;
-        }
-
-        // Check descendants
-        for (int i = 0; i < node.getChildCount(); i++) {
-            if (nodeMatchesFilter((DefaultMutableTreeNode) node.getChildAt(i))) {
-                return true;
-            }
-        }
-        return false;
+    private String sourceLabelOf(Object source, String anySeriesName) {
+        SeriesRef ref = refForSource.apply(anySeriesName, source);
+        return ref == null ? null : labelResolver.sourceLabel(ref);
     }
 
     // ========== Inner Classes ==========

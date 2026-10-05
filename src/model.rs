@@ -119,6 +119,11 @@ pub struct Model {
     /// Populated: during parsing or programmatic construction, via `add_node()`.
     pub nodes: Vec<NodeEnum>,
 
+    /// Cold: read at load, when a field's crop slots are resolved to indices.
+    /// The crops the model declares ([crop.*] sections), position-free like
+    /// tables.
+    pub crops: crate::hydrology::crop::CropRegistry,
+
     /// Hot path: flow phase, read in run_timestep().
     /// Var blocks ([var.*] sections): published calculations executed at their
     /// file position within the flow phase (structured_expressions_design.md §9)
@@ -307,6 +312,7 @@ impl Model {
             ras_systems: self.ras_systems.clone(),
             data_cache: self.data_cache.clone(),
             working_directory: self.working_directory.clone(),
+            crops: self.crops.clone(),
             nodes: self.nodes.clone(),
             var_blocks: self.var_blocks.clone(),
             exec_items: self.exec_items.clone(),
@@ -335,6 +341,7 @@ impl Model {
             ras_systems: self.ras_systems.clone(),
             data_cache: self.data_cache.clone(),
             working_directory: self.working_directory.clone(),
+            crops: self.crops.clone(),
             nodes: self.nodes.clone(),
             var_blocks: self.var_blocks.clone(),
             exec_items: self.exec_items.clone(),
@@ -1183,6 +1190,7 @@ impl Model {
             "gr4j",
             "awbm",
             "surm",
+            "gr4jsg",
             "regulated_user",
             "unregulated_user",
             "field",

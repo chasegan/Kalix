@@ -38,7 +38,18 @@ public final class NodeTemplateCatalog {
      * <p>{@code lines} are the INI body only. The {@code [node.<name>]} header is
      * generated from the id at insertion time, so it is not stored — and cannot drift.
      */
-    public record NodeTemplate(String id, String label, List<String> lines) {
+    public record NodeTemplate(String id, String label, List<String> lines, List<CarriedSection> sections) {
+    }
+
+    /**
+     * A section a template carries with it: a declaration the node refers to by name
+     * and cannot run without, such as the {@code [crop.*]} sections a field's
+     * {@code fallow} and {@code crop_1} name. {@code name} is the full section name
+     * ({@code crop.bare_soil}); {@code lines} is its body. It is inserted after the node
+     * only when the document has no section of that name yet, so a second field reuses
+     * the first one's crops.
+     */
+    public record CarriedSection(String name, List<String> lines) {
     }
 
     private NodeTemplateCatalog() {
@@ -101,7 +112,18 @@ public final class NodeTemplateCatalog {
                 for (JsonNode lineNode : definition.path("lines")) {
                     lines.add(lineNode.asText());
                 }
-                result.add(new NodeTemplate(id, label, Collections.unmodifiableList(lines)));
+                List<CarriedSection> sections = new ArrayList<>();
+                Iterator<Map.Entry<String, JsonNode>> sectionFields = definition.path("sections").fields();
+                while (sectionFields.hasNext()) {
+                    Map.Entry<String, JsonNode> section = sectionFields.next();
+                    List<String> sectionLines = new ArrayList<>();
+                    for (JsonNode lineNode : section.getValue()) {
+                        sectionLines.add(lineNode.asText());
+                    }
+                    sections.add(new CarriedSection(section.getKey(), Collections.unmodifiableList(sectionLines)));
+                }
+                result.add(new NodeTemplate(id, label, Collections.unmodifiableList(lines),
+                        Collections.unmodifiableList(sections)));
             }
         } catch (Exception e) {
             logger.error("Failed to load node templates from {} - " +

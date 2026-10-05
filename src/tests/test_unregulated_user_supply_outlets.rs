@@ -17,6 +17,15 @@ fn rig(head: &str, river: &str, channel_lag: usize, user: &str, field_order: &st
 start = 2020-01-01
 end = 2020-01-10
 {head}
+
+[crop.bare]
+root_depth = 1000
+kc = 0
+
+[crop.thirsty]
+root_depth = 1000
+kc = 0
+
 {river}
 
 [node.pump]
@@ -35,10 +44,14 @@ ds_1 = paddock
 [node.paddock]
 type = field
 area = 1
-capacity = 1000
+available_water = 1000
 initial_depletion = 1000
+fallow = bare
+crop_1 = thirsty
+crop_1_plant = 1
+crop_1_viable_area = this.area
 loc = 10, 50
-order = {field_order}
+crop_1_order = {field_order}
 ds_1 = outlet
 
 [node.outlet]
@@ -55,7 +68,7 @@ node.pump.ds_1
 node.pump.dsflow
 node.pump.diversion
 node.paddock.usflow
-node.paddock.order_due
+node.paddock.crop_1_order_due
 node.paddock.supply
 "#)
 }
@@ -178,7 +191,7 @@ loc = 0, 10
 lag = 3
 ds_1 = pump"#;
     let mut model = run(&rig("", river, 2, "demand = 0", "5").replace("[outputs]", "[outputs]\nnode.dam.ds_1_order"));
-    assert_eq!(series(&mut model, "node.paddock.order_due")[..4], [0.0, 0.0, 5.0, 5.0]);
+    assert_eq!(series(&mut model, "node.paddock.crop_1_order_due")[..4], [0.0, 0.0, 5.0, 5.0]);
     assert_eq!(series(&mut model, "node.pump.ds_2")[3..6], [5.0, 5.0, 5.0], "diverted as ordered, once the river is flowing");
     assert_eq!(series(&mut model, "node.paddock.supply")[5..8], [5.0, 5.0, 5.0], "and received 2 steps later, as it falls due");
     assert_eq!(series(&mut model, "node.dam.ds_1_order")[..4], [0.0; 4], "an unregulated user orders nothing upstream");

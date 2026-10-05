@@ -23,7 +23,7 @@ Tables come in two forms:
 
 - **1D tables** interpolate linearly between (x, y) breakpoints.
 - **2D tables** first select a column by exact key match, then interpolate
-  down that column.
+  down that column. With `bilinear = true` they interpolate across both axes.
 
 ## Defining a 1D Table
 
@@ -56,6 +56,11 @@ flow = table.rating(node.reach_5.dsflow)
 **Interpolation is clamped, not extrapolated.** Between breakpoints the value
 is linearly interpolated; outside the table range the nearest endpoint value
 is returned. NaN input produces NaN output.
+
+**Table values are returned exactly.** At a breakpoint the table returns the
+value written there, bit for bit; between two breakpoints the result never
+leaves the range of those two values. A bilinear table returns the cell at a
+grid point and stays within the four surrounding cells between grid points.
 
 ## Defining a 2D Table
 
@@ -100,7 +105,7 @@ Call a 2D table with two arguments — first the **column key**, then the
 release = table.pump_rating(sim.month, node.dam.volume)
 ```
 
-The lookup:
+By default, the lookup:
 
 1. **Column selection is an exact match.** The first argument must exactly
    equal one of the column keys. If it doesn't, the simulation stops with an
@@ -114,6 +119,15 @@ values match reliably. Avoid computing a column key with arithmetic that can
 introduce floating-point error (e.g. `volume / 300`): a value of
 `6.9999999...` will not match a key of `7`, and the run will stop with an
 error showing the offending value.
+
+**Bilinear tables.** Set `bilinear = true` on a 2D table whose column key is
+a continuous quantity. The lookup then interpolates down the two columns
+either side of the column key and between those two results. There is no
+exact-match error: both axes clamp to the table's edges, and NaN in either
+argument gives NaN. A column key that equals one of the table's column keys
+returns exactly what the exact-match lookup returns. `bilinear` takes `true`
+or `false` (default `false`); `bilinear = true` on a 1D table is an error at
+model load.
 
 ## Formatting Rules
 
@@ -156,4 +170,5 @@ like. The `[table.*]` section may appear anywhere in the model file.
 | Malformed data (bad number, wrong count, non-ascending keys) | Model load |
 | Unknown table name in an expression | Model load |
 | Wrong number of arguments (1D takes 1, 2D takes 2) | Model load |
-| 2D column key with no exact match | During simulation, with table name, value, and available keys |
+| `bilinear = true` on a 1D table, or a value other than `true` or `false` | Model load |
+| 2D column key with no exact match (unless the table sets `bilinear = true`) | During simulation, with table name, value, and available keys |

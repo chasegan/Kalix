@@ -1,6 +1,6 @@
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
-use crate::nodes::{Node, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, unregulated_user_node::UnregulatedUserNode, regulated_user_node::RegulatedUserNode, field_node::FieldNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode};
+use crate::nodes::{Node, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, unregulated_user_node::UnregulatedUserNode, regulated_user_node::RegulatedUserNode, field_node::FieldNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode, gr4jsg_node::Gr4jsgNode};
 
 #[derive(Clone)]
 pub enum NodeEnum {
@@ -21,6 +21,7 @@ pub enum NodeEnum {
     OrderControlNode(OrderControlNode),
     AwbmNode(AwbmNode),
     SurmNode(SurmNode),
+    Gr4jsgNode(Gr4jsgNode),
 }
 
 /// Dispatch a method call to whichever node variant this is. Expands to the
@@ -47,6 +48,7 @@ macro_rules! dispatch {
             NodeEnum::OrderControlNode($node) => $call,
             NodeEnum::AwbmNode($node) => $call,
             NodeEnum::SurmNode($node) => $call,
+            NodeEnum::Gr4jsgNode($node) => $call,
         }
     };
 }
@@ -71,6 +73,7 @@ impl NodeEnum {
             NodeEnum::OrderControlNode(_) => "order_control",
             NodeEnum::AwbmNode(_) => "awbm",
             NodeEnum::SurmNode(_) => "surm",
+            NodeEnum::Gr4jsgNode(_) => "gr4jsg",
         };
         name.to_string()
     }

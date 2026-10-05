@@ -7,10 +7,9 @@ import com.kalix.ide.flowviz.rendering.LineShape;
 import com.kalix.ide.flowviz.rendering.ViewPort;
 import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
-import com.kalix.ide.io.TimeSeriesCsvExporter;
+import com.kalix.ide.io.SeriesFileWriter;
 import com.kalix.ide.io.SourceResCsvExporter;
 import com.kalix.ide.io.SourceResCsvFormat;
-import com.kalix.ide.io.PixieWriter;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 
@@ -1117,19 +1116,14 @@ public class PlotInteractionManager {
      * Saves data in CSV format.
      */
     private void saveAsCsvFormat(File file) {
-        // Ensure a CSV extension — .csv.zip counts (the exporter zips by name).
-        String lower = file.getName().toLowerCase();
-        if (!lower.endsWith(".csv") && !lower.endsWith(".csv.zip")) {
-            file = new File(file.getAbsolutePath() + ".csv");
-        }
-
         try {
             DataSet dataSet = dataSetSupplier.get();
             com.kalix.ide.flowviz.transform.PlotType plotType =
                 (plotTypeSupplier != null) ? plotTypeSupplier.get() : null;
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
-            TimeSeriesCsvExporter.export(dataSet, file, plotType, labelResolver);
+            // .csv.zip counts as CSV (the exporter zips by name); anything else gains .csv.
+            file = SeriesFileWriter.write(dataSet, file, plotType, labelResolver, false);
             JOptionPane.showMessageDialog(parentComponent,
                 "Data saved successfully to " + file.getName(),
                 "Save Data",
@@ -1182,36 +1176,18 @@ public class PlotInteractionManager {
      * Saves data in Pixie format.
      */
     private void saveAsPixieFormat(File file) {
-        String filePath = file.getAbsolutePath();
-
-        // Remove .pxt extension if present to get base path
-        if (filePath.toLowerCase().endsWith(".pxt")) {
-            filePath = filePath.substring(0, filePath.length() - 4);
-        }
-
         try {
             DataSet dataSet = dataSetSupplier.get();
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
-
-            // Build (name, data) pairs — the .pxt metadata needs a series name, taken
-            // from the ref's projected label.
-            java.util.List<com.kalix.ide.io.NamedSeries> seriesList = new java.util.ArrayList<>();
-            for (com.kalix.ide.flowviz.data.SeriesRef ref : dataSet.getSeriesRefs()) {
-                com.kalix.ide.flowviz.data.TimeSeriesData series = dataSet.getSeries(ref);
-                if (series != null) {
-                    String name = labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
-                    seriesList.add(new com.kalix.ide.io.NamedSeries(name, series));
-                }
-            }
-
-            // Write to Pixie format
-            PixieWriter writer = new PixieWriter();
             boolean use64BitPrecision = precision64Supplier != null ? precision64Supplier.get() : true;
-            writer.writeToFile(filePath, seriesList, use64BitPrecision);
+            // Series are named by their projected labels in the .pxt metadata.
+            File pxtFile = SeriesFileWriter.write(dataSet, file, null, labelResolver, use64BitPrecision);
+            String pxtName = pxtFile.getName();
 
             JOptionPane.showMessageDialog(parentComponent,
-                "Data saved successfully to " + new File(filePath + ".pxt").getName() + " and " + new File(filePath + ".pxb").getName(),
+                "Data saved successfully to " + pxtName + " and "
+                    + pxtName.substring(0, pxtName.length() - ".pxt".length()) + ".pxb",
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception e) {

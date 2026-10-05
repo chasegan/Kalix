@@ -18,11 +18,15 @@ The models each emphasise a different part of the engine's hot path:
                         lag+PWL routing, and seasonal regulated users, joining
                         into a common trunk. Emphasises the ordering phase and
                         the storage backward-Euler solver.
-  6_routing           - twelve short chains of routing nodes and nothing else:
+  6_unregulated_users_with_tables - the network of models 2 and 3 with every
+                        pump capacity a lookup table call: a 1D rating, an
+                        exact-match monthly rule, a bilinear surface, and the
+                        three combined. Emphasises the table lookups.
+  8_routing           - twelve short chains of routing nodes and nothing else:
                         NLM and PWL, each at x = 1 and x < 1, on ephemeral
-                        inflows. The CONTROL for model 7.
-  7_routing_reach_losses - the same chains with `evap` and `loss_table` on
-                        every node. The 6-vs-7 gap isolates the cost of reach
+                        inflows. The CONTROL for model 9.
+  9_routing_reach_losses - the same chains with `evap` and `loss_table` on
+                        every node. The 8-vs-9 gap isolates the cost of reach
                         losses.
 
 Deterministic: fixed seeds, so regenerating produces identical files.
@@ -131,6 +135,9 @@ class ModelBuilder:
         self.lines += [f"[node.{name}]", f"loc = {x:.1f}, {y:.1f}", f"type = {node_type}"]
         self.lines += props + [""]
 
+    def section(self, text):
+        self.lines += text.strip("\n").split("\n") + [""]
+
     def output(self, ref):
         self.outputs.append(ref)
 
@@ -235,7 +242,7 @@ def pump_props(rng, style, head_gauge):
 CONTROL_DEMAND = 18.6  # scalar demand for the no-functions control model
 
 
-def build_unregulated(folder_name, title, with_functions):
+def build_unregulated(folder_name, title, pumps=None, tables=None):
     folder = HERE / folder_name
     folder.mkdir(exist_ok=True)
 
@@ -264,9 +271,9 @@ def build_unregulated(folder_name, title, with_functions):
         for u in range(USERS_PER_REACH):
             name = f"r{r}_user{u}"
             nxt = f"r{r}_user{u + 1}" if u + 1 < USERS_PER_REACH else f"conf{r // 2}"
-            if with_functions:
+            if pumps:
                 props = ["demand = 999999999"]
-                props += pump_props(rng, (r * USERS_PER_REACH + u) % 5, gauge)
+                props += pumps(rng, r * USERS_PER_REACH + u, gauge)
             else:
                 props = [f"demand = {CONTROL_DEMAND}"]
             props += [f"ds_1 = {nxt}"]
@@ -283,6 +290,9 @@ def build_unregulated(folder_name, title, with_functions):
         m.node(f"sink{c}", "blackhole", c * 80 + 20, 180, [])
         m.output(f"node.{gauge}.ds_1")
 
+    if tables:
+        m.section(tables)
+
     for r in (0, 3):
         m.output(f"node.r{r}_user5.diversion")
         m.output(f"node.r{r}_user5.ds_1")
@@ -295,7 +305,6 @@ def build_model_2():
     build_unregulated(
         "2_unregulated_users",
         "Speed test 2: unregulated users with scalar demands (control for test 3)",
-        with_functions=False,
     )
 
 
@@ -303,7 +312,69 @@ def build_model_3():
     build_unregulated(
         "3_unregulated_users_with_functions",
         "Speed test 3: unregulated users with pump capacity functions",
-        with_functions=True,
+        pumps=lambda rng, i, gauge: pump_props(rng, i % 5, gauge),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Model 6: unregulated users with lookup tables
+# ---------------------------------------------------------------------------
+
+# Sizes typical of real models: a rating of nine breakpoints, a monthly rule
+# of twelve columns, and a small surface keyed by two flows.
+LOOKUP_TABLES = """
+[table.rate]
+values = flow, cap,
+         0,    0,
+         20,   2,
+         50,   8,
+         100,  15,
+         250,  22,
+         600,  30,
+         1500, 41,
+         5000, 55,
+
+[table.rule]
+n_cols = 13
+values = flow\\month, 1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,
+         0,          0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+         30,         5,  5,  4,  3,  2,  1,  1,  2,  3,  4,  5,  5,
+         100,        20, 20, 18, 15, 12, 10, 10, 12, 15, 18, 20, 20,
+         400,        35, 35, 30, 28, 25, 20, 20, 25, 28, 30, 35, 35,
+         1500,       50, 50, 45, 40, 35, 30, 30, 35, 40, 45, 50, 50,
+         100000,     60, 60, 55, 50, 45, 40, 40, 45, 50, 55, 60, 60,
+
+[table.share]
+n_cols = 7
+bilinear = true
+values = flow\\head, 0,  25, 75, 150, 400, 2000,
+         0,         0,  0,  0,  0,   0,   0,
+         20,        0,  1,  2,  3,   4,   4,
+         60,        0,  3,  6,  9,   12,  14,
+         200,       0,  6,  12, 20,  28,  32,
+         800,       0,  8,  18, 30,  44,  52,
+         5000,      0,  10, 22, 38,  58,  70,
+"""
+
+
+def table_pump_props(i, head_gauge):
+    """Pump expressions that are table lookups: a 1D rating, an exact-match
+    monthly rule, a bilinear surface, and the three combined."""
+    rate = "table.rate(this.usflow)"
+    rule = "table.rule(sim.month, this.usflow)"
+    share = f"table.share(node.{head_gauge}.dsflow, this.usflow)"
+    return [[f"pump = {rate}"],
+            [f"pump = {rule}"],
+            [f"pump = {share}"],
+            [f"pump = max(0, min({rate}, {rule}) - 0.1 * {share})"]][i % 4]
+
+
+def build_model_6():
+    build_unregulated(
+        "6_unregulated_users_with_tables",
+        "Speed test 6: unregulated users with pump capacities from lookup tables",
+        pumps=lambda rng, i, gauge: table_pump_props(i, gauge),
+        tables=LOOKUP_TABLES,
     )
 
 
@@ -554,8 +625,80 @@ def build_model_5():
     (folder / "bench.json").write_text('{"repeats": 5}\n')
 
 
+def build_model_7():
+    """Fields: 25 farm storages, each supplying four irrigated fields with one
+    crop apiece, 20 years daily. Exists so a change to the field node can be
+    timed against a model that is mostly fields (ADR-0004 §4); nothing else in
+    the suite contains one. The order rules are the IDE template's, so the
+    expression evaluator's share (two offset reads per crop per step) is the
+    same as a real farm model carries."""
+    folder = HERE / "7_fields"
+    folder.mkdir(exist_ok=True)
+
+    rng = random.Random(606)
+    dates = daily_dates(1990, 20)
+    rain, pet = synth_climate(dates, rng)
+    write_csv(folder / "climate.csv", dates, [("rain", rain), ("pet", pet)])
+    cols = [(f"inflow_{i + 1}", synth_flow(dates, rng, scale=rng.uniform(40, 120)))
+            for i in range(5)]
+    write_csv(folder / "inflows.csv", dates, cols)
+
+    m = ModelBuilder("Speed test 7: farm storages supplying 100 fields with crops")
+    m.inputs("climate.csv", "inflows.csv")
+    m.lines += [
+        "[crop.cotton]", "root_depth = 900", "p = 0.65",
+        "kc = Day, Kc,", "     0,   0.35,", "     30,  0.35,", "     70,  1.2,", "     130, 1.2,", "     180, 0.6,",
+        "season_len = 180", "",
+        "[crop.lucerne]", "root_depth = 1200", "p = 0.55", "kc = 0.95", "",
+        "[crop.bare_soil]", "root_depth = 600", "kc = 0.4", "",
+    ]
+    for f in range(25):
+        x = (f % 5) * 40.0
+        y = (f // 5) * 60.0
+        m.node(f"s{f}_inflow", "inflow", x, y, [
+            f"inflow = data.inflows_csv.by_index.{f % 5 + 1}",
+            f"ds_1 = s{f}_dam",
+        ])
+        outlets = [f"ds_{k + 1}_outlet = 0, 500" for k in range(4)]
+        links = [f"ds_{k + 1} = s{f}_field{k}" for k in range(4)]
+        m.node(f"s{f}_dam", "storage", x, y + 10,
+               storage_props(3_000 + f * 100, initial_fraction=0.9) + outlets + links)
+        for k in range(4):
+            cotton = (f + k) % 2 == 0
+            area = rng.uniform(1.0, 4.0)
+            props = [
+                f"area = {area:.2f}",
+                f"available_water = {rng.choice([120, 150, 180])}",
+                "rain = data.climate_csv.by_name.rain",
+                "evap = data.climate_csv.by_name.pet",
+                f"efficiency = {rng.choice([0.7, 0.8, 0.9])}",
+                "fallow = bare_soil",
+            ]
+            if cotton:
+                props += [
+                    "crop_1 = cotton",
+                    "crop_1_plant = if(sim.month == 10 && sim.day == 15, this.area, 0)",
+                ]
+            else:
+                props += [
+                    "crop_1 = lucerne",
+                    "crop_1_plant = if(sim.year == 1990 && sim.month == 3 && sim.day == 1, this.area, 0)",
+                ]
+            props += [
+                "crop_1_order = this.crop_1_area * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]",
+                f"ds_1 = s{f}_sink",
+            ]
+            m.node(f"s{f}_field{k}", "field", x + 5 + k * 8, y + 25, props)
+        m.node(f"s{f}_sink", "blackhole", x + 15, y + 40, [])
+    m.output("node.s0_dam.volume")
+    m.output("node.s0_field0.crop_1_depletion")
+    m.output("node.s24_field3.supply")
+    m.write(folder / "kalix.ini")
+    (folder / "bench.json").write_text('{"repeats": 7}\n')
+
+
 # ---------------------------------------------------------------------------
-# Models 6 and 7: routing only, without and with reach losses
+# Models 8 and 9: routing only, without and with reach losses
 # ---------------------------------------------------------------------------
 
 EPHEMERAL_STORM_PROB = 0.035
@@ -643,13 +786,13 @@ def build_routing_only(folder_name, title, with_reach_losses):
     (folder / "bench.json").write_text('{"repeats": 7}\n')
 
 
-def build_model_6():
-    build_routing_only("6_routing", "Speed test 6: routing only, NLM and PWL (control for test 7)",
+def build_model_8():
+    build_routing_only("8_routing", "Speed test 8: routing only, NLM and PWL (control for test 9)",
                        with_reach_losses=False)
 
 
-def build_model_7():
-    build_routing_only("7_routing_reach_losses", "Speed test 7: routing with reach losses",
+def build_model_9():
+    build_routing_only("9_routing_reach_losses", "Speed test 9: routing with reach losses",
                        with_reach_losses=True)
 
 
@@ -661,4 +804,6 @@ if __name__ == "__main__":
     build_model_5()
     build_model_6()
     build_model_7()
-    print("Generated speed test models 1-7.")
+    build_model_8()
+    build_model_9()
+    print("Generated speed test models 1-9.")

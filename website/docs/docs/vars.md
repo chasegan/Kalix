@@ -57,8 +57,8 @@ has to edit the definition's internal references:
 
 ```ini
 [var.state]
-wy_count = this[-1, 0] + fn.is_startwy()               ; a counter
-assessment = if(sim.new_month, fn.assess(), this[-1, 0]) ; a monthly hold
+wy_count = this[-1, 0] + fn.is_startwy()               # a counter
+assessment = if(sim.new_month, fn.assess(), this[-1, 0]) # a monthly hold
 ```
 
 `this` always needs an offset (`this[-1, default]`) — a var can never read

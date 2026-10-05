@@ -15,6 +15,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -49,6 +50,8 @@ class LastRunTracker {
     private final VisualizationTabManager tabManager;
     private final TimeSeriesRequestManager timeSeriesRequestManager;
     private final SeriesFetchCoordinator fetchCoordinator;
+    // Told whenever Last changes, including to no run.
+    private final List<Runnable> lastChangeListeners = new ArrayList<>();
 
     // === LAST RUN TRACKING ===
     // lastRunInfo points to the most recently completed run
@@ -86,6 +89,11 @@ class LastRunTracker {
     /** The most recently completed run, or {@code null} if none. */
     RunInfoImpl getLastRunInfo() {
         return lastRunInfo;
+    }
+
+    /** Registers {@code listener} to run whenever Last changes, including to no run. */
+    void addLastChangeListener(Runnable listener) {
+        lastChangeListeners.add(listener);
     }
 
     /** Current "Last" generation; async "[Last]" fetches capture this at issue time. */
@@ -179,6 +187,7 @@ class LastRunTracker {
         // resolver); drop the stale rendered lines on every tab, not just whichever
         // one next happens to rebuild.
         tabManager.updateAllTabs(false);
+        lastChangeListeners.forEach(Runnable::run);
     }
 
     /**
@@ -285,6 +294,7 @@ class LastRunTracker {
 
         // Refresh any plotted "[Last]" series to use the new Last run's data
         refreshLastSeries();
+        lastChangeListeners.forEach(Runnable::run);
     }
 
     /**
@@ -356,8 +366,7 @@ class LastRunTracker {
             if (cachedData != null) {
                 // Synchronous replacement on EDT — atomic via DataSet.addSeries replacing
                 // the existing entry for this ref.
-                window.addSeriesToPool(ref, cachedData);
-                tabManager.updateSeriesInStatsTabsWithAggregation(ref, cachedData);
+                window.publishSeries(ref, cachedData);
                 anySyncReplacement = true;
             } else {
                 // Async fetch. requestTimeSeries returns an existing in-flight future
@@ -371,8 +380,7 @@ class LastRunTracker {
                             if (capturedGeneration != lastRunGeneration) {
                                 return;
                             }
-                            window.addSeriesToPool(ref, timeSeriesData);
-                            tabManager.updateSeriesInStatsTabsWithAggregation(ref, timeSeriesData);
+                            window.publishSeries(ref, timeSeriesData);
 
                             // Only refresh tabs if something on screen needs to redraw.
                             if (tabManager.isSeriesSelectedOnAnyTab(ref)) {

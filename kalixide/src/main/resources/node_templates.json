@@ -35,6 +35,20 @@
         "params = 1500, 4, 65, 0.38 #x1 mm, x2 mm, x3 mm, x4 days"
       ]
     },
+    "gr4jsg": {
+      "label": "GR4JSG",
+      "lines": [
+        "type = gr4jsg",
+        "loc = %%X%%,%%Y%%",
+        "area = 200 #km2",
+        "rain = 0 #expression",
+        "evap = 0 #expression",
+        "tmax = 0 #expression, deg C",
+        "tmin = 0 #expression, deg C",
+        "params = 1500, 4, 65, 0.38 #x1 mm, x2 mm, x3 mm, x4 days",
+        "snow_params = 0.5, 0, 3.38, 1.3, 3 #tfrac, taccum, m_rainfall, base_rainfall, m_nonrainfall"
+      ]
+    },
     "sacramento": {
       "label": "Sacramento",
       "lines": [
@@ -82,14 +96,32 @@
         "type = field",
         "loc = %%X%%,%%Y%%",
         "area = 1 #km2",
-        "capacity = 120 #mm",
+        "available_water = 150 #mm per m of soil",
         "rain = 0 #expression, mm",
         "evap = 0 #expression, mm",
-        "kc = 1 #expression",
-        "p = 0.5",
         "efficiency = 0.8",
-        "order = this.area * clamp(this.depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.orders_en_route[-1, 0]"
-      ]
+        "fallow = bare_soil #a [crop.*] section",
+        "crop_1 = cotton #a [crop.*] section",
+        "crop_1_plant = if(sim.month == 10 && sim.day == 15, this.area, 0) #km2 to plant today, 0 for none",
+        "crop_1_order = this.crop_1_area * clamp(this.crop_1_depletion[-1, 0] - 40, 0, 120) / this.efficiency - this.crop_1_orders_en_route[-1, 0]"
+      ],
+      "sections": {
+        "crop.bare_soil": [
+          "root_depth = 600 #mm, how deep the fallow ground dries",
+          "kc = 0.4 #bare-soil evaporation factor"
+        ],
+        "crop.cotton": [
+          "root_depth = 900 #mm",
+          "p = 0.65",
+          "kc = Day, Kc, #by days since planting",
+          "     0,   0.35,",
+          "     30,  0.35,",
+          "     70,  1.20,",
+          "     130, 1.20,",
+          "     180, 0.60,",
+          "season_len = 180 #days from planting to harvest"
+        ]
+      }
     },
     "regulated_user": {
       "label": "Regulated user",

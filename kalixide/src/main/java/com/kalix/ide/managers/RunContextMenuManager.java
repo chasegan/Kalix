@@ -11,11 +11,15 @@ import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 
 import javax.swing.JFrame;
+import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
+import javax.swing.JSeparator;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
@@ -30,7 +34,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -72,6 +78,10 @@ public class RunContextMenuManager {
     // Top-level category nodes that support "Remove all" on right-click (e.g. "Current runs",
     // "Run library", "Loaded datasets"). Set by the owner via setRemovableCategories.
     private final Set<DefaultMutableTreeNode> removableCategories = new HashSet<>();
+
+    // Menus for node kinds this manager doesn't know (e.g. derived series): user object -> menu,
+    // or null for none. Set by the owner via setNodeMenuProvider.
+    private Function<Object, JPopupMenu> nodeMenuProvider = userObject -> null;
 
     /**
      * Represents run status for context menu decisions.
@@ -228,12 +238,42 @@ public class RunContextMenuManager {
                     contextMenu.show(runTree, e.getX(), e.getY());
                 } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                     datasetMenu.show(runTree, e.getX(), e.getY());
+                } else if (nodeMenuProvider.apply(userObject) instanceof JPopupMenu menu) {
+                    menu.show(runTree, e.getX(), e.getY());
                 } else if (removableCategories.contains(node)) {
                     removeAllItem.setEnabled(countRemovableChildren(node) > 0);
                     categoryMenu.show(runTree, e.getX(), e.getY());
                 }
             }
         });
+    }
+
+    /** A menu item enabled only while {@code enabledWhen} holds; it stays visible, greyed, so the user learns it exists (ADR-0002 §4). */
+    public record ConditionalItem(String label, Runnable action, BooleanSupplier enabledWhen) {
+    }
+
+    /**
+     * Adds {@code items} and a separator after them; returns what refreshes their
+     * enabled state when the menu opens.
+     */
+    private static Runnable addConditionalBlock(JPopupMenu menu, List<ConditionalItem> items) {
+        List<JMenuItem> menuItems = new ArrayList<>();
+        for (ConditionalItem item : items) {
+            JMenuItem menuItem = new JMenuItem(item.label());
+            menuItem.addActionListener(e -> item.action().run());
+            menu.add(menuItem);
+            menuItems.add(menuItem);
+        }
+        menu.add(new JSeparator());
+        return () -> {
+            for (int i = 0; i < items.size(); i++) {
+                menuItems.get(i).setEnabled(items.get(i).enabledWhen().getAsBoolean());
+            }
+        };
+    }
+
+    public void setNodeMenuProvider(Function<Object, JPopupMenu> provider) {
+        this.nodeMenuProvider = provider;
     }
 
     /**
@@ -264,15 +304,33 @@ public class RunContextMenuManager {
     }
 
     /**
-     * Sets up the context menu for the outputs tree: expand/collapse, and the two
-     * "Show" actions that fold the tree back to what is checked or selected. Every item
-     * is a view/state action (ADR-0002 §1) and delegates to the caller.
+     * Sets up the context menu for the outputs tree: the {@code createItems} block, then
+     * the view/state block (ADR-0002 §1). Create items stay visible and are greyed when
+     * they don't apply, so the user learns they exist (§4). All items delegate to their
+     * callbacks.
      */
-    public void setupOutputsTreeContextMenu(Runnable expandAllCallback,
+
+    public void setupOutputsTreeContextMenu(List<ConditionalItem> createItems,
+                                            Runnable expandAllCallback,
                                             Runnable collapseAllCallback,
                                             Runnable showCheckedCallback,
                                             Runnable showSelectedCallback) {
         JPopupMenu contextMenu = new JPopupMenu();
+        Runnable refreshCreateItems = addConditionalBlock(contextMenu, createItems);
+        contextMenu.addPopupMenuListener(new PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+                refreshCreateItems.run();
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {
+            }
+
+            @Override
+            public void popupMenuCanceled(PopupMenuEvent e) {
+            }
+        });
 
         JMenuItem expandAllItem = new JMenuItem("Expand all");
         expandAllItem.addActionListener(e -> expandAllCallback.run());

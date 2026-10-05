@@ -16,6 +16,10 @@ mod test_gr4h_variant;
 #[cfg(test)]
 mod test_gr4h_validation;
 
+// GR4JSG: validation against Fors, and the node's model-file surface
+#[cfg(test)]
+mod test_gr4jsg;
+
 #[cfg(test)]
 mod test_node_inflow;
 
@@ -165,6 +169,10 @@ mod test_regulated_user_supply_outlets;
 
 // Storage: the order it places, and what is en route to a target level
 mod test_storage_order_results;
+
+// [crop.*] sections
+mod test_crop_sections;
+mod test_field_crops;
 
 // Field node: the soil water balance
 mod test_field_soil;

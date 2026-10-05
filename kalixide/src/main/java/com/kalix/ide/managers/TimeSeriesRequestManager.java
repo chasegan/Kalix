@@ -201,6 +201,19 @@ public class TimeSeriesRequestManager {
     }
 
     /**
+     * Drops one series from the completed cache, for a caller that fetched it to read once
+     * (summing it into a derived series, say) and would otherwise leave it held for the
+     * life of the run. A request in flight is untouched. Nothing happens if the series is
+     * not cached.
+     */
+    public void forgetCompleted(String sessionKey, String seriesName) {
+        String kalixcliUid = getKalixcliUid(sessionKey);
+        if (kalixcliUid != null) {
+            completedCache.remove(kalixcliUid + ":" + seriesName);
+        }
+    }
+
+    /**
      * Get timeseries data from cache if available
      * @param sessionKey The session key (IDE identifier)
      * @param seriesName The series name

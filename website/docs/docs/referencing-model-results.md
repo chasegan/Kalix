@@ -80,16 +80,16 @@ node.<name>.<output>[offset, default_value]
 **Examples:**
 
 ```
-; Yesterday's downstream flow (default to 0 if at simulation start)
+# Yesterday's downstream flow (default to 0 if at simulation start)
 node.catchment.dsflow[-1, 0.0]
 
-; Storage volume from 7 days ago
+# Storage volume from 7 days ago
 node.reservoir.volume[-7, 1000.0]
 
-; Calculate daily change in storage
+# Calculate daily change in storage
 node.reservoir.volume - node.reservoir.volume[-1, 0.0]
 
-; Conditional based on previous flow
+# Conditional based on previous flow
 if(node.catchment.dsflow > node.catchment.dsflow[-1, 0.0], 1, 0)
 ```
 
@@ -101,11 +101,13 @@ timestep. They read the same way, as `node.<name>.<property>`:
 
 | Property | Node types | Description |
 | --- | --- | --- |
-| `area` | GR4J, Sacramento, AWBM, SURM | Catchment area [km2] |
+| `area` | GR4J, GR4JSG, Sacramento, AWBM, SURM | Catchment area [km2] |
 | `x` | Routing | Inflow bias used by the storage routing solver |
 | `typical_regulated_flow` | Routing | Representative regulated flow [ML] used to estimate travel time through the reach for order propagation (see [Ordering](ordering.md)) |
 | `initial_volume` | Storage | Initial storage volume [ML] |
 | `order_factor` | Regulated user | Factor applied to the node's order as it is sent upstream — the declared value |
+| `area` | Field | Field area [km2] — the declared value, read by irrigation rules as `this.area` |
+| `efficiency` | Field | Share of supplied water that reaches the soil — the declared value, read as `this.efficiency` |
 
 ```
 [node.my_catchment]
@@ -115,7 +117,7 @@ area = 250
 
 [node.pump]
 type = unregulated_user
-; Scale demand by catchment area elsewhere in the model
+# Scale demand by catchment area elsewhere in the model
 demand = 0.05 * node.my_catchment.area
 ```
 

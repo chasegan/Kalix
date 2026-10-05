@@ -187,8 +187,15 @@ public class TimeSeriesMasker {
         if (n == 0) {
             return new Mask(new long[0]);
         }
-        if (!(mode instanceof SeasonalMaskMode.Enabled( Set<Month> months ))) {
-            return new Mask(Arrays.copyOf(timestamps, n));
+        Set<Month> months;
+        switch (mode) {
+            case null -> {
+                return new Mask(Arrays.copyOf(timestamps, n));
+            }
+            case SeasonalMaskMode.Disabled ignored -> {
+                return new Mask(Arrays.copyOf(timestamps, n));
+            }
+            case SeasonalMaskMode.Enabled enabled -> months = enabled.months();
         }
 
         long[] kept = new long[n];

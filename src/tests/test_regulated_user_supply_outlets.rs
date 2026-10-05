@@ -17,6 +17,14 @@ start = 2020-01-01
 end = 2020-01-10
 {head}
 
+[crop.bare]
+root_depth = 1000
+kc = 0
+
+[crop.thirsty]
+root_depth = 1000
+kc = 0
+
 [node.dam]
 type = storage
 loc = 0, 10
@@ -50,10 +58,14 @@ ds_1 = paddock
 [node.paddock]
 type = field
 area = 1
-capacity = 1000
+available_water = 1000
 initial_depletion = 1000
+fallow = bare
+crop_1 = thirsty
+crop_1_plant = 1
+crop_1_viable_area = this.area
 loc = 10, 50
-order = {field_order}
+crop_1_order = {field_order}
 ds_1 = outlet
 
 [node.outlet]
@@ -74,7 +86,7 @@ node.pump.dsflow
 node.pump.diversion
 node.pump.diversion_regulated
 node.paddock.usflow
-node.paddock.order_due
+node.paddock.crop_1_order_due
 node.paddock.supply
 node.outlet.usflow
 "#)
@@ -134,7 +146,7 @@ fn test_outlet_order_is_held_for_the_users_travel_time() {
     assert_eq!(series(&mut model, "node.pump.ds_2_order_due")[..5], [0.0, 0.0, 5.0, 5.0, 5.0]);
     assert_eq!(series(&mut model, "node.pump.usflow")[..5], [0.0, 0.0, 5.0, 5.0, 5.0]);
     assert_eq!(series(&mut model, "node.pump.ds_2")[..5], [0.0, 0.0, 5.0, 5.0, 5.0], "diverted as it arrives");
-    assert_eq!(series(&mut model, "node.paddock.order_due")[..5], [0.0, 0.0, 0.0, 5.0, 5.0]);
+    assert_eq!(series(&mut model, "node.paddock.crop_1_order_due")[..5], [0.0, 0.0, 0.0, 5.0, 5.0]);
     assert_eq!(series(&mut model, "node.paddock.usflow")[..5], [0.0, 0.0, 0.0, 5.0, 5.0], "and received as it falls due");
     assert_eq!(series(&mut model, "node.paddock.supply")[..5], [0.0, 0.0, 0.0, 5.0, 5.0]);
     assert_eq!(series(&mut model, "node.pump.ds_1")[..5], [0.0; 5], "nothing passes the user undiverted");
@@ -182,4 +194,104 @@ fn test_supply_outlet_round_trips() {
     assert!(rendered.contains("ds_2 = channel"), "the supply link survives save:\n{}", rendered);
     let reloaded = IniModelIO::read_model_string(&rendered).expect("canonical render should re-load");
     assert_eq!(IniModelIO::model_to_string(&reloaded), rendered);
+}
+
+#[test]
+fn test_an_on_farm_storage_between_the_user_and_the_field() {
+    // The in-line arrangement of a regulated farm: the user's supply outlet fills an on-farm
+    // storage that holds a target level, and the storage supplies the field. The storage
+    // orders up the outlet to reach its target, the user adds that to its own order, and the
+    // dam releases it; the storage meanwhile supplies the field from what it holds. 2 steps
+    // from the dam to the user, none from the storage to the field.
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-08
+
+[crop.bare]
+root_depth = 1000
+kc = 0
+
+[crop.thirsty]
+root_depth = 1000
+kc = 0
+
+[node.dam]
+type = storage
+loc = 0, 0
+initial_volume = 50000
+dimensions = 0, 0, 0, 0,
+             1, 100000, 1, 0,
+             2, 200000, 1, 1e9,
+ds_1_outlet = 0, 10000
+ds_1 = river
+
+[node.river]
+type = routing
+loc = 0, 10
+lag = 2
+ds_1 = pump
+
+[node.pump]
+type = regulated_user
+loc = 0, 20
+order = 0
+ds_1 = outlet
+ds_2 = ofs
+
+[node.ofs]
+type = storage
+loc = 10, 30
+initial_volume = 1000
+dimensions = 0, 0, 0, 0,
+             1, 1000, 0.1, 0,
+             3, 3000, 0.1, 0,
+             4, 4000, 0.1, 1e9,
+ds_1_outlet = 0, 10000
+target_level = 1.5
+ds_1 = paddock
+
+[node.paddock]
+type = field
+loc = 10, 40
+area = 1
+available_water = 1000
+initial_depletion = 1000
+interception = 0
+fallow = bare
+crop_1 = thirsty
+crop_1_plant = 1
+crop_1_viable_area = this.area
+crop_1_order = 10
+ds_1 = outlet
+
+[node.outlet]
+type = gauge
+loc = 0, 50
+
+[outputs]
+node.dam.ds_1_order
+node.pump.ds_2_order
+node.pump.ds_2
+node.ofs.order
+node.ofs.orders_en_route
+node.ofs.usflow
+node.ofs.volume
+node.paddock.supply
+"#;
+    let mut model = run(ini);
+    // Day 1: the field orders 10 of the storage; the storage, at 1000 against a 1500 target
+    // and releasing 10 today, orders 510 up the outlet; the user passes it to the dam
+    assert_eq!(series(&mut model, "node.ofs.order")[..3], [510.0, 10.0, 10.0]);
+    assert_eq!(series(&mut model, "node.pump.ds_2_order")[..3], [510.0, 10.0, 10.0]);
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[..3], [510.0, 10.0, 10.0]);
+    // The storage counts the 510 as on its way and orders only the day's release after that
+    assert_eq!(series(&mut model, "node.ofs.orders_en_route")[..3], [510.0, 520.0, 20.0]);
+    // The field is supplied from the storage every day, while the 510 travels
+    assert_eq!(series(&mut model, "node.paddock.supply")[..4], [10.0; 4]);
+    assert_eq!(series(&mut model, "node.ofs.volume")[..2], [990.0, 980.0]);
+    // Day 3: the 510 reaches the user, goes down the outlet and lands in the storage
+    assert_eq!(series(&mut model, "node.pump.ds_2")[..3], [0.0, 0.0, 510.0]);
+    assert_eq!(series(&mut model, "node.ofs.usflow")[2], 510.0);
+    assert_eq!(series(&mut model, "node.ofs.volume")[2], 1480.0, "980 + 510 - 10");
 }

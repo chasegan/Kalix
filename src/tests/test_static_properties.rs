@@ -366,7 +366,7 @@ var.calc.v
 
 /// Static properties are captured once, from the INI text, and never
 /// refreshed. The optimiser sets node parameters directly (`node.<n>.<param>`
-/// addresses, supported by gr4j/sacramento/awbm/surm/routing — the same node
+/// addresses, supported by gr4j/gr4jsg/sacramento/awbm/surm/routing — the same node
 /// types this list draws from), so a property that were both static AND
 /// optimisable would
 /// report its declared value while the run used the candidate value: a wrong
@@ -397,6 +397,12 @@ fn static_properties_are_disjoint_from_optimisable_params() {
             two_tap.list_params()
         }),
         ("surm", crate::nodes::surm_node::SurmNode::new().list_params()),
+        ("gr4jsg", crate::nodes::gr4jsg_node::Gr4jsgNode::new().list_params()),
+        ("gr4jsg", {
+            let mut glacier = crate::nodes::gr4jsg_node::Gr4jsgNode::new();
+            glacier.gr4jsg_model.glacier = true;
+            glacier.list_params()
+        }),
         ("routing", nlm_routing.list_params()),
         ("routing", pwl_routing.list_params()),
     ];

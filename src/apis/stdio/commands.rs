@@ -936,6 +936,11 @@ impl Command for GetOptimisableParamsCommand {
                         params.push(format!("node.{}.{}", node_name, param));
                     }
                 }
+                NodeEnum::Gr4jsgNode(node) => {
+                    for param in node.list_params() {
+                        params.push(format!("node.{}.{}", node_name, param));
+                    }
+                }
                 NodeEnum::RoutingNode(node) => {
                     for param in node.list_params() {
                         params.push(format!("node.{}.{}", node_name, param));
