@@ -13,7 +13,7 @@ use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
 use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
-use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, field_node::{FieldNode, CropSlot, crop_slot_property, MAX_CROPS}, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode, gr4jsg_node::Gr4jsgNode, Node};
+use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, field_node::{FieldNode, CropSlot, crop_slot_property, MAX_CROPS}, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::{RoutingNode, RoutingSpec}, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode, gr4jsg_node::Gr4jsgNode, Node};
 use crate::hydrology::rainfall_runoff::gr4j::Gr4Variant;
 use crate::hydrology::rainfall_runoff::awbm::AwbmVariant;
 use crate::nodes::storage_node::OutletDefinition;
@@ -842,42 +842,38 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     NodeEnum::LossNode(n)
                 }
                 "routing" => {
-                    // Read as the reach-losses variant; converted below if the node has no losses.
+                    // The properties fill a spec; the spec chooses the variant.
                     let section_line_number = ini_section.line_number;
-                    let (mut defined_evap, mut defined_dimensions) = (false, false);
-                    let mut n = RoutingNode::<true>::new();
-                    n.name = node_name.to_string();
+                    let mut spec = RoutingSpec::new(node_name);
                     for (name, ini_property) in ini_section.properties {
                         let name_lower = name.to_lowercase();
                         let v = require_non_empty(&ini_property.value, &name, ini_property.line_number).map_err(KalixIoError::Validate)?;
                         if name_lower == "loc" {
-                            n.location = Location::from_str(v)
+                            spec.location = Location::from_str(v)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "type" {
                             // Skipping this
                         } else if name_lower == "ds_1" {
-                            vec_link_defs.push(LinkHelper::new_from_names(&n.name, v, DS_1_OUTLET, INLET))
+                            vec_link_defs.push(LinkHelper::new_from_names(&spec.name, v, DS_1_OUTLET, INLET))
                         } else if name_lower == "lag" {
-                            n.set_lag(v.parse::<usize>()
+                            spec.lag = v.parse::<usize>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
-                                                     ini_property.line_number, name, node_name)))?);
+                                                     ini_property.line_number, name, node_name)))?;
                         } else if name_lower == "n_divs" {
-                            n.set_divs(v.parse::<usize>()
+                            spec.n_divs = v.parse::<usize>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': required non-negative integer",
-                                                     ini_property.line_number, name, node_name)))?);
+                                                     ini_property.line_number, name, node_name)))?;
                         } else if name_lower == "x" {
-                            let parsed_x = v.parse::<f64>()
+                            spec.x = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
-                            n.set_x(parsed_x);
                         } else if name_lower == "nlm" {
                             let all_values = csv_string_to_f64_vec(v)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                             if all_values.len() < 2 {
                                 return Err(KalixIoError::Parse(format!("Error on line {}: Expected k and m values.", ini_property.line_number)));
                             }
-                            n.set_k(all_values[0]);
-                            n.set_m(all_values[1]);
+                            spec.nlm = Some((all_values[0], all_values[1]));
                         } else if name_lower == "pwl" {
                             // A two-column table (index flow, travel time), read like every
                             // other node table so an optional header row is accepted (issue #266:
@@ -895,18 +891,16 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             }
                             let index_flows: Vec<f64> = (0..nrows).map(|r| table.get_value(r, 0)).collect();
                             let index_times: Vec<f64> = (0..nrows).map(|r| table.get_value(r, 1)).collect();
-                            n.set_routing_table(index_flows, index_times);
+                            spec.pwl = Some((index_flows, index_times));
                         } else if name_lower == "evap" {
-                            defined_evap = true;
-                            n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
-                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                            spec.evap = Some(DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?);
                         } else if name_lower == "dimensions" {
-                            defined_dimensions = true;
-                            n.dimensions = Table::from_csv_string(v, 3, false)
+                            spec.dimensions = Some(Table::from_csv_string(v, 3, false)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse dimensions for node '{}': {}",
-                                                     ini_property.line_number, node_name, e)))?;
+                                                     ini_property.line_number, node_name, e)))?);
                         } else if name_lower == "typical_regulated_flow" {
-                            n.typical_regulated_flow = v.parse::<f64>()
+                            spec.typical_regulated_flow = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
                         } else {
@@ -914,13 +908,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                               ini_property.line_number, name, node_name)));
                         }
                     }
-                    // evap and dimensions go together, and pick the node variant.
-                    if defined_evap != defined_dimensions {
-                        return Err(KalixIoError::Validate(format!("Error on line {}: `evap` and `dimensions` must be specified together for node '{}'",
-                                section_line_number, node_name
-                        )))
-                    }
-                    if defined_evap { NodeEnum::RoutingNodeReachLosses(n) } else { NodeEnum::RoutingNode(n.without_reach_losses()) }
+                    spec.into_node()
+                        .map_err(|e| KalixIoError::Validate(format!("Error on line {}: {}", section_line_number, e)))?
                 }
                 "sacramento" => {
                     let mut n = SacramentoNode::new();

@@ -1,4 +1,4 @@
-use super::{recorder, single_outlet_node_impls, Node};
+use super::{recorder, single_outlet_node_impls, Node, NodeEnum};
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
@@ -184,30 +184,41 @@ pub struct RoutingNode<const USING_REACH_LOSS: bool> {
     recorder_idx_evap_vol: Option<usize>
 }
 
-impl RoutingNode<true> {
-    /// The same node as the variant without reach losses. For the reader, which builds
-    /// every routing node as this type and converts when there is no `evap`/`dimensions`.
-    /// Every field is named, so a new field cannot be left behind.
-    pub fn without_reach_losses(self) -> RoutingNode<false> {
-        let RoutingNode {
-            name, location, mbal, usflow, dsflow_primary, storage_volume, routing_method, lag, x, n_divs,
-            nlm_m, nlm_k, nlm_k_working_units, nlm_a, nlm_one_minus_x, inv_one_minus_x, nlm_m_minus_1,
-            pwl_segs, pwl_qq, pwl_tt, lag_sto_array, lag_sto_used, lag_iter_index, x_is_unity, div_sto_array,
-            nlm_qref_array, seg_par_q1, seg_par_q2, seg_par_t1, seg_par_t2, seg_par_v1, seg_par_v2,
-            seg_par_aa, seg_par_bb, seg_par_cc, pwl_q_max, pwl_v_max, typical_regulated_flow, dsorders,
-            evap_mm_input, dimensions, div_area_by_flow, div_area_by_dead_vol, div_dead_max, pwl_loss_segs,
-            loss, area, recorder_idx_usflow, recorder_idx_volume, recorder_idx_dsflow, recorder_idx_ds_1,
-            recorder_idx_ds_1_order, recorder_idx_evap, recorder_idx_area, recorder_idx_evap_vol,
-        } = self;
-        RoutingNode {
-            name, location, mbal, usflow, dsflow_primary, storage_volume, routing_method, lag, x, n_divs,
-            nlm_m, nlm_k, nlm_k_working_units, nlm_a, nlm_one_minus_x, inv_one_minus_x, nlm_m_minus_1,
-            pwl_segs, pwl_qq, pwl_tt, lag_sto_array, lag_sto_used, lag_iter_index, x_is_unity, div_sto_array,
-            nlm_qref_array, seg_par_q1, seg_par_q2, seg_par_t1, seg_par_t2, seg_par_v1, seg_par_v2,
-            seg_par_aa, seg_par_bb, seg_par_cc, pwl_q_max, pwl_v_max, typical_regulated_flow, dsorders,
-            evap_mm_input, dimensions, div_area_by_flow, div_area_by_dead_vol, div_dead_max, pwl_loss_segs,
-            loss, area, recorder_idx_usflow, recorder_idx_volume, recorder_idx_dsflow, recorder_idx_ds_1,
-            recorder_idx_ds_1_order, recorder_idx_evap, recorder_idx_area, recorder_idx_evap_vol,
+/// What the model file says about a routing node. The reader fills one from the
+/// section's properties and hands it to [`RoutingSpec::into_node`], which chooses the
+/// node variant from whether `evap` and `dimensions` are given and refuses one without
+/// the other. Only configuration is here, so either variant can be built from it with
+/// [`RoutingNode::from_spec`]; nothing converts one variant into the other.
+#[derive(Default)]
+pub struct RoutingSpec {
+    pub name: String,
+    pub location: Location,
+    pub lag: usize,
+    pub n_divs: usize,
+    pub x: f64,
+    /// `nlm = k, m`.
+    pub nlm: Option<(f64, f64)>,
+    /// `pwl`: index flows and travel times.
+    pub pwl: Option<(Vec<f64>, Vec<f64>)>,
+    pub evap: Option<DynamicInput>,
+    pub dimensions: Option<Table>,
+    pub typical_regulated_flow: f64,
+}
+
+impl RoutingSpec {
+    pub fn new(name: &str) -> RoutingSpec {
+        RoutingSpec { name: name.to_string(), n_divs: 1, ..Default::default() }
+    }
+
+    /// The node this spec describes: the reach-losses variant when `evap` and
+    /// `dimensions` are both given, the plain one when neither is. The variant is a
+    /// function of the file alone (Manifesto §2.2); one property without the other is
+    /// refused here, with a message the reader stamps with the section's line.
+    pub fn into_node(self) -> Result<NodeEnum, String> {
+        match (self.evap.is_some(), self.dimensions.is_some()) {
+            (true, true) => Ok(NodeEnum::RoutingNodeReachLosses(RoutingNode::<true>::from_spec(self))),
+            (false, false) => Ok(NodeEnum::RoutingNode(RoutingNode::<false>::from_spec(self))),
+            _ => Err(format!("`evap` and `dimensions` must be specified together for node '{}'", self.name)),
         }
     }
 }
@@ -227,6 +238,33 @@ impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
             nlm_m: 0.75,
             ..Default::default()
         }
+    }
+
+    /// A node of this variant from its spec. Exhaustive destructure: a new spec field
+    /// does not compile until it is used here. Run state stays at its defaults.
+    pub fn from_spec(spec: RoutingSpec) -> Self {
+        let RoutingSpec { name, location, lag, n_divs, x, nlm, pwl, evap, dimensions, typical_regulated_flow } = spec;
+        let mut n = Self::new();
+        n.name = name;
+        n.location = location;
+        n.set_lag(lag);
+        n.set_divs(n_divs);
+        n.set_x(x);
+        if let Some((k, m)) = nlm {
+            n.set_k(k);
+            n.set_m(m);
+        }
+        if let Some((index_flows, travel_times)) = pwl {
+            n.set_routing_table(index_flows, travel_times);
+        }
+        if let Some(evap) = evap {
+            n.evap_mm_input = evap;
+        }
+        if let Some(dimensions) = dimensions {
+            n.dimensions = dimensions;
+        }
+        n.typical_regulated_flow = typical_regulated_flow;
+        n
     }
 
     pub fn set_k(&mut self, value: f64) {
