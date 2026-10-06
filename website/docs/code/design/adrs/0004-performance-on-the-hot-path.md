@@ -489,14 +489,14 @@ citing them when a trade is proposed.
   it on `feat/field-phase-3`.
 - *2026-10-06* — twelfth data point for §3.4, and the first measurement of
   the node sub-variants noted on 2026-09-22. The routing node's reach
-  losses were rebuilt for #229 as `evap` with a `loss_table`; the
+  losses were rebuilt for #229 as `evap` with `dimensions`; the
   `loss_rate` and `dead_storage` of the 2026-09-14 and 2026-09-15 entries
   were reverted first, so `LOSS_OR_DEAD` no longer exists. The feature was
   first built as those entries describe (one struct, a `bool` set at
   initialise and tested once per step, the division routing monomorphised
   on a `const`) and then split: `RoutingNode<const USING_REACH_LOSS:
   bool>`, held as two `NodeEnum` variants, chosen by the reader from
-  whether the node has `evap` and `loss_table`. Both report `type =
+  whether the node has `evap` and `dimensions`. Both report `type =
   routing`.
   - **Method.** Release builds, interleaved runs, minimum simulation time,
     every arm built in one worktree with the source swapped and hashed,
@@ -516,7 +516,7 @@ citing them when a trade is proposed.
     the split, test 4 was still 3.4% faster, and test 8 sat within 1.3% of
     main at every commit on the branch. This is what the 2026-09-22 entry
     predicted for a phase of this size.
-  - **What it bought is isolation.** Four changes to code that only a reach
+  - **What it appears to have bought is isolation.** Four changes to code that only a reach
     with losses runs (undoing a precompute, and `#[inline(never)]` on each
     of three small helpers) were applied in turn to the commit before the
     split and to the split. Before, the five builds spread 14% on test 4
@@ -535,8 +535,9 @@ citing them when a trade is proposed.
     commit earlier, before the reader change, test 5 was +1.1% to +2.3%. By
     the 2026-09-10 entry the test 4 gain is not to be banked as a property
     of the routing change.
-  - **Disassembly.** The no-losses `route_divisions` is main's in
-    everything that matters: 735 instructions against 737, the same 128
+  - **Disassembly** (x86-64; the earlier entries' counts are arm64). The
+    no-losses `route_divisions` is main's in everything that matters: 735
+    instructions against 737, the same 128
     conditional branches, 9 `pow` calls and 5 bounds checks. The
     with-losses instantiation is a separate function of 1,318 instructions
     that a node without losses never enters. The routing node's flow phase
@@ -555,9 +556,10 @@ citing them when a trade is proposed.
     176 bytes gave +14.1% on test 5 and +13.5% on test 2, beside the build
     at 4,216 at +12.5% and +12.7%; 160 bytes stayed within 2.4% on every
     test. The cost was where the code landed, and none of it was the data.
-  - **What follows.** A sub-variant is worth trying for isolation, not for
-    the per-step choice, and isolation is the thing to measure when the
-    next candidate is tried. Its cost is 8 bytes of stride on every node, a
+  - **What follows.** A sub-variant may be worth trying for isolation, not
+    for the per-step choice, and isolation is the thing to measure, and to
+    repeat, when the next candidate is tried; it was measured once here and
+    not repeated after main was merged in. Its cost is 8 bytes of stride on every node, a
     reader that converts between the variants, and an arm at every match
     over `NodeEnum`: six in the ordering, where
     [ADR-0008](0008-ordering-knowledge-in-exhaustive-matches.md) §2 had the
@@ -566,11 +568,19 @@ citing them when a trade is proposed.
     the compiler did not list. And a padded build controls the size and
     offsets of one struct, not the binary: build the arm that moves the
     code and leaves the data alone beside it.
+  - **On an Apple M5** (review, 2026-10-06, three to four sessions of 30,
+    an identical rebuild within ±1%): the head is at or below main on every
+    model, test 8 at 36 routing nodes −0.1%, and a fields-only arm, main
+    carrying the new fields unused at 4,208 bytes, is flat. The test 3 and
+    test 1 figures above have the opposite sign there (−2% each), which is
+    the best evidence they are placement. Without the pin on
+    `route_divisions` the cost lands on models with no routing node: test 3
+    +25%, test 2 +6 to 9%.
   - **Not established.** Which function's placement carries the cost, and
     why 160 bytes is free where 144 and 176 are not. Whether the branch
-    itself sits at a good placement or a bad one. No fields-only arm was
-    built, because main still carries the alpha `loss_rate` and
-    `dead_storage` fields and code and so is no clean base for one.
+    itself sits at a good placement or a bad one. A fields-only arm was
+    not built on the i7; main still carries the alpha `loss_rate` and
+    `dead_storage` fields and code, which such an arm would carry too.
   - The 2026-09-22 entry records that sub-variants were deferred to a
     consolidated effort across nodes. This is one node built ahead of that
     effort, recorded as a measurement for it and not as its design.
