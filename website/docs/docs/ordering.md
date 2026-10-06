@@ -12,9 +12,9 @@ Kalix’s ordering system simulates this process, providing a way for models to 
 
 ### The Ordering System
 
-Kalix’s ordering system follows a heuristic rules-based approach to ordering and operation (c.f. network-optimised approaches available in some platforms). Imperfect anticipation of future inflows, losses, and streamflow routing behaviour can lead to surpluses or shortfalls in water delivery, as occurs in real river systems.
+Kalix’s ordering system follows a heuristic rules-based approach to ordering and operation (cf. network-optimised approaches available in some platforms). Imperfect anticipation of future inflows, losses, and streamflow routing behaviour can lead to surpluses or shortfalls in water delivery, as occurs in real river systems.
 
-Kalix’s simple ordering system works as follows. Steps 1-2 are done once during the initialisation of the model. Steps 3-5 constitute the ***ordering phase*** and are done every timestep. Steps 4-5 constitute the ***flow phase*** and are done every timestep.
+Kalix’s simple ordering system works as follows. Steps 1-2 are done once during the initialisation of the model. Steps 3-5 constitute the ***ordering phase*** and Steps 6-7 constitute the ***flow phase***; both are done every timestep.
 
 1. identifying ***regulated zones***,
 
@@ -26,9 +26,9 @@ Kalix’s simple ordering system works as follows. Steps 1-2 are done once durin
 
 5. ***directing orders*** to appropriate infrastructure nodes,
 
-6. ***simulate operation*** of infrastructure nodes to deliver orders,
+6. ***simulating operation*** of infrastructure nodes to deliver orders,
 
-7. ***simulate water flow*** through the model network.
+7. ***simulating water flow*** through the model network.
 
 This system is similar, but not identical, to the ordering system in other modelling platforms such as IQQM and Source. Some key aspects of the system are:
 
@@ -58,7 +58,7 @@ For nodes in regulated zones below a junction, the travel time is based on the l
 
 #### Adjusting Orders According to Expected Inflows and Losses
 
-[How Orders Propagate](ordering.md)
+See [How Orders Propagate](#how-orders-propagate) below for worked examples.
 
 User nodes in regulated zones with `regulated = true` place orders based on the demand value. If the travel time for the node is T=0, the node will try to extract their demand in the same timestep, when the flows are calculated. But if the travel time for the node is T>0, then the user will not try to extract that volume for another T timesteps.
 
@@ -78,7 +78,7 @@ At loss nodes and inflow nodes the orders are adjusted as discussed above.
 
 At splitter nodes, the orders from both outlets are combined and sent upstream. The order on the main channel is first raised to cover the flow that the splitter's table sends down the effluent, in the same way that orders are raised through a loss node (see [Splitter](splitter.md#the-order-sent-upstream)).
 
-When a node, which is *not a confluence*, has multiple incoming links (branches), the full order is sent up each regulated link. This allows the modeller to make flow-phase decisions about how (from which branch) the order will be met. Note that a naive configuration could result in the order being met by both branches. If the modeller want more control over how the orders are apportioned up each branch, they should use a confluence node.
+When a node, which is *not a confluence*, has multiple incoming links (branches), the full order is sent up each regulated link. This allows the modeller to make flow-phase decisions about how (from which branch) the order will be met. Note that a naive configuration could result in the order being met by both branches. If the modeller wants more control over how the orders are apportioned up each branch, they should use a confluence node.
 
 At confluence nodes, the orders are directed up regulated branches on the basis of the harmony rule expression. If the upstream branches have different travel times (T1 > T2), orders designated for the shorter branch are delayed (by an amount DT = T1-T2) such that the ordered water will arrive at the user node at the right time.
 
@@ -183,9 +183,9 @@ The presence of the loss node changes the results:
 
 ### How do routing nodes affect orders?
 
-Streamflow routing can cause flows, including flows intended to satisfy orders, to be delayed. **Regulated\_user** nodes who are separated from their supplying by routing will postpone their demands (that this their intention to divert water) to align with the estimated lag based on the properties of the streamflow routing.
+Streamflow routing can cause flows, including flows intended to satisfy orders, to be delayed. **Regulated\_user** nodes that are separated from their supplying storage by routing will postpone their demands (that is, their intention to divert water) to align with the estimated lag based on the properties of the streamflow routing.
 
-The model below has a **routing** node position between the user and storage. The routing node has approximately 3 days of lag (= 2 days of pwl storage routing + 1 day of pure lag).
+The model below has a **routing** node positioned between the user and storage. The routing node has approximately 3 days of lag (= 2 days of pwl storage routing + 1 day of pure lag).
 
 ![](../assets/docs-concepts-ordering/image_4.png)
 
@@ -253,11 +253,7 @@ Neither allows for the water needed to refill the dead storage after a dry spell
 
 ### How do orders propagate through inflow nodes?
 
-Inflow nodes on regulated pathways
-
-(Below is CKG ‘draft’/WIP)
-
-Inflows may satisfy some or all of the order required for a r**egulated\_user.** When orders propagate through inflow nodes with the parameter `expected_inflow` set, they are automatically adjusted (i.e. partially or wholly satisfied) by the expected inflow.
+Inflows may satisfy some or all of the order required for a **regulated\_user**. When orders propagate through inflow nodes with the parameter `expected_inflow` set, they are automatically adjusted (i.e. partially or wholly satisfied) by the expected inflow.
 
 #### Case 1: Constant expected inflow
 
@@ -272,7 +268,7 @@ dimensions = 0, 0, 0, 0, 1, 10000, 0, 0, 1.1, 10001, 0, 10000, 1.2, 10002, 0, 10
 ds_1 = 0006_inflow
 
 [node.0006_inflow]
-type = inflow 
+type = inflow
 loc = 0, 40
 inflow = 100
 expected_inflow = 100
@@ -299,7 +295,7 @@ We now consider a case where the expected inflow is defined as a proportion of t
 
 ```ini
 [node.0006_inflow]
-type = inflow 
+type = inflow
 loc = 0, 40
 inflow = data.patterns_csv.by_name.pattern_1
 expected_inflow = 0.5*this.inflow[-1,0]
@@ -316,6 +312,7 @@ The volume required to be released from the dam then takes on the following saw-
 
 ![](../assets/docs-concepts-ordering/image_10.png)
 
+<!--
 ### TODO
 
 - Confluences
@@ -330,3 +327,4 @@ The volume required to be released from the dam then takes on the following saw-
 - Passive storages
 
 - Real valued order lag (PWL etc) - caution re: what nodes will “collapse the wavefunction” as it were
+-->
