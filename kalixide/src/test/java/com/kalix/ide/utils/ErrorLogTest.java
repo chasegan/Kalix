@@ -45,6 +45,13 @@ class ErrorLogTest {
     }
 
     @Test
+    void fileNameIsKalixLogWithSixCharacterUid() {
+        ErrorLog log = new ErrorLog(dir);
+        log.append("one");
+        assertTrue(log.file().getName().matches("kalix-log-[0-9a-f]{6}\\.txt"), log.file().getName());
+    }
+
+    @Test
     void multiLineMessageIsOneLine() throws IOException {
         ErrorLog log = new ErrorLog(dir);
         log.append("Failed to launch:\n\nPlease check the command.\r\nCurrent command: x");

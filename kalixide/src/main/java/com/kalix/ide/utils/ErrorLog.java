@@ -43,7 +43,11 @@ public final class ErrorLog {
     public synchronized String append(String message) {
         try {
             if (file == null) {
-                File created = new File(directory, "kalix-ide-errors-" + UUID.randomUUID() + ".txt");
+                File created;
+                do { // a six-character uid is short, so never reuse another IDE's log
+                    String uid = UUID.randomUUID().toString().substring(0, 6);
+                    created = new File(directory, "kalix-log-" + uid + ".txt");
+                } while (created.exists());
                 created.deleteOnExit();
                 file = created;
             }
