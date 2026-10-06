@@ -1,6 +1,7 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.cli.OptimisationProgram;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.flowviz.FlowVizPanel;
 import com.kalix.ide.windows.MinimalEditorWindow;
@@ -175,7 +176,7 @@ public class OptimisationWindowInitializer {
     public void setupManagerCallbacks(
             JFrame parentFrame,
             com.kalix.ide.managers.StdioTaskManager stdioTaskManager,
-            Consumer<String> statusUpdater,
+            StatusReporter statusUpdater,
             WindowCallbacks callbacks) {
 
         // Store stdioTaskManager for use in action callbacks
@@ -230,7 +231,7 @@ public class OptimisationWindowInitializer {
         treeManager.setOnOptimisationSelectedCallback(callbacks::displayOptimisation);
     }
 
-    private void setupTreeManagerActions(JFrame parentFrame, Consumer<String> statusUpdater) {
+    private void setupTreeManagerActions(JFrame parentFrame, StatusReporter statusUpdater) {
         treeManager.setShowModelAction(optInfo -> {
             if (optInfo.getSession() != null &&
                     optInfo.getSession().getActiveProgram() instanceof OptimisationProgram program) {

@@ -1,6 +1,7 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.cli.KalixCliLocator;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.cli.ProcessExecutor;
 import com.kalix.ide.cli.ProgressParser;
 import com.kalix.ide.cli.RunModelProgram;
@@ -31,7 +32,7 @@ public class StdioTaskManager {
 
     // Constants for configuration
 
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
     private final StatusProgressBar progressBar;
     private final JFrame parentFrame;
     private final ProcessExecutor processExecutor;
@@ -49,7 +50,7 @@ public class StdioTaskManager {
      * @param workingDirectorySupplier supplier for getting the current working directory
      */
     public StdioTaskManager(ProcessExecutor processExecutor,
-                            Consumer<String> statusUpdater,
+                            StatusReporter statusUpdater,
                             StatusProgressBar progressBar,
                             JFrame parentFrame,
                             Supplier<File> workingDirectorySupplier,
@@ -75,7 +76,7 @@ public class StdioTaskManager {
      */
     private void handleCliNotFound() {
         SwingUtilities.invokeLater(() -> {
-            statusUpdater.accept("Error: kalix not found");
+            statusUpdater.error("Error: kalix not found");
             JOptionPane.showMessageDialog(parentFrame,
                 "Kalix not found. Please fix this in File > Preferences > Kalix.",
                 "Kalix Not Found", JOptionPane.ERROR_MESSAGE);
@@ -374,7 +375,7 @@ public class StdioTaskManager {
                     
                 case ERROR:
                     progressBar.hideProgress();
-                    statusUpdater.accept("Session error: " + event.getMessage());
+                    statusUpdater.error("Session error: " + event.getMessage());
                     break;
                     
                 case TERMINATED:

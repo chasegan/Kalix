@@ -1,6 +1,7 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.cli.SessionManager;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.data.DerivedSeriesLabel;
@@ -82,7 +83,7 @@ class DerivedSeriesController {
     private final Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources;
     private final LastRunTracker lastRunTracker;
     private final SeriesFetchCoordinator fetchCoordinator;
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
 
     private final DerivedSeriesStore derivedSeries = new DerivedSeriesStore();
     // The Last generation whose derived series are fully recomputed.
@@ -101,7 +102,7 @@ class DerivedSeriesController {
         Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources,
         LastRunTracker lastRunTracker,
         SeriesFetchCoordinator fetchCoordinator,
-        Consumer<String> statusUpdater
+        StatusReporter statusUpdater
     ) {
         this.window = window;
         this.sourceTree = sourceTree;

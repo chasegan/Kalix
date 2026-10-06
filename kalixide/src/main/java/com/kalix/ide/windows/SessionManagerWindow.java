@@ -1,6 +1,7 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.cli.AbstractSessionProgram;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.cli.JsonStdioProtocol;
 import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.cli.RunModelProgram;
@@ -59,7 +60,7 @@ public class SessionManagerWindow extends JFrame {
     private static SessionManagerWindow instance;
 
     private final StdioTaskManager stdioTaskManager;
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
 
     // UI Components
     private JTree sessionTree;
@@ -97,7 +98,7 @@ public class SessionManagerWindow extends JFrame {
     /**
      * Private constructor for singleton pattern.
      */
-    private SessionManagerWindow(JFrame parentFrame, StdioTaskManager stdioTaskManager, Consumer<String> statusUpdater) {
+    private SessionManagerWindow(JFrame parentFrame, StdioTaskManager stdioTaskManager, StatusReporter statusUpdater) {
         this.stdioTaskManager = stdioTaskManager;
         this.statusUpdater = statusUpdater;
 
@@ -111,7 +112,7 @@ public class SessionManagerWindow extends JFrame {
     /**
      * Shows the Session Manager window using singleton pattern.
      */
-    public static void showSessionManagerWindow(JFrame parentFrame, StdioTaskManager stdioTaskManager, Consumer<String> statusUpdater) {
+    public static void showSessionManagerWindow(JFrame parentFrame, StdioTaskManager stdioTaskManager, StatusReporter statusUpdater) {
         if (instance == null) {
             instance = new SessionManagerWindow(parentFrame, stdioTaskManager, statusUpdater);
         }
@@ -131,7 +132,7 @@ public class SessionManagerWindow extends JFrame {
      * @param sessionKey the session key to select
      */
     public static void showSessionManagerWindow(JFrame parentFrame, StdioTaskManager stdioTaskManager,
-                                                 Consumer<String> statusUpdater, String sessionKey) {
+                                                 StatusReporter statusUpdater, String sessionKey) {
         // First show the window normally
         showSessionManagerWindow(parentFrame, stdioTaskManager, statusUpdater);
 
@@ -762,7 +763,7 @@ public class SessionManagerWindow extends JFrame {
                         if (success) {
                             statusUpdater.accept("Foreign process terminated");
                         } else {
-                            statusUpdater.accept("Failed to terminate foreign process");
+                            statusUpdater.error("Failed to terminate foreign process");
                             JOptionPane.showMessageDialog(this,
                                 "Failed to terminate foreign process. It may have already exited or you may lack permissions.",
                                 "Termination Failed",
@@ -772,7 +773,7 @@ public class SessionManagerWindow extends JFrame {
                     }))
                     .exceptionally(throwable -> {
                         SwingUtilities.invokeLater(() -> {
-                            statusUpdater.accept("Error terminating foreign process: " + throwable.getMessage());
+                            statusUpdater.error("Error terminating foreign process: " + throwable.getMessage());
                             JOptionPane.showMessageDialog(this,
                                 "Error terminating foreign process: " + throwable.getMessage(),
                                 "Termination Error",
@@ -807,7 +808,7 @@ public class SessionManagerWindow extends JFrame {
                 }))
                 .exceptionally(throwable -> {
                     SwingUtilities.invokeLater(() -> {
-                        statusUpdater.accept("Failed to terminate session: " + throwable.getMessage());
+                        statusUpdater.error("Failed to terminate session: " + throwable.getMessage());
                         JOptionPane.showMessageDialog(this,
                             "Failed to terminate session: " + throwable.getMessage(),
                             "Termination Error",

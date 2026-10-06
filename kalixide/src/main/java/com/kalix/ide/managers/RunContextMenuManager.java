@@ -1,6 +1,7 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.cli.RunModelProgram;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.diff.DiffWindow;
@@ -61,7 +62,7 @@ public class RunContextMenuManager {
     private final JCheckboxTree outputsTree;
     private final DefaultTreeModel runTreeModel;
     private final StdioTaskManager stdioTaskManager;
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
     private final Supplier<File> baseDirectorySupplier;
     private final Supplier<String> editorTextSupplier;
     private final Map<String, String> sessionToRunName;
@@ -126,7 +127,7 @@ public class RunContextMenuManager {
             JCheckboxTree outputsTree,
             DefaultTreeModel runTreeModel,
             StdioTaskManager stdioTaskManager,
-            Consumer<String> statusUpdater,
+            StatusReporter statusUpdater,
             Supplier<File> baseDirectorySupplier,
             Supplier<String> editorTextSupplier,
             Map<String, String> sessionToRunName,
@@ -558,7 +559,7 @@ public class RunContextMenuManager {
         stdioTaskManager.stopSession(sessionKey).exceptionally(throwable -> {
             SwingUtilities.invokeLater(() -> {
                 if (statusUpdater != null) {
-                    statusUpdater.accept("Failed to stop run: " + throwable.getMessage());
+                    statusUpdater.error("Failed to stop run: " + throwable.getMessage());
                 }
             });
             return null;
@@ -612,7 +613,7 @@ public class RunContextMenuManager {
         })).exceptionally(throwable -> {
             SwingUtilities.invokeLater(() -> {
                 if (statusUpdater != null) {
-                    statusUpdater.accept("Failed to remove run: " + throwable.getMessage());
+                    statusUpdater.error("Failed to remove run: " + throwable.getMessage());
                 }
                 DialogUtils.showError(parentFrame,
                     "Failed to remove run: " + throwable.getMessage(),
@@ -713,7 +714,7 @@ public class RunContextMenuManager {
             String statusText = status == RunStatus.ERROR ? "failed" :
                               status == RunStatus.RUNNING ? "still running" : "not completed";
             if (statusUpdater != null) {
-                statusUpdater.accept("Cannot save results: run " + runInfo.getRunName() + " has " + statusText);
+                statusUpdater.error("Cannot save results: run " + runInfo.getRunName() + " has " + statusText);
             }
             return;
         }
@@ -764,7 +765,7 @@ public class RunContextMenuManager {
                 }
             } catch (Exception e) {
                 if (statusUpdater != null) {
-                    statusUpdater.accept("Failed to send save command: " + e.getMessage());
+                    statusUpdater.error("Failed to send save command: " + e.getMessage());
                 }
                 DialogUtils.showError(parentFrame,
                     "Failed to save results: " + e.getMessage(),

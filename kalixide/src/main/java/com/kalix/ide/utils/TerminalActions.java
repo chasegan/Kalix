@@ -8,7 +8,6 @@ import javax.swing.SwingWorker;
 import java.awt.Component;
 import java.io.File;
 import java.util.concurrent.ExecutionException;
-import java.util.function.Consumer;
 
 /**
  * UI-facing entry point for launching a terminal from anywhere in the IDE.
@@ -39,7 +38,7 @@ public final class TerminalActions {
      * @param pathOrFolder file or directory indicating where to open the terminal, or null for home
      * @param status       callback for user-facing status messages, invoked on the EDT (may be null)
      */
-    public static void launchAsync(Component parent, File pathOrFolder, Consumer<String> status) {
+    public static void launchAsync(Component parent, File pathOrFolder, StatusReporter status) {
         new SwingWorker<File, Void>() {
             @Override
             protected File doInBackground() throws Exception {
@@ -60,7 +59,7 @@ public final class TerminalActions {
                     String message = "Failed to open terminal: " + cause.getMessage();
                     logger.error("Error opening terminal", cause);
                     if (status != null) {
-                        status.accept(message);
+                        status.error(message);
                     }
                     JOptionPane.showMessageDialog(parent, message, "Terminal Error", JOptionPane.ERROR_MESSAGE);
                 }

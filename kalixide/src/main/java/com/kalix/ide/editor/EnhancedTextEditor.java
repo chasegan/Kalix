@@ -1193,6 +1193,24 @@ public class EnhancedTextEditor extends JPanel {
         }
     }
 
+    /**
+     * Appends text at the end without changing the dirty state (the caller keeps the text in
+     * step with a file it writes itself). A clean buffer also forgets its undo history, so
+     * undo cannot strip lines the file still holds.
+     */
+    public void appendText(String text) {
+        boolean wasDirty = isDirty();
+        programmaticUpdate = true;
+        try {
+            textArea.append(text);
+        } finally {
+            programmaticUpdate = false;
+        }
+        if (!wasDirty) {
+            textArea.discardAllEdits();
+        }
+    }
+
     public void setText(String text) {
         programmaticUpdate = true;
         try {

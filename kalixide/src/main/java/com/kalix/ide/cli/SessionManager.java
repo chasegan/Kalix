@@ -1,5 +1,6 @@
 package com.kalix.ide.cli;
 
+import com.kalix.ide.utils.StatusReporter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,7 +27,7 @@ public class SessionManager {
     
     private final ProcessExecutor processExecutor;
     private final Map<String, KalixSession> activeSessions = new ConcurrentHashMap<>();
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
     private final Consumer<SessionEvent> eventCallback;
     private Consumer<JsonMessage.SystemMessage> timeSeriesResponseHandler;
 
@@ -166,7 +167,7 @@ public class SessionManager {
      * @param eventCallback callback for session events (can be null)
      */
     public SessionManager(ProcessExecutor processExecutor,
-                         Consumer<String> statusUpdater,
+                         StatusReporter statusUpdater,
                          Consumer<SessionEvent> eventCallback) {
         this.processExecutor = processExecutor;
         this.statusUpdater = statusUpdater;
@@ -586,7 +587,7 @@ public class SessionManager {
                 // Error not handled by a program - show a simplified message
                 String errorMsg = message.getErrorMessage();
                 if (errorMsg != null && !errorMsg.isEmpty()) {
-                    updateStatus("Error: " + errorMsg);
+                    updateStatusError("Error: " + errorMsg);
                 }
                 break;
 
@@ -647,12 +648,22 @@ public class SessionManager {
      */
     private void updateStatus(String message) {
         if (statusUpdater != null) {
-            try {
-                statusUpdater.accept(message);
-            } catch (Exception e) {
-                // Don't let callback exceptions break session management
-                logger.warn("Error in status update callback: {}", e.getMessage());
-            }
+            notifyStatus(() -> statusUpdater.accept(message));
+        }
+    }
+
+    private void updateStatusError(String message) {
+        if (statusUpdater != null) {
+            notifyStatus(() -> statusUpdater.error(message));
+        }
+    }
+
+    private static void notifyStatus(Runnable callback) {
+        try {
+            callback.run();
+        } catch (Exception e) {
+            // Don't let callback exceptions break session management
+            logger.warn("Error in status update callback: {}", e.getMessage());
         }
     }
     
@@ -673,7 +684,7 @@ public class SessionManager {
         }
         session.setState(SessionState.ERROR, operation + " failed: " + e.getMessage());
         fireSessionEvent(sessionKey, oldState, SessionState.ERROR, e.getMessage());
-        updateStatus("Session " + sessionKey + " error: " + operation + " failed");
+        updateStatusError("Session " + sessionKey + " error: " + operation + " failed");
     }
     
     /**

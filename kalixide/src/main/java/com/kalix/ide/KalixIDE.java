@@ -2,6 +2,8 @@ package com.kalix.ide;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
+import org.kordamp.ikonli.swing.FontIcon;
 
 import com.kalix.ide.builders.MenuBarBuilder;
 import com.kalix.ide.builders.ToolBarBuilder;
@@ -39,6 +41,8 @@ import com.kalix.ide.preferences.ui.PreferencePage;
 import com.kalix.ide.preferences.ui.SystemPreferencePage;
 import com.kalix.ide.preferences.ui.ThemePreferencePage;
 import com.kalix.ide.themes.NodeTheme;
+import com.kalix.ide.utils.ErrorLog;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.utils.TerminalActions;
 import com.kalix.ide.utils.WindowsIntegration;
 import com.kalix.ide.workspace.ContextSplitCoordinator;
@@ -121,6 +125,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private JLabel statusLabel;
     private AutoHidingProgressBar progressBar;
     private JToolBar toolBar;
+
+    // Errors shown to the user are also kept in a per-session log, opened from the status bar
+    private JButton statusLogButton;
+    private final ErrorLog errorLog = new ErrorLog(new File(System.getProperty("java.io.tmpdir")));
+    /** Status-bar and error-log channels, handed to every component that reports to the user. */
+    private final StatusReporter statusReporter = StatusReporter.of(this::updateStatus, this::updateStatusError);
 
     // Toolbar toggle buttons (stored for state synchronization)
     private JToggleButton fileTreeToggleButton;
@@ -315,6 +325,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             AppConstants.STATUS_LABEL_BORDER_V, AppConstants.STATUS_LABEL_BORDER_H
         ));
 
+        statusLogButton = new JButton(FontIcon.of(FontAwesomeSolid.INFO_CIRCLE,
+            AppConstants.TOOLBAR_ICON_SIZE, new java.awt.Color(0x2F80ED)));
+        statusLogButton.setToolTipText("Open the error log");
+        statusLogButton.putClientProperty("JButton.buttonType", "toolBarButton"); // FlatLaf: hover/press highlight
+        statusLogButton.setFocusable(false);
+        statusLogButton.setVisible(false); // shown once the first error is logged
+        statusLogButton.addActionListener(e -> openStatusLog());
+
         progressBar = new AutoHidingProgressBar();
 
         // Model supplier reflects whichever document is currently active.
@@ -326,20 +344,20 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // File operations create/focus documents via the factory and act on the active one.
         fileOperations = new FileOperationsManager(
             this, documentManager, this::createDocument,
-            this::updateStatus,
+            statusReporter,
             recentFilesManager::addRecentFile,
             this::onActiveDocumentFileChanged,
             fileWatcherManager
         );
         // NOTE: projectDirectorySupplier is registered in the finaliseComponents step
 
-        fileDropHandler = new FileDropHandler(fileOperations, this::updateStatus);
-        versionChecker = new VersionChecker(this::updateStatus);
+        fileDropHandler = new FileDropHandler(fileOperations, statusReporter);
+        versionChecker = new VersionChecker(statusReporter);
 
         // Initialize STDIO task manager
         stdioTaskManager = new StdioTaskManager(
             processExecutor,
-            this::updateStatus,
+            statusReporter,
             progressBar,
             this,
             fileOperations::getCurrentWorkingDirectory,
@@ -395,8 +413,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         StringBuilder entries = new StringBuilder();
         for (KalixDocument doc : documentManager.getDocuments()) {
             File file = doc.getFile();
-            if (file == null) {
-                continue; // untitled documents cannot be restored
+            if (file == null || file.equals(errorLog.file())) {
+                continue; // untitled documents cannot be restored; the error log is per-session
             }
             if (entries.length() > 0) {
                 entries.append('\n');
@@ -404,7 +422,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             entries.append(doc.getCaretPosition()).append('\t').append(file.getAbsolutePath());
         }
         KalixDocument active = documentManager.getActiveDocument();
-        String activePath = (active != null && active.getFile() != null)
+        String activePath = (active != null && active.getFile() != null
+                && !active.getFile().equals(errorLog.file()))
             ? active.getFile().getAbsolutePath() : "";
 
         PreferenceKeys.UI_OPEN_DOCUMENTS.set(entries.toString());
@@ -633,9 +652,9 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             }
             return java.nio.file.Files.readString(file.toPath());
         } catch (java.io.IOException ex) {
-            JOptionPane.showMessageDialog(this,
-                "Could not read \"" + file.getName() + "\": " + ex.getMessage(),
-                "Compare", JOptionPane.ERROR_MESSAGE);
+            String message = "Could not read \"" + file.getName() + "\": " + ex.getMessage();
+            logError(message);
+            JOptionPane.showMessageDialog(this, message, "Compare", JOptionPane.ERROR_MESSAGE);
             return null;
         }
     }
@@ -754,7 +773,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         // Add status bar at bottom
         JPanel statusPanel = new JPanel(new BorderLayout());
-        statusPanel.add(statusLabel, BorderLayout.WEST);
+        JPanel statusWest = new JPanel(new BorderLayout());
+        statusWest.add(statusLogButton, BorderLayout.WEST);
+        statusWest.add(statusLabel, BorderLayout.CENTER);
+        statusPanel.add(statusWest, BorderLayout.WEST);
         statusPanel.add(progressBar, BorderLayout.EAST);
         statusPanel.setBorder(BorderFactory.createLoweredBevelBorder());
         add(statusPanel, BorderLayout.SOUTH);
@@ -1063,7 +1085,59 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             }
         });
     }
-    
+
+    /**
+     * Records an error in the log from any thread, then (on the EDT) reveals the log button and
+     * keeps an open log tab in step.
+     */
+    private void logError(String message) {
+        File existing = errorLog.file();
+        if (existing != null) {
+            fileWatcherManager.ignoreNextChange(existing); // our own write; the tab is updated below
+        }
+        String line = errorLog.append(message);
+        if (line != null) {
+            SwingUtilities.invokeLater(() -> onErrorLogged(line));
+        }
+    }
+
+    private void onErrorLogged(String line) {
+        statusLogButton.setVisible(true);
+        KalixDocument logDocument = documentManager.findByFile(errorLog.file());
+        if (logDocument != null && !endsWith(logDocument.getEditor().getTextArea(), line)) {
+            logDocument.getEditor().appendText(line);
+        }
+    }
+
+    /** True if the area already ends with {@code line} (the tab was opened after the file was written). */
+    private static boolean endsWith(javax.swing.text.JTextComponent area, String line) {
+        int length = area.getDocument().getLength();
+        if (length < line.length()) {
+            return false;
+        }
+        try {
+            return area.getDocument().getText(length - line.length(), line.length()).equals(line);
+        } catch (javax.swing.text.BadLocationException e) {
+            return false;
+        }
+    }
+
+    /** Opens the error log as a tab in the IDE (a raw text file, editable as needed). */
+    private void openStatusLog() {
+        File logFile = errorLog.file();
+        if (logFile == null || !logFile.exists()) {
+            return;
+        }
+        fileOperations.openTransientFile(logFile);
+        KalixDocument logDocument = documentManager.findByFile(logFile);
+        if (logDocument != null) {
+            // Error text runs long; wrap in this tab only (editors default to no wrapping)
+            var logArea = logDocument.getEditor().getTextArea();
+            logArea.setLineWrap(true);
+            logArea.setWrapStyleWord(true);
+        }
+    }
+
     /**
      * Updates the status label with the given message.
      * 
@@ -1071,6 +1145,16 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     public void updateStatus(String message) {
         statusLabel.setText(message);
+    }
+
+    /**
+     * Shows an error in the status bar and records it in the error log.
+     *
+     * @param message The error message to display and log
+     */
+    public void updateStatusError(String message) {
+        updateStatus(message);
+        logError(message);
     }
     
     /**
@@ -1298,6 +1382,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                         }
                     }
                 } catch (Exception e) {
+                    logError("Failed to save file: " + e.getMessage());
                     JOptionPane.showMessageDialog(
                         this,
                         "Failed to save file: " + e.getMessage(),
@@ -1536,7 +1621,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                         java.awt.Desktop.getDesktop().browse(e.getURL().toURI());
                     }
                 } catch (Exception ex) {
-                    updateStatus("Error opening website: " + ex.getMessage());
+                    updateStatusError("Error opening website: " + ex.getMessage());
                 }
             }
         });
@@ -1559,7 +1644,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 updateStatus("Desktop not supported - website: " + AppConstants.APP_WEBSITE_URL);
             }
         } catch (Exception e) {
-            updateStatus("Error opening website: " + e.getMessage());
+            updateStatusError("Error opening website: " + e.getMessage());
         }
     }
     
@@ -1688,7 +1773,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 });
                 
             } catch (Exception e) {
-                updateStatus("Error clearing app data: " + e.getMessage());
+                updateStatusError("Error clearing app data: " + e.getMessage());
                 JOptionPane.showMessageDialog(
                     this,
                     "An error occurred while clearing app data:\n" + e.getMessage(),
@@ -1751,12 +1836,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void showRunManager() {
-        RunManager.showRunManager(this, stdioTaskManager, this::updateStatus);
+        RunManager.showRunManager(this, stdioTaskManager, statusReporter);
     }
 
     @Override
     public void showOptimisation() {
-        OptimisationWindow.showOptimisationWindow(this, stdioTaskManager, this::updateStatus,
+        OptimisationWindow.showOptimisationWindow(this, stdioTaskManager, statusReporter,
             progressBar,
             fileOperations::getCurrentProjectDirectory,
             workspace,
@@ -1796,19 +1881,19 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     @Override
     public void showSessionManager() {
-        SessionManagerWindow.showSessionManagerWindow(this, stdioTaskManager, this::updateStatus);
+        SessionManagerWindow.showSessionManagerWindow(this, stdioTaskManager, statusReporter);
     }
 
     @Override
     public void runModelFromMemory() {
         KalixDocument activeDoc = documentManager.getActiveDocument();
         if (activeDoc == null || !activeDoc.isModel()) {
-            updateStatus("Error: the active tab is not a model");
+            updateStatusError("Error: the active tab is not a model");
             return;
         }
         String modelText = textEditor.getText();
         if (modelText == null || modelText.trim().isEmpty()) {
-            updateStatus("Error: No model content to run");
+            updateStatusError("Error: No model content to run");
             return;
         }
         
@@ -1822,13 +1907,13 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
                     // Automatically open Run Manager if not already open
                     if (!RunManager.isWindowOpen()) {
-                        RunManager.showRunManager(this, stdioTaskManager, this::updateStatus);
+                        RunManager.showRunManager(this, stdioTaskManager, statusReporter);
                     }
                 });
             })
             .exceptionally(throwable -> {
                 SwingUtilities.invokeLater(() -> {
-                    updateStatus("Error starting model session: " + throwable.getMessage());
+                    updateStatusError("Error starting model session: " + throwable.getMessage());
                 });
                 return null;
             });
@@ -1940,7 +2025,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // file is open). TerminalLauncher resolves the file → its folder, and
         // TerminalActions handles running off the EDT plus status/error reporting.
         File currentFile = fileOperations.getCurrentFile();
-        TerminalActions.launchAsync(this, currentFile, this::updateStatus);
+        TerminalActions.launchAsync(this, currentFile, statusReporter);
     }
 
     @Override
@@ -1962,7 +2047,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         } catch (Exception e) {
             String message = "Failed to open file manager: " + e.getMessage();
-            updateStatus(message);
+            updateStatusError(message);
             logger.error("Error opening file manager", e);
 
             // Show error dialog
@@ -2079,7 +2164,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         } catch (Exception e) {
             String message = "Failed to create " + fileName + ": " + e.getMessage();
-            updateStatus(message);
+            updateStatusError(message);
             logger.error("Error creating " + fileName, e);
 
             JOptionPane.showMessageDialog(
@@ -2131,7 +2216,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         } catch (Exception e) {
             String message = "Failed to launch external editor: " + e.getMessage();
-            updateStatus(message);
+            updateStatusError(message);
             logger.error("Error launching external editor", e);
 
             // Show error dialog with helpful information

@@ -1,6 +1,7 @@
 package com.kalix.ide.cli;
 
 import com.kalix.ide.windows.RunManager;
+import com.kalix.ide.utils.StatusReporter;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.List;
@@ -40,7 +41,7 @@ public class RunModelProgram extends AbstractSessionProgram {
      * @param progressCallback callback for progress updates
      */
     public RunModelProgram(String sessionKey, SessionManager sessionManager,
-                          Consumer<String> statusUpdater,
+                          StatusReporter statusUpdater,
                           Consumer<ProgressParser.ProgressInfo> progressCallback) {
         super(sessionKey, sessionManager, statusUpdater, progressCallback);
     }
@@ -94,7 +95,7 @@ public class RunModelProgram extends AbstractSessionProgram {
         sessionManager.sendCommand(sessionKey, loadCommand)
             .exceptionally(throwable -> {
                 currentState = ProgramState.FAILED;
-                statusUpdater.accept("Failed to send model to " + getDisplayName() + ": " + throwable.getMessage());
+                statusUpdater.error("Failed to send model to " + getDisplayName() + ": " + throwable.getMessage());
                 return null;
             });
     }
@@ -111,7 +112,7 @@ public class RunModelProgram extends AbstractSessionProgram {
 
             case ERROR:
                 currentState = ProgramState.FAILED;
-                statusUpdater.accept("Failed to start " + getDisplayName() + ": " + extractErrorMessage(message));
+                statusUpdater.error("Failed to start " + getDisplayName() + ": " + extractErrorMessage(message));
                 return true;
 
             default:
@@ -137,7 +138,7 @@ public class RunModelProgram extends AbstractSessionProgram {
                 // Model loading failed
                 currentState = ProgramState.FAILED;
                 String errorMsg = extractErrorMessage(message);
-                statusUpdater.accept("Model loading failed in " + getDisplayName() + ": " + errorMsg);
+                statusUpdater.error("Model loading failed in " + getDisplayName() + ": " + errorMsg);
                 return true;
 
             default:
@@ -158,14 +159,14 @@ public class RunModelProgram extends AbstractSessionProgram {
                 sessionManager.sendCommand(sessionKey, runCommand)
                     .exceptionally(throwable -> {
                         currentState = ProgramState.FAILED;
-                        statusUpdater.accept("Failed to start simulation in " + getDisplayName() + ": " + throwable.getMessage());
+                        statusUpdater.error("Failed to start simulation in " + getDisplayName() + ": " + throwable.getMessage());
                         return null;
                     });
                 return true;
 
             case ERROR:
                 currentState = ProgramState.FAILED;
-                statusUpdater.accept("Error before simulation start in " + getDisplayName() + ": " + extractErrorMessage(message));
+                statusUpdater.error("Error before simulation start in " + getDisplayName() + ": " + extractErrorMessage(message));
                 return true;
 
             default:
@@ -261,7 +262,7 @@ public class RunModelProgram extends AbstractSessionProgram {
                 // Simulation failed
                 currentState = ProgramState.FAILED;
                 String errorMsg = extractErrorMessage(message);
-                statusUpdater.accept("Simulation failed in " + getDisplayName() + ": " + errorMsg);
+                statusUpdater.error("Simulation failed in " + getDisplayName() + ": " + errorMsg);
                 return true;
                 
             default:

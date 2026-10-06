@@ -1,6 +1,7 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
 import com.kalix.ide.flowviz.data.DerivedSeriesLabel;
@@ -133,7 +134,7 @@ public class RunManager extends JFrame {
     private static final Logger logger = LoggerFactory.getLogger(RunManager.class);
 
     private final StdioTaskManager stdioTaskManager;
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
     private final TimeSeriesRequestManager timeSeriesRequestManager;
     private static RunManager instance;
     private static java.util.function.Supplier<java.io.File> baseDirectorySupplier;
@@ -203,7 +204,7 @@ public class RunManager extends JFrame {
     /**
      * Private constructor for singleton pattern.
      */
-    private RunManager(JFrame parentFrame, StdioTaskManager stdioTaskManager, Consumer<String> statusUpdater) {
+    private RunManager(JFrame parentFrame, StdioTaskManager stdioTaskManager, StatusReporter statusUpdater) {
         this.stdioTaskManager = stdioTaskManager;
         this.statusUpdater = statusUpdater;
         this.timeSeriesRequestManager = new TimeSeriesRequestManager(stdioTaskManager.getSessionManager());
@@ -225,7 +226,7 @@ public class RunManager extends JFrame {
     /**
      * Shows the Run Manager window using singleton pattern.
      */
-    public static void showRunManager(JFrame parentFrame, StdioTaskManager stdioTaskManager, Consumer<String> statusUpdater) {
+    public static void showRunManager(JFrame parentFrame, StdioTaskManager stdioTaskManager, StatusReporter statusUpdater) {
         if (instance == null) {
             instance = new RunManager(parentFrame, stdioTaskManager, statusUpdater);
         }

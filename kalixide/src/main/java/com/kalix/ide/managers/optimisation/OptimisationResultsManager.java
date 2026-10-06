@@ -1,6 +1,7 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.components.KalixIniTextArea;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.filedialog.FileDialogFilter;
@@ -38,7 +39,7 @@ public class OptimisationResultsManager {
     private final KalixIniTextArea optimisedModelEditor;
 
     private Supplier<File> workingDirectorySupplier;
-    private Consumer<String> statusUpdater;
+    private StatusReporter statusUpdater;
 
     /**
      * Creates a new OptimisationResultsManager.
@@ -247,7 +248,7 @@ public class OptimisationResultsManager {
         this.workingDirectorySupplier = supplier;
     }
 
-    public void setStatusUpdater(Consumer<String> updater) {
+    public void setStatusUpdater(StatusReporter updater) {
         this.statusUpdater = updater;
     }
 

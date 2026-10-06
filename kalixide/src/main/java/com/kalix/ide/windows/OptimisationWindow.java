@@ -1,6 +1,7 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.KalixIDE;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.document.DocumentLabels;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.document.WorkspaceView;
@@ -68,7 +69,7 @@ import java.util.function.Supplier;
 public class OptimisationWindow extends JFrame {
 
     private final StdioTaskManager stdioTaskManager;
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
     private final StatusProgressBar progressBar;
     private final Supplier<File> projectDirectorySupplier;
     private final WorkspaceView workspace;
@@ -121,7 +122,7 @@ public class OptimisationWindow extends JFrame {
      */
     private OptimisationWindow(JFrame parentFrame,
                                StdioTaskManager stdioTaskManager,
-                               Consumer<String> statusUpdater,
+                               StatusReporter statusUpdater,
                                StatusProgressBar progressBar,
                                Supplier<File> projectDirectorySupplier,
                                WorkspaceView workspace,
@@ -310,7 +311,7 @@ public class OptimisationWindow extends JFrame {
      */
     public static void showOptimisationWindow(JFrame parentFrame,
                                               StdioTaskManager stdioTaskManager,
-                                              Consumer<String> statusUpdater,
+                                              StatusReporter statusUpdater,
                                               StatusProgressBar progressBar,
                                               Supplier<File> projectDirectorySupplier,
                                               WorkspaceView workspace,

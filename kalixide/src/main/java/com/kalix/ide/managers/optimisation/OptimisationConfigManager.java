@@ -1,6 +1,7 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.linter.parsing.IniSyntax;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.document.WorkspaceView;
@@ -34,7 +35,7 @@ public class OptimisationConfigManager {
     private final OptimisationGuiBuilder guiBuilder;
     private final RTextScrollPane configScrollPane;
 
-    private Consumer<String> statusUpdater;
+    private StatusReporter statusUpdater;
     private Consumer<String> configStatusCallback;
     private Runnable onIniManuallyEdited;
     private boolean isUpdatingEditor = false;
@@ -386,7 +387,7 @@ public class OptimisationConfigManager {
      *
      * @param statusUpdater The status updater
      */
-    public void setStatusUpdater(Consumer<String> statusUpdater) {
+    public void setStatusUpdater(StatusReporter statusUpdater) {
         this.statusUpdater = statusUpdater;
     }
 

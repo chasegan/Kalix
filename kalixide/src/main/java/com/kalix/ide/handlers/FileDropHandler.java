@@ -1,6 +1,7 @@
 package com.kalix.ide.handlers;
 
 import com.kalix.ide.constants.AppConstants;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.managers.FileOperationsManager;
 
 import java.awt.Component;
@@ -24,7 +25,7 @@ import java.util.function.Consumer;
 public class FileDropHandler {
 
     private final FileOperationsManager fileOperations;
-    private final Consumer<String> statusUpdateCallback;
+    private final StatusReporter statusUpdateCallback;
 
     /**
      * Creates a new FileDropHandler instance.
@@ -32,7 +33,7 @@ public class FileDropHandler {
      * @param fileOperations The file operations manager for handling dropped files
      * @param statusUpdateCallback Callback for status updates
      */
-    public FileDropHandler(FileOperationsManager fileOperations, Consumer<String> statusUpdateCallback) {
+    public FileDropHandler(FileOperationsManager fileOperations, StatusReporter statusUpdateCallback) {
         this.fileOperations = fileOperations;
         this.statusUpdateCallback = statusUpdateCallback;
     }
@@ -124,7 +125,7 @@ public class FileDropHandler {
                     dtde.rejectDrop();
                 }
             } catch (Exception e) {
-                statusUpdateCallback.accept(AppConstants.ERROR_PROCESSING_DROPPED_FILE + e.getMessage());
+                statusUpdateCallback.error(AppConstants.ERROR_PROCESSING_DROPPED_FILE + e.getMessage());
                 dtde.dropComplete(false);
             }
         }

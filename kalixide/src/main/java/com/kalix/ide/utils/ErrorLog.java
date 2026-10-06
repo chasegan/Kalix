@@ -1,0 +1,62 @@
+package com.kalix.ide.utils;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.UUID;
+
+/**
+ * A per-session log of the errors shown to the user: a plain temp file, created on the first
+ * error and removed when the JVM exits. Thread-safe, because errors arrive from CLI and
+ * executor threads as well as the EDT.
+ */
+public final class ErrorLog {
+
+    private static final Logger logger = LoggerFactory.getLogger(ErrorLog.class);
+    private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+
+    private final File directory;
+    private File file;
+
+    /** @param directory where the log file is created */
+    public ErrorLog(File directory) {
+        this.directory = directory;
+    }
+
+    /** A log line: timestamp, two spaces, message, newline (always LF, matching editor buffers). */
+    public static String format(LocalDateTime time, String message) {
+        return time.format(STAMP) + "  " + message + "\n";
+    }
+
+    /**
+     * Appends a timestamped line, creating the file on first use.
+     *
+     * @return the line written, or null if the file could not be written
+     */
+    public synchronized String append(String message) {
+        try {
+            if (file == null) {
+                File created = new File(directory, "kalix-ide-errors-" + UUID.randomUUID() + ".txt");
+                created.deleteOnExit();
+                file = created;
+            }
+            String line = format(LocalDateTime.now(), message);
+            Files.writeString(file.toPath(), line, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            return line;
+        } catch (IOException | RuntimeException e) {
+            logger.warn("Could not write error log {}", file, e);
+            return null;
+        }
+    }
+
+    /** The log file, or null until the first error has been written. */
+    public synchronized File file() {
+        return file;
+    }
+}

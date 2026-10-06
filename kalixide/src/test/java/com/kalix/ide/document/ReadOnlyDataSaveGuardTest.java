@@ -1,6 +1,7 @@
 package com.kalix.ide.document;
 
 import com.kalix.ide.managers.FileOperationsManager;
+import com.kalix.ide.utils.StatusReporter;
 
 import org.junit.jupiter.api.Test;
 
@@ -26,7 +27,7 @@ class ReadOnlyDataSaveGuardTest {
     private static FileOperationsManager manager(DocumentManager dm, List<String> status) {
         return new FileOperationsManager(
             null, dm, KalixDocument::createFor,
-            status::add, s -> { }, () -> { }, null);
+            StatusReporter.statusOnly(status::add), s -> { }, () -> { }, null);
     }
 
     @Test

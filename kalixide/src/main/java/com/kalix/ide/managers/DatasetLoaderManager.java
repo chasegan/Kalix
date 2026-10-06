@@ -1,6 +1,7 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.flowviz.data.DatasetSeries;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.io.NamedSeries;
 import com.kalix.ide.io.TimeSeriesCsvImporter;
 import com.kalix.ide.io.SourceResCsvFormat;
@@ -64,7 +65,7 @@ public class DatasetLoaderManager {
     private final Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources;
     private final DefaultMutableTreeNode loadedDatasetsNode;
     private final DefaultTreeModel treeModel;
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
 
     // Callbacks
     private final Runnable onDatasetLoadedCallback;
@@ -84,7 +85,7 @@ public class DatasetLoaderManager {
             Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources,
             DefaultMutableTreeNode loadedDatasetsNode,
             DefaultTreeModel treeModel,
-            Consumer<String> statusUpdater,
+            StatusReporter statusUpdater,
             Runnable onDatasetLoadedCallback) {
         this.parentFrame = parentFrame;
         this.datasetSeriesSources = datasetSeriesSources;
@@ -176,7 +177,7 @@ public class DatasetLoaderManager {
                     } catch (Exception e) {
                         dtde.dropComplete(false);
                         if (statusUpdater != null) {
-                            statusUpdater.accept("Failed to load dropped files");
+                            statusUpdater.error("Failed to load dropped files");
                         }
                         JOptionPane.showMessageDialog(parentFrame,
                             "Failed to load dropped files: " + e.getMessage(),
@@ -306,7 +307,7 @@ public class DatasetLoaderManager {
                         "Load Error",
                         JOptionPane.ERROR_MESSAGE);
                     if (statusUpdater != null) {
-                        statusUpdater.accept("Error loading CSV file");
+                        statusUpdater.error("Error loading CSV file");
                     }
                     logger.error("Error loading CSV file: " + csvFile.getName(), e);
                 }
@@ -341,7 +342,7 @@ public class DatasetLoaderManager {
             JOptionPane.showMessageDialog(parentFrame, errorMessage.toString(),
                 "CSV Load Error", JOptionPane.ERROR_MESSAGE);
             if (statusUpdater != null) {
-                statusUpdater.accept("Failed to load CSV file");
+                statusUpdater.error("Failed to load CSV file");
             }
             return;
         }
@@ -438,7 +439,7 @@ public class DatasetLoaderManager {
                         "Load Error",
                         JOptionPane.ERROR_MESSAGE);
                     if (statusUpdater != null) {
-                        statusUpdater.accept("Error loading res.csv file");
+                        statusUpdater.error("Error loading res.csv file");
                     }
                     logger.error("Error loading res.csv file: " + resCsvFile.getName(), e);
                 }
@@ -474,7 +475,7 @@ public class DatasetLoaderManager {
             JOptionPane.showMessageDialog(parentFrame, errorMessage.toString(),
                 "res.csv Load Error", JOptionPane.ERROR_MESSAGE);
             if (statusUpdater != null) {
-                statusUpdater.accept("Failed to load res.csv file");
+                statusUpdater.error("Failed to load res.csv file");
             }
             return;
         }
@@ -534,7 +535,7 @@ public class DatasetLoaderManager {
                 "Load Error",
                 JOptionPane.ERROR_MESSAGE);
             if (statusUpdater != null) {
-                statusUpdater.accept("Failed to load Pixie dataset");
+                statusUpdater.error("Failed to load Pixie dataset");
             }
             return;
         }
@@ -620,7 +621,7 @@ public class DatasetLoaderManager {
                         "Load Error",
                         JOptionPane.ERROR_MESSAGE);
                     if (statusUpdater != null) {
-                        statusUpdater.accept("Error loading Pixie dataset");
+                        statusUpdater.error("Error loading Pixie dataset");
                     }
                     logger.error("Error loading Pixie dataset: " + pxtFile.getName(), e);
                 }

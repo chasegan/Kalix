@@ -1,6 +1,7 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.constants.AppConstants;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.document.DataDocument;
@@ -31,7 +32,7 @@ public class FileOperationsManager {
     private final Component parentComponent;
     private final DocumentManager documentManager;
     private final Function<File, KalixDocument> documentFactory;
-    private final Consumer<String> statusUpdateCallback;
+    private final StatusReporter statusUpdateCallback;
     private final Consumer<String> addRecentFileCallback;
     private final Runnable fileChangedCallback;
     private final FileWatcherManager fileWatcherManager;
@@ -52,7 +53,7 @@ public class FileOperationsManager {
     public FileOperationsManager(Component parentComponent,
                                  DocumentManager documentManager,
                                  Function<File, KalixDocument> documentFactory,
-                                 Consumer<String> statusUpdateCallback,
+                                 StatusReporter statusUpdateCallback,
                                  Consumer<String> addRecentFileCallback,
                                  Runnable fileChangedCallback,
                                  FileWatcherManager fileWatcherManager) {
@@ -119,6 +120,21 @@ public class FileOperationsManager {
      * @param file The file to load
      */
     public void loadModelFile(File file) {
+        openFile(file, true);
+    }
+
+    /**
+     * Opens a file in a tab like {@link #loadModelFile(File)}, but without remembering it:
+     * it is not added to the recent files or the last-opened preference. For files the IDE
+     * itself owns and discards (the error log).
+     *
+     * @param file The file to open
+     */
+    public void openTransientFile(File file) {
+        openFile(file, false);
+    }
+
+    private void openFile(File file, boolean remember) {
         // A .pxb is the binary half of a Pixie pair: open it via its .pxt
         // manifest when one exists (the engine names datasets by the .pxt; the
         // Python API's read_pixie accepts either half - same courtesy here).
@@ -166,8 +182,10 @@ public class FileOperationsManager {
         }
 
         // Add to recent files and remember as last opened for session restoration.
-        addRecentFileCallback.accept(file.getAbsolutePath());
-        PreferenceKeys.LAST_OPENED_FILE.set(file.getAbsolutePath());
+        if (remember) {
+            addRecentFileCallback.accept(file.getAbsolutePath());
+            PreferenceKeys.LAST_OPENED_FILE.set(file.getAbsolutePath());
+        }
 
         documentManager.setActiveDocument(document);
         document.parseModelFromText(true);
@@ -217,7 +235,7 @@ public class FileOperationsManager {
             document.refreshDataViewFromDisk(); // data docs: re-index the new bytes
             statusUpdateCallback.accept("File reloaded: " + file.getName());
         } catch (IOException e) {
-            statusUpdateCallback.accept("Failed to reload file: " + file.getName());
+            statusUpdateCallback.error("Failed to reload file: " + file.getName());
         }
     }
     
@@ -415,7 +433,7 @@ public class FileOperationsManager {
             AppConstants.ERROR_FILE_OPEN,
             JOptionPane.ERROR_MESSAGE
         );
-        statusUpdateCallback.accept(AppConstants.ERROR_FAILED_TO_OPEN + file.getName());
+        statusUpdateCallback.error(AppConstants.ERROR_FAILED_TO_OPEN + file.getName());
     }
     
     /**
@@ -431,7 +449,7 @@ public class FileOperationsManager {
             "Save Error",
             JOptionPane.ERROR_MESSAGE
         );
-        statusUpdateCallback.accept("Failed to save: " + file.getName());
+        statusUpdateCallback.error("Failed to save: " + file.getName());
     }
     
     /**
