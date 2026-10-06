@@ -506,12 +506,10 @@ public class RunContextMenuManager {
 
             // Get the reference model text from the main editor
             if (editorTextSupplier == null) {
-                JOptionPane.showMessageDialog(
+                DialogUtils.showError(
                     parentFrame,
                     "Cannot access main editor text.",
-                    "Editor Not Available",
-                    JOptionPane.ERROR_MESSAGE
-                );
+                    "Editor Not Available");
                 return;
             }
 
@@ -613,7 +611,7 @@ public class RunContextMenuManager {
         })).exceptionally(throwable -> {
             SwingUtilities.invokeLater(() -> {
                 if (statusUpdater != null) {
-                    statusUpdater.error("Failed to remove run: " + throwable.getMessage());
+                    statusUpdater.accept("Failed to remove run: " + throwable.getMessage());
                 }
                 DialogUtils.showError(parentFrame,
                     "Failed to remove run: " + throwable.getMessage(),
@@ -765,7 +763,7 @@ public class RunContextMenuManager {
                 }
             } catch (Exception e) {
                 if (statusUpdater != null) {
-                    statusUpdater.error("Failed to send save command: " + e.getMessage());
+                    statusUpdater.accept("Failed to send save command: " + e.getMessage());
                 }
                 DialogUtils.showError(parentFrame,
                     "Failed to save results: " + e.getMessage(),

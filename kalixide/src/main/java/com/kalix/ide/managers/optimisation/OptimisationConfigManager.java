@@ -7,6 +7,7 @@ import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.document.WorkspaceView;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -258,10 +259,9 @@ public class OptimisationConfigManager {
                 }
                 logger.info("Loaded configuration from {}", selectedFile.getAbsolutePath());
             } catch (IOException ex) {
-                JOptionPane.showMessageDialog(parent,
+                DialogUtils.showError(parent,
                     "Failed to load configuration: " + ex.getMessage(),
-                    "Load Error",
-                    JOptionPane.ERROR_MESSAGE);
+                    "Load Error");
                 logger.error("Failed to load configuration from {}", selectedFile, ex);
             }
         }
@@ -301,10 +301,9 @@ public class OptimisationConfigManager {
                 }
                 logger.info("Saved configuration to {}", selectedFile.getAbsolutePath());
             } catch (IOException ex) {
-                JOptionPane.showMessageDialog(parent,
+                DialogUtils.showError(parent,
                     "Failed to save configuration: " + ex.getMessage(),
-                    "Save Error",
-                    JOptionPane.ERROR_MESSAGE);
+                    "Save Error");
                 logger.error("Failed to save configuration to {}", selectedFile, ex);
             }
         }

@@ -6,6 +6,7 @@ import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.parsing.INIModelParser.NodeSection;
 import com.kalix.ide.editor.EnhancedTextEditor;
+import com.kalix.ide.utils.DialogUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -397,9 +398,9 @@ public class ParameterSheetWindow extends JDialog {
         // and the actual application of changes
         INIModelParser.ParsedModel currentModel = modelSupplier.get();
         if (currentModel == null) {
-            JOptionPane.showMessageDialog(this,
+            DialogUtils.showError(this,
                     "Cannot apply changes: model could not be parsed.",
-                    "Error", JOptionPane.ERROR_MESSAGE);
+                    "Error");
             return;
         }
         for (ParameterSheetTableModel.CellChange change : changes) {
@@ -439,9 +440,9 @@ public class ParameterSheetWindow extends JDialog {
                 applyUpdatesAndAdditions(updates, additions);
             } catch (Exception e) {
                 logger.error("Error applying parameter sheet changes", e);
-                JOptionPane.showMessageDialog(this,
+                DialogUtils.showError(this,
                         "Error applying changes: " + e.getMessage(),
-                        "Error", JOptionPane.ERROR_MESSAGE);
+                        "Error");
                 return;
             }
         }

@@ -1,5 +1,6 @@
 package com.kalix.ide.workspace.tree;
 
+import com.kalix.ide.utils.DialogUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -151,9 +152,9 @@ class TreeFileOperations {
             }
             // The watcher will add the node; no manual model change required.
         } catch (IOException ex) {
-            JOptionPane.showMessageDialog(parent,
+            DialogUtils.showError(parent,
                 "Failed to create \"" + name + "\": " + ex.getMessage(),
-                "Create Failed", JOptionPane.ERROR_MESSAGE);
+                "Create Failed");
         }
     }
 
@@ -221,9 +222,9 @@ class TreeFileOperations {
             }
         }, error -> {
             if (error != null) {
-                JOptionPane.showMessageDialog(parent,
+                DialogUtils.showError(parent,
                     "Failed to duplicate \"" + file.getName() + "\": " + error,
-                    "Duplicate Failed", JOptionPane.ERROR_MESSAGE);
+                    "Duplicate Failed");
             }
         });
     }

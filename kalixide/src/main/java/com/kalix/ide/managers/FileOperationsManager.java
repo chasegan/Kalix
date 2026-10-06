@@ -9,6 +9,7 @@ import com.kalix.ide.document.DocumentKind;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.utils.DialogUtils;
 
 import javax.swing.JOptionPane;
 import java.awt.Component;
@@ -427,13 +428,11 @@ public class FileOperationsManager {
      * @param e The exception that occurred
      */
     private void showFileOpenError(File file, IOException e) {
-        JOptionPane.showMessageDialog(
+        DialogUtils.showError(
             parentComponent,
             AppConstants.ERROR_OPENING_FILE + e.getMessage(),
-            AppConstants.ERROR_FILE_OPEN,
-            JOptionPane.ERROR_MESSAGE
-        );
-        statusUpdateCallback.error(AppConstants.ERROR_FAILED_TO_OPEN + file.getName());
+            AppConstants.ERROR_FILE_OPEN);
+        statusUpdateCallback.accept(AppConstants.ERROR_FAILED_TO_OPEN + file.getName());
     }
     
     /**
@@ -443,13 +442,11 @@ public class FileOperationsManager {
      * @param e The exception that occurred
      */
     private void showFileSaveError(File file, IOException e) {
-        JOptionPane.showMessageDialog(
+        DialogUtils.showError(
             parentComponent,
             "Failed to save file: " + e.getMessage(),
-            "Save Error",
-            JOptionPane.ERROR_MESSAGE
-        );
-        statusUpdateCallback.error("Failed to save: " + file.getName());
+            "Save Error");
+        statusUpdateCallback.accept("Failed to save: " + file.getName());
     }
     
     /**

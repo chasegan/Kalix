@@ -45,6 +45,16 @@ class ErrorLogTest {
     }
 
     @Test
+    void multiLineMessageIsOneLine() throws IOException {
+        ErrorLog log = new ErrorLog(dir);
+        log.append("Failed to launch:\n\nPlease check the command.\r\nCurrent command: x");
+
+        List<String> lines = Files.readAllLines(log.file().toPath());
+        assertEquals(1, lines.size());
+        assertTrue(lines.get(0).endsWith("Failed to launch: Please check the command. Current command: x"));
+    }
+
+    @Test
     void concurrentFirstErrorsShareOneFile() throws Exception {
         ErrorLog log = new ErrorLog(dir);
         int threads = 8;

@@ -59,6 +59,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.utils.DialogUtils;
 
 /**
  * Manages all plot interaction functionality including mouse handling, zooming,
@@ -921,12 +922,12 @@ public class PlotInteractionManager {
 
     /** A clipboard transport failure: nothing the user typed was wrong. */
     private void showClipboardError(String message) {
-        JOptionPane.showMessageDialog(parentComponent, message, "Clipboard", JOptionPane.ERROR_MESSAGE);
+        DialogUtils.showError(parentComponent, message, "Clipboard");
     }
 
     /** One error dialog for every rejected axis limit, whichever path it arrived by. */
     private static void showInvalidInput(java.awt.Component parent, String message) {
-        JOptionPane.showMessageDialog(parent, message, "Invalid input", JOptionPane.ERROR_MESSAGE);
+        DialogUtils.showError(parent, message, "Invalid input");
     }
 
     /**
@@ -1129,15 +1130,13 @@ public class PlotInteractionManager {
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(parentComponent,
+            DialogUtils.showError(parentComponent,
                 "Error saving data: " + e.getMessage(),
-                "Save Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Save Error");
         } catch (IllegalArgumentException e) {
-            JOptionPane.showMessageDialog(parentComponent,
+            DialogUtils.showError(parentComponent,
                 "Invalid data: " + e.getMessage(),
-                "Save Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Save Error");
         }
     }
 
@@ -1160,15 +1159,13 @@ public class PlotInteractionManager {
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(parentComponent,
+            DialogUtils.showError(parentComponent,
                 "Error saving data: " + e.getMessage(),
-                "Save Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Save Error");
         } catch (IllegalArgumentException e) {
-            JOptionPane.showMessageDialog(parentComponent,
+            DialogUtils.showError(parentComponent,
                 "Invalid data: " + e.getMessage(),
-                "Save Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Save Error");
         }
     }
 
@@ -1191,10 +1188,9 @@ public class PlotInteractionManager {
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(parentComponent,
+            DialogUtils.showError(parentComponent,
                 "Error saving data: " + e.getMessage(),
-                "Save Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Save Error");
         }
     }
 }

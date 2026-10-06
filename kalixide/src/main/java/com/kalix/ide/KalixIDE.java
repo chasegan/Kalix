@@ -41,6 +41,7 @@ import com.kalix.ide.preferences.ui.PreferencePage;
 import com.kalix.ide.preferences.ui.SystemPreferencePage;
 import com.kalix.ide.preferences.ui.ThemePreferencePage;
 import com.kalix.ide.themes.NodeTheme;
+import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.ErrorLog;
 import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.utils.TerminalActions;
@@ -325,6 +326,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             AppConstants.STATUS_LABEL_BORDER_V, AppConstants.STATUS_LABEL_BORDER_H
         ));
 
+        DialogUtils.setErrorSink(this::logError); // every error dialog is logged too
         statusLogButton = new JButton(FontIcon.of(FontAwesomeSolid.INFO_CIRCLE,
             AppConstants.TOOLBAR_ICON_SIZE, new java.awt.Color(0x2F80ED)));
         statusLogButton.setToolTipText("Open the error log");
@@ -653,8 +655,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             return java.nio.file.Files.readString(file.toPath());
         } catch (java.io.IOException ex) {
             String message = "Could not read \"" + file.getName() + "\": " + ex.getMessage();
-            logError(message);
-            JOptionPane.showMessageDialog(this, message, "Compare", JOptionPane.ERROR_MESSAGE);
+            DialogUtils.showError(this, message, "Compare");
             return null;
         }
     }
@@ -1382,13 +1383,10 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                         }
                     }
                 } catch (Exception e) {
-                    logError("Failed to save file: " + e.getMessage());
-                    JOptionPane.showMessageDialog(
+                    DialogUtils.showError(
                         this,
                         "Failed to save file: " + e.getMessage(),
-                        "Save Error",
-                        JOptionPane.ERROR_MESSAGE
-                    );
+                        "Save Error");
                     return false;
                 }
                 return true; // Saved successfully, proceed
@@ -1773,13 +1771,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 });
                 
             } catch (Exception e) {
-                updateStatusError("Error clearing app data: " + e.getMessage());
-                JOptionPane.showMessageDialog(
+                updateStatus("Error clearing app data: " + e.getMessage());
+                DialogUtils.showError(
                     this,
                     "An error occurred while clearing app data:\n" + e.getMessage(),
-                    "Error",
-                    JOptionPane.ERROR_MESSAGE
-                );
+                    "Error");
             }
         }
     }
@@ -2047,16 +2043,14 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         } catch (Exception e) {
             String message = "Failed to open file manager: " + e.getMessage();
-            updateStatusError(message);
+            updateStatus(message);
             logger.error("Error opening file manager", e);
 
             // Show error dialog
-            JOptionPane.showMessageDialog(
+            DialogUtils.showError(
                 this,
                 message,
-                "File Manager Error",
-                JOptionPane.ERROR_MESSAGE
-            );
+                "File Manager Error");
         }
     }
 
@@ -2164,15 +2158,13 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         } catch (Exception e) {
             String message = "Failed to create " + fileName + ": " + e.getMessage();
-            updateStatusError(message);
+            updateStatus(message);
             logger.error("Error creating " + fileName, e);
 
-            JOptionPane.showMessageDialog(
+            DialogUtils.showError(
                 this,
                 message,
-                "Error Creating File",
-                JOptionPane.ERROR_MESSAGE
-            );
+                "Error Creating File");
         }
     }
 
@@ -2216,18 +2208,16 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         } catch (Exception e) {
             String message = "Failed to launch external editor: " + e.getMessage();
-            updateStatusError(message);
+            updateStatus(message);
             logger.error("Error launching external editor", e);
 
             // Show error dialog with helpful information
-            JOptionPane.showMessageDialog(
+            DialogUtils.showError(
                 this,
                 message + "\n\n" +
                 "Please check your external editor command in File → Preferences → File.\n" +
                 "Current command: " + commandTemplate,
-                "External Editor Error",
-                JOptionPane.ERROR_MESSAGE
-            );
+                "External Editor Error");
         }
     }
 

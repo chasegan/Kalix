@@ -7,10 +7,10 @@ import com.kalix.ide.cli.ProgressParser;
 import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.components.StatusProgressBar;
+import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.windows.RunManager;
 
 import javax.swing.JFrame;
-import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.io.File;
 import java.time.Duration;
@@ -76,10 +76,10 @@ public class StdioTaskManager {
      */
     private void handleCliNotFound() {
         SwingUtilities.invokeLater(() -> {
-            statusUpdater.error("Error: kalix not found");
-            JOptionPane.showMessageDialog(parentFrame,
+            statusUpdater.accept("Error: kalix not found");
+            DialogUtils.showError(parentFrame,
                 "Kalix not found. Please fix this in File > Preferences > Kalix.",
-                "Kalix Not Found", JOptionPane.ERROR_MESSAGE);
+                "Kalix Not Found");
         });
     }
     

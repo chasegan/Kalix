@@ -12,6 +12,7 @@ import com.kalix.ide.utils.JsonUtils;
 import com.kalix.ide.utils.ThemeUtils;
 
 import com.kalix.ide.components.KalixPlainTextArea;
+import com.kalix.ide.utils.DialogUtils;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -738,10 +739,9 @@ public class SessionManagerWindow extends JFrame {
                 statusUpdater.accept("Ping command sent to session");
             }
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(this,
+            DialogUtils.showError(this,
                 "Failed to send ping command: " + e.getMessage(),
-                "Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Error");
         }
     }
 
@@ -773,11 +773,10 @@ public class SessionManagerWindow extends JFrame {
                     }))
                     .exceptionally(throwable -> {
                         SwingUtilities.invokeLater(() -> {
-                            statusUpdater.error("Error terminating foreign process: " + throwable.getMessage());
-                            JOptionPane.showMessageDialog(this,
+                            statusUpdater.accept("Error terminating foreign process: " + throwable.getMessage());
+                            DialogUtils.showError(this,
                                 "Error terminating foreign process: " + throwable.getMessage(),
-                                "Termination Error",
-                                JOptionPane.ERROR_MESSAGE);
+                                "Termination Error");
                         });
                         return null;
                     });
@@ -808,11 +807,10 @@ public class SessionManagerWindow extends JFrame {
                 }))
                 .exceptionally(throwable -> {
                     SwingUtilities.invokeLater(() -> {
-                        statusUpdater.error("Failed to terminate session: " + throwable.getMessage());
-                        JOptionPane.showMessageDialog(this,
+                        statusUpdater.accept("Failed to terminate session: " + throwable.getMessage());
+                        DialogUtils.showError(this,
                             "Failed to terminate session: " + throwable.getMessage(),
-                            "Termination Error",
-                            JOptionPane.ERROR_MESSAGE);
+                            "Termination Error");
                     });
                     return null;
                 });

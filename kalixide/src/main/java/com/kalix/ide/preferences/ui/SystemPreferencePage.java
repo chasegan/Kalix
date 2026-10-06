@@ -2,6 +2,7 @@ package com.kalix.ide.preferences.ui;
 
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.preferences.PreferenceManager;
+import com.kalix.ide.utils.DialogUtils;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -84,9 +85,9 @@ public class SystemPreferencePage extends AbstractPreferencePage {
                     Desktop.getDesktop().open(prefFile.getParentFile());
                 }
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this,
+                DialogUtils.showError(this,
                     "Could not open file location: " + ex.getMessage(),
-                    "Error", JOptionPane.ERROR_MESSAGE);
+                    "Error");
             }
         });
         formPanel.add(locateButton, gbc);

@@ -35,7 +35,8 @@ public final class ErrorLog {
     }
 
     /**
-     * Appends a timestamped line, creating the file on first use.
+     * Appends a timestamped line, creating the file on first use. Line breaks in the message
+     * (dialog text is often multi-line) become spaces, so one error is always one line.
      *
      * @return the line written, or null if the file could not be written
      */
@@ -46,7 +47,7 @@ public final class ErrorLog {
                 created.deleteOnExit();
                 file = created;
             }
-            String line = format(LocalDateTime.now(), message);
+            String line = format(LocalDateTime.now(), String.valueOf(message).replaceAll("\\s*\\R\\s*", " "));
             Files.writeString(file.toPath(), line, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             return line;
         } catch (IOException | RuntimeException e) {

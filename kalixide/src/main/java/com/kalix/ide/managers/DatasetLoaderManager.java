@@ -9,6 +9,7 @@ import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.io.SourceResCsvImporter;
 import com.kalix.ide.io.PixieSeriesKey;
 import com.kalix.ide.io.PixieStore;
+import com.kalix.ide.utils.DialogUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -177,12 +178,11 @@ public class DatasetLoaderManager {
                     } catch (Exception e) {
                         dtde.dropComplete(false);
                         if (statusUpdater != null) {
-                            statusUpdater.error("Failed to load dropped files");
+                            statusUpdater.accept("Failed to load dropped files");
                         }
-                        JOptionPane.showMessageDialog(parentFrame,
+                        DialogUtils.showError(parentFrame,
                             "Failed to load dropped files: " + e.getMessage(),
-                            "Drop Error",
-                            JOptionPane.ERROR_MESSAGE);
+                            "Drop Error");
                         logger.error("Failed to load dropped files", e);
                     }
                 } else {
@@ -302,12 +302,11 @@ public class DatasetLoaderManager {
                     TimeSeriesCsvImporter.CsvImportResult importResult = get();
                     handleCsvImportResult(csvFile, importResult);
                 } catch (Exception e) {
-                    JOptionPane.showMessageDialog(parentFrame,
+                    DialogUtils.showError(parentFrame,
                         "Error loading CSV file:\n" + e.getMessage(),
-                        "Load Error",
-                        JOptionPane.ERROR_MESSAGE);
+                        "Load Error");
                     if (statusUpdater != null) {
-                        statusUpdater.error("Error loading CSV file");
+                        statusUpdater.accept("Error loading CSV file");
                     }
                     logger.error("Error loading CSV file: " + csvFile.getName(), e);
                 }
@@ -339,10 +338,10 @@ public class DatasetLoaderManager {
                 errorMessage.append("• ").append(error).append("\n");
             }
 
-            JOptionPane.showMessageDialog(parentFrame, errorMessage.toString(),
-                "CSV Load Error", JOptionPane.ERROR_MESSAGE);
+            DialogUtils.showError(parentFrame, errorMessage.toString(),
+                "CSV Load Error");
             if (statusUpdater != null) {
-                statusUpdater.error("Failed to load CSV file");
+                statusUpdater.accept("Failed to load CSV file");
             }
             return;
         }
@@ -434,12 +433,11 @@ public class DatasetLoaderManager {
                 try {
                     handleResCsvImportResult(resCsvFile, get());
                 } catch (Exception e) {
-                    JOptionPane.showMessageDialog(parentFrame,
+                    DialogUtils.showError(parentFrame,
                         "Error loading res.csv file:\n" + e.getMessage(),
-                        "Load Error",
-                        JOptionPane.ERROR_MESSAGE);
+                        "Load Error");
                     if (statusUpdater != null) {
-                        statusUpdater.error("Error loading res.csv file");
+                        statusUpdater.accept("Error loading res.csv file");
                     }
                     logger.error("Error loading res.csv file: " + resCsvFile.getName(), e);
                 }
@@ -472,10 +470,10 @@ public class DatasetLoaderManager {
                 errorMessage.append("• ").append(error).append("\n");
             }
 
-            JOptionPane.showMessageDialog(parentFrame, errorMessage.toString(),
-                "res.csv Load Error", JOptionPane.ERROR_MESSAGE);
+            DialogUtils.showError(parentFrame, errorMessage.toString(),
+                "res.csv Load Error");
             if (statusUpdater != null) {
-                statusUpdater.error("Failed to load res.csv file");
+                statusUpdater.accept("Failed to load res.csv file");
             }
             return;
         }
@@ -529,13 +527,12 @@ public class DatasetLoaderManager {
 
         // Verify both files exist
         if (!pxtFile.exists() || !pxbFile.exists()) {
-            JOptionPane.showMessageDialog(parentFrame,
+            DialogUtils.showError(parentFrame,
                 "Both .pxt and .pxb files are required.\n" +
                 "Missing: " + (!pxtFile.exists() ? pxtFile.getName() : pxbFile.getName()),
-                "Load Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Load Error");
             if (statusUpdater != null) {
-                statusUpdater.error("Failed to load Pixie dataset");
+                statusUpdater.accept("Failed to load Pixie dataset");
             }
             return;
         }
@@ -616,12 +613,11 @@ public class DatasetLoaderManager {
                         onDatasetLoadedCallback.run();
                     }
                 } catch (Exception e) {
-                    JOptionPane.showMessageDialog(parentFrame,
+                    DialogUtils.showError(parentFrame,
                         "Error loading Pixie dataset:\n" + e.getMessage(),
-                        "Load Error",
-                        JOptionPane.ERROR_MESSAGE);
+                        "Load Error");
                     if (statusUpdater != null) {
-                        statusUpdater.error("Error loading Pixie dataset");
+                        statusUpdater.accept("Error loading Pixie dataset");
                     }
                     logger.error("Error loading Pixie dataset: " + pxtFile.getName(), e);
                 }

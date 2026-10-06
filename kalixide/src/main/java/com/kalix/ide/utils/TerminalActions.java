@@ -3,7 +3,6 @@ package com.kalix.ide.utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.swing.JOptionPane;
 import javax.swing.SwingWorker;
 import java.awt.Component;
 import java.io.File;
@@ -59,9 +58,9 @@ public final class TerminalActions {
                     String message = "Failed to open terminal: " + cause.getMessage();
                     logger.error("Error opening terminal", cause);
                     if (status != null) {
-                        status.error(message);
+                        status.accept(message);
                     }
-                    JOptionPane.showMessageDialog(parent, message, "Terminal Error", JOptionPane.ERROR_MESSAGE);
+                    DialogUtils.showError(parent, message, "Terminal Error");
                 }
             }
         }.execute();

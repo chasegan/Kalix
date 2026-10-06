@@ -4,6 +4,7 @@ import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.flowviz.FlowVizPanel;
+import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -214,7 +215,7 @@ public class OptimisationWindowInitializer {
 
         sessionManager.setOnErrorOccurred(errorMessage -> {
             SwingUtilities.invokeLater(() -> {
-                JOptionPane.showMessageDialog(parentFrame, errorMessage, "Error", JOptionPane.ERROR_MESSAGE);
+                DialogUtils.showError(parentFrame, errorMessage, "Error");
             });
         });
 
