@@ -25,7 +25,7 @@ The models each emphasise a different part of the engine's hot path:
   8_routing           - twelve short chains of routing nodes and nothing else:
                         NLM and PWL, each at x = 1 and x < 1, on ephemeral
                         inflows. The CONTROL for model 9.
-  9_routing_reach_losses - the same chains with `evap` and `loss_table` on
+  9_routing_reach_losses - the same chains with `evap` and `dimensions` on
                         every node. The 8-vs-9 gap isolates the cost of reach
                         losses.
 
@@ -715,7 +715,7 @@ ROUTING_ONLY_PWL = """pwl = 0, {t0:.1f},
       500, {t3:.1f},"""
 
 # Three rows at zero flow (the dead pool filling), then area rising with flow.
-LOSS_TABLE = """loss_table = flow, dead_volume, area,
+DIMENSIONS = """dimensions = flow, dead_volume, area,
              0, 0, 0,
              0, {d1:.0f}, {a1:.3f},
              0, {d:.0f}, {a2:.3f},
@@ -741,7 +741,7 @@ def routing_only_props(rng, chain):
 def reach_loss_props(rng):
     d = rng.uniform(120, 280)   # dead volume (ML)
     a = rng.uniform(0.3, 0.7)   # area at full pool (km2)
-    table = LOSS_TABLE.format(d1=d / 2, d=d, a1=0.6 * a, a2=a, a3=1.3 * a, a4=2 * a, a5=4 * a, a6=8 * a)
+    table = DIMENSIONS.format(d1=d / 2, d=d, a1=0.6 * a, a2=a, a3=1.3 * a, a4=2 * a, a5=4 * a, a6=8 * a)
     return ["evap = data.pet_csv.by_index.1"] + table.split("\n")
 
 
@@ -780,7 +780,7 @@ def build_routing_only(folder_name, title, with_reach_losses):
 
     if with_reach_losses:
         for c in range(0, N_ROUTING_CHAINS, N_ROUTING_CHAINS // 4):  # one node per solver case
-            m.output(f"node.r{c}_0.loss")
+            m.output(f"node.r{c}_0.evap_vol")
     m.write(folder / "kalix.ini")
 
     (folder / "bench.json").write_text('{"repeats": 7}\n')
