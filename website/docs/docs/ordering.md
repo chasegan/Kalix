@@ -239,7 +239,7 @@ One way to overcome shortfalls due to nontrivial streamflow processes is to appl
     [node.cover_reach_loss]
     type = order_control
     loc = 20, 20
-    set_order = this.ds_1_order + node.my_reach.loss[-1, 0.0]
+    set_order = this.ds_1_order + node.my_reach.evap_vol[-1, 0.0]
     ds_1 = my_reach
     ```
 
