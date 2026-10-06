@@ -123,6 +123,20 @@ fn nan_evap_is_no_evap_that_step() {
     }
 }
 
+/// A dry reach stays at exactly zero, with a table that has no pool and so no water to
+/// hold: the NLM x < 1 path chased a root at 0 and reported outflow of +-1e-13.
+#[test]
+fn dry_reach_with_no_pool_is_exactly_zero() {
+    for (name, routing) in ROUTINGS {
+        let mut model = try_run(&ini("0", routing, 3, &losses("5", "0, 0, 0,\n    100, 0, 1,"), 10)).unwrap();
+        for what in ["dsflow", "volume", "loss"] {
+            for (t, v) in series(&mut model, &format!("node.reach.{what}")).iter().enumerate() {
+                assert_eq!(v.to_bits(), 0.0f64.to_bits(), "{name}: {what} on day {} is {v:e}", t + 1);
+            }
+        }
+    }
+}
+
 /// The table is for the whole reach: three divisions draining hold the same total as one.
 #[test]
 fn table_is_shared_across_divisions() {

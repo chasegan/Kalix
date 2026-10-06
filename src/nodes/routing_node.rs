@@ -862,12 +862,14 @@ impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
             //     F(y) = a y^m + y + (1-x) E A(y) - b0 = 0,
             //     b0 = (1-x)(vi - D_d) + qin.
             // F is monotone increasing (E >= 0, A non-decreasing). Outflow is
-            // (y - x qin) / (1-x), so there is outflow iff the root is at or
-            // above y0 = x qin, i.e. F(y0) <= 0.
+            // (y - x qin) / (1-x), so there is outflow iff the root is above
+            // y0 = x qin, i.e. F(y0) < 0. At F(y0) = 0 the outflow is zero either
+            // way; taking still water there keeps a dry reach with a no-pool table
+            // at exactly zero, where Newton on the root at 0 left +-1e-13.
             let e1 = one_minus_x * evap_mm;
             let b0 = one_minus_x * (vi - self.div_dead_max) + qin;
             let y0 = x * qin;
-            let flowing = a * y0.powf(m) + y0 + e1 * area_at(&self.div_area_by_flow, y0) - b0 <= 0.0;
+            let flowing = a * y0.powf(m) + y0 + e1 * area_at(&self.div_area_by_flow, y0) - b0 < 0.0;
             if !flowing {
                 self.nlm_qref_array[i] = 0.0;
                 self.div_sto_array[i] = self.still_water(vi + qin, evap_mm);
