@@ -470,6 +470,11 @@ impl<const USING_REACH_LOSS: bool> Node for RoutingNode<USING_REACH_LOSS> {
                 self.name, self.n_divs, self.div_sto_array.len()
             ));
         }
+        // With no divisions the routing loop runs zero times and the reach passes water
+        // straight through, dropping any losses it was given, with nothing to say so.
+        if self.n_divs == 0 {
+            return Err(format!("Error in node '{}'. n_divs must be at least 1.", self.name));
+        }
         if self.pwl_segs + 1 > self.pwl_qq.len() {
             return Err(format!(
                 "Error in node '{}'. Routing table has {} points which exceeds maximum of {}.",

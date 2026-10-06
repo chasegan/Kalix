@@ -12,9 +12,7 @@
 //! They scan text, so they depend on the parser's uniform style — every
 //! property check is `name_lower == "..."`, every recorder is
 //! `recorder(data_cache, &self.name, "...")`, name families are derived with
-//! `strip_suffix("_...")` or `format!("ds_{n}...")`. A property check the
-//! parser makes only to refuse the name ends its line with
-//! `// linter-schema: rejected` and is skipped. If that style changes
+//! `strip_suffix("_...")` or `format!("ds_{n}...")`. If that style changes
 //! these tests fail loudly and say so, which is the intended behaviour of a
 //! guard.
 
@@ -46,10 +44,6 @@ const NODE_SOURCES: &[(&str, &str)] = &[
     ("surm", include_str!("../nodes/surm_node.rs")),
     ("unregulated_user", include_str!("../nodes/unregulated_user_node.rs")),
 ];
-
-/// Marks a parser line whose names are recognised only to be refused (e.g. a
-/// deprecated property with a migration hint); such lines are not "accepted".
-const REJECTED_MARKER: &str = "// linter-schema: rejected";
 
 /// Every string literal that directly follows `prefix` in `hay`.
 fn literals_after(hay: &str, prefix: &str) -> BTreeSet<String> {
@@ -94,9 +88,8 @@ fn parser_arms() -> Vec<(String, BTreeSet<String>, BTreeSet<String>)> {
         // Only the node-type arms construct a NodeEnum; other matches in the
         // file share the indentation but not the shape.
         if body.contains("NodeEnum::") && name.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c.is_ascii_digit()) {
-            let body: String = body.lines().filter(|l| !l.contains(REJECTED_MARKER)).collect::<Vec<_>>().join("\n");
-            let literals = literals_after(&body, "name_lower == \"");
-            let families = literals_after(&body, "strip_suffix(\"");
+            let literals = literals_after(body, "name_lower == \"");
+            let families = literals_after(body, "strip_suffix(\"");
             arms.push((name, literals, families));
         }
     }

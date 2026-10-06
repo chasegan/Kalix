@@ -354,6 +354,12 @@ fn bad_loss_tables_are_rejected() {
 }
 
 #[test]
+fn zero_divisions_are_rejected() {
+    let err = try_run(&ini("50", PWL_X_UNITY, 0, &losses("5", LOSS_TABLE), 5)).err().expect("n_divs = 0 must fail");
+    assert!(err.contains("n_divs must be at least 1"), "{err}");
+}
+
+#[test]
 fn evap_and_loss_table_must_come_together() {
     for alone in ["evap = 10".to_string(), format!("loss_table = {LOSS_TABLE}")] {
         let err = try_run(&ini("50", PWL_X_UNITY, 1, &alone, 3)).err().expect("should be rejected");
