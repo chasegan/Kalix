@@ -184,6 +184,34 @@ pub struct RoutingNode<const USING_REACH_LOSS: bool> {
     recorder_idx_loss: Option<usize>
 }
 
+impl RoutingNode<true> {
+    /// The same node as the variant without reach losses. For the reader, which builds
+    /// every routing node as this type and converts when there is no `evap`/`loss_table`.
+    /// Every field is named, so a new field cannot be left behind.
+    pub fn without_reach_losses(self) -> RoutingNode<false> {
+        let RoutingNode {
+            name, location, mbal, usflow, dsflow_primary, storage_volume, routing_method, lag, x, n_divs,
+            nlm_m, nlm_k, nlm_k_working_units, nlm_a, nlm_one_minus_x, inv_one_minus_x, nlm_m_minus_1,
+            pwl_segs, pwl_qq, pwl_tt, lag_sto_array, lag_sto_used, lag_iter_index, x_is_unity, div_sto_array,
+            nlm_qref_array, seg_par_q1, seg_par_q2, seg_par_t1, seg_par_t2, seg_par_v1, seg_par_v2,
+            seg_par_aa, seg_par_bb, seg_par_cc, pwl_q_max, pwl_v_max, typical_regulated_flow, dsorders,
+            evap_mm_input, loss_table, div_area_by_flow, div_area_by_dead_vol, div_dead_max, pwl_loss_segs,
+            loss, area, recorder_idx_usflow, recorder_idx_volume, recorder_idx_dsflow, recorder_idx_ds_1,
+            recorder_idx_ds_1_order, recorder_idx_evap, recorder_idx_area, recorder_idx_loss,
+        } = self;
+        RoutingNode {
+            name, location, mbal, usflow, dsflow_primary, storage_volume, routing_method, lag, x, n_divs,
+            nlm_m, nlm_k, nlm_k_working_units, nlm_a, nlm_one_minus_x, inv_one_minus_x, nlm_m_minus_1,
+            pwl_segs, pwl_qq, pwl_tt, lag_sto_array, lag_sto_used, lag_iter_index, x_is_unity, div_sto_array,
+            nlm_qref_array, seg_par_q1, seg_par_q2, seg_par_t1, seg_par_t2, seg_par_v1, seg_par_v2,
+            seg_par_aa, seg_par_bb, seg_par_cc, pwl_q_max, pwl_v_max, typical_regulated_flow, dsorders,
+            evap_mm_input, loss_table, div_area_by_flow, div_area_by_dead_vol, div_dead_max, pwl_loss_segs,
+            loss, area, recorder_idx_usflow, recorder_idx_volume, recorder_idx_dsflow, recorder_idx_ds_1,
+            recorder_idx_ds_1_order, recorder_idx_evap, recorder_idx_area, recorder_idx_loss,
+        }
+    }
+}
+
 impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
 
     /// Base constructor
