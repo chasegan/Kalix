@@ -1041,8 +1041,8 @@ impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
             );
         }
 
-        //Do not allow water to flow upstream.
-        if qout < 0.0 {
+        //Do not allow water to flow upstream. `<=` so that a zero outflow is +0, never -0.
+        if qout <= 0.0 {
             qout = 0.0;
             // With reach losses the division keeps its water less the loss, taken at the storage held.
             vf = if USING_REACH_LOSS { self.still_water(vi + qin, evap_mm) } else { vi + qin };

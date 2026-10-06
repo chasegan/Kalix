@@ -242,6 +242,16 @@ fn test_pwl_flow_above_table_releases_storage_general_x() {
             "mass leak: inflow - outflow = {stored} but reach holds {}", volume[4]);
 }
 
+/// A dry reach records +0 outflow, not -0. The x < 1 solve returns a root of -0, and each
+/// division flips the sign again, so only an odd number of divisions showed it.
+#[test]
+fn test_pwl_dry_reach_outflow_is_positive_zero() {
+    let ini = out_of_table_ini(0.5, 3).replace("if(sim.day == 3, 1000, 50)", "0");
+    let mut model = run(&ini);
+    let dsflow = series(&mut model, "node.reach.dsflow");
+    assert!(dsflow.iter().all(|q| *q == 0.0 && q.is_sign_positive()), "dsflow: {dsflow:?}");
+}
+
 /// A lag-only node (no PWL table) takes the same fall-through path by design;
 /// it must remain pure pass-through with a step of lag.
 #[test]
