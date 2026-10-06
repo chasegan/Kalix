@@ -658,7 +658,16 @@ impl<const USING_REACH_LOSS: bool> Node for RoutingNode<USING_REACH_LOSS> {
         }
         
         // Without reach losses there is no evap to read; the recorder still gets zeros.
-        let evap_mm = if USING_REACH_LOSS { self.evap_mm_input.get_value(data_cache) } else { 0.0 };
+        // A NaN evap (a gap in the data) is no evap that step, as a NaN loss_rate is on
+        // the loss node: left in, it emptied a division on one path and filled another
+        // to the top of its routing table, with every output finite. Negative evap is
+        // net rain and passes through.
+        let evap_mm = if USING_REACH_LOSS {
+            let e = self.evap_mm_input.get_value(data_cache);
+            if e.is_nan() { 0.0 } else { e }
+        } else {
+            0.0
+        };
         if let Some(idx) = self.recorder_idx_evap {
             data_cache.add_value_at_index(idx, evap_mm);
         }

@@ -107,6 +107,22 @@ fn pool_drains_by_evaporation_only() {
     }
 }
 
+/// A NaN evap is no evap that step, on every solver path, and the next step carries on.
+/// Left unguarded, one path emptied the division into `loss` and another filled it to the
+/// top of its routing table, both with every output finite.
+#[test]
+fn nan_evap_is_no_evap_that_step() {
+    for (name, routing) in ROUTINGS {
+        let mut model = try_run(&ini("0", routing, 1, &losses("if(sim.day == 3, 0 / 0, 5)", LOSS_TABLE), 4)).unwrap();
+        let volume = series(&mut model, "node.reach.volume");
+        let loss = series(&mut model, "node.reach.loss");
+        assert!(volume.iter().chain(&loss).all(|v| v.is_finite()), "{name}: NaN reached the outputs");
+        assert!((volume[0] - DEAD / 1.05).abs() < 1e-9, "{name}: day 1 volume {}", volume[0]);
+        assert!((volume[2] - volume[1]).abs() < 1e-9 && loss[2] == 0.0, "{name}: day 3 should lose nothing");
+        assert!((volume[3] - volume[2] / 1.05).abs() < 1e-9, "{name}: day 4 volume {}", volume[3]);
+    }
+}
+
 /// The table is for the whole reach: three divisions draining hold the same total as one.
 #[test]
 fn table_is_shared_across_divisions() {
