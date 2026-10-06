@@ -265,6 +265,45 @@ fn steady_flow_loses_evap_times_area() {
     }
 }
 
+/// With x < 1 the routing storage above the pool is the law at the reference flow,
+/// V(q_ref), with the loss folded into the solve. Checked against a reach without
+/// losses fed q_ref, whose steady storage is V(q_ref) by definition. Dropping the
+/// evaporation term from the PWL quadratic, or the NLM residual, passes every other
+/// test: at steady state outflow is inflow less loss whatever q_ref the solver found.
+#[test]
+fn flowing_storage_is_the_law_at_the_reference_flow() {
+    for (name, routing) in ROUTINGS {
+        if routing.starts_with("x = 1") {
+            continue;
+        }
+        let mut with = try_run(&ini("80", routing, 1, &losses("6", LOSS_TABLE), 90)).unwrap();
+        let (q, v) = (series(&mut with, "node.reach.dsflow")[89], series(&mut with, "node.reach.volume")[89]);
+        let q_ref = 0.3 * 80.0 + 0.7 * q;
+        let mut without = try_run(&ini(&format!("{q_ref:?}"), routing, 1, "", 90)).unwrap();
+        let law = series(&mut without, "node.reach.volume")[89];
+        assert!((v - DEAD - law).abs() < 1e-7, "{name}: storage above the pool {} is not V(q_ref) = {law}", v - DEAD);
+    }
+}
+
+/// A loss table that reaches beyond the top of the routing table: the area still slopes
+/// there, and the loss is evap times the area at the reference flow. Every other test
+/// has a flat area above the routing table, where a wrong sign cannot show.
+#[test]
+fn loss_above_the_routing_table_follows_the_sloping_area() {
+    const WIDE_TABLE: &str = "0, 0, 0,\n    0, 100, 1,\n    2000, 100, 3,";
+    for (name, routing) in ROUTINGS.iter().filter(|(n, _)| n.starts_with("PWL")) {
+        let x: f64 = if routing.starts_with("x = 1") { 1.0 } else { 0.3 };
+        let mut model = try_run(&ini("1500", routing, 1, &losses("6", WIDE_TABLE), 90)).unwrap();
+        let (dsflow, area, loss) = (series(&mut model, "node.reach.dsflow"), series(&mut model, "node.reach.area"), series(&mut model, "node.reach.loss"));
+        let (q, a, l) = (dsflow[89], area[89], loss[89]);
+        assert!((dsflow[88] - q).abs() < 1e-9, "{name}: not steady by day 90");
+        let q_ref = x * 1500.0 + (1.0 - x) * q;
+        assert!(q_ref > 1000.0, "{name}: q_ref {q_ref} is not above the routing table");
+        assert!((a - (1.0 + 2.0 * q_ref / 2000.0)).abs() < 1e-9, "{name}: area {a} at reference flow {q_ref}");
+        assert!((l - 6.0 * a).abs() < 1e-9, "{name}: loss {l} is not 6 mm x {a} km2");
+    }
+}
+
 /// Flows above the loss table hold the last area.
 #[test]
 fn area_holds_above_the_table() {
