@@ -10,11 +10,11 @@ use crate::numerical::table::Table;
 
 const MAX_DS_LINKS: usize = 1;
 const PWL_TT_PREFIX: &str = "pwl_tt_";
-/// loss_table column index for flow
+/// dimensions column index for flow
 const FLOW: usize = 0;
-/// loss_table column index for dead storage volume
+/// dimensions column index for dead storage volume
 const DSVO: usize = 1;
-/// loss_table column index for area
+/// dimensions column index for area
 const AREA: usize = 2;
 
 /// One piece of a per-division area lookup: area = a_lo + (x - x_lo) * slope for x_lo <= x < next x_lo.
@@ -72,7 +72,7 @@ fn build_area_segments(points: impl Iterator<Item = (f64, f64)>, n_divs: f64, se
 }
 
 /// The segment holding a root - the last one before the first whose start is
-/// `past_root` - and the segment after it, if any. Linear scan: loss tables are
+/// `past_root` - and the segment after it, if any. Linear scan: dimensionss are
 /// a handful of rows. `segs` must be non-empty.
 #[inline(always)]
 fn segment_holding_root(segs: &[AreaSegment], past_root: impl Fn(&AreaSegment) -> bool) -> (&AreaSegment, Option<&AreaSegment>) {
@@ -164,8 +164,8 @@ pub struct RoutingNode<const USING_REACH_LOSS: bool> {
     // Dead storage & evap feature
     /// Evaporation (mm). Assumed >= 0: the still-water solve divides by 1 + E * slope.
     pub evap_mm_input: DynamicInput,
-    pub loss_table: Table, 
-    // Per-division lookups built from loss_table at initialise; areas and dead volumes divided by n_divs.
+    pub dimensions: Table, 
+    // Per-division lookups built from dimensions at initialise; areas and dead volumes divided by n_divs.
     div_area_by_flow: Vec<AreaSegment>,      // flowing range: flow -> area, from the last zero-flow row up
     div_area_by_dead_vol: Vec<AreaSegment>,  // zero-flow rows: dead volume -> area
     div_dead_max: f64,                       // dead storage in a full division
@@ -181,12 +181,12 @@ pub struct RoutingNode<const USING_REACH_LOSS: bool> {
     recorder_idx_ds_1_order: Option<usize>,
     recorder_idx_evap: Option<usize>,
     recorder_idx_area: Option<usize>,
-    recorder_idx_loss: Option<usize>
+    recorder_idx_evap_vol: Option<usize>
 }
 
 impl RoutingNode<true> {
     /// The same node as the variant without reach losses. For the reader, which builds
-    /// every routing node as this type and converts when there is no `evap`/`loss_table`.
+    /// every routing node as this type and converts when there is no `evap`/`dimensions`.
     /// Every field is named, so a new field cannot be left behind.
     pub fn without_reach_losses(self) -> RoutingNode<false> {
         let RoutingNode {
@@ -195,9 +195,9 @@ impl RoutingNode<true> {
             pwl_segs, pwl_qq, pwl_tt, lag_sto_array, lag_sto_used, lag_iter_index, x_is_unity, div_sto_array,
             nlm_qref_array, seg_par_q1, seg_par_q2, seg_par_t1, seg_par_t2, seg_par_v1, seg_par_v2,
             seg_par_aa, seg_par_bb, seg_par_cc, pwl_q_max, pwl_v_max, typical_regulated_flow, dsorders,
-            evap_mm_input, loss_table, div_area_by_flow, div_area_by_dead_vol, div_dead_max, pwl_loss_segs,
+            evap_mm_input, dimensions, div_area_by_flow, div_area_by_dead_vol, div_dead_max, pwl_loss_segs,
             loss, area, recorder_idx_usflow, recorder_idx_volume, recorder_idx_dsflow, recorder_idx_ds_1,
-            recorder_idx_ds_1_order, recorder_idx_evap, recorder_idx_area, recorder_idx_loss,
+            recorder_idx_ds_1_order, recorder_idx_evap, recorder_idx_area, recorder_idx_evap_vol,
         } = self;
         RoutingNode {
             name, location, mbal, usflow, dsflow_primary, storage_volume, routing_method, lag, x, n_divs,
@@ -205,9 +205,9 @@ impl RoutingNode<true> {
             pwl_segs, pwl_qq, pwl_tt, lag_sto_array, lag_sto_used, lag_iter_index, x_is_unity, div_sto_array,
             nlm_qref_array, seg_par_q1, seg_par_q2, seg_par_t1, seg_par_t2, seg_par_v1, seg_par_v2,
             seg_par_aa, seg_par_bb, seg_par_cc, pwl_q_max, pwl_v_max, typical_regulated_flow, dsorders,
-            evap_mm_input, loss_table, div_area_by_flow, div_area_by_dead_vol, div_dead_max, pwl_loss_segs,
+            evap_mm_input, dimensions, div_area_by_flow, div_area_by_dead_vol, div_dead_max, pwl_loss_segs,
             loss, area, recorder_idx_usflow, recorder_idx_volume, recorder_idx_dsflow, recorder_idx_ds_1,
-            recorder_idx_ds_1_order, recorder_idx_evap, recorder_idx_area, recorder_idx_loss,
+            recorder_idx_ds_1_order, recorder_idx_evap, recorder_idx_area, recorder_idx_evap_vol,
         }
     }
 }
@@ -308,34 +308,34 @@ impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
         answer
     }
 
-    /// Splits loss_table into the per-division lookups. Leading zero-flow rows
+    /// Splits dimensions into the per-division lookups. Leading zero-flow rows
     /// give area by dead volume; the last of them onward gives area by flow.
     fn build_loss_lookups(&mut self) -> Result<(), String> {
-        let t = &self.loss_table;
+        let t = &self.dimensions;
         let nrows = t.nrows();
         if nrows == 0 {
-            return Err(format!("Error in node '{}'. Loss table has no rows.", self.name));
+            return Err(format!("Error in node '{}'. Dimensions has no rows.", self.name));
         }
         // An all-zero first row anchors the dead-volume lookup at the origin, so area never extrapolates below it.
         if t.get_value(0, FLOW) != 0.0 || t.get_value(0, DSVO) != 0.0 || t.get_value(0, AREA) != 0.0 {
-            return Err(format!("Error in node '{}'. Loss table must begin with flow = 0, dead storage volume = 0, area = 0.", self.name));
+            return Err(format!("Error in node '{}'. Dimensions must begin with flow = 0, dead storage volume = 0, area = 0.", self.name));
         }
         for r in 0..nrows {
             let (q, v, a) = (t.get_value(r, FLOW), t.get_value(r, DSVO), t.get_value(r, AREA));
             // `!(x >= 0)` also catches NaN.
             if !(q >= 0.0) || !(v >= 0.0) || !(a >= 0.0) {
-                return Err(format!("Error in node '{}'. Loss table values must be non-negative (row {}).", self.name, r + 1));
+                return Err(format!("Error in node '{}'. Dimensions values must be non-negative (row {}).", self.name, r + 1));
             }
             if r > 0 && (q < t.get_value(r - 1, FLOW) || v < t.get_value(r - 1, DSVO)) {
                 return Err(format!(
-                    "Error in node '{}'. Loss table flow and dead storage volume must not decrease (row {}).",
+                    "Error in node '{}'. Dimensions flow and dead storage volume must not decrease (row {}).",
                     self.name, r + 1
                 ));
             }
             // Flow is solved across for x < 1, so area cannot step against it. Zero-flow rows may repeat.
             if r > 0 && q > 0.0 && q == t.get_value(r - 1, FLOW) {
                 return Err(format!(
-                    "Error in node '{}'. Loss table flows above zero must be strictly increasing (violation at row {}).",
+                    "Error in node '{}'. Dimensions flows above zero must be strictly increasing (violation at row {}).",
                     self.name, r + 1
                 ));
             }
@@ -345,7 +345,7 @@ impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
         for r in 1..nrows {
             if t.get_value(r, AREA) < t.get_value(r - 1, AREA) {
                 return Err(format!(
-                    "Error in node '{}'. Loss table areas must be non-decreasing (violation at row {}).",
+                    "Error in node '{}'. Dimensions areas must be non-decreasing (violation at row {}).",
                     self.name, r + 1
                 ));
             }
@@ -357,7 +357,7 @@ impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
         for r in n_zero..nrows {
             if t.get_value(r, DSVO) != dead_max {
                 return Err(format!(
-                    "Error in node '{}'. Loss table dead storage volume above zero flow must equal the largest zero-flow value, {} (violation at row {}).",
+                    "Error in node '{}'. Dimensions dead storage volume above zero flow must equal the largest zero-flow value, {} (violation at row {}).",
                     self.name, dead_max, r + 1
                 ));
             }
@@ -612,13 +612,13 @@ impl<const USING_REACH_LOSS: bool> Node for RoutingNode<USING_REACH_LOSS> {
 
         // The variant must match what is configured; the reader guarantees it, a node built in code may not.
         let has_evap = !matches!(self.evap_mm_input, DynamicInput::None { .. });
-        let has_loss_table = self.loss_table.nrows() > 0;
-        if has_evap != has_loss_table {
-            return Err(format!("Error in node '{}'. `evap` and `loss_table` must be specified together.", self.name));
+        let has_dimensions = self.dimensions.nrows() > 0;
+        if has_evap != has_dimensions {
+            return Err(format!("Error in node '{}'. `evap` and `dimensions` must be specified together.", self.name));
         }
         if has_evap != USING_REACH_LOSS {
             return Err(format!(
-                "Error in node '{}'. A routing node with `evap` and `loss_table` must be NodeEnum::RoutingNodeReachLosses, and one without must be NodeEnum::RoutingNode.",
+                "Error in node '{}'. A routing node with `evap` and `dimensions` must be NodeEnum::RoutingNodeReachLosses, and one without must be NodeEnum::RoutingNode.",
                 self.name
             ));
         }
@@ -636,7 +636,7 @@ impl<const USING_REACH_LOSS: bool> Node for RoutingNode<USING_REACH_LOSS> {
         self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
         self.recorder_idx_evap = recorder(data_cache, &self.name, "evap");
         self.recorder_idx_area = recorder(data_cache, &self.name, "area");
-        self.recorder_idx_loss = recorder(data_cache, &self.name, "loss");
+        self.recorder_idx_evap_vol = recorder(data_cache, &self.name, "evap_vol");
 
         //Return
         Ok(())
@@ -706,7 +706,7 @@ impl<const USING_REACH_LOSS: bool> Node for RoutingNode<USING_REACH_LOSS> {
         if let Some(idx) = self.recorder_idx_area {
             data_cache.add_value_at_index(idx, self.area);
         }
-        if let Some(idx) = self.recorder_idx_loss {
+        if let Some(idx) = self.recorder_idx_evap_vol {
             data_cache.add_value_at_index(idx, self.loss);
         }
         // Reset upstream inflow for next timestep

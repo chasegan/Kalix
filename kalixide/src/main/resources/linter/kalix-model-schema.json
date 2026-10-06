@@ -825,7 +825,7 @@
         "typical_regulated_flow",
         "evap",
         "area",
-        "loss"
+        "evap_vol"
       ],
       "required_params": [
         "type",
@@ -839,7 +839,7 @@
         "typical_regulated_flow",
         "nlm",
         "evap",
-        "loss_table"
+        "dimensions"
       ],
       "dsnode_params": [
         "ds_1"
@@ -885,11 +885,11 @@
         },
         "evap": {
           "type": "function_expression",
-          "description": "Evaporation in mm, >= 0 (data reference, constant, or expression); requires loss_table"
+          "description": "Evaporation in mm (data reference, constant, or expression); requires dimensions"
         },
-        "loss_table": {
+        "dimensions": {
           "type": "string",
-          "description": "Reach losses table: flow ML, dead storage volume ML, area km2 (optional header row); first row must be 0, 0, 0; flows above zero strictly increasing, with the full dead storage volume repeated; requires evap"
+          "description": "Reach dimensions: flow ML, dead storage volume ML, area km2 (optional header row); first row must be 0, 0, 0; flows above zero strictly increasing, with the full dead storage volume repeated; requires evap"
         }
       }
     },

@@ -844,7 +844,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 "routing" => {
                     // Read as the reach-losses variant; converted below if the node has no losses.
                     let section_line_number = ini_section.line_number;
-                    let (mut defined_evap, mut defined_loss_table) = (false, false);
+                    let (mut defined_evap, mut defined_dimensions) = (false, false);
                     let mut n = RoutingNode::<true>::new();
                     n.name = node_name.to_string();
                     for (name, ini_property) in ini_section.properties {
@@ -900,28 +900,23 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             defined_evap = true;
                             n.evap_mm_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-                        } else if name_lower == "loss_table" {
-                            defined_loss_table = true;
-                            n.loss_table = Table::from_csv_string(v, 3, false)
-                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse loss table for node '{}': {}",
+                        } else if name_lower == "dimensions" {
+                            defined_dimensions = true;
+                            n.dimensions = Table::from_csv_string(v, 3, false)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse dimensions for node '{}': {}",
                                                      ini_property.line_number, node_name, e)))?;
                         } else if name_lower == "typical_regulated_flow" {
                             n.typical_regulated_flow = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Invalid '{}' value for node '{}': not a valid number",
                                                      ini_property.line_number, name, node_name)))?;
-                        } else if name_lower == "loss_rate" || name_lower == "dead_storage" { // linter-schema: rejected
-                            // Deprecated (0.4.5 alpha) — helpful error.
-                            return Err(KalixIoError::Validate(format!("Error on line {}: The routing property '{}' is deprecated (node '{}'). \
-                                Reach losses and dead storage are now defined with 'evap' and 'loss_table' \
-                                (flow, dead storage volume, area).", ini_property.line_number, name, node_name)));
                         } else {
                             return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected parameter '{}' for node '{}'",
                                               ini_property.line_number, name, node_name)));
                         }
                     }
-                    // evap and loss_table go together, and pick the node variant.
-                    if defined_evap != defined_loss_table {
-                        return Err(KalixIoError::Validate(format!("Error on line {}: `evap` and `loss_table` must be specified together for node '{}'",
+                    // evap and dimensions go together, and pick the node variant.
+                    if defined_evap != defined_dimensions {
+                        return Err(KalixIoError::Validate(format!("Error on line {}: `evap` and `dimensions` must be specified together for node '{}'",
                                 section_line_number, node_name
                         )))
                     }
@@ -2427,10 +2422,10 @@ fn render_routing_node<const USING_REACH_LOSS: bool>(ini_doc: &mut IniDocument, 
             ini_doc.set_property(section_name.as_str(), "pwl", pwl_values_str.as_str());
         }
     }
-    // Reach losses: the parser requires evap and loss_table together; both are empty when unset.
+    // Reach losses: the parser requires evap and dimensions together; both are empty when unset.
     set_property_if_not_empty(ini_doc, section_name.as_str(), "evap", &n.evap_mm_input.to_string());
-    let loss_table_values = n.loss_table.get_values_as_vec();
-    let loss_table_str = format_vec_as_multiline_table(&loss_table_values, n.loss_table.ncols(), 4);
-    set_property_if_not_empty(ini_doc, section_name.as_str(), "loss_table", loss_table_str.as_str());
+    let dimensions_values = n.dimensions.get_values_as_vec();
+    let dimensions_str = format_vec_as_multiline_table(&dimensions_values, n.dimensions.ncols(), 4);
+    set_property_if_not_empty(ini_doc, section_name.as_str(), "dimensions", dimensions_str.as_str());
     set_property_unless_default(ini_doc, section_name.as_str(), "typical_regulated_flow", &n.typical_regulated_flow.to_string(), "0");
 }

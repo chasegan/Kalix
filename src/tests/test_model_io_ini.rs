@@ -240,7 +240,7 @@ fn test_routing_nlm_does_not_emit_pwl() {
     assert!(!out.contains("pwl"), "must not emit a pwl line for an NLM node, got:\n{}", out);
 }
 
-/// Reach losses (#229): `evap` and `loss_table` survive a re-rendered save and
+/// Reach losses (#229): `evap` and `dimensions` survive a re-rendered save and
 /// reload to the same values; a routing node without them emits neither.
 #[test]
 fn test_routing_reach_losses_round_trip() {
@@ -252,7 +252,7 @@ fn test_routing_reach_losses_round_trip() {
                x = 1\n\
                nlm = 2.0, 0.8\n\
                evap = 2 + 1.5\n\
-               loss_table = flow, dead_volume, area,\n    0, 0, 0,\n    0, 130, 0.2,\n    100, 130, 0.25,\n    1e8, 130, 0.25,\n\
+               dimensions = flow, dead_volume, area,\n    0, 0, 0,\n    0, 130, 0.2,\n    100, 130, 0.25,\n    1e8, 130, 0.25,\n\
                ds_1 = p\n\
                \n\
                [node.p]\n\
@@ -269,7 +269,7 @@ fn test_routing_reach_losses_round_trip() {
         for node in &model.nodes {
             if let crate::nodes::NodeEnum::RoutingNodeReachLosses(n) = node {
                 if n.name == name {
-                    return (n.evap_mm_input.to_string(), n.loss_table.get_values_as_vec());
+                    return (n.evap_mm_input.to_string(), n.dimensions.get_values_as_vec());
                 }
             }
         }
@@ -294,7 +294,7 @@ fn test_routing_reach_losses_round_trip() {
     assert_eq!(before.1, vec![0.0, 0.0, 0.0, 0.0, 130.0, 0.2, 100.0, 130.0, 0.25, 1e8, 130.0, 0.25]);
 
     let p_section = out.split("[node.p]").nth(1).and_then(|s| s.split("\n[").next()).expect("node.p section");
-    assert!(!p_section.contains("evap") && !p_section.contains("loss_table"),
+    assert!(!p_section.contains("evap") && !p_section.contains("dimensions"),
             "a node without reach losses must emit neither, got:\n{}", p_section);
 }
 
