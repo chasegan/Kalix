@@ -231,6 +231,26 @@ The regulated\_user node places the same orders (the same timeseries pattern). T
 
 One way to overcome shortfalls due to nontrivial streamflow processes is to apply an overorder factor to the order. By scaling up all the orders, it is more likely that there will be enough water to meet the actual demand on any given day. Using an overorder factor comes at the cost of running the system less efficiently.
 
+**Reach losses.** A routing node with [reach losses](routing.md#reach-losses-and-dead-storage) evaporates some of the water passing through it, but an order passes upstream through the node unchanged. The supply releases what was ordered and the user receives less, by about the loss. In a test with a constant order of 50 ML through a reach losing about 7 ML a day, the user received about 43 ML. There are two ways to allow for this:
+
+- Put an [order\_control](order-control.md) node immediately upstream of the reach, and have it add the reach's loss from the previous timestep to the order passing through:
+
+    ```ini
+    [node.cover_reach_loss]
+    type = order_control
+    loc = 20, 20
+    set_order = this.ds_1_order + node.my_reach.loss[-1, 0.0]
+    ds_1 = my_reach
+    ```
+
+    This follows the loss as it changes, and leaves the user's own order and demand untouched. In the same test the supply released 57.5 ML and the user received the full 50 ML. Because it uses yesterday's loss, deliveries run slightly short for a few days after the order changes.
+
+- Set an `order_factor` on the user (see [Regulated user](regulated-user.md#order-factor)). This raises the order sent upstream without changing what the user wants to divert. It is a fixed proportion, so it suits a loss that is a steady fraction of the flow. In the same test `order_factor = 1.15` delivered the full 50 ML.
+
+Adding the loss to the user's own `order` expression is not recommended: it raises the user's demand as well as its order, so the user diverts the extra water if it arrives.
+
+Neither allows for the water needed to refill the dead storage after a dry spell.
+
 ### How do orders propagate through inflow nodes?
 
 Inflow nodes on regulated pathways
