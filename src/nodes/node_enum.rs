@@ -1,5 +1,6 @@
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
+use crate::numerical::opt::optimisable_component::OptimisableComponent;
 use crate::nodes::{Node, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, unregulated_user_node::UnregulatedUserNode, regulated_user_node::RegulatedUserNode, field_node::FieldNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::RoutingNode, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode, gr4jsg_node::Gr4jsgNode};
 
 #[derive(Clone)]
@@ -54,6 +55,60 @@ macro_rules! dispatch {
 }
 
 impl NodeEnum {
+    /// The node's optimisable parameters, or `None` for a node type that has none.
+    /// Every variant answers here, with no wildcard arm, so a new node type or
+    /// sub-variant does not compile until it has said (ADR-0008 §2). The three
+    /// callers, the optimiser's target resolution and parameter setting and the
+    /// STDIO parameter list, used to each keep their own list of the optimisable
+    /// types ahead of a wildcard, where a sub-variant left out was a wrong error,
+    /// a panic, or silently missing from the IDE's list.
+    pub fn optimisable(&self) -> Option<&dyn OptimisableComponent> {
+        match self {
+            NodeEnum::SacramentoNode(n) => Some(n),
+            NodeEnum::Gr4jNode(n) => Some(n),
+            NodeEnum::AwbmNode(n) => Some(n),
+            NodeEnum::SurmNode(n) => Some(n),
+            NodeEnum::Gr4jsgNode(n) => Some(n),
+            NodeEnum::RoutingNode(n) => Some(n),
+            NodeEnum::RoutingNodeReachLosses(n) => Some(n),
+            NodeEnum::BlackholeNode(_)
+            | NodeEnum::ConfluenceNode(_)
+            | NodeEnum::GaugeNode(_)
+            | NodeEnum::LossNode(_)
+            | NodeEnum::SplitterNode(_)
+            | NodeEnum::UnregulatedUserNode(_)
+            | NodeEnum::RegulatedUserNode(_)
+            | NodeEnum::FieldNode(_)
+            | NodeEnum::InflowNode(_)
+            | NodeEnum::StorageNode(_)
+            | NodeEnum::OrderControlNode(_) => None,
+        }
+    }
+
+    /// [`optimisable`](Self::optimisable), mutably. The arms are the same list.
+    pub fn optimisable_mut(&mut self) -> Option<&mut dyn OptimisableComponent> {
+        match self {
+            NodeEnum::SacramentoNode(n) => Some(n),
+            NodeEnum::Gr4jNode(n) => Some(n),
+            NodeEnum::AwbmNode(n) => Some(n),
+            NodeEnum::SurmNode(n) => Some(n),
+            NodeEnum::Gr4jsgNode(n) => Some(n),
+            NodeEnum::RoutingNode(n) => Some(n),
+            NodeEnum::RoutingNodeReachLosses(n) => Some(n),
+            NodeEnum::BlackholeNode(_)
+            | NodeEnum::ConfluenceNode(_)
+            | NodeEnum::GaugeNode(_)
+            | NodeEnum::LossNode(_)
+            | NodeEnum::SplitterNode(_)
+            | NodeEnum::UnregulatedUserNode(_)
+            | NodeEnum::RegulatedUserNode(_)
+            | NodeEnum::FieldNode(_)
+            | NodeEnum::InflowNode(_)
+            | NodeEnum::StorageNode(_)
+            | NodeEnum::OrderControlNode(_) => None,
+        }
+    }
+
     pub fn get_type_as_string(&self) -> String {
         let name = match self {
             NodeEnum::BlackholeNode(_) => "blackhole",

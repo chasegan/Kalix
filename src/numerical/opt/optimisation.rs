@@ -11,11 +11,9 @@
 use std::collections::HashMap;
 use crate::model::Model;
 use crate::numerical::mathfn::u64_subtraction;
-use crate::nodes::NodeEnum;
 use crate::timeseries::Timeseries;
 use crate::functions::{ParsedFunction, VariableContext, EvaluationConfig, parse_function};
 use super::optimisable::Optimisable;
-use super::optimisable_component::OptimisableComponent;
 use super::parameter_mapping::ParameterMappingConfig;
 use super::objectives::ObjectiveFunction;
 
@@ -143,14 +141,12 @@ impl OptimisationProblem {
                 let param_name = parts[2];
                 let node_idx = self.model.get_node_idx(node_name)
                     .ok_or_else(|| format!("Node not found: {}", node_name))?;
-                match &self.model.nodes[node_idx] {
-                    NodeEnum::SacramentoNode(_) | NodeEnum::Gr4jNode(_) | NodeEnum::AwbmNode(_) | NodeEnum::SurmNode(_) | NodeEnum::Gr4jsgNode(_) | NodeEnum::RoutingNode(_) | NodeEnum::RoutingNodeReachLosses(_) => {}
-                    other => {
-                        return Err(format!(
-                            "Node '{}' (type: {}) does not support parameter optimisation",
-                            node_name, other.get_type_as_string()
-                        ));
-                    }
+                let node = &self.model.nodes[node_idx];
+                if node.optimisable().is_none() {
+                    return Err(format!(
+                        "Node '{}' (type: {}) does not support parameter optimisation",
+                        node_name, node.get_type_as_string()
+                    ));
                 }
                 resolved.push(ResolvedTarget::NodeParam {
                     node_idx,
@@ -179,17 +175,10 @@ impl OptimisationProblem {
                     self.model.data_cache.constants.set_value_by_idx(*idx, value);
                 }
                 ResolvedTarget::NodeParam { node_idx, param_name } => {
-                    match &mut self.model.nodes[*node_idx] {
-                        NodeEnum::SacramentoNode(node) => node.set_param(param_name, value),
-                        NodeEnum::Gr4jNode(node) => node.set_param(param_name, value),
-                        NodeEnum::AwbmNode(node) => node.set_param(param_name, value),
-                        NodeEnum::SurmNode(node) => node.set_param(param_name, value),
-                        NodeEnum::Gr4jsgNode(node) => node.set_param(param_name, value),
-                        NodeEnum::RoutingNode(node) => node.set_param(param_name, value),
-                        NodeEnum::RoutingNodeReachLosses(node) => node.set_param(param_name, value),
-                        _ => unreachable!("checked during target resolution"),
-                    }
-                    .map_err(|e| format!("Error setting {}: {}", param_name, e))?;
+                    self.model.nodes[*node_idx].optimisable_mut()
+                        .expect("checked during target resolution")
+                        .set_param(param_name, value)
+                        .map_err(|e| format!("Error setting {}: {}", param_name, e))?;
                 }
             }
         }
