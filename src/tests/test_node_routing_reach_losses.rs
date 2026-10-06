@@ -139,11 +139,11 @@ fn mass_balance_closes() {
     }
 }
 
-/// Every step closes, and nothing goes negative, on a month of jumpy inflow and evap
-/// with dry days and floods above the tables. Whole-run closure would miss a step that
-/// over-releases and a later one that makes up for it.
-#[test]
-fn every_step_closes_on_a_random_series() {
+/// Runs a month of jumpy inflow (dry days, floods above the tables) and the given evap
+/// through every solver case and a lag-only reach. Every step must close, with outflow
+/// and volume never negative. Whole-run closure would miss a step that over-releases
+/// and a later one that makes up for it.
+fn assert_every_step_closes(evap_of: fn(u64) -> f64, net_rain: bool) {
     let mut state: u64 = 0x2545_F491_4F6C_DD1D;
     let mut next = || { state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); state >> 33 };
     let mut csv = String::from("timestamp,inflow,evap
@@ -151,9 +151,8 @@ fn every_step_closes_on_a_random_series() {
     for day in 1..=31 {
         let (r, e) = (next(), next());
         let inflow = if r % 4 == 0 { 0.0 } else { (r % 1200) as f64 + 0.37 };
-        let evap = if e % 3 == 0 { 0.0 } else { (e % 12) as f64 + 0.61 };
-        csv.push_str(&format!("2020-01-{day:02},{inflow},{evap}
-"));
+        csv.push_str(&format!("2020-01-{day:02},{inflow},{}
+", evap_of(e)));
     }
     let dir = std::env::temp_dir().join("kalix_tests").join(uuid::Uuid::new_v4().to_string());
     std::fs::create_dir_all(&dir).unwrap();
@@ -175,16 +174,30 @@ fn every_step_closes_on_a_random_series() {
             let volume = series(&mut model, "node.reach.volume");
             let loss = series(&mut model, "node.reach.loss");
             assert!(dsflow.iter().any(|&q| q > 0.0) && loss.iter().any(|&l| l > 0.0), "{name}: case not exercised");
+            assert_eq!(loss.iter().any(|&l| l < 0.0), net_rain, "{name}, {n_divs} divisions: sign of the loss");
             let mut prev = DEAD;
             for t in 0..usflow.len() {
                 let residual = usflow[t] - dsflow[t] - loss[t] - (volume[t] - prev);
                 assert!(residual.abs() < 1e-8, "{name}, {n_divs} divisions, step {}: residual {residual}", t + 1);
-                assert!(dsflow[t] >= 0.0 && volume[t] >= 0.0 && loss[t] >= 0.0, "{name}, {n_divs} divisions, step {}: negative value", t + 1);
+                assert!(dsflow[t] >= 0.0 && volume[t] >= 0.0, "{name}, {n_divs} divisions, step {}: negative value", t + 1);
                 prev = volume[t];
             }
         }
     }
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn every_step_closes_on_a_random_series() {
+    assert_every_step_closes(|e| if e % 3 == 0 { 0.0 } else { (e % 12) as f64 + 0.61 }, false);
+}
+
+/// Negative evap (net rain) is not the documented use, but a mild one must still close:
+/// the loss goes negative and the reach gains water. Mild means 1 + E * slope stays
+/// above zero (here the area slopes are 0.01 km2/ML, so E > -100 mm).
+#[test]
+fn every_step_closes_with_net_rain() {
+    assert_every_step_closes(|e| if e % 3 == 0 { -((e % 9) as f64) - 0.4 } else { (e % 12) as f64 + 0.61 }, true);
 }
 
 /// With one division, outflow means the pool is full, and nothing is ever negative.
