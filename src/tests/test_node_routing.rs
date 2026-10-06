@@ -62,7 +62,7 @@ fn test_inflow_node_with_timeseries() {
 // OptimisableComponent tests
 // ============================================================================
 
-fn pwl_node() -> RoutingNode {
+fn pwl_node() -> RoutingNode<false> {
     let mut r = RoutingNode::new();
     r.name = "pwl_reach".to_string();
     // 4 points -> pwl_segs = 3 -> params pwl_tt_0 to pwl_tt_3
@@ -71,7 +71,7 @@ fn pwl_node() -> RoutingNode {
     r
 }
 
-fn nlm_node() -> RoutingNode {
+fn nlm_node() -> RoutingNode<false> {
     let mut r = RoutingNode::new();
     r.name = "nlm_reach".to_string();
     r.set_k(100.0);
@@ -92,7 +92,7 @@ fn test_nlm_node_lists_muskingum_params() {
     assert_eq!(nlm_node().list_params(), vec!["nlm_k", "nlm_m"]);
     // Lag-only (no table, k = 0) lands in the NLM bucket: calibrating k onto
     // it is how a modeller gives it NLM routing.
-    let mut lag_only = RoutingNode::new();
+    let mut lag_only = RoutingNode::<false>::new();
     lag_only.set_lag(3);
     assert_eq!(lag_only.list_params(), vec!["nlm_k", "nlm_m"]);
 }
@@ -240,6 +240,16 @@ fn test_pwl_flow_above_table_releases_storage_general_x() {
     let stored: f64 = usflow.iter().sum::<f64>() - dsflow.iter().sum::<f64>();
     assert!((stored - volume[4]).abs() < 1e-9,
             "mass leak: inflow - outflow = {stored} but reach holds {}", volume[4]);
+}
+
+/// A dry reach records +0 outflow, not -0. The x < 1 solve returns a root of -0, and each
+/// division flips the sign again, so only an odd number of divisions showed it.
+#[test]
+fn test_pwl_dry_reach_outflow_is_positive_zero() {
+    let ini = out_of_table_ini(0.5, 3).replace("if(sim.day == 3, 1000, 50)", "0");
+    let mut model = run(&ini);
+    let dsflow = series(&mut model, "node.reach.dsflow");
+    assert!(dsflow.iter().all(|q| *q == 0.0 && q.is_sign_positive()), "dsflow: {dsflow:?}");
 }
 
 /// A lag-only node (no PWL table) takes the same fall-through path by design;

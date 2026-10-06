@@ -110,3 +110,14 @@ fn test_renamed_inputs_section_gives_migration_hint() {
     assert!(err.contains("[inputs]") && err.contains("[data]") && err.contains("renamed"),
         "error should point [inputs] users at [data], got: {}", err);
 }
+
+#[test]
+fn test_alpha_routing_properties_are_unknown() {
+    // Routing `loss_rate` and `dead_storage` shipped as alpha in 0.4.5 and are gone;
+    // they are refused like any other unknown property.
+    for line in ["loss_rate = 30", "dead_storage = 100"] {
+        let ini = format!("[kalix]\n\n[node.r]\nloc = 0, 0\ntype = routing\n{line}\n");
+        let err = IniModelIO::read_model_string(&ini).err().expect("unknown property must fail to load").to_string();
+        assert!(err.contains("Unexpected parameter"), "got: {}", err);
+    }
+}

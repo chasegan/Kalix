@@ -85,9 +85,11 @@ fn parser_arms() -> Vec<(String, BTreeSet<String>, BTreeSet<String>)> {
         let Some(q) = rest.find("\" => {") else { break };
         let name = rest[..q].to_string();
         let body = rest[q..].split(ARM_CLOSE).next().unwrap_or("");
-        // Only the node-type arms construct a NodeEnum; other matches in the
-        // file share the indentation but not the shape.
-        if body.contains("NodeEnum::") && name.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c.is_ascii_digit()) {
+        // Only the node-type arms produce a NodeEnum, by naming a variant or
+        // by handing a spec to `into_node()`; other matches in the file share
+        // the indentation but not the shape.
+        let produces_node = body.contains("NodeEnum::") || body.contains(".into_node()");
+        if produces_node && name.chars().all(|c| c.is_ascii_lowercase() || c == '_' || c.is_ascii_digit()) {
             let literals = literals_after(body, "name_lower == \"");
             let families = literals_after(body, "strip_suffix(\"");
             arms.push((name, literals, families));

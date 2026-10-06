@@ -10,6 +10,7 @@ pub mod run;
 pub mod nodes;
 pub mod numerical;
 pub mod perf;
+#[cfg(test)]
 pub mod tests;
 pub mod tid;
 pub mod timeseries;

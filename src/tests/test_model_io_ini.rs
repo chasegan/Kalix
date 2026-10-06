@@ -240,6 +240,64 @@ fn test_routing_nlm_does_not_emit_pwl() {
     assert!(!out.contains("pwl"), "must not emit a pwl line for an NLM node, got:\n{}", out);
 }
 
+/// Reach losses (#229): `evap` and `dimensions` survive a re-rendered save and
+/// reload to the same values; a routing node without them emits neither.
+#[test]
+fn test_routing_reach_losses_round_trip() {
+    let ini = "[kalix]\n\
+               \n\
+               [node.r]\n\
+               type = routing\n\
+               loc = 0, 40\n\
+               x = 1\n\
+               nlm = 2.0, 0.8\n\
+               evap = 2 + 1.5\n\
+               dimensions = flow, dead_volume, area,\n    0, 0, 0,\n    0, 130, 0.2,\n    100, 130, 0.25,\n    1e8, 130, 0.25,\n\
+               ds_1 = p\n\
+               \n\
+               [node.p]\n\
+               type = routing\n\
+               loc = 0, 80\n\
+               lag = 1\n\
+               ds_1 = bh\n\
+               \n\
+               [node.bh]\n\
+               type = blackhole\n\
+               loc = 1, 2\n";
+
+    fn reach_losses(model: &crate::model::Model, name: &str) -> (String, Vec<f64>) {
+        for node in &model.nodes {
+            if let crate::nodes::NodeEnum::RoutingNodeReachLosses(n) = node {
+                if n.name == name {
+                    return (n.evap_mm_input.to_string(), n.dimensions.get_values_as_vec());
+                }
+            }
+        }
+        panic!("no routing node '{}'", name);
+    }
+
+    let mut model = IniModelIO::read_model_string(ini).expect("model should parse");
+    let before = reach_losses(&model, "r");
+
+    // Force both routing sections to re-render canonically.
+    for node in &mut model.nodes {
+        match node {
+            crate::nodes::NodeEnum::RoutingNode(n) => n.set_lag(n.get_lag() + 1),
+            crate::nodes::NodeEnum::RoutingNodeReachLosses(n) => n.set_lag(n.get_lag() + 1),
+            _ => {}
+        }
+    }
+
+    let out = IniModelIO::model_to_string(&model);
+    let reloaded = IniModelIO::read_model_string(&out).expect("saved model should reload");
+    assert_eq!(reach_losses(&reloaded, "r"), before, "saved:\n{}", out);
+    assert_eq!(before.1, vec![0.0, 0.0, 0.0, 0.0, 130.0, 0.2, 100.0, 130.0, 0.25, 1e8, 130.0, 0.25]);
+
+    let p_section = out.split("[node.p]").nth(1).and_then(|s| s.split("\n[").next()).expect("node.p section");
+    assert!(!p_section.contains("evap") && !p_section.contains("dimensions"),
+            "a node without reach losses must emit neither, got:\n{}", p_section);
+}
+
 #[test]
 fn test_baseline_canonical_captured_at_load() {
     // Phase 1 of the formatting-preserving saver: loading a model must capture a

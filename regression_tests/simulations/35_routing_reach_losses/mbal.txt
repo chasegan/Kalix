@@ -1,0 +1,39 @@
+==================================
+MASS BALANCE REPORT
+==================================
+  Node count: 21
+  Timesteps: 60
+  Stepsize (s): 86400
+  Period: 2024-01-01T00:00:00.000Z, 2024-02-29T00:00:00.000Z
+  Note: units are ML/timestep
+
+INFLOW NODES
+  in_reach_lag_only, 107.22050000000004
+  in_reach_nlm, 107.22050000000004
+  in_reach_nlm_x1, 107.22050000000004
+  in_reach_no_pool, 107.22050000000004
+  in_reach_plain, 107.22050000000004
+  in_reach_pwl, 107.22050000000004
+  in_reach_pwl_x1, 107.22050000000004
+
+ROUTING NODES
+  reach_lag_only, -10.324790487461115
+  reach_nlm, -9.123136959942123
+  reach_nlm_x1, -8.241730401408471
+  reach_no_pool, -9.343953206944443
+  reach_plain, -2.6340331258417042
+  reach_pwl, -10.152507597830565
+  reach_pwl_x1, -10.06671567324388
+
+BLACKHOLE NODES
+  bh_reach_lag_only, -96.89570951253886
+  bh_reach_nlm, -98.09736304005789
+  bh_reach_nlm_x1, -98.97876959859154
+  bh_reach_no_pool, -97.87654679305555
+  bh_reach_plain, -104.58646687415833
+  bh_reach_pwl, -97.06799240216942
+  bh_reach_pwl_x1, -97.15378432675612
+
+----------------------------------
+TOTAL = 0.0000000000001794120407794253
+----------------------------------

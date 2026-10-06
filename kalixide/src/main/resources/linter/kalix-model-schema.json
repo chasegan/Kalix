@@ -823,9 +823,9 @@
         "ds_1_order",
         "x",
         "typical_regulated_flow",
-        "loss_rate",
-        "loss",
-        "dead_storage"
+        "evap",
+        "area",
+        "evap_vol"
       ],
       "required_params": [
         "type",
@@ -838,8 +838,8 @@
         "x",
         "typical_regulated_flow",
         "nlm",
-        "loss_rate",
-        "dead_storage"
+        "evap",
+        "dimensions"
       ],
       "dsnode_params": [
         "ds_1"
@@ -883,14 +883,13 @@
           "count": 2,
           "description": "Nonlinear muskingum parameters: two comma-separated numbers"
         },
-        "loss_rate": {
+        "evap": {
           "type": "function_expression",
-          "description": "Reach loss [ML/timestep] (data reference, constant, or expression), split equally across the divisions and taken inside the routing balance; bounded so outflow cannot go negative"
+          "description": "Evaporation in mm (data reference, constant, or expression); requires dimensions"
         },
-        "dead_storage": {
-          "type": "number",
-          "min": 0,
-          "description": "Dead storage [ML]: the water the reach holds at zero flow, split equally across the divisions; fills before any outflow and drains to a loss"
+        "dimensions": {
+          "type": "string",
+          "description": "Reach dimensions: flow ML, dead storage volume ML, area km2 (optional header row); first row must be 0, 0, 0; dead storage volumes at zero flow and flows above zero strictly increasing, with the full dead storage volume repeated; requires evap"
         }
       }
     },

@@ -899,7 +899,6 @@ impl Command for GetOptimisableParamsCommand {
         _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
     ) -> Result<serde_json::Value, CommandError> {
         use crate::numerical::opt::OptimisableComponent;
-        use crate::nodes::NodeEnum;
 
         // Get model and check if it exists
         let model = session.get_model()
@@ -915,39 +914,9 @@ impl Command for GetOptimisableParamsCommand {
 
         // Add node parameters (prefixed with "node.")
         for (node_name, &node_idx) in &model.node_lookup {
-            match &model.nodes[node_idx] {
-                NodeEnum::Gr4jNode(node) => {
-                    for param in node.list_params() {
-                        params.push(format!("node.{}.{}", node_name, param));
-                    }
-                }
-                NodeEnum::SacramentoNode(node) => {
-                    for param in node.list_params() {
-                        params.push(format!("node.{}.{}", node_name, param));
-                    }
-                }
-                NodeEnum::AwbmNode(node) => {
-                    for param in node.list_params() {
-                        params.push(format!("node.{}.{}", node_name, param));
-                    }
-                }
-                NodeEnum::SurmNode(node) => {
-                    for param in node.list_params() {
-                        params.push(format!("node.{}.{}", node_name, param));
-                    }
-                }
-                NodeEnum::Gr4jsgNode(node) => {
-                    for param in node.list_params() {
-                        params.push(format!("node.{}.{}", node_name, param));
-                    }
-                }
-                NodeEnum::RoutingNode(node) => {
-                    for param in node.list_params() {
-                        params.push(format!("node.{}.{}", node_name, param));
-                    }
-                }
-                _ => {
-                    // Skip non-optimisable nodes
+            if let Some(optimisable) = model.nodes[node_idx].optimisable() {
+                for param in optimisable.list_params() {
+                    params.push(format!("node.{}.{}", node_name, param));
                 }
             }
         }

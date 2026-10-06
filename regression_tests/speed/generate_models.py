@@ -2,7 +2,7 @@
 """
 Generates the synthetic models and climate/flow data for the speed test suite.
 
-The three models each emphasise a different part of the engine's hot path:
+The models each emphasise a different part of the engine's hot path:
 
   1_sacramento_long   - one Sacramento node over 300 years of daily data.
                         Emphasises raw rainfall-runoff arithmetic.
@@ -22,6 +22,12 @@ The three models each emphasise a different part of the engine's hot path:
                         pump capacity a lookup table call: a 1D rating, an
                         exact-match monthly rule, a bilinear surface, and the
                         three combined. Emphasises the table lookups.
+  8_routing           - twelve short chains of routing nodes and nothing else:
+                        NLM and PWL, each at x = 1 and x < 1, on ephemeral
+                        inflows. The CONTROL for model 9.
+  9_routing_reach_losses - the same chains with `evap` and `dimensions` on
+                        every node. The 8-vs-9 gap isolates the cost of reach
+                        losses.
 
 Deterministic: fixed seeds, so regenerating produces identical files.
 The generated .ini and .csv files are committed; do not hand-edit them —
@@ -82,6 +88,20 @@ def synth_flow(dates, rng, scale):
         q *= 0.94  # recession
         q += scale * 0.03  # persistent baseflow
         out.append(q)
+    return out
+
+
+def synth_ephemeral_flow(dates, rng, scale):
+    """Ephemeral flow (ML/d): storm pulses on a fast recession, dry between events."""
+    q = 0.0
+    out = []
+    for d in dates:
+        doy = d.timetuple().tm_yday
+        season = math.sin(2.0 * math.pi * (doy - 15) / 365.25)
+        if rng.random() < EPHEMERAL_STORM_PROB + 0.02 * season:
+            q += rng.expovariate(1.0 / (scale * 10.0))  # storm pulse
+        q *= EPHEMERAL_RECESSION
+        out.append(q if q > scale * 0.02 else 0.0)  # cease to flow
     return out
 
 
@@ -677,6 +697,105 @@ def build_model_7():
     (folder / "bench.json").write_text('{"repeats": 7}\n')
 
 
+# ---------------------------------------------------------------------------
+# Models 8 and 9: routing only, without and with reach losses
+# ---------------------------------------------------------------------------
+
+EPHEMERAL_STORM_PROB = 0.035
+EPHEMERAL_RECESSION = 0.85
+
+N_ROUTING_CHAINS = 12
+ROUTING_CHAIN_LENGTH = 3
+ROUTING_X_GENERAL = 0.3
+
+# Top row well inside the inflow range, so storm peaks route above the table.
+ROUTING_ONLY_PWL = """pwl = 0, {t0:.1f},
+      20, {t1:.1f},
+      100, {t2:.1f},
+      500, {t3:.1f},"""
+
+# Three rows at zero flow (the dead pool filling), then area rising with flow.
+DIMENSIONS = """dimensions = flow, dead_volume, area,
+             0, 0, 0,
+             0, {d1:.0f}, {a1:.3f},
+             0, {d:.0f}, {a2:.3f},
+             20, {d:.0f}, {a3:.3f},
+             100, {d:.0f}, {a4:.3f},
+             500, {d:.0f}, {a5:.3f},
+             5000, {d:.0f}, {a6:.3f},"""
+
+
+def routing_only_props(rng, chain):
+    """A quarter of the chains each: NLM x = 1, NLM x < 1, PWL x = 1, PWL x < 1."""
+    method = chain * 4 // N_ROUTING_CHAINS
+    x = 1 if method % 2 == 0 else ROUTING_X_GENERAL
+    props = ["n_divs = 5", f"x = {x}"]
+    if method < 2:
+        props.append(f"nlm = {rng.uniform(15000, 45000):.0f}, {rng.uniform(0.6, 0.9):.2f}")
+    else:
+        tt = sorted((rng.uniform(0.3, 2.5) for _ in range(4)), reverse=True)
+        props += ROUTING_ONLY_PWL.format(t0=tt[0], t1=tt[1], t2=tt[2], t3=tt[3]).split("\n")
+    return props
+
+
+def reach_loss_props(rng):
+    d = rng.uniform(120, 280)   # dead volume (ML)
+    a = rng.uniform(0.3, 0.7)   # area at full pool (km2)
+    table = DIMENSIONS.format(d1=d / 2, d=d, a1=0.6 * a, a2=a, a3=1.3 * a, a4=2 * a, a5=4 * a, a6=8 * a)
+    return ["evap = data.pet_csv.by_index.1"] + table.split("\n")
+
+
+def build_routing_only(folder_name, title, with_reach_losses):
+    folder = HERE / folder_name
+    folder.mkdir(exist_ok=True)
+
+    # Separate generators, so both models get the same inflows and routing parameters.
+    rng = random.Random(606)
+    loss_rng = random.Random(707)
+    dates = daily_dates(1925, 40)
+    cols = [(f"inflow_{c + 1}", synth_ephemeral_flow(dates, rng, scale=rng.uniform(30, 90)))
+            for c in range(N_ROUTING_CHAINS)]
+    write_csv(folder / "inflows.csv", dates, cols)
+
+    m = ModelBuilder(title)
+    if with_reach_losses:
+        _, pet = synth_climate(dates, loss_rng)
+        write_csv(folder / "pet.csv", dates, [("pet_mm", pet)])
+        m.inputs("inflows.csv", "pet.csv")
+    else:
+        m.inputs("inflows.csv")
+
+    for c in range(N_ROUTING_CHAINS):
+        x = c * 20.0
+        m.node(f"inflow_{c}", "inflow", x, 0, [
+            f"inflow = data.inflows_csv.by_index.{c + 1}", f"ds_1 = r{c}_0"])
+        for i in range(ROUTING_CHAIN_LENGTH):
+            last = i == ROUTING_CHAIN_LENGTH - 1
+            props = routing_only_props(rng, c)
+            if with_reach_losses:
+                props += reach_loss_props(loss_rng)
+            m.node(f"r{c}_{i}", "routing", x, 10 * (i + 1), props + [f"ds_1 = {'sink' if last else f'r{c}_{i + 1}'}"])
+        m.output(f"node.r{c}_{ROUTING_CHAIN_LENGTH - 1}.ds_1")
+    m.node("sink", "blackhole", 70, 10 * (ROUTING_CHAIN_LENGTH + 1), [])
+
+    if with_reach_losses:
+        for c in range(0, N_ROUTING_CHAINS, N_ROUTING_CHAINS // 4):  # one node per solver case
+            m.output(f"node.r{c}_0.evap_vol")
+    m.write(folder / "kalix.ini")
+
+    (folder / "bench.json").write_text('{"repeats": 7}\n')
+
+
+def build_model_8():
+    build_routing_only("8_routing", "Speed test 8: routing only, NLM and PWL (control for test 9)",
+                       with_reach_losses=False)
+
+
+def build_model_9():
+    build_routing_only("9_routing_reach_losses", "Speed test 9: routing with reach losses",
+                       with_reach_losses=True)
+
+
 if __name__ == "__main__":
     build_model_1()
     build_model_2()
@@ -685,4 +804,6 @@ if __name__ == "__main__":
     build_model_5()
     build_model_6()
     build_model_7()
-    print("Generated speed test models 1-7.")
+    build_model_8()
+    build_model_9()
+    print("Generated speed test models 1-9.")

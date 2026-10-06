@@ -383,9 +383,9 @@ fn static_properties_are_disjoint_from_optimisable_params() {
     use crate::numerical::opt::optimisable_component::OptimisableComponent;
 
     // Routing reports a different parameter set per mode, so check both.
-    let mut pwl_routing = crate::nodes::routing_node::RoutingNode::new();
+    let mut pwl_routing = crate::nodes::routing_node::RoutingNode::<false>::new();
     pwl_routing.set_routing_table(vec![0.0, 50.0, 500.0], vec![2.0, 1.5, 1.0]);
-    let nlm_routing = crate::nodes::routing_node::RoutingNode::new();
+    let nlm_routing = crate::nodes::routing_node::RoutingNode::<false>::new();
 
     let optimisable: Vec<(&str, Vec<String>)> = vec![
         ("gr4j", crate::nodes::gr4j_node::Gr4jNode::new().list_params()),

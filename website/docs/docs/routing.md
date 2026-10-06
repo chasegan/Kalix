@@ -34,9 +34,9 @@ ds_1 = my_other_node
 | nlm (optional) | Nonlinear Muskingum parameters: k, m. Using these parameters will activate nonlinear Muskingum routing algorithm. Cannot be used in conjunction with piecewise linear on the same reach. Units for k are [meters^(3(1-m)) · s^m]. Following the convention of other platforms, if n\_divs > 1 then k applies per division. Example: `nlm = 183000, 0.75` |
 | n\_divs (optional) | The number of divisions used in the pwl storage routing solver. Default value is 1. Example: `n_divs = 10` |
 | x (optional) | Inflow bias. This sets the bias of the upstream flow (as opposed to the downstream flow) in the index flow term used in the pwl storage routing solver. Default value is 0. Example: `x = 0` |
+| evap (optional) | Evaporation from the water surface of the reach [mm]: a data reference, constant, or [dynamic expression](dynamic-expressions.md). Given together with `dimensions`. See [Reach losses and dead storage](#reach-losses-and-dead-storage). Example: `evap = data.climate_csv.by_name.mpot` |
+| dimensions (optional) | A three-column table of flow [ML], dead storage volume [ML] and surface area [km2] for the whole reach, laid out across lines however you like (see [Tables](conventions.md#tables)). An optional header row of three column names may come first; it is ignored by the engine. Given together with `evap`. See [Reach losses and dead storage](#reach-losses-and-dead-storage) for what the rows mean and the rules they follow. |
 | typical\_regulated\_flow (optional) | A representative regulated flow rate [ML], used to estimate travel time through this reach when propagating orders upstream (see [Ordering](ordering.md)). Default value is 0. Example: `typical_regulated_flow = 250` |
-| loss\_rate (optional) | Loss along the reach [ML per timestep]: a data reference, constant, or [dynamic expression](dynamic-expressions.md). The value is split equally across the divisions and taken inside each division's routing balance, so the water leaves the reach's storage rather than its inflow or outflow. It is bounded so that no division's outflow can go negative; a NaN or negative value loses nothing. See [Reach losses](#reach-losses). Example: `loss_rate = data.losses.reach_4` |
-| dead\_storage (optional) | Water the reach holds at zero flow [ML], as one volume for the reach split equally across the `n_divs` divisions. Built into the routing law, so it costs nothing per step. The reach starts at dead level, passes nothing until its pools are full, and a `loss_rate` can drain them. Default 0. See [Dead storage](#dead-storage). Example: `dead_storage = 100` |
 | ds\_1 (optional) | Name of the downstream node. This property defines a downstream link. Inflow nodes may only have 1 downstream link.  Example: `ds_1 = my_other_node` |
 
 The routing parameters — the `nlm` pair, or the travel times of the `pwl` table — can be calibrated with the built-in optimiser: see [Optimisable parameters](optimisable-parameters.md).
@@ -49,12 +49,12 @@ The routing parameters — the `nlm` pair, or the travel times of the `pwl` tabl
 | usflow | Upstream flow [ML] |
 | ds\_1 | Downstream flow on link ds\_1 [ML] |
 | ds\_1\_order | Orders on the link ds\_1 [ML] |
-| volume | Volume of water in the reach storage [ML], dead water included |
+| volume | Volume of water in the reach storage [ML], including any dead storage |
+| evap | Input evaporation [mm]. Zero for a reach without reach losses. |
+| area | Water surface area of the reach [km2]. Zero for a reach without reach losses. |
+| evap\_vol | Volume evaporated this timestep [ML], as a storage node's `evap_vol`. Zero for a reach without reach losses. |
 | x | The declared `x` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
 | typical\_regulated\_flow | The declared `typical_regulated_flow` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
-| dead\_storage | The declared `dead_storage` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
-| loss\_rate | The evaluated `loss_rate` expression, before bounding [ML]. All missing values when no `loss_rate` property is set. |
-| loss | Water actually lost from the reach this timestep [ML]: each division's bounded loss, summed. Zero when no `loss_rate` is set. |
 
 ## How the node works
 
@@ -70,23 +70,68 @@ and mass balance requires that
 
 `Vi=Vi−1+qin,i−qout,i`
 
+**Reach losses** - when the node has `evap` and `dimensions`, each division's mass balance also carries the evaporation loss and the division's share of the dead storage. See [Reach losses and dead storage](#reach-losses-and-dead-storage).
+
 **Flows above the table** - when the reference flow exceeds the last row of the `pwl` table, the travel time is treated as flat beyond the table (flat extrapolation): the section's storage saturates at the storage integral evaluated at the last index flow, and the balance is released downstream, so mass always balances. Tables therefore do not need a synthetic huge-flow guard row.
 
-### Reach losses
+## Reach losses and dead storage
 
-With `loss_rate` set, the reach loses that much water each timestep, in ML. The amount is split equally across the `n_divs` divisions and taken inside each division's backward Euler balance, `V(q) = V₀ + inflow − loss − outflow`, so the loss comes out of the water in the reach - not off the inflow before routing, and not off the outflow after it.
+A routing node can lose water to evaporation from its water surface, and can hold a **dead storage**: water that stays in the reach when it stops flowing, such as pools in an ephemeral river. Both are switched on by giving the node an `evap` and `dimensions` together. A node with neither behaves exactly as described above.
 
-Each division's loss is bounded so its outflow cannot go negative. The bound has a closed form: outflow reaches zero when the reference flow is `x·qin`, so a division can pass at most `V₀ + qin − V(x·qin)` to the loss before its outflow stops. Once it has, the rest of the request comes out of what the division holds, so a loss can empty a stagnant reach; nothing is ever invented, and a dry reach with no inflow loses nothing. The `loss` output reports what was actually taken. A NaN or negative `loss_rate` loses nothing.
+```ini
+[node.reach_4_routing]
+type = routing
+loc = 20, 30
+pwl = Flow [ML], Travel Time [steps],
+      0,         3,
+      100,       2,
+      500,       1,
+n_divs = 3
+evap = data.climate_csv.by_name.mpot
+dimensions = Flow [ML], Dead storage [ML], Area [km2],
+             0,         0,                 0,
+             0,         130,               0.8,
+             0,         150,               1.0,
+             50,        150,               1.5,
+             200,       150,               2.2,
+ds_1 = my_other_node
+```
 
-Note on ordering: upstream orders pass through a routing node unchanged, and a `loss_rate` expression does not alter that - ordering has no way to foresee an arbitrary expression's value, so it assumes zero loss along the reach, as it does for a loss node with no table.
+**Reading the table.** The table describes the whole reach, and has two parts.
 
-### Dead storage
+- The first row is the empty reach: zero flow, zero dead storage, and the area of the reach with no water in it. That is zero for a dry bed. A reach with no pool but a wetted bed can give it an area, and then loses `evap × area` from the first water it holds.
+- The rows at zero flow describe the dead storage filling: how much surface area the reach has when it holds that volume and is not flowing. In the example the dead storage holds up to 150 ML, with 0.8 km2 of surface at 130 ML and 1.0 km2 when full.
+- The rows above zero flow give the surface area when the reach is flowing at that rate. The dead storage is full whenever the reach flows, so these rows repeat the full dead storage volume (150 ML in the example). The last zero-flow row is both the full dead storage and the reach at zero flow, so its area is where the flow rows begin: the area does not jump when the reach starts to flow.
 
-`dead_storage` is the water a reach holds when nothing flows — the pools left in a channel between events — given as one volume for the reach, in ML, and split equally across the `n_divs` divisions. It enters each division's storage law as an offset, `V′(q) = dead + V(q)`, so the routing arithmetic is unchanged and the property costs nothing per step. A lag-only reach, whose law is otherwise zero, becomes a plain pool.
+Area is interpolated linearly between rows. Above the last row the area stays at the last row's value.
 
-Below the dead level nothing routes. A division holding less than its share, counting the step's inflow, keeps everything and passes nothing on; outflow resumes once the pool is full. The reach starts at dead level, as its pools would be at the start of a simulation, and that initial water sits outside the mass balance like a storage's `initial_volume`.
+**Rules for the table.** The model will not run unless:
 
-A reach loss can drain the pool. The loss first reduces outflow to zero, then continues into whatever the division still holds, dead or live, so evaporation empties a stagnant reach; inflow then refills it before anything passes. The declared value is reported as the static output `dead_storage`.
+- the first row has zero flow and zero dead storage;
+- every value is a finite number, none negative;
+- flow and dead storage volume never decrease down the table; dead storage volumes at zero flow strictly increase, and so do flows above zero;
+- area never decreases down the table;
+- every row above zero flow has the same dead storage volume as the last zero-flow row.
+
+A table with no dead storage is allowed: give every row a dead storage volume of zero, with the first row's area as the area of the empty reach.
+
+**How it behaves.**
+
+- The loss each timestep is `evap × area`. With evaporation in mm and area in km2, that is a volume in ML.
+- While the reach flows, the area comes from the flow rows, at the reference flow `qref`.
+- The reach does not flow until its dead storage is full. Inflow fills the dead storage and covers the loss, and only water above the dead storage is routed downstream. The dead storage and the routing are solved as one balance each timestep: with `x = 0` that is exactly the description above; with `x > 0` the step on which the dead storage fills releases a little less than filling it first would, because the inflow also indexes the routing storage.
+- When the reach is not flowing, the dead storage drains by evaporation alone, and the area comes from the zero-flow rows at the volume held.
+- The loss can step on the timestep the reach starts to flow: just below the threshold the area is the full pool's, just above it is the flow row's at the reference flow. With `x = 0` there is no step; with `x = 1` it can be as large as `evap × (area at the inflow − area at zero flow)` on that one step.
+- A reach starts the simulation with its dead storage full, so the first days of a run do not go to filling it. That starting water is not counted in the mass balance report.
+- With `n_divs` greater than 1, the dead storage and area are shared equally between the divisions, so the table always describes the reach as a whole. The divisions fill one after another.
+
+Reach losses work with every routing method: lag only, piecewise-linear and nonlinear Muskingum, for any `x`.
+
+**Evaporation is meant to be evaporation.** A negative value is net rain, and passes through: the reach gains water. The balance still closes, but this is not tested beyond modest negative values. A missing (NaN) evap counts as zero that timestep.
+
+**Orders are not raised to cover the loss.** An order passes upstream through a routing node unchanged, so a user downstream of a reach with losses receives less than it ordered, by about the loss. See [How do routing nodes affect orders?](ordering.md#how-do-routing-nodes-affect-orders) for two ways to allow for this.
+
+**Reach losses or a loss node?** Use reach losses when the loss is evaporation from a surface whose area changes with flow, or when the reach holds water after it stops flowing. For a loss that is simply a function of flow, a [loss node](loss.md) is the simpler tool. A pool alone can also be written as a [storage node](storage.md) with a spill row at its full volume.
 
 ## References
 
