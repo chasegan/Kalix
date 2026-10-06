@@ -139,6 +139,54 @@ fn mass_balance_closes() {
     }
 }
 
+/// Every step closes, and nothing goes negative, on a month of jumpy inflow and evap
+/// with dry days and floods above the tables. Whole-run closure would miss a step that
+/// over-releases and a later one that makes up for it.
+#[test]
+fn every_step_closes_on_a_random_series() {
+    let mut state: u64 = 0x2545_F491_4F6C_DD1D;
+    let mut next = || { state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); state >> 33 };
+    let mut csv = String::from("timestamp,inflow,evap
+");
+    for day in 1..=31 {
+        let (r, e) = (next(), next());
+        let inflow = if r % 4 == 0 { 0.0 } else { (r % 1200) as f64 + 0.37 };
+        let evap = if e % 3 == 0 { 0.0 } else { (e % 12) as f64 + 0.61 };
+        csv.push_str(&format!("2020-01-{day:02},{inflow},{evap}
+"));
+    }
+    let dir = std::env::temp_dir().join("kalix_tests").join(uuid::Uuid::new_v4().to_string());
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("series.csv");
+    std::fs::write(&path, csv).unwrap();
+
+    let laws = ROUTINGS.iter().copied().chain([("lag only", "lag = 2")]);
+    for (name, routing) in laws {
+        for n_divs in [1, 3] {
+            let ini = ini("data.series_csv.by_name.inflow", routing, n_divs,
+                          &losses("data.series_csv.by_name.evap", LOSS_TABLE), 31)
+                .replace("[node.src]", &format!("[data]
+{}
+
+[node.src]", path.display()));
+            let mut model = try_run(&ini).unwrap();
+            let usflow = series(&mut model, "node.reach.usflow");
+            let dsflow = series(&mut model, "node.reach.dsflow");
+            let volume = series(&mut model, "node.reach.volume");
+            let loss = series(&mut model, "node.reach.loss");
+            assert!(dsflow.iter().any(|&q| q > 0.0) && loss.iter().any(|&l| l > 0.0), "{name}: case not exercised");
+            let mut prev = DEAD;
+            for t in 0..usflow.len() {
+                let residual = usflow[t] - dsflow[t] - loss[t] - (volume[t] - prev);
+                assert!(residual.abs() < 1e-8, "{name}, {n_divs} divisions, step {}: residual {residual}", t + 1);
+                assert!(dsflow[t] >= 0.0 && volume[t] >= 0.0 && loss[t] >= 0.0, "{name}, {n_divs} divisions, step {}: negative value", t + 1);
+                prev = volume[t];
+            }
+        }
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// With one division, outflow means the pool is full, and nothing is ever negative.
 #[test]
 fn no_outflow_until_pool_is_full() {
