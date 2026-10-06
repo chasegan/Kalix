@@ -763,6 +763,12 @@ impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
     }
 
     /// Core node logic - run once per time step.
+    ///
+    /// Kept out of line on purpose. Inlined into the flow phase, this loop
+    /// moved models that contain no routing node at all: +25% on speed test 3
+    /// and +6-9% on test 2 (Apple M5), and +2% and +19% on tests 4 and 5
+    /// (i7-13700H), with the arithmetic unchanged. One call per reach per step
+    /// costs nothing measurable (ADR-0004 §3.4, 2026-09-15 and 2026-10-06).
     #[inline(never)]
     fn route_divisions(&mut self, flow_out_of_lag_reach: f64, evap_mm: f64) {
         // PWL or NLM routing second
