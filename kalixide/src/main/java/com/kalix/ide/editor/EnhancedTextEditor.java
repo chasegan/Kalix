@@ -705,12 +705,10 @@ public class EnhancedTextEditor extends JPanel {
         ParsedModel parsedModel = commandModelSupplier.get();
         if (parsedModel == null) {
             logger.error("Failed to parse model for rename");
-            javax.swing.JOptionPane.showMessageDialog(
+            com.kalix.ide.utils.DialogUtils.showError(
                 commandParentFrame,
                 "Failed to parse model",
-                "Error",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
+                "Error");
             return false;
         }
 
@@ -1207,6 +1205,7 @@ public class EnhancedTextEditor extends JPanel {
             programmaticUpdate = false;
         }
         if (!wasDirty) {
+            setDirty(false); // re-baseline: the appended text is on disk too
             textArea.discardAllEdits();
         }
     }

@@ -560,7 +560,11 @@ public class OptimisationSessionManager {
         }
 
         if (statusUpdater != null) {
-            statusUpdater.error("Error: " + errorMessage);
+            if (onErrorOccurred != null) {
+                statusUpdater.accept("Error: " + errorMessage); // the callback's dialog logs it
+            } else {
+                statusUpdater.error("Error: " + errorMessage);
+            }
         }
 
         logger.error("Optimisation error: {}", errorMessage);

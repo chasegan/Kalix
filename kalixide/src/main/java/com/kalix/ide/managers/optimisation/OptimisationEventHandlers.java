@@ -133,7 +133,8 @@ public class OptimisationEventHandlers {
                         progressManager.completeProgress(errInfo, result);
                     }
                     if (statusUpdater != null) {
-                        statusUpdater.error("Optimisation failed: " + errorText);
+                        // Already logged by OptimisationProgram, which sent the sentinel
+                        statusUpdater.accept("Optimisation failed: " + errorText);
                     }
                     updateTreeNodeForSession(sessionKey);
                     updateDetailsIfSelected(sessionKey);

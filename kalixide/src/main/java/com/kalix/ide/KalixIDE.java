@@ -72,6 +72,7 @@ import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
+import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import java.awt.BorderLayout;
 import java.awt.Component;
@@ -327,8 +328,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         ));
 
         DialogUtils.setErrorSink(this::logError); // every error dialog is logged too
-        statusLogButton = new JButton(FontIcon.of(FontAwesomeSolid.INFO_CIRCLE,
-            AppConstants.TOOLBAR_ICON_SIZE, new java.awt.Color(0x2F80ED)));
+        statusLogButton = new JButton(statusLogIcon());
         statusLogButton.setToolTipText("Open the error log");
         statusLogButton.putClientProperty("JButton.buttonType", "toolBarButton"); // FlatLaf: hover/press highlight
         statusLogButton.setFocusable(false);
@@ -1105,28 +1105,45 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private void onErrorLogged(String line) {
         statusLogButton.setVisible(true);
         KalixDocument logDocument = documentManager.findByFile(errorLog.file());
-        if (logDocument != null && !endsWith(logDocument.getEditor().getTextArea(), line)) {
-            logDocument.getEditor().appendText(line);
+        if (logDocument == null) {
+            return;
         }
+        var editor = logDocument.getEditor();
+        if (logDocument.isDirty()) {
+            editor.appendText(line); // an edited tab is the user's; just add the new line
+            return;
+        }
+        // A clean tab is topped up from the file, not from this one line: the tab may have been
+        // opened with later lines already in it, and these callbacks can arrive out of order.
+        String shown = editor.getText();
+        String logged = errorLog.read();
+        if (logged != null && logged.startsWith(shown)) {
+            if (logged.length() > shown.length()) {
+                editor.appendText(logged.substring(shown.length()));
+            }
+            return;
+        }
+        // The file no longer matches the tab (deleted or replaced on disk): keep what the tab
+        // holds and mark it unsaved, as for any open file that goes missing.
+        editor.appendText(line);
+        logDocument.setDirty(true);
+        documentTabPane.refreshTab(logDocument);
     }
 
-    /** True if the area already ends with {@code line} (the tab was opened after the file was written). */
-    private static boolean endsWith(javax.swing.text.JTextComponent area, String line) {
-        int length = area.getDocument().getLength();
-        if (length < line.length()) {
-            return false;
-        }
-        try {
-            return area.getDocument().getText(length - line.length(), line.length()).equals(line);
-        } catch (javax.swing.text.BadLocationException e) {
-            return false;
-        }
+    /** The log button's icon, in the current theme's accent colour. */
+    private static FontIcon statusLogIcon() {
+        return FontIcon.of(FontAwesomeSolid.INFO_CIRCLE, AppConstants.TOOLBAR_ICON_SIZE,
+            UIManager.getColor("Component.accentColor"));
     }
 
     /** Opens the error log as a tab in the IDE (a raw text file, editable as needed). */
     private void openStatusLog() {
         File logFile = errorLog.file();
-        if (logFile == null || !logFile.exists()) {
+        if (logFile == null) {
+            return;
+        }
+        if (!logFile.exists() && documentManager.findByFile(logFile) == null) {
+            updateStatus("The error log is no longer on disk: " + logFile.getAbsolutePath());
             return;
         }
         fileOperations.openTransientFile(logFile);
@@ -2249,6 +2266,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     public void updateToolBar() {
         if (toolBar != null) {
+            statusLogButton.setIcon(statusLogIcon());
             // Remove the old toolbar
             remove(toolBar);
             

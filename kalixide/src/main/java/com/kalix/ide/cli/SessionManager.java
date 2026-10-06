@@ -684,7 +684,8 @@ public class SessionManager {
         }
         session.setState(SessionState.ERROR, operation + " failed: " + e.getMessage());
         fireSessionEvent(sessionKey, oldState, SessionState.ERROR, e.getMessage());
-        updateStatusError("Session " + sessionKey + " error: " + operation + " failed");
+        // Not logged here: the ERROR event just fired is what the listener logs
+        updateStatus("Session " + sessionKey + " error: " + operation + " failed");
     }
     
     /**

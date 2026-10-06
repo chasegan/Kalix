@@ -16,6 +16,8 @@ import java.awt.Component;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -38,6 +40,8 @@ public class FileOperationsManager {
     private final Runnable fileChangedCallback;
     private final FileWatcherManager fileWatcherManager;
     private Supplier<File> projectDirectorySupplier;
+    /** Files opened with {@link #openTransientFile}: never recorded as recent or last-opened. */
+    private final Set<File> transientFiles = new HashSet<>();
 
     /**
      * Creates a new FileOperationsManager instance.
@@ -132,6 +136,7 @@ public class FileOperationsManager {
      * @param file The file to open
      */
     public void openTransientFile(File file) {
+        transientFiles.add(file);
         openFile(file, false);
     }
 
@@ -282,7 +287,9 @@ public class FileOperationsManager {
             document.refreshDataViewFromDisk();
 
             // Save as last opened file for session restoration
-            PreferenceKeys.LAST_OPENED_FILE.set(currentFile.getAbsolutePath());
+            if (!transientFiles.contains(currentFile)) {
+                PreferenceKeys.LAST_OPENED_FILE.set(currentFile.getAbsolutePath());
+            }
 
             String statusMessage = String.format("Saved model: %s", currentFile.getName());
             statusUpdateCallback.accept(statusMessage);

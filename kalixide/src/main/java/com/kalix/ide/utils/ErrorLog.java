@@ -60,6 +60,18 @@ public final class ErrorLog {
         }
     }
 
+    /** Everything logged so far, or null if there is no log file or it cannot be read. */
+    public synchronized String read() {
+        if (file == null) {
+            return null;
+        }
+        try {
+            return Files.readString(file.toPath());
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
     /** The log file, or null until the first error has been written. */
     public synchronized File file() {
         return file;

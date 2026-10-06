@@ -45,6 +45,19 @@ class ErrorLogTest {
     }
 
     @Test
+    void readReturnsEverythingLoggedSoFar() {
+        ErrorLog log = new ErrorLog(dir);
+        assertNull(log.read());
+
+        String first = log.append("one");
+        String second = log.append("two");
+        assertEquals(first + second, log.read());
+
+        assertTrue(log.file().delete());
+        assertNull(log.read());
+    }
+
+    @Test
     void fileNameIsKalixLogWithSixCharacterUid() {
         ErrorLog log = new ErrorLog(dir);
         log.append("one");
