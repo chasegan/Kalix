@@ -889,7 +889,7 @@
         },
         "dimensions": {
           "type": "string",
-          "description": "Reach dimensions: flow ML, dead storage volume ML, area km2 (optional header row); first row must be 0, 0, 0; flows above zero strictly increasing, with the full dead storage volume repeated; requires evap"
+          "description": "Reach dimensions: flow ML, dead storage volume ML, area km2 (optional header row); first row must be 0, 0, 0; dead storage volumes at zero flow and flows above zero strictly increasing, with the full dead storage volume repeated; requires evap"
         }
       }
     },

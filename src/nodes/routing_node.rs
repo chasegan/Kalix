@@ -316,15 +316,18 @@ impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
         if nrows == 0 {
             return Err(format!("Error in node '{}'. Dimensions has no rows.", self.name));
         }
-        // An all-zero first row anchors the dead-volume lookup at the origin, so area never extrapolates below it.
-        if t.get_value(0, FLOW) != 0.0 || t.get_value(0, DSVO) != 0.0 || t.get_value(0, AREA) != 0.0 {
-            return Err(format!("Error in node '{}'. Dimensions must begin with flow = 0, dead storage volume = 0, area = 0.", self.name));
+        // The first row is the empty reach, zero flow and zero dead storage, which anchors
+        // the dead-volume lookup at the origin so area never extrapolates below it. Its area
+        // is the area of the empty reach: zero for a dry bed, or the wetted bed of a reach
+        // with no pool, which then loses evap times that area from the first drop it holds.
+        if t.get_value(0, FLOW) != 0.0 || t.get_value(0, DSVO) != 0.0 {
+            return Err(format!("Error in node '{}'. Dimensions must begin with flow = 0 and dead storage volume = 0.", self.name));
         }
         for r in 0..nrows {
             let (q, v, a) = (t.get_value(r, FLOW), t.get_value(r, DSVO), t.get_value(r, AREA));
-            // `!(x >= 0)` also catches NaN.
-            if !(q >= 0.0) || !(v >= 0.0) || !(a >= 0.0) {
-                return Err(format!("Error in node '{}'. Dimensions values must be non-negative (row {}).", self.name, r + 1));
+            // `!(x >= 0)` also catches NaN; `is_finite` catches inf.
+            if !(q >= 0.0 && q.is_finite()) || !(v >= 0.0 && v.is_finite()) || !(a >= 0.0 && a.is_finite()) {
+                return Err(format!("Error in node '{}'. Dimensions values must be finite and non-negative (row {}).", self.name, r + 1));
             }
             if r > 0 && (q < t.get_value(r - 1, FLOW) || v < t.get_value(r - 1, DSVO)) {
                 return Err(format!(
@@ -332,10 +335,18 @@ impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
                     self.name, r + 1
                 ));
             }
-            // Flow is solved across for x < 1, so area cannot step against it. Zero-flow rows may repeat.
+            // Flow is solved across for x < 1, so area cannot step against it. Zero-flow rows
+            // may repeat the flow, since they describe the pool filling; the pool volume is
+            // then the axis, and it must not repeat either, or the area would step at a volume.
             if r > 0 && q > 0.0 && q == t.get_value(r - 1, FLOW) {
                 return Err(format!(
                     "Error in node '{}'. Dimensions flows above zero must be strictly increasing (violation at row {}).",
+                    self.name, r + 1
+                ));
+            }
+            if r > 0 && q == 0.0 && v == t.get_value(r - 1, DSVO) {
+                return Err(format!(
+                    "Error in node '{}'. Dimensions dead storage volumes at zero flow must be strictly increasing (violation at row {}).",
                     self.name, r + 1
                 ));
             }

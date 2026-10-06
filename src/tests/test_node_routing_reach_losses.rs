@@ -336,9 +336,11 @@ fn zero_table_matches_no_reach_losses() {
 #[test]
 fn bad_dimensions_are_rejected() {
     let cases = [
-        ("0, 0, 1,\n 100, 0, 2,", "must begin with flow = 0, dead storage volume = 0, area = 0"),
-        ("50, 0, 0,\n 100, 0, 2,", "must begin with flow = 0, dead storage volume = 0, area = 0"),
-        ("0, 0, 0,\n 100, 0, -1,", "must be non-negative"),
+        ("0, 10, 1,\n 100, 10, 2,", "must begin with flow = 0 and dead storage volume = 0"),
+        ("50, 0, 0,\n 100, 0, 2,", "must begin with flow = 0 and dead storage volume = 0"),
+        ("0, 0, 0,\n 100, 0, -1,", "must be finite and non-negative"),
+        ("0, 0, 0,\n 100, 0, inf,", "must be finite and non-negative"),
+        ("0, 0, 0,\n 0, 100, 0,\n 0, 100, 1,\n 100, 100, 2,", "dead storage volumes at zero flow must be strictly increasing"),
         ("0, 0, 0,\n 100, 0, 1,\n 50, 0, 2,", "must not decrease"),
         ("0, 0, 0,\n 0, 100, 1,\n 0, 50, 2,\n 100, 50, 2,", "must not decrease"),
         ("0, 0, 0,\n 100, 0, 1,\n 100, 0, 2,", "must be strictly increasing"),
