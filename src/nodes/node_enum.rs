@@ -62,6 +62,7 @@ impl NodeEnum {
     /// STDIO parameter list, used to each keep their own list of the optimisable
     /// types ahead of a wildcard, where a sub-variant left out was a wrong error,
     /// a panic, or silently missing from the IDE's list.
+    #[cold]
     pub fn optimisable(&self) -> Option<&dyn OptimisableComponent> {
         match self {
             NodeEnum::SacramentoNode(n) => Some(n),
@@ -86,6 +87,7 @@ impl NodeEnum {
     }
 
     /// [`optimisable`](Self::optimisable), mutably. The arms are the same list.
+    #[cold]
     pub fn optimisable_mut(&mut self) -> Option<&mut dyn OptimisableComponent> {
         match self {
             NodeEnum::SacramentoNode(n) => Some(n),

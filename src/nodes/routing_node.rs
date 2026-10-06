@@ -214,6 +214,7 @@ impl RoutingSpec {
     /// `dimensions` are both given, the plain one when neither is. The variant is a
     /// function of the file alone (Manifesto §2.2); one property without the other is
     /// refused here, with a message the reader stamps with the section's line.
+    #[cold]
     pub fn into_node(self) -> Result<NodeEnum, String> {
         match (self.evap.is_some(), self.dimensions.is_some()) {
             (true, true) => Ok(NodeEnum::RoutingNodeReachLosses(RoutingNode::<true>::from_spec(self))),
@@ -242,6 +243,7 @@ impl<const USING_REACH_LOSS: bool> RoutingNode<USING_REACH_LOSS> {
 
     /// A node of this variant from its spec. Exhaustive destructure: a new spec field
     /// does not compile until it is used here. Run state stays at its defaults.
+    #[cold]
     pub fn from_spec(spec: RoutingSpec) -> Self {
         let RoutingSpec { name, location, lag, n_divs, x, nlm, pwl, evap, dimensions, typical_regulated_flow } = spec;
         let mut n = Self::new();
