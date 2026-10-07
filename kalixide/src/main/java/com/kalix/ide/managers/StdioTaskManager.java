@@ -1,13 +1,13 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.cli.KalixCliLocator;
-import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.cli.ProcessExecutor;
 import com.kalix.ide.cli.ProgressParser;
 import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.components.StatusProgressBar;
 import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.windows.RunManager;
 
 import javax.swing.JFrame;

@@ -1,12 +1,12 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.cli.OptimisationProgram;
-import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.cli.ProgressParser;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.StdioTaskManager;
+import com.kalix.ide.utils.StatusReporter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

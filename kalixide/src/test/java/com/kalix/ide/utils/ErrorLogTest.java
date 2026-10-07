@@ -14,8 +14,8 @@ class ErrorLogTest {
 
     @Test
     void formatsFullDateTimeWithMilliseconds() {
-        String line = ErrorLog.format(LocalDateTime.of(2026, 10, 6, 9, 5, 3, 7_000_000), "boom");
-        assertEquals("2026-10-06 09:05:03.007  boom\n", line);
+        String line = ErrorLog.format(LocalDateTime.of(2026, 10, 6, 14, 5, 3, 7_000_000), "boom");
+        assertEquals("2026-10-06 14:05:03.007  boom\n", line); // 24-hour clock, local time
     }
 
     @Test

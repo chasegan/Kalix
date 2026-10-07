@@ -1,8 +1,9 @@
 package com.kalix.ide.workspace.tree;
 
-import com.kalix.ide.utils.DialogUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.kalix.ide.utils.DialogUtils;
 
 import javax.swing.JOptionPane;
 import javax.swing.SwingWorker;

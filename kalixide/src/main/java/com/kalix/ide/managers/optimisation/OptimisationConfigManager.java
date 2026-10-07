@@ -1,13 +1,13 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.linter.parsing.IniSyntax;
-import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.document.WorkspaceView;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;

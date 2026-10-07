@@ -1,7 +1,8 @@
 package com.kalix.ide.cli;
 
-import java.util.function.Consumer;
 import com.kalix.ide.utils.StatusReporter;
+
+import java.util.function.Consumer;
 
 /**
  * Abstract base class for programs that execute in a kalixcli session.

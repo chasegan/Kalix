@@ -1,6 +1,7 @@
 package com.kalix.ide.filedialog;
 
 import com.kalix.ide.utils.DialogUtils;
+
 import javax.swing.JOptionPane;
 import java.awt.Component;
 import java.io.IOException;

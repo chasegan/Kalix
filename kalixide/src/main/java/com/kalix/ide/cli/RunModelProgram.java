@@ -1,7 +1,7 @@
 package com.kalix.ide.cli;
 
-import com.kalix.ide.windows.RunManager;
 import com.kalix.ide.utils.StatusReporter;
+import com.kalix.ide.windows.RunManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.List;

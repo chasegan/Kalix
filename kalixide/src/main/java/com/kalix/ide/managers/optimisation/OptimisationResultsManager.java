@@ -1,12 +1,12 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.components.KalixIniTextArea;
-import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

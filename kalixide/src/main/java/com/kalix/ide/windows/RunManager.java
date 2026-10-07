@@ -1,7 +1,6 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.components.JCheckboxTree;
-import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
 import com.kalix.ide.flowviz.data.DerivedSeriesLabel;
@@ -34,6 +33,7 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.renderers.OutputsTreeCellRenderer;
 import com.kalix.ide.renderers.RunTreeCellRenderer;
+import com.kalix.ide.utils.StatusReporter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

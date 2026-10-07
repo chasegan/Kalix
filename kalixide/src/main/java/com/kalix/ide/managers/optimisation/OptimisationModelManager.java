@@ -1,9 +1,9 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.document.DocumentLabels;
-import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.document.ModelWriteBack;
+import com.kalix.ide.utils.StatusReporter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

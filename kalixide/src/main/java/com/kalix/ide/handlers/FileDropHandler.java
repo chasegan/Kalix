@@ -1,8 +1,8 @@
 package com.kalix.ide.handlers;
 
 import com.kalix.ide.constants.AppConstants;
-import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.managers.FileOperationsManager;
+import com.kalix.ide.utils.StatusReporter;
 
 import java.awt.Component;
 import java.awt.datatransfer.DataFlavor;

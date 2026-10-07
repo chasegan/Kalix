@@ -1,7 +1,6 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.cli.AbstractSessionProgram;
-import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.cli.JsonStdioProtocol;
 import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.cli.RunModelProgram;
@@ -13,6 +12,7 @@ import com.kalix.ide.utils.ThemeUtils;
 
 import com.kalix.ide.components.KalixPlainTextArea;
 import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;

@@ -1,7 +1,8 @@
 package com.kalix.ide.cli;
 
-import java.util.function.Consumer;
 import com.kalix.ide.utils.StatusReporter;
+
+import java.util.function.Consumer;
 
 /**
  * Handles the "Optimisation" program flow:

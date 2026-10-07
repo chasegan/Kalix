@@ -42,6 +42,7 @@ import com.kalix.ide.linter.LinterManager;
 import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.linter.factories.LinterComponentFactory;
 import com.kalix.ide.themes.SyntaxTheme;
+import com.kalix.ide.utils.DialogUtils;
 
 /**
  * Simplified enhanced text editor component with professional code editor features.
@@ -705,7 +706,7 @@ public class EnhancedTextEditor extends JPanel {
         ParsedModel parsedModel = commandModelSupplier.get();
         if (parsedModel == null) {
             logger.error("Failed to parse model for rename");
-            com.kalix.ide.utils.DialogUtils.showError(
+            DialogUtils.showError(
                 commandParentFrame,
                 "Failed to parse model",
                 "Error");

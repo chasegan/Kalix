@@ -1,7 +1,6 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.constants.AppConstants;
-import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.document.DataDocument;
@@ -10,6 +9,7 @@ import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 
 import javax.swing.JOptionPane;
 import java.awt.Component;

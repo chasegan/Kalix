@@ -1,8 +1,9 @@
 package com.kalix.ide.windows.optimisation;
 
-import com.kalix.ide.utils.DialogUtils;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
+
+import com.kalix.ide.utils.DialogUtils;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;

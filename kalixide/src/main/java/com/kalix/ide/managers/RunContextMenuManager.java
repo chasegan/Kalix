@@ -1,13 +1,13 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.cli.RunModelProgram;
-import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.components.JCheckboxTree;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 

@@ -1,7 +1,6 @@
 package com.kalix.ide.managers;
 
 import com.kalix.ide.flowviz.data.DatasetSeries;
-import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.io.NamedSeries;
 import com.kalix.ide.io.TimeSeriesCsvImporter;
 import com.kalix.ide.io.SourceResCsvFormat;
@@ -10,6 +9,7 @@ import com.kalix.ide.io.SourceResCsvImporter;
 import com.kalix.ide.io.PixieSeriesKey;
 import com.kalix.ide.io.PixieStore;
 import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

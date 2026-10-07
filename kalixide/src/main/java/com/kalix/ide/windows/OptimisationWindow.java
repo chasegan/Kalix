@@ -1,7 +1,6 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.KalixIDE;
-import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.document.DocumentLabels;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.document.WorkspaceView;
@@ -28,6 +27,7 @@ import com.kalix.ide.windows.optimisation.ModelSelectorPanel;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import com.kalix.ide.flowviz.FlowVizPanel;
+import com.kalix.ide.utils.StatusReporter;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
