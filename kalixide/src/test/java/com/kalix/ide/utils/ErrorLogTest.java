@@ -20,7 +20,9 @@ class ErrorLogTest {
 
     @Test
     void emptyUntilFirstError() {
-        assertEquals("", new ErrorLog().text());
+        ErrorLog log = new ErrorLog();
+        assertEquals("", log.text());
+        assertEquals(0, log.count());
     }
 
     @Test
@@ -31,6 +33,7 @@ class ErrorLogTest {
 
         List<String> lines = log.text().lines().toList();
         assertEquals(2, lines.size());
+        assertEquals(2, log.count());
         assertTrue(lines.get(0).endsWith("  one"), lines.get(0));
         assertTrue(lines.get(1).endsWith("  two"), lines.get(1));
         assertTrue(log.text().endsWith("\n"));

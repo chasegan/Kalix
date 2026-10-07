@@ -14,6 +14,7 @@ public final class ErrorLog {
     private static final DateTimeFormatter STAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
 
     private final StringBuilder text = new StringBuilder();
+    private int count;
 
     /** A log line: timestamp, two spaces, message, newline (always LF, matching editor buffers). */
     public static String format(LocalDateTime time, String message) {
@@ -26,6 +27,12 @@ public final class ErrorLog {
      */
     public synchronized void append(String message) {
         text.append(format(LocalDateTime.now(), oneLine(String.valueOf(message))));
+        count++;
+    }
+
+    /** How many errors have been logged. */
+    public synchronized int count() {
+        return count;
     }
 
     /** The message's lines, each trimmed, joined by single spaces; blank lines vanish. */

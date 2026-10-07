@@ -330,7 +330,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         ));
 
         DialogUtils.setErrorSink(this::logError); // every error dialog is logged too
-        statusLogButton = new JButton(statusLogIcon());
+        statusLogButton = new JButton(statusLogIcon()); // its text is the error count
         statusLogButton.setToolTipText("Open the error log");
         statusLogButton.putClientProperty("JButton.buttonType", "toolBarButton"); // FlatLaf: hover/press highlight
         statusLogButton.setFocusable(false);
@@ -1098,6 +1098,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     private void onErrorLogged() {
+        statusLogButton.setText(Integer.toString(errorLog.count()));
         statusLogButton.setVisible(true);
         // The tab is topped up from the whole log, not from the one line just logged: it may
         // have been opened with later lines already in it, and these callbacks can arrive
