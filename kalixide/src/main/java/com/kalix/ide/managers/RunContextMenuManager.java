@@ -163,6 +163,7 @@ public class RunContextMenuManager {
 
         JMenuItem diffItem = new JMenuItem("Show model changes");
         diffItem.addActionListener(e -> diffModel());
+        diffItem.setToolTipText("Compare this run's model with the model in the main editor.");
         contextMenu.add(diffItem);
 
         JMenuItem saveResultsItem = new JMenuItem("Save results");
