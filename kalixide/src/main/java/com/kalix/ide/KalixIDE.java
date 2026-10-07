@@ -1131,16 +1131,21 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /**
-     * Updates the status label with the given message.
-     * 
+     * Updates the status label with the given message. Safe from any thread: the session
+     * and CLI programs report from their own threads, and the label is a Swing component.
+     *
      * @param message The status message to display
      */
     public void updateStatus(String message) {
-        statusLabel.setText(message);
+        if (SwingUtilities.isEventDispatchThread()) {
+            statusLabel.setText(message);
+        } else {
+            SwingUtilities.invokeLater(() -> statusLabel.setText(message));
+        }
     }
 
     /**
-     * Shows an error in the status bar and records it in the error log.
+     * Shows an error in the status bar and records it in the error log. Safe from any thread.
      *
      * @param message The error message to display and log
      */
