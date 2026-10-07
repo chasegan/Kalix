@@ -1902,13 +1902,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                         RunManager.showRunManager(this, stdioTaskManager, statusReporter);
                     }
                 });
-            })
-            .exceptionally(throwable -> {
-                SwingUtilities.invokeLater(() -> {
-                    updateStatusError("Error starting model session: " + throwable.getMessage());
-                });
-                return null;
-            });
+            }); // a failure is reported by StdioTaskManager before the future completes
     }
     
     @Override
