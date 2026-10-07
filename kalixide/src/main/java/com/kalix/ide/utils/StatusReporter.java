@@ -6,6 +6,12 @@ import java.util.function.Consumer;
  * Where components report progress to the user: {@link #accept} for ordinary status-bar
  * messages, {@link #error} for failures, which are also kept in the IDE's error log.
  * Still a {@code Consumer<String>}, so code that only reports status can take it as one.
+ *
+ * <p>What the log holds is errors only: every status message reported through
+ * {@link #error}, and every error dialog, which {@link DialogUtils#showError} records.
+ * Warnings, whether a warning dialog or a status message, are not logged. Each failure
+ * is logged once: where a status line and a dialog report the same failure, the status
+ * line uses {@link #accept} and the dialog does the logging.
  */
 public interface StatusReporter extends Consumer<String> {
 
