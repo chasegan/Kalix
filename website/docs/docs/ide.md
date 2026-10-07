@@ -151,7 +151,7 @@ Derived series appear under **Derived series** in the Run Manager's source tree,
 
 A message in the status bar is replaced by the next one, and an error dialog is gone once you close it. The IDE keeps every error it has shown you this session in an **error log**. Once there is one, an info icon appears at the left of the status bar, with the number of errors beside it; click it to open the log in a tab. Each error is one line with the time it was shown, and the tab fills in as more arrive. Select and copy from it like any other text.
 
-The log is read-only and lasts only for the session: it is not saved anywhere, so copy out what you want to keep.
+The log is read-only and lasts only for the session: it is not saved anywhere, so copy out what you want to keep. Right-click the icon to **Clear** the log; the icon goes until the next error.
 
 ## Docking
 
