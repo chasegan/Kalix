@@ -8,6 +8,7 @@ import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.StatusReporter;
+import com.kalix.ide.windows.MassBalanceReportWindow;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 
@@ -24,6 +25,7 @@ import javax.swing.event.PopupMenuListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
+import java.awt.Component;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -34,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
@@ -64,6 +67,7 @@ public class RunContextMenuManager {
     private final StdioTaskManager stdioTaskManager;
     private final StatusReporter statusUpdater;
     private final Supplier<File> baseDirectorySupplier;
+    private final Supplier<String> modelTextSupplier;
     private final Supplier<String> editorTextSupplier;
     private final Map<String, String> sessionToRunName;
 
@@ -115,7 +119,8 @@ public class RunContextMenuManager {
      * @param stdioTaskManager Task manager for session operations
      * @param statusUpdater Status bar updater
      * @param baseDirectorySupplier Supplier for base directory (file save dialogs)
-     * @param editorTextSupplier Supplier for editor text (diff operations)
+     * @param modelTextSupplier Supplier for the active model's text (model diff)
+     * @param editorTextSupplier Supplier for the active document's text, whatever its kind
      * @param sessionToRunName Map of session keys to run names
      * @param refreshRunsCallback Callback to refresh the runs list
      * @param renameRunDelegate Delegate that validates and applies a run rename
@@ -129,6 +134,7 @@ public class RunContextMenuManager {
             StdioTaskManager stdioTaskManager,
             StatusReporter statusUpdater,
             Supplier<File> baseDirectorySupplier,
+            Supplier<String> modelTextSupplier,
             Supplier<String> editorTextSupplier,
             Map<String, String> sessionToRunName,
             Runnable refreshRunsCallback,
@@ -141,6 +147,7 @@ public class RunContextMenuManager {
         this.stdioTaskManager = stdioTaskManager;
         this.statusUpdater = statusUpdater;
         this.baseDirectorySupplier = baseDirectorySupplier;
+        this.modelTextSupplier = modelTextSupplier;
         this.editorTextSupplier = editorTextSupplier;
         this.sessionToRunName = sessionToRunName;
         this.refreshRunsCallback = refreshRunsCallback;
@@ -165,6 +172,15 @@ public class RunContextMenuManager {
         diffItem.addActionListener(e -> diffModel());
         diffItem.setToolTipText("Compare this run's model with the model in the main editor.");
         contextMenu.add(diffItem);
+
+        JMenuItem mbReportItem = new JMenuItem("Show mass balance report");
+        mbReportItem.addActionListener(e -> showMassBalanceReport());
+        contextMenu.add(mbReportItem);
+
+        JMenuItem mbValidateItem = new JMenuItem("Validate mass balance");
+        mbValidateItem.addActionListener(e -> validateMassBalance());
+        mbValidateItem.setToolTipText("Compare this run's mass balance with the mass balance file in the main editor.");
+        contextMenu.add(mbValidateItem);
 
         JMenuItem saveResultsItem = new JMenuItem("Save results");
         saveResultsItem.addActionListener(e -> saveResults());
@@ -506,7 +522,7 @@ public class RunContextMenuManager {
             }
 
             // Get the reference model text from the main editor
-            if (editorTextSupplier == null) {
+            if (modelTextSupplier == null) {
                 DialogUtils.showError(
                     parentFrame,
                     "Cannot access main editor text.",
@@ -514,7 +530,7 @@ public class RunContextMenuManager {
                 return;
             }
 
-            String referenceModelText = editorTextSupplier.get();
+            String referenceModelText = modelTextSupplier.get();
             if (referenceModelText == null || referenceModelText.isEmpty()) {
                 JOptionPane.showMessageDialog(
                     parentFrame,
@@ -537,6 +553,114 @@ public class RunContextMenuManager {
                 JOptionPane.INFORMATION_MESSAGE
             );
         }
+    }
+
+    /**
+     * The selected run, if it has finished. Otherwise null: silently when no run is
+     * selected, and with a status bar line saying why {@code action} cannot be done
+     * when the run has not finished.
+     */
+    private RunInfo selectedFinishedRun(String action) {
+        TreePath selectedPath = runTree.getSelectionPath();
+        if (selectedPath == null) return null;
+
+        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
+        if (!(selectedNode.getUserObject() instanceof RunInfo runInfo)) return null;
+
+        RunStatus status = runInfo.getRunStatus();
+        if (status != RunStatus.DONE) {
+            String statusText = status == RunStatus.ERROR ? "failed" :
+                              status == RunStatus.RUNNING ? "still running" : "not completed";
+            if (statusUpdater != null) {
+                statusUpdater.error("Cannot " + action + ": run " + runInfo.getRunName() + " has " + statusText);
+            }
+            return null;
+        }
+        return runInfo;
+    }
+
+    /**
+     * Fetches the selected run's mass balance report and hands it to
+     * {@code onReportReceived} on the EDT. The reply is asynchronous, so nothing is
+     * returned. {@code onReportReceived} is not called if no finished run is selected
+     * or the request fails; the user is told why.
+     */
+    private void getMassBalanceReport(BiConsumer<RunInfo, String> onReportReceived) {
+        RunInfo runInfo = selectedFinishedRun("get mass balance");
+        if (runInfo == null) return;
+        String sessionKey = runInfo.getSession().getSessionKey();
+
+        // The future completes on the session's reader thread.
+        stdioTaskManager.requestMassBalanceReport(sessionKey).whenComplete(
+            (report, throwable) -> SwingUtilities.invokeLater(
+                () -> {
+                    if (throwable != null) {
+                        if (statusUpdater != null) {
+                            statusUpdater
+                                    .accept("Failed to get mass balance report: " + throwable.getMessage());
+                        }
+                        DialogUtils.showError(parentFrame,
+                                "Failed to get mass balance report: " + throwable.getMessage(),
+                                "Mass Balance Report Error");
+                        return;
+                    }
+                    onReportReceived.accept(runInfo, report);
+                }));
+    }
+
+    /**
+     * Shows a mass balance report for the selected run. Verification is
+     * available via the "Validate mass balance" menu item (against the open
+     * editor tab), or the "Validate..." button in the popup window.
+     */
+    public void showMassBalanceReport() {
+        getMassBalanceReport((runInfo, report) -> {
+            new MassBalanceReportWindow(
+                runInfo.getRunName(), report, baseDirectorySupplier,
+                (window, reference) ->
+                    massBalanceDiffOrOK(window, runInfo.getRunName(), report, reference)
+            ).setVisible(true);
+        });
+    }
+
+    /**
+     * Validate the mass balance of the selected run against the mass balance
+     * file in the main editor window.
+     */
+    private void validateMassBalance() {
+        getMassBalanceReport((runInfo, report) -> {
+            String referenceReport = editorTextSupplier.get();
+            if (referenceReport == null || referenceReport.isEmpty()) {
+                JOptionPane.showMessageDialog(
+                    parentFrame,
+                    "No mass balance file is loaded in the main editor.",
+                    "No Reference Mass Balance",
+                    JOptionPane.INFORMATION_MESSAGE
+                );
+                return;
+            }
+            massBalanceDiffOrOK(parentFrame, runInfo.getRunName(), report, referenceReport);
+        });
+    }
+
+    /**
+     * Compares a run's mass balance report with a reference report: an info box over
+     * {@code parent} if they match, a diff window if they do not.
+     */
+    private void massBalanceDiffOrOK(Component parent, String runName, String report,
+                                     String referenceReport) {
+        // Leading and trailing whitespace is ignored, as `kalix simulate -v` does.
+        if (report.strip().equals(referenceReport.strip())) {
+            JOptionPane.showMessageDialog(
+                parent,
+                "Mass balance validation successful: the run's report matches the reference.",
+                "Validation Successful",
+                JOptionPane.INFORMATION_MESSAGE
+            );
+            return;
+        }
+        String title = "Changes: " + runName + " vs Reference Mass Balance";
+        DiffWindow.ofPlainText(report, referenceReport, title, "Reference Mass Balance", runName);
     }
 
     /**
@@ -698,25 +822,11 @@ public class RunContextMenuManager {
      * Handles save results action from context menu.
      */
     public void saveResults() {
-        TreePath selectedPath = runTree.getSelectionPath();
-        if (selectedPath == null) return;
-
-        DefaultMutableTreeNode selectedNode = (DefaultMutableTreeNode) selectedPath.getLastPathComponent();
-        if (!(selectedNode.getUserObject() instanceof RunInfo runInfo)) return;
+        RunInfo runInfo = selectedFinishedRun("save results");
+        if (runInfo == null) return;
 
         String sessionKey = runInfo.getSession().getSessionKey();
         String kalixcliUid = runInfo.getSession().getKalixcliUid();
-
-        // Check if the run has completed successfully
-        RunStatus status = runInfo.getRunStatus();
-        if (status != RunStatus.DONE) {
-            String statusText = status == RunStatus.ERROR ? "failed" :
-                              status == RunStatus.RUNNING ? "still running" : "not completed";
-            if (statusUpdater != null) {
-                statusUpdater.error("Cannot save results: run " + runInfo.getRunName() + " has " + statusText);
-            }
-            return;
-        }
 
         // Generate default filename: {run_name}_{uid}.csv (CSV is the default format)
         String safeRunName = runInfo.getRunName().replaceAll("[^a-zA-Z0-9_-]", "_");
