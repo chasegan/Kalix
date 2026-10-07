@@ -1814,7 +1814,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         if (documentManager.getActiveDocument() instanceof com.kalix.ide.document.DataDocument dd
                 && dd.routesFindToDataView()) {
             dd.showDataFind(); // nothing to replace in a read-only view
-            updateStatus("Read-only data view — Find opened (no replacing)");
+            updateStatus("Read-only — Find opened (no replacing)");
             return;
         }
         textEditor.getSearchManager().showFindReplaceDialog();

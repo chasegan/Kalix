@@ -239,7 +239,7 @@ public class FileOperationsManager {
         if (!document.isEditable()) {
             // A read-only data view has no editor buffer; writing it out would
             // replace the file with nothing.
-            statusUpdateCallback.accept("Read-only data view — nothing to save");
+            statusUpdateCallback.accept("Read-only — nothing to save");
             return;
         }
         File currentFile = document.getFile();
@@ -295,7 +295,7 @@ public class FileOperationsManager {
             return;
         }
         if (!document.isEditable()) {
-            statusUpdateCallback.accept("Read-only data view — nothing to save");
+            statusUpdateCallback.accept("Read-only — nothing to save");
             return;
         }
         // The dialog handles default-extension appending and overwrite confirmation.
