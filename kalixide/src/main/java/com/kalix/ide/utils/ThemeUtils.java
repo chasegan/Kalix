@@ -2,6 +2,7 @@ package com.kalix.ide.utils;
 
 import com.kalix.ide.constants.UIConstants;
 
+import javax.swing.UIManager;
 import java.awt.Color;
 
 /**
@@ -43,4 +44,26 @@ public final class ThemeUtils {
     public static Color iconColor(Color background) {
         return isDark(background) ? Color.LIGHT_GRAY : Color.DARK_GRAY;
     }
+
+    /**
+     * The current theme's accent colour, for the one coloured mark among grey icons (the
+     * tab insertion line, the error-log button). Resolved on each call so it tracks theme
+     * switches. The themes carry their accent in {@code Component.focusedBorderColor};
+     * {@code Component.accentColor} is FlatLaf's own default and the same blue in every
+     * theme, so it is only a fallback, as is a fixed blue when no look and feel is set.
+     *
+     * @return the accent colour, never null
+     */
+    public static Color accentColor() {
+        Color c = UIManager.getColor("Component.focusedBorderColor");
+        if (c == null) {
+            c = UIManager.getColor("Component.accentColor");
+        }
+        if (c == null) {
+            c = UIManager.getColor("Component.focusColor");
+        }
+        return c != null ? c : FALLBACK_ACCENT;
+    }
+
+    private static final Color FALLBACK_ACCENT = new Color(0x1E88E5);
 }

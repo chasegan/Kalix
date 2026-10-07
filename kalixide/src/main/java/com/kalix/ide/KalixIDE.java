@@ -46,6 +46,7 @@ import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.ErrorLog;
 import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.utils.TerminalActions;
+import com.kalix.ide.utils.ThemeUtils;
 import com.kalix.ide.utils.WindowsIntegration;
 import com.kalix.ide.workspace.ContextSplitCoordinator;
 import com.kalix.ide.workspace.DocumentTabPane;
@@ -73,7 +74,6 @@ import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
-import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import java.awt.BorderLayout;
 import java.awt.Component;
@@ -1115,8 +1115,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     /** The log button's icon, in the current theme's accent colour. */
     private static FontIcon statusLogIcon() {
-        return FontIcon.of(FontAwesomeSolid.INFO_CIRCLE, AppConstants.TOOLBAR_ICON_SIZE,
-            UIManager.getColor("Component.accentColor"));
+        return FontIcon.of(FontAwesomeSolid.INFO_CIRCLE, AppConstants.TOOLBAR_ICON_SIZE, ThemeUtils.accentColor());
     }
 
     /** Opens the error log as a read-only tab, or brings the open one to the front. */
