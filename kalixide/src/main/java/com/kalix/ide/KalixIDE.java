@@ -131,7 +131,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     private JToolBar toolBar;
 
     // Errors shown to the user are also kept in a per-session log, opened from the status bar
-    private JButton statusLogButton;
+    private JButton errorLogButton;
     private final ErrorLog errorLog = new ErrorLog();
     /** Status-bar and error-log channels, handed to every component that reports to the user. */
     private final StatusReporter statusReporter = StatusReporter.of(this::updateStatus, this::updateStatusError);
@@ -330,12 +330,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         ));
 
         DialogUtils.setErrorSink(this::logError); // every error dialog is logged too
-        statusLogButton = new JButton(statusLogIcon()); // its text is the error count
-        statusLogButton.setToolTipText("Open the error log");
-        statusLogButton.putClientProperty("JButton.buttonType", "toolBarButton"); // FlatLaf: hover/press highlight
-        statusLogButton.setFocusable(false);
-        statusLogButton.setVisible(false); // shown once the first error is logged
-        statusLogButton.addActionListener(e -> openStatusLog());
+        errorLogButton = new JButton(errorLogIcon()); // its text is the error count
+        errorLogButton.setToolTipText("Open the error log");
+        errorLogButton.putClientProperty("JButton.buttonType", "toolBarButton"); // FlatLaf: hover/press highlight
+        errorLogButton.setFocusable(false);
+        errorLogButton.setVisible(false); // shown once the first error is logged
+        errorLogButton.addActionListener(e -> openErrorLog());
 
         progressBar = new AutoHidingProgressBar();
 
@@ -776,7 +776,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Add status bar at bottom
         JPanel statusPanel = new JPanel(new BorderLayout());
         JPanel statusWest = new JPanel(new BorderLayout());
-        statusWest.add(statusLogButton, BorderLayout.WEST);
+        statusWest.add(errorLogButton, BorderLayout.WEST);
         statusWest.add(statusLabel, BorderLayout.CENTER);
         statusPanel.add(statusWest, BorderLayout.WEST);
         statusPanel.add(progressBar, BorderLayout.EAST);
@@ -1098,8 +1098,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     private void onErrorLogged() {
-        statusLogButton.setText(Integer.toString(errorLog.count()));
-        statusLogButton.setVisible(true);
+        errorLogButton.setText(Integer.toString(errorLog.count()));
+        errorLogButton.setVisible(true);
         // The tab is topped up from the whole log, not from the one line just logged: it may
         // have been opened with later lines already in it, and these callbacks can arrive
         // out of order.
@@ -1115,12 +1115,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     /** The log button's icon, in the current theme's accent colour. */
-    private static FontIcon statusLogIcon() {
+    private static FontIcon errorLogIcon() {
         return FontIcon.of(FontAwesomeSolid.INFO_CIRCLE, AppConstants.TOOLBAR_ICON_SIZE, ThemeUtils.accentColor());
     }
 
     /** Opens the error log as a read-only tab, or brings the open one to the front. */
-    private void openStatusLog() {
+    private void openErrorLog() {
         ErrorLogDocument document = errorLogDocument().orElseGet(() -> {
             ErrorLogDocument created = new ErrorLogDocument();
             configureDocument(created);
@@ -2240,7 +2240,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     public void updateToolBar() {
         if (toolBar != null) {
-            statusLogButton.setIcon(statusLogIcon());
+            errorLogButton.setIcon(errorLogIcon());
             // Remove the old toolbar
             remove(toolBar);
             
