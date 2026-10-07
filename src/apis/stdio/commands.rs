@@ -98,6 +98,12 @@ impl CommandRegistry {
     }
 }
 
+impl Default for CommandRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // Built-in commands
 
 pub struct GetVersionCommand;
