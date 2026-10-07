@@ -69,6 +69,7 @@ import javax.swing.JLabel;
 import javax.swing.JMenuBar;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JRootPane;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
@@ -336,6 +337,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         errorLogButton.setFocusable(false);
         errorLogButton.setVisible(false); // shown once the first error is logged
         errorLogButton.addActionListener(e -> openErrorLog());
+        JPopupMenu errorLogMenu = new JPopupMenu();
+        errorLogMenu.add("Open").addActionListener(e -> openErrorLog());
+        errorLogMenu.addSeparator();
+        errorLogMenu.add("Clear").addActionListener(e -> clearErrorLog());
+        errorLogButton.setComponentPopupMenu(errorLogMenu);
 
         progressBar = new AutoHidingProgressBar();
 
@@ -1094,15 +1100,24 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      */
     private void logError(String message) {
         errorLog.append(message);
-        SwingUtilities.invokeLater(this::onErrorLogged);
+        SwingUtilities.invokeLater(this::refreshErrorLogView);
     }
 
-    private void onErrorLogged() {
-        errorLogButton.setText(Integer.toString(errorLog.count()));
-        errorLogButton.setVisible(true);
-        // The tab is topped up from the whole log, not from the one line just logged: it may
-        // have been opened with later lines already in it, and these callbacks can arrive
-        // out of order.
+    /** Empties the log: the button goes until the next error, and an open tab empties with it. */
+    private void clearErrorLog() {
+        errorLog.clear();
+        refreshErrorLogView();
+    }
+
+    /**
+     * Brings the button and an open log tab in step with the log as it is now, not with the
+     * one event that prompted this: the tab may have been opened with later lines already in
+     * it, callbacks can arrive out of order, and the log may have been cleared meanwhile.
+     */
+    private void refreshErrorLogView() {
+        int count = errorLog.count();
+        errorLogButton.setText(Integer.toString(count));
+        errorLogButton.setVisible(count > 0);
         errorLogDocument().ifPresent(document -> document.showLog(errorLog.text()));
     }
 

@@ -40,6 +40,19 @@ class ErrorLogTest {
     }
 
     @Test
+    void clearForgetsEverything() {
+        ErrorLog log = new ErrorLog();
+        log.append("one");
+        log.clear();
+        assertEquals("", log.text());
+        assertEquals(0, log.count());
+
+        log.append("two");
+        assertEquals(1, log.count());
+        assertTrue(log.text().endsWith("  two\n"));
+    }
+
+    @Test
     void multiLineMessageIsOneLine() {
         ErrorLog log = new ErrorLog();
         log.append("Failed to launch:\n\nPlease check the command.\r\nCurrent command: x");

@@ -36,4 +36,20 @@ class ErrorLogDocumentTest {
             document.dispose();
         }
     }
+
+    @Test
+    void showLogReplacesTheTextWhenTheLogWasCleared() {
+        ErrorLogDocument document = new ErrorLogDocument();
+        try {
+            document.showLog("one\ntwo\n");
+            document.showLog(""); // cleared
+            assertEquals("", document.getText());
+
+            document.showLog("three\n"); // and refilling
+            assertEquals("three\n", document.getText());
+            assertFalse(document.isDirty());
+        } finally {
+            document.dispose();
+        }
+    }
 }

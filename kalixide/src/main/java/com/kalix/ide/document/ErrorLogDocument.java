@@ -18,14 +18,17 @@ public class ErrorLogDocument extends TextDocument {
     }
 
     /**
-     * Brings the tab up to date with the log. The tab only ever shows a prefix of the log
-     * (it is seeded from it and nothing else writes to it), so this appends the remainder,
-     * which keeps the caret and scroll position when nothing has arrived.
+     * Brings the tab up to date with the log. Nothing else writes to the tab, so what it
+     * shows is a prefix of the log unless the log was cleared meanwhile: the remainder is
+     * appended, which keeps the caret and scroll position when nothing has arrived, and
+     * anything else replaces the text.
      */
     public void showLog(String logged) {
-        int shown = getEditor().getTextArea().getDocument().getLength();
-        if (logged.length() > shown) {
-            getEditor().appendText(logged.substring(shown));
+        String shown = getText();
+        if (logged.startsWith(shown)) {
+            getEditor().appendText(logged.substring(shown.length()));
+        } else {
+            setText(logged);
         }
     }
 

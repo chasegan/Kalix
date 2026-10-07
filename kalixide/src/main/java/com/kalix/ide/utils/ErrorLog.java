@@ -35,6 +35,12 @@ public final class ErrorLog {
         return count;
     }
 
+    /** Forgets everything logged so far. */
+    public synchronized void clear() {
+        text.setLength(0);
+        count = 0;
+    }
+
     /** The message's lines, each trimmed, joined by single spaces; blank lines vanish. */
     private static String oneLine(String message) {
         return message.lines().map(String::strip).filter(s -> !s.isEmpty()).collect(Collectors.joining(" "));
