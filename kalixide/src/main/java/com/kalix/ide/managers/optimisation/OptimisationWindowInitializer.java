@@ -3,6 +3,8 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.cli.OptimisationProgram;
 import com.kalix.ide.components.KalixIniTextArea;
 import com.kalix.ide.flowviz.FlowVizPanel;
+import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -175,7 +177,7 @@ public class OptimisationWindowInitializer {
     public void setupManagerCallbacks(
             JFrame parentFrame,
             com.kalix.ide.managers.StdioTaskManager stdioTaskManager,
-            Consumer<String> statusUpdater,
+            StatusReporter statusUpdater,
             WindowCallbacks callbacks) {
 
         // Store stdioTaskManager for use in action callbacks
@@ -213,7 +215,7 @@ public class OptimisationWindowInitializer {
 
         sessionManager.setOnErrorOccurred(errorMessage -> {
             SwingUtilities.invokeLater(() -> {
-                JOptionPane.showMessageDialog(parentFrame, errorMessage, "Error", JOptionPane.ERROR_MESSAGE);
+                DialogUtils.showError(parentFrame, errorMessage, "Error");
             });
         });
 
@@ -230,7 +232,7 @@ public class OptimisationWindowInitializer {
         treeManager.setOnOptimisationSelectedCallback(callbacks::displayOptimisation);
     }
 
-    private void setupTreeManagerActions(JFrame parentFrame, Consumer<String> statusUpdater) {
+    private void setupTreeManagerActions(JFrame parentFrame, StatusReporter statusUpdater) {
         treeManager.setShowModelAction(optInfo -> {
             if (optInfo.getSession() != null &&
                     optInfo.getSession().getActiveProgram() instanceof OptimisationProgram program) {

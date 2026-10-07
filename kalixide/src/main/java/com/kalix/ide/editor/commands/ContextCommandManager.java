@@ -3,6 +3,7 @@ package com.kalix.ide.editor.commands;
 import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.linter.parsing.INIModelParser;
+import com.kalix.ide.utils.DialogUtils;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,7 +12,6 @@ import javax.swing.AbstractAction;
 import javax.swing.ActionMap;
 import javax.swing.InputMap;
 import javax.swing.JFrame;
-import javax.swing.JOptionPane;
 import java.awt.event.ActionEvent;
 import java.io.File;
 import java.util.List;
@@ -155,12 +155,10 @@ public class ContextCommandManager {
 
         } catch (Exception e) {
             logger.error("Error executing command: " + command.getMetadata().getId(), e);
-            JOptionPane.showMessageDialog(
+            DialogUtils.showError(
                 parentFrame,
                 "Error executing command: " + e.getMessage(),
-                "Error",
-                JOptionPane.ERROR_MESSAGE
-            );
+                "Error");
         }
     }
 

@@ -8,6 +8,8 @@ import com.kalix.ide.document.DocumentKind;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 
 import javax.swing.JOptionPane;
 import java.awt.Component;
@@ -31,7 +33,7 @@ public class FileOperationsManager {
     private final Component parentComponent;
     private final DocumentManager documentManager;
     private final Function<File, KalixDocument> documentFactory;
-    private final Consumer<String> statusUpdateCallback;
+    private final StatusReporter statusUpdateCallback;
     private final Consumer<String> addRecentFileCallback;
     private final Runnable fileChangedCallback;
     private final FileWatcherManager fileWatcherManager;
@@ -52,7 +54,7 @@ public class FileOperationsManager {
     public FileOperationsManager(Component parentComponent,
                                  DocumentManager documentManager,
                                  Function<File, KalixDocument> documentFactory,
-                                 Consumer<String> statusUpdateCallback,
+                                 StatusReporter statusUpdateCallback,
                                  Consumer<String> addRecentFileCallback,
                                  Runnable fileChangedCallback,
                                  FileWatcherManager fileWatcherManager) {
@@ -217,7 +219,7 @@ public class FileOperationsManager {
             document.refreshDataViewFromDisk(); // data docs: re-index the new bytes
             statusUpdateCallback.accept("File reloaded: " + file.getName());
         } catch (IOException e) {
-            statusUpdateCallback.accept("Failed to reload file: " + file.getName());
+            statusUpdateCallback.error("Failed to reload file: " + file.getName());
         }
     }
     
@@ -237,7 +239,7 @@ public class FileOperationsManager {
         if (!document.isEditable()) {
             // A read-only data view has no editor buffer; writing it out would
             // replace the file with nothing.
-            statusUpdateCallback.accept("Read-only data view — nothing to save");
+            statusUpdateCallback.accept("Read-only — nothing to save");
             return;
         }
         File currentFile = document.getFile();
@@ -293,7 +295,7 @@ public class FileOperationsManager {
             return;
         }
         if (!document.isEditable()) {
-            statusUpdateCallback.accept("Read-only data view — nothing to save");
+            statusUpdateCallback.accept("Read-only — nothing to save");
             return;
         }
         // The dialog handles default-extension appending and overwrite confirmation.
@@ -409,12 +411,10 @@ public class FileOperationsManager {
      * @param e The exception that occurred
      */
     private void showFileOpenError(File file, IOException e) {
-        JOptionPane.showMessageDialog(
+        DialogUtils.showError(
             parentComponent,
             AppConstants.ERROR_OPENING_FILE + e.getMessage(),
-            AppConstants.ERROR_FILE_OPEN,
-            JOptionPane.ERROR_MESSAGE
-        );
+            AppConstants.ERROR_FILE_OPEN);
         statusUpdateCallback.accept(AppConstants.ERROR_FAILED_TO_OPEN + file.getName());
     }
     
@@ -425,12 +425,10 @@ public class FileOperationsManager {
      * @param e The exception that occurred
      */
     private void showFileSaveError(File file, IOException e) {
-        JOptionPane.showMessageDialog(
+        DialogUtils.showError(
             parentComponent,
             "Failed to save file: " + e.getMessage(),
-            "Save Error",
-            JOptionPane.ERROR_MESSAGE
-        );
+            "Save Error");
         statusUpdateCallback.accept("Failed to save: " + file.getName());
     }
     

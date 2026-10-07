@@ -2,6 +2,7 @@ package com.kalix.ide.windows.optimisation;
 
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.filedialog.FileDialogFilter;
+import com.kalix.ide.utils.DialogUtils;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultCellEditor;
 import javax.swing.JButton;
@@ -349,10 +350,9 @@ public class ObjectiveConfigPanel extends JPanel {
             termsTable.getCellEditor().stopCellEditing();
         }
         if (termsTableModel.getRowCount() == 0) {
-            JOptionPane.showMessageDialog(this,
+            DialogUtils.showError(this,
                 "At least one term is required.",
-                "Validation Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Validation Error");
             return false;
         }
 
@@ -393,7 +393,7 @@ public class ObjectiveConfigPanel extends JPanel {
     }
 
     private void showError(String message) {
-        JOptionPane.showMessageDialog(this, message, "Validation Error", JOptionPane.ERROR_MESSAGE);
+        DialogUtils.showError(this, message, "Validation Error");
     }
 
     // ===== Inner types =====

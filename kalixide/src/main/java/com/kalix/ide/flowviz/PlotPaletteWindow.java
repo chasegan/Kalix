@@ -4,6 +4,7 @@ import com.kalix.ide.flowviz.style.LineStyle;
 import com.kalix.ide.flowviz.style.PlotPalette;
 import com.kalix.ide.flowviz.style.PlotPaletteManager;
 import com.kalix.ide.flowviz.style.StrokeStyle;
+import com.kalix.ide.utils.DialogUtils;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -286,7 +287,7 @@ public final class PlotPaletteWindow extends JFrame {
     }
 
     private void showError(String message) {
-        JOptionPane.showMessageDialog(this, message, "Palette", JOptionPane.ERROR_MESSAGE);
+        DialogUtils.showError(this, message, "Palette");
     }
 
     /**

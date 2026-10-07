@@ -2,12 +2,12 @@ package com.kalix.ide.editor.commands;
 
 import com.kalix.ide.io.KalixPath;
 import com.kalix.ide.io.KalixPathResolutionException;
+import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.FileManagerLauncher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.JFrame;
-import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.io.File;
 import java.nio.file.Path;
@@ -92,12 +92,10 @@ public class RevealInputFileCommand implements EditorCommand {
 
     private void showError(String message) {
         SwingUtilities.invokeLater(() -> {
-            JOptionPane.showMessageDialog(
+            DialogUtils.showError(
                 parentFrame,
                 message,
-                "Reveal File Error",
-                JOptionPane.ERROR_MESSAGE
-            );
+                "Reveal File Error");
         });
     }
 }

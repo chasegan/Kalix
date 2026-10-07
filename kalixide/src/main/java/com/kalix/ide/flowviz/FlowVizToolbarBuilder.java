@@ -11,6 +11,7 @@ import com.kalix.ide.components.WrapLayout;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.utils.DialogUtils;
 
 import com.formdev.flatlaf.FlatClientProperties;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
@@ -463,10 +464,9 @@ class FlowVizToolbarBuilder {
                     JOptionPane.INFORMATION_MESSAGE);
 
             } catch (java.io.IOException ex) {
-                JOptionPane.showMessageDialog(statsTable,
+                DialogUtils.showError(statsTable,
                     "Error saving statistics: " + ex.getMessage(),
-                    "Save Error",
-                    JOptionPane.ERROR_MESSAGE);
+                    "Save Error");
             }
         }
     }

@@ -1,10 +1,11 @@
 package com.kalix.ide.components;
 
+import com.kalix.ide.utils.ThemeUtils;
+
 import javax.swing.JComponent;
 import javax.swing.JRootPane;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 import javax.swing.event.MouseInputAdapter;
 import java.awt.AlphaComposite;
 import java.awt.BasicStroke;
@@ -322,7 +323,6 @@ public final class TabDragReorderer {
     private static final class DragGhostGlassPane extends JComponent {
 
         /** Used only if the look and feel exposes no accent colour. */
-        private static final Color FALLBACK_LINE_COLOR = new Color(0x1E88E5);
         private static final float GHOST_ALPHA = 0.6f;
 
         private BufferedImage ghost;
@@ -381,19 +381,9 @@ public final class TabDragReorderer {
             g2.dispose();
         }
 
-        /**
-         * The current theme's accent colour for the insertion line, resolved at paint time so it
-         * tracks theme switches. Falls back through related look-and-feel keys, then to a fixed blue.
-         */
+        /** The current theme's accent colour, resolved at paint time so it tracks theme switches. */
         private static Color insertionLineColor() {
-            Color c = UIManager.getColor("Component.focusedBorderColor");
-            if (c == null) {
-                c = UIManager.getColor("Component.accentColor");
-            }
-            if (c == null) {
-                c = UIManager.getColor("Component.focusColor");
-            }
-            return c != null ? c : FALLBACK_LINE_COLOR;
+            return ThemeUtils.accentColor();
         }
 
         /** Bounds of what we currently draw (ghost + line), padded, or null if nothing. */

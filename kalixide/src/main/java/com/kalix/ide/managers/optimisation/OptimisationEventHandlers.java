@@ -1,6 +1,7 @@
 package com.kalix.ide.managers.optimisation;
 
 import com.kalix.ide.cli.ProgressParser;
+import com.kalix.ide.utils.StatusReporter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
@@ -33,7 +34,7 @@ public class OptimisationEventHandlers {
     private final OptimisationProgressManager progressManager;
     private final OptimisationResultsManager resultsManager;
     private final OptimisationPlotManager plotManager;
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
 
     /**
      * Creates a new OptimisationEventHandlers instance.
@@ -43,7 +44,7 @@ public class OptimisationEventHandlers {
                                      OptimisationProgressManager progressManager,
                                      OptimisationResultsManager resultsManager,
                                      OptimisationPlotManager plotManager,
-                                     Consumer<String> statusUpdater) {
+                                     StatusReporter statusUpdater) {
         this.sessionManager = sessionManager;
         this.treeManager = treeManager;
         this.progressManager = progressManager;
@@ -132,6 +133,7 @@ public class OptimisationEventHandlers {
                         progressManager.completeProgress(errInfo, result);
                     }
                     if (statusUpdater != null) {
+                        // Already logged by OptimisationProgram, which sent the sentinel
                         statusUpdater.accept("Optimisation failed: " + errorText);
                     }
                     updateTreeNodeForSession(sessionKey);
@@ -196,14 +198,14 @@ public class OptimisationEventHandlers {
                         if (result.isSuccess()) {
                             statusUpdater.accept("Optimisation completed successfully");
                         } else {
-                            statusUpdater.accept("Optimisation failed: " + result.getMessage());
+                            statusUpdater.error("Optimisation failed: " + result.getMessage());
                         }
                     }
 
                 } catch (Exception e) {
                     logger.error("Failed to parse optimisation result", e);
                     if (statusUpdater != null) {
-                        statusUpdater.accept("Failed to parse result: " + e.getMessage());
+                        statusUpdater.error("Failed to parse result: " + e.getMessage());
                     }
                 }
 

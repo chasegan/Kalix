@@ -6,10 +6,11 @@ import com.kalix.ide.cli.ProgressParser;
 import com.kalix.ide.cli.RunModelProgram;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.components.StatusProgressBar;
+import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.windows.RunManager;
 
 import javax.swing.JFrame;
-import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.io.File;
 import java.time.Duration;
@@ -19,6 +20,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -31,7 +33,7 @@ public class StdioTaskManager {
 
     // Constants for configuration
 
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
     private final StatusProgressBar progressBar;
     private final JFrame parentFrame;
     private final ProcessExecutor processExecutor;
@@ -49,7 +51,7 @@ public class StdioTaskManager {
      * @param workingDirectorySupplier supplier for getting the current working directory
      */
     public StdioTaskManager(ProcessExecutor processExecutor,
-                            Consumer<String> statusUpdater,
+                            StatusReporter statusUpdater,
                             StatusProgressBar progressBar,
                             JFrame parentFrame,
                             Supplier<File> workingDirectorySupplier,
@@ -76,9 +78,9 @@ public class StdioTaskManager {
     private void handleCliNotFound() {
         SwingUtilities.invokeLater(() -> {
             statusUpdater.accept("Error: kalix not found");
-            JOptionPane.showMessageDialog(parentFrame,
+            DialogUtils.showError(parentFrame,
                 "Kalix not found. Please fix this in File > Preferences > Kalix.",
-                "Kalix Not Found", JOptionPane.ERROR_MESSAGE);
+                "Kalix Not Found");
         });
     }
     
@@ -87,28 +89,29 @@ public class StdioTaskManager {
      * This creates a persistent session and starts the Run Model program.
      * 
      * @param modelText the model definition from the editor
-     * @return CompletableFuture with the session key
+     * @return CompletableFuture with the session key; a failure has already been reported
+     *         to the user by the time it completes
      */
     public CompletableFuture<String> runModelFromMemory(String modelText) {
         // Dedicated thread pool instead of the common ForkJoinPool: this lambda blocks
         // on sessionFuture.get(), and blocking common-pool workers starves every other
         // common-pool user in the JVM.
         return CompletableFuture.supplyAsync(() -> {
+            // Get current working directory if available
+            File workingDir = workingDirectorySupplier.get();
+            String currentFolder = workingDir != null ? workingDir.getAbsolutePath() : null;
+
+            File projectDir = projectDirectorySupplier != null ? projectDirectorySupplier.get() : null;
+            String projectFolder = projectDir != null ? projectDir.getAbsolutePath() : null;
+
+            // Locate kalix using preferences, checking current folder first
+            Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCliWithPreferences(currentFolder, projectFolder);
+            if (cliLocation.isEmpty()) {
+                handleCliNotFound(); // reports it: status line and a logged dialog
+                throw new IllegalStateException("kalix not found");
+            }
+
             try {
-                // Get current working directory if available
-                File workingDir = workingDirectorySupplier.get();
-                String currentFolder = workingDir != null ? workingDir.getAbsolutePath() : null;
-
-                File projectDir = projectDirectorySupplier != null ? projectDirectorySupplier.get() : null;
-                String projectFolder = projectDir != null ? projectDir.getAbsolutePath() : null;
-
-                // Locate kalix using preferences, checking current folder first
-                Optional<KalixCliLocator.CliLocation> cliLocation = KalixCliLocator.findKalixCliWithPreferences(currentFolder, projectFolder);
-                if (cliLocation.isEmpty()) {
-                    handleCliNotFound();
-                    throw new RuntimeException("kalix not found");
-                }
-
                 // Configure session for model run (let SessionManager auto-generate unique ID)
                 SessionManager.SessionConfig config = new SessionManager.SessionConfig("new-session");
 
@@ -142,6 +145,9 @@ public class StdioTaskManager {
                 return sessionKey;
                 
             } catch (Exception e) {
+                // ExecutionException's own message is its cause's class name; the cause says why
+                Throwable why = e instanceof ExecutionException && e.getCause() != null ? e.getCause() : e;
+                statusUpdater.error("Error starting model session: " + why.getMessage());
                 throw new RuntimeException("Failed to run model from memory", e);
             }
         }, processExecutor.getExecutorService());
@@ -374,7 +380,7 @@ public class StdioTaskManager {
                     
                 case ERROR:
                     progressBar.hideProgress();
-                    statusUpdater.accept("Session error: " + event.getMessage());
+                    statusUpdater.error("Session error: " + event.getMessage());
                     break;
                     
                 case TERMINATED:

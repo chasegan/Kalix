@@ -5,6 +5,7 @@ import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.preferences.ui.PreferencePage;
+import com.kalix.ide.utils.DialogUtils;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -329,15 +330,13 @@ public class LinterPreferencesPanel extends JPanel
                     "Export Successful",
                     JOptionPane.INFORMATION_MESSAGE);
             } catch (IOException ex) {
-                JOptionPane.showMessageDialog(this,
+                DialogUtils.showError(this,
                     "Error exporting schema: " + ex.getMessage(),
-                    "Export Error",
-                    JOptionPane.ERROR_MESSAGE);
+                    "Export Error");
             } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this,
+                DialogUtils.showError(this,
                     "Error reading default schema: " + ex.getMessage(),
-                    "Export Error",
-                    JOptionPane.ERROR_MESSAGE);
+                    "Export Error");
             }
         }
     }

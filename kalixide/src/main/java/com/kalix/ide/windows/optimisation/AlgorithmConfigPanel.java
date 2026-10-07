@@ -3,13 +3,14 @@ package com.kalix.ide.windows.optimisation;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
+import com.kalix.ide.utils.DialogUtils;
+
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
@@ -200,34 +201,30 @@ public class AlgorithmConfigPanel extends JPanel {
         try {
             int termEvals = Integer.parseInt(getTerminationEvaluations());
             if (termEvals <= 0) {
-                JOptionPane.showMessageDialog(this,
+                DialogUtils.showError(this,
                     "Evaluations must be a positive integer",
-                    "Validation Error",
-                    JOptionPane.ERROR_MESSAGE);
+                    "Validation Error");
                 return false;
             }
         } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(this,
+            DialogUtils.showError(this,
                 "Evaluations must be a valid integer",
-                "Validation Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Validation Error");
             return false;
         }
 
         try {
             int t = Integer.parseInt(threads);
             if (t <= 0) {
-                JOptionPane.showMessageDialog(this,
+                DialogUtils.showError(this,
                     "Threads (in Settings) must be a positive integer",
-                    "Validation Error",
-                    JOptionPane.ERROR_MESSAGE);
+                    "Validation Error");
                 return false;
             }
         } catch (NumberFormatException e) {
-            JOptionPane.showMessageDialog(this,
+            DialogUtils.showError(this,
                 "Threads (in Settings) must be a valid integer",
-                "Validation Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Validation Error");
             return false;
         }
         return true;

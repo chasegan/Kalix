@@ -206,9 +206,10 @@ public abstract class KalixDocument implements OpenModel {
     }
 
     /**
-     * Whether this document's text can be edited and saved. False only for a
-     * data document above the editable gate — its tab is a viewer, and save
-     * paths must refuse rather than write an empty buffer over the file.
+     * Whether this document's text can be edited and saved. False for a data
+     * document above the editable gate — its tab is a viewer, and save paths
+     * must refuse rather than write an empty buffer over the file — and for the
+     * error log, which the IDE fills itself.
      */
     public boolean isEditable() {
         return true;

@@ -5,13 +5,13 @@ import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.model.NodeInsertionPoint;
 import com.kalix.ide.model.SectionSplice;
 import com.kalix.ide.model.NodeSectionLocator;
+import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.EngineNames;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.swing.JFrame;
-import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -992,12 +992,10 @@ public class CommandExecutor {
      */
     private void showError(String message) {
         SwingUtilities.invokeLater(() -> {
-            JOptionPane.showMessageDialog(
+            DialogUtils.showError(
                 parentFrame,
                 message,
-                "Error",
-                JOptionPane.ERROR_MESSAGE
-            );
+                "Error");
         });
     }
 

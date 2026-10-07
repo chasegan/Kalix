@@ -42,6 +42,7 @@ import com.kalix.ide.linter.LinterManager;
 import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.linter.factories.LinterComponentFactory;
 import com.kalix.ide.themes.SyntaxTheme;
+import com.kalix.ide.utils.DialogUtils;
 
 /**
  * Simplified enhanced text editor component with professional code editor features.
@@ -705,12 +706,10 @@ public class EnhancedTextEditor extends JPanel {
         ParsedModel parsedModel = commandModelSupplier.get();
         if (parsedModel == null) {
             logger.error("Failed to parse model for rename");
-            javax.swing.JOptionPane.showMessageDialog(
+            DialogUtils.showError(
                 commandParentFrame,
                 "Failed to parse model",
-                "Error",
-                javax.swing.JOptionPane.ERROR_MESSAGE
-            );
+                "Error");
             return false;
         }
 
@@ -1190,6 +1189,22 @@ public class EnhancedTextEditor extends JPanel {
 
         } catch (Exception ex) {
             logger.error("Error normalizing line endings", ex);
+        }
+    }
+
+    /**
+     * Appends text at the end as a programmatic change, like {@link #setText}: the buffer
+     * stays clean and the appended text cannot be undone. For buffers the IDE fills itself
+     * (the error log).
+     */
+    public void appendText(String text) {
+        programmaticUpdate = true;
+        try {
+            textArea.append(text);
+            setDirty(false); // re-baseline: the appended text is part of the clean content
+            textArea.discardAllEdits();
+        } finally {
+            programmaticUpdate = false;
         }
     }
 

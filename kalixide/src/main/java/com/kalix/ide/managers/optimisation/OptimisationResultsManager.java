@@ -5,6 +5,8 @@ import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,7 +40,7 @@ public class OptimisationResultsManager {
     private final KalixIniTextArea optimisedModelEditor;
 
     private Supplier<File> workingDirectorySupplier;
-    private Consumer<String> statusUpdater;
+    private StatusReporter statusUpdater;
 
     /**
      * Creates a new OptimisationResultsManager.
@@ -197,10 +199,9 @@ public class OptimisationResultsManager {
                 }
                 logger.info("Saved results to {}", selectedFile.getAbsolutePath());
             } catch (IOException ex) {
-                JOptionPane.showMessageDialog(parentFrame,
+                DialogUtils.showError(parentFrame,
                     "Failed to save results: " + ex.getMessage(),
-                    "Save Error",
-                    JOptionPane.ERROR_MESSAGE);
+                    "Save Error");
                 logger.error("Failed to save results", ex);
             }
         }
@@ -247,7 +248,7 @@ public class OptimisationResultsManager {
         this.workingDirectorySupplier = supplier;
     }
 
-    public void setStatusUpdater(Consumer<String> updater) {
+    public void setStatusUpdater(StatusReporter updater) {
         this.statusUpdater = updater;
     }
 

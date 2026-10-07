@@ -26,6 +26,7 @@ import com.kalix.ide.managers.OutputsTreeBuilder;
 import com.kalix.ide.managers.TimeSeriesRequestManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
@@ -82,7 +83,7 @@ class DerivedSeriesController {
     private final Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources;
     private final LastRunTracker lastRunTracker;
     private final SeriesFetchCoordinator fetchCoordinator;
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
 
     private final DerivedSeriesStore derivedSeries = new DerivedSeriesStore();
     // The Last generation whose derived series are fully recomputed.
@@ -101,7 +102,7 @@ class DerivedSeriesController {
         Map<DatasetSeries, DatasetSeriesSource> datasetSeriesSources,
         LastRunTracker lastRunTracker,
         SeriesFetchCoordinator fetchCoordinator,
-        Consumer<String> statusUpdater
+        StatusReporter statusUpdater
     ) {
         this.window = window;
         this.sourceTree = sourceTree;

@@ -7,6 +7,7 @@ import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
 
@@ -61,7 +62,7 @@ public class RunContextMenuManager {
     private final JCheckboxTree outputsTree;
     private final DefaultTreeModel runTreeModel;
     private final StdioTaskManager stdioTaskManager;
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
     private final Supplier<File> baseDirectorySupplier;
     private final Supplier<String> editorTextSupplier;
     private final Map<String, String> sessionToRunName;
@@ -126,7 +127,7 @@ public class RunContextMenuManager {
             JCheckboxTree outputsTree,
             DefaultTreeModel runTreeModel,
             StdioTaskManager stdioTaskManager,
-            Consumer<String> statusUpdater,
+            StatusReporter statusUpdater,
             Supplier<File> baseDirectorySupplier,
             Supplier<String> editorTextSupplier,
             Map<String, String> sessionToRunName,
@@ -505,12 +506,10 @@ public class RunContextMenuManager {
 
             // Get the reference model text from the main editor
             if (editorTextSupplier == null) {
-                JOptionPane.showMessageDialog(
+                DialogUtils.showError(
                     parentFrame,
                     "Cannot access main editor text.",
-                    "Editor Not Available",
-                    JOptionPane.ERROR_MESSAGE
-                );
+                    "Editor Not Available");
                 return;
             }
 
@@ -558,7 +557,7 @@ public class RunContextMenuManager {
         stdioTaskManager.stopSession(sessionKey).exceptionally(throwable -> {
             SwingUtilities.invokeLater(() -> {
                 if (statusUpdater != null) {
-                    statusUpdater.accept("Failed to stop run: " + throwable.getMessage());
+                    statusUpdater.error("Failed to stop run: " + throwable.getMessage());
                 }
             });
             return null;
@@ -713,7 +712,7 @@ public class RunContextMenuManager {
             String statusText = status == RunStatus.ERROR ? "failed" :
                               status == RunStatus.RUNNING ? "still running" : "not completed";
             if (statusUpdater != null) {
-                statusUpdater.accept("Cannot save results: run " + runInfo.getRunName() + " has " + statusText);
+                statusUpdater.error("Cannot save results: run " + runInfo.getRunName() + " has " + statusText);
             }
             return;
         }

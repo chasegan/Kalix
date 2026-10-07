@@ -14,6 +14,7 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.utils.DialogUtils;
 
 import javax.swing.JButton;
 import javax.swing.JDialog;
@@ -177,10 +178,9 @@ public class FlowVizDataManager {
         } else if (fileName.endsWith(".pxt")) {
             loadPixieFile(file);
         } else {
-            JOptionPane.showMessageDialog(parentFrame,
+            DialogUtils.showError(parentFrame,
                 "Unsupported file type: " + file.getName() + "\nSupported types: .csv, .csv.zip, .res.csv, .pxt",
-                "Load Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Load Error");
         }
     }
 
@@ -221,9 +221,9 @@ public class FlowVizDataManager {
                         try {
                             loadFile(file);
                         } catch (Exception e) {
-                            JOptionPane.showMessageDialog(parentFrame,
+                            DialogUtils.showError(parentFrame,
                                 "Failed to load " + file.getName() + ": " + e.getMessage(),
-                                "Load Error", JOptionPane.ERROR_MESSAGE);
+                                "Load Error");
                         }
                     });
 
@@ -303,10 +303,9 @@ public class FlowVizDataManager {
                     TimeSeriesCsvImporter.CsvImportResult importResult = get();
                     handleImportResult(csvFile, importResult);
                 } catch (Exception e) {
-                    JOptionPane.showMessageDialog(parentFrame,
+                    DialogUtils.showError(parentFrame,
                         "Error loading CSV file:\n" + e.getMessage(),
-                        "Load Error",
-                        JOptionPane.ERROR_MESSAGE);
+                        "Load Error");
                 }
             }
         };
@@ -358,10 +357,9 @@ public class FlowVizDataManager {
                 try {
                     handleResCsvImportResult(resCsvFile, get());
                 } catch (Exception e) {
-                    JOptionPane.showMessageDialog(parentFrame,
+                    DialogUtils.showError(parentFrame,
                         "Error loading res.csv file:\n" + e.getMessage(),
-                        "Load Error",
-                        JOptionPane.ERROR_MESSAGE);
+                        "Load Error");
                 }
             }
         };
@@ -389,8 +387,8 @@ public class FlowVizDataManager {
                 errorMessage.append("• ").append(error).append("\n");
             }
 
-            JOptionPane.showMessageDialog(parentFrame, errorMessage.toString(),
-                "res.csv Load Error", JOptionPane.ERROR_MESSAGE);
+            DialogUtils.showError(parentFrame, errorMessage.toString(),
+                "res.csv Load Error");
             return;
         }
 
@@ -434,10 +432,9 @@ public class FlowVizDataManager {
         File pxbFile = new File(basePath + ".pxb");
 
         if (!pxbFile.exists()) {
-            JOptionPane.showMessageDialog(parentFrame,
+            DialogUtils.showError(parentFrame,
                 "Binary data file not found: " + pxbFile.getName() + "\nBoth .pxt and .pxb files are required.",
-                "Load Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Load Error");
             return;
         }
 
@@ -519,10 +516,9 @@ public class FlowVizDataManager {
                     }
                     handlePixieImportResult(pixieFile, load.series());
                 } catch (Exception e) {
-                    JOptionPane.showMessageDialog(parentFrame,
+                    DialogUtils.showError(parentFrame,
                         "Error loading Pixie file:\n" + e.getMessage(),
-                        "Load Error",
-                        JOptionPane.ERROR_MESSAGE);
+                        "Load Error");
                 }
             }
         };
@@ -585,8 +581,8 @@ public class FlowVizDataManager {
                 errorMessage.append("• ").append(error).append("\n");
             }
 
-            JOptionPane.showMessageDialog(parentFrame, errorMessage.toString(),
-                "CSV Load Error", JOptionPane.ERROR_MESSAGE);
+            DialogUtils.showError(parentFrame, errorMessage.toString(),
+                "CSV Load Error");
             return;
         }
 
@@ -730,10 +726,9 @@ public class FlowVizDataManager {
                         dtde.dropComplete(true);
                     } catch (Exception e) {
                         dtde.dropComplete(false);
-                        JOptionPane.showMessageDialog(parentFrame,
+                        DialogUtils.showError(parentFrame,
                             "Failed to load dropped files: " + e.getMessage(),
-                            "Drop Error",
-                            JOptionPane.ERROR_MESSAGE);
+                            "Drop Error");
                     }
                 } else {
                     dtde.rejectDrop();

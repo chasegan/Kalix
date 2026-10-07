@@ -1,5 +1,7 @@
 package com.kalix.ide.filedialog;
 
+import com.kalix.ide.utils.DialogUtils;
+
 import javax.swing.JOptionPane;
 import java.awt.Component;
 import java.io.IOException;
@@ -83,9 +85,9 @@ final class EntryOperations {
                 Files.delete(entry.path());
             }
         } catch (IOException ex) {
-            JOptionPane.showMessageDialog(parent,
+            DialogUtils.showError(parent,
                 "Failed to delete \"" + entry.name() + "\": " + ex.getMessage(),
-                "Delete Failed", JOptionPane.ERROR_MESSAGE);
+                "Delete Failed");
         }
         return true; // something may have changed even on partial failure; refresh regardless
     }

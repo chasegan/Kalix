@@ -1,5 +1,7 @@
 package com.kalix.ide.cli;
 
+import com.kalix.ide.utils.StatusReporter;
+
 import java.util.function.Consumer;
 
 /**
@@ -14,7 +16,7 @@ public abstract class AbstractSessionProgram {
     // Common fields shared by all programs
     protected final String sessionKey;
     protected final SessionManager sessionManager;
-    protected final Consumer<String> statusUpdater;
+    protected final StatusReporter statusUpdater;
     protected final Consumer<ProgressParser.ProgressInfo> progressCallback;
 
     /**
@@ -27,7 +29,7 @@ public abstract class AbstractSessionProgram {
      */
     protected AbstractSessionProgram(String sessionKey,
                                      SessionManager sessionManager,
-                                     Consumer<String> statusUpdater,
+                                     StatusReporter statusUpdater,
                                      Consumer<ProgressParser.ProgressInfo> progressCallback) {
         this.sessionKey = sessionKey;
         this.sessionManager = sessionManager;
@@ -128,7 +130,7 @@ public abstract class AbstractSessionProgram {
             })
             .exceptionally(throwable -> {
                 if (errorMessage != null) {
-                    statusUpdater.accept(errorMessage + ": " + throwable.getMessage());
+                    statusUpdater.error(errorMessage + ": " + throwable.getMessage());
                 }
                 return null;
             });

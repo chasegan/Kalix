@@ -19,3 +19,6 @@ pip: "pip install kalix==0.4.7"
     - The dead storage fills before the reach flows, and drains by evaporation while it doesn't. A reach starts with its dead storage full.
     - New results `evap`, `area` and `evap_vol`, the same names as on a storage node.
     - Orders pass up through a reach unchanged: they are not raised to cover the reach's loss. The [ordering page](https://kalix.org/docs/ordering/#how-do-routing-nodes-affect-orders) shows two ways to allow for it.
+- New! The IDE keeps an error log for the session. Once an error has been shown, in the status bar or in an error dialog, an info icon appears at the left of the status bar; click it to open the log as a tab.
+    - Each error is one timestamped line, and an open log tab updates as new errors arrive.
+    - The log is read-only and lasts for the session: copy what you need out of it. Right-click the icon to clear it.

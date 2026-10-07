@@ -4,6 +4,7 @@ import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.icons.MenuIcons;
+import com.kalix.ide.utils.DialogUtils;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
@@ -602,10 +603,9 @@ public class TableViewWindow extends JDialog {
             }
 
         } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this,
+            DialogUtils.showError(this,
                 "Invalid numeric values entered",
-                "Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Error");
         }
     }
 
@@ -727,7 +727,7 @@ public class TableViewWindow extends JDialog {
             if (errorCount > 5) {
                 message += "... and " + (errorCount - 5) + " more errors";
             }
-            JOptionPane.showMessageDialog(this, message, "Validation Errors", JOptionPane.ERROR_MESSAGE);
+            DialogUtils.showError(this, message, "Validation Errors");
             return false;
         }
 

@@ -5,6 +5,7 @@ import com.kalix.ide.components.KalixPlainTextArea;
 import com.kalix.ide.components.KalixTextArea;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.themes.SyntaxTheme;
+import com.kalix.ide.utils.DialogUtils;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -193,9 +194,9 @@ public class MinimalEditorWindow extends JFrame {
             currentFile = file;
             setTitle("Kalix - Text Editor - " + file.getName());
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(this,
+            DialogUtils.showError(this,
                 "Failed to load file: " + e.getMessage(),
-                "Load Error", JOptionPane.ERROR_MESSAGE);
+                "Load Error");
         }
     }
 
@@ -208,9 +209,9 @@ public class MinimalEditorWindow extends JFrame {
                 "File saved successfully",
                 "Save Successful", JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(this,
+            DialogUtils.showError(this,
                 "Failed to save file: " + e.getMessage(),
-                "Save Error", JOptionPane.ERROR_MESSAGE);
+                "Save Error");
         }
     }
 

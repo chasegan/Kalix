@@ -11,6 +11,8 @@ import com.kalix.ide.utils.JsonUtils;
 import com.kalix.ide.utils.ThemeUtils;
 
 import com.kalix.ide.components.KalixPlainTextArea;
+import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -59,7 +61,7 @@ public class SessionManagerWindow extends JFrame {
     private static SessionManagerWindow instance;
 
     private final StdioTaskManager stdioTaskManager;
-    private final Consumer<String> statusUpdater;
+    private final StatusReporter statusUpdater;
 
     // UI Components
     private JTree sessionTree;
@@ -97,7 +99,7 @@ public class SessionManagerWindow extends JFrame {
     /**
      * Private constructor for singleton pattern.
      */
-    private SessionManagerWindow(JFrame parentFrame, StdioTaskManager stdioTaskManager, Consumer<String> statusUpdater) {
+    private SessionManagerWindow(JFrame parentFrame, StdioTaskManager stdioTaskManager, StatusReporter statusUpdater) {
         this.stdioTaskManager = stdioTaskManager;
         this.statusUpdater = statusUpdater;
 
@@ -111,7 +113,7 @@ public class SessionManagerWindow extends JFrame {
     /**
      * Shows the Session Manager window using singleton pattern.
      */
-    public static void showSessionManagerWindow(JFrame parentFrame, StdioTaskManager stdioTaskManager, Consumer<String> statusUpdater) {
+    public static void showSessionManagerWindow(JFrame parentFrame, StdioTaskManager stdioTaskManager, StatusReporter statusUpdater) {
         if (instance == null) {
             instance = new SessionManagerWindow(parentFrame, stdioTaskManager, statusUpdater);
         }
@@ -131,7 +133,7 @@ public class SessionManagerWindow extends JFrame {
      * @param sessionKey the session key to select
      */
     public static void showSessionManagerWindow(JFrame parentFrame, StdioTaskManager stdioTaskManager,
-                                                 Consumer<String> statusUpdater, String sessionKey) {
+                                                 StatusReporter statusUpdater, String sessionKey) {
         // First show the window normally
         showSessionManagerWindow(parentFrame, stdioTaskManager, statusUpdater);
 
@@ -737,10 +739,9 @@ public class SessionManagerWindow extends JFrame {
                 statusUpdater.accept("Ping command sent to session");
             }
         } catch (Exception e) {
-            JOptionPane.showMessageDialog(this,
+            DialogUtils.showError(this,
                 "Failed to send ping command: " + e.getMessage(),
-                "Error",
-                JOptionPane.ERROR_MESSAGE);
+                "Error");
         }
     }
 
@@ -762,7 +763,7 @@ public class SessionManagerWindow extends JFrame {
                         if (success) {
                             statusUpdater.accept("Foreign process terminated");
                         } else {
-                            statusUpdater.accept("Failed to terminate foreign process");
+                            statusUpdater.error("Failed to terminate foreign process");
                             JOptionPane.showMessageDialog(this,
                                 "Failed to terminate foreign process. It may have already exited or you may lack permissions.",
                                 "Termination Failed",
@@ -773,10 +774,9 @@ public class SessionManagerWindow extends JFrame {
                     .exceptionally(throwable -> {
                         SwingUtilities.invokeLater(() -> {
                             statusUpdater.accept("Error terminating foreign process: " + throwable.getMessage());
-                            JOptionPane.showMessageDialog(this,
+                            DialogUtils.showError(this,
                                 "Error terminating foreign process: " + throwable.getMessage(),
-                                "Termination Error",
-                                JOptionPane.ERROR_MESSAGE);
+                                "Termination Error");
                         });
                         return null;
                     });
@@ -808,10 +808,9 @@ public class SessionManagerWindow extends JFrame {
                 .exceptionally(throwable -> {
                     SwingUtilities.invokeLater(() -> {
                         statusUpdater.accept("Failed to terminate session: " + throwable.getMessage());
-                        JOptionPane.showMessageDialog(this,
+                        DialogUtils.showError(this,
                             "Failed to terminate session: " + throwable.getMessage(),
-                            "Termination Error",
-                            JOptionPane.ERROR_MESSAGE);
+                            "Termination Error");
                     });
                     return null;
                 });

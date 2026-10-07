@@ -2,13 +2,22 @@ package com.kalix.ide.utils;
 
 import javax.swing.JOptionPane;
 import java.awt.Component;
+import java.util.function.Consumer;
 
 /**
  * Utility class for creating and displaying common dialog types.
  * Centralizes dialog creation to ensure consistent look and behavior.
  */
 public class DialogUtils {
-    
+
+    /** Where error-dialog messages are also recorded (the IDE's error log); null until set. */
+    private static volatile Consumer<String> errorSink;
+
+    /** Sets the sink that every {@link #showError} message is also recorded in. */
+    public static void setErrorSink(Consumer<String> sink) {
+        errorSink = sink;
+    }
+
     /**
      * Shows an error dialog with a standardized title and icon.
      * 
@@ -20,13 +29,17 @@ public class DialogUtils {
     }
     
     /**
-     * Shows an error dialog with a custom title.
+     * Shows an error dialog with a custom title, and records the message in the error sink.
      * 
      * @param parent the parent component for the dialog
      * @param message the error message to display
      * @param title the dialog title
      */
     public static void showError(Component parent, String message, String title) {
+        Consumer<String> sink = errorSink;
+        if (sink != null) {
+            sink.accept(message);
+        }
         JOptionPane.showMessageDialog(parent, message, title, JOptionPane.ERROR_MESSAGE);
     }
     

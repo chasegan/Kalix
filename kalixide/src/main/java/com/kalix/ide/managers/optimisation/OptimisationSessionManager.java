@@ -6,6 +6,7 @@ import com.kalix.ide.cli.ProgressParser;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.managers.SessionTreeBookkeeping;
 import com.kalix.ide.managers.StdioTaskManager;
+import com.kalix.ide.utils.StatusReporter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,7 +52,7 @@ public class OptimisationSessionManager {
     private final Map<String, OptimisationResult> optimisationResults = new HashMap<>();
 
     // Callbacks
-    private Consumer<String> statusUpdater;
+    private StatusReporter statusUpdater;
     private Consumer<OptimisationInfo> onOptimisationCreated;
     private Consumer<String> onSessionStarted;
     private Consumer<String> onSessionCompleted;
@@ -198,7 +199,7 @@ public class OptimisationSessionManager {
                     OptimisationProgram program = new OptimisationProgram(
                         sessionKey,
                         stdioTaskManager.getSessionManager(),
-                        statusUpdater != null ? msg -> statusUpdater.accept(msg) : msg -> {},
+                        statusUpdater != null ? statusUpdater : StatusReporter.statusOnly(msg -> {}),
                         progressCallback != null ? progress -> progressCallback.accept(sessionKey, progress) : progress -> {},
                         parametersCallback != null ? params -> parametersCallback.accept(sessionKey, params) : params -> {},
                         resultCallback != null ? result -> resultCallback.accept(sessionKey, result) : result -> {}
@@ -559,14 +560,18 @@ public class OptimisationSessionManager {
         }
 
         if (statusUpdater != null) {
-            statusUpdater.accept("Error: " + errorMessage);
+            if (onErrorOccurred != null) {
+                statusUpdater.accept("Error: " + errorMessage); // the callback's dialog logs it
+            } else {
+                statusUpdater.error("Error: " + errorMessage);
+            }
         }
 
         logger.error("Optimisation error: {}", errorMessage);
     }
 
     // Setters for callbacks
-    public void setStatusUpdater(Consumer<String> statusUpdater) {
+    public void setStatusUpdater(StatusReporter statusUpdater) {
         this.statusUpdater = statusUpdater;
     }
 

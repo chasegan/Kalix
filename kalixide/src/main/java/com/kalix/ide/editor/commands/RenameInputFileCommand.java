@@ -1,6 +1,7 @@
 package com.kalix.ide.editor.commands;
 
 import com.kalix.ide.linter.parsing.INIModelParser;
+import com.kalix.ide.utils.DialogUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,12 +66,10 @@ public class RenameInputFileCommand implements EditorCommand {
         INIModelParser.ParsedModel parsedModel = modelSupplier.get();
         if (parsedModel == null) {
             logger.error("Failed to parse model");
-            JOptionPane.showMessageDialog(
+            DialogUtils.showError(
                 parentFrame,
                 "Failed to parse model",
-                "Error",
-                JOptionPane.ERROR_MESSAGE
-            );
+                "Error");
             return;
         }
 

@@ -1,5 +1,7 @@
 package com.kalix.ide.cli;
 
+import com.kalix.ide.utils.StatusReporter;
+
 import java.util.function.Consumer;
 
 /**
@@ -43,7 +45,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
      * @param resultCallback callback for final result message
      */
     public OptimisationProgram(String sessionKey, SessionManager sessionManager,
-                               Consumer<String> statusUpdater,
+                               StatusReporter statusUpdater,
                                Consumer<ProgressParser.ProgressInfo> progressCallback,
                                Consumer<java.util.List<String>> parametersCallback,
                                Consumer<String> resultCallback) {
@@ -73,7 +75,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
      */
     public void runOptimisation(String configText) {
         if (currentState != ProgramState.READY) {
-            statusUpdater.accept("Cannot start optimisation: program not ready (current state: " + currentState + ")");
+            statusUpdater.error("Cannot start optimisation: program not ready (current state: " + currentState + ")");
             return;
         }
 
@@ -152,7 +154,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
                 // Unexpected error during initialization
                 currentState = ProgramState.FAILED;
                 String errorMsg = extractErrorMessage(message);
-                statusUpdater.accept("Failed to initialize: " + errorMsg);
+                statusUpdater.error("Failed to initialize: " + errorMsg);
                 return true;
 
             default:
@@ -179,7 +181,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
             })
             .exceptionally(throwable -> {
                 currentState = ProgramState.FAILED;
-                statusUpdater.accept("Failed to send model: " + throwable.getMessage());
+                statusUpdater.error("Failed to send model: " + throwable.getMessage());
                 return null;
             });
     }
@@ -214,7 +216,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
                 // Model loading failed
                 currentState = ProgramState.FAILED;
                 String errorMsg = extractErrorMessage(message);
-                statusUpdater.accept("Model loading failed: " + errorMsg);
+                statusUpdater.error("Model loading failed: " + errorMsg);
                 return true;
 
             default:
@@ -241,7 +243,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
                 // Unexpected error
                 currentState = ProgramState.FAILED;
                 String errorMsg = extractErrorMessage(message);
-                statusUpdater.accept("Error after model load: " + errorMsg);
+                statusUpdater.error("Error after model load: " + errorMsg);
                 return true;
 
             default:
@@ -407,7 +409,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
                 // Optimisation failed
                 currentState = ProgramState.FAILED;
                 String errorMsg = extractErrorMessage(message);
-                statusUpdater.accept("Optimisation failed: " + errorMsg);
+                statusUpdater.error("Optimisation failed: " + errorMsg);
                 if (resultCallback != null) {
                     resultCallback.accept("ERROR: " + errorMsg);
                 }

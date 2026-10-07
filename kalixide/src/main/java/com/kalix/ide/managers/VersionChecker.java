@@ -3,11 +3,11 @@ package com.kalix.ide.managers;
 import com.kalix.ide.cli.KalixCliLocator;
 import com.kalix.ide.cli.ProcessExecutor;
 import com.kalix.ide.cli.StdioLogger;
+import com.kalix.ide.utils.StatusReporter;
 
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
 
 /**
  * Manages CLI version checking functionality.
@@ -15,7 +15,7 @@ import java.util.function.Consumer;
  */
 public class VersionChecker {
     
-    private final Consumer<String> statusUpdateCallback;
+    private final StatusReporter statusUpdateCallback;
     private final ProcessExecutor processExecutor;
     private final StdioLogger logger;
     
@@ -54,7 +54,7 @@ public class VersionChecker {
      * 
      * @param statusUpdateCallback Callback for status updates
      */
-    public VersionChecker(Consumer<String> statusUpdateCallback) {
+    public VersionChecker(StatusReporter statusUpdateCallback) {
         this.statusUpdateCallback = statusUpdateCallback;
         this.processExecutor = new ProcessExecutor();
         this.logger = StdioLogger.getInstance();
@@ -142,7 +142,7 @@ public class VersionChecker {
         if (throwable != null) {
             String errorMsg = "Version check failed: " + throwable.getMessage();
             logger.error(errorMsg, throwable);
-            statusUpdateCallback.accept(errorMsg);
+            statusUpdateCallback.error(errorMsg);
             return;
         }
         
@@ -155,7 +155,7 @@ public class VersionChecker {
                 "Version check failed: Unknown error";
             
             logger.error(errorMsg);
-            statusUpdateCallback.accept(errorMsg);
+            statusUpdateCallback.error(errorMsg);
         }
     }
 }

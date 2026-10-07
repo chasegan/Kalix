@@ -6,6 +6,8 @@ import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.document.WorkspaceView;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.utils.DialogUtils;
+import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.windows.optimisation.OptimisationGuiBuilder;
 import com.kalix.ide.windows.optimisation.OptimisationUIConstants;
 import org.fife.ui.rtextarea.RTextScrollPane;
@@ -34,7 +36,7 @@ public class OptimisationConfigManager {
     private final OptimisationGuiBuilder guiBuilder;
     private final RTextScrollPane configScrollPane;
 
-    private Consumer<String> statusUpdater;
+    private StatusReporter statusUpdater;
     private Consumer<String> configStatusCallback;
     private Runnable onIniManuallyEdited;
     private boolean isUpdatingEditor = false;
@@ -257,10 +259,9 @@ public class OptimisationConfigManager {
                 }
                 logger.info("Loaded configuration from {}", selectedFile.getAbsolutePath());
             } catch (IOException ex) {
-                JOptionPane.showMessageDialog(parent,
+                DialogUtils.showError(parent,
                     "Failed to load configuration: " + ex.getMessage(),
-                    "Load Error",
-                    JOptionPane.ERROR_MESSAGE);
+                    "Load Error");
                 logger.error("Failed to load configuration from {}", selectedFile, ex);
             }
         }
@@ -300,10 +301,9 @@ public class OptimisationConfigManager {
                 }
                 logger.info("Saved configuration to {}", selectedFile.getAbsolutePath());
             } catch (IOException ex) {
-                JOptionPane.showMessageDialog(parent,
+                DialogUtils.showError(parent,
                     "Failed to save configuration: " + ex.getMessage(),
-                    "Save Error",
-                    JOptionPane.ERROR_MESSAGE);
+                    "Save Error");
                 logger.error("Failed to save configuration to {}", selectedFile, ex);
             }
         }
@@ -386,7 +386,7 @@ public class OptimisationConfigManager {
      *
      * @param statusUpdater The status updater
      */
-    public void setStatusUpdater(Consumer<String> statusUpdater) {
+    public void setStatusUpdater(StatusReporter statusUpdater) {
         this.statusUpdater = statusUpdater;
     }
 

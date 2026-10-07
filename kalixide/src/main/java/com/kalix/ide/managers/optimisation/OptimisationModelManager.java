@@ -3,6 +3,7 @@ package com.kalix.ide.managers.optimisation;
 import com.kalix.ide.document.DocumentLabels;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.document.ModelWriteBack;
+import com.kalix.ide.utils.StatusReporter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +21,7 @@ public class OptimisationModelManager {
     private static final Logger logger = LoggerFactory.getLogger(OptimisationModelManager.class);
 
     private final ModelWriteBack modelWriteBack;
-    private Consumer<String> statusUpdater;
+    private StatusReporter statusUpdater;
 
     /**
      * Creates a new OptimisationModelManager.
@@ -36,7 +37,7 @@ public class OptimisationModelManager {
      *
      * @param statusUpdater The status updater
      */
-    public void setStatusUpdater(Consumer<String> statusUpdater) {
+    public void setStatusUpdater(StatusReporter statusUpdater) {
         this.statusUpdater = statusUpdater;
     }
 
