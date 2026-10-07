@@ -179,6 +179,8 @@ pub struct FieldNode {
 
     // Recorders
     recorder_idx_fallow_depletion: Option<usize>,
+    recorder_idx_soil_moisture: Option<usize>,
+    recorder_idx_soil_moisture_vol: Option<usize>,
     recorder_idx_usflow: Option<usize>,
     recorder_idx_et: Option<usize>,
     recorder_idx_et_vol: Option<usize>,
@@ -489,6 +491,8 @@ impl Node for FieldNode {
 
         // Initialize result recorders
         self.recorder_idx_fallow_depletion = recorder(data_cache, &self.name, "fallow_depletion");
+        self.recorder_idx_soil_moisture = recorder(data_cache, &self.name, "soil_moisture");
+        self.recorder_idx_soil_moisture_vol = recorder(data_cache, &self.name, "soil_moisture_vol");
         self.recorder_idx_usflow = recorder(data_cache, &self.name, "usflow");
         self.recorder_idx_et = recorder(data_cache, &self.name, "et");
         self.recorder_idx_et_vol = recorder(data_cache, &self.name, "et_vol");
@@ -661,6 +665,25 @@ impl Node for FieldNode {
         }
         if let Some(idx) = self.recorder_idx_fallow_depletion {
             data_cache.add_value_at_index(idx, self.fallow_partition.root_depletion);
+        }
+        // The water the whole profile holds over the whole field, to the deepest roots: every
+        // partition's bucket and the layers below it, by area. The one state whose change is
+        // the field's water balance:
+        // soil_moisture_vol[t] - soil_moisture_vol[t-1] = rain_vol - intercepted x area + supply
+        //                                                - escape - et_vol - excess
+        if self.recorder_idx_soil_moisture.is_some() || self.recorder_idx_soil_moisture_vol.is_some() {
+            let mut water_vol = self.fallow_partition.water(&self.profile) * self.fallow_partition.area;
+            for slot in &self.slots {
+                if slot.in_ground {
+                    water_vol += slot.partition.water(&self.profile) * slot.partition.area;
+                }
+            }
+            if let Some(idx) = self.recorder_idx_soil_moisture {
+                data_cache.add_value_at_index(idx, water_vol / self.area);
+            }
+            if let Some(idx) = self.recorder_idx_soil_moisture_vol {
+                data_cache.add_value_at_index(idx, water_vol);
+            }
         }
         // The soil's terms in mm over the whole field, and their volumes as _vol, as on a storage
         if let Some(idx) = self.recorder_idx_et {
