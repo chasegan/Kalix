@@ -216,6 +216,17 @@ public class StdioTaskManager {
     }
 
     /**
+     * Requests the mass balance report for the model a session has run.
+     * The future completes off the EDT.
+     *
+     * @param sessionKey the session to ask
+     * @return CompletableFuture with the report text
+     */
+    public CompletableFuture<String> requestMassBalanceReport(String sessionKey) {
+        return sessionManager.requestMassBalanceReport(sessionKey);
+    }
+
+    /**
      * Detects foreign kalix/kalixcli processes running on the system that are not managed
      * by the current SessionManager. These may be managed by other KalixIDE instances.
      *
