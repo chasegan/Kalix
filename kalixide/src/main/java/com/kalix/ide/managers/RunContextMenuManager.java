@@ -649,8 +649,11 @@ public class RunContextMenuManager {
      */
     private void massBalanceDiffOrOK(Component parent, String runName, String report,
                                      String referenceReport) {
-        // Leading and trailing whitespace is ignored, as `kalix simulate -v` does.
-        if (report.strip().equals(referenceReport.strip())) {
+        // Ignores leading and trailing whitespace, as `kalix simulate -v` does, and line
+        // endings: a reference checked out on Windows has CRLF, the engine's report LF.
+        String thisText = normaliseReport(report);
+        String referenceText = normaliseReport(referenceReport);
+        if (thisText.equals(referenceText)) {
             JOptionPane.showMessageDialog(
                 parent,
                 "Mass balance validation successful: the run's report matches the reference.",
@@ -660,7 +663,11 @@ public class RunContextMenuManager {
             return;
         }
         String title = "Changes: " + runName + " vs Reference Mass Balance";
-        DiffWindow.ofPlainText(report, referenceReport, title, "Reference Mass Balance", runName);
+        DiffWindow.ofPlainText(thisText, referenceText, title, "Reference Mass Balance", runName);
+    }
+
+    private static String normaliseReport(String report) {
+        return report.replaceAll("\\R", "\n").strip();
     }
 
     /**
