@@ -16,8 +16,6 @@ import java.awt.Component;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -40,8 +38,6 @@ public class FileOperationsManager {
     private final Runnable fileChangedCallback;
     private final FileWatcherManager fileWatcherManager;
     private Supplier<File> projectDirectorySupplier;
-    /** Files opened with {@link #openTransientFile}: never recorded as recent or last-opened. */
-    private final Set<File> transientFiles = new HashSet<>();
 
     /**
      * Creates a new FileOperationsManager instance.
@@ -125,22 +121,6 @@ public class FileOperationsManager {
      * @param file The file to load
      */
     public void loadModelFile(File file) {
-        openFile(file, true);
-    }
-
-    /**
-     * Opens a file in a tab like {@link #loadModelFile(File)}, but without remembering it:
-     * it is not added to the recent files or the last-opened preference. For files the IDE
-     * itself owns and discards (the error log).
-     *
-     * @param file The file to open
-     */
-    public void openTransientFile(File file) {
-        transientFiles.add(file);
-        openFile(file, false);
-    }
-
-    private void openFile(File file, boolean remember) {
         // A .pxb is the binary half of a Pixie pair: open it via its .pxt
         // manifest when one exists (the engine names datasets by the .pxt; the
         // Python API's read_pixie accepts either half - same courtesy here).
@@ -188,10 +168,8 @@ public class FileOperationsManager {
         }
 
         // Add to recent files and remember as last opened for session restoration.
-        if (remember) {
-            addRecentFileCallback.accept(file.getAbsolutePath());
-            PreferenceKeys.LAST_OPENED_FILE.set(file.getAbsolutePath());
-        }
+        addRecentFileCallback.accept(file.getAbsolutePath());
+        PreferenceKeys.LAST_OPENED_FILE.set(file.getAbsolutePath());
 
         documentManager.setActiveDocument(document);
         document.parseModelFromText(true);
@@ -287,9 +265,7 @@ public class FileOperationsManager {
             document.refreshDataViewFromDisk();
 
             // Save as last opened file for session restoration
-            if (!transientFiles.contains(currentFile)) {
-                PreferenceKeys.LAST_OPENED_FILE.set(currentFile.getAbsolutePath());
-            }
+            PreferenceKeys.LAST_OPENED_FILE.set(currentFile.getAbsolutePath());
 
             String statusMessage = String.format("Saved model: %s", currentFile.getName());
             statusUpdateCallback.accept(statusMessage);

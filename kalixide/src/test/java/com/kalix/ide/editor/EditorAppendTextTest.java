@@ -6,11 +6,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** {@link EnhancedTextEditor#appendText} keeps a buffer in step with a file its caller writes. */
+/** {@link EnhancedTextEditor#appendText} fills a buffer on the IDE's behalf: clean, and not undoable. */
 class EditorAppendTextTest {
 
     @Test
-    void appendingToACleanBufferMovesTheCleanBaseline() {
+    void appendedTextIsPartOfTheCleanContent() {
         EnhancedTextEditor editor = new EnhancedTextEditor();
         try {
             editor.setText("one\n");
@@ -31,15 +31,14 @@ class EditorAppendTextTest {
     }
 
     @Test
-    void appendingToADirtyBufferLeavesItDirty() {
+    void appendedTextCannotBeUndone() {
         EnhancedTextEditor editor = new EnhancedTextEditor();
         try {
             editor.setText("one\n");
-            editor.getTextArea().append("edited");
             editor.appendText("two\n");
-
-            assertTrue(editor.isDirty());
-            assertEquals("one\neditedtwo\n", editor.getText());
+            assertFalse(editor.getTextArea().canUndo());
+            editor.getTextArea().undoLastAction();
+            assertEquals("one\ntwo\n", editor.getText());
         } finally {
             editor.dispose();
         }

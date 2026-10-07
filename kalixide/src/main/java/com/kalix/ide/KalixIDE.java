@@ -15,6 +15,7 @@ import com.kalix.ide.linter.LinterPreferencesPanel;
 import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.document.DocumentManager;
 import com.kalix.ide.document.DocumentWorkspaceView;
+import com.kalix.ide.document.ErrorLogDocument;
 import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.editor.EnhancedTextEditor;
@@ -87,6 +88,7 @@ import javax.swing.InputMap;
 import javax.swing.KeyStroke;
 import java.io.File;
 import java.util.List;
+import java.util.Optional;
 import java.util.prefs.Preferences;
 
 /**
@@ -130,7 +132,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     // Errors shown to the user are also kept in a per-session log, opened from the status bar
     private JButton statusLogButton;
-    private final ErrorLog errorLog = new ErrorLog(new File(System.getProperty("java.io.tmpdir")));
+    private final ErrorLog errorLog = new ErrorLog();
     /** Status-bar and error-log channels, handed to every component that reports to the user. */
     private final StatusReporter statusReporter = StatusReporter.of(this::updateStatus, this::updateStatusError);
 
@@ -415,8 +417,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         StringBuilder entries = new StringBuilder();
         for (KalixDocument doc : documentManager.getDocuments()) {
             File file = doc.getFile();
-            if (file == null || file.equals(errorLog.file())) {
-                continue; // untitled documents cannot be restored; the error log is per-session
+            if (file == null) {
+                continue; // untitled documents (and the error log) cannot be restored
             }
             if (entries.length() > 0) {
                 entries.append('\n');
@@ -424,8 +426,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             entries.append(doc.getCaretPosition()).append('\t').append(file.getAbsolutePath());
         }
         KalixDocument active = documentManager.getActiveDocument();
-        String activePath = (active != null && active.getFile() != null
-                && !active.getFile().equals(errorLog.file()))
+        String activePath = (active != null && active.getFile() != null)
             ? active.getFile().getAbsolutePath() : "";
 
         PreferenceKeys.UI_OPEN_DOCUMENTS.set(entries.toString());
@@ -1092,42 +1093,24 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * keeps an open log tab in step.
      */
     private void logError(String message) {
-        File existing = errorLog.file();
-        if (existing != null) {
-            fileWatcherManager.ignoreNextChange(existing); // our own write; the tab is updated below
-        }
-        String line = errorLog.append(message);
-        if (line != null) {
-            SwingUtilities.invokeLater(() -> onErrorLogged(line));
-        }
+        errorLog.append(message);
+        SwingUtilities.invokeLater(this::onErrorLogged);
     }
 
-    private void onErrorLogged(String line) {
+    private void onErrorLogged() {
         statusLogButton.setVisible(true);
-        KalixDocument logDocument = documentManager.findByFile(errorLog.file());
-        if (logDocument == null) {
-            return;
-        }
-        var editor = logDocument.getEditor();
-        if (logDocument.isDirty()) {
-            editor.appendText(line); // an edited tab is the user's; just add the new line
-            return;
-        }
-        // A clean tab is topped up from the file, not from this one line: the tab may have been
-        // opened with later lines already in it, and these callbacks can arrive out of order.
-        String shown = editor.getText();
-        String logged = errorLog.read();
-        if (logged != null && logged.startsWith(shown)) {
-            if (logged.length() > shown.length()) {
-                editor.appendText(logged.substring(shown.length()));
-            }
-            return;
-        }
-        // The file no longer matches the tab (deleted or replaced on disk): keep what the tab
-        // holds and mark it unsaved, as for any open file that goes missing.
-        editor.appendText(line);
-        logDocument.setDirty(true);
-        documentTabPane.refreshTab(logDocument);
+        // The tab is topped up from the whole log, not from the one line just logged: it may
+        // have been opened with later lines already in it, and these callbacks can arrive
+        // out of order.
+        errorLogDocument().ifPresent(document -> document.showLog(errorLog.text()));
+    }
+
+    /** The open error log tab, if there is one. */
+    private Optional<ErrorLogDocument> errorLogDocument() {
+        return documentManager.getDocuments().stream()
+            .filter(ErrorLogDocument.class::isInstance)
+            .map(ErrorLogDocument.class::cast)
+            .findFirst();
     }
 
     /** The log button's icon, in the current theme's accent colour. */
@@ -1136,24 +1119,16 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             UIManager.getColor("Component.accentColor"));
     }
 
-    /** Opens the error log as a tab in the IDE (a raw text file, editable as needed). */
+    /** Opens the error log as a read-only tab, or brings the open one to the front. */
     private void openStatusLog() {
-        File logFile = errorLog.file();
-        if (logFile == null) {
-            return;
-        }
-        if (!logFile.exists() && documentManager.findByFile(logFile) == null) {
-            updateStatus("The error log is no longer on disk: " + logFile.getAbsolutePath());
-            return;
-        }
-        fileOperations.openTransientFile(logFile);
-        KalixDocument logDocument = documentManager.findByFile(logFile);
-        if (logDocument != null) {
-            // Error text runs long; wrap in this tab only (editors default to no wrapping)
-            var logArea = logDocument.getEditor().getTextArea();
-            logArea.setLineWrap(true);
-            logArea.setWrapStyleWord(true);
-        }
+        ErrorLogDocument document = errorLogDocument().orElseGet(() -> {
+            ErrorLogDocument created = new ErrorLogDocument();
+            configureDocument(created);
+            documentManager.addDocument(created);
+            return created;
+        });
+        document.showLog(errorLog.text());
+        documentManager.setActiveDocument(document);
     }
 
     /**

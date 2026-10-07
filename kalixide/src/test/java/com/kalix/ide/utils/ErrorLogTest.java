@@ -1,25 +1,16 @@
 package com.kalix.ide.utils;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ErrorLogTest {
-
-    @TempDir
-    File dir;
 
     @Test
     void formatsFullDateTimeWithMilliseconds() {
@@ -28,55 +19,36 @@ class ErrorLogTest {
     }
 
     @Test
-    void createsNoFileUntilFirstError() {
-        assertNull(new ErrorLog(dir).file());
-        assertEquals(0, dir.list().length);
+    void emptyUntilFirstError() {
+        assertEquals("", new ErrorLog().text());
     }
 
     @Test
-    void appendsLinesInOrderToOneFile() throws IOException {
-        ErrorLog log = new ErrorLog(dir);
-        String first = log.append("one");
-        String second = log.append("two");
-
-        assertNotNull(first);
-        assertEquals(first + second, Files.readString(log.file().toPath()));
-        assertEquals(1, dir.list().length);
-    }
-
-    @Test
-    void readReturnsEverythingLoggedSoFar() {
-        ErrorLog log = new ErrorLog(dir);
-        assertNull(log.read());
-
-        String first = log.append("one");
-        String second = log.append("two");
-        assertEquals(first + second, log.read());
-
-        assertTrue(log.file().delete());
-        assertNull(log.read());
-    }
-
-    @Test
-    void fileNameIsKalixLogWithSixCharacterUid() {
-        ErrorLog log = new ErrorLog(dir);
+    void appendsOneLinePerErrorInOrder() {
+        ErrorLog log = new ErrorLog();
         log.append("one");
-        assertTrue(log.file().getName().matches("kalix-log-[0-9a-f]{6}\\.txt"), log.file().getName());
+        log.append("two");
+
+        List<String> lines = log.text().lines().toList();
+        assertEquals(2, lines.size());
+        assertTrue(lines.get(0).endsWith("  one"), lines.get(0));
+        assertTrue(lines.get(1).endsWith("  two"), lines.get(1));
+        assertTrue(log.text().endsWith("\n"));
     }
 
     @Test
-    void multiLineMessageIsOneLine() throws IOException {
-        ErrorLog log = new ErrorLog(dir);
+    void multiLineMessageIsOneLine() {
+        ErrorLog log = new ErrorLog();
         log.append("Failed to launch:\n\nPlease check the command.\r\nCurrent command: x");
 
-        List<String> lines = Files.readAllLines(log.file().toPath());
+        List<String> lines = log.text().lines().toList();
         assertEquals(1, lines.size());
         assertTrue(lines.get(0).endsWith("Failed to launch: Please check the command. Current command: x"));
     }
 
     @Test
-    void concurrentFirstErrorsShareOneFile() throws Exception {
-        ErrorLog log = new ErrorLog(dir);
+    void concurrentErrorsAreAllKept() throws Exception {
+        ErrorLog log = new ErrorLog();
         int threads = 8;
         CountDownLatch start = new CountDownLatch(1);
         List<Thread> workers = new ArrayList<>();
@@ -98,14 +70,10 @@ class ErrorLogTest {
             t.join();
         }
 
-        assertEquals(1, dir.list().length);
-        assertEquals(threads, Files.readAllLines(log.file().toPath()).size());
-    }
-
-    @Test
-    void failedWriteReturnsNull() {
-        ErrorLog log = new ErrorLog(new File(dir, "missing-subdirectory"));
-        assertNull(log.append("cannot be written"));
-        assertTrue(dir.list().length == 0);
+        List<String> lines = log.text().lines().toList();
+        assertEquals(threads, lines.size());
+        for (String line : lines) {
+            assertTrue(line.matches("\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}  error \\d"), line);
+        }
     }
 }
