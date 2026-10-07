@@ -2,6 +2,8 @@ package com.kalix.ide.diff;
 
 import com.github.difflib.text.DiffRow;
 import com.kalix.ide.components.KalixIniTextArea;
+import com.kalix.ide.components.KalixPlainTextArea;
+import com.kalix.ide.components.KalixTextArea;
 import com.kalix.ide.themes.SyntaxTheme;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
@@ -28,8 +30,9 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * Window for displaying side-by-side diff comparison of two model versions.
- * Provides read-only view with syntax highlighting and change navigation.
+ * Window for displaying side-by-side diff comparison of two text files.
+ * Provides read-only view with optional syntax highlighting and change
+ * navigation.
  */
 public class DiffWindow extends JFrame {
     private static final Logger logger = LoggerFactory.getLogger(DiffWindow.class);
@@ -37,8 +40,8 @@ public class DiffWindow extends JFrame {
     private static final List<WeakReference<DiffWindow>> openWindows = new ArrayList<>();
 
     // UI Components
-    private KalixIniTextArea leftTextArea;
-    private KalixIniTextArea rightTextArea;
+    private KalixTextArea leftTextArea;
+    private KalixTextArea rightTextArea;
     private RTextScrollPane leftScrollPane;
     private RTextScrollPane rightScrollPane;
     private JSplitPane splitPane;
@@ -62,41 +65,64 @@ public class DiffWindow extends JFrame {
     private final String leftHeaderLabel;
     private final String rightHeaderLabel;
 
+    // Kalix INI highlighting in both panes when true; plain text when false.
+    private final boolean useIniMode;
+
     // Inline change ranges
     private List<DiffEngine.InlineChange> leftInlineChanges;
     private List<DiffEngine.InlineChange> rightInlineChanges;
 
     /**
-     * Creates a diff window with default title and headers.
+     * Creates a model diff window with default title and headers.
      *
-     * @param thisModel The current/modified model
-     * @param referenceModel The original/reference model
+     * @param thisText The current/modified model
+     * @param referenceText The original/reference model
      */
-    public DiffWindow(String thisModel, String referenceModel) {
-        this(thisModel, referenceModel, "Kalix - Model Comparison", "Reference Model", "This Model");
+    public DiffWindow(String thisText, String referenceText) {
+        this(thisText, referenceText, "Kalix - Model Comparison", "Reference Model", "This Model");
     }
 
     /**
-     * Creates a diff window with custom title and default headers.
+     * Creates a model diff window with custom title and default headers.
      *
-     * @param thisModel The current/modified model
-     * @param referenceModel The original/reference model
+     * @param thisText The current/modified model
+     * @param referenceText The original/reference model
      * @param title The window title
      */
-    public DiffWindow(String thisModel, String referenceModel, String title) {
-        this(thisModel, referenceModel, title, "Reference Model", "This Model");
+    public DiffWindow(String thisText, String referenceText, String title) {
+        this(thisText, referenceText, title, "Reference Model", "This Model");
     }
 
     /**
-     * Creates a diff window with custom title and headers.
+     * Creates a model diff window with custom title and headers.
      *
-     * @param thisModel The current/modified model
-     * @param referenceModel The original/reference model
+     * @param thisText The current/modified model
+     * @param referenceText The original/reference model
      * @param title The window title
      * @param leftHeader The header label for the left pane (reference model)
      * @param rightHeader The header label for the right pane (this model)
      */
-    public DiffWindow(String thisModel, String referenceModel, String title, String leftHeader, String rightHeader) {
+    public DiffWindow(String thisText, String referenceText, String title, String leftHeader, String rightHeader) {
+        this(thisText, referenceText, title, leftHeader, rightHeader, true);
+    }
+
+    /**
+     * Creates and shows a diff window for two plain texts, with no syntax highlighting.
+     *
+     * @param thisText The current/modified text
+     * @param referenceText The original/reference text
+     * @param title The window title
+     * @param leftHeader The header label for the left pane (reference text)
+     * @param rightHeader The header label for the right pane (this text)
+     */
+    public static DiffWindow ofPlainText(String thisText, String referenceText, String title,
+                                         String leftHeader, String rightHeader) {
+        return new DiffWindow(thisText, referenceText, title, leftHeader, rightHeader, false);
+    }
+
+    private DiffWindow(String thisText, String referenceText, String title, String leftHeader,
+                       String rightHeader, boolean useIniMode) {
+        this.useIniMode = useIniMode;
         setTitle(title);
 
         // Store header labels
@@ -104,7 +130,7 @@ public class DiffWindow extends JFrame {
         this.rightHeaderLabel = rightHeader;
 
         // Compute diff
-        diffResult = DiffEngine.computeDiff(referenceModel, thisModel);
+        diffResult = DiffEngine.computeDiff(referenceText, thisText);
 
         // Initialize theme-aware colors
         initializeColors();
@@ -113,7 +139,7 @@ public class DiffWindow extends JFrame {
         setupWindow();
 
         // Initialize components
-        initializeComponents(referenceModel, thisModel);
+        initializeComponents(referenceText, thisText);
 
         // Setup layout
         setupLayout();
@@ -146,7 +172,7 @@ public class DiffWindow extends JFrame {
         }
     }
 
-    private void initializeComponents(String referenceModel, String thisModel) {
+    private void initializeComponents(String referenceText, String thisText) {
         // Create aligned text versions with padding for proper visual alignment
         AlignedTexts alignedTexts = createAlignedTexts();
 
@@ -179,8 +205,10 @@ public class DiffWindow extends JFrame {
         navigationToolbar = createNavigationToolbar();
     }
 
-    private KalixIniTextArea createTextArea() {
-        KalixIniTextArea textArea = KalixIniTextArea.createReadOnly(20, 60);
+    private KalixTextArea createTextArea() {
+        KalixTextArea textArea = useIniMode
+            ? KalixIniTextArea.createReadOnly(20, 60)
+            : KalixPlainTextArea.createReadOnly(20, 60);
 
         // Disable code folding for diff view
         textArea.setCodeFoldingEnabled(false);
@@ -529,9 +557,10 @@ public class DiffWindow extends JFrame {
 
                 if (window == null) {
                     iterator.remove();
-                } else {
-                    window.leftTextArea.updateSyntaxTheme(syntaxTheme);
-                    window.rightTextArea.updateSyntaxTheme(syntaxTheme);
+                } else if (window.leftTextArea instanceof KalixIniTextArea left
+                        && window.rightTextArea instanceof KalixIniTextArea right) {
+                    left.updateSyntaxTheme(syntaxTheme);
+                    right.updateSyntaxTheme(syntaxTheme);
                 }
             }
         }
