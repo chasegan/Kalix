@@ -77,6 +77,7 @@ impl CommandRegistry {
         registry.register(Arc::new(GetResultCommand));
         registry.register(Arc::new(SaveResultsCommand));
         registry.register(Arc::new(EchoCommand));
+        registry.register(Arc::new(GetMassBalanceReportCommand));
         
         registry
     }
@@ -1061,6 +1062,38 @@ impl Command for SaveResultsCommand {
             "n_series": series_count,
             "len": total_timesteps
         }))
+    }
+}
+
+pub struct GetMassBalanceReportCommand;
+
+impl Command for GetMassBalanceReportCommand {
+    fn name(&self) -> &str {
+        "get_mass_balance_report"
+    }
+
+    fn description(&self) -> &str {
+        "Return the mass balance report for the model"
+    }
+
+    fn parameters(&self) -> Vec<ParameterSpec> {
+        vec![]
+    }
+
+    fn interruptible(&self) -> bool {
+        false
+    }
+
+    fn execute(
+        &self,
+        session: &mut Session,
+        _params: serde_json::Value,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
+    ) -> Result<serde_json::Value, CommandError> {
+        let model = session.get_model()
+            .ok_or(CommandError::ModelNotLoaded)?;
+        let report = model.generate_mass_balance_report();
+        Ok(serde_json::json!({ "report": report }))
     }
 }
 
