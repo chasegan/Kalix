@@ -310,6 +310,30 @@ fn test_ratio_with_numerator_fails_set_params() {
     assert!(err.contains("cannot both be optimised"), "got: {}", err);
 }
 
+/// A parameter name the node does not have is refused when the targets are
+/// resolved, before any candidate is applied.
+#[test]
+fn test_unknown_parameter_name_fails_resolve() {
+    let mut problem = picnic_problem(vec![
+        "node.my_sac.lztwn = lin_range(g(1), 10, 600)",
+    ]);
+    let err = problem.resolve().unwrap_err();
+    assert!(err.contains("node.my_sac.lztwn"), "got: {}", err);
+    assert!(err.contains("Unknown Sacramento parameter"), "got: {}", err);
+
+    // The ratio rule is checked at the same point
+    let mut problem = picnic_problem(vec![
+        "node.my_sac.sarvaonpctim = lin_range(g(1), 0, 1)",
+        "node.my_sac.sarva = lin_range(g(2), 0, 0.1)",
+    ]);
+    assert!(problem.resolve().unwrap_err().contains("cannot both be optimised"));
+
+    let mut problem = picnic_problem(vec![
+        "node.my_sac.lztwm = lin_range(g(1), 10, 600)",
+    ]);
+    problem.resolve().unwrap();
+}
+
 /// Write an optimisation config for the picnic model to a temp file.
 fn picnic_config_file(parameters: &str) -> String {
     let models = std::env::current_dir().unwrap().join("src/tests/example_models/8");
@@ -329,9 +353,9 @@ fn picnic_config_file(parameters: &str) -> String {
 }
 
 /// optimise_from_file reports the derived numerator apart from the mapped
-/// parameters.
+/// parameters, and stops on a bad address before running any candidate.
 #[test]
-fn test_optimise_from_file_reports_derived() {
+fn test_optimise_from_file_reports_derived_and_checks_addresses() {
     let config = picnic_config_file(
         "node.my_sac.sarvaonpctim = lin_range(g(1), 0.1, 1)\nnode.my_sac.lztwm = lin_range(g(2), 50, 200)");
     let outcome = crate::run::optimise_from_file(&config, None, None, None).unwrap();
@@ -339,4 +363,8 @@ fn test_optimise_from_file_reports_derived() {
     assert_eq!(outcome.derived_parameters.len(), 1);
     assert_eq!(outcome.derived_parameters[0].0, "node.my_sac.sarva");
     assert!(outcome.derived_parameters[0].1 > 0.0);
+
+    let config = picnic_config_file("node.my_sac.lztwn = lin_range(g(1), 10, 600)");
+    let err = crate::run::optimise_from_file(&config, None, None, None).err().expect("a bad address is an error");
+    assert!(err.starts_with("Cannot optimise 'node.my_sac.lztwn'"), "got: {}", err);
 }

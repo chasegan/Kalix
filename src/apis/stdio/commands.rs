@@ -768,6 +768,9 @@ impl Command for RunOptimisationCommand {
             expression,
         );
 
+        // Fail on a bad parameter address before any candidate runs
+        problem.resolve().map_err(CommandError::ExecutionError)?;
+
         // Get interrupt flag
         let interrupt_flag = std::sync::Arc::clone(&session.interrupt_flag);
 

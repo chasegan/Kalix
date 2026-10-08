@@ -128,6 +128,9 @@ pub fn optimise_from_file(
         expression,
     );
 
+    // Fail on a bad parameter address before any candidate runs.
+    problem.resolve()?;
+
     // Run the optimisation, wiring up the caller's progress callback (if any).
     let optimiser = create_optimizer_with_callback(&config, progress_callback)
         .map_err(|e| e.to_string())?;

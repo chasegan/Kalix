@@ -27,6 +27,10 @@ pub trait OptimisableComponent {
 
     /// Get a parameter by name (physical space)
     ///
+    /// Must succeed for every name `set_param` can set and fail for any name
+    /// it never could: the optimiser reads each mapped name once, up front,
+    /// to check the address.
+    ///
     /// # Arguments
     /// * `name` - Parameter name
     ///

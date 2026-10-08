@@ -390,12 +390,18 @@ fn main() {
                 }
             };
 
-            let problem = OptimisationProblem::new(
+            let mut problem = OptimisationProblem::new(
                 model,
                 config.parameter_config.clone(),
                 comparisons,
                 expression,
             );
+
+            // Fail on a bad parameter address before any candidate runs
+            if let Err(e) = problem.resolve() {
+                eprintln!("Error in [parameters]: {}", e);
+                std::process::exit(1);
+            }
 
             println!("\n=== Starting Optimisation ===");
             println!("Algorithm: {}", config.algorithm.name());

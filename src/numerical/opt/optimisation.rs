@@ -174,6 +174,10 @@ impl OptimisationProblem {
                         node_name, node.get_type_as_string()
                     ));
                 };
+                // get_param reads every name set_param can set (see the
+                // trait), so a name that does not read back is refused.
+                component.get_param(param_name)
+                    .map_err(|e| format!("Cannot optimise '{}': {}", target, e))?;
                 match component.derives(param_name) {
                     Some(written) => {
                         derived_order.push(i);
@@ -215,11 +219,20 @@ impl OptimisationProblem {
         Ok(ResolvedTargets { targets, order, derived })
     }
 
-    /// Apply parameter values to the model via the pre-resolved targets.
-    fn apply_params_to_model(&mut self, genes: &[f64]) -> Result<(), String> {
+    /// Resolve the parameter targets now rather than on the first candidate.
+    /// Call before optimising: an optimiser scores a failed candidate as
+    /// infinity and carries on, so a bad address would otherwise fail every
+    /// candidate instead of stopping the run.
+    pub fn resolve(&mut self) -> Result<(), String> {
         if self.resolved_targets.is_none() {
             self.resolved_targets = Some(self.resolve_targets()?);
         }
+        Ok(())
+    }
+
+    /// Apply parameter values to the model via the pre-resolved targets.
+    fn apply_params_to_model(&mut self, genes: &[f64]) -> Result<(), String> {
+        self.resolve()?;
         let resolved = self.resolved_targets.as_ref().unwrap();
 
         // Physical values in mapping order (no target strings on this path)
