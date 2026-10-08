@@ -70,11 +70,32 @@ pub struct OptimisationProblem {
 
     /// Parameter targets resolved once (first set_params) from their string
     /// addresses to direct indices - no per-evaluation string splitting,
-    /// lowercasing, or node lookups. One entry per config mapping, in order.
-    resolved_targets: Option<Vec<ResolvedTarget>>,
+    /// lowercasing, or node lookups.
+    resolved_targets: Option<ResolvedTargets>,
 
     /// Simulated-series index per comparison, resolved on first evaluation.
     sim_series_indices: Option<Vec<usize>>,
+}
+
+/// What target resolution produces, kept together so no part goes stale.
+struct ResolvedTargets {
+    /// One entry per config mapping, in order.
+    targets: Vec<ResolvedTarget>,
+    /// Mapping indices in the order to apply them: derived parameters last,
+    /// so each is computed from the candidate's other values.
+    order: Vec<usize>,
+    /// What the derived parameters write, for reporting.
+    derived: Vec<DerivedParam>,
+}
+
+/// A mapped parameter that writes another one (OptimisableComponent::derives).
+struct DerivedParam {
+    node_idx: usize,
+    /// The parameter written, and its address ("node.name.param").
+    written: &'static str,
+    written_address: String,
+    /// The mapping target that writes it.
+    target: String,
 }
 
 /// A parameter target address, pre-resolved for the evaluation hot path.
@@ -125,9 +146,13 @@ impl OptimisationProblem {
     /// Resolve every mapping's target address ("node.name.param" or
     /// "const.constant") to a direct index. Runs once per problem; the per-
     /// evaluation path then applies values by index with no string work.
-    fn resolve_targets(&mut self) -> Result<Vec<ResolvedTarget>, String> {
-        let mut resolved = Vec::with_capacity(self.config.mappings.len());
-        for mapping in &self.config.mappings {
+    fn resolve_targets(&mut self) -> Result<ResolvedTargets, String> {
+        let n = self.config.mappings.len();
+        let mut targets = Vec::with_capacity(n);
+        let mut order = Vec::with_capacity(n);
+        let mut derived: Vec<DerivedParam> = Vec::new();
+        let mut derived_order = Vec::new();
+        for (i, mapping) in self.config.mappings.iter().enumerate() {
             let target = &mapping.target;
             let parts: Vec<&str> = target.split('.').collect();
 
@@ -135,20 +160,33 @@ impl OptimisationProblem {
                 // Same registration path set_param used, so behaviour
                 // (including creating a not-yet-seen constant) is unchanged.
                 let idx = self.model.data_cache.constants.add_if_needed_and_get_idx(target);
-                resolved.push(ResolvedTarget::Constant(idx));
+                targets.push(ResolvedTarget::Constant(idx));
+                order.push(i);
             } else if parts.len() == 3 && parts[0] == "node" {
                 let node_name = parts[1];
                 let param_name = parts[2];
                 let node_idx = self.model.get_node_idx(node_name)
                     .ok_or_else(|| format!("Node not found: {}", node_name))?;
                 let node = &self.model.nodes[node_idx];
-                if node.optimisable().is_none() {
+                let Some(component) = node.optimisable() else {
                     return Err(format!(
                         "Node '{}' (type: {}) does not support parameter optimisation",
                         node_name, node.get_type_as_string()
                     ));
+                };
+                match component.derives(param_name) {
+                    Some(written) => {
+                        derived_order.push(i);
+                        derived.push(DerivedParam {
+                            node_idx,
+                            written,
+                            written_address: format!("node.{}.{}", node_name, written),
+                            target: target.clone(),
+                        });
+                    }
+                    None => order.push(i),
                 }
-                resolved.push(ResolvedTarget::NodeParam {
+                targets.push(ResolvedTarget::NodeParam {
                     node_idx,
                     param_name: param_name.to_string(),
                 });
@@ -156,7 +194,25 @@ impl OptimisationProblem {
                 return Err(format!("Invalid target address: '{}'. Expected 'node.name.param' or 'const.constant_name'", target));
             }
         }
-        Ok(resolved)
+
+        // A derived parameter cannot be mapped with the parameter it writes,
+        // nor with another derived parameter that writes the same one.
+        for d in &derived {
+            let clash = self.config.mappings.iter().map(|m| m.target.as_str())
+                .find(|t| *t == d.written_address)
+                .or_else(|| derived.iter()
+                    .find(|o| o.written_address == d.written_address && o.target != d.target)
+                    .map(|o| o.target.as_str()));
+            if let Some(other) = clash {
+                return Err(format!(
+                    "'{}' and '{}' cannot both be optimised: '{}' sets '{}'",
+                    d.target, other, d.target, d.written_address
+                ));
+            }
+        }
+
+        order.extend(derived_order);
+        Ok(ResolvedTargets { targets, order, derived })
     }
 
     /// Apply parameter values to the model via the pre-resolved targets.
@@ -164,13 +220,14 @@ impl OptimisationProblem {
         if self.resolved_targets.is_none() {
             self.resolved_targets = Some(self.resolve_targets()?);
         }
-        let targets = self.resolved_targets.as_ref().unwrap();
+        let resolved = self.resolved_targets.as_ref().unwrap();
 
         // Physical values in mapping order (no target strings on this path)
         let values = self.config.evaluate_values(genes);
 
-        for (target, &value) in targets.iter().zip(values.iter()) {
-            match target {
+        for &i in &resolved.order {
+            let value = values[i];
+            match &resolved.targets[i] {
                 ResolvedTarget::Constant(idx) => {
                     self.model.data_cache.constants.set_value_by_idx(*idx, value);
                 }
@@ -183,6 +240,22 @@ impl OptimisationProblem {
             }
         }
         Ok(())
+    }
+
+    /// The parameters written by the mapped derived parameters, as (address,
+    /// value) read from the model now: e.g. Sacramento's sarva when
+    /// sarvaonpctim is mapped. These are not [parameters] targets. Empty
+    /// until the targets have been resolved.
+    pub fn derived_params(&self) -> Vec<(String, f64)> {
+        let Some(resolved) = &self.resolved_targets else {
+            return Vec::new();
+        };
+        resolved.derived.iter()
+            .filter_map(|d| {
+                let value = self.model.nodes[d.node_idx].optimisable()?.get_param(d.written).ok()?;
+                Some((d.written_address.clone(), value))
+            })
+            .collect()
     }
 
     /// Align observed and simulated timeseries temporally.

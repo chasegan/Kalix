@@ -88,3 +88,255 @@ fn test_sacramento_node_with_timeseries_by_index() {
     //println!("correct_answer: {}", correct_answer_total_runoff);
     assert!((total_runoff - correct_answer_total_runoff).abs() < 0.00001);
 }
+
+// ---------------------------------------------------------------------------
+// Ratio parameters (sarvaonpctim, lzpkonlzsk)
+// ---------------------------------------------------------------------------
+
+use crate::numerical::opt::optimisable_component::OptimisableComponent;
+
+/// Setting a ratio writes its numerator from the denominator the node holds
+/// at that moment, and the ratio reads back.
+#[test]
+fn test_ratio_param_sets_its_numerator() {
+    let mut n = SacramentoNode::new();
+    n.set_param("pctim", 0.08).unwrap();
+    n.set_param("sarvaonpctim", 0.5).unwrap();
+    assert!((n.sacramento_model.sarva - 0.04).abs() < 1e-12);
+    assert_eq!(n.sacramento_model.pctim, 0.08);
+
+    n.set_param("lzsk", 0.2).unwrap();
+    n.set_param("lzpkonlzsk", 0.1).unwrap();
+    assert!((n.sacramento_model.lzpk - 0.02).abs() < 1e-12);
+
+    assert!((n.get_param("sarvaonpctim").unwrap() - 0.5).abs() < 1e-12);
+    assert!((n.get_param("lzpkonlzsk").unwrap() - 0.1).abs() < 1e-12);
+}
+
+/// The node keeps no ratio: a denominator set afterwards leaves the numerator
+/// where it was. Ordering is the optimiser's job (see the problem tests).
+#[test]
+fn test_ratio_param_is_not_remembered() {
+    let mut n = SacramentoNode::new();
+    n.set_param("pctim", 0.08).unwrap();
+    n.set_param("sarvaonpctim", 0.5).unwrap();
+    n.set_param("pctim", 0.02).unwrap();
+    assert!((n.sacramento_model.sarva - 0.04).abs() < 1e-12);
+
+    n.set_param("sarva", 0.03).unwrap();
+    n.set_param("lztwm", 100.0).unwrap();
+    assert_eq!(n.sacramento_model.sarva, 0.03);
+}
+
+/// Only the ratios are derived, and each names its numerator.
+#[test]
+fn test_ratio_params_name_what_they_write() {
+    let n = SacramentoNode::new();
+    assert_eq!(n.derives("sarvaonpctim"), Some("sarva"));
+    assert_eq!(n.derives("lzpkonlzsk"), Some("lzpk"));
+    for name in ["sarva", "lzpk", "pctim", "lzsk", "lztwm", "nonsense"] {
+        assert_eq!(n.derives(name), None, "'{}'", name);
+    }
+}
+
+
+// ---------------------------------------------------------------------------
+// Ratio parameters through an OptimisationProblem
+// ---------------------------------------------------------------------------
+
+use crate::io::csv_io::read_ts;
+use crate::io::ini_model_io::IniModelIO;
+use crate::numerical::opt::objectives::{ObjectiveFunction, SdebObjective};
+use crate::numerical::opt::optimisable::Optimisable;
+use crate::numerical::opt::{OptimisationProblem, ParameterMappingConfig};
+
+fn picnic_problem(mappings: Vec<&str>) -> OptimisationProblem {
+    let model = IniModelIO::read_model_file("./src/tests/example_models/8/picnic_sacr.ini").unwrap();
+    let observed = read_ts("./src/tests/example_models/8/formatted_11000A.csv").unwrap()[0].clone();
+    OptimisationProblem::single_comparison(
+        model,
+        ParameterMappingConfig::from_strings(mappings).unwrap(),
+        observed,
+        "node.my_sac.ds_1".to_string(),
+        ObjectiveFunction::SDEB(SdebObjective::new()),
+    )
+}
+
+fn picnic_sacramento(problem: &OptimisationProblem) -> &SacramentoNode {
+    match problem.model.get_node("my_sac") {
+        Some(NodeEnum::SacramentoNode(n)) => n,
+        _ => panic!("my_sac is not a Sacramento node"),
+    }
+}
+
+/// The numerators land in the model whichever side of its denominator a
+/// ratio is written: the problem sets the ratios last. One denominator is
+/// searched and the other held by a constant expression.
+#[test]
+fn test_ratio_params_reach_the_model() {
+    let mut problem = picnic_problem(vec![
+        "node.my_sac.sarvaonpctim = lin_range(g(1), 0, 1)",
+        "node.my_sac.pctim = 0.05",
+        "node.my_sac.lzsk = lin_range(g(2), 0, 0.5)",
+        "node.my_sac.lzpkonlzsk = lin_range(g(3), 0, 1)",
+    ]);
+    assert_eq!(problem.n_params(), 3);
+
+    problem.set_params(&[0.5, 0.4, 0.2]).unwrap();
+    let sac = &picnic_sacramento(&problem).sacramento_model;
+    assert!((sac.pctim - 0.05).abs() < 1e-12);
+    assert!((sac.sarva - 0.025).abs() < 1e-12);
+    assert!((sac.lzsk - 0.2).abs() < 1e-12);
+    assert!((sac.lzpk - 0.04).abs() < 1e-12);
+
+    // The derived numerators are reported apart from the mappings
+    let derived = problem.derived_params();
+    assert_eq!(derived.len(), 2);
+    assert_eq!(derived[0].0, "node.my_sac.sarva");
+    assert!((derived[0].1 - 0.025).abs() < 1e-12);
+    assert_eq!(derived[1].0, "node.my_sac.lzpk");
+    assert!((derived[1].1 - 0.04).abs() < 1e-12);
+}
+
+/// A configuration that maps every parameter the node lists, which is what
+/// the IDE generates by default, resolves and applies.
+#[test]
+fn test_every_listed_parameter_can_be_mapped_together() {
+    let listed = picnic_sacramento(&picnic_problem(vec![])).list_params();
+    let lines: Vec<String> = listed.iter().enumerate()
+        .map(|(i, name)| format!("node.my_sac.{} = lin_range(g({}), 0.1, 0.2)", name, i + 1))
+        .collect();
+    let mut problem = picnic_problem(lines.iter().map(String::as_str).collect());
+
+    problem.set_params(&vec![0.5; listed.len()]).unwrap();
+    let sac = &picnic_sacramento(&problem).sacramento_model;
+    assert!((sac.sarva - 0.15 * 0.15).abs() < 1e-12);
+    assert!((sac.lzpk - 0.15 * 0.15).abs() < 1e-12);
+}
+
+/// The same candidate applied twice, and after another candidate, gives the
+/// same numerators: nothing is carried over between candidates.
+#[test]
+fn test_ratio_candidates_do_not_carry_over() {
+    let mut problem = picnic_problem(vec![
+        "node.my_sac.sarvaonpctim = lin_range(g(1), 0, 1)",
+        "node.my_sac.pctim = lin_range(g(2), 0, 0.1)",
+    ]);
+    problem.set_params(&[0.5, 0.4]).unwrap();
+    assert!((picnic_sacramento(&problem).sacramento_model.sarva - 0.02).abs() < 1e-12);
+    problem.set_params(&[0.9, 1.0]).unwrap();
+    assert!((picnic_sacramento(&problem).sacramento_model.sarva - 0.09).abs() < 1e-12);
+    problem.set_params(&[0.5, 0.4]).unwrap();
+    assert!((picnic_sacramento(&problem).sacramento_model.sarva - 0.02).abs() < 1e-12);
+}
+
+/// A ratio problem scores exactly as the same search written with tied genes,
+/// on the problem itself and on a parallel worker's clone.
+#[test]
+fn test_ratio_params_match_tied_genes() {
+    let mut ratio = picnic_problem(vec![
+        "node.my_sac.sarvaonpctim = lin_range(g(1), 0, 1)",
+        "node.my_sac.pctim = lin_range(g(2), 0, 0.1)",
+        "node.my_sac.lzpkonlzsk = lin_range(g(3), 0, 1)",
+        "node.my_sac.lzsk = lin_range(g(4), 0, 0.5)",
+    ]);
+    let mut tied = picnic_problem(vec![
+        "node.my_sac.sarva = lin_range(g(1), 0, 1) * lin_range(g(2), 0, 0.1)",
+        "node.my_sac.pctim = lin_range(g(2), 0, 0.1)",
+        "node.my_sac.lzpk = lin_range(g(3), 0, 1) * lin_range(g(4), 0, 0.5)",
+        "node.my_sac.lzsk = lin_range(g(4), 0, 0.5)",
+    ]);
+
+    let genes = [0.3, 0.6, 0.2, 0.4];
+    ratio.set_params(&genes).unwrap();
+    tied.set_params(&genes).unwrap();
+    let expected = tied.evaluate().unwrap();
+    assert_eq!(ratio.evaluate().unwrap(), expected);
+
+    // Move the worker elsewhere first, so it cannot pass on inherited values.
+    let mut worker = ratio.clone_for_parallel();
+    worker.set_params(&[0.9, 0.1, 0.8, 0.9]).unwrap();
+    assert_ne!(worker.evaluate().unwrap(), expected);
+    worker.set_params(&genes).unwrap();
+    assert_eq!(worker.evaluate().unwrap(), expected);
+}
+
+/// The node offers the ratios in place of `sarva` and `lzpk`, yet a
+/// configuration that maps those two directly still resolves and applies.
+#[test]
+fn test_numerators_are_accepted_but_not_listed() {
+    let mut problem = picnic_problem(vec![
+        "node.my_sac.sarva = lin_range(g(1), 0, 0.1)",
+        "node.my_sac.lzpk = lin_range(g(2), 0, 0.5)",
+    ]);
+    let listed = picnic_sacramento(&problem).list_params();
+    for name in ["sarva", "lzpk"] {
+        assert!(!listed.contains(&name.to_string()), "'{}' is listed", name);
+    }
+    for name in ["sarvaonpctim", "pctim", "lzpkonlzsk", "lzsk"] {
+        assert!(listed.contains(&name.to_string()), "'{}' is not listed", name);
+    }
+
+    problem.set_params(&[0.5, 0.2]).unwrap();
+    let sac = &picnic_sacramento(&problem).sacramento_model;
+    assert!((sac.sarva - 0.05).abs() < 1e-12);
+    assert!((sac.lzpk - 0.1).abs() < 1e-12);
+}
+
+/// A ratio mapped without its denominator derives the numerator from the
+/// denominator in the model file, and leaves that denominator alone.
+#[test]
+fn test_ratio_without_denominator_uses_the_model_value() {
+    let mut problem = picnic_problem(vec![
+        "node.my_sac.sarvaonpctim = lin_range(g(1), 0, 1)",
+    ]);
+    let pctim = picnic_sacramento(&problem).sacramento_model.pctim;
+    assert!(pctim > 0.0);
+
+    problem.set_params(&[0.5]).unwrap();
+    let sac = &picnic_sacramento(&problem).sacramento_model;
+    assert_eq!(sac.pctim, pctim);
+    assert!((sac.sarva - 0.5 * pctim).abs() < 1e-12);
+}
+
+/// A ratio mapped alongside its numerator fails when the candidate is applied.
+#[test]
+fn test_ratio_with_numerator_fails_set_params() {
+    let mut problem = picnic_problem(vec![
+        "node.my_sac.sarvaonpctim = lin_range(g(1), 0, 1)",
+        "node.my_sac.sarva = lin_range(g(2), 0, 0.1)",
+    ]);
+    let err = problem.set_params(&[0.5, 0.5]).unwrap_err();
+    assert!(err.contains("cannot both be optimised"), "got: {}", err);
+}
+
+/// Write an optimisation config for the picnic model to a temp file.
+fn picnic_config_file(parameters: &str) -> String {
+    let models = std::env::current_dir().unwrap().join("src/tests/example_models/8");
+    let dir = std::env::temp_dir().join("kalix_tests").join(uuid::Uuid::new_v4().to_string());
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("optimisation.ini");
+    std::fs::write(&path, format!(
+        "[optimisation]\nmodel_file = {}\nobjective_expression = term1\nalgorithm = DE\n\
+         population_size = 4\ntermination_evaluations = 8\nn_threads = 1\nrandom_seed = 1\n\n\
+         [term.term1]\nsimulated = node.my_sac.ds_1\nobserved_file = {}\nobserved_series = 1\n\
+         statistic = SDEB\n\n[parameters]\n{}\n",
+        models.join("picnic_sacr.ini").display(),
+        models.join("formatted_11000A.csv").display(),
+        parameters,
+    )).unwrap();
+    path.to_string_lossy().into_owned()
+}
+
+/// optimise_from_file reports the derived numerator apart from the mapped
+/// parameters.
+#[test]
+fn test_optimise_from_file_reports_derived() {
+    let config = picnic_config_file(
+        "node.my_sac.sarvaonpctim = lin_range(g(1), 0.1, 1)\nnode.my_sac.lztwm = lin_range(g(2), 50, 200)");
+    let outcome = crate::run::optimise_from_file(&config, None, None, None).unwrap();
+    assert_eq!(outcome.parameters.len(), 2);
+    assert_eq!(outcome.derived_parameters.len(), 1);
+    assert_eq!(outcome.derived_parameters[0].0, "node.my_sac.sarva");
+    assert!(outcome.derived_parameters[0].1 > 0.0);
+}

@@ -36,10 +36,13 @@ class ParameterExpressionLibraryTest {
             "x1", "x2", "x3", "x4", "tfrac", "taccum", "m_rainfall", "base_rainfall", "m_nonrainfall",
             "ddfi", "tmelt", "return_flow", "accumulation");
 
-    /** {@code src/nodes/sacramento_node.rs} — Sacramento's fixed parameters. */
-    private static final List<String> SACRAMENTO_PARAMS = List.of(
-            "adimp", "lzfpm", "lzfsm", "lzpk", "lzsk", "lztwm",
-            "pctim", "pfree", "rexp", "sarva", "side",
+    /**
+     * {@code src/nodes/sacramento_node.rs} — Sacramento's fixed parameters, with the
+     * ratios {@code lzpkonlzsk} and {@code sarvaonpctim} in place of lzpk and sarva.
+     */
+    static final List<String> SACRAMENTO_PARAMS = List.of(
+            "adimp", "lzfpm", "lzfsm", "lzpkonlzsk", "lzsk", "lztwm",
+            "pctim", "pfree", "rexp", "sarvaonpctim", "side",
             "ssout", "uzfwm", "uzk", "uztwm", "zperc", "laguh");
 
     /** {@code src/nodes/awbm_node.rs} — AWBM's fixed parameters. */

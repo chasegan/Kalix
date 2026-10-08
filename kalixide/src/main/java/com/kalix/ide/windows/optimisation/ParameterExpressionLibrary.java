@@ -41,11 +41,11 @@ public class ParameterExpressionLibrary {
         Map.entry("nlm_m", "lin_range(g(#),0.5,1)"),
         Map.entry("pwl_tt_", "lin_range(g(#),0,5)"),
 
-        // Sacramento parameters
+        // Sacramento parameters. The engine offers the ratios lzpkonlzsk and
+        // sarvaonpctim in place of lzpk and sarva.
         Map.entry("adimp", "log_range(g(#),1E-05,0.15)"),
         Map.entry("lzfpm", "log_range(g(#),1,300)"),
         Map.entry("lzfsm", "log_range(g(#),1,350)"),
-        Map.entry("lzpk", "log_range(g(#),0.001,0.6)"),
         Map.entry("lzpkonlzsk", "log_range(g(#),0.001,1)"),
         Map.entry("lzsk", "log_range(g(#),0.001,0.9)"),
         Map.entry("lztwm", "log_range(g(#),10,600)"),
@@ -53,7 +53,6 @@ public class ParameterExpressionLibrary {
         Map.entry("pfree", "log_range(g(#),0.01,0.5)"),
         Map.entry("rexp", "log_range(g(#),1,6)"),
         Map.entry("rserv", "lin_range(g(#),0.2,0.4)"),
-        Map.entry("sarva", "log_range(g(#),1E-05,0.11)"),
         Map.entry("sarvaonpctim", "log_range(g(#),0.0001,1)"),
         Map.entry("side", "log_range(g(#),1E-05,0.1)"),
         Map.entry("ssout", "log_range(g(#),1E-05,0.1)"),
