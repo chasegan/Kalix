@@ -77,6 +77,8 @@ node.paddock.crop_1_plant
 node.paddock.crop_1_viable_area
 node.paddock.crop_2_plant
 node.paddock.fallow_depletion
+node.paddock.soil_moisture
+node.paddock.soil_moisture_vol
 node.paddock.usflow
 node.paddock.et
 node.paddock.et_vol
@@ -108,17 +110,20 @@ fn assert_close(a: f64, b: f64, what: &str) {
     assert!((a - b).abs() <= 1e-9 * b.abs().max(1.0), "{what}: {a} vs {b}");
 }
 
-/// Water in the field at the end of a step, from what it records: only the root
-/// buckets show, so this holds when the profile is one layer (see the layer test
-/// for the rest)
-fn field_balance_closes(model: &mut Model, held: impl Fn(&mut Model, usize) -> f64) {
+/// The field's water balance, every step, from its results alone: the change in the
+/// water the profile holds is what came in less what went out. soil_moisture_vol counts
+/// every bucket and every layer, so this holds through planting, harvest, abandonment,
+/// overflow into the layers, storm runoff and the pour.
+fn field_balance_closes(model: &mut Model) {
     let n = s(model, "usflow").len();
+    let area = 4.0;
     for t in 1..n {
-        let d_held = held(model, t) - held(model, t - 1);
-        let inflow = s(model, "rain_vol")[t] + s(model, "supply")[t] - s(model, "escape")[t];
+        let d_held = s(model, "soil_moisture_vol")[t] - s(model, "soil_moisture_vol")[t - 1];
+        let inflow = s(model, "rain_vol")[t] - s(model, "intercepted")[t] * area + s(model, "supply")[t] - s(model, "escape")[t];
         let outflow = s(model, "et_vol")[t] + s(model, "excess")[t];
         assert_close(inflow - outflow, d_held, &format!("water balance on step {t}"));
         assert_close(s(model, "usflow")[t], s(model, "supply")[t] + s(model, "bypass")[t], &format!("usflow on step {t}"));
+        assert_close(s(model, "soil_moisture")[t] * area, s(model, "soil_moisture_vol")[t], &format!("soil_moisture is soil_moisture_vol over the field on step {t}"));
     }
 }
 
@@ -146,13 +151,7 @@ fn test_planting_takes_area_from_the_fallow_with_its_water_and_harvest_gives_it_
     let fallow = s(&mut model, "fallow_depletion");
     assert_eq!(fallow[..5], [10.0; 5]);
     assert_eq!(fallow[5], 13.0);
-    let held = |m: &mut Model, t: usize| {
-        let (a, d, f) = (s(m, "crop_1_area")[t], s(m, "crop_1_depletion")[t], s(m, "fallow_depletion")[t]);
-        // The profile below 500 mm is untouched (10 mm down over 4 km2) and one layer deep, so
-        // the root buckets account for every change
-        -(a * if d.is_nan() { 0.0 } else { d } + (4.0 - a) * f)
-    };
-    field_balance_closes(&mut model, held);
+    field_balance_closes(&mut model);
 }
 
 #[test]
@@ -241,6 +240,12 @@ fn test_water_below_one_crops_roots_is_there_for_the_next() {
     assert_eq!(s(&mut model, "excess")[7], 0.0, "the 12 to spare went to the layer below");
     assert_eq!(s(&mut model, "crop_2_depletion")[8], 0.0);
     assert_eq!(s(&mut model, "excess")[8], 168.0, "42 mm over 4 km2 once the layer is full");
+    // The profile's water shows the layer the buckets hide: at the end of day 5, after the
+    // harvest, the fallow's bucket is 20 down and the layer below 20, over the whole field:
+    // 100 mm of capacity less 40, over 4 km2
+    assert_eq!(s(&mut model, "soil_moisture")[4], 60.0);
+    assert_eq!(s(&mut model, "soil_moisture_vol")[4], 240.0);
+    field_balance_closes(&mut model);
 }
 
 #[test]
@@ -320,9 +325,8 @@ fn test_irrigation_never_runs_through_the_curve_number_and_wet_crops_shed_more()
     // The fallow is dry: 6.32 mm x 3 km2.
     assert_close(s(&mut model, "excess")[2], 50.0 * 1.0 + 6.323638637769316 * 3.0, "wet crop and dry fallow");
     assert_close(s(&mut model, "fallow_depletion")[2], 6.323638637769316, "the fallow took the rest");
-    // The balance still closes: rain in = et + excess + change in what the buckets hold
-    let held = |m: &mut Model, t: usize| -(s(m, "crop_1_area")[t] * s(m, "crop_1_depletion")[t] + (4.0 - s(m, "crop_1_area")[t]) * s(m, "fallow_depletion")[t]);
-    field_balance_closes(&mut model, held);
+    // The balance still closes
+    field_balance_closes(&mut model);
 }
 
 #[test]
@@ -550,4 +554,22 @@ fn test_todays_opening_stress_is_readable_in_a_viable_area_rule() {
     let ks = s(&mut model, "crop_1_ks");
     assert_eq!(ks.len(), s(&mut model, "usflow").len());
     assert!(ks[0].is_nan() && ks[1] == 1.0);
+}
+
+#[test]
+fn test_the_profiles_water_is_the_one_state_whose_change_is_the_water_balance() {
+    // Everything at once over twelve days: two crops of different root depths planted and one
+    // harvested, a curve number, interception, irrigation with a forced pour, rain that
+    // overflows into the layers. The balance closes every step from the results alone.
+    let ini = rig("", "initial_depletion = 30\nevap = 5\nrain = if(var.day.n == 4, 40, if(var.day.n == 9, 70, 0))\ncurve_number = 80\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 2, 2, 0)\ncrop_1_order = if(var.day.n == 6, 60, this.crop_1_area * clamp(this.crop_1_depletion[-1, 0] - 10, 0, 50))\ncrop_2 = deep\ncrop_2_plant = if(var.day.n == 3, 1, 0)\ncrop_2_order = this.crop_2_area * clamp(this.crop_2_depletion[-1, 0] - 20, 0, 50)")
+        .replace("interception = 0\n", "")
+        .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 1\nseason_len = 6\n");
+    let mut model = run(&ini);
+    field_balance_closes(&mut model);
+    // With the whole field under one crop on a one-layer profile of 50 mm, the field's
+    // moisture is the capacity less the crop's depletion
+    let mut one = run(&rig("", "initial_depletion = 20\nevap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 4, 0)").replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 500\nkc = 1\n"));
+    for t in 0..5 {
+        assert_close(s(&mut one, "soil_moisture")[t], 50.0 - s(&mut one, "crop_1_depletion")[t], "one crop, one layer, whole field");
+    }
 }
