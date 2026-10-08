@@ -28,6 +28,8 @@ KalixIDE lists the addresses the loaded model offers (via the engine's `get_opti
 
 ### Validation and infeasible candidates
 
+The addresses themselves are checked before the optimisation starts. One that names a missing node, or a parameter the node does not have, stops the run with an error.
+
 Candidate values are applied to the model as-is; the engine re-validates all parameters at the start of every run. A candidate that fails validation — or that produces non-finite flows inside the assessment window — is treated as **infeasible** and scores an objective of infinity, so it cannot win but also teaches the optimiser nothing. Keep your `lin_range`/`log_range` bounds inside each parameter's valid range so evaluations aren't wasted on infeasible candidates.
 
 ## Constants (`const.*`)
