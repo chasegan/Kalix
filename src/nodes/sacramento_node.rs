@@ -179,9 +179,8 @@ impl Node for SacramentoNode {
 impl OptimisableComponent for SacramentoNode {
     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
         // Try to handle as rainfall weight parameter first
-        match RainfallWeightHandler::try_set_param(&mut self.rain_mm_input, name, value, &self.name)? {
-            true => return Ok(()), // Parameter was handled
-            false => {} // Not a rainfall parameter, continue to standard parameters
+        if RainfallWeightHandler::try_set_param(&mut self.rain_mm_input, name, value, &self.name)? {
+            return Ok(())
         }
 
         // Standard Sacramento parameters
