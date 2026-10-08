@@ -253,6 +253,14 @@ public class RunContextMenuManager {
                 if (userObject instanceof RunInfo runInfo) {
                     stopItem.setEnabled(runInfo.getSession().getState()
                         == SessionManager.SessionState.RUNNING);
+                    // Mass balance needs a finished run (ADR-0002 §4): greyed while the
+                    // run is still going, hidden once it can never apply.
+                    RunStatus status = runInfo.getRunStatus();
+                    boolean mayFinish = status == RunStatus.DONE || status == RunStatus.RUNNING;
+                    for (JMenuItem item : List.of(mbReportItem, mbValidateItem)) {
+                        item.setVisible(mayFinish);
+                        item.setEnabled(status == RunStatus.DONE);
+                    }
                     contextMenu.show(runTree, e.getX(), e.getY());
                 } else if (userObject instanceof DatasetLoaderManager.LoadedDatasetInfo) {
                     datasetMenu.show(runTree, e.getX(), e.getY());
