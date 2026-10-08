@@ -331,6 +331,7 @@ public class ThemeManager {
     public static void notifyFontSizeChanged(int fontSize) {
         com.kalix.ide.windows.MinimalEditorWindow.updateAllFontSizes(fontSize);
         com.kalix.ide.components.KalixIniTextArea.updateAllFontSizes(fontSize);
+        com.kalix.ide.components.KalixPlainTextArea.updateAllFontSizes(fontSize);
         com.kalix.ide.diff.DiffWindow.updateAllFontSizes(fontSize);
         com.kalix.ide.dataview.VirtualTextArea.updateAllFontSizes(fontSize);
     }
