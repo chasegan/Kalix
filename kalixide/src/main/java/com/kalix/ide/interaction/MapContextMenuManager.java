@@ -12,8 +12,10 @@ import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import java.awt.Point;
 import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 
@@ -170,7 +172,7 @@ public class MapContextMenuManager {
                         // editor and select it on the map. Selection is deferred one EDT
                         // cycle so the queued re-parse has registered the node first.
                         textEditor.scrollToNode(newName);
-                        javax.swing.SwingUtilities.invokeLater(() -> {
+                        SwingUtilities.invokeLater(() -> {
                             model.selectNode(newName, false);
                             mapPanel.repaint();
                         });
@@ -222,8 +224,7 @@ public class MapContextMenuManager {
                 double worldY = mapPanel.toWorldY(lastContextMenuLocation.y);
                 // Locale.ROOT: the copied text is pasted into model files (dot decimals).
                 String locationText = String.format(java.util.Locale.ROOT, "%.2f, %.2f", worldX, worldY);
-                java.awt.datatransfer.StringSelection selection =
-                    new java.awt.datatransfer.StringSelection(locationText);
+                StringSelection selection = new StringSelection(locationText);
                 Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, null);
             }
         });
