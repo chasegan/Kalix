@@ -2,6 +2,7 @@ package com.kalix.ide.windows;
 
 import com.kalix.ide.components.KalixPlainTextArea;
 import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.utils.DialogUtils;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import javax.swing.JButton;
@@ -96,9 +97,9 @@ public class MassBalanceReportWindow extends JFrame {
         try {
             reference = Files.readString(referenceFile.toPath());
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(this,
+            DialogUtils.showError(this,
                 "Failed to read reference report: " + e.getMessage(),
-                "Validation Error", JOptionPane.ERROR_MESSAGE);
+                "Validation Error");
             return;
         }
         onValidate.accept(this, reference);
@@ -120,9 +121,9 @@ public class MassBalanceReportWindow extends JFrame {
                 "Report saved to " + file.getName(),
                 "Save Successful", JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException e) {
-            JOptionPane.showMessageDialog(this,
+            DialogUtils.showError(this,
                 "Failed to save report: " + e.getMessage(),
-                "Save Error", JOptionPane.ERROR_MESSAGE);
+                "Save Error");
         }
     }
 }
