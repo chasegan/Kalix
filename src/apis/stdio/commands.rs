@@ -541,6 +541,9 @@ impl Command for RunSimulationCommand {
         // Get interrupt flag before getting mutable model reference
         let interrupt_flag = Arc::clone(&session.interrupt_flag);
 
+        // A stopped or failed run must not leave the previous run's results standing.
+        session.clear_results();
+
         // Check if model is loaded
         let model = session.get_model_mut()
             .ok_or(CommandError::ModelNotLoaded)?;
@@ -1092,6 +1095,11 @@ impl Command for GetMassBalanceReportCommand {
     ) -> Result<serde_json::Value, CommandError> {
         let model = session.get_model()
             .ok_or(CommandError::ModelNotLoaded)?;
+        // A model that was only loaded, or whose run was stopped, has no balance to report.
+        if !session.has_completed_simulation() {
+            return Err(CommandError::ExecutionError(
+                "No completed simulation to report on. Run simulation first.".to_string()));
+        }
         let report = model.generate_mass_balance_report();
         Ok(serde_json::json!({ "report": report }))
     }
