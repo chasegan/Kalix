@@ -1,16 +1,16 @@
-/// INI file parsing for optimisation configuration
-///
-/// This module parses optimisation configuration from INI files using the
-/// Kalix custom INI parser.
-///
-/// Case-sensitivity:
-/// - Section names: case-insensitive ([General] = [general])
-/// - Property keys: case-insensitive (model_file = MODEL_FILE)
-/// - Objective functions: case-insensitive (NSE = nse)
-/// - Algorithm names: case-insensitive (DE = de)
-/// - Boolean values: case-insensitive (true = TRUE)
-/// - File paths: case-sensitive (preserved as-is)
-/// - Node/series names: case-sensitive (preserved as-is)
+//! INI file parsing for optimisation configuration
+//!
+//! This module parses optimisation configuration from INI files using the
+//! Kalix custom INI parser.
+//!
+//! Case-sensitivity:
+//! - Section names: case-insensitive ([General] = [general])
+//! - Property keys: case-insensitive (model_file = MODEL_FILE)
+//! - Objective functions: case-insensitive (NSE = nse)
+//! - Algorithm names: case-insensitive (DE = de)
+//! - Boolean values: case-insensitive (true = TRUE)
+//! - File paths: case-sensitive (preserved as-is)
+//! - Node/series names: case-sensitive (preserved as-is)
 
 use std::fs;
 use indexmap::IndexMap;
