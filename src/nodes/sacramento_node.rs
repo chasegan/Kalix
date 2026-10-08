@@ -166,10 +166,6 @@ impl Node for SacramentoNode {
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;
     }
-
-
-
-
 }
 
 // ============================================================================
