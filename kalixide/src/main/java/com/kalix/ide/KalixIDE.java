@@ -385,10 +385,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         // Suppliers for auxiliary windows always reflect the active document.
         RunManager.setBaseDirectorySupplier(fileOperations::getCurrentWorkingDirectory);
-        RunManager.setEditorTextSupplier(() -> {
+        RunManager.setModelTextSupplier(() -> {
             // Only model documents are runnable; a text tab supplies nothing.
             KalixDocument doc = documentManager.getActiveDocument();
             return doc != null && doc.isModel() ? doc.getText() : null;
+        });
+        RunManager.setEditorTextSupplier(() -> {
+            // The active tab's text whatever its kind, e.g. a mass balance report.
+            KalixDocument doc = documentManager.getActiveDocument();
+            return doc != null ? doc.getText() : null;
         });
         MinimalEditorWindow.setBaseDirectorySupplier(fileOperations::getCurrentWorkingDirectory);
 

@@ -165,6 +165,14 @@ impl Session {
 
     pub fn set_model(&mut self, model: Model) {
         self.model = Some(model);
+        // Results describe the model they came from, not its replacement.
+        self.results.clear();
+    }
+
+    /// Whether the loaded model has run to completion since it was loaded. A stopped
+    /// or failed run does not count.
+    pub fn has_completed_simulation(&self) -> bool {
+        self.results.contains_key("last_simulation")
     }
 
     pub fn get_model_mut(&mut self) -> Option<&mut Model> {
