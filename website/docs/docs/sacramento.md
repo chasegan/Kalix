@@ -56,7 +56,7 @@ All seventeen model parameters — and the rainfall-weighting terms, when `rain`
 
 The sacramento node adds inflows from a Sacramento rainfall-runoff model (Burnash, 1973) to the system. The downstream flow is therefore
 
-`dsflow=usflow+runoff\_volume`
+`dsflow = usflow + runoff_volume`
 
 Parameters for soil moisture and Stores
 
@@ -96,7 +96,7 @@ Parameters for Runoff and Losses
 
 Parameters for Runoff Routing
 
-- LagUH is a single-value reparameterisation of the five original unit hydrogrpah parameters UH1 -UH5. This represents the shape of the unit hydrogrpah which is used to route instantaneous runoff through the system allowing for delays in the runoff process.
+- LagUH is a single-value reparameterisation of the five original unit hydrogrpah parameters UH1 - UH5. This represents the shape of the unit hydrograph which is used to route instantaneous runoff through the system allowing for delays in the runoff process.
 
 ![](../assets/docs-nodes-sacramento/image.png)
 
