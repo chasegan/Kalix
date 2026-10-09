@@ -6,11 +6,15 @@ hide:
   - toc
 ---
 
-<div class="kx-help" markdown>
+<div class="kx-help">
 
-# Help
-
-<p class="kx-help-lead">The assistant is here to make the Kalix documentation more accessible. Consider whether its advice suits your modelling application.</p>
+<div class="kx-help-head">
+  <div>
+    <h1>Help</h1>
+    <p class="kx-help-lead">Ask the bird. It knows the Kalix docs and will do its best to help. It is still a bird, though, and accepts no liability.</p>
+  </div>
+  <img class="kx-help-bird off-glb" src="../assets/help-bird.svg" alt="" width="72" height="88">
+</div>
 
 <div id="kx-chat-page"></div>
 

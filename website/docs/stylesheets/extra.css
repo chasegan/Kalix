@@ -355,10 +355,19 @@
  * the site.
  * ------------------------------------------------------------------------- */
 .kx-help { max-width: 820px; margin: 0 auto; }
-.md-typeset .kx-help > h1 { margin: 0 0 var(--kx-space-3); }
+/* The bird sits to the right of the title and lead, about three lead lines tall.
+ * Scoped under .md-typeset because Material's `img { height: auto; max-width: 100% }`
+ * otherwise outranks the class and lets the SVG scale to the full row width. */
+.kx-help-head {
+  display: flex; align-items: center; gap: var(--kx-space-6);
+  margin: 0 0 var(--kx-space-7);
+}
+.kx-help-head > div { flex: 1 1 auto; min-width: 0; }
+.md-typeset .kx-help-bird { flex: none; height: 5.5rem; width: auto; margin-left: auto; }
+.md-typeset .kx-help-head h1 { margin: 0 0 var(--kx-space-2); }
 .md-typeset .kx-help-lead {
   font-size: var(--kx-text-lg); line-height: var(--kx-leading-normal);
-  color: var(--kx-text-muted); max-width: 60ch; margin: 0 0 var(--kx-space-7);
+  color: var(--kx-text-muted); max-width: 60ch; margin: 0;
 }
 
 /* ---- Contact page --------------------------------------------------------- *
