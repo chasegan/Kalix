@@ -208,7 +208,8 @@ impl Sacramento {
 
     /// Test-only access to internal upper-zone state, letting tests drive the
     /// evaporation branches directly without contriving a spin-up sequence.
-    /// Keeps `adimc` consistent with its invariant (adimc = uztwc + lztwc).
+    /// Resets `adimc` to its starting condition (adimc = uztwc + lztwc), as
+    /// `initialize_state_empty` does.
     #[cfg(test)]
     pub(crate) fn set_uz_state_for_test(&mut self, uztwc: f64, uzfwc: f64, evapuzfw: f64) {
         self.uztwc = uztwc;
