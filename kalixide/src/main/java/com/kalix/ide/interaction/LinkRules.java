@@ -2,14 +2,7 @@ package com.kalix.ide.interaction;
 
 import com.kalix.ide.model.ModelLink;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Deque;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 /**
@@ -36,34 +29,14 @@ public final class LinkRules {
         if (upstream.equals(downstream)) {
             return false;
         }
-        Map<String, List<String>> downstreamOf = new HashMap<>();
         for (ModelLink link : links) {
             if (link.getUpstreamTerminus().equals(upstream)
                     && link.getDownstreamTerminus().equals(downstream)) {
                 return false;
             }
-            downstreamOf.computeIfAbsent(link.getUpstreamTerminus(), k -> new ArrayList<>())
-                .add(link.getDownstreamTerminus());
         }
-        return !reaches(downstreamOf, downstream, upstream);
-    }
-
-    /** Whether {@code to} is reachable from {@code from} by following links downstream. */
-    private static boolean reaches(Map<String, List<String>> downstreamOf, String from, String to) {
-        Set<String> seen = new HashSet<>();
-        Deque<String> pending = new ArrayDeque<>();
-        pending.push(from);
-        while (!pending.isEmpty()) {
-            String node = pending.pop();
-            if (node.equals(to)) {
-                return true;
-            }
-            if (seen.add(node)) {
-                for (String next : downstreamOf.getOrDefault(node, List.of())) {
-                    pending.push(next);
-                }
-            }
-        }
-        return false;
+        // A loop: the upstream node already lies below the downstream one.
+        // Builds more of the graph than this needs and has no early exit; cheap at model sizes.
+        return !new NodeAdjacency(links).downstream(Set.of(downstream)).contains(upstream);
     }
 }

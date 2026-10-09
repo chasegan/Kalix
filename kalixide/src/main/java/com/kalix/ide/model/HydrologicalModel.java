@@ -313,6 +313,23 @@ public class HydrologicalModel {
     }
     
     /**
+     * Add several nodes to the current selection, notifying listeners once.
+     * Names that are not nodes in the model are ignored.
+     * @param nodeNames Names of nodes to select
+     */
+    public void selectNodes(Collection<String> nodeNames) {
+        boolean changed = false;
+        for (String nodeName : nodeNames) {
+            if (nodes.containsKey(nodeName) && selectedNodes.add(nodeName)) {
+                changed = true;
+            }
+        }
+        if (changed) {
+            notifyListeners(new ModelChangeEvent(ModelChangeEvent.Type.NODE_SELECTED, null));
+        }
+    }
+
+    /**
      * Deselect a specific node
      * @param nodeName Name of node to deselect
      */
@@ -441,6 +458,29 @@ public class HydrologicalModel {
      */
     public Set<String> getSelectedLinks() {
         return new HashSet<>(selectedLinks);
+    }
+
+    /**
+     * The nodes a network selection grows from: the selected nodes, or with no node
+     * selected, both ends of each selected link. Links never add to selected nodes: a
+     * rectangle selection picks up every link it crosses, and those must not widen the
+     * seed set. Only nodes still in the model are returned: a selection can outlive
+     * what it names.
+     */
+    public Set<String> getSelectionSeedNodes() {
+        Set<String> seeds = new HashSet<>(selectedNodes);
+        seeds.retainAll(nodes.keySet());
+        if (!seeds.isEmpty()) {
+            return seeds;
+        }
+        for (ModelLink link : links) {
+            if (isLinkSelected(link)) {
+                seeds.add(link.getUpstreamTerminus());
+                seeds.add(link.getDownstreamTerminus());
+            }
+        }
+        seeds.retainAll(nodes.keySet());
+        return seeds;
     }
 
     /**

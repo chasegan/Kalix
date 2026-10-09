@@ -1,0 +1,14 @@
+---
+version: "0.4.8"
+date: TBD
+prerelease: false
+assets:
+  Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.8/KalixIDE-Windows-0.4.8-Portable.zip"
+  macOS: "https://github.com/chasegan/Kalix/releases/download/v0.4.8/KalixIDE-macOS-0.4.8-Portable.zip"
+  Linux: "https://github.com/chasegan/Kalix/releases/download/v0.4.8/KalixIDE-Linux-0.4.8-Portable.zip"
+pip: "pip install kalix==0.4.8"
+---
+
+- New! `Select` in the schematic map's context menu grows the selection along the network from the selected nodes and links: connected nodes, all nodes, upstream, or downstream.
+    - `Upstream including distributaries` and `Downstream including tributaries` also take the branches that leave or join that stretch of river.
+    - With no nodes selected, the menu shows `Select all`.

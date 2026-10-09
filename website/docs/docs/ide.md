@@ -20,6 +20,17 @@ Click and drag to select nodes on the schematic map. Then drag to move or ctrl+d
 
 ![](../assets/docs-using-ide/image_2.png)
 
+**Select** in the schematic map context menu grows the selection from the nodes already selected. With no nodes selected, a selected link counts as the nodes at its two ends. Once a node is selected, links are ignored: a rectangle selection also selects the links it crosses, and those do not widen it. Nodes are added to the selection, never removed.
+
+- **Connected nodes** selects every node linked to the selection, in either direction.
+- **All nodes** selects every node in the model.
+- **Upstream** selects every node that flows to the selection.
+- **Upstream including distributaries** also follows each branch that leaves those upstream nodes, down to its end or to where it rejoins the flow below the selection.
+- **Downstream** selects every node the selection flows to.
+- **Downstream including tributaries** also follows each tributary that joins those downstream nodes, up to its headwaters.
+
+With no nodes selected, the menu shows **Select all** instead.
+
 **Draw a link** by hovering just outside a node until a ring appears, then dragging to the downstream node. The cursor shows when a drop isn't allowed (the same node, an existing link, or a loop). Esc cancels; Ctrl+Z undoes.
 
 The link is written as `ds_N = <downstream>` at the first free outlet. If every outlet the node type allows is taken, the last one is re-pointed instead (`ds_1` for most nodes, `ds_2` for a splitter, `ds_4` for storage). To use a different outlet, edit the `ds_N` numbers in the text.
