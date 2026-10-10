@@ -406,7 +406,7 @@
       "allowed_outputs": [
         "fallow_depletion",
         "soil_moisture",
-        "soil_moisture_vol",
+        "volume",
         "usflow",
         "et",
         "et_vol",

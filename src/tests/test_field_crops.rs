@@ -80,7 +80,7 @@ node.paddock.crop_1_kc
 node.paddock.crop_2_plant
 node.paddock.fallow_depletion
 node.paddock.soil_moisture
-node.paddock.soil_moisture_vol
+node.paddock.volume
 node.paddock.usflow
 node.paddock.et
 node.paddock.et_vol
@@ -113,19 +113,19 @@ fn assert_close(a: f64, b: f64, what: &str) {
 }
 
 /// The field's water balance, every step, from its results alone: the change in the
-/// water the profile holds is what came in less what went out. soil_moisture_vol counts
+/// water the profile holds is what came in less what went out. volume counts
 /// every bucket and every layer, so this holds through planting, harvest, abandonment,
 /// overflow into the layers, storm runoff and the pour.
 fn field_balance_closes(model: &mut Model) {
     let n = s(model, "usflow").len();
     let area = 4.0;
     for t in 1..n {
-        let d_held = s(model, "soil_moisture_vol")[t] - s(model, "soil_moisture_vol")[t - 1];
+        let d_held = s(model, "volume")[t] - s(model, "volume")[t - 1];
         let inflow = s(model, "rain_vol")[t] - s(model, "intercepted")[t] * area + s(model, "supply")[t] - s(model, "escape")[t];
         let outflow = s(model, "et_vol")[t] + s(model, "excess")[t];
         assert_close(inflow - outflow, d_held, &format!("water balance on step {t}"));
         assert_close(s(model, "usflow")[t], s(model, "supply")[t] + s(model, "bypass")[t], &format!("usflow on step {t}"));
-        assert_close(s(model, "soil_moisture")[t] * area, s(model, "soil_moisture_vol")[t], &format!("soil_moisture is soil_moisture_vol over the field on step {t}"));
+        assert_close(s(model, "soil_moisture")[t] * area, s(model, "volume")[t], &format!("soil_moisture is volume over the field on step {t}"));
     }
 }
 
@@ -246,7 +246,7 @@ fn test_water_below_one_crops_roots_is_there_for_the_next() {
     // harvest, the fallow's bucket is 20 down and the layer below 20, over the whole field:
     // 100 mm of capacity less 40, over 4 km2
     assert_eq!(s(&mut model, "soil_moisture")[4], 60.0);
-    assert_eq!(s(&mut model, "soil_moisture_vol")[4], 240.0);
+    assert_eq!(s(&mut model, "volume")[4], 240.0);
     field_balance_closes(&mut model);
 }
 

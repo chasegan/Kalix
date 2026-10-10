@@ -114,7 +114,7 @@ dries.
 | crop\_N\_kc | The crop coefficient used today: the crop's curve at its days since planting, times the multiplier; not a number when nothing stands in the slot |
 | fallow\_depletion | How far the fallow's root zone is below full at the end of the step [mm] |
 | soil\_moisture | The water the whole profile holds at the end of the step, to the deepest roots on the field, over the whole field [mm]: every partition's bucket and every layer below it, by area. How much water there is, where the depletions say how much is missing; the profile's capacity is `available_water × deepest root depth / 1000` |
-| soil\_moisture\_vol | The same water as a volume [ML]: `soil_moisture × area`. The one state whose change is the field's water balance; see [Mass balance](#mass-balance) |
+| volume | The water held in the node [ML], as `volume` is on a storage or routing node: the same water as `soil_moisture`, over the field, `soil_moisture × area`. The one state whose change is the field's water balance; see [Mass balance](#mass-balance) |
 | usflow | Upstream flow: the water that arrives at the field [ML] |
 | et | Evapotranspiration over the whole field [mm]: the partitions' `ks × kc × evap`, each no more than the water its bucket holds, weighted by area |
 | et\_vol | Evapotranspiration [ML]: `et × area` |
@@ -249,11 +249,11 @@ running off a bucket that irrigation has just filled. Effective rainfall is `rai
 **The balance closes every step, to machine precision**, and every term is a result:
 
 ```
-soil_moisture_vol[t] − soil_moisture_vol[t−1] = rain_vol − intercepted × area + supply − escape − et_vol − excess
+volume[t] − volume[t−1] = rain_vol − intercepted × area + supply − escape − et_vol − excess
 ```
 
 with `usflow = supply + bypass`, `ds_1 = bypass + excess − return_flow` and `ds_2 = return_flow`.
-`soil_moisture_vol` is the water the whole profile holds over the whole field, every partition's
+`volume` is the water the whole profile holds over the whole field, every partition's
 bucket and every layer, so the identity holds through planting, harvest and abandonment, which
 move land and its water between partitions but nothing in or out of the field. Nothing leaves
 the field except on its links, as evapotranspiration, intercepted rain or escape.
@@ -435,7 +435,7 @@ that drains to a tailwater dam or a channel is `ds_2` to that node.
 
 Only what the field keeps and loses leaves the model at the field: the water the soil holds, in
 every bucket and layer, evapotranspiration, intercepted rain, and escape. To see the balance
-close, record `soil_moisture_vol` with `rain_vol`, `intercepted`, `supply`, `escape`, `et_vol`
+close, record `volume` with `rain_vol`, `intercepted`, `supply`, `escape`, `et_vol`
 and `excess`: the day-to-day change in the first is the sum of the rest, every day. `bypass`, `excess` and `return_flow` are still
 in the model, on `ds_1` and `ds_2`.
 
