@@ -433,6 +433,8 @@
         "crop_1_orders_en_route",
         "crop_1_plant",
         "crop_1_viable_area",
+        "crop_1_kc_multiplier",
+        "crop_1_kc",
         "crop_2_area",
         "crop_2_days",
         "crop_2_depletion",
@@ -442,6 +444,8 @@
         "crop_2_orders_en_route",
         "crop_2_plant",
         "crop_2_viable_area",
+        "crop_2_kc_multiplier",
+        "crop_2_kc",
         "crop_3_area",
         "crop_3_days",
         "crop_3_depletion",
@@ -451,6 +455,8 @@
         "crop_3_orders_en_route",
         "crop_3_plant",
         "crop_3_viable_area",
+        "crop_3_kc_multiplier",
+        "crop_3_kc",
         "crop_4_area",
         "crop_4_days",
         "crop_4_depletion",
@@ -459,7 +465,9 @@
         "crop_4_order_due",
         "crop_4_orders_en_route",
         "crop_4_plant",
-        "crop_4_viable_area"
+        "crop_4_viable_area",
+        "crop_4_kc_multiplier",
+        "crop_4_kc"
       ],
       "required_params": [
         "type",
@@ -480,18 +488,22 @@
         "crop_1_plant",
         "crop_1_order",
         "crop_1_viable_area",
+        "crop_1_kc_multiplier",
         "crop_2",
         "crop_2_plant",
         "crop_2_order",
         "crop_2_viable_area",
+        "crop_2_kc_multiplier",
         "crop_3",
         "crop_3_plant",
         "crop_3_order",
         "crop_3_viable_area",
+        "crop_3_kc_multiplier",
         "crop_4",
         "crop_4_plant",
         "crop_4_order",
-        "crop_4_viable_area"
+        "crop_4_viable_area",
+        "crop_4_kc_multiplier"
       ],
       "dsnode_params": [
         "ds_1",
@@ -573,6 +585,10 @@
           "type": "function_expression",
           "description": "Each day in the ground, crop_1's area becomes min(area, value) [km2]; 0 is death. Omitted, a crop whose stress coefficient starts the day at 0.05 or below dies"
         },
+        "crop_1_kc_multiplier": {
+          "type": "function_expression",
+          "description": "Scales crop_1's kc in the evapotranspiration step only, read every day the crop stands; interception is unaffected. Omitted, 1"
+        },
         "crop_2": {
           "type": "string",
           "description": "The crop in slot 2: the name of a [crop.*] section"
@@ -588,6 +604,10 @@
         "crop_2_viable_area": {
           "type": "function_expression",
           "description": "Each day in the ground, crop_2's area becomes min(area, value) [km2]; 0 is death. Omitted, a crop whose stress coefficient starts the day at 0.05 or below dies"
+        },
+        "crop_2_kc_multiplier": {
+          "type": "function_expression",
+          "description": "Scales crop_2's kc in the evapotranspiration step only, read every day the crop stands; interception is unaffected. Omitted, 1"
         },
         "crop_3": {
           "type": "string",
@@ -605,6 +625,10 @@
           "type": "function_expression",
           "description": "Each day in the ground, crop_3's area becomes min(area, value) [km2]; 0 is death. Omitted, a crop whose stress coefficient starts the day at 0.05 or below dies"
         },
+        "crop_3_kc_multiplier": {
+          "type": "function_expression",
+          "description": "Scales crop_3's kc in the evapotranspiration step only, read every day the crop stands; interception is unaffected. Omitted, 1"
+        },
         "crop_4": {
           "type": "string",
           "description": "The crop in slot 4: the name of a [crop.*] section"
@@ -620,6 +644,10 @@
         "crop_4_viable_area": {
           "type": "function_expression",
           "description": "Each day in the ground, crop_4's area becomes min(area, value) [km2]; 0 is death. Omitted, a crop whose stress coefficient starts the day at 0.05 or below dies"
+        },
+        "crop_4_kc_multiplier": {
+          "type": "function_expression",
+          "description": "Scales crop_4's kc in the evapotranspiration step only, read every day the crop stands; interception is unaffected. Omitted, 1"
         }
       }
     },

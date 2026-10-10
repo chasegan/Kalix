@@ -75,6 +75,8 @@ node.paddock.crop_2_ks
 node.paddock.crop_2_order
 node.paddock.crop_1_plant
 node.paddock.crop_1_viable_area
+node.paddock.crop_1_kc_multiplier
+node.paddock.crop_1_kc
 node.paddock.crop_2_plant
 node.paddock.fallow_depletion
 node.paddock.soil_moisture
@@ -572,4 +574,56 @@ fn test_the_profiles_water_is_the_one_state_whose_change_is_the_water_balance() 
     for t in 0..5 {
         assert_close(s(&mut one, "soil_moisture")[t], 50.0 - s(&mut one, "crop_1_depletion")[t], "one crop, one layer, whole field");
     }
+}
+
+#[test]
+fn test_the_kc_multiplier_scales_the_crops_water_use_and_nothing_else() {
+    // A crop at kc 1 on evap 5 dries 5 mm a day; with a multiplier of 0.6 it dries 3, with 0
+    // nothing, and the multiplier never reaches the interception, which still takes 0.2 x evap
+    let base = "evap = 5\nrain = 2\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 4, 0)";
+    let mut plain = run(&rig("", base).replace("interception = 0\n", ""));
+    let mut skip = run(&rig("", &format!("{base}\ncrop_1_kc_multiplier = 0.6")).replace("interception = 0\n", ""));
+    let mut none = run(&rig("", &format!("{base}\ncrop_1_kc_multiplier = 0")).replace("interception = 0\n", ""));
+    assert_eq!(s(&mut plain, "et")[1], 5.0);
+    assert_close(s(&mut skip, "et")[1], 3.0, "0.6 of the water use");
+    assert_eq!(s(&mut none, "et")[1], 0.0, "a multiplier of 0 is no evapotranspiration");
+    for m in [&mut plain, &mut skip, &mut none] {
+        assert_eq!(s(m, "intercepted")[1], 1.0, "interception reads evap as it is: 0.2 x 5");
+    }
+    // Recorded: the multiplier as read (1 when none is written) and the coefficient used
+    assert_eq!(s(&mut plain, "crop_1_kc_multiplier")[1], 1.0);
+    assert_eq!(s(&mut plain, "crop_1_kc")[1], 1.0);
+    assert_close(s(&mut skip, "crop_1_kc_multiplier")[1], 0.6, "the multiplier as read");
+    assert_close(s(&mut skip, "crop_1_kc")[1], 0.6, "the curve's 1 times 0.6");
+    // Not a number when nothing stands
+    let mut later = run(&rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 3, 4, 0)\ncrop_1_kc_multiplier = 0.8"));
+    assert!(s(&mut later, "crop_1_kc_multiplier")[0].is_nan() && s(&mut later, "crop_1_kc")[0].is_nan());
+    assert_close(s(&mut later, "crop_1_kc")[2], 0.8, "from the planting day");
+}
+
+#[test]
+fn test_the_kc_multiplier_can_follow_the_season_and_the_curve() {
+    // The multiplier reads the slot's own series without an offset, since area and days are
+    // written at planting: a single skip whose canopy closes over the skip after day 2.
+    // The kc curve is 0.5 on day 0 rising to 1 by day 2, so the coefficient used is the
+    // product on every day.
+    let ini = rig("", "evap = 10\nrain = 10\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_1_kc_multiplier = if(this.crop_1_days < 2, 0.7, 0.9)")
+        .replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 1000\nkc = 0, 0.5, 2, 1.0\n");
+    let mut model = run(&ini);
+    let kc = s(&mut model, "crop_1_kc");
+    assert_close(kc[0], 0.5 * 0.7, "day 0 of the crop");
+    assert_close(kc[1], 0.75 * 0.7, "day 1");
+    assert_close(kc[2], 1.0 * 0.9, "day 2: the canopy has closed");
+    assert_close(s(&mut model, "et")[2], 9.0, "kc 0.9 x evap 10 over the whole field");
+    // A multiplier that gives no number, or a negative one, stops the run
+    let bad = rig("", "evap = 5\ncrop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_1_kc_multiplier = -0.5");
+    let err = std::panic::catch_unwind(|| run(&bad)).err().map(|e| e.downcast_ref::<String>().cloned().unwrap_or_default()).unwrap_or_default();
+    assert!(err.contains("crop kc_multiplier rule for 'shallow' gave -0.5"), "got: {err}");
+    // And it round-trips
+    let ini = rig("", "crop_1 = shallow\ncrop_1_plant = 0\ncrop_1_kc_multiplier = 0.85");
+    let model = IniModelIO::read_model_string(&ini).expect("loads");
+    let rendered = IniModelIO::model_to_string(&model);
+    assert!(rendered.contains("crop_1_kc_multiplier = 0.85"), "survives save:\n{rendered}");
+    let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig("", "crop_1 = shallow\ncrop_1_plant = 0")).unwrap());
+    assert!(!plain.contains("crop_1_kc_multiplier ="), "absent stays absent:\n{plain}");
 }

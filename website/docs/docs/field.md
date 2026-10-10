@@ -93,6 +93,7 @@ dries.
 | crop\_N\_plant (compulsory with crop\_N) | The area of the crop to plant today [km²]: an expression, read every day the slot is empty, in the order phase (see step 1 of [How the node works](#how-the-node-works)). Above zero plants the crop on that much land, capped at the fallow's area that day, taking it from the fallow with its water; zero plants nothing. A slot with a crop in the ground is not read; where two slots plant the same day, the lower N goes first. A rule that gives an area every day plants again on the day of a harvest or an abandonment, into the land just returned to the fallow. Negative or not a number stops the run. Example: `crop_1_plant = if(sim.month == 10 && sim.day == 15, min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8), 0)` |
 | crop\_N\_order (optional) | The irrigation rule for this crop: the order it places upstream each step [ML]. An expression, read only while the crop is in the ground; see [The irrigation rule](#the-irrigation-rule). Omitted, the crop is rain-fed. |
 | crop\_N\_viable\_area (optional) | An expression, read every day the crop is in the ground, in the order phase: the area becomes `min(area, value)` [km²], and what leaves goes back to the fallow with its water. Zero is death. Omitted, the built-in rule applies: a crop whose stress coefficient is 0.05 or below at the start of the day dies, and its area returns to the fallow. Writing any expression replaces that rule entirely. A negative or non-numeric value stops the run. |
+| crop\_N\_kc\_multiplier (optional) | An expression, read every day the crop is in the ground, that scales the crop's `kc` in the evapotranspiration step and nowhere else: `et = ks × kc × kc_multiplier × evap`. Interception reads `evap` as it is. For a skip-row planting, a climate adjustment to the tabled curve, or a stress the field does not model. It scales water use, not area: a single-skip cotton crop uses well over two thirds of a solid one, because the canopy spreads into the skip and the skip's soil still evaporates; take the number from the published curves for the configuration. Omitted, 1. Zero is allowed; a negative or non-numeric value stops the run. Example: `crop_1_kc_multiplier = if(this.crop_1_days < 60, 0.8, 0.9)` |
 | ds\_1 (optional) | Name of the downstream node on the river: `bypass` and the river's share of the runoff drain down it. Example: `ds_1 = river` |
 | ds\_2 (optional) | Name of the node the caught runoff (`return_flow`) drains to: a blackhole when it is pumped back to the farm storage through an inflow node, a tailwater dam, or a drain. Example: `ds_2 = drain` |
 
@@ -109,6 +110,8 @@ dries.
 | crop\_N\_orders\_en\_route | Water on its way to slot N at the end of the step [ML]: ordered, today's order included, and not yet arrived. Zero without travel time from the supply. A state, like `crop_N_depletion`; the irrigation rule reads `this.crop_N_orders_en_route[-1, 0]` |
 | crop\_N\_plant | What the planting rule gave today [km²], before the cap at the fallow's area; not a number on a day it was not read, which is every day a crop stands in the slot |
 | crop\_N\_viable\_area | What the viable-area rule gave today [km²], or, with no rule written, the area the built-in rule allows: the crop's own area, or 0 the morning it dies. Not a number on a day it was not read: when nothing stands in the slot, and on a harvest day |
+| crop\_N\_kc\_multiplier | What the multiplier gave today, 1 when none is written; not a number when nothing stands in the slot |
+| crop\_N\_kc | The crop coefficient used today: the crop's curve at its days since planting, times the multiplier; not a number when nothing stands in the slot |
 | fallow\_depletion | How far the fallow's root zone is below full at the end of the step [mm] |
 | soil\_moisture | The water the whole profile holds at the end of the step, to the deepest roots on the field, over the whole field [mm]: every partition's bucket and every layer below it, by area. How much water there is, where the depletions say how much is missing; the profile's capacity is `available_water × deepest root depth / 1000` |
 | soil\_moisture\_vol | The same water as a volume [ML]: `soil_moisture × area`. The one state whose change is the field's water balance; see [Mass balance](#mass-balance) |
@@ -147,7 +150,8 @@ reference evapotranspiration.
 3. **The state: depletion.** D is how far the bucket is below full, in mm. D = 0 is full and
    D = TAW is empty. This is the crop's `crop_N_depletion`.
 4. **What the crop wants.** A well-watered crop uses E_c = K_c · E₀, where the crop coefficient
-   K_c depends on the crop and how far through its growth it is (`kc`).
+   K_c depends on the crop and how far through its growth it is (`kc`). A planting that is not
+   a full stand, a single-skip cotton say, uses less: the slot's `kc_multiplier` scales it.
 5. **What it gets when the bucket is low.** A crop drinks freely until it has used a fraction
    `p` of the capacity, then less and less:
    K_s = 1 if D ≤ p·TAW, otherwise (TAW − D) / ((1 − p)·TAW), and E = K_s · E_c.
@@ -216,9 +220,9 @@ In this order:
    `ks = clamp((TAW − D) / ((1 − p) × TAW), 0, 1)`, with `TAW` the bucket's capacity and `p` the
    crop's. The crop transpires freely while it has used less than `p` of its bucket, and less
    and less as the soil dries beyond that (FAO-56, equation 84).
-3. **Evapotranspiration.** `et = ks × kc × evap`, no more than the water the bucket holds, with
-   `kc` from the crop's curve at its days since planting (the fallow's counts from the start of
-   the run).
+3. **Evapotranspiration.** `et = ks × kc × kc_multiplier × evap`, no more than the water the
+   bucket holds, with `kc` from the crop's curve at its days since planting and the slot's
+   `crop_N_kc_multiplier`, 1 unless written. The fallow's `kc` is its number.
 4. **Rain.** With a `curve_number`, each partition first sheds storm runoff by its own
    wetness (see [Storm runoff](#storm-runoff)). The rest goes on the soil, less
    `intercepted = min(rain, interception × evap)`. What would take a bucket below zero drains
@@ -471,6 +475,11 @@ choice is not in FAO-56, the reference it follows is given.
   Industry and Environment (2019). *Assessment of the additional cropped area rainfall runoff
   occurring due to irrigation*: the saturation-excess store of the NSW river models beside the
   consultants' curve-number estimates for the same farms.
+- Bange, M.P., Carberry, P.S., Marshall, J. and Milroy, S.P. (2005). *Row configuration as a
+  tool for managing rain-fed cotton systems: review and simulation analysis.* Australian Journal
+  of Experimental Agriculture 45, 65–77. Water use and yield of solid, single-skip and
+  double-skip cotton; the place to take a `kc_multiplier` from, with the industry's WATERpak
+  (Cotton Research and Development Corporation) crop water-use chapters.
 - eWater. *Source Scientific Reference Guide: Irrigator Demand Model.* The fallow as a crop with
   its own depth and coefficient, the planting decision as an authored rule, the effective-rain
   form of interception, and crop death under sustained stress. Its assumption that the soil

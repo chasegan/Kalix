@@ -1284,6 +1284,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                 "_plant" => slot.plant_input = input,
                                 "_order" => slot.order_input = input,
                                 "_viable_area" => slot.viable_area_input = Some(input),
+                                "_kc_multiplier" => slot.kc_multiplier_input = input,
                                 other => unreachable!("crop_slot_property only returns CROP_SLOT_PROPERTIES, got {other}"),
                             }
                         }
@@ -1929,6 +1930,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                     if let Some(viable) = &slot.viable_area_input {
                         ini_doc.set_property(section_name.as_str(), &key("_viable_area"), viable.to_string().as_str());
                     }
+                    set_property_if_not_empty(&mut ini_doc, section_name.as_str(), &key("_kc_multiplier"), &slot.kc_multiplier_input.to_string());
                 }
             }
         }

@@ -18,10 +18,10 @@ pub const MAX_CROPS: usize = 4;
 
 /// The properties of a crop slot, after `crop_N`: the parser accepts each and
 /// the linter schema lists each, for N in 1..=MAX_CROPS
-pub const CROP_SLOT_PROPERTIES: [&str; 4] = ["", "_plant", "_order", "_viable_area"];
+pub const CROP_SLOT_PROPERTIES: [&str; 5] = ["", "_plant", "_order", "_viable_area", "_kc_multiplier"];
 
 /// The results of a crop slot, after `crop_N`
-pub const CROP_SLOT_OUTPUTS: [&str; 9] = ["_area", "_days", "_depletion", "_ks", "_order", "_order_due", "_orders_en_route", "_plant", "_viable_area"];
+pub const CROP_SLOT_OUTPUTS: [&str; 11] = ["_area", "_days", "_depletion", "_ks", "_order", "_order_due", "_orders_en_route", "_plant", "_viable_area", "_kc_multiplier", "_kc"];
 
 /// A crop whose stress coefficient at the start of the day is this or below dies,
 /// when the slot has no viable_area rule of its own (Source's rule)
@@ -36,6 +36,7 @@ pub struct CropSlot {
     pub plant_input: DynamicInput,        // km2 to plant today, read while the slot is empty; 0 plants nothing
     pub order_input: DynamicInput,        // the irrigation rule, in ML; omitted, rain-fed
     pub viable_area_input: Option<DynamicInput>, // the area becomes min(area, value); absent, the built-in rule
+    pub kc_multiplier_input: DynamicInput, // scales the crop's kc in the ET step only; omitted, 1
 
     // Internal state only
     partition: Partition,
@@ -48,6 +49,8 @@ pub struct CropSlot {
     plant_read: f64,                      // what the plant rule gave today; NaN when it was not read
     viable_read: f64,                     // what the viable_area rule gave today, or the built-in rule's area; NaN when not read
     ks_written: bool,                     // today's opening ks has been recorded (planting writes it as soon as it is known)
+    kc_multiplier_read: f64,              // what the multiplier gave today; 1 when none is written; NaN when the crop does not stand
+    kc_used: f64,                         // the coefficient used for today's ET: the curve times the multiplier; NaN when the crop does not stand
 
     // Recorders, in the order of CROP_SLOT_OUTPUTS
     recorder_idx: [Option<usize>; CROP_SLOT_OUTPUTS.len()],
@@ -60,6 +63,7 @@ impl CropSlot {
             plant_input: DynamicInput::default(),
             order_input: DynamicInput::default(),
             viable_area_input: None,
+            kc_multiplier_input: DynamicInput::default(),
             partition: Partition::default(),
             in_ground: false,
             days: 0,
@@ -70,6 +74,8 @@ impl CropSlot {
             plant_read: f64::NAN,
             viable_read: f64::NAN,
             ks_written: false,
+            kc_multiplier_read: f64::NAN,
+            kc_used: f64::NAN,
             recorder_idx: [None; CROP_SLOT_OUTPUTS.len()],
         }
     }
@@ -479,6 +485,8 @@ impl Node for FieldNode {
             slot.plant_read = f64::NAN;
             slot.viable_read = f64::NAN;
             slot.ks_written = false;
+            slot.kc_multiplier_read = f64::NAN;
+            slot.kc_used = f64::NAN;
         }
 
         // Reset order state, so a rerun of the same model object starts clean.
@@ -610,8 +618,27 @@ impl Node for FieldNode {
             excess += (runoff_mm + excess_mm) * self.fallow_partition.area;
         }
         for slot in &mut self.slots {
-            if !slot.in_ground { continue; }
-            let kc = slot.crop.kc.at(slot.days as f64);
+            if !slot.in_ground {
+                slot.kc_multiplier_read = f64::NAN;
+                slot.kc_used = f64::NAN;
+                continue;
+            }
+            // The crop's coefficient from its curve, scaled by the slot's multiplier if one is
+            // written (a skip-row planting, a climate adjustment, a stress the node does not
+            // model). It touches the ET step only: interception reads evap as it is.
+            let multiplier = match slot.kc_multiplier_input {
+                DynamicInput::None { .. } => 1.0,
+                _ => {
+                    let value = slot.kc_multiplier_input.get_value(data_cache);
+                    if !(value >= 0.0) {
+                        panic!("Field '{}': crop kc_multiplier rule for '{}' gave {}; it must be a non-negative number", self.name, slot.crop.name, value);
+                    }
+                    value
+                }
+            };
+            let kc = slot.crop.kc.at(slot.days as f64) * multiplier;
+            slot.kc_multiplier_read = multiplier;
+            slot.kc_used = kc;
             let runoff_mm = curve.map_or(0.0, |(dry, wet)| curve_number_runoff(dry, wet, &slot.partition, rain_mm));
             let intercepted_mm = (rain_mm - runoff_mm).min(self.interception * evap_mm);
             let (ks, et_mm, excess_mm) = soil_day(&self.profile, &mut slot.partition, slot.crop.p, kc, evap_mm, rain_mm - runoff_mm - intercepted_mm);
@@ -661,6 +688,12 @@ impl Node for FieldNode {
             let depletion = if slot.in_ground { slot.partition.root_depletion } else { f64::NAN };
             if let Some(idx) = slot.recorder_idx[2] {
                 data_cache.add_value_at_index(idx, depletion);
+            }
+            if let Some(idx) = slot.recorder_idx[9] {
+                data_cache.add_value_at_index(idx, slot.kc_multiplier_read);
+            }
+            if let Some(idx) = slot.recorder_idx[10] {
+                data_cache.add_value_at_index(idx, slot.kc_used);
             }
         }
         if let Some(idx) = self.recorder_idx_fallow_depletion {

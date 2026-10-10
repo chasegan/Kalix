@@ -30,7 +30,7 @@ public class CropSectionValidator implements ValidationStrategy {
 
     private static final Pattern VALID_CROP_NAME = Pattern.compile("^[a-z][a-z0-9_]*$");
 
-    private static final Pattern CROP_SLOT_KEY = Pattern.compile("^crop_([1-9][0-9]*)(|_plant|_order|_viable_area)$");
+    private static final Pattern CROP_SLOT_KEY = Pattern.compile("^crop_([1-9][0-9]*)(|_plant|_order|_viable_area|_kc_multiplier)$");
 
     @Override
     public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
