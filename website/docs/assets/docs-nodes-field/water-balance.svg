@@ -45,7 +45,7 @@
   <!-- evapotranspiration -->
   <path class="v" d="M470,288 L470,66"/>
   <text x="482" y="222" class="lbl">evapotranspiration</text>
-  <text x="482" y="239" class="mono">ks × kc × evap</text>
+  <text x="482" y="239" class="mono">ks × kc × kc_multiplier × evap</text>
   <text x="482" y="256" class="small">at most the water held</text>
   <circle cx="440" cy="262" r="10" fill="#96631a"/><text x="440" y="266" text-anchor="middle" class="step">2–3</text>
 
