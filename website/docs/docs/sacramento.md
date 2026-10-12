@@ -100,6 +100,24 @@ Parameters for Runoff Routing
 
 ![](../assets/docs-nodes-sacramento/image.png)
 
+## LagUH
+
+LagUH is the delay, in days, between runoff being generated and reaching the catchment outlet. It stands in for the five unit-hydrograph ordinates UH1 to UH5 of the original model, which Kalix does not take. The engine turns it into a unit hydrograph with at most two non-zero ordinates: a whole-number LagUH shifts the day's runoff by that many days, and a fractional one splits it between the two days either side, so that the mean delay is exactly LagUH. For example, `laguh = 1` sends all of today's runoff out tomorrow; `laguh = 0.3` sends 70% out today and 30% tomorrow. The hydrograph routes surface runoff, interflow and impervious-area runoff; baseflow bypasses it.
+
+**Forward: LagUH to ordinates.** With $n = \lceil \text{LagUH} \rceil$ and $UH_0$ the ordinate for the same day,
+
+$$
+UH_{n-1} = n - \text{LagUH}, \qquad UH_n = \text{LagUH} - (n - 1), \qquad UH_i = 0 \text{ otherwise.}
+$$
+
+**Backward: ordinates to LagUH.** For a set of ordinates that sums to 1,
+
+$$
+\text{LagUH} = \sum_{i \ge 0} i \cdot UH_i
+$$
+
+This recovers LagUH exactly when the set has the two-ordinate form above. For any other set it gives the value with the same mean delay, but the shape is not reproduced, so recalibrate rather than rely on the converted value.
+
 ## References
 
 Burnash, R. J. (1973). *A generalized streamflow simulation system: Conceptual modeling for digital computers*. US Department of Commerce, National Weather Service, and State of California, Department of Water Resources.
