@@ -655,7 +655,7 @@ public class CommandExecutor {
         try {
             TextEdit edit = linkEdit(editor.getText(), upstream, downstream, maxOutlet);
             if (edit == null) {
-                logger.warn("Link skipped: no section found for upstream node '{}'", upstream);
+                showError("Cannot add this link: no section for node '" + upstream + "' was found.");
                 return false;
             }
             editor.beginAtomicEdit();
