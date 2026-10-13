@@ -896,6 +896,71 @@ public class CommandExecutor {
         return dsLineInsertion(text, section, n, downstream);
     }
 
+    /** One {@code ds_N} line: its outlet, and where its key and its content end in the text. */
+    private record DsLine(int outlet, int keyEnd, int contentEnd) {
+    }
+
+    /**
+     * Computes the edits that make {@code upstream}'s link to {@code downstream} its
+     * {@code ds_1}. The keys stay where they are; everything after them (target and any
+     * trailing comment) swaps between the two lines. With no {@code ds_1} line, the link's
+     * key is renumbered in place. Ordered last-first, so each can be applied in turn.
+     * Empty when there is nothing to do: no section, no such link, or already primary.
+     */
+    static List<TextEdit> makePrimaryEdits(String text, String upstream, String downstream) {
+        NodeSectionLocator.NodeSection section = NodeSectionLocator.find(text, upstream);
+        if (section == null) {
+            return List.of();
+        }
+        String body = text.substring(section.start(), section.contentEnd());
+        DsLine primary = null;
+        DsLine link = null;
+        // Scanning the section alone keeps other nodes' ds lines out of it.
+        for (NodeSectionLocator.DsReference ref : NodeSectionLocator.findDsReferences(body)) {
+            DsLine line = dsLine(text, section.start() + ref.lineStart(), section.start() + ref.lineEnd());
+            if (line == null) {
+                continue;
+            }
+            if (line.outlet() == 1) {
+                if (ref.target().equals(downstream)) {
+                    return List.of(); // already primary
+                }
+                primary = primary == null ? line : primary;
+            } else if (link == null && ref.target().equals(downstream)) {
+                link = line;
+            }
+        }
+        if (link == null) {
+            return List.of();
+        }
+        if (primary == null) {
+            int keyStart = link.keyEnd() - String.valueOf(link.outlet()).length();
+            return List.of(new TextEdit(keyStart, link.keyEnd(), "1"));
+        }
+        TextEdit toPrimary = new TextEdit(primary.keyEnd(), primary.contentEnd(),
+            text.substring(link.keyEnd(), link.contentEnd()));
+        TextEdit toLink = new TextEdit(link.keyEnd(), link.contentEnd(),
+            text.substring(primary.keyEnd(), primary.contentEnd()));
+        return toPrimary.start() > toLink.start() ? List.of(toPrimary, toLink) : List.of(toLink, toPrimary);
+    }
+
+    /** Locates the key and content of the {@code ds_N} line spanning the given range, or null. */
+    private static DsLine dsLine(String text, int lineStart, int lineEnd) {
+        int contentEnd = lineEnd;
+        while (contentEnd > lineStart && (text.charAt(contentEnd - 1) == '\n' || text.charAt(contentEnd - 1) == '\r')) {
+            contentEnd--;
+        }
+        int keyStart = lineStart;
+        while (keyStart < contentEnd && Character.isWhitespace(text.charAt(keyStart))) {
+            keyStart++;
+        }
+        java.util.regex.Matcher key = DS_KEY_PATTERN.matcher(text.substring(keyStart, contentEnd));
+        if (!key.find()) {
+            return null;
+        }
+        return new DsLine(Integer.parseInt(key.group(1)), keyStart + key.end(1), contentEnd);
+    }
+
     /**
      * The exact value-range replacement of {@code oldTarget} on one {@code ds_N} line that
      * starts at {@code lineStart}. Range-anchored to the value only, so keys and same-line
