@@ -11,3 +11,8 @@ pip: "pip install kalix==0.4.8"
 
 - New! Soil moisture store outputs on the [`sacramento` node](https://kalix.org/docs/sacramento/): `uztw`, `uzfw`, `lztw`, `lzfp` and `lzfs` record the contents of the five stores at the end of each step.
     - Each is a depth in mm over the pervious area, and each fills to its capacity parameter; see [Soil moisture store outputs](https://kalix.org/docs/sacramento-technical/#soil-moisture-store-outputs).
+- Improved: Sacramento calibration now searches the ratios `lzpkonlzsk` (`lzpk / lzsk`) and `sarvaonpctim` (`sarva / pctim`) in place of `lzpk` and `sarva`. See [optimisable parameters](https://kalix.org/docs/optimisable-parameters/#the-ratios-lzpkonlzsk-and-sarvaonpctim).
+    - The IDE's default Sacramento configuration lists the ratios, which keeps `lzpk` at or below `lzsk` and `sarva` at or below `pctim`.
+    - Existing configurations that map `lzpk` and `sarva` run unchanged.
+    - Optimisation results list the derived `lzpk` and `sarva` in their own block, apart from the mapped parameters.
+- Improved: a wrong address in `[parameters]` now stops an optimisation before it starts, where before every candidate failed.
