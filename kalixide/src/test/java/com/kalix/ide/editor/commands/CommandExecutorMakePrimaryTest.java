@@ -1,5 +1,6 @@
 package com.kalix.ide.editor.commands;
 
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -76,5 +77,22 @@ class CommandExecutorMakePrimaryTest {
         assertTrue(CommandExecutor.makePrimaryEdits(text, "no_such_node", "b").isEmpty(), "no section");
         // The same target on two outlets is one link on the map, and it is already primary.
         assertTrue(CommandExecutor.makePrimaryEdits("[node.s]\nds_1 = a\nds_2 = a\n", "s", "a").isEmpty());
+    }
+
+    // --- Atomic behaviour (needs a real text area) ---
+
+    @Test
+    void makePrimaryIsOneUndoStep() {
+        String text = "[node.s]\nds_1 = a  # river\nds_2 = b  # weir\n";
+        RSyntaxTextArea area = new RSyntaxTextArea();
+        area.setText(text);
+        area.discardAllEdits();
+        CommandExecutor executor = new CommandExecutor(area, null, null);
+
+        assertTrue(executor.makePrimary("s", "b"));
+        assertEquals("[node.s]\nds_1 = b  # weir\nds_2 = a  # river\n", area.getText());
+
+        area.undoLastAction();
+        assertEquals(text, area.getText(), "one undo must restore the original text");
     }
 }

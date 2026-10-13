@@ -674,6 +674,37 @@ public class CommandExecutor {
     }
 
     /**
+     * Makes the link from {@code upstream} to {@code downstream} the upstream node's
+     * {@code ds_1}, as one atomic edit; see {@link #makePrimaryEdits}.
+     *
+     * @return false if there was nothing to do, in which case nothing changed
+     */
+    public boolean makePrimary(String upstream, String downstream) {
+        try {
+            List<TextEdit> edits = makePrimaryEdits(editor.getText(), upstream, downstream);
+            if (edits.isEmpty()) {
+                showError("Cannot make this link primary: no other ds_ property from '" + upstream
+                    + "' to '" + downstream + "' was found.");
+                return false;
+            }
+            editor.beginAtomicEdit();
+            try {
+                for (TextEdit edit : edits) {
+                    applyEdit(edit);
+                }
+            } finally {
+                editor.endAtomicEdit();
+            }
+            logger.info("Made {} -> {} primary", upstream, downstream);
+            return true;
+        } catch (Exception e) {
+            logger.error("Error making link primary", e);
+            showError("Failed to make link primary: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Inserts a new node template from the text-editor context menu: the section goes
      * relative to the caret (see {@link NodeInsertionPoint}), at the given world
      * location — typically the centre of the map view, since a text-editor invocation
