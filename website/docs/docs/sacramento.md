@@ -50,7 +50,14 @@ All seventeen model parameters — and the rainfall-weighting terms, when `rain`
 | floin | Internal flux component - interflow [ML] |
 | flobf | Internal flux component - baseflow [ML] |
 | roimp | Internal flux component - impervious runoff [ML] |
+| uztw | Upper zone tension water at the end of the step [mm] |
+| uzfw | Upper zone free water at the end of the step [mm] |
+| lztw | Lower zone tension water at the end of the step [mm] |
+| lzfp | Lower zone primary free water at the end of the step, including the `side` component [mm] |
+| lzfs | Lower zone supplemental free water at the end of the step, including the `side` component [mm] |
 | area | Catchment area [km2] — the declared `area` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
+
+The five store results (`uztw`, `uzfw`, `lztw`, `lzfp`, `lzfs`) are depths over the pervious area; see [Soil moisture store outputs](sacramento-technical.md#soil-moisture-store-outputs).
 
 ## How the node works
 
@@ -96,7 +103,7 @@ Parameters for Runoff and Losses
 
 Parameters for Runoff Routing
 
-- LagUH is a single-value reparameterisation of the five original unit hydrogrpah parameters UH1 - UH5. This represents the shape of the unit hydrograph which is used to route instantaneous runoff through the system allowing for delays in the runoff process.
+- LagUH is a single-value reparameterisation of the five original unit hydrograph parameters UH1 - UH5. This represents the shape of the unit hydrograph which is used to route instantaneous runoff through the system allowing for delays in the runoff process.
 
 ![](../assets/docs-nodes-sacramento/image.png)
 

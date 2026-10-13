@@ -1,0 +1,13 @@
+---
+version: "0.4.8"
+date: TBD
+prerelease: false
+assets:
+  Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.8/KalixIDE-Windows-0.4.8-Portable.zip"
+  macOS: "https://github.com/chasegan/Kalix/releases/download/v0.4.8/KalixIDE-macOS-0.4.8-Portable.zip"
+  Linux: "https://github.com/chasegan/Kalix/releases/download/v0.4.8/KalixIDE-Linux-0.4.8-Portable.zip"
+pip: "pip install kalix==0.4.8"
+---
+
+- New! Soil moisture store outputs on the [`sacramento` node](https://kalix.org/docs/sacramento/): `uztw`, `uzfw`, `lztw`, `lzfp` and `lzfs` record the contents of the five stores at the end of each step.
+    - Each is a depth in mm over the pervious area. `lzfp` and `lzfs` include the water that is later lost through `side`, so they can exceed `lzfpm` and `lzfsm`; see [Soil moisture store outputs](https://kalix.org/docs/sacramento-technical/#soil-moisture-store-outputs).
