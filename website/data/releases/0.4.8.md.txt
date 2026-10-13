@@ -1,0 +1,13 @@
+---
+version: "0.4.8"
+date: TBD
+prerelease: false
+assets:
+  Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.8/KalixIDE-Windows-0.4.8-Portable.zip"
+  macOS: "https://github.com/chasegan/Kalix/releases/download/v0.4.8/KalixIDE-macOS-0.4.8-Portable.zip"
+  Linux: "https://github.com/chasegan/Kalix/releases/download/v0.4.8/KalixIDE-Linux-0.4.8-Portable.zip"
+pip: "pip install kalix==0.4.8"
+---
+
+- New! `Make primary` in the schematic map's context menu. Select a dashed link, right-click and choose it to swap that link with the node's `ds_1`.
+    - Only the two `ds_N` lines change. Anything else that names those outlets, such as `node.dam.ds_2` in an expression, is left as written.
