@@ -552,4 +552,40 @@ impl Sacramento {
         //Return the results
         self.runoff
     }
+
+    // Store contents, as depths [mm] over the pervious area. Getters, not public
+    // fields like the flow components: the stores are state the next step reads,
+    // so they must not be writable from outside the model.
+
+    /// Returns the upper zone tension water [mm].
+    #[inline]
+    pub fn get_uztw(&self) -> f64 {
+        self.uztwc
+    }
+
+    /// Returns the upper zone free water [mm].
+    #[inline]
+    pub fn get_uzfw(&self) -> f64 {
+        self.uzfwc
+    }
+
+    /// Returns the lower zone tension water [mm].
+    #[inline]
+    pub fn get_lztw(&self) -> f64 {
+        self.lztwc
+    }
+
+    /// Returns the lower zone primary free water [mm], including the `side`
+    /// component: the form that closes the pervious area mass balance.
+    #[inline]
+    pub fn get_lzfp(&self) -> f64 {
+        self.alzfpc
+    }
+
+    /// Returns the lower zone supplemental free water [mm], including the `side`
+    /// component: the form that closes the pervious area mass balance.
+    #[inline]
+    pub fn get_lzfs(&self) -> f64 {
+        self.alzfsc
+    }
 }
