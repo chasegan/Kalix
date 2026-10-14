@@ -43,6 +43,11 @@ pub struct SacramentoNode {
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
+    recorder_idx_uztw: Option<usize>,
+    recorder_idx_uzfw: Option<usize>,
+    recorder_idx_lztw: Option<usize>,
+    recorder_idx_lzfs: Option<usize>,
+    recorder_idx_lzfp: Option<usize>,
 }
 
 impl SacramentoNode {
@@ -95,7 +100,11 @@ impl Node for SacramentoNode {
         self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
         self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
         self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
-
+        self.recorder_idx_uztw = recorder(data_cache, &self.name, "uztw");
+        self.recorder_idx_uzfw = recorder(data_cache, &self.name, "uzfw");
+        self.recorder_idx_lztw = recorder(data_cache, &self.name, "lztw");
+        self.recorder_idx_lzfs = recorder(data_cache, &self.name, "lzfs");
+        self.recorder_idx_lzfp = recorder(data_cache, &self.name, "lzfp");
         //Return
         Ok(())
     }
@@ -162,14 +171,25 @@ impl Node for SacramentoNode {
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
+        if let Some(idx) = self.recorder_idx_uztw {
+            data_cache.add_value_at_index(idx, self.sacramento_model.get_uztw());
+        }
+        if let Some(idx) = self.recorder_idx_uzfw {
+            data_cache.add_value_at_index(idx, self.sacramento_model.get_uzfw());
+        }
+        if let Some(idx) = self.recorder_idx_lztw {
+            data_cache.add_value_at_index(idx, self.sacramento_model.get_lztw());
+        }
+        if let Some(idx) = self.recorder_idx_lzfp {
+            data_cache.add_value_at_index(idx, self.sacramento_model.get_lzfp());
+        }
+        if let Some(idx) = self.recorder_idx_lzfs {
+            data_cache.add_value_at_index(idx, self.sacramento_model.get_lzfs());
+        }
 
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;
     }
-
-
-
-
 }
 
 // ============================================================================

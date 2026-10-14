@@ -115,3 +115,89 @@ fn test_uz_free_water_evap_independent_of_history() {
         "post-step state must not depend on the previous step's evapuzfw");
     assert_eq!(runoff_a, runoff_b);
 }
+
+/// Builds a Sacramento model with every area fraction and the side loss
+/// switched on, for testing the store outputs.
+fn make_store_test_model() -> Sacramento {
+    let mut s = Sacramento::new();
+    s.set_params(
+        0.1,   // adimp
+        45.0,  // lzfpm
+        60.0,  // lzfsm
+        0.01,  // lzpk
+        0.05,  // lzsk
+        150.0, // lztwm
+        0.02,  // pctim
+        0.11,  // pfree
+        1.5,   // rexp
+        0.0,   // sarva
+        0.2,   // side
+        0.0,   // ssout
+        25.0,  // uzfwm
+        0.2,   // uzk
+        47.0,  // uztwm
+        15.0,  // zperc
+        0.1,   // laguh
+    );
+    s.initialize_state_empty();
+    s
+}
+
+/// Rain that fits within upper zone tension water is held there in full, and
+/// reaches no other store.
+#[test]
+fn test_stores_after_rain_held_in_tension_water() {
+    let mut s = make_store_test_model();
+    assert_eq!(s.get_uztw() + s.get_uzfw() + s.get_lztw() + s.get_lzfp() + s.get_lzfs(), 0.0,
+        "stores start empty");
+
+    s.run_step(10.0, 0.0);
+
+    assert!((s.get_uztw() - 10.0).abs() < 1e-12, "uztw should be 10, got {}", s.get_uztw());
+    assert_eq!(s.get_uzfw(), 0.0);
+    assert_eq!(s.get_lztw(), 0.0);
+    assert_eq!(s.get_lzfp(), 0.0);
+    assert_eq!(s.get_lzfs(), 0.0);
+}
+
+/// The five stores are depths over the pervious area. With no evaporation, the
+/// only ways water leaves them are surface flow, interflow and baseflow, which
+/// the model reports scaled by the pervious fraction, so every step must satisfy
+///   pervious fraction * (rain - change in the five stores) = flosf + floin + flobf.
+/// This holds only if the lower zone free water stores include the side
+/// component, because flobf is baseflow before the side loss.
+#[test]
+fn test_stores_close_pervious_water_balance_without_evap() {
+    let mut s = make_store_test_model();
+    let pervious_fraction = 1.0 - s.pctim - s.adimp;
+    let total = |s: &Sacramento| s.get_uztw() + s.get_uzfw() + s.get_lztw() + s.get_lzfp() + s.get_lzfs();
+
+    // Deterministic rain: dry spells, light falls, and storms big enough to
+    // fill the upper zone and generate surface runoff.
+    let rain_at = |i: usize| -> f64 {
+        match i % 23 {
+            0 => 85.0,
+            1 => 40.0,
+            5 | 6 => 12.0,
+            11 => 3.0,
+            17 => 150.0,
+            _ => 0.0,
+        }
+    };
+
+    let mut previous = total(&s);
+    let mut saw_surface_runoff = false;
+    let mut saw_baseflow = false;
+    for i in 0..2000 {
+        let rain = rain_at(i);
+        s.run_step(rain, 0.0);
+        let current = total(&s);
+        let generated = s.flosf + s.floin + s.flobf;
+        let error = pervious_fraction * (rain - (current - previous)) - generated;
+        assert!(error.abs() < 1e-9, "step {}: water balance error {}", i, error);
+        saw_surface_runoff |= s.flosf > 0.0;
+        saw_baseflow |= s.flobf > 0.0;
+        previous = current;
+    }
+    assert!(saw_surface_runoff && saw_baseflow, "rain pattern should exercise surface runoff and baseflow");
+}
