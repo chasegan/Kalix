@@ -26,8 +26,8 @@ ds_1 = my_other_node
 | order (optional) | This property specifies how much the regulated user will order [ML] each timestep. In regulated systems with nonzero travel times, the demand will be lagged to give enough time for the water to arrive.  Example: `order = data.extendeddataset.by_name.urban_demand` |
 | pump (optional) | Use this to limit the amount of water the user can extract each timestep. Example: `pump = 86.4` |
 | opportunistic\_demand (optional) | Demand for water above the arriving order, evaluated at flow time — for access that is announced on conditions rather than ordered ahead, such as off-allocation. The opportunistic take is supplied from whatever availability the regulated delivery leaves behind, shares the pump limit, and is debited to the same accounts. Example: `opportunistic_demand = if(fn.oa_open(), 309.5, 0)` |
-| accounts (optional) | Names of the [accounts](accounts.md) this user draws on, comma-separated in order of use. Orders are capped by the accounts' combined balance and deliveries are debited from them, so an [allocation system](allocation-systems.md) can constrain the user. Example: `accounts = smith_carryover, smith_annual` |
-| order\_accounts (optional) | Names of order-authorisation accounts (debit-on-order), comma-separated in order of use. They extend the order cap beyond the regular `accounts` balance, and the excess portion of each approved order is debited from them immediately at order time. They are invisible to the flow phase. See "Order accounts" below. Example: `order_accounts = wy_bridge` |
+| accounts (optional) | Names of the [accounts](accounts.md) this user draws on, comma-separated in order of use. Orders are capped by the accounts' combined balance less the orders already en route, and deliveries are debited from them, so an [allocation system](allocation-systems.md) can constrain the user. See [Accounts](#accounts). Example: `accounts = smith_carryover, smith_annual` |
+| order\_accounts (optional) | Names of order-authorisation accounts (debit-on-order), comma-separated in order of use. They extend the order cap beyond what the regular `accounts` can cover, and the excess portion of each approved order is debited from them immediately at order time. They are invisible to the flow phase. See "Order accounts" below. Example: `order_accounts = wy_bridge` |
 | order\_factor (optional) | Factor applied to this node's order as it is sent upstream. The network sees `order_factor × order`, while `order`, `order_due` and the delivery are unchanged. A number; default 1. See [Order factor](#order-factor). Example: `order_factor = 1.1` |
 | ds\_1 (optional) | Name of the downstream node on the river. This property defines a downstream link: what the user does not divert flows down it.  Example: `ds_1 = my_other_node` |
 | ds\_2, ds\_3, ds\_4 (optional) | Supply outlets. The node on a supply outlet places its orders with this user, and the user diverts that water and sends it down the outlet. See [Supply outlets](#supply-outlets). Example: `ds_2 = my_field` |
@@ -45,7 +45,7 @@ ds_1 = my_other_node
 | ds\_2\_order\_due (and 3, 4) | The order accepted from the supply outlet earlier, which is due to be delivered today [ML] |
 | order | The order placed today [ML] |
 | order\_due | The order previously placed, which is due to be delivered today [ML] |
-| demand | Demand at this node [ML] |
+| demand | The demand that falls due today: the `order` expression as evaluated when today's order was placed, before the accounts capped it [ML]. This is what the user plans to divert. It is the same as `order_due` unless the user has `accounts` |
 | diversion | Diverted volume [ML] — the sum of the regulated and opportunistic takes. This is the whole metered take, including what is sent down supply outlets |
 | diversion\_regulated | The part of the diversion that delivers the arriving order [ML] |
 | diversion\_opportunistic | The part of the diversion taken under opportunistic\_demand [ML] |
@@ -107,15 +107,46 @@ listed (the first is drawn down before the second). This is how an
 [allocation system](allocation-systems.md) limits the user: a low announced
 allocation means a low balance, which caps ordering. See [`[acc.*]`](accounts.md).
 
+Where there is travel time between the supply and the user, the orders of the
+last few steps are still on their way, and the balance has not yet paid for
+them. The user allows for this: each accepted order is **committed** to the
+accounts until it falls due, and the cap on a new order is the balance less
+what is committed:
+
+`order ≤ Σ max(0, balance − committed)`, over the accounts listed
+
+The commitment is a forecast of the diversion to come, never a debit. On the
+step an order falls due the whole order leaves the commitment, delivered or not;
+what is then diverted is debited, and what is not is still in the balance and
+free to be ordered again from that step. So in a shortfall the user loses
+nothing; it loses only the days the water was en route. The commitment lives on
+the account, not on the user, so two users drawing on one account each see the
+other's orders en route (`acc.<name>.committed`). A RAS action that lowers the
+balance leaves the commitment as it is: the ordered water is still coming and
+will be debited when it arrives, so new orders wait until it does.
+
+The forecast limits what the user *orders*, not what it *takes*. The user plans
+to divert its whole demand when the water arrives, not just the part it could
+order: `demand` is the `order` expression of that day, uncapped, and `order_due`
+is the order it placed. If on the day the water is there, from a tributary or an
+order placed by another user, and the balance is there too, from a credit that
+has since landed, the user takes up to its demand. The take is always capped by
+the balance of the day. The same holds for a [supply outlet](#supply-outlets):
+the delivery down it is planned at the order as it arrived, and `ds_2_order_due`
+is the part the user could order. One consequence: when users share an account,
+the one upstream diverts first and may take water released for an order placed
+downstream.
+
 #### Order accounts
 
 `order_accounts` lists additional accounts that authorise ordering without
 supplying water — debit-on-order semantics. The contract:
 
 - The order cap becomes `min(order, Σaccounts + Σorder_accounts)`.
-- Only the **excess** of the approved order over the regular `accounts`
-  balance is debited from the `order_accounts`, walked in list order, at
-  order time. Orders within the regular balance never touch them.
+- Only the **excess** of the approved order over what the regular `accounts`
+  can still cover (balance less orders en route) is debited from the
+  `order_accounts`, walked in list order, at order time. Orders within the
+  regular balance never touch them.
 - They are **invisible to the flow phase**: they never extend the delivery
   cap, are never debited by takes, and are not refunded when an
   authorised order goes undelivered.

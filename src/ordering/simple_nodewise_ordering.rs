@@ -10,7 +10,8 @@
 //   1. resolve the `regulated =` pathways that confluences name;
 //   2. the topology - which links are regulated, and the travel time down each
 //      (regulated_topology, which changes nothing);
-//   3. size every node's delay buffers from its travel time (size_order_buffers);
+//   3. size every node's delay buffers from its travel time, and the accounts' commit
+//      rings from the travel times of the users drawing on them (size_order_buffers);
 //   4. list the nodes the order phase visits (build_visit_list).
 // What the ordering system needs to know about each node type is stated in this file, in
 // matches that name every type: what does an outlet do to the zone, does the node add routing lag,
@@ -26,6 +27,7 @@
 // - Incoming regulated links are stored in a flat CSR-style layout for cache locality
 
 use crate::data_management::data_cache::DataCache;
+use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::simulation_context::set_context_node;
 use crate::nodes::{Link, Node, NodeEnum};
 use crate::numerical::fifo_buffer::FifoBuffer;
@@ -72,7 +74,8 @@ impl SimpleNodewiseOrderingSystem {
     pub fn initialize(&mut self,
                       nodes: &mut Vec<NodeEnum>,
                       links: &Vec<Link>,
-                      incoming_links: &Vec<Vec<usize>>) -> Result<(), String> {
+                      incoming_links: &Vec<Vec<usize>>,
+                      account_manager: &mut AccountManager) -> Result<(), String> {
         // 'nodes' is a borrowed vector of all nodes (as NodeEnums) in definition order
         // 'links' is a borrowed vector of all links, where a link has from_node, from_outlet,
         //         to_node, to_inlet.
@@ -90,8 +93,9 @@ impl SimpleNodewiseOrderingSystem {
         // from its supply. Reads the nodes and changes nothing.
         self.links_simple_ordering = regulated_topology(nodes, links, incoming_links)?;
 
-        // Step 3: size every node's order buffers from its travel time.
-        self.size_order_buffers(nodes)?;
+        // Step 3: size every node's order buffers from its travel time, and the accounts'
+        // commit rings from the travel times of the regulated users drawing on them.
+        self.size_order_buffers(nodes, account_manager)?;
 
         // Step 4: the list of nodes the order phase visits, with their incoming regulated links.
         self.build_visit_list(nodes);
@@ -111,7 +115,7 @@ impl SimpleNodewiseOrderingSystem {
     ///
     /// The match names every node type, with no wildcard: a new node type does not compile
     /// until it says here whether it keeps a delay buffer.
-    fn size_order_buffers(&self, nodes: &mut Vec<NodeEnum>) -> Result<(), String> {
+    fn size_order_buffers(&self, nodes: &mut Vec<NodeEnum>, account_manager: &mut AccountManager) -> Result<(), String> {
         // The travel time to each node, in whole steps: that of its longest regulated
         // incoming link, and zero if it has none. (Rounding keeps order, so the longest
         // rounded travel time is the rounded longest travel time.)
@@ -123,6 +127,7 @@ impl SimpleNodewiseOrderingSystem {
             }
         }
 
+        account_manager.clear_commit_horizons();
         for node_idx in 0..nodes.len() {
             let travel_time = travel_times[node_idx];
 
@@ -147,11 +152,17 @@ impl SimpleNodewiseOrderingSystem {
                 NodeEnum::RegulatedUserNode(node) => {
                     node.order_travel_time = travel_time;
                     node.order_buffer = FifoBuffer::new(travel_time);
+                    node.demand_buffer = FifoBuffer::new(travel_time);
                     // The orders arriving on its supply outlets (ds_2 to ds_4) are delivered
                     // when the ordered water reaches the user, so they are held for the
                     // user's travel time, whatever lies between the user and the node below.
                     for supply_outlet in &mut node.supply_outlets {
                         supply_outlet.order_buffer = FifoBuffer::new(travel_time);
+                        supply_outlet.demand_buffer = FifoBuffer::new(travel_time);
+                    }
+                    // The accounts it draws on must be able to hold a commitment this far ahead
+                    for &account_idx in &node.account_idxs {
+                        account_manager.set_commit_horizon(account_idx, travel_time);
                     }
                 }
                 NodeEnum::FieldNode(node) => {
@@ -320,12 +331,16 @@ impl SimpleNodewiseOrderingSystem {
     /// Unlike simple_ordering.rs which iterates links in reverse, this method iterates only
     /// regulated nodes in reverse definition order, with incoming links stored in a flat
     /// contiguous vec for cache locality.
-    pub fn run_ordering_phase(&mut self, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache, account_manager: &mut crate::hydrology::accounts::account_manager::AccountManager) {
+    pub fn run_ordering_phase(&mut self, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
 
         // Guard to save computation time if there is no ordering!
         if !self.model_has_ordering {
             return;
         }
+
+        // The accounts' forecast: yesterday's due orders leave it, and it is published,
+        // before any user caps its order by it
+        account_manager.start_of_ordering(data_cache);
 
         // Iterate only regulated nodes (already in reverse definition order)
         for entry in &self.regulated_nodes {

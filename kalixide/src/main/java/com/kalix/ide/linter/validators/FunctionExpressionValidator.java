@@ -373,7 +373,7 @@ public class FunctionExpressionValidator {
      *  still valid field names here. */
     private static final java.util.Set<String> ACCOUNT_FIELDS =
         java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "allocation_pct",
-                         "use", "size", "initial");
+                         "use", "committed", "size", "initial");
 
     /** Fields published per account group: every account field is aggregated
      *  over the members — summed, `size` and `use` included, except

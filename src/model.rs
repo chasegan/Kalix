@@ -1037,7 +1037,7 @@ impl Model {
         // Initialise the ordering system
         // TODO: I am doing this in "initialize_network" because it relies on execution order being resolved (which we do above).
         self.simple_ordering_system
-            .initialize(&mut self.nodes, &self.links, &self.incoming_links)?;
+            .initialize(&mut self.nodes, &self.links, &self.incoming_links, &mut self.account_manager)?;
 
         // Return
         Ok(())

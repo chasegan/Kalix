@@ -44,6 +44,27 @@ pub struct Account {
     /// slots). Zero-capacity (passthrough) unless roll_cap targets this
     /// account with N > 1.
     pub aged_debits: FifoBuffer,
+
+    /// Orders accepted against this account and not yet due: the users' best
+    /// guess of the diversions to come. A forecast, not a debit - it never
+    /// moves the balance, and `balance - committed` is what a regulated user
+    /// may still order. Only the actual diversion is ever debited.
+    ///
+    /// Kept exact by `commit_ring`, a calendar of the committed amounts by the
+    /// step they fall due: slot `commit_cursor` is today, slot `cursor + k` is
+    /// k steps ahead. A user with travel time T commits into slot `cursor + T`;
+    /// at the start of every ordering phase the account releases yesterday's
+    /// slot - the orders that fell due yesterday, delivered or not - and the
+    /// cursor moves on to today (AccountManager::start_of_ordering). Every
+    /// amount so leaves the account it entered on the step its order is due,
+    /// whichever user placed it and whatever its travel time, with no record
+    /// of which order was whose. `committed` is the sum of the ring. The ring
+    /// is sized by the ordering system (longest travel time among the users
+    /// drawing on the account, plus one) and is empty for an account no
+    /// regulated user draws on.
+    pub committed: f64,
+    pub commit_ring: Vec<f64>,
+    pub commit_cursor: usize,
 }
 
 impl Account {
@@ -62,6 +83,9 @@ impl Account {
             debits_since_reset: 0.0,
             debits_this_period: 0.0,
             aged_debits: FifoBuffer::default(),
+            committed: 0.0,
+            commit_ring: Vec::new(),
+            commit_cursor: 0,
         }
     }
 
@@ -72,6 +96,9 @@ impl Account {
         self.debits_since_reset = 0.0;
         self.debits_this_period = 0.0;
         self.aged_debits.reset();
+        self.committed = 0.0;
+        self.commit_ring.fill(0.0);
+        self.commit_cursor = 0;
     }
 
     /// Allocation to date: everything credited since the last reset, whether
