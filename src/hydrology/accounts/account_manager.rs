@@ -41,17 +41,20 @@ pub struct AccountManager {
     //                     unwritten-value error and want a [-1, 0] offset).
     has_recorders: bool,
     has_opening_recorders: bool,
+    has_committed_recorders: bool,
     recorder_acc_opening: Vec<(usize, usize)>,
     recorder_acc_closing: Vec<(usize, usize)>,
     recorder_acc_debits: Vec<(usize, usize)>,
     recorder_acc_allocation: Vec<(usize, usize)>,
     recorder_acc_use: Vec<(usize, usize)>,
     recorder_acc_allocation_pct: Vec<(usize, usize)>,
+    recorder_acc_committed: Vec<(usize, usize)>,
     recorder_grp_opening: Vec<(usize, usize)>,
     recorder_grp_closing: Vec<(usize, usize)>,
     recorder_grp_debits: Vec<(usize, usize)>,
     recorder_grp_allocation: Vec<(usize, usize)>,
     recorder_grp_use: Vec<(usize, usize)>,
+    recorder_grp_committed: Vec<(usize, usize)>,
     // Triples (group_idx, series_idx, group size): the size is summed once in
     // initialize, which relies on account sizes being fixed after load.
     recorder_grp_allocation_pct: Vec<(usize, usize, f64)>,
@@ -60,17 +63,19 @@ pub struct AccountManager {
 /// Fields an `acc.<name>.<field>` reference may use. Closed set: anything
 /// else is a load error rather than a silently unwritten series. `use` is
 /// water taken since the last reset_allocation — the use term of the
-/// allocation (balance + use), fed only by node takes. `size` and `initial`
-/// are static (registered into `static_properties`, not published as
-/// per-step series like the rest); everything else is a genuine per-step
+/// allocation (balance + use), fed only by node takes. `committed` is the
+/// orders accepted and not yet due (see Account::committed). `size` and
+/// `initial` are static (registered into `static_properties`, not published
+/// as per-step series like the rest); everything else is a genuine per-step
 /// recorder.
-pub const ACCOUNT_SERIES_FIELDS: [&str; 8] = [
+pub const ACCOUNT_SERIES_FIELDS: [&str; 9] = [
     "opening_balance",
     "closing_balance",
     "debits",
     "allocation",
     "allocation_pct",
     "use",
+    "committed",
     "size",
     "initial"
 ];
@@ -78,13 +83,14 @@ pub const ACCOUNT_SERIES_FIELDS: [&str; 8] = [
 /// The fields a *group* aggregate publishes: the same set, each summed over
 /// members except `allocation_pct`, which is the group allocation over the
 /// group size (a size-weighted mean of the members' percentages).
-pub const GROUP_SERIES_FIELDS: [&str; 8] = [
+pub const GROUP_SERIES_FIELDS: [&str; 9] = [
     "opening_balance",
     "closing_balance",
     "debits",
     "allocation",
     "allocation_pct",
     "use",
+    "committed",
     "size",
     "initial"
 ];
@@ -101,17 +107,20 @@ impl AccountManager {
             group_lookup: FxHashMap::default(),
             has_recorders: false,
             has_opening_recorders: false,
+            has_committed_recorders: false,
             recorder_acc_opening: Vec::new(),
             recorder_acc_closing: Vec::new(),
             recorder_acc_debits: Vec::new(),
             recorder_acc_allocation: Vec::new(),
             recorder_acc_use: Vec::new(),
             recorder_acc_allocation_pct: Vec::new(),
+            recorder_acc_committed: Vec::new(),
             recorder_grp_opening: Vec::new(),
             recorder_grp_closing: Vec::new(),
             recorder_grp_debits: Vec::new(),
             recorder_grp_allocation: Vec::new(),
             recorder_grp_use: Vec::new(),
+            recorder_grp_committed: Vec::new(),
             recorder_grp_allocation_pct: Vec::new(),
         }
     }
@@ -198,11 +207,13 @@ impl AccountManager {
         self.recorder_acc_allocation.clear();
         self.recorder_acc_use.clear();
         self.recorder_acc_allocation_pct.clear();
+        self.recorder_acc_committed.clear();
         self.recorder_grp_opening.clear();
         self.recorder_grp_closing.clear();
         self.recorder_grp_debits.clear();
         self.recorder_grp_allocation.clear();
         self.recorder_grp_use.clear();
+        self.recorder_grp_committed.clear();
         self.recorder_grp_allocation_pct.clear();
 
         for account_idx in 0..self.accounts.len() {
@@ -223,6 +234,9 @@ impl AccountManager {
             register("use", &mut self.recorder_acc_use, &mut any);
             register("allocation_pct", &mut self.recorder_acc_allocation_pct, &mut any);
             self.has_recorders |= any;
+            // Written at the start of the ordering phase, not by record_results
+            let mut committed = false;
+            register("committed", &mut self.recorder_acc_committed, &mut committed);
         }
 
         // Group aggregates: the same fields summed over member accounts.
@@ -242,6 +256,8 @@ impl AccountManager {
             register("debits", &mut self.recorder_grp_debits, &mut any);
             register("allocation", &mut self.recorder_grp_allocation, &mut any);
             register("use", &mut self.recorder_grp_use, &mut any);
+            let mut committed = false;
+            register("committed", &mut self.recorder_grp_committed, &mut committed);
             if let Some(series_idx) = data_cache.get_series_idx(
                 make_acc_result_name(&name, "allocation_pct").as_str(), false
             ) {
@@ -255,6 +271,8 @@ impl AccountManager {
 
         self.has_opening_recorders =
             !self.recorder_acc_opening.is_empty() || !self.recorder_grp_opening.is_empty();
+        self.has_committed_recorders =
+            !self.recorder_acc_committed.is_empty() || !self.recorder_grp_committed.is_empty();
     }
 
     /// Start-of-step accounting, called after the [ras.*] loop and before the
@@ -355,6 +373,79 @@ impl AccountManager {
         self.accounts[account_id].debits_today += amount;
         self.accounts[account_id].debits_since_reset += amount;
         self.accounts[account_id].debits_this_period += amount;
+    }
+
+    /// What a regulated user may still order against an account: the balance
+    /// less the orders already en route, floored at zero (a RAS cut can leave
+    /// the committed orders above the balance until they fall due).
+    #[inline]
+    pub fn get_account_uncommitted_balance(&self, account_id: usize) -> f64 {
+        let account = &self.accounts[account_id];
+        (account.balance - account.committed).max(0.0)
+    }
+
+    /// A regulated user has accepted an order against this account, due in
+    /// `due_in` steps (its travel time; 0 is today). Forecast only: the balance
+    /// is untouched until the water is diverted. The ring must have been sized
+    /// for this user by `set_commit_horizon`, so `due_in` is within it, and
+    /// `start_of_ordering` must have moved the cursor on to today.
+    #[inline]
+    pub fn commit_account(&mut self, account_id: usize, amount: f64, due_in: usize) {
+        let account = &mut self.accounts[account_id];
+        debug_assert!(due_in < account.commit_ring.len(), "commit ring of '{}' not sized for a travel time of {}", account.name, due_in);
+        let mut slot = account.commit_cursor + due_in;
+        if slot >= account.commit_ring.len() { slot -= account.commit_ring.len(); }
+        account.commit_ring[slot] += amount;
+        account.committed += amount;
+    }
+
+    /// Empty every account's commit ring, ahead of re-sizing them.
+    pub fn clear_commit_horizons(&mut self) {
+        for account in &mut self.accounts {
+            account.commit_ring = Vec::new();
+            account.commit_cursor = 0;
+        }
+    }
+
+    /// A regulated user with the given travel time draws on this account: make
+    /// sure its commit ring reaches that far ahead. Called by the ordering
+    /// system as it sizes the nodes' delay buffers.
+    pub fn set_commit_horizon(&mut self, account_id: usize, travel_time: usize) {
+        let account = &mut self.accounts[account_id];
+        if account.commit_ring.len() < travel_time + 1 {
+            account.commit_ring.resize(travel_time + 1, 0.0);
+        }
+    }
+
+    /// Start of the ordering phase, before any node places an order (called by
+    /// the ordering system, so only a model with regulation runs it). The
+    /// orders that fell due yesterday are no longer en route, delivered or
+    /// not: yesterday's slot of each commit ring is released and the ring moves
+    /// on to today. The total is re-summed from the ring whenever a slot is
+    /// released, so it is the ring's sum and not a running tally that could
+    /// drift from it. Then `committed` is published - the orders en route as
+    /// today's ordering begins, so that `opening_balance - committed` is the
+    /// headroom today's orders are capped by. Written before ordering, like
+    /// `opening_balance`, so it reads cleanly mid-step.
+    pub fn start_of_ordering(&mut self, data_cache: &mut DataCache) {
+        if !self.has_accounts { return; }
+        for account in &mut self.accounts {
+            if account.commit_ring.is_empty() { continue; }
+            let cursor = account.commit_cursor;
+            if account.commit_ring[cursor] != 0.0 {
+                account.commit_ring[cursor] = 0.0;
+                account.committed = account.commit_ring.iter().sum();
+            }
+            account.commit_cursor = if cursor + 1 == account.commit_ring.len() { 0 } else { cursor + 1 };
+        }
+        if !self.has_committed_recorders { return; }
+        for &(account_idx, series_idx) in &self.recorder_acc_committed {
+            data_cache.add_value_at_index(series_idx, self.accounts[account_idx].committed);
+        }
+        for &(group_idx, series_idx) in &self.recorder_grp_committed {
+            let total = self.group_sum(group_idx, |a| a.committed);
+            data_cache.add_value_at_index(series_idx, total);
+        }
     }
 
     /// Announce an allocation: raise each account's allocation to `pct` of its
