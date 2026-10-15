@@ -2,6 +2,7 @@ package com.kalix.ide.interaction;
 
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.model.HydrologicalModel;
+import com.kalix.ide.model.ModelLink;
 import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.icons.MenuIcons;
@@ -105,6 +106,19 @@ public class MapContextMenuManager {
         boolean hasSelection = hasNodeSelection || model.getSelectedLinkCount() > 0;
         boolean hasClipboard = clipboardManager != null && clipboardManager.hasClipboardContent();
         int shortcutMask = AppShortcut.menuMask();
+
+        // Context-specific block (ADR-0002 §1 block ②). Hidden, not disabled, when it
+        // cannot apply (§4): only a single selected non-primary link can be made primary.
+        ModelLink selectedLink = model.getSingleSelectedLink();
+        if (selectedLink != null && !isOnPrimaryOutlet(selectedLink) && textEditor != null) {
+            JMenuItem makePrimaryItem = new JMenuItem("Make primary");
+            makePrimaryItem.addActionListener(e -> {
+                textEditor.makePrimary(selectedLink);
+                mapPanel.repaint();
+            });
+            menu.add(makePrimaryItem);
+            menu.addSeparator();
+        }
 
         // Cut
         JMenuItem cutItem = new JMenuItem("Cut");
@@ -244,6 +258,22 @@ public class MapContextMenuManager {
         JMenuItem zoomToFitItem = new JMenuItem("Zoom to fit");
         zoomToFitItem.addActionListener(e -> mapPanel.zoomToFit());
         menu.add(zoomToFitItem);
+    }
+
+    /**
+     * Whether the link's upstream node sends its {@code ds_1} to the link's downstream
+     * node. Two outlets may share a target, and the map draws them as one link, so the
+     * selected link's own flag is not enough.
+     */
+    private boolean isOnPrimaryOutlet(ModelLink link) {
+        for (ModelLink other : model.getAllLinks()) {
+            if (other.isPrimary()
+                    && other.getUpstreamTerminus().equals(link.getUpstreamTerminus())
+                    && other.getDownstreamTerminus().equals(link.getDownstreamTerminus())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

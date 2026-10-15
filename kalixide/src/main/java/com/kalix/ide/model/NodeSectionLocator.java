@@ -89,8 +89,11 @@ public final class NodeSectionLocator {
      * A downstream-link property line ({@code ds_N = <target>}) inside a node section:
      * the owning section's node name, the referenced target node, and the whole-line
      * span {@code [lineStart, lineEnd)} including the trailing newline if present.
+     * {@code outlet} is the N of the key as written; {@code keyEnd} is where the key
+     * ends and {@code contentEnd} where the line's content ends, before its terminator.
      */
-    public record DsReference(String sourceNode, String target, int lineStart, int lineEnd) {
+    public record DsReference(String sourceNode, String target, int lineStart, int lineEnd,
+                              String outlet, int keyEnd, int contentEnd) {
     }
 
     /**
@@ -215,8 +218,11 @@ public final class NodeSectionLocator {
             if (currentNode != null) {
                 Matcher ds = DS_LINE_PATTERN.matcher(code);
                 if (ds.matches()) {
+                    String raw = scanner.raw();
+                    int indent = raw.length() - raw.stripLeading().length();
                     references.add(new DsReference(
-                        currentNode, ds.group(2), scanner.lineStart, scanner.nextLineStart));
+                        currentNode, ds.group(2), scanner.lineStart, scanner.nextLineStart,
+                        ds.group(1), scanner.lineStart + indent + ds.end(1), scanner.contentEnd));
                 }
             }
         }

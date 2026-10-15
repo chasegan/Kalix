@@ -24,6 +24,10 @@ Click and drag to select nodes on the schematic map. Then drag to move or ctrl+d
 
 The link is written as `ds_N = <downstream>` at the first free outlet. If every outlet the node type allows is taken, the last one is re-pointed instead (`ds_1` for most nodes, `ds_2` for a splitter, `ds_4` for storage). To use a different outlet, edit the `ds_N` numbers in the text.
 
+A node's primary link (`ds_1`) is drawn solid and its other links dashed. To **make a link primary**, select a dashed link, right-click and choose **Make primary**. The link swaps with the node's `ds_1`: the `ds_N` keys stay where they are, and the downstream names (with any comments after them) change places. If the node has no `ds_1`, the link is renumbered to `ds_1`.
+
+Only those `ds_N` lines change. Anything else that names the outlets, such as `node.dam.ds_2` in an expression or a recorder, is left as written, so check it still says what you mean.
+
 Ctrl+f in the model editor for **find**, or Ctrl+h for **find-and-replace**
 
 ![](../assets/docs-using-ide/image_3.png)

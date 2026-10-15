@@ -772,6 +772,19 @@ public class EnhancedTextEditor extends JPanel {
         executor.addLink(upstream, downstream, type != null ? type.maxDsOutlet() : 0);
     }
 
+    /**
+     * Makes a link its upstream node's primary ({@code ds_1}); see
+     * {@link CommandExecutor#makePrimaryEdits} for what moves.
+     */
+    public void makePrimary(com.kalix.ide.model.ModelLink link) {
+        if (commandParentFrame == null) {
+            logger.warn("Context commands not initialized - cannot make link primary");
+            return;
+        }
+        CommandExecutor executor = new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
+        executor.makePrimary(link.getUpstreamTerminus(), link.getDownstreamTerminus());
+    }
+
     private void setupKeyBindings() {
         InputMap inputMap = textArea.getInputMap();
         ActionMap actionMap = textArea.getActionMap();

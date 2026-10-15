@@ -655,7 +655,7 @@ public class CommandExecutor {
         try {
             TextEdit edit = linkEdit(editor.getText(), upstream, downstream, maxOutlet);
             if (edit == null) {
-                logger.warn("Link skipped: no section found for upstream node '{}'", upstream);
+                showError("Cannot add this link: no section for node '" + upstream + "' was found.");
                 return false;
             }
             editor.beginAtomicEdit();
@@ -669,6 +669,37 @@ public class CommandExecutor {
         } catch (Exception e) {
             logger.error("Error adding link", e);
             showError("Failed to add link: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Makes the link from {@code upstream} to {@code downstream} the upstream node's
+     * {@code ds_1}, as one atomic edit; see {@link #makePrimaryEdits}.
+     *
+     * @return false if there was nothing to do, in which case nothing changed
+     */
+    public boolean makePrimary(String upstream, String downstream) {
+        try {
+            List<TextEdit> edits = makePrimaryEdits(editor.getText(), upstream, downstream);
+            if (edits.isEmpty()) {
+                showError("Cannot make this link primary: no other ds_ property from '" + upstream
+                    + "' to '" + downstream + "' was found.");
+                return false;
+            }
+            editor.beginAtomicEdit();
+            try {
+                for (TextEdit edit : edits) {
+                    applyEdit(edit);
+                }
+            } finally {
+                editor.endAtomicEdit();
+            }
+            logger.info("Made {} -> {} primary", upstream, downstream);
+            return true;
+        } catch (Exception e) {
+            logger.error("Error making link primary", e);
+            showError("Failed to make link primary: " + e.getMessage());
             return false;
         }
     }
@@ -882,8 +913,7 @@ public class CommandExecutor {
             // Scanning the section alone keeps other nodes' ds lines out of it.
             for (NodeSectionLocator.DsReference ref : NodeSectionLocator.findDsReferences(body)) {
                 String line = body.substring(ref.lineStart(), ref.lineEnd());
-                java.util.regex.Matcher key = DS_KEY_PATTERN.matcher(line.trim());
-                if (key.find() && key.group(1).equals(String.valueOf(maxOutlet))) {
+                if (ref.outlet().equals(String.valueOf(maxOutlet))) {
                     TextEdit edit = dsValueEdit(line, section.start() + ref.lineStart(), ref.target(), downstream);
                     if (edit != null) {
                         return edit;
@@ -894,6 +924,47 @@ public class CommandExecutor {
             // the type's limit, and leave it for the linter to flag.
         }
         return dsLineInsertion(text, section, n, downstream);
+    }
+
+    /**
+     * Computes the edits that make {@code upstream}'s link to {@code downstream} its
+     * {@code ds_1}. The keys stay where they are; everything after them (target and any
+     * trailing comment) swaps between the two lines. With no {@code ds_1} line, the link's
+     * key is renumbered in place. Ordered last-first, so each can be applied in turn.
+     * Empty when there is nothing to do: no section, no such link, or already primary.
+     */
+    static List<TextEdit> makePrimaryEdits(String text, String upstream, String downstream) {
+        NodeSectionLocator.NodeSection section = NodeSectionLocator.find(text, upstream);
+        if (section == null) {
+            return List.of();
+        }
+        String body = text.substring(section.start(), section.contentEnd());
+        NodeSectionLocator.DsReference primary = null;
+        NodeSectionLocator.DsReference link = null;
+        // Scanning the section alone keeps other nodes' ds lines out of it.
+        for (NodeSectionLocator.DsReference ref : NodeSectionLocator.findDsReferences(body)) {
+            if (ref.outlet().equals("1")) {
+                if (ref.target().equals(downstream)) {
+                    return List.of(); // already primary
+                }
+                primary = primary == null ? ref : primary;
+            } else if (link == null && ref.target().equals(downstream)) {
+                link = ref;
+            }
+        }
+        if (link == null) {
+            return List.of();
+        }
+        int base = section.start(); // references are relative to the section
+        if (primary == null) {
+            int keyEnd = base + link.keyEnd();
+            return List.of(new TextEdit(keyEnd - link.outlet().length(), keyEnd, "1"));
+        }
+        TextEdit toPrimary = new TextEdit(base + primary.keyEnd(), base + primary.contentEnd(),
+            body.substring(link.keyEnd(), link.contentEnd()));
+        TextEdit toLink = new TextEdit(base + link.keyEnd(), base + link.contentEnd(),
+            body.substring(primary.keyEnd(), primary.contentEnd()));
+        return toPrimary.start() > toLink.start() ? List.of(toPrimary, toLink) : List.of(toLink, toPrimary);
     }
 
     /**
