@@ -2,6 +2,7 @@ package com.kalix.ide.interaction;
 
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.model.HydrologicalModel;
+import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.MapPanel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.icons.MenuIcons;
@@ -12,10 +13,15 @@ import javax.swing.JMenu;
 import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
 import java.awt.Point;
 import java.awt.Toolkit;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
+import java.util.Locale;
+import java.util.Set;
+import java.util.function.BiFunction;
 
 /**
  * Manages the right-click context menu for the map panel.
@@ -149,6 +155,25 @@ public class MapContextMenuManager {
 
         menu.addSeparator();
 
+        // Grow the selection along the network; with nothing to grow from, offer only select all.
+        // Below the clipboard block, as in the editor's menu: ADR-0002 §1 has no block for selection.
+        if (!model.getSelectionSeedNodes().isEmpty()) {
+            JMenu selectMenu = new JMenu("Select");
+            selectMenu.add(growSelectionItem("Connected nodes", NodeAdjacency::connected));
+            selectMenu.add(selectAllItem("All nodes"));
+            selectMenu.add(growSelectionItem("Upstream", NodeAdjacency::upstream));
+            selectMenu.add(growSelectionItem("Upstream including distributaries",
+                NodeAdjacency::upstreamWithDistributaries));
+            selectMenu.add(growSelectionItem("Downstream", NodeAdjacency::downstream));
+            selectMenu.add(growSelectionItem("Downstream including tributaries",
+                NodeAdjacency::downstreamWithTributaries));
+            menu.add(selectMenu);
+            menu.addSeparator();
+        } else if (!model.getAllNodes().isEmpty()) {
+            menu.add(selectAllItem("Select all"));
+            menu.addSeparator();
+        }
+
         // Create block, per ADR-0002 §1 block ④. Verb-first per §2.2: the
         // children are the objects of the verb, not values to pick among, so this is a
         // menu item that happens to have a submenu — not a category title under §6.
@@ -170,7 +195,7 @@ public class MapContextMenuManager {
                         // editor and select it on the map. Selection is deferred one EDT
                         // cycle so the queued re-parse has registered the node first.
                         textEditor.scrollToNode(newName);
-                        javax.swing.SwingUtilities.invokeLater(() -> {
+                        SwingUtilities.invokeLater(() -> {
                             model.selectNode(newName, false);
                             mapPanel.repaint();
                         });
@@ -221,9 +246,8 @@ public class MapContextMenuManager {
                 double worldX = mapPanel.toWorldX(lastContextMenuLocation.x);
                 double worldY = mapPanel.toWorldY(lastContextMenuLocation.y);
                 // Locale.ROOT: the copied text is pasted into model files (dot decimals).
-                String locationText = String.format(java.util.Locale.ROOT, "%.2f, %.2f", worldX, worldY);
-                java.awt.datatransfer.StringSelection selection =
-                    new java.awt.datatransfer.StringSelection(locationText);
+                String locationText = String.format(Locale.ROOT, "%.2f, %.2f", worldX, worldY);
+                StringSelection selection = new StringSelection(locationText);
                 Toolkit.getDefaultToolkit().getSystemClipboard().setContents(selection, null);
             }
         });
@@ -244,6 +268,27 @@ public class MapContextMenuManager {
         JMenuItem zoomToFitItem = new JMenuItem("Zoom to fit");
         zoomToFitItem.addActionListener(e -> mapPanel.zoomToFit());
         menu.add(zoomToFitItem);
+    }
+
+    // An item that adds to the selection whatever `grow` finds from the selection.
+    private JMenuItem growSelectionItem(String label,
+                                        BiFunction<NodeAdjacency, Set<String>, Set<String>> grow) {
+        JMenuItem item = new JMenuItem(label);
+        item.addActionListener(e -> {
+            NodeAdjacency adjacency = new NodeAdjacency(model.getAllLinks());
+            model.selectNodes(grow.apply(adjacency, model.getSelectionSeedNodes()));
+            mapPanel.repaint();
+        });
+        return item;
+    }
+
+    private JMenuItem selectAllItem(String label) {
+        JMenuItem item = new JMenuItem(label);
+        item.addActionListener(e -> {
+            model.selectNodes(model.getAllNodes().stream().map(ModelNode::getName).toList());
+            mapPanel.repaint();
+        });
+        return item;
     }
 
     /**
