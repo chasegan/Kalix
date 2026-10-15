@@ -1,5 +1,6 @@
 package com.kalix.ide.cli;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,7 +14,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
@@ -31,6 +35,10 @@ public class SessionManager {
     private final StatusReporter statusUpdater;
     private final Consumer<SessionEvent> eventCallback;
     private Consumer<JsonMessage.SystemMessage> timeSeriesResponseHandler;
+
+    // Mass balance report requests awaiting their reply, by session key.
+    private final Map<String, CompletableFuture<String>> pendingMassBalanceReports = new ConcurrentHashMap<>();
+    private static final long MASS_BALANCE_REPORT_TIMEOUT_SECONDS = 30;
 
     // Multi-listener support for session events
     private final List<Consumer<SessionEvent>> sessionEventListeners = new CopyOnWriteArrayList<>();
@@ -266,6 +274,47 @@ public class SessionManager {
     }
     
     /**
+     * Requests the mass balance report for the model a session has run.
+     *
+     * The future completes off the EDT, so marshal to it before touching Swing. It fails,
+     * with a message fit to show the user, if the engine replies with an error, the send
+     * fails, the session ends first, or no reply arrives within
+     * {@link #MASS_BALANCE_REPORT_TIMEOUT_SECONDS}.
+     *
+     * @param sessionKey the session to ask
+     * @return CompletableFuture with the report text
+     */
+    public CompletableFuture<String> requestMassBalanceReport(String sessionKey) {
+        CompletableFuture<String> future = new CompletableFuture<>();
+        CompletableFuture<String> pending = pendingMassBalanceReports.putIfAbsent(sessionKey, future);
+        if (pending != null) {
+            return pending; // one reply serves every caller waiting on this session
+        }
+        future.whenComplete((report, throwable) -> pendingMassBalanceReports.remove(sessionKey, future));
+        // Not orTimeout: its TimeoutException carries no message.
+        CompletableFuture.delayedExecutor(MASS_BALANCE_REPORT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .execute(() -> future.completeExceptionally(new TimeoutException(
+                "No reply from the engine within " + MASS_BALANCE_REPORT_TIMEOUT_SECONDS + " seconds")));
+
+        sendCommand(sessionKey, JsonStdioProtocol.Commands.getMassBalanceReport())
+            .exceptionally(throwable -> {
+                // runAsync wraps the failure; the cause has the message worth showing.
+                future.completeExceptionally(throwable instanceof CompletionException
+                    && throwable.getCause() != null ? throwable.getCause() : throwable);
+                return null;
+            });
+        return future;
+    }
+
+    /** Fails a session's pending mass balance report request: no reply can come now. */
+    private void failPendingMassBalanceReport(String sessionKey, String reason) {
+        CompletableFuture<String> pending = pendingMassBalanceReports.remove(sessionKey);
+        if (pending != null) {
+            pending.completeExceptionally(new IllegalStateException(reason));
+        }
+    }
+
+    /**
      * Requests a cooperative stop of the session's current task by sending the protocol's
      * {@code stp} message. The CLI (since backend commit 920d187) reads stdin while busy
      * and honours the interrupt at the next timestep (simulation) or generation
@@ -310,6 +359,7 @@ public class SessionManager {
             if (session != null) {
                 SessionState oldState = session.getState();
                 session.setState(SessionState.TERMINATED, "Session terminated by user");
+                failPendingMassBalanceReport(sessionKey, "The session was terminated");
 
                 boolean exited = false;
                 try {
@@ -491,6 +541,7 @@ public class SessionManager {
      */
     private void handleProcessExit(KalixSession session) {
         String sessionKey = session.getSessionKey();
+        failPendingMassBalanceReport(sessionKey, "The engine process exited");
         SessionState oldState = session.getState();
         if (oldState == SessionState.TERMINATED || oldState == SessionState.ERROR) {
             return; // already settled (user terminate or reported error)
@@ -540,6 +591,10 @@ public class SessionManager {
             } else {
                 logger.warn("TimeSeriesResponseHandler is null, cannot route response");
             }
+        }
+
+        if (handleMassBalanceReportReply(session, message)) {
+            return;
         }
 
         // First try to delegate to any active program
@@ -618,6 +673,42 @@ public class SessionManager {
     }
 
     /**
+     * Completes a pending mass balance report request from its reply.
+     *
+     * @return true if the message was the reply to a pending request
+     */
+    private boolean handleMassBalanceReportReply(KalixSession session, JsonMessage.SystemMessage message) {
+        if (!"get_mass_balance_report".equals(message.getCommand())) {
+            return false;
+        }
+        // bsy carries the command name too; only res and err are replies.
+        JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
+        if (msgType != JsonStdioTypes.SystemMessageType.RESULT
+                && msgType != JsonStdioTypes.SystemMessageType.ERROR) {
+            return false;
+        }
+        CompletableFuture<String> future = pendingMassBalanceReports.remove(session.getSessionKey());
+        if (future == null) {
+            return false;
+        }
+
+        if (msgType == JsonStdioTypes.SystemMessageType.ERROR) {
+            String errorMsg = message.getErrorMessage();
+            future.completeExceptionally(new RuntimeException(
+                errorMsg != null && !errorMsg.isEmpty() ? errorMsg : "Mass balance report request failed"));
+            return true;
+        }
+
+        JsonNode report = message.getResult() != null ? message.getResult().get("report") : null;
+        if (report == null || !report.isTextual()) {
+            future.completeExceptionally(new RuntimeException("Mass balance report reply carried no report text"));
+        } else {
+            future.complete(report.asText());
+        }
+        return true;
+    }
+
+    /**
      * Fires a session event to registered callbacks.
      */
     private void fireSessionEvent(String sessionKey, SessionState oldState, SessionState newState, String message) {
@@ -684,6 +775,7 @@ public class SessionManager {
             return;
         }
         session.setState(SessionState.ERROR, operation + " failed: " + e.getMessage());
+        failPendingMassBalanceReport(sessionKey, operation + " failed: " + e.getMessage());
         fireSessionEvent(sessionKey, oldState, SessionState.ERROR, e.getMessage());
         // Not logged here: the ERROR event just fired is what the listener logs
         updateStatus("Session " + sessionKey + " error: " + operation + " failed");

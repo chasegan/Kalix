@@ -254,6 +254,12 @@ End the session and exit.
   - `"csv"` (default): single wide CSV with a `Datetime` column and one column per output series.
   - `"pixie"`: writes a `.pxt` (metadata) / `.pxb` (compressed binary) pair. The `path` is treated as a base path; a trailing `.pxt`/`.pxb` is stripped before writing, and `r.path` reports the `.pxt` file.
 
+**get_mass_balance_report**
+- Description: Return the mass balance report for the loaded model's last completed simulation
+- Parameters: None
+- Result: `r.report` (string) holds the whole report, the same text `kalix simulate -m` writes to a file. Lines end with `\n`.
+- Errors: fails with "Model not loaded" when no model is loaded, and with "No completed simulation to report on. Run simulation first." when the loaded model has not run to completion. A run that was stopped or failed does not count, and loading a model discards the previous model's completed run.
+
 **get_version**
 - Description: Get kalixcli version information
 - Parameters: None

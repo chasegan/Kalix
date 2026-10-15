@@ -77,6 +77,7 @@ impl CommandRegistry {
         registry.register(Arc::new(GetResultCommand));
         registry.register(Arc::new(SaveResultsCommand));
         registry.register(Arc::new(EchoCommand));
+        registry.register(Arc::new(GetMassBalanceReportCommand));
         
         registry
     }
@@ -95,6 +96,12 @@ impl CommandRegistry {
     
     pub fn list_commands(&self) -> Vec<&str> {
         self.commands.keys().map(|s| s.as_str()).collect()
+    }
+}
+
+impl Default for CommandRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -533,6 +540,9 @@ impl Command for RunSimulationCommand {
         
         // Get interrupt flag before getting mutable model reference
         let interrupt_flag = Arc::clone(&session.interrupt_flag);
+
+        // A stopped or failed run must not leave the previous run's results standing.
+        session.clear_results();
 
         // Check if model is loaded
         let model = session.get_model_mut()
@@ -1058,6 +1068,43 @@ impl Command for SaveResultsCommand {
     }
 }
 
+pub struct GetMassBalanceReportCommand;
+
+impl Command for GetMassBalanceReportCommand {
+    fn name(&self) -> &str {
+        "get_mass_balance_report"
+    }
+
+    fn description(&self) -> &str {
+        "Return the mass balance report for the model"
+    }
+
+    fn parameters(&self) -> Vec<ParameterSpec> {
+        vec![]
+    }
+
+    fn interruptible(&self) -> bool {
+        false
+    }
+
+    fn execute(
+        &self,
+        session: &mut Session,
+        _params: serde_json::Value,
+        _progress_sender: Box<dyn Fn(ProgressInfo) + Send + Sync>,
+    ) -> Result<serde_json::Value, CommandError> {
+        let model = session.get_model()
+            .ok_or(CommandError::ModelNotLoaded)?;
+        // A model that was only loaded, or whose run was stopped, has no balance to report.
+        if !session.has_completed_simulation() {
+            return Err(CommandError::ExecutionError(
+                "No completed simulation to report on. Run simulation first.".to_string()));
+        }
+        let report = model.generate_mass_balance_report();
+        Ok(serde_json::json!({ "report": report }))
+    }
+}
+
 /// Encodes a result series as the `get_result` pixie payload: a Gorilla-compressed
 /// bitstream, base64-encoded.
 ///
@@ -1135,6 +1182,95 @@ mod tests {
         assert!(commands.contains(&"get_result"));
         assert!(commands.contains(&"save_results"));
         assert!(commands.contains(&"echo"));
+        assert!(commands.contains(&"get_mass_balance_report"));
+    }
+
+    /// Smallest runnable model: a constant inflow into a gauge, no input files.
+    const TINY_MODEL: &str = "\
+[kalix]
+start = 2020-01-01
+end = 2020-01-10
+
+[node.trib]
+type = inflow
+loc = 0, 0
+inflow = 100
+ds_1 = outlet
+
+[node.outlet]
+type = gauge
+loc = 0, 10
+
+[outputs]
+node.outlet.dsflow
+";
+
+    fn run(cmd: &dyn Command, session: &mut Session, params: serde_json::Value)
+        -> Result<serde_json::Value, CommandError> {
+        cmd.execute(session, params, Box::new(|_| {}))
+    }
+
+    fn load_tiny_model(session: &mut Session) {
+        run(&LoadModelStringCommand, session, serde_json::json!({ "model_ini": TINY_MODEL }))
+            .expect("tiny model should load");
+    }
+
+    #[test]
+    fn mass_balance_report_needs_a_model() {
+        let mut session = Session::new();
+        let result = run(&GetMassBalanceReportCommand, &mut session, serde_json::json!({}));
+        assert!(matches!(result, Err(CommandError::ModelNotLoaded)));
+    }
+
+    /// A model that was loaded but never run has nothing to balance.
+    #[test]
+    fn mass_balance_report_needs_a_completed_run() {
+        let mut session = Session::new();
+        load_tiny_model(&mut session);
+
+        let result = run(&GetMassBalanceReportCommand, &mut session, serde_json::json!({}));
+        assert!(matches!(result, Err(CommandError::ExecutionError(_))));
+    }
+
+    #[test]
+    fn mass_balance_report_follows_a_completed_run() {
+        let mut session = Session::new();
+        load_tiny_model(&mut session);
+        run(&RunSimulationCommand, &mut session, serde_json::json!({})).expect("run should complete");
+
+        let result = run(&GetMassBalanceReportCommand, &mut session, serde_json::json!({})).unwrap();
+        let report = result["report"].as_str().expect("report is a string");
+        assert_eq!(report, session.get_model().unwrap().generate_mass_balance_report());
+        assert!(report.contains("MASS BALANCE REPORT"));
+        assert!(report.contains("trib"));
+    }
+
+    /// A stopped run leaves partial balances behind; they must not be reported, even
+    /// when an earlier run of the same model completed.
+    #[test]
+    fn mass_balance_report_is_withheld_after_a_stopped_run() {
+        let mut session = Session::new();
+        load_tiny_model(&mut session);
+        run(&RunSimulationCommand, &mut session, serde_json::json!({})).expect("run should complete");
+
+        session.interrupt_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        let stopped = run(&RunSimulationCommand, &mut session, serde_json::json!({}));
+        assert!(matches!(stopped, Err(CommandError::Interrupted)));
+
+        let result = run(&GetMassBalanceReportCommand, &mut session, serde_json::json!({}));
+        assert!(matches!(result, Err(CommandError::ExecutionError(_))));
+    }
+
+    /// Loading a model replaces the one that ran, so its report goes with it.
+    #[test]
+    fn mass_balance_report_is_withheld_after_reloading() {
+        let mut session = Session::new();
+        load_tiny_model(&mut session);
+        run(&RunSimulationCommand, &mut session, serde_json::json!({})).expect("run should complete");
+        load_tiny_model(&mut session);
+
+        let result = run(&GetMassBalanceReportCommand, &mut session, serde_json::json!({}));
+        assert!(matches!(result, Err(CommandError::ExecutionError(_))));
     }
 
     #[test]

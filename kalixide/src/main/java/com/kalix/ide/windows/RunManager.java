@@ -138,6 +138,7 @@ public class RunManager extends JFrame {
     private final TimeSeriesRequestManager timeSeriesRequestManager;
     private static RunManager instance;
     private static java.util.function.Supplier<java.io.File> baseDirectorySupplier;
+    private static java.util.function.Supplier<String> modelTextSupplier;
     private static java.util.function.Supplier<String> editorTextSupplier;
 
     // === DATA SOURCE TREE (left-top) ===
@@ -248,10 +249,20 @@ public class RunManager extends JFrame {
     }
 
     /**
-     * Sets the editor text supplier for diff operations.
-     * This should be called to provide access to the main editor's text.
+     * Sets the model text supplier for model diff operations.
      *
-     * @param supplier Supplier that returns the current editor text (null if no text is loaded)
+     * @param supplier Supplier that returns the active model's text (null if the active
+     *                 document is not a model)
+     */
+    public static void setModelTextSupplier(java.util.function.Supplier<String> supplier) {
+        modelTextSupplier = supplier;
+    }
+
+    /**
+     * Sets the editor text supplier, for comparing against whatever the main editor shows.
+     *
+     * @param supplier Supplier that returns the active document's text whatever its kind
+     *                 (null if no document is open)
      */
     public static void setEditorTextSupplier(java.util.function.Supplier<String> supplier) {
         editorTextSupplier = supplier;
@@ -574,6 +585,7 @@ public class RunManager extends JFrame {
             stdioTaskManager,                 // Task manager
             statusUpdater,                    // Status updater
             () -> baseDirectorySupplier != null ? baseDirectorySupplier.get() : null,  // Base directory supplier
+            () -> modelTextSupplier != null ? modelTextSupplier.get() : null,          // Model text supplier
             () -> editorTextSupplier != null ? editorTextSupplier.get() : null,        // Editor text supplier
             runTreeController.sessionToRunNameView(),  // Session to run name map (live)
             this::refreshRuns,                // Refresh callback
