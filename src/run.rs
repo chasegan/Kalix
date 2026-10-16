@@ -24,6 +24,9 @@ pub struct OptimisationOutcome {
     /// Optimised parameters as (target, physical value) pairs, in config order.
     /// Targets look like `node.<name>.<param>` or `c.<constant>`.
     pub parameters: Vec<(String, f64)>,
+    /// Values the nodes derived from the optimised parameters, as (address,
+    /// value) pairs, e.g. Sacramento's sarva from sarvaonpctim. Not targets.
+    pub derived_parameters: Vec<(String, f64)>,
     /// The optimised model serialised to an INI string (lossless round-trip).
     pub optimised_model_ini: String,
 }
@@ -125,6 +128,9 @@ pub fn optimise_from_file(
         expression,
     );
 
+    // Fail on a bad parameter address before any candidate runs.
+    problem.resolve()?;
+
     // Run the optimisation, wiring up the caller's progress callback (if any).
     let optimiser = create_optimizer_with_callback(&config, progress_callback)
         .map_err(|e| e.to_string())?;
@@ -136,6 +142,7 @@ pub fn optimise_from_file(
     // Apply best parameters so the model is in its optimal state before saving.
     problem.set_params(&result.best_params)
         .map_err(|e| format!("Failed to apply best parameters: {}", e))?;
+    let derived_parameters = problem.derived_params();
 
     let optimised_model_ini = IniModelIO::model_to_string(&problem.model);
 
@@ -167,6 +174,12 @@ pub fn optimise_from_file(
         for (target, value) in &parameters {
             writeln!(&mut output, "  {} = {:.6}", target, value).unwrap();
         }
+        if !derived_parameters.is_empty() {
+            writeln!(&mut output, "\nDerived Parameters (not [parameters] targets):").unwrap();
+            for (address, value) in &derived_parameters {
+                writeln!(&mut output, "  {} = {:.6}", address, value).unwrap();
+            }
+        }
         std::fs::write(output_path, output)
             .map_err(|e| format!("Failed to write results to '{}': {}", output_path, e))?;
     }
@@ -177,6 +190,7 @@ pub fn optimise_from_file(
         success: result.success,
         message: result.message,
         parameters,
+        derived_parameters,
         optimised_model_ini,
     })
 }

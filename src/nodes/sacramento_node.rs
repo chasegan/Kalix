@@ -166,10 +166,6 @@ impl Node for SacramentoNode {
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;
     }
-
-
-
-
 }
 
 // ============================================================================
@@ -179,9 +175,8 @@ impl Node for SacramentoNode {
 impl OptimisableComponent for SacramentoNode {
     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
         // Try to handle as rainfall weight parameter first
-        match RainfallWeightHandler::try_set_param(&mut self.rain_mm_input, name, value, &self.name)? {
-            true => return Ok(()), // Parameter was handled
-            false => {} // Not a rainfall parameter, continue to standard parameters
+        if RainfallWeightHandler::try_set_param(&mut self.rain_mm_input, name, value, &self.name)? {
+            return Ok(())
         }
 
         // Standard Sacramento parameters
@@ -254,7 +249,24 @@ impl OptimisableComponent for SacramentoNode {
                 self.sacramento_model.set_laguh(value);
                 Ok(())
             },
+            // The ratios write their numerator from the denominator held now
+            "sarvaonpctim" => {
+                self.sacramento_model.sarva = value * self.sacramento_model.pctim;
+                Ok(())
+            },
+            "lzpkonlzsk" => {
+                self.sacramento_model.lzpk = value * self.sacramento_model.lzsk;
+                Ok(())
+            },
             _ => Err(format!("Unknown Sacramento parameter: {}", name)),
+        }
+    }
+
+    fn derives(&self, name: &str) -> Option<&'static str> {
+        match name {
+            "sarvaonpctim" => Some("sarva"),
+            "lzpkonlzsk" => Some("lzpk"),
+            _ => None,
         }
     }
 
@@ -283,15 +295,19 @@ impl OptimisableComponent for SacramentoNode {
             "uztwm" => Ok(self.sacramento_model.uztwm),
             "zperc" => Ok(self.sacramento_model.zperc),
             "laguh" => Ok(self.sacramento_model.get_laguh()),
+            "sarvaonpctim" => Ok(self.sacramento_model.sarva / self.sacramento_model.pctim),
+            "lzpkonlzsk" => Ok(self.sacramento_model.lzpk / self.sacramento_model.lzsk),
             _ => Err(format!("Unknown Sacramento parameter: {}", name)),
         }
     }
 
     fn list_params(&self) -> Vec<String> {
         let mut params = vec![
-            "adimp", "lzfpm", "lzfsm", "lzpk", "lzsk", "lztwm",
-            "pctim", "pfree", "rexp", "sarva", "side",
-            "ssout", "uzfwm", "uzk", "uztwm", "zperc", "laguh"
+            // The ratios stand where lzpk and sarva did; those two are still
+            // accepted, but no longer offered.
+            "adimp", "lzfpm", "lzfsm", "lzpkonlzsk", "lzsk", "lztwm",
+            "pctim", "pfree", "rexp", "sarvaonpctim", "side",
+            "ssout", "uzfwm", "uzk", "uztwm", "zperc", "laguh",
         ]
         .iter()
         .map(|s| s.to_string())

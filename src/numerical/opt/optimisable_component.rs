@@ -8,15 +8,28 @@ pub trait OptimisableComponent {
     /// Set a parameter by name (physical space, not normalised)
     ///
     /// # Arguments
-    /// * `name` - Parameter name (e.g., "lztwm", "uzk", "sarva_on_pctim")
+    /// * `name` - Parameter name (e.g., "lztwm", "uzk", "sarvaonpctim")
     /// * `value` - Parameter value in physical space
     ///
     /// # Derived Parameters
-    /// Some parameters may be "derived" - they update multiple underlying values.
-    /// For example, "sarva_on_pctim" might set sarva = value * pctim.
+    /// Some parameters are "derived": setting one writes another parameter,
+    /// computed from the values the component holds at that moment. For
+    /// example, "sarvaonpctim" sets sarva = value * pctim. See `derives`.
     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String>;
 
+    /// The parameter that setting `name` writes, when `name` is derived from
+    /// others: "sarvaonpctim" writes "sarva". The optimiser sets such a name
+    /// after the component's other mapped parameters, so it is computed from
+    /// the candidate's values, and refuses it alongside the one it writes.
+    fn derives(&self, _name: &str) -> Option<&'static str> {
+        None
+    }
+
     /// Get a parameter by name (physical space)
+    ///
+    /// Must succeed for every name `set_param` can set and fail for any name
+    /// it never could: the optimiser reads each mapped name once, up front,
+    /// to check the address.
     ///
     /// # Arguments
     /// * `name` - Parameter name

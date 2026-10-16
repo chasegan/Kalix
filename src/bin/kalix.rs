@@ -390,12 +390,18 @@ fn main() {
                 }
             };
 
-            let problem = OptimisationProblem::new(
+            let mut problem = OptimisationProblem::new(
                 model,
                 config.parameter_config.clone(),
                 comparisons,
                 expression,
             );
+
+            // Fail on a bad parameter address before any candidate runs
+            if let Err(e) = problem.resolve() {
+                eprintln!("Error in [parameters]: {}", e);
+                std::process::exit(1);
+            }
 
             println!("\n=== Starting Optimisation ===");
             println!("Algorithm: {}", config.algorithm.name());
@@ -478,6 +484,13 @@ fn main() {
             if let Err(e) = problem_mut.set_params(&result.best_params) {
                 eprintln!("Warning: Failed to apply final parameters: {}", e);
             }
+            let derived_values = problem_mut.derived_params();
+            if !derived_values.is_empty() {
+                println!("\nDerived Parameters (not [parameters] targets):");
+                for (address, value) in &derived_values {
+                    println!("  {} = {:.6}", address, value);
+                }
+            }
 
             // Save optimised model to file if specified
             let output_start = Instant::now();
@@ -510,6 +523,12 @@ fn main() {
                 writeln!(&mut output, "Optimized Parameters:").unwrap();
                 for (target, value) in &param_values {
                     writeln!(&mut output, "  {} = {:.6}", target, value).unwrap();
+                }
+                if !derived_values.is_empty() {
+                    writeln!(&mut output, "\nDerived Parameters (not [parameters] targets):").unwrap();
+                    for (address, value) in &derived_values {
+                        writeln!(&mut output, "  {} = {:.6}", address, value).unwrap();
+                    }
                 }
 
                 match fs::write(&output_path, output) {
