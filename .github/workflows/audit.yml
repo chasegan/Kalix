@@ -1,0 +1,25 @@
+name: Dependency audit
+
+# Checks Cargo.lock against RustSec advisories and crates.io yanks. Runs
+# weekly so a yank or advisory is reported before it breaks a build, and on
+# changes to the lockfile. It deliberately does not run on every PR: a new
+# advisory should not turn unrelated PRs red.
+on:
+  schedule:
+    - cron: '0 21 * * 0'
+  push:
+    branches: [main]
+    paths: [Cargo.lock, deny.toml]
+  pull_request:
+    paths: [Cargo.lock, deny.toml]
+  workflow_dispatch:
+
+jobs:
+  advisories:
+    name: Advisories and yanks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories
