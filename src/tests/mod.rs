@@ -195,3 +195,6 @@ mod test_linter_schema;
 
 // Loss node: the optional `rate` expression overriding the loss table
 mod test_loss_rate;
+
+// Inputs must share the simulation grid's time of day
+mod test_input_phase;

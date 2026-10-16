@@ -21,7 +21,13 @@ class TimeFormatUtilTest {
 
     @Test
     void dailyStepSizeFormatsAsDateOnly() {
-        assertEquals("2024-01-15", TimeFormatUtil.formatForStepSize(MS_2024_01_15_14_30, 86400));
+        assertEquals("2024-01-15", TimeFormatUtil.formatForStepSize(MS_2024_01_15_MIDNIGHT, 86400));
+    }
+
+    @Test
+    void dailyStepSizeKeepsTimeOffMidnight() {
+        // e.g. 9am daily data: dropping the time would shift it on re-read
+        assertEquals("2024-01-15T14:30:00", TimeFormatUtil.formatForStepSize(MS_2024_01_15_14_30, 86400));
     }
 
     @Test
@@ -37,13 +43,14 @@ class TimeFormatUtilTest {
 
     @Test
     void unknownStepSizeFallsBackToDateOnly() {
-        assertEquals("2024-01-15", TimeFormatUtil.formatForStepSize(MS_2024_01_15_14_30, 0));
+        assertEquals("2024-01-15", TimeFormatUtil.formatForStepSize(MS_2024_01_15_MIDNIGHT, 0));
+        assertEquals("2024-01-15T14:30:00", TimeFormatUtil.formatForStepSize(MS_2024_01_15_14_30, 0));
     }
 
     @Test
     void weeklyStepSizeFormatsAsDateOnly() {
         // Anything that is a multiple of a day is "daily-or-coarser" by our convention
-        assertEquals("2024-01-15", TimeFormatUtil.formatForStepSize(MS_2024_01_15_14_30, 7 * 86400));
+        assertEquals("2024-01-15", TimeFormatUtil.formatForStepSize(MS_2024_01_15_MIDNIGHT, 7 * 86400));
     }
 
     // ---- formatForTickInterval ----

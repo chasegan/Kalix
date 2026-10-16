@@ -50,11 +50,14 @@ public final class TimeFormatUtil {
 
     /**
      * Format a timestamp for resolution-aware display. Daily-or-coarser series (step_size
-     * is a multiple of 86400s) format as {@code yyyy-MM-dd}; sub-daily series format as
-     * full ISO datetime. A step_size of 0 (unknown) defaults to date-only.
+     * is a multiple of 86400s, or 0 for unknown) at midnight format as {@code yyyy-MM-dd};
+     * sub-daily or off-midnight (e.g. 9am daily) series format as full ISO datetime. A
+     * whole-day step keeps every point at the same time of day, so a series stays consistent.
+     * Mirrors the engine's {@code needs_time_of_day}.
      */
     public static String formatForStepSize(LocalDateTime dateTime, long stepSeconds) {
-        DateTimeFormatter formatter = (stepSeconds <= 0 || stepSeconds % 86400 == 0)
+        boolean dailyOrCoarser = stepSeconds <= 0 || stepSeconds % 86400 == 0;
+        DateTimeFormatter formatter = (dailyOrCoarser && dateTime.toLocalTime().equals(LocalTime.MIDNIGHT))
             ? DATE_ONLY : ISO_DATETIME;
         return dateTime.format(formatter);
     }

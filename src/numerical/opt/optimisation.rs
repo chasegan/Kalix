@@ -11,7 +11,7 @@
 use std::collections::HashMap;
 use crate::model::Model;
 use crate::numerical::mathfn::u64_subtraction;
-use crate::timeseries::Timeseries;
+use crate::timeseries::{same_phase, Timeseries};
 use crate::functions::{ParsedFunction, VariableContext, EvaluationConfig, parse_function};
 use super::optimisable::Optimisable;
 use super::parameter_mapping::ParameterMappingConfig;
@@ -209,7 +209,7 @@ impl OptimisationProblem {
         // How many steps is observed[0] ahead of simulated[0]?
         let offset = u64_subtraction(observed.start_timestamp / step,
                                      simulated.start_timestamp / step);
-        if observed.start_timestamp % step != simulated.start_timestamp % step {
+        if !same_phase(observed.start_timestamp, simulated.start_timestamp, step) {
             return Err(format!(
                 "Observed and simulated grids are not aligned: starts {} and {} \
                  differ by a non-whole number of {}s steps",
