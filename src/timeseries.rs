@@ -6,6 +6,13 @@
 
 use crate::numerical::mathfn::u64_subtraction;
 
+/// True if grids starting at `a` and `b` with this step share a phase (e.g. the
+/// same time of day for daily steps). Exact on wrapped timestamps, which all
+/// carry the same 2^63 shift.
+pub fn same_phase(a: u64, b: u64, step: u64) -> bool {
+    step == 0 || a % step == b % step
+}
+
 #[derive(Clone)]
 #[derive(Default)]
 pub struct Timeseries {
@@ -161,8 +168,12 @@ impl Timeseries {
             self.set_all_values_to(f64::NAN);
         } else {
             //Get the index offset. I.e. how many steps is self[0] ahead of mask[0]?
-            let mask_offset = u64_subtraction(self.start_timestamp / self.step_size,
-                                              mask.start_timestamp / self.step_size);
+            //Subtract before dividing: dividing wrapped timestamps first buckets days
+            //at 08:29:52 UTC (2^63 mod 86400), which misaligns out-of-phase grids.
+            debug_assert!(same_phase(self.start_timestamp, mask.start_timestamp, self.step_size),
+                          "mask_with needs grids in the same phase");
+            let mask_offset = u64_subtraction(self.start_timestamp, mask.start_timestamp)
+                / self.step_size as i64;
 
             //Now for each element of self, set self.value=NAN if the mask is NAN.
             for i_self in 0..self.len() {
