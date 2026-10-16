@@ -495,3 +495,27 @@ fn test_node_table_bad_cell_is_an_error_not_a_panic() {
     let msg = format!("{:?}", err);
     assert!(msg.contains("'x'") && msg.contains("cell 8"), "{msg}");
 }
+
+#[test]
+fn test_save_keeps_time_of_day_on_start_and_end() {
+    // A 9am start/end on a daily model must survive save and reload, not
+    // collapse to a date that reloads at midnight (off the data grid).
+    let ini = "[kalix]\n\
+               start = 2020-01-02\n\
+               end = 2020-01-05\n\
+               \n\
+               [node.bh]\n\
+               type = blackhole\n\
+               loc = 1, 2\n";
+    let mut model = IniModelIO::read_model_string(ini).expect("model should parse");
+    let start = crate::tid::utils::date_string_to_u64_flexible("2020-01-02T09:00:00").unwrap().0;
+    let end = crate::tid::utils::date_string_to_u64_flexible("2020-01-05T09:00:00").unwrap().0;
+    model.configuration.sim_stepsize = 86400;
+    model.configuration.specified_sim_start_timestamp = Some(start);
+    model.configuration.specified_sim_end_timestamp = Some(end);
+
+    let out = IniModelIO::model_to_string(&model);
+    let reloaded = IniModelIO::read_model_string(&out).expect("saved model should reload");
+    assert_eq!(reloaded.configuration.specified_sim_start_timestamp, Some(start), "saved:\n{}", out);
+    assert_eq!(reloaded.configuration.specified_sim_end_timestamp, Some(end), "saved:\n{}", out);
+}
