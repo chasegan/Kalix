@@ -317,6 +317,12 @@ fn is_midnight(value: u64) -> bool {
     wrap_to_i64(value).rem_euclid(86400) == 0
 }
 
+/// The UTC time of day of `value` as "HH:MM:SS".
+pub fn time_of_day_string(value: u64) -> String {
+    let secs = wrap_to_i64(value).rem_euclid(86400);
+    format!("{:02}:{:02}:{:02}", secs / 3600, (secs / 60) % 60, secs % 60)
+}
+
 /// True if timestamps on a grid starting at `start` need a time of day to
 /// print without loss: sub-daily steps, or daily-or-coarser steps off midnight
 /// (e.g. 9am data). A whole-day step keeps every point at the same time of
