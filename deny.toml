@@ -1,0 +1,5 @@
+# cargo-deny configuration. Only the advisories check is run (see
+# .github/workflows/audit.yml): it fails on RustSec advisories and on any
+# locked dependency version that has been yanked from crates.io.
+[advisories]
+yanked = "deny"
