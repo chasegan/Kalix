@@ -144,6 +144,8 @@ Rules for CSV files are as follows:
 
 - Timesteps in the file must be regular (no missing timestamps), and in temporal order.
 
+- All inputs to a model must share the same timestep and the same time of day. For example, daily data stamped at 9am (`2020-01-01T09:00:00`) can't be mixed with daily data at midnight (`2020-01-01`). Kalix stops with an error naming both inputs rather than shifting either one.
+
 - Blank values (or whitespace) are taken to indicate missing data.
 
 ### Zip-compressed CSV files (.csv.zip)
