@@ -145,7 +145,7 @@ jobs:
         shell: bash
         run: |
           pip install maturin
-          maturin build --release --out dist
+          maturin build --release --locked --out dist
           pip install dist/*.whl
       - name: Install test dependencies
         run: pip install numpy

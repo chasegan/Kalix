@@ -27,6 +27,12 @@ exclude = [
 [lib]
 crate-type = ["lib"]
 
+# One workspace, so the Python bindings build against this crate's committed
+# Cargo.lock rather than resolving dependencies fresh on every CI run (a fresh
+# resolve breaks the moment any dependency version is yanked).
+[workspace]
+members = ["python"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

@@ -203,7 +203,7 @@ jobs:
         with:
           working-directory: python
           target: ${{ matrix.target }}
-          args: --release --out dist
+          args: --release --locked --out dist
           sccache: 'true'
           manylinux: auto
       - uses: actions/upload-artifact@v7
