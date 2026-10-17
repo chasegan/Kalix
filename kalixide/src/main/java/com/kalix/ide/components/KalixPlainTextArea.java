@@ -13,7 +13,7 @@ import java.util.List;
  * Extends KalixTextArea to inherit:
  * <ul>
  *   <li>Monospace font configuration</li>
- *   <li>Windows cursor alignment fix</li>
+ *   <li>Font metrics that follow the screen the editor is shown on</li>
  *   <li>Common editor settings</li>
  * </ul>
  *

@@ -32,7 +32,7 @@ import java.util.List;
  * Uses KalixIniTextArea or KalixPlainTextArea depending on mode, which provide:
  * <ul>
  *   <li>Monospace font configuration</li>
- *   <li>Windows cursor alignment fix</li>
+ *   <li>Font metrics that follow the screen the editor is shown on</li>
  *   <li>Theme-aware styling</li>
  * </ul>
  *

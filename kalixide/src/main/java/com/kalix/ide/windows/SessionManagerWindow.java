@@ -194,7 +194,6 @@ public class SessionManagerWindow extends JFrame {
 
         // Initialize STDIO log area
         logArea = KalixPlainTextArea.createReadOnly(20, 60);
-        logArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, UIConstants.StdioLog.FONT_SIZE));
         logArea.setText("Select a session to view STDIO log...");
 
         logScrollPane = new RTextScrollPane(logArea);

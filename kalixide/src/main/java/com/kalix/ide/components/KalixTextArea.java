@@ -3,10 +3,14 @@ package com.kalix.ide.components;
 import com.kalix.ide.managers.FontManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.swing.UIManager;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.GraphicsConfiguration;
+import java.beans.PropertyChangeEvent;
 
 /**
  * Base class for all text editor components in Kalix IDE.
@@ -14,7 +18,7 @@ import java.awt.Font;
  * Provides common configuration that ensures consistent behavior across platforms:
  * <ul>
  *   <li>Monospace font configuration (JetBrains Mono with fallbacks)</li>
- *   <li>Windows cursor alignment fix via addNotify() override</li>
+ *   <li>Font metrics that follow the screen the editor is shown on</li>
  *   <li>Common editor settings (anti-aliasing, tab handling, etc.)</li>
  * </ul>
  *
@@ -25,6 +29,8 @@ import java.awt.Font;
  * @see KalixPlainTextArea for plain text display (logs, output)
  */
 public abstract class KalixTextArea extends RSyntaxTextArea {
+
+    private static final Logger logger = LoggerFactory.getLogger(KalixTextArea.class);
 
     /**
      * Creates a KalixTextArea with default dimensions.
@@ -57,20 +63,41 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
 
         // Configure monospace font from preferences
         configureMonospaceFont();
+
+        addPropertyChangeListener("graphicsConfiguration", this::onGraphicsConfigurationChanged);
     }
 
     /**
-     * Re-applies font after component realization to fix Windows cursor alignment.
+     * Rebuilds the cached font metrics when this editor lands on a screen with a
+     * different {@link GraphicsConfiguration}.
      *
-     * On Windows, RSyntaxTextArea may not correctly calculate font metrics when
-     * setFont() is called before the component has a valid Graphics context.
-     * This override ensures proper font metrics by re-applying the font once
-     * the component is connected to a native screen resource.
+     * <p>RSyntaxTextArea measures text with {@link java.awt.FontMetrics} that it caches
+     * from the component's {@code Graphics}: once at first paint, and again whenever
+     * the font is set. Those metrics belong to the device scale of the screen they were
+     * taken on. With fractional metrics off, each glyph advance is rounded to whole
+     * device pixels, so a 125% screen and a 150% screen measure the same string
+     * differently. Painting always uses the live screen. When the window is dragged
+     * to a monitor with another scale, or the display scale is changed while the IDE
+     * runs, the caret and the glyphs under it therefore drift apart
+     * (<a href="https://github.com/chasegan/Kalix/issues/162">#162</a>).
+     *
+     * <p>The JDK fires the {@code graphicsConfiguration} property on every component
+     * whose configuration changes, for exactly this purpose. Re-applying the current
+     * font is RSyntaxTextArea's public route to its (private) metrics refresh; it also
+     * updates the margin line and the current-line highlight.
+     *
+     * <p>Only a change from one screen to another needs this. The first configuration
+     * (old value {@code null}) is covered by RSyntaxTextArea's refresh at first paint,
+     * and losing the configuration (new value {@code null}) means the component has
+     * left the hierarchy.
      */
-    @Override
-    public void addNotify() {
-        super.addNotify();
-        configureMonospaceFont();
+    private void onGraphicsConfigurationChanged(PropertyChangeEvent event) {
+        if (event.getOldValue() != null && event.getNewValue() != null) {
+            GraphicsConfiguration screen = (GraphicsConfiguration) event.getNewValue();
+            logger.debug("Editor moved to a screen at {}x scale; rebuilding font metrics",
+                screen.getDefaultTransform().getScaleX());
+            setFont(getFont());
+        }
     }
 
     /**

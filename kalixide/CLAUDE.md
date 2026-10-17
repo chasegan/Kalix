@@ -133,7 +133,8 @@ RSyntaxTextArea (library)
 
 **KalixTextArea** (base class) provides:
 - Monospace font configuration via FontManager
-- Windows cursor alignment fix via `addNotify()` override
+- Font metrics that follow the screen (a `graphicsConfiguration` listener re-applies the
+  font when the editor moves to a monitor with a different scale — issue #162)
 - Common settings (anti-aliasing, tab handling)
 
 **KalixIniTextArea** adds:
@@ -154,7 +155,7 @@ Key files: `KalixTextArea.java`, `KalixIniTextArea.java`, `KalixPlainTextArea.ja
 
 ### Text Editor with RSyntaxTextArea
 Enhanced text editor using manager pattern:
-- **Uses KalixIniTextArea**: Inherits font and cursor alignment fixes
+- **Uses KalixIniTextArea**: Inherits the font configuration and screen-aware metrics
 - **Manager classes**: `TextSearchManager`, `TextNavigationManager`, `FileDropManager`
 - **Features**: Mark occurrences, current line highlighting, Ctrl+F/Ctrl+H shortcuts
 

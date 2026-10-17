@@ -15,7 +15,7 @@ import java.util.List;
  * Text area pre-configured for Kalix INI file editing.
  *
  * Extends KalixTextArea to inherit monospace font configuration and
- * Windows cursor alignment fix, then adds INI-specific features:
+ * screen-aware font metrics, then adds INI-specific features:
  * <ul>
  *   <li>Custom Kalix INI syntax highlighting with line continuation support</li>
  *   <li>Syntax theme from user preferences</li>
