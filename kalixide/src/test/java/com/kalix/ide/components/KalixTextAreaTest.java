@@ -3,11 +3,8 @@ package com.kalix.ide.components;
 import org.junit.jupiter.api.Test;
 
 import java.awt.Font;
-import java.awt.GraphicsConfiguration;
-import java.awt.GraphicsDevice;
-import java.awt.Rectangle;
-import java.awt.geom.AffineTransform;
-import java.awt.image.ColorModel;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -16,14 +13,16 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 /**
  * Pins two contracts of the shared editor base class.
  *
- * <p>Issue #162: an editor that moves to a screen with a different graphics
- * configuration re-applies its font, which is RSyntaxTextArea's public route to
- * rebuilding the font metrics it caches per screen. Runs headless, so the
- * configurations are stand-ins and the change is delivered through the same property
- * the JDK fires.
+ * <p>Issue #162: an editor painted at a device scale other than the one its font
+ * metrics were measured at re-applies its font, which is RSyntaxTextArea's public
+ * route to rebuilding the metrics it caches per screen. Runs headless, so the paint
+ * is stood in for by the scale check it delegates to, fed a {@code Graphics2D} with
+ * the transform a scaled screen would carry.
  *
  * <p>Font-size preference: one registry reaches every live editor, plain and INI alike.
- * The session log area used to sit in a registry nothing swept.
+ * The session log area used to sit in a registry nothing swept. The registry is
+ * process-wide and the tests run sequentially, so a sweep in one test cannot be
+ * observed by another.
  */
 class KalixTextAreaTest {
 
@@ -45,50 +44,54 @@ class KalixTextAreaTest {
             super.setFont(font);
         }
 
-        void screenChanged(GraphicsConfiguration from, GraphicsConfiguration to) {
-            firePropertyChange("graphicsConfiguration", from, to);
+        void paintedAt(double scale) {
+            Graphics2D g = new BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB).createGraphics();
+            g.scale(scale, scale);
+            remeasureIfScaleChanged(g);
+            g.dispose();
         }
     }
 
-    /** A configuration that stands for one screen; identity is all the test needs. */
-    private static GraphicsConfiguration screen() {
-        return new GraphicsConfiguration() {
-            @Override public GraphicsDevice getDevice() { return null; }
-            @Override public ColorModel getColorModel() { return null; }
-            @Override public ColorModel getColorModel(int transparency) { return null; }
-            @Override public AffineTransform getDefaultTransform() { return new AffineTransform(); }
-            @Override public AffineTransform getNormalizingTransform() { return new AffineTransform(); }
-            @Override public Rectangle getBounds() { return new Rectangle(); }
-        };
+    @Test
+    void firstPaintLeavesTheMeasurementToTheLibrary() {
+        CountingTextArea area = new CountingTextArea();
+
+        area.paintedAt(1.25);
+
+        assertEquals(0, area.fontApplications);
     }
 
     @Test
-    void movingToAnotherScreenReappliesTheCurrentFont() {
+    void repaintingAtTheSameScaleDoesNothing() {
+        CountingTextArea area = new CountingTextArea();
+
+        area.paintedAt(1.25);
+        area.paintedAt(1.25);
+
+        assertEquals(0, area.fontApplications);
+    }
+
+    @Test
+    void paintingAtAnotherScaleReappliesTheCurrentFont() {
         CountingTextArea area = new CountingTextArea();
         Font before = area.getFont();
 
-        area.screenChanged(screen(), screen());
+        area.paintedAt(1.25);
+        area.paintedAt(1.5);
 
         assertEquals(1, area.fontApplications);
         assertSame(before, area.getFont(), "the font itself is unchanged; only its metrics are rebuilt");
     }
 
     @Test
-    void firstScreenIsLeftToTheFirstPaint() {
+    void everyScaleChangeRemeasures() {
         CountingTextArea area = new CountingTextArea();
 
-        area.screenChanged(null, screen());
+        area.paintedAt(1.25);
+        area.paintedAt(1.5);
+        area.paintedAt(1.25);
 
-        assertEquals(0, area.fontApplications);
-    }
-
-    @Test
-    void leavingTheHierarchyDoesNothing() {
-        CountingTextArea area = new CountingTextArea();
-
-        area.screenChanged(screen(), null);
-
-        assertEquals(0, area.fontApplications);
+        assertEquals(2, area.fontApplications);
     }
 
     @Test

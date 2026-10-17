@@ -10,8 +10,8 @@ import org.slf4j.LoggerFactory;
 import javax.swing.UIManager;
 import java.awt.Color;
 import java.awt.Font;
-import java.awt.GraphicsConfiguration;
-import java.beans.PropertyChangeEvent;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.util.function.Consumer;
 
 /**
@@ -36,6 +36,12 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     private static final Logger logger = LoggerFactory.getLogger(KalixTextArea.class);
 
     private static final WeakRegistry<KalixTextArea> instances = new WeakRegistry<>();
+
+    /**
+     * Device scale (pixels per user-space unit) of the screen this editor last painted
+     * on, and so the scale its cached font metrics belong to. Zero until first paint.
+     */
+    private double paintedScale;
 
     /**
      * Creates a KalixTextArea with default dimensions.
@@ -69,13 +75,10 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
 
         // Configure monospace font from preferences
         configureMonospaceFont();
-
-        addPropertyChangeListener("graphicsConfiguration", this::onGraphicsConfigurationChanged);
     }
 
     /**
-     * Rebuilds the cached font metrics when this editor lands on a screen with a
-     * different {@link GraphicsConfiguration}.
+     * Keeps the cached font metrics in step with the screen this editor is painted on.
      *
      * <p>RSyntaxTextArea measures text with {@link java.awt.FontMetrics} that it caches
      * from the component's {@code Graphics}: once at first paint, and again whenever
@@ -87,23 +90,32 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
      * runs, the caret and the glyphs under it therefore drift apart
      * (<a href="https://github.com/chasegan/Kalix/issues/162">#162</a>).
      *
-     * <p>The JDK fires the {@code graphicsConfiguration} property on every component
-     * whose configuration changes, for exactly this purpose. Re-applying the current
-     * font is RSyntaxTextArea's public route to its (private) metrics refresh; it also
-     * updates the margin line and the current-line highlight.
-     *
-     * <p>Only a change from one screen to another needs this. The first configuration
-     * (old value {@code null}) is covered by RSyntaxTextArea's refresh at first paint,
-     * and losing the configuration (new value {@code null}) means the component has
-     * left the hierarchy.
+     * <p>The check lives here, where the library itself does its first measurement,
+     * because the {@code Graphics} in hand is the truth about the screen: it covers a
+     * monitor move, a scale change, and an already-painted editor re-attached on another
+     * screen alike. The {@code graphicsConfiguration} property and {@code addNotify}
+     * each miss one of those, since the library's own first-paint refresh runs once and
+     * the property fires before a re-attached component can measure anything.
      */
-    private void onGraphicsConfigurationChanged(PropertyChangeEvent event) {
-        if (event.getOldValue() != null && event.getNewValue() != null) {
-            GraphicsConfiguration screen = (GraphicsConfiguration) event.getNewValue();
-            logger.debug("Editor moved to a screen at {}x scale; rebuilding font metrics",
-                screen.getDefaultTransform().getScaleX());
+    @Override
+    protected void paintComponent(Graphics g) {
+        remeasureIfScaleChanged((Graphics2D) g);
+        super.paintComponent(g);
+    }
+
+    /**
+     * Rebuilds the font metrics if the scale this paint runs at differs from the scale
+     * they were measured on. Re-applying the current font is RSyntaxTextArea's public
+     * route to its (private) metrics refresh; it also updates the margin line and the
+     * current-line highlight. The first paint is left to the library.
+     */
+    void remeasureIfScaleChanged(Graphics2D g) {
+        double scale = g.getTransform().getScaleX();
+        if (paintedScale != 0 && scale != paintedScale) {
+            logger.debug("Editor now paints at {}x scale; rebuilding font metrics", scale);
             setFont(getFont());
         }
+        paintedScale = scale;
     }
 
     /**
