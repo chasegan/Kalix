@@ -1,6 +1,5 @@
 package com.kalix.ide.preferences.ui;
 
-import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import javax.swing.Box;
@@ -19,19 +18,16 @@ import java.util.function.IntConsumer;
  */
 public class FontPreferencePage extends AbstractPreferencePage {
 
-    private final EnhancedTextEditor textEditor;
     private final IntConsumer onFontSizeChanged;
 
     private JSpinner fontSizeSpinner;
 
     /**
-     * @param textEditor        the main editor, updated immediately on change
      * @param onFontSizeChanged notified with the new size after the font size
-     *                          preference changes (e.g. to update MinimalEditorWindows)
+     *                          preference changes, so every editor can follow it
      */
-    public FontPreferencePage(EnhancedTextEditor textEditor, IntConsumer onFontSizeChanged) {
+    public FontPreferencePage(IntConsumer onFontSizeChanged) {
         super("Font");
-        this.textEditor = textEditor;
         this.onFontSizeChanged = onFontSizeChanged;
         initializePanel();
     }
@@ -75,13 +71,6 @@ public class FontPreferencePage extends AbstractPreferencePage {
         fontSizeSpinner.addChangeListener(e -> {
             int fontSize = (Integer) fontSizeSpinner.getValue();
             PreferenceKeys.EDITOR_FONT_SIZE.set(fontSize);
-
-            // Update the text editor font immediately
-            if (textEditor != null) {
-                textEditor.updateFontSize(fontSize);
-            }
-
-            // Notify callback listeners (e.g., to update MinimalEditorWindows)
             onFontSizeChanged.accept(fontSize);
         });
         formPanel.add(fontSizeSpinner, gbc);

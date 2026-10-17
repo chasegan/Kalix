@@ -11,6 +11,11 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.GraphicsConfiguration;
 import java.beans.PropertyChangeEvent;
+import java.lang.ref.WeakReference;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Base class for all text editor components in Kalix IDE.
@@ -20,6 +25,7 @@ import java.beans.PropertyChangeEvent;
  *   <li>Monospace font configuration (JetBrains Mono with fallbacks)</li>
  *   <li>Font metrics that follow the screen the editor is shown on</li>
  *   <li>Common editor settings (anti-aliasing, tab handling, etc.)</li>
+ *   <li>A registry of live instances, so a preference change reaches every editor</li>
  * </ul>
  *
  * Subclasses should extend this class rather than RSyntaxTextArea directly to
@@ -31,6 +37,9 @@ import java.beans.PropertyChangeEvent;
 public abstract class KalixTextArea extends RSyntaxTextArea {
 
     private static final Logger logger = LoggerFactory.getLogger(KalixTextArea.class);
+
+    /** Every live Kalix text area, held weakly so a closed window can be collected. */
+    private static final List<WeakReference<KalixTextArea>> instances = new ArrayList<>();
 
     /**
      * Creates a KalixTextArea with default dimensions.
@@ -48,6 +57,9 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     protected KalixTextArea(int rows, int cols) {
         super(rows, cols);
         initializeBase();
+        synchronized (instances) {
+            instances.add(new WeakReference<>(this));
+        }
     }
 
     /**
@@ -119,6 +131,37 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     public void updateFontSize(int fontSize) {
         Font monoFont = FontManager.getMonospaceFont(fontSize);
         setFont(monoFont);
+    }
+
+    /**
+     * Updates the font size of every live Kalix text area.
+     *
+     * @param fontSize the new font size in points
+     */
+    public static void updateAllFontSizes(int fontSize) {
+        forEachInstance(KalixTextArea.class, textArea -> textArea.updateFontSize(fontSize));
+    }
+
+    /**
+     * Applies an action to every live instance of the given type, dropping
+     * registrations whose text area has been collected.
+     *
+     * @param type   the text area class to visit; other instances are skipped
+     * @param action what to do with each one
+     * @param <T>    the text area class
+     */
+    protected static <T extends KalixTextArea> void forEachInstance(Class<T> type, Consumer<? super T> action) {
+        synchronized (instances) {
+            Iterator<WeakReference<KalixTextArea>> iterator = instances.iterator();
+            while (iterator.hasNext()) {
+                KalixTextArea textArea = iterator.next().get();
+                if (textArea == null) {
+                    iterator.remove();
+                } else if (type.isInstance(textArea)) {
+                    action.accept(type.cast(textArea));
+                }
+            }
+        }
     }
 
     /**

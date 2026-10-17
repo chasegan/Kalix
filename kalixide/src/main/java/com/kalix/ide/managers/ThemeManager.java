@@ -329,9 +329,7 @@ public class ThemeManager {
      * @param fontSize The new font size in points
      */
     public static void notifyFontSizeChanged(int fontSize) {
-        com.kalix.ide.windows.MinimalEditorWindow.updateAllFontSizes(fontSize);
-        com.kalix.ide.components.KalixIniTextArea.updateAllFontSizes(fontSize);
-        com.kalix.ide.diff.DiffWindow.updateAllFontSizes(fontSize);
+        com.kalix.ide.components.KalixTextArea.updateAllFontSizes(fontSize);
         com.kalix.ide.dataview.VirtualTextArea.updateAllFontSizes(fontSize);
     }
 }

@@ -139,8 +139,8 @@ public class DiffWindow extends JFrame {
         setSize(1200, 800);
         setLocationRelativeTo(null);
 
-        // Register this instance for preference updates; cleanup is handled
-        // by the WeakReferences in updateAllFontSizes()
+        // Register this instance for syntax theme updates; cleanup is handled
+        // by the WeakReferences in updateAllSyntaxThemes()
         synchronized (openWindows) {
             openWindows.add(new WeakReference<>(this));
         }
@@ -241,16 +241,6 @@ public class DiffWindow extends JFrame {
         setLayout(new BorderLayout());
         add(navigationToolbar, BorderLayout.NORTH);
         add(splitPane, BorderLayout.CENTER);
-    }
-
-    /**
-     * Updates the font size of both text editors.
-     *
-     * @param fontSize the new font size in points
-     */
-    public void updateFontSize(int fontSize) {
-        leftTextArea.updateFontSize(fontSize);
-        rightTextArea.updateFontSize(fontSize);
     }
 
     private void initializeColors() {
@@ -491,27 +481,6 @@ public class DiffWindow extends JFrame {
             this.rightText = rightText;
             this.leftInlineChanges = leftInlineChanges;
             this.rightInlineChanges = rightInlineChanges;
-        }
-    }
-
-    /**
-     * Updates the font size for all open DiffWindow instances.
-     *
-     * @param fontSize the new font size in points
-     */
-    public static void updateAllFontSizes(int fontSize) {
-        synchronized (openWindows) {
-            Iterator<WeakReference<DiffWindow>> iterator = openWindows.iterator();
-            while (iterator.hasNext()) {
-                WeakReference<DiffWindow> ref = iterator.next();
-                DiffWindow window = ref.get();
-
-                if (window == null) {
-                    iterator.remove();
-                } else {
-                    window.updateFontSize(fontSize);
-                }
-            }
         }
     }
 

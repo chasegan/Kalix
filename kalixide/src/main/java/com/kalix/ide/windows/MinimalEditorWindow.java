@@ -216,27 +216,6 @@ public class MinimalEditorWindow extends JFrame {
     }
 
     /**
-     * Updates the font size for all open MinimalEditorWindow instances.
-     *
-     * @param fontSize the new font size in points
-     */
-    public static void updateAllFontSizes(int fontSize) {
-        synchronized (openWindows) {
-            Iterator<WeakReference<MinimalEditorWindow>> iterator = openWindows.iterator();
-            while (iterator.hasNext()) {
-                WeakReference<MinimalEditorWindow> ref = iterator.next();
-                MinimalEditorWindow window = ref.get();
-
-                if (window == null) {
-                    iterator.remove();
-                } else {
-                    window.textArea.updateFontSize(fontSize);
-                }
-            }
-        }
-    }
-
-    /**
      * Updates the syntax theme for all open MinimalEditorWindow instances.
      *
      * @param syntaxTheme the new syntax theme to apply

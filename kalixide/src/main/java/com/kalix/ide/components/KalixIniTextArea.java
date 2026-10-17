@@ -6,11 +6,6 @@ import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.lang.ref.WeakReference;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-
 /**
  * Text area pre-configured for Kalix INI file editing.
  *
@@ -21,7 +16,7 @@ import java.util.List;
  *   <li>Syntax theme from user preferences</li>
  *   <li>Theme-aware current line highlighting</li>
  *   <li>Code folding, mark occurrences, and other editing features</li>
- *   <li>Global preference update support via static methods</li>
+ *   <li>Syntax theme updates for every live instance via static methods</li>
  * </ul>
  *
  * @see KalixTextArea for base configuration
@@ -33,8 +28,6 @@ public class KalixIniTextArea extends KalixTextArea {
 
     /** Syntax style identifier for Kalix INI format. */
     public static final String SYNTAX_STYLE_KALIX_INI = "text/kalixini";
-
-    private static final List<WeakReference<KalixIniTextArea>> instances = new ArrayList<>();
 
     static {
         registerCustomTokenMaker();
@@ -56,7 +49,6 @@ public class KalixIniTextArea extends KalixTextArea {
     public KalixIniTextArea(int rows, int cols) {
         super(rows, cols);
         initializeIni();
-        registerInstance();
     }
 
     /**
@@ -138,52 +130,13 @@ public class KalixIniTextArea extends KalixTextArea {
         }
     }
 
-    private void registerInstance() {
-        synchronized (instances) {
-            instances.add(new WeakReference<>(this));
-        }
-    }
-
     /**
      * Updates syntax theme for all KalixIniTextArea instances.
      *
      * @param theme the theme to apply
      */
     public static void updateAllSyntaxThemes(SyntaxTheme.Theme theme) {
-        synchronized (instances) {
-            Iterator<WeakReference<KalixIniTextArea>> iterator = instances.iterator();
-            while (iterator.hasNext()) {
-                WeakReference<KalixIniTextArea> ref = iterator.next();
-                KalixIniTextArea textArea = ref.get();
-
-                if (textArea == null) {
-                    iterator.remove();
-                } else {
-                    textArea.updateSyntaxTheme(theme);
-                }
-            }
-        }
-    }
-
-    /**
-     * Updates font size for all KalixIniTextArea instances.
-     *
-     * @param fontSize the new font size in points
-     */
-    public static void updateAllFontSizes(int fontSize) {
-        synchronized (instances) {
-            Iterator<WeakReference<KalixIniTextArea>> iterator = instances.iterator();
-            while (iterator.hasNext()) {
-                WeakReference<KalixIniTextArea> ref = iterator.next();
-                KalixIniTextArea textArea = ref.get();
-
-                if (textArea == null) {
-                    iterator.remove();
-                } else {
-                    textArea.updateFontSize(fontSize);
-                }
-            }
-        }
+        forEachInstance(KalixIniTextArea.class, textArea -> textArea.updateSyntaxTheme(theme));
     }
 
     /**
@@ -191,18 +144,6 @@ public class KalixIniTextArea extends KalixTextArea {
      * Called when the application theme changes.
      */
     public static void updateAllForThemeChange() {
-        synchronized (instances) {
-            Iterator<WeakReference<KalixIniTextArea>> iterator = instances.iterator();
-            while (iterator.hasNext()) {
-                WeakReference<KalixIniTextArea> ref = iterator.next();
-                KalixIniTextArea textArea = ref.get();
-
-                if (textArea == null) {
-                    iterator.remove();
-                } else {
-                    textArea.updateCurrentLineHighlight();
-                }
-            }
-        }
+        forEachInstance(KalixIniTextArea.class, KalixTextArea::updateCurrentLineHighlight);
     }
 }
