@@ -301,14 +301,7 @@ public class ThemeManager {
      * Components will update their UI to match the new theme colors.
      */
     public static void notifyApplicationThemeChanged() {
-        // MinimalEditorWindow instances need to update current line highlight colors
-        com.kalix.ide.windows.MinimalEditorWindow.updateAllForThemeChange();
-
-        // KalixIniTextArea instances need to update current line highlight colors
-        com.kalix.ide.components.KalixIniTextArea.updateAllForThemeChange();
-
-        // DiffWindow instances may need theme updates (if they track themes separately)
-        // Currently DiffWindow relies on SwingUtilities.updateComponentTreeUI
+        com.kalix.ide.components.KalixTextArea.updateAllForThemeChange();
     }
 
     /**
@@ -317,9 +310,7 @@ public class ThemeManager {
      * @param syntaxTheme The new syntax theme to apply
      */
     public static void notifySyntaxThemeChanged(SyntaxTheme.Theme syntaxTheme) {
-        com.kalix.ide.windows.MinimalEditorWindow.updateAllSyntaxThemes(syntaxTheme);
         com.kalix.ide.components.KalixIniTextArea.updateAllSyntaxThemes(syntaxTheme);
-        com.kalix.ide.diff.DiffWindow.updateAllSyntaxThemes(syntaxTheme);
         com.kalix.ide.dataview.VirtualTextArea.updateAllSyntaxThemes(syntaxTheme);
     }
 

@@ -19,11 +19,7 @@ import java.awt.BorderLayout;
 import java.awt.FlowLayout;
 import java.io.File;
 import java.io.IOException;
-import java.lang.ref.WeakReference;
 import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
 
 /**
  * Minimal text editor window with Load/Save buttons.
@@ -43,7 +39,6 @@ public class MinimalEditorWindow extends JFrame {
 
     private static final Logger logger = LoggerFactory.getLogger(MinimalEditorWindow.class);
 
-    private static final List<WeakReference<MinimalEditorWindow>> openWindows = new ArrayList<>();
     private static java.util.function.Supplier<File> baseDirectorySupplier;
 
     private KalixTextArea textArea;
@@ -128,9 +123,6 @@ public class MinimalEditorWindow extends JFrame {
         setSize(800, 600);
         setLocationRelativeTo(null);
 
-        synchronized (openWindows) {
-            openWindows.add(new WeakReference<>(this));
-        }
     }
 
     private void initializeComponents() {
@@ -212,46 +204,6 @@ public class MinimalEditorWindow extends JFrame {
             DialogUtils.showError(this,
                 "Failed to save file: " + e.getMessage(),
                 "Save Error");
-        }
-    }
-
-    /**
-     * Updates the syntax theme for all open MinimalEditorWindow instances.
-     *
-     * @param syntaxTheme the new syntax theme to apply
-     */
-    public static void updateAllSyntaxThemes(SyntaxTheme.Theme syntaxTheme) {
-        synchronized (openWindows) {
-            Iterator<WeakReference<MinimalEditorWindow>> iterator = openWindows.iterator();
-            while (iterator.hasNext()) {
-                WeakReference<MinimalEditorWindow> ref = iterator.next();
-                MinimalEditorWindow window = ref.get();
-
-                if (window == null) {
-                    iterator.remove();
-                } else if (window.textArea instanceof KalixIniTextArea) {
-                    ((KalixIniTextArea) window.textArea).updateSyntaxTheme(syntaxTheme);
-                }
-            }
-        }
-    }
-
-    /**
-     * Updates theme-dependent colors for all open MinimalEditorWindow instances.
-     */
-    public static void updateAllForThemeChange() {
-        synchronized (openWindows) {
-            Iterator<WeakReference<MinimalEditorWindow>> iterator = openWindows.iterator();
-            while (iterator.hasNext()) {
-                WeakReference<MinimalEditorWindow> ref = iterator.next();
-                MinimalEditorWindow window = ref.get();
-
-                if (window == null) {
-                    iterator.remove();
-                } else {
-                    window.textArea.updateCurrentLineHighlight();
-                }
-            }
         }
     }
 }

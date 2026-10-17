@@ -2,6 +2,7 @@ package com.kalix.ide.components;
 
 import com.kalix.ide.managers.FontManager;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.utils.WeakRegistry;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,10 +12,6 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.GraphicsConfiguration;
 import java.beans.PropertyChangeEvent;
-import java.lang.ref.WeakReference;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -38,8 +35,7 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
 
     private static final Logger logger = LoggerFactory.getLogger(KalixTextArea.class);
 
-    /** Every live Kalix text area, held weakly so a closed window can be collected. */
-    private static final List<WeakReference<KalixTextArea>> instances = new ArrayList<>();
+    private static final WeakRegistry<KalixTextArea> instances = new WeakRegistry<>();
 
     /**
      * Creates a KalixTextArea with default dimensions.
@@ -57,9 +53,7 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     protected KalixTextArea(int rows, int cols) {
         super(rows, cols);
         initializeBase();
-        synchronized (instances) {
-            instances.add(new WeakReference<>(this));
-        }
+        instances.add(this);
     }
 
     /**
@@ -139,29 +133,26 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
      * @param fontSize the new font size in points
      */
     public static void updateAllFontSizes(int fontSize) {
-        forEachInstance(KalixTextArea.class, textArea -> textArea.updateFontSize(fontSize));
+        instances.forEach(textArea -> textArea.updateFontSize(fontSize));
     }
 
     /**
-     * Applies an action to every live instance of the given type, dropping
-     * registrations whose text area has been collected.
+     * Re-resolves theme-dependent colours in every live Kalix text area.
+     * Called when the application theme changes.
+     */
+    public static void updateAllForThemeChange() {
+        instances.forEach(KalixTextArea::updateCurrentLineHighlight);
+    }
+
+    /**
+     * Applies an action to every live instance of the given subclass.
      *
      * @param type   the text area class to visit; other instances are skipped
      * @param action what to do with each one
      * @param <T>    the text area class
      */
     protected static <T extends KalixTextArea> void forEachInstance(Class<T> type, Consumer<? super T> action) {
-        synchronized (instances) {
-            Iterator<WeakReference<KalixTextArea>> iterator = instances.iterator();
-            while (iterator.hasNext()) {
-                KalixTextArea textArea = iterator.next().get();
-                if (textArea == null) {
-                    iterator.remove();
-                } else if (type.isInstance(textArea)) {
-                    action.accept(type.cast(textArea));
-                }
-            }
-        }
+        instances.forEach(type, action);
     }
 
     /**

@@ -22,9 +22,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Rectangle;
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -34,7 +32,6 @@ import java.util.List;
 public class DiffWindow extends JFrame {
     private static final Logger logger = LoggerFactory.getLogger(DiffWindow.class);
 
-    private static final List<WeakReference<DiffWindow>> openWindows = new ArrayList<>();
 
     // UI Components
     private KalixIniTextArea leftTextArea;
@@ -139,11 +136,6 @@ public class DiffWindow extends JFrame {
         setSize(1200, 800);
         setLocationRelativeTo(null);
 
-        // Register this instance for syntax theme updates; cleanup is handled
-        // by the WeakReferences in updateAllSyntaxThemes()
-        synchronized (openWindows) {
-            openWindows.add(new WeakReference<>(this));
-        }
     }
 
     private void initializeComponents(String referenceModel, String thisModel) {
@@ -481,28 +473,6 @@ public class DiffWindow extends JFrame {
             this.rightText = rightText;
             this.leftInlineChanges = leftInlineChanges;
             this.rightInlineChanges = rightInlineChanges;
-        }
-    }
-
-    /**
-     * Updates the syntax theme for all open DiffWindow instances.
-     *
-     * @param syntaxTheme the new syntax theme to apply
-     */
-    public static void updateAllSyntaxThemes(SyntaxTheme.Theme syntaxTheme) {
-        synchronized (openWindows) {
-            Iterator<WeakReference<DiffWindow>> iterator = openWindows.iterator();
-            while (iterator.hasNext()) {
-                WeakReference<DiffWindow> ref = iterator.next();
-                DiffWindow window = ref.get();
-
-                if (window == null) {
-                    iterator.remove();
-                } else {
-                    window.leftTextArea.updateSyntaxTheme(syntaxTheme);
-                    window.rightTextArea.updateSyntaxTheme(syntaxTheme);
-                }
-            }
         }
     }
 }

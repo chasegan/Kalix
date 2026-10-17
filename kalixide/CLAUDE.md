@@ -136,8 +136,10 @@ RSyntaxTextArea (library)
 - Font metrics that follow the screen (a `graphicsConfiguration` listener re-applies the
   font when the editor moves to a monitor with a different scale — issue #162)
 - Common settings (anti-aliasing, tab handling)
-- One weak registry of live instances: `updateAllFontSizes` reaches every editor, and
-  `forEachInstance(Class, Consumer)` lets a subclass sweep its own kind
+- One `WeakRegistry` of live instances (`utils/WeakRegistry.java`, shared with
+  `VirtualTextArea`): `updateAllFontSizes` and `updateAllForThemeChange` reach every editor,
+  and `forEachInstance(Class, Consumer)` lets a subclass sweep its own kind. Windows do
+  not keep registries of their editors.
 
 **KalixIniTextArea** adds:
 - Kalix INI syntax highlighting

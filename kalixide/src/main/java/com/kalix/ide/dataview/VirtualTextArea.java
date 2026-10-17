@@ -6,6 +6,7 @@ import com.kalix.ide.managers.FontManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.themes.SyntaxTheme;
 import com.kalix.ide.themes.ThemePreferences;
+import com.kalix.ide.utils.WeakRegistry;
 
 import javax.swing.AbstractAction;
 import javax.swing.JComponent;
@@ -29,9 +30,6 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.lang.ref.WeakReference;
-import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -102,7 +100,7 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
         // The editor's font-size preference, like every text surface (a hardcoded
         // 13 made this view visibly larger than the editors it sits beside).
         setFont(FontManager.getMonospaceFont(PreferenceKeys.EDITOR_FONT_SIZE.get()));
-        registerInstance(this);
+        instances.add(this);
         setOpaque(true);
         setFocusable(true);
         resolveColors();
@@ -245,39 +243,19 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
 
     // --- Global preference pushes (weak registry, like the editor components') ---
 
-    private static final List<WeakReference<VirtualTextArea>> instances = new ArrayList<>();
-
-    private static void registerInstance(VirtualTextArea area) {
-        synchronized (instances) {
-            instances.add(new WeakReference<>(area));
-        }
-    }
+    private static final WeakRegistry<VirtualTextArea> instances = new WeakRegistry<>();
 
     /** Pushes a font-size preference change to every live instance. */
     public static void updateAllFontSizes(int fontSize) {
-        forEachInstance(area -> area.updateFontSize(fontSize));
+        instances.forEach(area -> area.updateFontSize(fontSize));
     }
 
     /** Pushes a syntax-theme preference change (colours re-resolve) to every live instance. */
     public static void updateAllSyntaxThemes(SyntaxTheme.Theme theme) {
-        forEachInstance(area -> {
+        instances.forEach(area -> {
             area.resolveColors();
             area.repaint();
         });
-    }
-
-    private static void forEachInstance(java.util.function.Consumer<VirtualTextArea> action) {
-        synchronized (instances) {
-            Iterator<WeakReference<VirtualTextArea>> iterator = instances.iterator();
-            while (iterator.hasNext()) {
-                VirtualTextArea area = iterator.next().get();
-                if (area == null) {
-                    iterator.remove();
-                } else {
-                    action.accept(area);
-                }
-            }
-        }
     }
 
     private void registerSessionListener() {

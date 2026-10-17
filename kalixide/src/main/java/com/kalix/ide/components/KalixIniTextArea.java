@@ -138,12 +138,4 @@ public class KalixIniTextArea extends KalixTextArea {
     public static void updateAllSyntaxThemes(SyntaxTheme.Theme theme) {
         forEachInstance(KalixIniTextArea.class, textArea -> textArea.updateSyntaxTheme(theme));
     }
-
-    /**
-     * Updates theme-dependent colors for all KalixIniTextArea instances.
-     * Called when the application theme changes.
-     */
-    public static void updateAllForThemeChange() {
-        forEachInstance(KalixIniTextArea.class, KalixTextArea::updateCurrentLineHighlight);
-    }
 }
