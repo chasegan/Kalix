@@ -133,13 +133,21 @@ RSyntaxTextArea (library)
 
 **KalixTextArea** (base class) provides:
 - Monospace font configuration via FontManager
-- Windows cursor alignment fix via `addNotify()` override
+- Font metrics that follow the screen: `paintComponent` compares the paint scale with
+  the scale the metrics were measured at and re-applies the font on a change. RSyntaxTextArea
+  caches metrics per device scale and refreshes only at first paint, so a monitor drag or a
+  display-scale change left the caret and glyphs misaligned (issue #162). Painting, not
+  `addNotify` or the `graphicsConfiguration` property, because only the paint `Graphics`
+  is reliably available and reliably current.
 - Common settings (anti-aliasing, tab handling)
+- One `WeakRegistry` of live instances (`utils/WeakRegistry.java`, shared with
+  `VirtualTextArea`): `updateAllFontSizes` and `updateAllForThemeChange` reach every editor,
+  and `forEachInstance(Class, Consumer)` lets a subclass sweep its own kind. Windows do
+  not keep registries of their editors.
 
 **KalixIniTextArea** adds:
 - Kalix INI syntax highlighting
-- Syntax theme support
-- Global preference update methods
+- Syntax theme support, applied to every instance via `updateAllSyntaxThemes`
 
 **KalixPlainTextArea** adds:
 - No syntax highlighting (SYNTAX_STYLE_NONE)
@@ -154,7 +162,7 @@ Key files: `KalixTextArea.java`, `KalixIniTextArea.java`, `KalixPlainTextArea.ja
 
 ### Text Editor with RSyntaxTextArea
 Enhanced text editor using manager pattern:
-- **Uses KalixIniTextArea**: Inherits font and cursor alignment fixes
+- **Uses KalixIniTextArea**: Inherits the font configuration and screen-aware metrics
 - **Manager classes**: `TextSearchManager`, `TextNavigationManager`, `FileDropManager`
 - **Features**: Mark occurrences, current line highlighting, Ctrl+F/Ctrl+H shortcuts
 

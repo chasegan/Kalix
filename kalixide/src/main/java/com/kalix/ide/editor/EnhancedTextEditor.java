@@ -138,16 +138,6 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
-     * Updates the font size of the text editor.
-     * Delegates to the underlying KalixIniTextArea.
-     *
-     * @param fontSize The new font size in points
-     */
-    public void updateFontSize(int fontSize) {
-        textArea.updateFontSize(fontSize);
-    }
-
-    /**
      * Per-filetype syntax seam: switches this editor to plain text — no
      * tokenisation, no folding. TEXT documents use this; previously every
      * kind inherited the Kalix INI grammar.

@@ -1701,7 +1701,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 syncToggleButtonStates();
             }),
             themePage,
-            new FontPreferencePage(textEditor, ThemeManager::notifyFontSizeChanged),
+            new FontPreferencePage(ThemeManager::notifyFontSizeChanged),
             linterPage,
             new NodeDiagramPreferencePage(onMapPreferencesChanged, visible -> syncToggleButtonStates()),
             new DataVisualizationPreferencePage(onFlowVizPreferencesChanged),
