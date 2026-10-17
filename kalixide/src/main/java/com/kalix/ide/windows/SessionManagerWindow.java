@@ -26,7 +26,6 @@ import javax.swing.JPanel;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
-import javax.swing.JTextArea;
 import javax.swing.JTree;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -40,7 +39,6 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
-import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
@@ -715,9 +713,8 @@ public class SessionManagerWindow extends JFrame {
             String initialJsonCommand = JsonStdioProtocol.createCommandMessage("echo", parameters);
 
             // Show dialog with editable JSON
-            JTextArea textArea = new JTextArea(UIConstants.StdioLog.DIALOG_ROWS, UIConstants.StdioLog.DIALOG_COLS);
+            KalixPlainTextArea textArea = new KalixPlainTextArea(UIConstants.StdioLog.DIALOG_ROWS, UIConstants.StdioLog.DIALOG_COLS);
             textArea.setText(initialJsonCommand);
-            textArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, UIConstants.StdioLog.FONT_SIZE));
             textArea.setLineWrap(true);
             textArea.setWrapStyleWord(true);
 
