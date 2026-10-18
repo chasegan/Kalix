@@ -1,5 +1,6 @@
 package com.kalix.ide.model;
 
+import com.kalix.ide.linter.parsing.AnnotationKey;
 import com.kalix.ide.linter.parsing.IniSyntax;
 
 import java.util.ArrayList;
@@ -55,7 +56,7 @@ public class ModelParser {
         for (String rawLine : IniSyntax.splitLines(iniText)) {
             IniSyntax.Annotation annotation = IniSyntax.annotation(rawLine);
             if (annotation != null) {
-                if ("aka".equals(annotation.key()) && !annotation.value().isEmpty()) {
+                if (AnnotationKey.of(annotation.key()) == AnnotationKey.AKA && !annotation.value().isEmpty()) {
                     pendingAka = annotation.value();
                 }
                 continue;

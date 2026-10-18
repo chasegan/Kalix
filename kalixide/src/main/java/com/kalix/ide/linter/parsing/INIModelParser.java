@@ -27,6 +27,14 @@ public class INIModelParser {
     public static final String RULE_SEMICOLON_COMMENT = "semicolon_comment";
     /** Rule name for a line that begins with {@code [} but is not a complete header. */
     public static final String RULE_MALFORMED_SECTION_HEADER = "malformed_section_header";
+    /** Rule name for a {@code #@} line that is not {@code key = value} (ADR-0010 §2). */
+    public static final String RULE_ANNOTATION_MALFORMED = "annotation_malformed";
+    /** Rule name for an annotation with no section header below it (ADR-0010 §3). */
+    public static final String RULE_ANNOTATION_MISPLACED = "annotation_misplaced";
+    /** Rule name for a bare annotation key Kalix does not know (ADR-0010 §4). */
+    public static final String RULE_ANNOTATION_UNKNOWN_KEY = "annotation_unknown_key";
+    /** Rule name for a known key on a section it means nothing to. */
+    public static final String RULE_ANNOTATION_NO_EFFECT = "annotation_no_effect";
 
     /**
      * A lexical problem found while parsing: something the engine would reject (or
@@ -148,9 +156,25 @@ public class INIModelParser {
         ParsedModel model = new ParsedModel();
         String[] lines = IniSyntax.splitLines(content);
         Section currentSection = null;
+        // Annotations waiting for the header they attach to (ADR-0010 §3).
+        List<PendingAnnotation> pending = new ArrayList<>();
 
         for (int i = 0; i < lines.length; i++) {
             int lineNumber = i + 1;
+
+            // An annotation is a comment to the engine but not to the linter: it is
+            // checked against the key registry when its header arrives.
+            if (IniSyntax.isAnnotationLine(lines[i])) {
+                IniSyntax.Annotation annotation = IniSyntax.annotation(lines[i]);
+                if (annotation == null) {
+                    model.getSyntaxIssues().add(new SyntaxIssue(lineNumber,
+                        "Malformed annotation: expected '#@key = value'", RULE_ANNOTATION_MALFORMED));
+                } else {
+                    pending.add(new PendingAnnotation(annotation, lineNumber));
+                }
+                continue;
+            }
+
             // Code only: the inline '#' comment (if any) is gone from here on.
             String line = IniSyntax.stripComment(lines[i]).trim();
 
@@ -164,6 +188,7 @@ public class INIModelParser {
             // ']') is an engine error, and it still closes the previous section.
             if (first == '[') {
                 String sectionName = IniSyntax.sectionName(line);
+                checkAnnotations(pending, sectionName, model);
                 if (sectionName == null) {
                     model.getSyntaxIssues().add(new SyntaxIssue(lineNumber,
                         "Malformed section header: expected '[name]' with only a '#' comment after it",
@@ -174,6 +199,9 @@ public class INIModelParser {
                 currentSection = createSection(sectionName, lineNumber, model);
                 continue;
             }
+
+            // Any other code line orphans the annotations above it.
+            reportMisplaced(pending, model);
 
             // ';' is not a comment marker in Kalix (it terminates statements in
             // expression blocks). A line starting with one is a mistake the engine
@@ -226,6 +254,7 @@ public class INIModelParser {
             }
         }
 
+        reportMisplaced(pending, model);
         return model;
     }
 
@@ -319,6 +348,48 @@ public class INIModelParser {
     }
 
     private static final String NODE_SECTION_PREFIX = "node.";
+
+    /** An annotation and its line, held until the next header says what it applies to. */
+    private record PendingAnnotation(IniSyntax.Annotation annotation, int lineNumber) {
+    }
+
+    /**
+     * Checks the annotations above a header against the key registry: a bare key
+     * Kalix does not know is a warning, as is a known key on a section it means
+     * nothing to. A dotted key belongs to another tool and is never checked.
+     * {@code sectionName} is {@code null} for a malformed header, which still
+     * consumes the annotations but cannot say what they apply to.
+     */
+    private static void checkAnnotations(List<PendingAnnotation> pending, String sectionName, ParsedModel model) {
+        for (PendingAnnotation p : pending) {
+            String key = p.annotation().key();
+            if (AnnotationKey.isToolKey(key)) {
+                continue;
+            }
+            AnnotationKey known = AnnotationKey.of(key);
+            if (known == null) {
+                AnnotationKey lowercase = AnnotationKey.of(key.toLowerCase());
+                model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(),
+                    lowercase != null
+                        ? "Unknown annotation '" + key + "'; annotation keys are lowercase: '" + lowercase.key() + "'"
+                        : "Unknown annotation '" + key + "'",
+                    RULE_ANNOTATION_UNKNOWN_KEY));
+            } else if (sectionName != null && !known.appliesTo(sectionName)) {
+                model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(),
+                    "'" + key + "' has no effect on [" + sectionName + "]", RULE_ANNOTATION_NO_EFFECT));
+            }
+        }
+        pending.clear();
+    }
+
+    /** Reports every pending annotation as having no header to attach to. */
+    private static void reportMisplaced(List<PendingAnnotation> pending, ParsedModel model) {
+        for (PendingAnnotation p : pending) {
+            model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(),
+                "Annotation must sit above a section header", RULE_ANNOTATION_MISPLACED));
+        }
+        pending.clear();
+    }
 
     private static Section createSection(String sectionName, int lineNumber, ParsedModel model) {
         Section section;
