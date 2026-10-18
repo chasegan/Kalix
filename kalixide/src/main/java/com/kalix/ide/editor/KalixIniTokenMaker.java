@@ -34,6 +34,15 @@ public class KalixIniTokenMaker extends AbstractTokenMaker {
         int offset = text.offset;
         int end = offset + text.count;
 
+        // An annotation line (#@ at column zero, ADR-0010 §2) is a comment the IDE
+        // reads, so it gets its own token type and colour; any other prefix is a
+        // plain comment, and shows as one.
+        if (end - offset >= 2 && array[offset] == '#' && array[offset + 1] == '@') {
+            addToken(text, offset, end - 1, Token.ANNOTATION, startOffset);
+            addNullToken();
+            return firstToken;
+        }
+
         // Check if this line starts with whitespace (continuation line)
         if (offset < end && Character.isWhitespace(array[offset]) &&
             array[offset] != '\n' && array[offset] != '\r') {
