@@ -33,6 +33,28 @@ class ModelParserAnnotationTest {
     }
 
     @Test
+    void akaStaysWithItsOwnNodeWhenAnotherFollows() {
+        List<ModelNode> nodes = ModelParser.parse("""
+                #@aka = Teemburra Dam
+                [node.teemburra]
+                type = storage
+                loc = 10, 20
+                [node.gauge_1]
+                type = gauge
+                loc = 30, 40
+                """).getNodes();
+        assertEquals(2, nodes.size());
+        assertEquals("Teemburra Dam", nodes.get(0).getAka());
+        assertNull(nodes.get(1).getAka());
+    }
+
+    @Test
+    void crlfLineEndingsReadTheSameAsLf() {
+        String lf = "#@aka = Teemburra Dam\n[node.teemburra]\ntype = storage\nloc = 10, 20\n";
+        assertEquals(only(lf).getAka(), only(lf.replace("\n", "\r\n")).getAka());
+    }
+
+    @Test
     void blankLinesAndCommentsMayLieBetweenTheAnnotationAndTheHeader() {
         ModelNode node = only("""
                 #@aka = Teemburra Dam

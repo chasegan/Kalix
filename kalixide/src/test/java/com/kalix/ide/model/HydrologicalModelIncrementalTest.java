@@ -97,6 +97,15 @@ class HydrologicalModelIncrementalTest {
     }
 
     @Test
+    void movingANodeKeepsItsAka() {
+        model.parseFromIniTextIncremental("#@aka = Node one\n" + TWO_NODES);
+        model.updateNodePosition("node1", 15, 25);
+        ModelNode moved = model.getNode("node1");
+        assertEquals(15.0, moved.getX());
+        assertEquals("Node one", moved.getAka());
+    }
+
+    @Test
     void removedNodeIsDetected() {
         model.parseFromIniTextIncremental(TWO_NODES);
         events.clear();
