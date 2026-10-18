@@ -44,9 +44,15 @@ Chosen option: **4**, for regions as well.
 2. **Syntax.** A line whose first two characters, at column zero, are `#@`,
    followed by `key = value`. The value is the trimmed text after the first
    `=`. Any other prefix, such as `##@` or `# #@`, is an ordinary comment,
-   which is how an annotation is disabled.
-3. **Placement.** An annotation attaches to the next section header.
-   Annotations above `[kalix]` are file-level. Anywhere else is a lint error.
+   which is how an annotation is disabled. A `#@` line that is not
+   `key = value` is a lint error.
+3. **Placement.** An annotation attaches to the next section header. Blank
+   lines and ordinary comments may lie between; a code line orphans it, which
+   is a lint error, as is an annotation anywhere else. Annotations above
+   `[kalix]` are file-level. A section's text begins at its first annotation:
+   a tool that removes, copies or replaces a section takes its annotations
+   with it, and comments before the first annotation stay with the section
+   above.
 4. **Keys.** A bare key belongs to Kalix, follows the strict bare-name rule
    of ADR-0006 §2.6, and has a typed, linted value; an unknown one is a lint
    warning. A dotted key `tool.key` belongs to the tool named by the prefix.
@@ -56,8 +62,10 @@ Chosen option: **4**, for regions as well.
 5. **A key never reuses a property or section name with a different
    meaning.** This excludes `group`, `name` and `alias`.
 6. **Vocabulary.** Four keys, and no more until a use case exists.
-    1. `aka` — a readable alternative name, any text. A label in the sense of
-       ADR-0003, never an identity.
+    1. `aka` — a readable alternative name, any text; empty means none. A
+       label in the sense of ADR-0003, never an identity: the schematic shows
+       akas in a label mode of their own, and hovering any node reveals its
+       name, so identity is never more than a hover away.
     2. `cluster` — a strict bare name. Nodes sharing one may be drawn as one
        icon at their centroid. `.` is reserved for hierarchy later.
     3. `region` — the title of a text region, which runs to the next `region`
@@ -98,8 +106,8 @@ Chosen option: **4**, for regions as well.
 - **4, `#@`**: ✅ deterministic, same `key = value` shape as the file, and
   comment toggling disables and restores it exactly; ❌ one sigil to learn.
 
-Also rejected: annotations inside the section, since both parsers already
-treat comments above a header as belonging to it; and `endregion` markers,
+Also rejected: annotations inside the section, since the engine's document
+model already gives a header its leading comments; and `endregion` markers,
 since pairs can be unbalanced and no model needed arbitrary spans.
 
 ## Worked example
@@ -117,10 +125,12 @@ type = storage
 
 ## Enforcement
 
-- **Structural.** The model loader has no annotation concept. The lexer
-  lives once in `src/io/custom_ini_parser.rs`, mirrored by
-  `linter/parsing/IniSyntax.java` as the comment lexer already is, with one
-  key registry and tests that resave and replace patches preserve annotations.
+- **Structural.** The model loader has no annotation concept. The lexer is
+  `linter/parsing/IniSyntax.java` today; when the Rust document layer gains
+  one for §1 and §7, in `src/io/custom_ini_parser.rs`, the Java one mirrors
+  it as the comment lexer already does, and the resave and replace-patch
+  preservation tests arrive with it. One key registry in the IDE. The §3
+  span rule is held by the section locator's tests.
 - **Advisory.** §5, §6 and §10 are held by review.
 
 ## Links and references
