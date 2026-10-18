@@ -560,17 +560,12 @@ public class ToolBarBuilder {
     }
 
     /** The current mode and what the next click does, e.g. "Node labels: akas only - click to hide". */
-    static String labelModeTooltip(NodeLabelMode mode) {
-        switch (mode) {
-            case NAMES:
-                return "Node labels: names - click to show akas only";
-            case AKA:
-                return "Node labels: akas only - click to hide";
-            case HIDDEN:
-                return "Node labels: hidden (shown on hover) - click to show names";
-            default:
-                throw new IllegalStateException("Unhandled label mode " + mode);
-        }
+    private static String labelModeTooltip(NodeLabelMode mode) {
+        return switch (mode) {
+            case NAMES -> "Node labels: names - click to show akas only";
+            case AKA -> "Node labels: akas only - click to hide";
+            case HIDDEN -> "Node labels: hidden (shown on hover) - click to show names";
+        };
     }
 
 }

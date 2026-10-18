@@ -6,9 +6,10 @@ import java.util.List;
 
 /**
  * Which text the map draws under each node. One toolbar button cycles through the
- * three modes in the order declared here; the rule for what a node shows, with and
- * without the mouse over it, lives in {@link #labelLines(ModelNode, boolean)} so
- * the renderer has nothing to decide.
+ * three modes; the rule for what a node shows, with and without the mouse over it,
+ * lives in {@link #labelLines(ModelNode, boolean)} so the renderer has nothing to
+ * decide. Every switch over the modes is exhaustive, so a fourth mode is a compile
+ * error wherever it is not yet handled (ADR-0008 §2).
  *
  * <p>A node's {@code aka} (ADR-0010 §6.1) is a readable alternative to its name.
  * {@link #AKA} draws only nodes that have one, which keeps a dense model's map
@@ -48,7 +49,11 @@ public enum NodeLabelMode {
 
     /** The next mode in the cycle: names, aka, hidden, names. */
     public NodeLabelMode next() {
-        return values()[(ordinal() + 1) % values().length];
+        return switch (this) {
+            case NAMES -> AKA;
+            case AKA -> HIDDEN;
+            case HIDDEN -> NAMES;
+        };
     }
 
     /** True if any label is drawn without hovering, i.e. the toolbar button is selected. */
@@ -67,22 +72,22 @@ public enum NodeLabelMode {
      * @param hovered whether the mouse is over this node
      */
     public List<String> labelLines(ModelNode node, boolean hovered) {
+        String name = node.getName();
         String aka = node.getAka();
-        switch (this) {
-            case NAMES:
-                return List.of(node.getName());
-            case AKA:
+        return switch (this) {
+            case NAMES -> List.of(name);
+            case AKA -> {
                 if (hovered) {
-                    return List.of(node.getName());
+                    yield List.of(name);
                 }
-                return aka == null ? List.of() : List.of(aka);
-            case HIDDEN:
+                yield aka == null ? List.of() : List.of(aka);
+            }
+            case HIDDEN -> {
                 if (!hovered) {
-                    return List.of();
+                    yield List.of();
                 }
-                return aka == null ? List.of(node.getName()) : List.of(aka, node.getName());
-            default:
-                throw new IllegalStateException("Unhandled label mode " + this);
-        }
+                yield aka == null ? List.of(name) : List.of(aka, name);
+            }
+        };
     }
 }
