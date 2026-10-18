@@ -111,6 +111,11 @@ public class KalixIniTextArea extends KalixTextArea {
             syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.LITERAL_STRING_DOUBLE_QUOTE).foreground = syntaxTheme.getStringColor();
             syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.RESERVED_WORD).foreground = syntaxTheme.getReservedWordColor();
             syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.COMMENT_EOL).foreground = syntaxTheme.getCommentColor();
+            // Annotations belong to the section header below them, so they take its
+            // colour, in italics to tell them from the header itself.
+            org.fife.ui.rsyntaxtextarea.Style annotation = syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.ANNOTATION);
+            annotation.foreground = syntaxTheme.getReservedWordColor();
+            annotation.font = getFont().deriveFont(java.awt.Font.ITALIC);
             syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.WHITESPACE).foreground = syntaxTheme.getWhitespaceColor();
 
             updateCurrentLineHighlight();

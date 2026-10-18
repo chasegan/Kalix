@@ -175,6 +175,18 @@ Enhanced map visualization:
 
 Key files: `NodeTheme.java`, `TextCoordinateUpdater.java`
 
+### Annotations (ADR-0010)
+A `#@key = value` line at column zero is an annotation: a comment the IDE reads and
+the engine never does. `IniSyntax.annotation()` is the only lexer for it, and to every
+other `IniSyntax` rule the line is still a comment, so parsers that strip comments are
+untouched. `ModelParser` attaches an `aka` above a `[node.*]` header to that node
+(`ModelNode.getAka()`); a code line in between orphans it. `NodeLabelMode` owns what
+the map draws per node (names / aka only / hidden, with the hover rule) and the one
+toolbar button cycles it; `MapRenderer` draws the lines it is given. The editor
+tokenises annotation lines as `Token.ANNOTATION`.
+
+Key files: `IniSyntax.java`, `ModelParser.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`
+
 ### Code Quality Improvements
 Systematic refactoring addressing code smells:
 

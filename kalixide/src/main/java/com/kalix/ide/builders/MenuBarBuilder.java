@@ -3,6 +3,7 @@ package com.kalix.ide.builders;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.editor.EnhancedTextEditor;
+import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.themes.NodeTheme;
 
 import javax.swing.Action;
@@ -90,8 +91,8 @@ public class MenuBarBuilder {
         // Appearance menu
         void toggleGridlines(boolean showGridlines);
         boolean isGridlinesVisible();
-        void toggleLabels(boolean showLabels);
-        boolean isLabelsVisible();
+        void setLabelMode(NodeLabelMode mode);
+        NodeLabelMode getLabelMode();
         void toggleAutoReload(boolean enabled);
         boolean isAutoReloadEnabled();
 

@@ -474,7 +474,8 @@ public class HydrologicalModel {
         }
         
         // Create a new node with updated coordinates (ModelNode is immutable)
-        ModelNode updatedNode = new ModelNode(existingNode.getName(), existingNode.getType(), x, y);
+        ModelNode updatedNode = new ModelNode(existingNode.getName(), existingNode.getType(), x, y,
+                existingNode.getAka());
 
         // Update in main collection
         nodes.put(nodeName, updatedNode);

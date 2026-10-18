@@ -34,6 +34,20 @@ class TextCoordinateUpdaterDeletionTest {
     }
 
     @Test
+    void deletingNodeRemovesItsAnnotationsToo() {
+        String text = "[node.a]\nloc = 1, 1\n\n#@aka = Bee\n[node.b]\nloc = 2, 2\n\n[node.c]\nloc = 3, 3\n";
+        String result = apply(text, TextCoordinateUpdater.computeDeletionSpans(text, Set.of("b"), Set.of()));
+        assertEquals("[node.a]\nloc = 1, 1\n\n[node.c]\nloc = 3, 3\n", result);
+    }
+
+    @Test
+    void deletingTheNodeAboveLeavesTheNextNodesAnnotation() {
+        String text = "[node.a]\nloc = 1, 1\n\n#@aka = Bee\n[node.b]\nloc = 2, 2\n";
+        String result = apply(text, TextCoordinateUpdater.computeDeletionSpans(text, Set.of("a"), Set.of()));
+        assertEquals("#@aka = Bee\n[node.b]\nloc = 2, 2\n", result);
+    }
+
+    @Test
     void deletingNodeRemovesDanglingReferencesInSurvivingSections() {
         String text = "[node.a]\nloc = 1, 1\nds_1 = b\n\n[node.b]\nloc = 2, 2\n\n[node.c]\nds_1 = b\nds_2 = a\nloc = 3, 3\n";
         String result = apply(text, TextCoordinateUpdater.computeDeletionSpans(text, Set.of("b"), Set.of()));

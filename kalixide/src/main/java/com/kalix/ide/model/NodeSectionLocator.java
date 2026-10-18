@@ -26,7 +26,9 @@ import java.util.regex.Pattern;
  *       (a trailing {@code #} comment is allowed) and closes at the next line whose
  *       trimmed content starts with {@code [} (any section header), or at end of
  *       text. Trailing blank/comment lines before the next header belong to the
- *       section.</li>
+ *       section — except that an annotation line ({@code #@}, ADR-0010 §3) and
+ *       everything after it belong to the header below, as they do in the parser,
+ *       so a section's span begins at its first annotation.</li>
  *   <li>Property matches are line-anchored with inline {@code #} comments
  *       stripped, so {@code refloc = ...} or {@code # loc = ...} never match as a
  *       {@code loc} property.</li>
@@ -71,8 +73,10 @@ public final class NodeSectionLocator {
      * text), and the section's {@code loc} value span, or {@code null} if the section
      * has no parseable {@code loc} line.
      *
-     * <p>{@code end} deliberately swallows the blank and comment lines that trail the
-     * section — that is what removal wants, so cutting a section takes its trailing
+     * <p>{@code start} is the section's first annotation line if it has any, else its
+     * header line, so cutting a section takes its annotations with it. {@code end}
+     * deliberately swallows the blank and comment lines that trail the section — up
+     * to the next section's first annotation — so cutting a section takes its trailing
      * gap with it. {@code contentEnd} is the offset just past the section's last
      * <em>content</em> line (the last line that is neither blank nor a comment), which
      * is what <em>insertion</em> wants: a comment block sitting between two nodes
@@ -139,23 +143,33 @@ public final class NodeSectionLocator {
         int openContentEnd = -1;
         LocValueSpan openLoc = null;
 
+        // Start of the first annotation line since the last code line, or -1. The
+        // next header's section begins there; a code line in between orphans it.
+        int leadingStart = -1;
+
         LineScanner scanner = new LineScanner(text);
         while (scanner.next()) {
             String code = IniSyntax.stripComment(scanner.trimmed());
             if (code.isEmpty()) {
                 // Inert: never opens or closes a section, and never extends its content.
+                if (leadingStart < 0 && IniSyntax.isAnnotationLine(scanner.raw())) {
+                    leadingStart = scanner.lineStart;
+                }
                 continue;
             }
 
             if (code.charAt(0) == '[') {
-                // Any section header closes the open section, at this line's start.
+                // Any section header closes the open section, at the header's own
+                // start or at the first annotation that introduces it.
+                int boundary = leadingStart >= 0 ? leadingStart : scanner.lineStart;
+                leadingStart = -1;
                 if (openName != null) {
-                    sections.add(new NodeSection(openName, openStart, scanner.lineStart, openContentEnd, openLoc));
+                    sections.add(new NodeSection(openName, openStart, boundary, openContentEnd, openLoc));
                 }
                 Matcher header = NODE_HEADER_PATTERN.matcher(code);
                 if (header.matches()) {
                     openName = header.group(1);
-                    openStart = scanner.lineStart;
+                    openStart = boundary;
                     openContentEnd = scanner.nextLineStart; // the header is itself content
                     openLoc = null;
                 } else {
@@ -163,6 +177,8 @@ public final class NodeSectionLocator {
                 }
                 continue;
             }
+
+            leadingStart = -1;
 
             if (openName != null) {
                 openContentEnd = scanner.nextLineStart;

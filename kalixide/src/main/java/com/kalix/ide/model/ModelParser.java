@@ -12,7 +12,9 @@ import java.util.List;
  * <p>Runs on the EDT after every (coalesced) document change, so it is a single
  * pass of plain string scanning per line via {@link IniSyntax}: no regular
  * expressions, no reader objects. A node is complete when its section has a
- * {@code type} and a parseable {@code loc}; {@code ds_N} properties become links.</p>
+ * {@code type} and a parseable {@code loc}; {@code ds_N} properties become links.
+ * An {@code #@aka} annotation above the header (ADR-0010 §3) gives the node its
+ * readable name.</p>
  */
 public class ModelParser {
 
@@ -42,9 +44,23 @@ public class ModelParser {
         String currentNodeType = null;
         Double currentNodeX = null;
         Double currentNodeY = null;
+        String currentNodeAka = null;
         List<LinkInfo> currentNodeLinks = new ArrayList<>();
 
+        // The aka annotated above the next header, if any. Annotations attach to
+        // the next section header (ADR-0010 §3); a code line in between orphans
+        // them, so they can never leak onto a later section.
+        String pendingAka = null;
+
         for (String rawLine : IniSyntax.splitLines(iniText)) {
+            IniSyntax.Annotation annotation = IniSyntax.annotation(rawLine);
+            if (annotation != null) {
+                if ("aka".equals(annotation.key()) && !annotation.value().isEmpty()) {
+                    pendingAka = annotation.value();
+                }
+                continue;
+            }
+
             // Code only: a trailing '#' comment on any line is not part of it.
             String line = IniSyntax.stripComment(rawLine).trim();
 
@@ -60,7 +76,8 @@ public class ModelParser {
                 // Save previous node if complete
                 if (currentNodeName != null && currentNodeType != null
                         && currentNodeX != null && currentNodeY != null) {
-                    nodes.add(new ModelNode(currentNodeName, currentNodeType, currentNodeX, currentNodeY));
+                    nodes.add(new ModelNode(currentNodeName, currentNodeType, currentNodeX, currentNodeY,
+                            currentNodeAka));
                     for (LinkInfo linkInfo : currentNodeLinks) {
                         links.add(new ModelLink(currentNodeName, linkInfo.downstreamNode, linkInfo.isPrimary));
                     }
@@ -71,9 +88,14 @@ public class ModelParser {
                 currentNodeType = null;
                 currentNodeX = null;
                 currentNodeY = null;
+                currentNodeAka = pendingAka;
+                pendingAka = null;
                 currentNodeLinks.clear();
                 continue;
             }
+
+            // A code line that is not a header: any annotation above it is orphaned.
+            pendingAka = null;
 
             if (currentNodeName == null) {
                 continue;
@@ -112,7 +134,8 @@ public class ModelParser {
         // Save final node if complete
         if (currentNodeName != null && currentNodeType != null
                 && currentNodeX != null && currentNodeY != null) {
-            nodes.add(new ModelNode(currentNodeName, currentNodeType, currentNodeX, currentNodeY));
+            nodes.add(new ModelNode(currentNodeName, currentNodeType, currentNodeX, currentNodeY,
+                    currentNodeAka));
             for (LinkInfo linkInfo : currentNodeLinks) {
                 links.add(new ModelLink(currentNodeName, linkInfo.downstreamNode, linkInfo.isPrimary));
             }

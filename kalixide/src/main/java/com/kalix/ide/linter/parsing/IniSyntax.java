@@ -19,12 +19,59 @@ package com.kalix.ide.linter.parsing;
  *   <li>{@code ;} is <em>never</em> a comment marker. It terminates statements
  *       inside {@code { ... }} expression blocks, so treating it as a comment would
  *       cut those values in half.</li>
+ *   <li>An <em>annotation</em> is a comment line whose first two characters, at
+ *       column zero, are {@code #@}, followed by {@code key = value} (ADR-0010 §2).
+ *       It is still a comment to every rule above, so parsers that strip comments
+ *       see nothing; only {@link #annotation(String)} reads it. Any other prefix
+ *       ({@code ##@}, {@code # #@}, an indented {@code #@}) is an ordinary comment,
+ *       which is how an annotation is disabled.</li>
  * </ul>
  */
 public final class IniSyntax {
 
+    /** The two characters that open an annotation line, at column zero. */
+    public static final String ANNOTATION_PREFIX = "#@";
+
+    /**
+     * An annotation's key and value (ADR-0010 §2). The key is the trimmed text
+     * between {@code #@} and the first {@code =}; the value is the trimmed text
+     * after it, kept verbatim — a {@code #} or a second {@code =} inside it is
+     * just text.
+     */
+    public record Annotation(String key, String value) {
+    }
+
     private IniSyntax() {
         // utility class
+    }
+
+    /**
+     * True if the line opens with {@code #@} at column zero, well-formed or not.
+     * A malformed annotation (no {@code =}, or an empty key) is still an
+     * annotation attempt for the highlighter and the linter, never a plain comment.
+     */
+    public static boolean isAnnotationLine(CharSequence line) {
+        return line != null && line.length() >= 2 && line.charAt(0) == '#' && line.charAt(1) == '@';
+    }
+
+    /**
+     * The annotation on a well-formed {@code #@key = value} line, or {@code null}
+     * if the line is not an annotation or has no {@code =} or an empty key. The
+     * value may be empty.
+     */
+    public static Annotation annotation(String line) {
+        if (!isAnnotationLine(line)) {
+            return null;
+        }
+        int equals = line.indexOf('=', ANNOTATION_PREFIX.length());
+        if (equals < 0) {
+            return null;
+        }
+        String key = line.substring(ANNOTATION_PREFIX.length(), equals).strip();
+        if (key.isEmpty()) {
+            return null;
+        }
+        return new Annotation(key, line.substring(equals + 1).strip());
     }
 
     /**

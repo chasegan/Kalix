@@ -92,7 +92,19 @@ public final class PreferenceKeys {
     public static final Pref<Boolean> MAP_SHOW_GRIDLINES =
         Pref.fileBoolean("map.showGridlines", true);
 
-    /** Map node-label visibility toggle. When off, labels still appear on hover. */
+    /**
+     * Map node-label mode: a {@code NodeLabelMode} key ({@code names}, {@code aka},
+     * {@code hidden}). Empty means unset, and the legacy boolean below decides.
+     */
+    public static final Pref<String> MAP_LABEL_MODE =
+        Pref.fileString("map.labelMode", "");
+
+    /**
+     * Legacy node-label toggle: true is names, false is hidden. Read once by
+     * {@code NodeLabelMode.saved()} while {@link #MAP_LABEL_MODE} is unset, and
+     * rewritten as that key, so it can be deleted once old preference files no
+     * longer matter.
+     */
     public static final Pref<Boolean> MAP_SHOW_LABELS =
         Pref.fileBoolean("map.showLabels", true);
 
