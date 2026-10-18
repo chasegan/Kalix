@@ -37,7 +37,7 @@ public class KalixIniTokenMaker extends AbstractTokenMaker {
         // An annotation line (#@ at column zero, ADR-0010 §2) is a comment the IDE
         // reads, so it gets its own token type and colour; any other prefix is a
         // plain comment, and shows as one.
-        if (end - offset >= 2 && array[offset] == '#' && array[offset + 1] == '@') {
+        if (IniSyntax.isAnnotationLine(CharBuffer.wrap(array, offset, end - offset))) {
             addToken(text, offset, end - 1, Token.ANNOTATION, startOffset);
             addNullToken();
             return firstToken;

@@ -50,8 +50,8 @@ public final class IniSyntax {
      * A malformed annotation (no {@code =}, or an empty key) is still an
      * annotation attempt for the highlighter and the linter, never a plain comment.
      */
-    public static boolean isAnnotationLine(String line) {
-        return line != null && line.startsWith(ANNOTATION_PREFIX);
+    public static boolean isAnnotationLine(CharSequence line) {
+        return line != null && line.length() >= 2 && line.charAt(0) == '#' && line.charAt(1) == '@';
     }
 
     /**
