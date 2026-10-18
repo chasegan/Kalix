@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /** The label button's cycle, and what each mode draws with and without hover. */
 class NodeLabelModeTest {
 
-    private static final ModelNode PLAIN = new ModelNode("gauge_1", "gauge", 0, 0);
+    private static final ModelNode PLAIN = new ModelNode("gauge_1", "gauge", 0, 0, null);
     private static final ModelNode NAMED = new ModelNode("teemburra", "storage", 0, 0, "Teemburra Dam");
 
     @Test

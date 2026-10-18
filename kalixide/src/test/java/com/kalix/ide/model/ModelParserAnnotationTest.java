@@ -30,18 +30,6 @@ class ModelParserAnnotationTest {
                 """);
         assertEquals("teemburra", node.getName());
         assertEquals("Teemburra Dam (gauge 125001)", node.getAka());
-        assertEquals("Teemburra Dam (gauge 125001)", node.label());
-    }
-
-    @Test
-    void nodeWithoutAkaIsLabelledByItsName() {
-        ModelNode node = only("""
-                [node.teemburra]
-                type = storage
-                loc = 10, 20
-                """);
-        assertNull(node.getAka());
-        assertEquals("teemburra", node.label());
     }
 
     @Test

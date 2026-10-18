@@ -9,7 +9,7 @@ import java.util.Objects;
  * <p>{@code name} is the node's identity; {@code aka}, when present, is the
  * readable alternative name from an {@code #@aka} annotation (ADR-0010 §6.1). It is
  * a label in the sense of ADR-0003, never a key: collections stay keyed by name,
- * and {@link #label()} is the one projection that chooses between the two.</p>
+ * and {@code rendering.NodeLabelMode} is the one place that decides what is drawn.</p>
  */
 public final class ModelNode {
     private final String name;
@@ -17,10 +17,6 @@ public final class ModelNode {
     private final double x;
     private final double y;
     private final String aka;
-
-    public ModelNode(String name, String type, double x, double y) {
-        this(name, type, x, y, null);
-    }
 
     public ModelNode(String name, String type, double x, double y, String aka) {
         this.name = name;
@@ -37,11 +33,6 @@ public final class ModelNode {
     /** The {@code #@aka} annotation's value, or {@code null} if the node has none. */
     public String getAka() {
         return aka;
-    }
-
-    /** The text shown for this node: its {@code aka} if it has one, else its name. */
-    public String label() {
-        return aka != null ? aka : name;
     }
 
     public String getType() {
