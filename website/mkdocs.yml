@@ -217,6 +217,7 @@ nav:
               - "0007 File-tree colour": code/design/adrs/0007-file-tree-colour.md
               - "0008 Ordering knowledge in exhaustive matches": code/design/adrs/0008-ordering-knowledge-in-exhaustive-matches.md
               - "0009 Options: faster or clearer": code/design/adrs/0009-options-faster-or-clearer.md
+              - "0010 Annotations": code/design/adrs/0010-annotations.md
           - Website:
               - code/design/website/index.md
               - Todo: code/design/website/todo.md
