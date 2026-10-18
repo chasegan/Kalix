@@ -4,7 +4,7 @@ title: "ADR-0010: Carry IDE metadata in annotation comments"
 
 # ADR-0010: Carry IDE metadata in annotation comments
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-10-18
 - **Deciders**: Chas Egan (@chasegan)
 - **Tags**: ide, language, io
