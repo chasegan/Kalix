@@ -51,7 +51,7 @@ dependencies {
     implementation("org.kordamp.ikonli:ikonli-fontawesome6-pack:12.4.0")
     
     // RSyntaxTextArea for enhanced text components
-    implementation("com.fifesoft:rsyntaxtextarea:3.3.4")
+    implementation("com.fifesoft:rsyntaxtextarea:3.5.4")
     implementation("com.fifesoft:autocomplete:3.3.2")
 
     // Diff utilities for model comparison

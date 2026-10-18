@@ -5,6 +5,7 @@ import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 
 import javax.swing.BorderFactory;
+import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
@@ -19,16 +20,20 @@ import javax.swing.SwingUtilities;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Frame;
 import java.awt.Window;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
  * Manages a "Find Node" dialog for the map panel.
- * Provides a filterable list of node names with keyboard-driven selection.
+ * Provides a filterable list of nodes with keyboard-driven selection. The filter
+ * matches a node's name or its aka, and a node with an aka is listed as
+ * "aka (name)". The list holds nodes, never display strings (ADR-0003 §2.1).
  */
 public class MapSearchManager {
 
@@ -37,8 +42,8 @@ public class MapSearchManager {
 
     private JDialog dialog;
     private JTextField searchField;
-    private JList<String> nodeList;
-    private DefaultListModel<String> listModel;
+    private JList<ModelNode> nodeList;
+    private DefaultListModel<ModelNode> listModel;
 
     public MapSearchManager(MapPanel mapPanel, HydrologicalModel model) {
         this.mapPanel = mapPanel;
@@ -80,6 +85,14 @@ public class MapSearchManager {
         // Filtered node list
         listModel = new DefaultListModel<>();
         nodeList = new JList<>(listModel);
+        nodeList.setCellRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                          boolean isSelected, boolean cellHasFocus) {
+                return super.getListCellRendererComponent(list, listText((ModelNode) value), index,
+                        isSelected, cellHasFocus);
+            }
+        });
         nodeList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         nodeList.setVisibleRowCount(10);
         JScrollPane scrollPane = new JScrollPane(nodeList);
@@ -153,20 +166,20 @@ public class MapSearchManager {
     }
 
     /**
-     * Refreshes the list model with node names matching the filter.
+     * Refreshes the list with the nodes whose name or aka contains the filter,
+     * in name order.
      */
     private void refreshNodeList(String filter) {
         String lowerFilter = filter.toLowerCase();
 
-        List<String> names = model.getAllNodes().stream()
-            .map(ModelNode::getName)
-            .sorted(String.CASE_INSENSITIVE_ORDER)
-            .filter(name -> name.toLowerCase().contains(lowerFilter))
+        List<ModelNode> matches = model.getAllNodes().stream()
+            .filter(node -> matches(node, lowerFilter))
+            .sorted(Comparator.comparing(ModelNode::getName, String.CASE_INSENSITIVE_ORDER))
             .collect(Collectors.toList());
 
         listModel.clear();
-        for (String name : names) {
-            listModel.addElement(name);
+        for (ModelNode node : matches) {
+            listModel.addElement(node);
         }
 
         if (!listModel.isEmpty()) {
@@ -174,14 +187,25 @@ public class MapSearchManager {
         }
     }
 
+    /** True if the node's name or aka contains the (already lower-cased) filter. */
+    static boolean matches(ModelNode node, String lowerFilter) {
+        return node.getName().toLowerCase().contains(lowerFilter)
+            || (node.getAka() != null && node.getAka().toLowerCase().contains(lowerFilter));
+    }
+
+    /** The node's line in the list: its aka with the name in brackets, or just the name. */
+    static String listText(ModelNode node) {
+        return node.getAka() == null ? node.getName() : node.getAka() + " (" + node.getName() + ")";
+    }
+
     /**
      * Accepts the currently selected node: selects it on the map, centers the view, and closes the dialog.
      */
     private void acceptSelection() {
-        String selected = nodeList.getSelectedValue();
+        ModelNode selected = nodeList.getSelectedValue();
         if (selected != null) {
             dialog.setVisible(false);
-            mapPanel.selectNodeFromEditor(selected);
+            mapPanel.selectNodeFromEditor(selected.getName());
         }
     }
 }
