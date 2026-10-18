@@ -83,7 +83,7 @@ An annotation is a comment that KalixIDE reads. The simulation never does: an an
 type = storage
 ```
 
-- **`aka`** gives a node a readable name for the schematic. Node names are restricted to letters, digits and underscores; an `aka` is any text. The map's node-label button cycles through names, akas only, and hidden, so a large model can label just the nodes that matter.
+- **`aka`** gives a node a readable name for the schematic. [Node names](#node-names) are restricted to letters, digits and underscores; an `aka` is any text. The map's node-label button cycles through names, akas only, and hidden, so a large model can label just the nodes that matter.
 
 Anything else in front of the `#@`, such as a second `#` or a space, makes the line an ordinary comment, which is how to switch an annotation off. The value runs to the end of the line and is kept as written, so `#` and `=` inside it are just text.
 

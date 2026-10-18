@@ -32,7 +32,6 @@ import com.kalix.ide.managers.FontManager;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelChangeEvent;
 import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.preferences.ui.DataVisualizationPreferencePage;
 import com.kalix.ide.preferences.ui.FontPreferencePage;
 import com.kalix.ide.preferences.ui.IntegrationsPreferencePage;
@@ -42,6 +41,7 @@ import com.kalix.ide.preferences.ui.NodeDiagramPreferencePage;
 import com.kalix.ide.preferences.ui.PreferencePage;
 import com.kalix.ide.preferences.ui.SystemPreferencePage;
 import com.kalix.ide.preferences.ui.ThemePreferencePage;
+import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.ErrorLog;
@@ -961,7 +961,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
 
         if (labelsToggleButton != null) {
-            ToolBarBuilder.showLabelMode(labelsToggleButton, getLabelMode());
+            ToolBarBuilder.applyLabelMode(labelsToggleButton, getLabelMode());
         }
     }
 

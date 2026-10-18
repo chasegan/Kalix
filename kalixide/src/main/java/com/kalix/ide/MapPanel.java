@@ -649,7 +649,7 @@ public class MapPanel extends JPanel {
     /**
      * Recomputes which node's label is revealed by hover, returning whether it changed.
      *
-     * <p>With labels visible there is nothing to reveal, so no hit-test is performed —
+     * <p>In names mode there is nothing to reveal, so no hit-test is performed —
      * this is called from {@code mouseMoved}, which fires continuously, and
      * {@link #getNodeAtPoint} scans every node.</p>
      *

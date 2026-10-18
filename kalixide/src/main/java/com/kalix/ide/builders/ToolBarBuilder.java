@@ -535,22 +535,22 @@ public class ToolBarBuilder {
         JToggleButton labelsButton = new JToggleButton();
         labelsButton.setFocusPainted(false);
 
-        showLabelMode(labelsButton, callbacks.getLabelMode());
+        applyLabelMode(labelsButton, callbacks.getLabelMode());
 
         labelsButton.addActionListener(e -> {
             NodeLabelMode next = callbacks.getLabelMode().next();
             callbacks.setLabelMode(next);
-            showLabelMode(labelsButton, next);
+            applyLabelMode(labelsButton, next);
         });
 
         // Set accessible name for screen readers
-        labelsButton.getAccessibleContext().setAccessibleName("Node Labels");
+        labelsButton.getAccessibleContext().setAccessibleName("Node labels");
 
         return labelsButton;
     }
 
-    /** Puts the button in the state that shows {@code mode}: icon, selection and tooltip. */
-    public static void showLabelMode(JToggleButton labelsButton, NodeLabelMode mode) {
+    /** Sets the button's icon, selection and tooltip to match {@code mode}. */
+    public static void applyLabelMode(JToggleButton labelsButton, NodeLabelMode mode) {
         FontIcon icon = FontIcon.of(mode == NodeLabelMode.AKA ? FontAwesomeSolid.FONT : FontAwesomeSolid.TAG,
                 AppConstants.TOOLBAR_ICON_SIZE);
         icon.setIconColor(getThemeAwareIconColor());
