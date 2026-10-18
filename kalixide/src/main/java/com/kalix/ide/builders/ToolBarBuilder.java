@@ -4,6 +4,7 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.icons.KalixIcon;
+import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.utils.ThemeUtils;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -407,7 +408,7 @@ public class ToolBarBuilder {
      * 
      * @return Color for toolbar icons that contrasts with the current theme
      */
-    private Color getThemeAwareIconColor() {
+    private static Color getThemeAwareIconColor() {
         return ThemeUtils.iconColor(UIManager.getColor("ToolBar.background"));
     }
 
@@ -523,40 +524,53 @@ public class ToolBarBuilder {
     }
 
     /**
-     * Creates a toggle button for node labels with theme-aware tag icon.
-     * Mirrors {@link #createGridToggleButton()} — same shape, same state source.
+     * Creates the node-label button. One button cycles the three {@link NodeLabelMode}s
+     * (names, aka, hidden): it is selected while labels are drawn, and its icon says
+     * which text — the tag for names, the "A" for akas. Mirrors
+     * {@link #createGridToggleButton()} in shape and state source.
      *
      * @return Configured JToggleButton for node labels
      */
     private JToggleButton createLabelsToggleButton() {
-        FontIcon icon = FontIcon.of(FontAwesomeSolid.TAG, AppConstants.TOOLBAR_ICON_SIZE);
-        Color iconColor = getThemeAwareIconColor();
-        icon.setIconColor(iconColor);
-
-        JToggleButton labelsButton = new JToggleButton(icon);
+        JToggleButton labelsButton = new JToggleButton();
         labelsButton.setFocusPainted(false);
 
-        // Set initial state
-        boolean labelsVisible = callbacks.isLabelsVisible();
-        labelsButton.setSelected(labelsVisible);
-        labelsButton.setToolTipText(labelsVisible
-            ? "Node labels visible - click to hide"
-            : "Node labels hidden (shown on hover) - click to show");
+        showLabelMode(labelsButton, callbacks.getLabelMode());
 
-        // Add action listener
         labelsButton.addActionListener(e -> {
-            boolean newState = !callbacks.isLabelsVisible();
-            callbacks.toggleLabels(newState);
-            labelsButton.setSelected(newState);
-            labelsButton.setToolTipText(newState
-                ? "Node labels visible - click to hide"
-                : "Node labels hidden (shown on hover) - click to show");
+            NodeLabelMode next = callbacks.getLabelMode().next();
+            callbacks.setLabelMode(next);
+            showLabelMode(labelsButton, next);
         });
 
         // Set accessible name for screen readers
-        labelsButton.getAccessibleContext().setAccessibleName("Toggle Node Labels");
+        labelsButton.getAccessibleContext().setAccessibleName("Node Labels");
 
         return labelsButton;
+    }
+
+    /** Puts the button in the state that shows {@code mode}: icon, selection and tooltip. */
+    public static void showLabelMode(JToggleButton labelsButton, NodeLabelMode mode) {
+        FontIcon icon = FontIcon.of(mode == NodeLabelMode.AKA ? FontAwesomeSolid.FONT : FontAwesomeSolid.TAG,
+                AppConstants.TOOLBAR_ICON_SIZE);
+        icon.setIconColor(getThemeAwareIconColor());
+        labelsButton.setIcon(icon);
+        labelsButton.setSelected(mode.drawsLabels());
+        labelsButton.setToolTipText(labelModeTooltip(mode));
+    }
+
+    /** The current mode and what the next click does, e.g. "Node labels: akas only - click to hide". */
+    static String labelModeTooltip(NodeLabelMode mode) {
+        switch (mode) {
+            case NAMES:
+                return "Node labels: names - click to show akas only";
+            case AKA:
+                return "Node labels: akas only - click to hide";
+            case HIDDEN:
+                return "Node labels: hidden (shown on hover) - click to show names";
+            default:
+                throw new IllegalStateException("Unhandled label mode " + mode);
+        }
     }
 
 }

@@ -35,6 +35,7 @@ import com.kalix.ide.interaction.TextCoordinateUpdater;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.rendering.MapRenderer;
+import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.UIConstants;
 
@@ -105,11 +106,11 @@ public class MapPanel extends JPanel {
 
     // Display settings
     private boolean showGridlines = true;
-    private boolean showLabels = true;
+    private NodeLabelMode labelMode = NodeLabelMode.NAMES;
 
     /**
-     * Node whose label is shown transiently because the mouse is over it. Only ever
-     * set while {@link #showLabels} is false — with labels on there is nothing to
+     * Node whose label changes because the mouse is over it. Only ever set while
+     * {@link #labelMode} reveals on hover — in names mode there is nothing to
      * reveal, so the hover hit-test is skipped entirely rather than computed and
      * discarded (mouseMoved fires continuously; getNodeAtPoint is a linear scan).
      */
@@ -539,7 +540,7 @@ public class MapPanel extends JPanel {
 
         mapRenderer.renderMap(g2d, getWidth(), getHeight(), zoomLevel, panX, panY,
                              showGridlines, model, nodeTheme, selectionStart, selectionCurrent,
-                             mouseWorldX, mouseWorldY, mouseInPanel, showLabels, hoveredNodeName);
+                             mouseWorldX, mouseWorldY, mouseInPanel, labelMode, hoveredNodeName);
         linkDragManager.paint(g2d);
 
         g2d.dispose();
@@ -628,26 +629,21 @@ public class MapPanel extends JPanel {
     }
 
     /**
-     * Sets whether node labels should be shown on the map. With labels off, the label
-     * of the node under the mouse is still revealed on hover, so a node can always be
-     * identified without turning them back on.
-     *
-     * @param showLabels true to show all node labels, false to show them on hover only
+     * Sets which text is drawn under each node (see {@link NodeLabelMode}). In every
+     * mode but names, the node under the mouse still reveals its name on hover, so a
+     * node can always be identified without changing mode.
      */
-    public void setShowLabels(boolean showLabels) {
-        this.showLabels = showLabels;
-        // Turning labels on makes any pending hover reveal meaningless; turning them
-        // off must not inherit a hover computed while they were on (none was tracked).
+    public void setLabelMode(NodeLabelMode labelMode) {
+        this.labelMode = labelMode;
+        // A mode change makes any pending hover reveal meaningless, and a mode that
+        // reveals must not inherit a hover computed under one that did not.
         this.hoveredNodeName = null;
         repaint();
     }
 
-    /**
-     * Gets whether node labels are currently shown on the map.
-     * @return true if labels are shown, false if they appear on hover only
-     */
-    public boolean isShowLabels() {
-        return showLabels;
+    /** The text drawn under each node. */
+    public NodeLabelMode getLabelMode() {
+        return labelMode;
     }
 
     /**
@@ -661,7 +657,7 @@ public class MapPanel extends JPanel {
      * @return true if the revealed node changed and the map needs repainting
      */
     private boolean updateHoveredNode(Point screenPoint) {
-        String hovered = showLabels ? null : getNodeAtPoint(screenPoint);
+        String hovered = labelMode.revealsOnHover() ? getNodeAtPoint(screenPoint) : null;
         if (java.util.Objects.equals(hovered, hoveredNodeName)) {
             return false;
         }

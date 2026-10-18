@@ -73,6 +73,20 @@ Two things are *not* comments:
 
 Kalix keeps your comments when it rewrites a model — for example after a calibration, or a `kalix resave` with the standard save method — so they are a safe place for the notes that make a model legible to the next person.
 
+## Annotations
+
+An annotation is a comment that KalixIDE reads. The simulation never does: an annotation changes what the IDE shows, never what runs. It is a line that starts with `#@` in the first column, followed by `key = value`, placed directly above the section it describes:
+
+```ini
+#@aka = Teemburra Dam (gauge 125001)
+[node.teemburra]
+type = storage
+```
+
+- **`aka`** gives a node a readable name for the schematic. Node names are restricted to letters, digits and underscores; an `aka` is any text. The map's node-label button cycles through names, akas only, and hidden, so a large model can label just the nodes that matter.
+
+Anything else in front of the `#@`, such as a second `#` or a space, makes the line an ordinary comment, which is how to switch an annotation off. The value runs to the end of the line and is kept as written, so `#` and `=` inside it are just text.
+
 ## Multi-line values
 
 Any line that begins with whitespace continues the value of the property above it. Kalix joins the pieces with a single space, so a long table or expression can be laid out for readability (see [Tables](#tables) above). A blank line, a section header, or a line that starts flush-left ends the value.

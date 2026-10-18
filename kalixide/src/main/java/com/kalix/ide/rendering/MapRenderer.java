@@ -9,6 +9,7 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.RenderingHints;
 import java.awt.geom.AffineTransform;
+import java.util.List;
 import com.kalix.ide.model.HydrologicalModel;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.themes.NodeTheme;
@@ -103,16 +104,16 @@ public class MapRenderer {
      * @param mouseWorldX Mouse X in world coordinates
      * @param mouseWorldY Mouse Y in world coordinates
      * @param mouseInPanel Whether the mouse is currently over the panel
-     * @param showLabels Whether node name labels are shown for every node
-     * @param hoveredNodeName Node whose label is revealed by hover while {@code showLabels}
-     *                        is false; null when nothing is revealed
+     * @param labelMode Which text is drawn under each node
+     * @param hoveredNodeName Node whose label the mouse changes, per {@code labelMode};
+     *                        null when nothing is revealed
      */
     public void renderMap(Graphics2D g2d, int width, int height,
                          double zoomLevel, double panX, double panY,
                          boolean showGridlines, HydrologicalModel model,
                          NodeTheme nodeTheme, Point selectionStart, Point selectionCurrent,
                          double mouseWorldX, double mouseWorldY, boolean mouseInPanel,
-                         boolean showLabels, String hoveredNodeName) {
+                         NodeLabelMode labelMode, String hoveredNodeName) {
 
         // Enable antialiasing for smoother graphics
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -135,7 +136,7 @@ public class MapRenderer {
         // Render screen-space elements (links first, then nodes, then selection, debug)
         if (model != null) {
             renderLinks(g2d, model, zoomLevel, panX, panY);
-            renderNodes(g2d, model, nodeTheme, zoomLevel, panX, panY, showLabels, hoveredNodeName);
+            renderNodes(g2d, model, nodeTheme, zoomLevel, panX, panY, labelMode, hoveredNodeName);
         }
 
         if (selectionStart != null && selectionCurrent != null) {
@@ -351,19 +352,19 @@ public class MapRenderer {
      * @param zoomLevel Current zoom level for coordinate transformation
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
-     * @param showLabels Whether every node's name label is drawn
-     * @param hoveredNodeName Node whose label is revealed by hover, or null
+     * @param labelMode Which text is drawn under each node
+     * @param hoveredNodeName Node whose label the mouse changes, or null
      */
     private void renderNodes(Graphics2D g2d, HydrologicalModel model, NodeTheme nodeTheme,
                             double zoomLevel, double panX, double panY,
-                            boolean showLabels, String hoveredNodeName) {
+                            NodeLabelMode labelMode, String hoveredNodeName) {
 
         AffineTransform originalTransform = g2d.getTransform();
 
         // Render each node
         for (ModelNode node : model.getAllNodes()) {
             renderSingleNode(g2d, node, model, nodeTheme, zoomLevel, panX, panY, originalTransform,
-                             showLabels, hoveredNodeName);
+                             labelMode, hoveredNodeName);
         }
 
         // Restore the original transform
@@ -381,13 +382,13 @@ public class MapRenderer {
      * @param panX Horizontal pan offset
      * @param panY Vertical pan offset
      * @param originalTransform Original screen-space transform
-     * @param showLabels Whether every node's name label is drawn
-     * @param hoveredNodeName Node whose label is revealed by hover, or null
+     * @param labelMode Which text is drawn under each node
+     * @param hoveredNodeName Node whose label the mouse changes, or null
      */
     private void renderSingleNode(Graphics2D g2d, ModelNode node, HydrologicalModel model,
                                  NodeTheme nodeTheme, double zoomLevel, double panX, double panY,
                                  AffineTransform originalTransform,
-                                 boolean showLabels, String hoveredNodeName) {
+                                 NodeLabelMode labelMode, String hoveredNodeName) {
 
         // Get node styling from theme
         Color nodeColor = nodeTheme.getColorForNodeType(node.getType());
@@ -415,26 +416,26 @@ public class MapRenderer {
         // Reset stroke for next node
         g2d.setStroke(DEFAULT_STROKE);
 
-        // Render node name text label below shape. With labels hidden, only the
-        // hovered node's label is drawn, so a node can still be identified in place.
-        if (showLabels || node.getName().equals(hoveredNodeName)) {
-            renderNodeText(g2d, node.getName(), screenX, screenY, nodeTheme);
-        }
+        // The label under the shape: what the mode draws for this node, given
+        // whether the mouse is over it (NodeLabelMode owns that rule).
+        boolean hovered = node.getName().equals(hoveredNodeName);
+        renderNodeText(g2d, labelMode.labelLines(node, hovered), screenX, screenY, nodeTheme);
     }
 
     /**
-     * Renders node name text with theme-based styling.
+     * Renders a node's label lines, top first, stacked below the node, each on its
+     * own background strip, with theme-based styling.
      *
      * @param g2d Graphics context
-     * @param nodeName Name of the node to render
+     * @param lines Lines to draw; nothing is drawn for an empty list
      * @param nodeScreenX Screen X coordinate of node center
      * @param nodeScreenY Screen Y coordinate of node center
      * @param nodeTheme Theme for text styling
      */
-    private void renderNodeText(Graphics2D g2d, String nodeName, double nodeScreenX,
+    private void renderNodeText(Graphics2D g2d, List<String> lines, double nodeScreenX,
                                double nodeScreenY, NodeTheme nodeTheme) {
 
-        if (nodeName == null || nodeName.trim().isEmpty()) {
+        if (lines.isEmpty()) {
             return;
         }
 
@@ -445,26 +446,29 @@ public class MapRenderer {
         Font originalFont = g2d.getFont();
         g2d.setFont(textStyle.getFont());
 
-        // Calculate text positioning
         FontMetrics fm = g2d.getFontMetrics();
-        int textWidth = fm.stringWidth(nodeName);
         int textHeight = fm.getHeight();
-
-        double textX = nodeScreenX - (textWidth / 2.0);
         double textY = nodeScreenY + (NODE_SIZE / 2.0) + textStyle.getYOffset();
 
-        // Render text background
-        g2d.setColor(textStyle.getBackgroundColorWithAlpha());
-        g2d.fillRect(
-            (int)(textX - TEXT_BACKGROUND_PADDING),
-            (int)(textY - fm.getAscent() - TEXT_BACKGROUND_PADDING),
-            textWidth + (TEXT_BACKGROUND_PADDING * 2),
-            textHeight + TEXT_BACKGROUND_PADDING
-        );
+        for (String line : lines) {
+            int textWidth = fm.stringWidth(line);
+            double textX = nodeScreenX - (textWidth / 2.0);
 
-        // Render text foreground
-        g2d.setColor(textStyle.getTextColor());
-        g2d.drawString(nodeName, (int)textX, (int)textY);
+            // Render text background
+            g2d.setColor(textStyle.getBackgroundColorWithAlpha());
+            g2d.fillRect(
+                (int)(textX - TEXT_BACKGROUND_PADDING),
+                (int)(textY - fm.getAscent() - TEXT_BACKGROUND_PADDING),
+                textWidth + (TEXT_BACKGROUND_PADDING * 2),
+                textHeight + TEXT_BACKGROUND_PADDING
+            );
+
+            // Render text foreground
+            g2d.setColor(textStyle.getTextColor());
+            g2d.drawString(line, (int)textX, (int)textY);
+
+            textY += textHeight + TEXT_BACKGROUND_PADDING;
+        }
 
         // Restore original font
         g2d.setFont(originalFont);
