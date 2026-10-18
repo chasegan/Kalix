@@ -100,8 +100,10 @@ public final class PreferenceKeys {
         Pref.fileString("map.labelMode", "");
 
     /**
-     * Legacy node-label toggle, read only while {@link #MAP_LABEL_MODE} is unset so an
-     * existing preference file keeps its setting: true is names, false is hidden.
+     * Legacy node-label toggle: true is names, false is hidden. Read once by
+     * {@code NodeLabelMode.saved()} while {@link #MAP_LABEL_MODE} is unset, and
+     * rewritten as that key, so it can be deleted once old preference files no
+     * longer matter.
      */
     public static final Pref<Boolean> MAP_SHOW_LABELS =
         Pref.fileBoolean("map.showLabels", true);

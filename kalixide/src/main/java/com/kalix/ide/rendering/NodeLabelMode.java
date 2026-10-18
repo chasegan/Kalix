@@ -1,6 +1,7 @@
 package com.kalix.ide.rendering;
 
 import com.kalix.ide.model.ModelNode;
+import com.kalix.ide.preferences.PreferenceKeys;
 
 import java.util.List;
 
@@ -38,13 +39,32 @@ public enum NodeLabelMode {
     }
 
     /** The mode stored under {@code key}, or {@code null} if it names none. */
-    public static NodeLabelMode fromKey(String key) {
+    static NodeLabelMode fromKey(String key) {
         for (NodeLabelMode mode : values()) {
             if (mode.key.equals(key)) {
                 return mode;
             }
         }
         return null;
+    }
+
+    /**
+     * The saved mode. A preference file from before the three-way key has only the
+     * on/off toggle; it is read once here and rewritten as the new key, the way
+     * {@code ThemePreferences} migrates theme names.
+     */
+    public static NodeLabelMode saved() {
+        NodeLabelMode mode = fromKey(PreferenceKeys.MAP_LABEL_MODE.get());
+        if (mode == null) {
+            mode = PreferenceKeys.MAP_SHOW_LABELS.get() ? NAMES : HIDDEN;
+            mode.save();
+        }
+        return mode;
+    }
+
+    /** Persists this mode as the saved one. */
+    public void save() {
+        PreferenceKeys.MAP_LABEL_MODE.set(key);
     }
 
     /** The next mode in the cycle: names, aka, hidden, names. */

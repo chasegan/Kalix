@@ -521,7 +521,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             // application theme's linked node palette).
             map.setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
             map.setShowGridlines(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
-            map.setLabelMode(savedLabelMode());
+            map.setLabelMode(NodeLabelMode.saved());
         }
 
         if (document.isModel()) {
@@ -1940,20 +1940,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 map.setLabelMode(mode);
             }
         }
-        // Save preference
-        PreferenceKeys.MAP_LABEL_MODE.set(mode.key());
-    }
-
-    /**
-     * The label mode from the preference file: the three-way key when set, else the
-     * legacy on/off toggle it replaced (true is names, false is hidden).
-     */
-    private static NodeLabelMode savedLabelMode() {
-        NodeLabelMode mode = NodeLabelMode.fromKey(PreferenceKeys.MAP_LABEL_MODE.get());
-        if (mode != null) {
-            return mode;
-        }
-        return PreferenceKeys.MAP_SHOW_LABELS.get() ? NodeLabelMode.NAMES : NodeLabelMode.HIDDEN;
+        mode.save();
     }
     
     @Override
@@ -1984,7 +1971,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         // Falls back to the saved preference before any document/map exists (toolbar build).
         return mapPanel != null
             ? mapPanel.getLabelMode()
-            : savedLabelMode();
+            : NodeLabelMode.saved();
     }
 
     @Override
