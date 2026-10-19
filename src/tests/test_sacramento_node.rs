@@ -470,6 +470,7 @@ fn test_ratio_alone_against_zero_denominator_fails_resolve() {
             &format!("{} is 0", from),
             &format!("Map 'node.my_sac.{}' as well", from),
             &format!("map 'node.my_sac.{}' directly", written),
+            &format!("give 'node.my_sac.{}' a non-zero value in the model", from),
         ] {
             assert!(err.contains(expected.as_str()), "{}: expected {:?} in {:?}", ratio, expected, err);
         }
@@ -509,6 +510,28 @@ fn test_ratio_with_mapped_denominator_resolves_whatever_the_file_holds() {
     problem.set_params(&[0.4]).unwrap();
     let sac = &picnic_sacramento(&problem).sacramento_model;
     assert!((sac.sarva - 0.02).abs() < 1e-12);
+}
+
+/// Node names are matched case-insensitively, so the checks compare resolved
+/// targets: a differently spelled node name neither hides a clash nor makes
+/// a mapped denominator look unmapped.
+#[test]
+fn test_ratio_checks_see_through_node_name_spelling() {
+    let mut problem = picnic_problem(vec![
+        "node.My_Sac.sarvaonpctim = lin_range(g(1), 0, 1)",
+        "node.my_sac.sarva = lin_range(g(2), 0, 0.1)",
+    ]);
+    assert!(problem.resolve().unwrap_err().contains("cannot both be mapped"));
+
+    let mut problem = picnic_problem(vec![
+        "node.My_Sac.lzpkonlzsk = lin_range(g(1), 0, 1)",
+        "node.my_sac.lzsk = lin_range(g(2), 0, 0.5)",
+    ]);
+    picnic_set(&mut problem, "lzsk", 0.0);
+    problem.resolve().unwrap();
+    problem.set_params(&[0.5, 0.4]).unwrap();
+    let sac = &picnic_sacramento(&problem).sacramento_model;
+    assert!((sac.lzpk - 0.1).abs() < 1e-12);
 }
 
 /// Write an optimisation config for the picnic model to a temp file.
