@@ -458,8 +458,9 @@ impl Optimisable for OptimisationProblem {
             config: self.config.clone(),
             comparisons: self.comparisons.clone(),
             expression: self.expression.clone(),
-            // Resolved indices stay valid in the clone (same node order,
-            // same constants table, same series layout).
+            // Resolved lazily on the worker's first candidate: the clone has
+            // the same node order and constants table, so it resolves the
+            // same way.
             resolved_targets: None,
             sim_series_indices: self.sim_series_indices.clone(),
         })

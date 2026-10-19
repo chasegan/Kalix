@@ -49,10 +49,12 @@ pub trait OptimisableComponent {
     /// Parameter value in physical space, or error if parameter doesn't exist
     fn get_param(&self, name: &str) -> Result<f64, String>;
 
-    /// List available parameter names (for introspection/validation)
+    /// The parameter names to offer a modeller, for the IDE and the
+    /// `get_optimisable_params` command. Not necessarily every name
+    /// `set_param` accepts: a component that offers a ratio leaves out the
+    /// numerator the ratio sets, since the two cannot be mapped together.
     ///
     /// Default implementation returns empty list (no introspection).
-    /// Override to provide list of all supported parameter names.
     fn list_params(&self) -> Vec<String> {
         vec![]
     }
