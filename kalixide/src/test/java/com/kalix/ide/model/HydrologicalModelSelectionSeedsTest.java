@@ -89,6 +89,19 @@ class HydrologicalModelSelectionSeedsTest {
     }
 
     @Test
+    void aReparseThatDropsTheSelectedNodeLeavesItOutOfTheSeeds() {
+        // How a selection goes stale in the IDE: the text changes under it.
+        model.selectNode("a", false);
+        model.selectLink(sToJ, true);
+        model.parseFromIniText(
+            "[node.s]\n" + "type = gr4j\n" + "loc = 10, 0\n" + "ds_1 = j\n" +
+            "[node.j]\n" + "type = outlet\n" + "loc = 20, 0\n");
+
+        assertEquals(Set.of("s", "j"), model.getSelectionSeedNodes(),
+            "a is gone, so the still-selected link s -> j seeds");
+    }
+
+    @Test
     void selectedLinkNoLongerInTheModelSeedsNothing() {
         model.selectLink(sToJ, false);
         model.removeLink(sToJ);
