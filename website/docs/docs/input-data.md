@@ -140,7 +140,7 @@ Rules for CSV files are as follows:
 
 - Timestamps should be in the first column. The column name for this column doesn’t matter. Timestamps are allowed to take a range of valid [ISO 8601 formats](https://en.wikipedia.org/wiki/ISO_8601). Some good choices are:
   - **yyyy-MM-dd** e.g. `2022-03-21` for daily data.
-  - **yyyy-MM-dd'T'HH****:mm:****ss** e.g. `2019-06-28T22:00:00` for sub-daily data. Note that the Python formatter for this is “%Y-%m-%dT%H:%M:%S”.
+  - **yyyy-MM-dd'T'HH****:mm:****ss** e.g. `2019-06-28T22:00:00` for sub-daily data, or for daily data at a time other than midnight. Note that the Python formatter for this is “%Y-%m-%dT%H:%M:%S”.
 
 - Timesteps in the file must be regular (no missing timestamps), and in temporal order.
 
