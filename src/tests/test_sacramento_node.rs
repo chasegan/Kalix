@@ -90,17 +90,16 @@ fn test_sacramento_node_with_timeseries_by_index() {
     assert!((total_runoff - correct_answer_total_runoff).abs() < 0.00001);
 }
 
-
 /// Each soil moisture store output carries the right store: every recorded
 /// step matches a standalone model driven by the same rain and evap, and stays
 /// within the store's capacity.
 #[test]
 fn test_sacramento_node_store_outputs() {
 
-    //Creat a new model. Add some data.
+    //Create a new model. Add some data.
     let mut m = Model::new();
-    m.load_input_data("./src/tests/example_data/fors/rain_infilled.csv", None).expect("TODO: panic message");
-    m.load_input_data("./src/tests/example_data/fors/mpot_rolled.csv", None).expect("TODO: panic message");
+    m.load_input_data("./src/tests/example_data/fors/rain_infilled.csv", None).expect("rain data should load");
+    m.load_input_data("./src/tests/example_data/fors/mpot_rolled.csv", None).expect("evap data should load");
 
     //Create a node and add it to the model
     let (lzfpm, lzfsm, lztwm, side, uzfwm, uztwm) = (45.0, 60.0, 150.0, 0.2, 25.0, 47.0);
