@@ -5,6 +5,7 @@ import com.kalix.ide.model.ModelLink;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -27,8 +28,8 @@ final class NodeAdjacency {
 
     NodeAdjacency(Collection<ModelLink> links) {
         for (ModelLink link : links) {
-            var us = link.getUpstreamTerminus();
-            var ds = link.getDownstreamTerminus();
+            String us = link.getUpstreamTerminus();
+            String ds = link.getDownstreamTerminus();
 
             upstreamOf.computeIfAbsent(ds, k -> new ArrayList<>()).add(us);
             downstreamOf.computeIfAbsent(us, k -> new ArrayList<>()).add(ds);
@@ -72,14 +73,14 @@ final class NodeAdjacency {
 
     /** The river below the nodes: downstream of them and not also upstream of them. */
     private Set<String> below(Set<String> nodes) {
-        var below = reach(nodes, downstreamOf, Set.of());
+        Set<String> below = reach(nodes, downstreamOf, Set.of());
         below.removeAll(reach(nodes, upstreamOf, Set.of()));
         return below;
     }
 
     /** The river above the nodes: upstream of them and not also downstream of them. */
     private Set<String> above(Set<String> nodes) {
-        var above = reach(nodes, upstreamOf, Set.of());
+        Set<String> above = reach(nodes, upstreamOf, Set.of());
         above.removeAll(reach(nodes, downstreamOf, Set.of()));
         return above;
     }
@@ -90,11 +91,11 @@ final class NodeAdjacency {
      */
     private static Set<String> reach(Set<String> nodes, Map<String, List<String>> adjacency,
                                      Set<String> blocked) {
-        var stack = new ArrayDeque<>(nodes);
-        var visited = new HashSet<>(nodes);
+        Deque<String> stack = new ArrayDeque<>(nodes);
+        Set<String> visited = new HashSet<>(nodes);
         while (!stack.isEmpty()) {
-            var node = stack.pop();
-            for (var next : adjacency.getOrDefault(node, List.of())) {
+            String node = stack.pop();
+            for (String next : adjacency.getOrDefault(node, List.of())) {
                 if (!blocked.contains(next) && visited.add(next)) {
                     stack.push(next);
                 }
