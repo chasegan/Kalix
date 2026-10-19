@@ -94,6 +94,9 @@ struct DerivedParam {
     /// The parameter written, and its address ("node.name.param").
     written: &'static str,
     written_address: String,
+    /// The parameter it is written from, and its address.
+    from: &'static str,
+    from_address: String,
     /// The mapping target that writes it.
     target: String,
 }
@@ -179,12 +182,14 @@ impl OptimisationProblem {
                 component.get_param(param_name)
                     .map_err(|e| format!("Cannot optimise '{}': {}", target, e))?;
                 match component.derives(param_name) {
-                    Some(written) => {
+                    Some(d) => {
                         derived_order.push(i);
                         derived.push(DerivedParam {
                             node_idx,
-                            written,
-                            written_address: format!("node.{}.{}", node_name, written),
+                            written: d.writes,
+                            written_address: format!("node.{}.{}", node_name, d.writes),
+                            from: d.from,
+                            from_address: format!("node.{}.{}", node_name, d.from),
                             target: target.clone(),
                         });
                     }

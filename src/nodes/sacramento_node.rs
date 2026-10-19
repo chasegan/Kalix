@@ -5,7 +5,7 @@ use crate::hydrology::rainfall_runoff::sacramento::Sacramento;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
-use crate::numerical::opt::optimisable_component::OptimisableComponent;
+use crate::numerical::opt::optimisable_component::{Derived, OptimisableComponent};
 
 const MAX_DS_LINKS: usize = 1;
 
@@ -286,10 +286,10 @@ impl OptimisableComponent for SacramentoNode {
         }
     }
 
-    fn derives(&self, name: &str) -> Option<&'static str> {
+    fn derives(&self, name: &str) -> Option<Derived> {
         match name {
-            "sarvaonpctim" => Some("sarva"),
-            "lzpkonlzsk" => Some("lzpk"),
+            "sarvaonpctim" => Some(Derived { writes: "sarva", from: "pctim" }),
+            "lzpkonlzsk" => Some(Derived { writes: "lzpk", from: "lzsk" }),
             _ => None,
         }
     }

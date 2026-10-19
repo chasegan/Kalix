@@ -1,3 +1,12 @@
+/// What a derived parameter is made of: setting it writes `writes` from the
+/// value `from` holds at that moment ("sarvaonpctim" writes "sarva" from
+/// "pctim"). Both are names `set_param` accepts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Derived {
+    pub writes: &'static str,
+    pub from: &'static str,
+}
+
 /// Trait for model components that support parameter optimisation
 ///
 /// This is a minimal interface that allows getting/setting parameters by name.
@@ -17,11 +26,11 @@ pub trait OptimisableComponent {
     /// example, "sarvaonpctim" sets sarva = value * pctim. See `derives`.
     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String>;
 
-    /// The parameter that setting `name` writes, when `name` is derived from
-    /// others: "sarvaonpctim" writes "sarva". The optimiser sets such a name
-    /// after the component's other mapped parameters, so it is computed from
-    /// the candidate's values, and refuses it alongside the one it writes.
-    fn derives(&self, _name: &str) -> Option<&'static str> {
+    /// What `name` writes and from what, when `name` is derived from others:
+    /// "sarvaonpctim" writes "sarva" from "pctim". The optimiser sets such a
+    /// name after the component's other mapped parameters, so it is computed
+    /// from the candidate's values, and refuses it alongside the one it writes.
+    fn derives(&self, _name: &str) -> Option<Derived> {
         None
     }
 

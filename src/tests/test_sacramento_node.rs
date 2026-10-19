@@ -183,7 +183,7 @@ fn test_sacramento_node_store_outputs() {
 // Ratio parameters (sarvaonpctim, lzpkonlzsk)
 // ---------------------------------------------------------------------------
 
-use crate::numerical::opt::optimisable_component::OptimisableComponent;
+use crate::numerical::opt::optimisable_component::{Derived, OptimisableComponent};
 
 /// Setting a ratio writes its numerator from the denominator the node holds
 /// at that moment, and the ratio reads back.
@@ -218,12 +218,12 @@ fn test_ratio_param_is_not_remembered() {
     assert_eq!(n.sacramento_model.sarva, 0.03);
 }
 
-/// Only the ratios are derived, and each names its numerator.
+/// Only the ratios are derived, and each names its numerator and denominator.
 #[test]
 fn test_ratio_params_name_what_they_write() {
     let n = SacramentoNode::new();
-    assert_eq!(n.derives("sarvaonpctim"), Some("sarva"));
-    assert_eq!(n.derives("lzpkonlzsk"), Some("lzpk"));
+    assert_eq!(n.derives("sarvaonpctim"), Some(Derived { writes: "sarva", from: "pctim" }));
+    assert_eq!(n.derives("lzpkonlzsk"), Some(Derived { writes: "lzpk", from: "lzsk" }));
     for name in ["sarva", "lzpk", "pctim", "lzsk", "lztwm", "nonsense"] {
         assert_eq!(n.derives(name), None, "'{}'", name);
     }
