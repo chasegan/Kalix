@@ -375,7 +375,7 @@ class TimeSeriesCsvRoundTripTest {
         TimeSeriesCsvExporter.export(ds, out, PlotType.EXCEEDANCE, LABELS);
 
         List<String> lines = Files.readAllLines(out.toPath(), StandardCharsets.UTF_8);
-        assertEquals("Percentile,a", lines.get(0));
+        assertEquals("percentile,a", lines.get(0));
         assertEquals("1.00,9.0", lines.get(1));
         assertEquals("50.00,5.0", lines.get(2));
         assertEquals("100.00,1.0", lines.get(3));

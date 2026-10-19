@@ -86,7 +86,7 @@ public class TimeSeriesCsvExporter {
     /**
      * Exports a dataset to a CSV file with plot type awareness.
      *
-     * <p>For EXCEEDANCE plot type, the first column is "Percentile" with percentages.
+     * <p>For EXCEEDANCE plot type, the first column is "percentile" with percentages.
      * For other plot types it is the timestamps, headed "date" or "datetime" (see the class
      * doc).</p>
      *
@@ -172,7 +172,7 @@ public class TimeSeriesCsvExporter {
         // Sub-daily series get ISO datetime; daily-or-coarser get date-only. Inferred from the
         // first regular-interval series; falls back to date-only if none is regular.
         long stepSeconds = CsvExportUtil.inferStepSeconds(allSeries);
-        String firstHeader = isExceedance ? "Percentile"
+        String firstHeader = isExceedance ? "percentile"
             : anyRowNeedsTime(allSeries, stepSeconds) ? "datetime" : "date";
 
         try (Writer writer = openWriter(file)) {
@@ -210,7 +210,7 @@ public class TimeSeriesCsvExporter {
 
     /**
      * Writes the CSV header row: the first column's heading ("date", "datetime" or
-     * "Percentile"), then each series name, escaped for CSV.
+     * "percentile"), then each series name, escaped for CSV.
      */
     private static void writeHeader(Writer writer, String firstHeader, List<String> headers)
             throws IOException {
