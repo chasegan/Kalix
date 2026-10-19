@@ -161,13 +161,13 @@ public class MapContextMenuManager {
             // Each child is the object of "Select" (ADR-0002 §6): "Select upstream". The
             // context supplies "nodes" (§2.3), so the children do not repeat it.
             JMenu selectMenu = new JMenu("Select");
+            selectMenu.add(selectAllItem("All"));
             selectMenu.add(growSelectionItem("Upstream", NodeAdjacency::upstream));
-            selectMenu.add(growSelectionItem("Connected upstream", NodeAdjacency::connectedUpstream));
             selectMenu.add(growSelectionItem("Downstream", NodeAdjacency::downstream));
-            selectMenu.add(growSelectionItem("Connected downstream", NodeAdjacency::connectedDownstream));
             selectMenu.addSeparator();
             selectMenu.add(growSelectionItem("Connected", NodeAdjacency::connected));
-            selectMenu.add(selectAllItem("All"));
+            selectMenu.add(growSelectionItem("Connected downstream", NodeAdjacency::connectedDownstream));
+            selectMenu.add(growSelectionItem("Connected upstream", NodeAdjacency::connectedUpstream));
             menu.add(selectMenu);
             menu.addSeparator();
         } else if (!model.getAllNodes().isEmpty()) {

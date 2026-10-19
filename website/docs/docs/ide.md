@@ -22,12 +22,12 @@ Click and drag to select nodes on the schematic map. Then drag to move or ctrl+d
 
 **Select** in the schematic map context menu grows the selection from the nodes already selected. With no nodes selected, a selected link counts as the nodes at its two ends. Once a node is selected, selected links are ignored. Nodes are added to the selection, never removed.
 
-- **Upstream** selects every node that flows to the selection.
-- **Connected upstream** selects everything joined to the selection without passing through the river below it. In a braided network this adds the branches that leave the upstream reach, and whatever joins those branches.
-- **Downstream** selects every node the selection flows to.
-- **Connected downstream** selects everything joined to the selection without passing through the river above it: the river below, its tributaries, and whatever leaves them.
-- **Connected** selects every node joined to the selection by any chain of links, in either direction.
 - **All** selects every node in the model.
+- **Upstream** selects every node that flows to the selection.
+- **Downstream** selects every node the selection flows to.
+- **Connected** selects every node joined to the selection by any chain of links, in either direction.
+- **Connected downstream** selects everything joined to the selection without passing through the river above it: the river below, its tributaries, and whatever leaves them.
+- **Connected upstream** selects everything joined to the selection without passing through the river below it. In a braided network this adds the branches that leave the upstream reach, and whatever joins those branches.
 
 With nothing selected, the menu shows **Select all** instead.
 
