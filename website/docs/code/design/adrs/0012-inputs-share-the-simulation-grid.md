@@ -137,9 +137,13 @@ Error: Specified start '2020-01-02' is not on the input data's grid at 09:00:00;
 
 **Structural** — `Model::auto_determine_simulation_period` (`src/model.rs`)
 checks critical inputs and `start`/`end`, and the input fill in
-`Model::configure` checks every referenced input, all via
-`Timeseries::same_phase` (`src/timeseries.rs`), which `Optimisation::align`
-also uses. Tests: `src/tests/test_input_phase.rs`.
+`Model::configure` checks every referenced input, all via `same_phase`
+(`src/timeseries.rs`), which `Optimisation::align` also uses. On the writing
+side, `needs_time_of_day` (`src/tid/utils.rs`) keeps the time of day on any
+off-midnight timestamp, so a saved `start`, an output file or an IDE export
+re-reads on the same grid. Tests: `src/tests/test_input_phase.rs`,
+`test_save_keeps_time_of_day_on_start_and_end` in
+`src/tests/test_model_io_ini.rs`.
 
 ## Links and references
 
