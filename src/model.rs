@@ -580,11 +580,11 @@ impl Model {
                 }
                 for full_path in paths_to_fill {
                     if let Some(idx) = self.data_cache.get_series_idx(&*full_path, false) {
-                        // Off-grid inputs are rejected; the lookup below would shift them.
+                        // Inputs out of step with the simulation are rejected; the lookup below would shift them.
                         if !same_phase(input_ts.start_timestamp, self.configuration.sim_start_timestamp,
                                        self.configuration.sim_stepsize) {
                             return Err(format!(
-                                "Input '{}' is on a grid at {}, but the simulation grid is at {}. \
+                                "Input '{}' is out of step with the simulation: {} against {}. \
                                  All inputs must share the same time of day.",
                                 full_path, time_of_day_string(input_ts.start_timestamp),
                                 time_of_day_string(self.configuration.sim_start_timestamp)
@@ -835,10 +835,10 @@ impl Model {
                             // Out-of-phase inputs are rejected, never realigned.
                             if !same_phase(mask.start_timestamp, ts.timeseries.start_timestamp, mask.step_size) {
                                 return Err(format!(
-                                    "Input '{}' is on a grid at {}, but '{}' is at {}. \
+                                    "Input '{}' is out of step with '{}': {} against {}. \
                                      All inputs must share the same time of day.",
-                                    ci, time_of_day_string(ts.timeseries.start_timestamp),
-                                    first_critical_name, time_of_day_string(mask.start_timestamp)
+                                    ci, first_critical_name, time_of_day_string(ts.timeseries.start_timestamp),
+                                    time_of_day_string(mask.start_timestamp)
                                 ));
                             }
                             mask.mask_with(&ts.timeseries);
@@ -885,18 +885,18 @@ impl Model {
         self.configuration.sim_end_timestamp = end_timestamp;
         self.configuration.sim_nsteps = n_steps;
 
-        // Override with dates specified in the model, if relevant. They must sit on
-        // the data's grid: an off-grid start would shift every input.
-        let grid_start = self.configuration.sim_start_timestamp;
+        // Override with dates specified in the model, if relevant. They must be in
+        // step with the data: a start between two steps would shift every input.
+        let data_start = self.configuration.sim_start_timestamp;
         let step = self.configuration.sim_stepsize;
-        let check_on_grid = |what: &str, ts: u64| -> Result<(), String> {
-            if same_phase(ts, grid_start, step) {
+        let check_in_step = |what: &str, ts: u64| -> Result<(), String> {
+            if same_phase(ts, data_start, step) {
                 return Ok(());
             }
-            let suggestion = grid_start + (ts - grid_start).div_ceil(step) * step;
+            let suggestion = data_start + (ts - data_start).div_ceil(step) * step;
             Err(format!(
-                "Specified {} '{}' is not on the input data's grid at {}; use '{}'.",
-                what, u64_to_date_string_for_step_size(ts, step), time_of_day_string(grid_start),
+                "Specified {} '{}' is out of step with the input data, which is at {}; use '{}'.",
+                what, u64_to_date_string_for_step_size(ts, step), time_of_day_string(data_start),
                 u64_to_date_string_for_step_size(suggestion, step)
             ))
         };
@@ -907,7 +907,7 @@ impl Model {
                 {
                     return Err("Specified start inconsistent with input data.".to_string());
                 }
-                check_on_grid("start", timestamp)?;
+                check_in_step("start", timestamp)?;
                 self.configuration.sim_start_timestamp = timestamp;
                 self.configuration.sim_nsteps = 1
                     + (self.configuration.sim_end_timestamp
@@ -923,7 +923,7 @@ impl Model {
                 {
                     return Err("Specified end inconsistent with input data.".to_string());
                 }
-                check_on_grid("end", timestamp)?;
+                check_in_step("end", timestamp)?;
                 self.configuration.sim_end_timestamp = timestamp;
                 self.configuration.sim_nsteps = 1
                     + (self.configuration.sim_end_timestamp

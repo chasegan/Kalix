@@ -1,8 +1,8 @@
 ---
-title: "ADR-0012: Inputs must share the simulation grid; Kalix does not realign them"
+title: "ADR-0012: Inputs must be in step with the simulation; Kalix does not realign them"
 ---
 
-# ADR-0012: Inputs must share the simulation grid; Kalix does not realign them
+# ADR-0012: Inputs must be in step with the simulation; Kalix does not realign them
 
 - **Status**: Proposed
 - **Date**: 2026-10-16
@@ -13,11 +13,11 @@ title: "ADR-0012: Inputs must share the simulation grid; Kalix does not realign 
 
 Two daily files can disagree on the time of day: rainfall stamped
 `2020-01-01T09:00:00` and flow stamped `2020-01-01`. Until now Kalix ran such
-a model silently. The simulation grid came from whichever critical input a
-node referenced first, and other inputs were floored onto it, so 9am data on
-a midnight grid ran a day late. A date-only `start` on 9am data moved the
-grid the same way, and a 9am timestamp was written back as a bare date, so a
-saved model or output file re-read a day late. Date-only files are not
+a model silently. The simulation's timesteps came from whichever critical
+input a node referenced first, and other inputs were floored onto them, so
+9am data on midnight steps ran a day late. A date-only `start` on 9am data
+moved the steps the same way, and a 9am timestamp was written back as a bare
+date, so a saved model or output file re-read a day late. Date-only files are not
 affected: two of them share midnight. The conflict arises only when a file
 carries an explicit time.
 
@@ -41,7 +41,7 @@ should Kalix realign them, and by what rule?
 2. **Treat date-only data as unspecified time** and align it to the
    timestamped data by calendar date.
 3. **Warn and align by calendar date.**
-4. **Snap to the nearest grid point** instead of flooring.
+4. **Snap to the nearest step** instead of flooring.
 5. **A per-input offset option** in the model file.
 
 ## Decision
@@ -49,17 +49,17 @@ should Kalix realign them, and by what rule?
 Chosen option: **1**. It assumes nothing the modeller has not written, and
 leaves the pairing of misaligned data in their hands.
 
-1. **Every input a model reads must share the simulation grid's step and
-   phase**, which for daily data is the time of day. Otherwise configure
-   fails, naming the two inputs and their times of day. Kalix never shifts a
-   value onto a different time to make it fit. The grid is still taken from
-   the critical inputs; since they must agree, their order no longer changes
-   the result.
-2. **A specified `start` or `end` must lie on the grid**, and Kalix writes a
+1. **Every input a model reads must be in step with the simulation: the same
+   timestep and the same phase**, which for daily data is the time of day.
+   Otherwise configure fails, naming the two inputs and their times of day.
+   Kalix never shifts a value onto a different time to make it fit. The
+   timesteps are still taken from the critical inputs; since they must
+   agree, their order no longer changes the result.
+2. **A specified `start` or `end` must fall on a step**, and Kalix writes a
    timestamp as a bare date only when it is midnight. A date-only `start` on
-   9am data is rejected with the next grid point suggested
+   9am data is rejected with the next step suggested
    (`use '2020-01-02T09:00:00'`), never snapped; a saved `start`, output
-   file or export re-reads on the grid it was written from.
+   file or export re-reads on the steps it was written from.
 
 Options 2 and 3 hide a pairing rule in the engine, and 2 also needs date-only
 versus timestamped tracked per input, including for in-memory and Pixie data
@@ -74,11 +74,11 @@ and only the modeller knows which pairing is right.
 ## Worked example
 
 ```text
-Error: Input 'data.inflow_9am_csv.by_name.flow' is on a grid at 09:00:00, but 'data.inflow_midnight_csv.by_name.flow' is at 00:00:00. All inputs must share the same time of day.
+Error: Input 'data.inflow_9am_csv.by_name.flow' is out of step with 'data.inflow_midnight_csv.by_name.flow': 09:00:00 against 00:00:00. All inputs must share the same time of day.
 ```
 
 ```text
-Error: Specified start '2020-01-02' is not on the input data's grid at 09:00:00; use '2020-01-02T09:00:00'.
+Error: Specified start '2020-01-02' is out of step with the input data, which is at 09:00:00; use '2020-01-02T09:00:00'.
 ```
 
 ## Enforcement

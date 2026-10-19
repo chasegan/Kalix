@@ -2,8 +2,8 @@ use crate::io::ini_model_io::IniModelIO;
 use crate::tid::utils::date_string_to_u64_flexible;
 use crate::timeseries::Timeseries;
 
-// Inputs must share the simulation grid's time of day: out-of-phase inputs and
-// off-grid start/end are rejected, never realigned. Fixtures: example_models/9,
+// Inputs must be in step with the simulation: out-of-phase inputs and a
+// start/end between steps are rejected, never realigned. Fixtures: example_models/9,
 // daily data on 1-5 Jan 2020 at 09:00 and at midnight.
 
 const DIR: &str = "./src/tests/example_models/9";
@@ -37,13 +37,13 @@ fn test_single_phase_9am_runs_all_steps() {
 }
 
 #[test]
-fn test_off_grid_start_rejected_with_suggestion() {
+fn test_start_between_steps_rejected_with_suggestion() {
     let err = configure("nine_start_date.ini").err().expect("midnight start on 9am data should be rejected");
     assert!(err.contains("'2020-01-02'") && err.contains("'2020-01-02T09:00:00'"), "{}", err);
 }
 
 #[test]
-fn test_on_grid_start_accepted() {
+fn test_start_in_step_accepted() {
     let model = configure("nine_start_time.ini").expect("9am start on 9am data should configure");
     assert_eq!(model.configuration.sim_start_timestamp, ts("2020-01-02T09:00:00"));
     assert_eq!(model.configuration.sim_nsteps, 4);
