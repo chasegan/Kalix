@@ -20,16 +20,16 @@ Click and drag to select nodes on the schematic map. Then drag to move or ctrl+d
 
 ![](../assets/docs-using-ide/image_2.png)
 
-**Select** in the schematic map context menu grows the selection from the nodes already selected. With no nodes selected, a selected link counts as the nodes at its two ends. Once a node is selected, links are ignored: a rectangle selection also selects the links it crosses, and those do not widen it. Nodes are added to the selection, never removed.
+**Select** in the schematic map context menu grows the selection from the nodes already selected. With no nodes selected, a selected link counts as the nodes at its two ends. Once a node is selected, selected links are ignored. Nodes are added to the selection, never removed.
 
-- **Connected nodes** selects every node linked to the selection, in either direction.
-- **All nodes** selects every node in the model.
 - **Upstream** selects every node that flows to the selection.
-- **Upstream including distributaries** also follows each branch that leaves those upstream nodes, down to its end or to where it rejoins the flow below the selection.
+- **Connected upstream** selects everything joined to the selection without passing through the river below it. In a braided network this adds the branches that leave the upstream reach, and whatever joins those branches.
 - **Downstream** selects every node the selection flows to.
-- **Downstream including tributaries** also follows each tributary that joins those downstream nodes, up to its headwaters.
+- **Connected downstream** selects everything joined to the selection without passing through the river above it: the river below, its tributaries, and whatever leaves them.
+- **Connected** selects every node joined to the selection by any chain of links, in either direction.
+- **All** selects every node in the model.
 
-With no nodes selected, the menu shows **Select all** instead.
+With nothing selected, the menu shows **Select all** instead.
 
 **Draw a link** by hovering just outside a node until a ring appears, then dragging to the downstream node. The cursor shows when a drop isn't allowed (the same node, an existing link, or a loop). Esc cancels; Ctrl+Z undoes.
 
