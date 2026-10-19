@@ -33,7 +33,6 @@ public final class AxisLimitCodec {
 
     private AxisLimitCodec() {}
 
-    private static final long MS_PER_DAY = TimeUnit.DAYS.toMillis(1);
     private static final long SECONDS_PER_DAY = TimeUnit.DAYS.toSeconds(1);
     private static final String PAIR_SEPARATOR = ", ";
 
@@ -139,7 +138,7 @@ public final class AxisLimitCodec {
             case PERCENTILE -> formatNumber((double) value / PlotTypeTransformer.PERCENTILE_SCALE) + "%";
             case COUNT -> String.valueOf(value);
             case NUMERIC -> formatNumber((double) value / PlotTypeTransformer.NUMERIC_SCALE);
-            case TIME -> TimeFormatUtil.formatForStepSize(value, value % MS_PER_DAY == 0 ? SECONDS_PER_DAY : 1L);
+            case TIME -> TimeFormatUtil.formatForStepSize(value, SECONDS_PER_DAY);
         };
     }
 

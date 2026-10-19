@@ -21,3 +21,6 @@ pip: "pip install kalix==0.4.8"
 - New! `Select nodes` in the schematic map's context menu grows the selection from the selected nodes and links: all, upstream, downstream, or connected.
     - `Connected downstream` and `Connected upstream` take everything joined to the selection without passing through the river above or below it, so in a braided network they also take the branches that leave or join that stretch of river.
     - With nothing selected, only `All` is offered.
+- Fixed: daily data stamped at a time other than midnight (e.g. 9am) now keeps its time in output files, e.g. `2020-01-01T09:00:00`. This applies to model outputs and to CSV and Pixie exports from the IDE.
+- Changed: [all inputs must share the same time of day](https://kalix.org/docs/input-data/). Daily data at 9am can no longer be mixed with daily data at midnight; Kalix now stops with an error instead of silently shifting one of them by a day.
+    - `start` and `end` must also fall on the data's timesteps, e.g. `start = 2020-01-02T09:00:00` for 9am data.

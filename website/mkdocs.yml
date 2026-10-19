@@ -219,6 +219,7 @@ nav:
               - "0009 Options: faster or clearer": code/design/adrs/0009-options-faster-or-clearer.md
               - "0010 Annotations": code/design/adrs/0010-annotations.md
               - "0011 No scheduled dependency audit": code/design/adrs/0011-no-scheduled-dependency-audit.md
+              - "0012 Inputs in step with the simulation": code/design/adrs/0012-inputs-in-step-with-the-simulation.md
           - Website:
               - code/design/website/index.md
               - Todo: code/design/website/todo.md
