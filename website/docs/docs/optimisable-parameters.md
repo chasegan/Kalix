@@ -115,9 +115,9 @@ All seventeen Sacramento parameters are optimisable. Two of them, `lzpk` and `sa
 | `lzpkonlzsk` | `lzpk / lzsk` | `lzpk` |
 | `sarvaonpctim` | `sarva / pctim` | `sarva` |
 
-The optimiser searches the ratio, and the numerator is derived from it and the denominator (`lzpk = lzpkonlzsk × lzsk`). An upper bound of 1 on `lzpkonlzsk` keeps `lzpk` at or below `lzsk`, which the model's definition requires. For `sarvaonpctim` the bound is a choice: `sarva` may exceed `pctim`.
+The optimiser searches the ratio, and the numerator is derived from it and the denominator (`lzpk = lzpkonlzsk × lzsk`). An upper bound of 1 on `lzpkonlzsk` keeps `lzpk` at or below `lzsk`: the primary store is the slow one by convention, and the engine does not enforce it. For `sarvaonpctim` the bound is likewise a choice: `sarva` may exceed `pctim`.
 
-The denominator is usually searched alongside its ratio. If it is left out of `[parameters]`, it keeps the value in the model file:
+The denominator is usually searched alongside its ratio. If it is left out of `[parameters]`, it keeps the value in the model file, which must then be non-zero: a ratio to zero is undefined, and every candidate would write a numerator of 0. Such a configuration stops before the optimisation starts, with an error naming the fix.
 
 ```ini
 [parameters]
@@ -128,7 +128,13 @@ node.my_sac.sarvaonpctim = log_range(g(3), 0.0001, 1)
 
 Here `lzsk` is searched and `pctim` stays as the model file has it.
 
-The saved model holds `lzpk` and `sarva` as usual; the ratios are not model properties.
+The saved model holds `lzpk` and `sarva` as usual; the ratios are not model properties. The reverse also holds: searching `pctim` without its ratio leaves `sarva` where the model file has it, so the ratio moves. To hold the ratio instead and let `sarva` follow `pctim`, as Fors does, map the ratio to a constant:
+
+```ini
+[parameters]
+node.my_sac.pctim = log_range(g(1), 1E-05, 0.11)
+node.my_sac.sarvaonpctim = 0.5
+```
 
 ### Searching `lzpk` and `sarva` directly
 

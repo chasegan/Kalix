@@ -15,4 +15,5 @@ pip: "pip install kalix==0.4.8"
     - The IDE's default Sacramento configuration lists the ratios, which keeps `lzpk` at or below `lzsk` and `sarva` at or below `pctim`.
     - Existing configurations that map `lzpk` and `sarva` run unchanged.
     - Optimisation results list the derived `lzpk` and `sarva` in their own block, apart from the mapped parameters.
+    - A ratio mapped without its denominator needs a non-zero denominator in the model file; otherwise the optimisation stops before it starts, since the numerator would be 0 for every candidate.
 - Improved: a wrong address in `[parameters]` now stops an optimisation before it starts, where before every candidate failed.
