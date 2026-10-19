@@ -196,6 +196,17 @@ impl Node for SacramentoNode {
 // OptimisableComponent Implementation
 // ============================================================================
 
+/// A ratio parameter read back. Undefined when the denominator is 0: a ratio
+/// mapped against such a value would search nothing, so the read fails
+/// rather than returning NaN or infinity.
+fn ratio(numerator: f64, denominator: f64, name: &str, from: &str) -> Result<f64, String> {
+    if denominator == 0.0 {
+        Err(format!("{} is undefined: {} is 0", name, from))
+    } else {
+        Ok(numerator / denominator)
+    }
+}
+
 impl OptimisableComponent for SacramentoNode {
     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
         // Try to handle as rainfall weight parameter first
@@ -319,8 +330,8 @@ impl OptimisableComponent for SacramentoNode {
             "uztwm" => Ok(self.sacramento_model.uztwm),
             "zperc" => Ok(self.sacramento_model.zperc),
             "laguh" => Ok(self.sacramento_model.get_laguh()),
-            "sarvaonpctim" => Ok(self.sacramento_model.sarva / self.sacramento_model.pctim),
-            "lzpkonlzsk" => Ok(self.sacramento_model.lzpk / self.sacramento_model.lzsk),
+            "sarvaonpctim" => ratio(self.sacramento_model.sarva, self.sacramento_model.pctim, name, "pctim"),
+            "lzpkonlzsk" => ratio(self.sacramento_model.lzpk, self.sacramento_model.lzsk, name, "lzsk"),
             _ => Err(format!("Unknown Sacramento parameter: {}", name)),
         }
     }

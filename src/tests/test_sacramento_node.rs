@@ -203,6 +203,28 @@ fn test_ratio_param_sets_its_numerator() {
     assert!((n.get_param("lzpkonlzsk").unwrap() - 0.1).abs() < 1e-12);
 }
 
+/// A ratio is undefined when its denominator is 0, and says so instead of
+/// reading back as NaN or infinity. Setting it still works: the numerator is
+/// 0 whatever the ratio.
+#[test]
+fn test_ratio_param_is_undefined_at_zero_denominator() {
+    let mut n = SacramentoNode::new();
+    n.set_param("pctim", 0.0).unwrap();
+    n.set_param("sarva", 0.0).unwrap();
+    let err = n.get_param("sarvaonpctim").unwrap_err();
+    assert!(err.contains("sarvaonpctim") && err.contains("pctim is 0"), "{}", err);
+    n.set_param("sarva", 0.01).unwrap();
+    assert!(n.get_param("sarvaonpctim").is_err(), "infinity is not a ratio either");
+
+    n.set_param("lzsk", 0.0).unwrap();
+    let err = n.get_param("lzpkonlzsk").unwrap_err();
+    assert!(err.contains("lzpkonlzsk") && err.contains("lzsk is 0"), "{}", err);
+
+    n.set_param("sarvaonpctim", 0.5).unwrap();
+    assert_eq!(n.sacramento_model.sarva, 0.0);
+    assert_eq!(n.sacramento_model.pctim, 0.0, "the setter does not touch the denominator");
+}
+
 /// The node keeps no ratio: a denominator set afterwards leaves the numerator
 /// where it was. Ordering is the optimiser's job (see the problem tests).
 #[test]
