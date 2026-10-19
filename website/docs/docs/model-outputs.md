@@ -29,7 +29,7 @@ The CSV format has a single header row, and a single timestamp column.
 
 **Rows:** Column names are written in the top row, separated by commas.
 
-**Columns:** Timestamps are written in the first column, and follow an ISO format. For daily (or longer) timesteps at midnight this reduces to “YYYY-MM-DD”; daily data at another time of day, such as 9am, keeps the time (e.g. “2020-01-01T09:00:00”). This column is named “Time”. Subsequent columns contain model results. These appear in the output CSV file in the same order that they are specified in the model file.
+**Columns:** Timestamps are written in the first column, and follow an ISO format. For daily (or longer) timesteps at midnight this reduces to “YYYY-MM-DD”; daily data at another time of day, such as 9am, keeps the time (e.g. “2020-01-01T09:00:00”). The column is headed “date” when its values are bare dates and “datetime” when they carry a time. Subsequent columns contain model results. These appear in the output CSV file in the same order that they are specified in the model file.
 
 ![](../assets/docs-concepts-model-outputs/image.png)
 
