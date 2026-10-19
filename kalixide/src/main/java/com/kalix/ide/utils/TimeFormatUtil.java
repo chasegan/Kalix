@@ -56,10 +56,7 @@ public final class TimeFormatUtil {
      * Mirrors the engine's {@code needs_time_of_day}.
      */
     public static String formatForStepSize(LocalDateTime dateTime, long stepSeconds) {
-        boolean dailyOrCoarser = stepSeconds <= 0 || stepSeconds % 86400 == 0;
-        DateTimeFormatter formatter = (dailyOrCoarser && dateTime.toLocalTime().equals(LocalTime.MIDNIGHT))
-            ? DATE_ONLY : ISO_DATETIME;
-        return dateTime.format(formatter);
+        return dateTime.format(needsTimeOfDay(dateTime, stepSeconds) ? ISO_DATETIME : DATE_ONLY);
     }
 
     /**
@@ -67,6 +64,21 @@ public final class TimeFormatUtil {
      */
     public static String formatForStepSize(long timestampMs, long stepSeconds) {
         return formatForStepSize(toUtc(timestampMs), stepSeconds);
+    }
+
+    /**
+     * The heading for a CSV timestamp column whose rows {@link #formatForStepSize} writes:
+     * {@code date} when they are bare dates, {@code datetime} when they carry a time of day.
+     * Matches the engine's output files, so a tool that finds the column in one finds it in
+     * the other. {@code firstTimestampMs} is the column's first row.
+     */
+    public static String columnHeadingForStepSize(long firstTimestampMs, long stepSeconds) {
+        return needsTimeOfDay(toUtc(firstTimestampMs), stepSeconds) ? "datetime" : "date";
+    }
+
+    private static boolean needsTimeOfDay(LocalDateTime dateTime, long stepSeconds) {
+        boolean dailyOrCoarser = stepSeconds <= 0 || stepSeconds % 86400 == 0;
+        return !(dailyOrCoarser && dateTime.toLocalTime().equals(LocalTime.MIDNIGHT));
     }
 
     /**

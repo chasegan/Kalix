@@ -282,11 +282,26 @@ class TimeSeriesCsvRoundTripTest {
         TimeSeriesCsvExporter.export(ds, out, null, LABELS);
 
         List<String> lines = Files.readAllLines(out.toPath(), StandardCharsets.UTF_8);
-        assertEquals("Datetime,a,b", lines.get(0));
+        assertEquals("date,a,b", lines.get(0));
         assertEquals("2020-01-01,1.0,", lines.get(1));
         assertEquals("2020-01-02,2.0,5.0", lines.get(2));
         assertEquals("2020-01-03,,6.0", lines.get(3));
         assertEquals(4, lines.size());
+    }
+
+    @Test
+    void exportHeadsTheColumnDatetimeWhenRowsCarryATime() throws Exception {
+        long start = dayMillis("2020-01-01") + 9 * 3_600_000L;
+        long[] ts = {start, start + 86_400_000L};
+        DataSet ds = new DataSet();
+        ds.addSeries(new DatasetSeries("/x", "a"), new TimeSeriesData(ts, new double[] {1.0, 2.0}));
+
+        File out = tempDir.resolve("nine.csv").toFile();
+        TimeSeriesCsvExporter.export(ds, out, null, LABELS);
+
+        List<String> lines = Files.readAllLines(out.toPath(), StandardCharsets.UTF_8);
+        assertEquals("datetime,a", lines.get(0));
+        assertEquals("2020-01-01T09:00:00,1.0", lines.get(1));
     }
 
     @Test
@@ -298,7 +313,7 @@ class TimeSeriesCsvRoundTripTest {
         TimeSeriesCsvExporter.export(ds, out, null, LABELS);
 
         List<String> lines = Files.readAllLines(out.toPath(), StandardCharsets.UTF_8);
-        assertEquals("Datetime,\"flow, total\"", lines.get(0));
+        assertEquals("date,\"flow, total\"", lines.get(0));
     }
 
     @Test

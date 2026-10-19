@@ -24,7 +24,8 @@ import java.util.List;
  * multiple time series to CSV files. The resulting CSV format includes:</p>
  *
  * <ul>
- *   <li>First column: "Datetime" with timestamps in ISO format</li>
+ *   <li>First column: timestamps, headed "date" when they are bare dates and "datetime"
+ *       when they carry a time of day, as the engine's output files are</li>
  *   <li>Subsequent columns: One column per time series with series names as headers</li>
  *   <li>Missing values (NaN) are represented as empty cells</li>
  *   <li>Datetime formatting adapts based on precision (date-only vs. date-time)</li>
@@ -32,7 +33,7 @@ import java.util.List;
  *
  * <p><strong>CSV Format Example:</strong></p>
  * <pre>
- * Datetime,Series1,Series2,Series3
+ * date,Series1,Series2,Series3
  * 2023-01-01,10.5,20.1,
  * 2023-01-01T12:30:00,11.2,21.3,15.8
  * 2023-01-02,12.0,,16.2
@@ -170,9 +171,11 @@ public class TimeSeriesCsvExporter {
         // Sub-daily series get ISO datetime; daily-or-coarser get date-only. Inferred from the
         // first regular-interval series; falls back to date-only if none is regular.
         long stepSeconds = CsvExportUtil.inferStepSeconds(allSeries);
+        String firstColumn = isExceedance ? "Percentile"
+            : TimeFormatUtil.columnHeadingForStepSize(firstTimestamp(allSeries), stepSeconds);
 
         try (Writer writer = openWriter(file)) {
-            writeHeader(writer, headers, isExceedance);
+            writeHeader(writer, firstColumn, headers);
             writeDataRows(writer, allSeries, isExceedance, stepSeconds);
         }
     }
@@ -180,7 +183,7 @@ public class TimeSeriesCsvExporter {
     /**
      * Writes the CSV header row with column names.
      *
-     * <p>The header includes "Datetime" (or "Percentile" for exceedance) as the first column,
+     * <p>The header names the first column ("date", "datetime" or "Percentile" for exceedance),
      * followed by each time series name. Series names are properly escaped for CSV format.</p>
      */
     /**
@@ -193,9 +196,20 @@ public class TimeSeriesCsvExporter {
         return CsvZipFormat.newUtf8Writer(file);
     }
 
-    private static void writeHeader(Writer writer, List<String> headers, boolean isExceedance)
+    /** The earliest timestamp across the series, which heads the first data row. */
+    private static long firstTimestamp(List<TimeSeriesData> allSeries) {
+        long first = Long.MAX_VALUE;
+        for (TimeSeriesData series : allSeries) {
+            if (series.getPointCount() > 0) {
+                first = Math.min(first, series.getFirstTimestamp());
+            }
+        }
+        return first == Long.MAX_VALUE ? 0L : first;
+    }
+
+    private static void writeHeader(Writer writer, String firstColumn, List<String> headers)
             throws IOException {
-        writer.write(isExceedance ? "Percentile" : "Datetime");
+        writer.write(firstColumn);
         for (String header : headers) {
             writer.write(",");
             writer.write(CsvExportUtil.escapeCsvField(header));
