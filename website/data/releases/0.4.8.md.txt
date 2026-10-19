@@ -18,6 +18,6 @@ pip: "pip install kalix==0.4.8"
     - The command line and the Python package list `lzpk` and `sarva`, which the ratios set, in their own block apart from the mapped parameters. The IDE does not show them yet.
     - A ratio mapped without its denominator needs a non-zero denominator in the model file; otherwise the optimisation stops before it starts, since the numerator would be 0 for every candidate.
 - Improved: a wrong address in `[parameters]` now stops an optimisation before it starts, where before every candidate failed.
-- New! `Select` in the schematic map's context menu grows the selection from the selected nodes and links: all, upstream, downstream, or connected.
+- New! `Select nodes` in the schematic map's context menu grows the selection from the selected nodes and links: all, upstream, downstream, or connected.
     - `Connected downstream` and `Connected upstream` take everything joined to the selection without passing through the river above or below it, so in a braided network they also take the branches that leave or join that stretch of river.
-    - With nothing selected, the menu shows `Select all`.
+    - With nothing selected, only `All` is offered.

@@ -155,23 +155,23 @@ public class MapContextMenuManager {
 
         menu.addSeparator();
 
-        // Grow the selection along the network; with nothing to grow from, offer only select all.
-        // Below the clipboard block, as in the editor's menu: ADR-0002 §1 has no block for selection.
-        if (!model.getSelectionSeedNodes().isEmpty()) {
-            // Each child is the object of "Select" (ADR-0002 §6): "Select upstream". The
-            // context supplies "nodes" (§2.3), so the children do not repeat it.
-            JMenu selectMenu = new JMenu("Select");
-            selectMenu.add(selectAllItem("All"));
-            selectMenu.add(growSelectionItem("Upstream", NodeAdjacency::upstream));
-            selectMenu.add(growSelectionItem("Downstream", NodeAdjacency::downstream));
-            selectMenu.addSeparator();
-            selectMenu.add(growSelectionItem("Connected", NodeAdjacency::connected));
-            selectMenu.add(growSelectionItem("Connected downstream", NodeAdjacency::connectedDownstream));
-            selectMenu.add(growSelectionItem("Connected upstream", NodeAdjacency::connectedUpstream));
+        // Select nodes: "All" always; the network walks only when there is a selection to
+        // walk from (ADR-0002 §4 hides what cannot apply). The title keeps "nodes" because the
+        // selection also holds links, which these items never add (§2.3). Each child is the
+        // object of the title (§6): "Select nodes: upstream". Sits below the clipboard block,
+        // as in the editor's menu: the §1 skeleton has no block for selection.
+        if (!model.getAllNodes().isEmpty()) {
+            JMenu selectMenu = new JMenu("Select nodes");
+            selectMenu.add(selectAllItem());
+            if (!model.getSelectionSeedNodes().isEmpty()) {
+                selectMenu.add(growSelectionItem("Upstream", NodeAdjacency::upstream));
+                selectMenu.add(growSelectionItem("Downstream", NodeAdjacency::downstream));
+                selectMenu.addSeparator();
+                selectMenu.add(growSelectionItem("Connected", NodeAdjacency::connected));
+                selectMenu.add(growSelectionItem("Connected downstream", NodeAdjacency::connectedDownstream));
+                selectMenu.add(growSelectionItem("Connected upstream", NodeAdjacency::connectedUpstream));
+            }
             menu.add(selectMenu);
-            menu.addSeparator();
-        } else if (!model.getAllNodes().isEmpty()) {
-            menu.add(selectAllItem("Select all"));
             menu.addSeparator();
         }
 
@@ -271,7 +271,7 @@ public class MapContextMenuManager {
         menu.add(zoomToFitItem);
     }
 
-    // An item that adds to the selection whatever `grow` finds from the selection.
+    /** An item that adds to the selection whatever {@code grow} finds from the selection. */
     private JMenuItem growSelectionItem(String label,
                                         BiFunction<NodeAdjacency, Set<String>, Set<String>> grow) {
         JMenuItem item = new JMenuItem(label);
@@ -283,8 +283,9 @@ public class MapContextMenuManager {
         return item;
     }
 
-    private JMenuItem selectAllItem(String label) {
-        JMenuItem item = new JMenuItem(label);
+    /** An item that adds every node in the model to the selection. */
+    private JMenuItem selectAllItem() {
+        JMenuItem item = new JMenuItem("All");
         item.addActionListener(e -> {
             model.selectNodes(model.getAllNodes().stream().map(ModelNode::getName).toList());
             mapPanel.repaint();
