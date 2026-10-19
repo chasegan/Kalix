@@ -4,7 +4,7 @@ use crate::timeseries::Timeseries;
 
 // Inputs must be in step with the simulation: out-of-phase inputs and a
 // start/end between steps are rejected, never realigned. Fixtures: example_models/9,
-// daily data on 1-5 Jan 2020 at 09:00 and at midnight.
+// daily data on 1-5 Jan 2020 at 09:00 and at midnight, and hourly data on 1 Jan 2020.
 
 const DIR: &str = "./src/tests/example_models/9";
 
@@ -40,6 +40,18 @@ fn test_single_phase_9am_runs_all_steps() {
 fn test_start_between_steps_rejected_with_suggestion() {
     let err = configure("nine_start_date.ini").err().expect("midnight start on 9am data should be rejected");
     assert!(err.contains("'2020-01-02'") && err.contains("'2020-01-02T09:00:00'"), "{}", err);
+}
+
+#[test]
+fn test_end_between_steps_rejected_with_suggestion() {
+    let err = configure("nine_end_date.ini").err().expect("midnight end on 9am data should be rejected");
+    assert!(err.contains("end '2020-01-04'") && err.contains("'2020-01-04T09:00:00'"), "{}", err);
+}
+
+#[test]
+fn test_sub_daily_start_between_steps_rejected_with_suggestion() {
+    let err = configure("hourly_start_half_past.ini").err().expect("half-past start on hourly data should be rejected");
+    assert!(err.contains("'2020-01-01T01:30:00'") && err.contains("'2020-01-01T02:00:00'"), "{}", err);
 }
 
 #[test]
