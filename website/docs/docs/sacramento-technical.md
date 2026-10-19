@@ -249,7 +249,7 @@ Things to keep in mind when using them:
 
 - **Sensitivity ordering.** UZTWM, LZTWM, UZK, LZSK, LZPK, ZPERC, and REXP are typically the most sensitive parameters; SARVA, SIDE, SSOUT, and PFREE are usually low-sensitivity.
 
-- **Constraint between LZSK and LZPK.** Keep LZSK > LZPK during calibration, so that the two stores keep their roles. Searching the ratio `lzpkonlzsk` does this for you.
+- **Constraint between LZSK and LZPK.** Keep LZPK at or below LZSK during calibration, so that the two stores keep their roles. Searching the ratio `lzpkonlzsk` with an upper bound of 1 does this for you.
 
 - **Constraint between LZFSM and LZFPM.** No fixed ordering, but extreme differences between the two are physically unusual.
 

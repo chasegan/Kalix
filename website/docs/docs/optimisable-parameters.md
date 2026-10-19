@@ -24,7 +24,7 @@ There are two families of address:
 | `const.<name>` | A model constant from the `[const]` section |
 | `node.<name>.<param>` | A parameter of a named node. Supported by `gr4j`, `gr4jsg`, `sacramento`, `awbm`, `surm` and `routing` nodes |
 
-KalixIDE lists the addresses the loaded model offers (via the engine's `get_optimisable_params` command), which is the quickest way to discover what a given model exposes. A few older addresses are accepted without being listed; the node sections below name them.
+KalixIDE lists the addresses the loaded model offers (via the engine's `get_optimisable_params` command), which is the quickest way to discover what a given model exposes. A few older addresses are accepted without being listed; the Sacramento section below names them.
 
 ### Validation and infeasible candidates
 
@@ -128,7 +128,7 @@ node.my_sac.sarvaonpctim = log_range(g(3), 0.0001, 1)
 
 Here `lzsk` is searched and `pctim` stays as the model file has it.
 
-The saved model holds `lzpk` and `sarva` as usual; the ratios are not model properties. The reverse also holds: searching `pctim` without its ratio leaves `sarva` where the model file has it, so the ratio moves. To hold the ratio instead and let `sarva` follow `pctim`, as Fors does, map the ratio to a constant:
+The saved model holds `lzpk` and `sarva` as usual; the ratios are not model properties. The reverse also holds: searching `pctim` without its ratio leaves `sarva` where the model file has it, so the ratio moves. To hold the ratio instead and let `sarva` follow `pctim`, as the Fors calibration tool does, map the ratio to a constant:
 
 ```ini
 [parameters]
@@ -138,7 +138,7 @@ node.my_sac.sarvaonpctim = 0.5
 
 ### Searching `lzpk` and `sarva` directly
 
-Prefer the ratios: they are what KalixIDE offers, and with the bounds above they keep `lzpk` at or below `lzsk` and `sarva` at or below `pctim`.
+The ratios are what KalixIDE offers, and with the bounds above they keep `lzpk` at or below `lzsk` and `sarva` at or below `pctim`.
 
 `lzpk` and `sarva` are still accepted as addresses, so a configuration written before the ratios existed runs unchanged. KalixIDE no longer lists them. To search one independently of its denominator, for example to let `sarva` exceed `pctim`, write its line by hand in place of the ratio's:
 
