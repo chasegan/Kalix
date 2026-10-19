@@ -1,8 +1,8 @@
 ---
-title: "ADR-0010: Inputs must share the simulation grid; Kalix does not realign them"
+title: "ADR-0012: Inputs must share the simulation grid; Kalix does not realign them"
 ---
 
-# ADR-0010: Inputs must share the simulation grid; Kalix does not realign them
+# ADR-0012: Inputs must share the simulation grid; Kalix does not realign them
 
 - **Status**: Proposed
 - **Date**: 2026-10-16
