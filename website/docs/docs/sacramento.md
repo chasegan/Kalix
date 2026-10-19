@@ -95,9 +95,9 @@ Parameters for Runoff and Losses
 
 - ADIMP (Impervious Area Delay): Influences the time delay for runoff from the impervious area.
 
-- SIDE: A parameter related to channel side losses.
+- SIDE: Ratio of baseflow lost to groundwater to baseflow that reaches the channel.
 
-- SSOUT: Represents losses from the surface storage.
+- SSOUT: Fixed depth [mm] taken from channel flow each step.
 
 - SARVA: A parameter for losses from the system.
 

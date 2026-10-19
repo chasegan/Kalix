@@ -575,15 +575,15 @@ impl Sacramento {
         self.lztwc
     }
 
-    /// Returns the lower zone primary free water [mm], with the `side`
-    /// component divided out, so it fills to `lzfpm`. Fors records the same.
+    /// Returns the lower zone primary free water [mm], with the side loss
+    /// divided out, so it fills to `lzfpm`. Fors records the same.
     #[inline]
     pub fn get_lzfp(&self) -> f64 {
         self.lzfpc
     }
 
-    /// Returns the lower zone supplemental free water [mm], with the `side`
-    /// component divided out, so it fills to `lzfsm`. Fors records the same.
+    /// Returns the lower zone supplemental free water [mm], with the side loss
+    /// divided out, so it fills to `lzfsm`. Fors records the same.
     #[inline]
     pub fn get_lzfs(&self) -> f64 {
         self.lzfsc
