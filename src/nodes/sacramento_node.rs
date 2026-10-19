@@ -196,12 +196,11 @@ impl Node for SacramentoNode {
 // OptimisableComponent Implementation
 // ============================================================================
 
-/// A ratio parameter read back. Undefined when the denominator is 0: a ratio
-/// mapped against such a value would search nothing, so the read fails
-/// rather than returning NaN or infinity.
+/// A ratio parameter read back. Undefined when the denominator is 0 or NaN,
+/// and says so rather than returning NaN or infinity.
 fn ratio(numerator: f64, denominator: f64, name: &str, from: &str) -> Result<f64, String> {
-    if denominator == 0.0 {
-        Err(format!("{} is undefined: {} is 0", name, from))
+    if denominator == 0.0 || denominator.is_nan() {
+        Err(format!("{} is undefined: {} is {}", name, from, denominator))
     } else {
         Ok(numerator / denominator)
     }

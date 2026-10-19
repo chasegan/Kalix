@@ -219,6 +219,9 @@ fn test_ratio_param_is_undefined_at_zero_denominator() {
     n.set_param("lzsk", 0.0).unwrap();
     let err = n.get_param("lzpkonlzsk").unwrap_err();
     assert!(err.contains("lzpkonlzsk") && err.contains("lzsk is 0"), "{}", err);
+    n.set_param("lzsk", f64::NAN).unwrap();
+    let err = n.get_param("lzpkonlzsk").unwrap_err();
+    assert!(err.contains("lzsk is NaN"), "{}", err);
 
     n.set_param("sarvaonpctim", 0.5).unwrap();
     assert_eq!(n.sacramento_model.sarva, 0.0);
