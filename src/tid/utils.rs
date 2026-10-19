@@ -326,7 +326,8 @@ pub fn time_of_day_string(value: u64) -> String {
 /// True if timestamps on a grid starting at `start` need a time of day to
 /// print without loss: sub-daily steps, or daily-or-coarser steps off midnight
 /// (e.g. 9am data). A whole-day step keeps every point at the same time of
-/// day, so the answer holds for the whole series.
+/// day, so the answer holds for the whole series. Mirrored by the IDE's
+/// `TimeFormatUtil.formatForStepSize`; change both together.
 pub fn needs_time_of_day(start: u64, step_size: u64) -> bool {
     let sub_daily = !(step_size == 0 || step_size % 86400 == 0);
     sub_daily || !is_midnight(start)
