@@ -344,15 +344,15 @@ pub fn write_ts_opts(filename: &str, timeseries_vector: Vec<&Timeseries>, zip_in
         }
     }
 
+    // One date format for the whole file, from the first series' grid (all series in a
+    // write share it in practice); the heading names it, "date" being what most
+    // post-processing tools look for.
+    let first = timeseries_vector.first();
+    let with_time = first.is_some_and(|ts| needs_time_of_day(ts.start_timestamp, ts.step_size));
+
     // Build the whole file in one buffer, reserved up front so a large output
     // never regrows (a 45 MB result file would otherwise be memcpy'd ~20
     // times as the buffer doubles).
-    // One date format for the whole file, from the first series (all series in a
-    // write share its grid in practice): sub-daily or off-midnight data (e.g. 9am
-    // daily) gets ISO datetime under a "datetime" heading; midnight daily-or-coarser
-    // gets date-only under "date", the heading most post-processing tools look for.
-    let with_time = timeseries_vector.first()
-        .map_or(false, |ts| needs_time_of_day(ts.start_timestamp, ts.step_size));
     let estimated_row_bytes = 21 + timeseries_vector.len() * 20;
     let mut data_string = String::with_capacity(64 + data_length * estimated_row_bytes);
     data_string.push_str(if with_time { "datetime" } else { "date" });
@@ -365,8 +365,7 @@ pub fn write_ts_opts(filename: &str, timeseries_vector: Vec<&Timeseries>, zip_in
     // Build the data section. Values are written straight into the buffer (no per-cell
     // temporary String for ordinary magnitudes), in the shortest exact form - see
     // push_f64_compact.
-    if timeseries_vector.len() > 0 {
-        let first = timeseries_vector[0];
+    if let Some(first) = first {
         for i in 0..data_length {
             let timestamp = first.timestamp_at(i);
             append_date_string(&mut data_string, timestamp, with_time);
