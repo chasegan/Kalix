@@ -12,10 +12,28 @@ PathLike = Union[str, Path]
 TimeSeriesData = Union[Dict[str, np.ndarray], Iterable[Tuple[str, np.ndarray]]]
 
 
+def index_name(index: pd.DatetimeIndex) -> str:
+    """``"date"`` when the timestamps are bare dates, ``"datetime"`` when they
+    carry a time of day.
+
+    The rule the engine's CSV writer uses for its first-column heading
+    (``needs_time_of_day`` in ``src/tid/utils.rs``): a step that is a whole
+    number of days keeps every point at the same time of day, so the first
+    point and the step decide for the whole index. An empty or one-point
+    index is judged on its first point alone.
+    """
+    if len(index) == 0:
+        return "date"
+    first = index[0]
+    midnight = first.hour == 0 and first.minute == 0 and first.second == 0
+    whole_days = len(index) < 2 or (index[1] - first) % pd.Timedelta(days=1) == pd.Timedelta(0)
+    return "date" if midnight and whole_days else "datetime"
+
+
 def build_time_indexed_df(
     timestamps_sec: np.ndarray, series: TimeSeriesData
 ) -> pd.DataFrame:
-    """Build a DataFrame with a UTC ``DatetimeIndex`` named ``"time"``.
+    """Build a DataFrame with a UTC ``DatetimeIndex`` named by :func:`index_name`.
 
     ``timestamps_sec`` are whole seconds since the epoch, matching how Kalix
     stores/exchanges time internally -- pinned to second resolution so
@@ -34,7 +52,7 @@ def build_time_indexed_df(
     # keeps the full representable range available on both pandas 2.x and 3.x.
     seconds = np.asarray(timestamps_sec, dtype=np.int64).astype("datetime64[s]")
     index = pd.DatetimeIndex(seconds).tz_localize("UTC")
-    index.name = "time"
+    index.name = index_name(index)
     items = list(series.items()) if isinstance(series, dict) else list(series)
     if not items:
         return pd.DataFrame(index=index)

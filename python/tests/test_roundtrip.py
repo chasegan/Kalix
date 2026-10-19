@@ -24,7 +24,7 @@ def _make_df(n: int = 100,
                         freq="h",
                         tz="UTC",
                         unit=unit) # type: ignore
-    idx.name = "time"
+    idx.name = "datetime"
     return pd.DataFrame(
         {
             "flow": np.sin(np.arange(n) * 0.1) * 10.0,
@@ -77,7 +77,7 @@ def test_pre1970_timestamps(tmp_path):
                         freq="h",
                         tz="UTC",
                         unit="s")
-    idx.name = "time"
+    idx.name = "datetime"
     df = pd.DataFrame({"v": np.arange(24, dtype=float)}, index=idx)
     path = tmp_path / "old.pxb"
 
@@ -91,7 +91,7 @@ def test_pre1970_timestamps(tmp_path):
 def test_nan_preserved(tmp_path):
     n = 10
     idx = pd.date_range("2020-01-01", periods=n, freq="h", tz="UTC")
-    idx.name = "time"
+    idx.name = "datetime"
     vals = np.arange(n, dtype=float)
     vals[3] = np.nan
     vals[7] = np.nan
@@ -108,7 +108,7 @@ def test_write_rejects_irregular_timestep(tmp_path):
     idx = pd.DatetimeIndex(
         ["2020-01-01 00:00", "2020-01-01 01:00", "2020-01-01 03:00"],
         tz="UTC",
-        name="time",
+        name="datetime",
     )
     df = pd.DataFrame({"v": [1.0, 2.0, 3.0]}, index=idx)
     with pytest.raises(ValueError, match="Irregular timestep"):
@@ -219,7 +219,7 @@ def test_model_input_from_pixie(tmp_path):
     """Pixie as a model *input*, closing the loop: write a pair from pandas,
     name its `.pxt` in `[data]`, run, and read the results back."""
     idx = pd.date_range("2020-01-01", periods=5, freq="D", tz="UTC", unit="s")
-    idx.name = "time"
+    idx.name = "date"
     df = pd.DataFrame({"flow": [1.0, 2.0, 3.0, 4.0, 5.0]}, index=idx)
     kalix.write_pixie(tmp_path / "climate.pxb", df)
 
@@ -262,7 +262,7 @@ def test_model_input_pixie_pxb_raises(tmp_path):
     manifest where one dataset must have one name.
     """
     idx = pd.date_range("2020-01-01", periods=5, freq="D", tz="UTC", unit="s")
-    idx.name = "time"
+    idx.name = "date"
     kalix.write_pixie(tmp_path / "climate.pxb", pd.DataFrame({"flow": [1.0] * 5}, index=idx))
 
     model_ini = tmp_path / "model.ini"
@@ -287,7 +287,7 @@ def test_model_input_pixie_missing_companion_raises(tmp_path):
     """A named .pxt whose .pxb sibling is absent is a filesystem problem, so it
     stays an OSError and names the file that is actually missing."""
     idx = pd.date_range("2020-01-01", periods=5, freq="D", tz="UTC", unit="s")
-    idx.name = "time"
+    idx.name = "date"
     kalix.write_pixie(tmp_path / "climate.pxb", pd.DataFrame({"flow": [1.0] * 5}, index=idx))
     (tmp_path / "climate.pxb").unlink()
 
@@ -394,3 +394,19 @@ def test_cli_pixie_output_is_readable(tmp_path):
     df = kalix.read_pixie(str(out_base) + ".pxb")
     assert len(df) > 0
     assert len(df.columns) > 0
+
+
+def test_read_names_the_index_date_or_datetime(tmp_path):
+    """The index name follows the engine's CSV heading rule: bare dates are a
+    "date", anything carrying a time of day a "datetime"."""
+    daily = pd.date_range("2020-01-01", periods=3, freq="D", tz="UTC", unit="s")
+    kalix.write_pixie(tmp_path / "daily.pxb", pd.DataFrame({"v": [1.0, 2.0, 3.0]}, index=daily))
+    assert kalix.read_pixie(tmp_path / "daily.pxb").index.name == "date"
+
+    nine_am = pd.date_range("2020-01-01 09:00", periods=3, freq="D", tz="UTC", unit="s")
+    kalix.write_pixie(tmp_path / "nine.pxb", pd.DataFrame({"v": [1.0, 2.0, 3.0]}, index=nine_am))
+    assert kalix.read_pixie(tmp_path / "nine.pxb").index.name == "datetime"
+
+    hourly = pd.date_range("2020-01-01", periods=3, freq="h", tz="UTC", unit="s")
+    kalix.write_pixie(tmp_path / "hourly.pxb", pd.DataFrame({"v": [1.0, 2.0, 3.0]}, index=hourly))
+    assert kalix.read_pixie(tmp_path / "hourly.pxb").index.name == "datetime"

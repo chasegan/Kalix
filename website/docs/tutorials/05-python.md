@@ -135,7 +135,7 @@ sim_pxb = kalix.read_pixie("results.pxb")
 sim_pxb.head()
 ```
 
-The DataFrame has the same shape as the CSV version, but the index is now a **tz-aware UTC** `DatetimeIndex` named `"time"`. From there all the standard pandas + matplotlib tools work the same way.
+The DataFrame has the same shape as the CSV version, but the index is now a **tz-aware UTC** `DatetimeIndex`, named `"date"` or `"datetime"` as the CSV column is. From there all the standard pandas + matplotlib tools work the same way.
 
 ![](../assets/tutorials-05-python/image_2.png)
 

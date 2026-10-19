@@ -688,10 +688,10 @@ def test_get_outputs_returns_dataframe_after_run():
     assert set(df.columns) == set(_DECLARED_OUTPUTS)
 
 
-def test_get_outputs_index_is_named_time_and_utc():
+def test_get_outputs_index_is_named_date_and_utc():
     model = kalix.load_file(str(_MODEL_INI)).run()
     df = model.get_outputs()
-    assert df.index.name == "time"
+    assert df.index.name == "date", "daily data at midnight, so the index is a date"
     assert isinstance(df.index, pd.DatetimeIndex)
     assert df.index.tz is not None
 

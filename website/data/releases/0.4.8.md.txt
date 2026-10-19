@@ -28,6 +28,7 @@ pip: "pip install kalix==0.4.8"
     - New! `crop_N_kc_multiplier` on the `field` node scales the crop coefficient dynamically, supporting simulation of skip-row irrigation practices.
     - `soil_moisture_vol` output renamed `volume` for consistency with other nodes.
 - Timestamp changes:
+    - Output CSV files now head their first column `date`, or `datetime` when the timestamps carry a time of day (hourly data, or daily data stamped at 9am), rather than `Time`. Postprocessing tools that look for a `date` column now find it; scripts that select `Time` by name need updating. The IDE's plot `Save Data` export does the same (previously `Datetime`), and heads an exceedance export `percentile`. The Python package names its DataFrame index by the same rule (previously `time`).
     - Daily models stamped at a time (other than midnight, e.g. 9am) now retain the same time component in the model output.
     - New checks to ensure that all [input data shares the same time of day](https://kalix.org/docs/input-data/).
     - `start` and `end` must also fall on the data's timesteps, e.g. `start = 2020-01-02T09:00:00` for 9am data.
