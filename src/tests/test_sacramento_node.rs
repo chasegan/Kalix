@@ -571,3 +571,93 @@ fn test_optimise_from_file_reports_ratio_numerators_and_checks_addresses() {
     let err = crate::run::optimise_from_file(&config, None, None, None).err().expect("a bad address is an error");
     assert!(err.starts_with("Cannot optimise 'node.my_sac.lztwn'"), "got: {}", err);
 }
+
+/// The zero-denominator refusal reaches the file-level entry point: a model
+/// file holding pctim = 0 with only the ratio mapped is an error before any
+/// candidate runs, and runs once pctim is mapped too.
+#[test]
+fn test_optimise_from_file_refuses_ratio_alone_against_zero_denominator() {
+    let config = picnic_config_file("node.my_sac.sarvaonpctim = lin_range(g(1), 0.1, 1)");
+    let model_dir = std::path::Path::new(&config).parent().unwrap().to_path_buf();
+    let model_path = model_dir.join("picnic_pctim_zero.ini");
+    let source = std::fs::read_to_string("./src/tests/example_models/8/picnic_sacr.ini").unwrap();
+    assert_eq!(source.matches("0.00151450246849861").count(), 1, "the fixture's pctim");
+    std::fs::write(&model_path, source.replace("0.00151450246849861", "0")).unwrap();
+    // The model's data files are named relative to the model, so point at the originals.
+    for f in ["formatted_mpot.csv", "formatted_rain.csv"] {
+        std::fs::copy(format!("./src/tests/example_models/8/{}", f), model_dir.join(f)).unwrap();
+    }
+    let model = model_path.to_str().unwrap();
+
+    let err = crate::run::optimise_from_file(&config, Some(model), None, None).err().expect("a dead ratio is an error");
+    assert!(err.starts_with("Cannot optimise 'node.my_sac.sarvaonpctim'"), "got: {}", err);
+    assert!(err.contains("pctim is 0"), "got: {}", err);
+
+    let config = picnic_config_file(
+        "node.my_sac.sarvaonpctim = lin_range(g(1), 0.1, 1)\nnode.my_sac.pctim = lin_range(g(2), 0, 0.1)");
+    let outcome = crate::run::optimise_from_file(&config, Some(model), None, None).unwrap();
+    assert_eq!(outcome.parameters_from_ratios[0].0, "node.my_sac.sarva");
+}
+
+/// Two Sacramento nodes each map a ratio: the checks and the report keep the
+/// nodes apart, and a ratio on one node is independent of a denominator on
+/// the other.
+#[test]
+fn test_ratios_on_two_nodes_are_independent() {
+    let source = std::fs::read_to_string("./src/tests/example_models/8/picnic_sacr.ini").unwrap();
+    let second = source[source.find("[node.my_sac]").unwrap()..source.find("[outputs]").unwrap()]
+        .replace("[node.my_sac]", "[node.other_sac]");
+    let two_nodes = source.replace("[outputs]", &format!("{}[outputs]", second))
+        .replace("node.my_sac.ds_1\n", "node.my_sac.ds_1\nnode.other_sac.ds_1\n");
+    let dir = std::env::current_dir().unwrap().join("src/tests/example_models/8");
+    let model = {
+        let path = std::env::temp_dir().join("kalix_tests").join(uuid::Uuid::new_v4().to_string());
+        std::fs::create_dir_all(&path).unwrap();
+        for f in ["formatted_mpot.csv", "formatted_rain.csv"] {
+            std::fs::copy(dir.join(f), path.join(f)).unwrap();
+        }
+        let file = path.join("two_sacs.ini");
+        std::fs::write(&file, two_nodes).unwrap();
+        IniModelIO::read_model_file(file.to_str().unwrap()).unwrap()
+    };
+    let observed = read_ts("./src/tests/example_models/8/formatted_11000A.csv").unwrap()[0].clone();
+    let make = |mappings: Vec<&str>| OptimisationProblem::single_comparison(
+        model.clone(),
+        ParameterMappingConfig::from_strings(mappings).unwrap(),
+        observed.clone(),
+        "node.my_sac.ds_1".to_string(),
+        ObjectiveFunction::SDEB(SdebObjective::new()),
+    );
+
+    // Same ratio on both nodes, sarva mapped directly on neither: no clash.
+    let mut problem = make(vec![
+        "node.my_sac.sarvaonpctim = lin_range(g(1), 0, 1)",
+        "node.other_sac.sarvaonpctim = lin_range(g(2), 0, 1)",
+        "node.other_sac.pctim = lin_range(g(3), 0, 0.1)",
+    ]);
+    problem.set_params(&[0.5, 0.25, 0.4]).unwrap();
+    let (my_pctim, my_sarva, other_pctim, other_sarva) = match (problem.model.get_node("my_sac"), problem.model.get_node("other_sac")) {
+        (Some(NodeEnum::SacramentoNode(a)), Some(NodeEnum::SacramentoNode(b))) =>
+            (a.sacramento_model.pctim, a.sacramento_model.sarva, b.sacramento_model.pctim, b.sacramento_model.sarva),
+        _ => panic!("both nodes are Sacramento nodes"),
+    };
+    assert!(my_pctim > 0.0, "my_sac's pctim is the model file's");
+    assert!((my_sarva - 0.5 * my_pctim).abs() < 1e-12);
+    assert!((other_pctim - 0.04).abs() < 1e-12);
+    assert!((other_sarva - 0.01).abs() < 1e-12);
+    let report = problem.params_from_ratios();
+    assert_eq!(report.iter().map(|(a, _)| a.as_str()).collect::<Vec<_>>(), ["node.my_sac.sarva", "node.other_sac.sarva"]);
+
+    // sarva mapped on the other node does not clash with my_sac's ratio.
+    let mut problem = make(vec![
+        "node.my_sac.sarvaonpctim = lin_range(g(1), 0, 1)",
+        "node.other_sac.sarva = lin_range(g(2), 0, 0.1)",
+    ]);
+    problem.resolve().unwrap();
+
+    // A zero pctim on the other node does not stop my_sac's ratio.
+    let mut problem = make(vec!["node.my_sac.sarvaonpctim = lin_range(g(1), 0, 1)"]);
+    let idx = problem.model.get_node_idx("other_sac").unwrap();
+    problem.model.nodes[idx].optimisable_mut().unwrap().set_param("pctim", 0.0).unwrap();
+    problem.resolve().unwrap();
+}
