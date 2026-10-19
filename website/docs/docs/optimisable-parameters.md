@@ -148,7 +148,7 @@ node.my_sac.lzpk = log_range(g(1), 0.001, 0.6)
 node.my_sac.sarva = log_range(g(3), 1E-05, 0.11)
 ```
 
-The bounds shown are typical ones. A parameter cannot be listed together with its own ratio.
+The bounds shown are typical ones. A parameter cannot be mapped together with its own ratio.
 
 Sacramento nodes whose rainfall input is a linear combination of stations also expose the [rainfall input parameters](#rainfall-input-parameters-rf_bias-rf_di) below.
 

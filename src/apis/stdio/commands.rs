@@ -849,7 +849,7 @@ impl Command for RunOptimisationCommand {
         // Apply best parameters to the model to get the optimized model
         problem.set_params(&result.best_params)
             .map_err(|e| CommandError::ExecutionError(format!("Failed to apply best parameters: {}", e)))?;
-        let params_derived = problem.derived_params();
+        let params_from_ratios = problem.params_from_ratios();
 
         // Serialize the optimized model to INI string
         let optimised_model_ini = IniModelIO::model_to_string(&problem.model);
@@ -860,7 +860,7 @@ impl Command for RunOptimisationCommand {
             "evaluations": result.n_evaluations,
             "params_normalized": result.best_params,
             "params_physical": params_physical.into_iter().collect::<std::collections::HashMap<_, _>>(),
-            "params_derived": params_derived.into_iter().collect::<std::collections::HashMap<_, _>>(),
+            "params_from_ratios": params_from_ratios.into_iter().collect::<std::collections::HashMap<_, _>>(),
             "optimised_model_ini": optimised_model_ini,
             "success": result.success,
             "interrupted": interrupted,

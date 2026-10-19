@@ -81,20 +81,20 @@ pub struct OptimisationProblem {
 struct ResolvedTargets {
     /// One entry per config mapping, in order.
     targets: Vec<ResolvedTarget>,
-    /// Mapping indices in the order to apply them: derived parameters last,
-    /// so each is computed from the candidate's other values.
+    /// Mapping indices in the order to apply them: ratios last, so each is
+    /// computed from the candidate's own denominator.
     order: Vec<usize>,
-    /// What the derived parameters write, for reporting.
-    derived: Vec<DerivedParam>,
+    /// The numerators the mapped ratios set, for reporting.
+    ratios: Vec<RatioParam>,
 }
 
-/// A mapped parameter that writes another one (OptimisableComponent::derives).
-struct DerivedParam {
+/// A mapped ratio parameter (OptimisableComponent::ratio_of).
+struct RatioParam {
     node_idx: usize,
-    /// The parameter written, and its address ("node.name.param").
-    written: &'static str,
-    written_address: String,
-    /// The mapping target that writes it.
+    /// The numerator it sets, and its address ("node.name.param").
+    numerator: &'static str,
+    numerator_address: String,
+    /// The mapping target that sets it.
     target: String,
 }
 
@@ -150,8 +150,8 @@ impl OptimisationProblem {
         let n = self.config.mappings.len();
         let mut targets = Vec::with_capacity(n);
         let mut order = Vec::with_capacity(n);
-        let mut derived: Vec<DerivedParam> = Vec::new();
-        let mut derived_order = Vec::new();
+        let mut ratios: Vec<RatioParam> = Vec::new();
+        let mut ratio_order = Vec::new();
         for (i, mapping) in self.config.mappings.iter().enumerate() {
             let target = &mapping.target;
             let parts: Vec<&str> = target.split('.').collect();
@@ -176,27 +176,27 @@ impl OptimisationProblem {
                 };
                 // get_param reads every name set_param can set (see the
                 // trait), so a name that does not read back is refused.
-                match component.derives(param_name) {
-                    Some(d) => {
-                        let written_address = format!("node.{}.{}", node_name, d.writes);
-                        let from_address = format!("node.{}.{}", node_name, d.from);
+                match component.ratio_of(param_name) {
+                    Some(r) => {
+                        let numerator_address = format!("node.{}.{}", node_name, r.numerator);
+                        let denominator_address = format!("node.{}.{}", node_name, r.denominator);
                         // A ratio is undefined when the model holds a zero
                         // denominator, and mapped alone it would search
                         // nothing. A mapped denominator is written before the
                         // ratio on every candidate, so the model's value does
                         // not matter then and is not read.
-                        let from_mapped = self.config.mappings.iter().any(|m| m.target == from_address);
-                        if !from_mapped {
+                        let denominator_mapped = self.config.mappings.iter().any(|m| m.target == denominator_address);
+                        if !denominator_mapped {
                             component.get_param(param_name).map_err(|e| format!(
                                 "Cannot optimise '{}': {}. Map '{}' as well, or map '{}' directly.",
-                                target, e, from_address, written_address
+                                target, e, denominator_address, numerator_address
                             ))?;
                         }
-                        derived_order.push(i);
-                        derived.push(DerivedParam {
+                        ratio_order.push(i);
+                        ratios.push(RatioParam {
                             node_idx,
-                            written: d.writes,
-                            written_address,
+                            numerator: r.numerator,
+                            numerator_address,
                             target: target.clone(),
                         });
                     }
@@ -215,24 +215,24 @@ impl OptimisationProblem {
             }
         }
 
-        // A derived parameter cannot be mapped with the parameter it writes,
-        // nor with another derived parameter that writes the same one.
-        for d in &derived {
+        // A ratio cannot be mapped with its numerator, nor with another
+        // ratio that sets the same numerator.
+        for r in &ratios {
             let clash = self.config.mappings.iter().map(|m| m.target.as_str())
-                .find(|t| *t == d.written_address)
-                .or_else(|| derived.iter()
-                    .find(|o| o.written_address == d.written_address && o.target != d.target)
+                .find(|t| *t == r.numerator_address)
+                .or_else(|| ratios.iter()
+                    .find(|o| o.numerator_address == r.numerator_address && o.target != r.target)
                     .map(|o| o.target.as_str()));
             if let Some(other) = clash {
                 return Err(format!(
-                    "'{}' and '{}' cannot both be optimised: '{}' sets '{}'",
-                    d.target, other, d.target, d.written_address
+                    "'{}' and '{}' cannot both be mapped: '{}' sets '{}'",
+                    r.target, other, r.target, r.numerator_address
                 ));
             }
         }
 
-        order.extend(derived_order);
-        Ok(ResolvedTargets { targets, order, derived })
+        order.extend(ratio_order);
+        Ok(ResolvedTargets { targets, order, ratios })
     }
 
     /// Resolve the parameter targets now rather than on the first candidate.
@@ -271,18 +271,21 @@ impl OptimisationProblem {
         Ok(())
     }
 
-    /// The parameters written by the mapped derived parameters, as (address,
-    /// value) read from the model now: e.g. Sacramento's sarva when
-    /// sarvaonpctim is mapped. These are not [parameters] targets. Empty
-    /// until the targets have been resolved.
-    pub fn derived_params(&self) -> Vec<(String, f64)> {
+    /// The numerators the mapped ratios set, as (address, value) read from
+    /// the model now: e.g. Sacramento's sarva when sarvaonpctim is mapped.
+    /// These are not [parameters] targets. Empty until the targets have been
+    /// resolved.
+    pub fn params_from_ratios(&self) -> Vec<(String, f64)> {
         let Some(resolved) = &self.resolved_targets else {
             return Vec::new();
         };
-        resolved.derived.iter()
-            .filter_map(|d| {
-                let value = self.model.nodes[d.node_idx].optimisable()?.get_param(d.written).ok()?;
-                Some((d.written_address.clone(), value))
+        resolved.ratios.iter()
+            .map(|r| {
+                let value = self.model.nodes[r.node_idx].optimisable()
+                    .expect("checked during target resolution")
+                    .get_param(r.numerator)
+                    .expect("a numerator is a plain parameter and always reads back");
+                (r.numerator_address.clone(), value)
             })
             .collect()
     }

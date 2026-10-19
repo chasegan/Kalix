@@ -1,10 +1,11 @@
-/// What a derived parameter is made of: setting it writes `writes` from the
-/// value `from` holds at that moment ("sarvaonpctim" writes "sarva" from
-/// "pctim"). Both are names `set_param` accepts.
+/// The two parameters a ratio parameter is made of: setting the ratio sets
+/// `numerator = ratio * denominator` from the denominator the component holds
+/// at that moment ("sarvaonpctim" sets "sarva" from "pctim"). Both are names
+/// `set_param` accepts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Derived {
-    pub writes: &'static str,
-    pub from: &'static str,
+pub struct Ratio {
+    pub numerator: &'static str,
+    pub denominator: &'static str,
 }
 
 /// Trait for model components that support parameter optimisation
@@ -20,17 +21,18 @@ pub trait OptimisableComponent {
     /// * `name` - Parameter name (e.g., "lztwm", "uzk", "sarvaonpctim")
     /// * `value` - Parameter value in physical space
     ///
-    /// # Derived Parameters
-    /// Some parameters are "derived": setting one writes another parameter,
-    /// computed from the values the component holds at that moment. For
-    /// example, "sarvaonpctim" sets sarva = value * pctim. See `derives`.
+    /// # Ratio parameters
+    /// Some parameters are ratios of two others: setting one sets its
+    /// numerator from the denominator the component holds at that moment.
+    /// For example, "sarvaonpctim" sets sarva = value * pctim. See `ratio_of`.
     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String>;
 
-    /// What `name` writes and from what, when `name` is derived from others:
-    /// "sarvaonpctim" writes "sarva" from "pctim". The optimiser sets such a
-    /// name after the component's other mapped parameters, so it is computed
-    /// from the candidate's values, and refuses it alongside the one it writes.
-    fn derives(&self, _name: &str) -> Option<Derived> {
+    /// The numerator and denominator of `name`, when `name` is a ratio:
+    /// "sarvaonpctim" is "sarva" over "pctim". The optimiser sets ratios last,
+    /// after every other mapped parameter, so each is computed from the
+    /// candidate's own denominator, and refuses a ratio mapped beside its
+    /// numerator.
+    fn ratio_of(&self, _name: &str) -> Option<Ratio> {
         None
     }
 

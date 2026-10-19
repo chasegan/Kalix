@@ -484,10 +484,10 @@ fn main() {
             if let Err(e) = problem_mut.set_params(&result.best_params) {
                 eprintln!("Warning: Failed to apply final parameters: {}", e);
             }
-            let derived_values = problem_mut.derived_params();
-            if !derived_values.is_empty() {
-                println!("\nDerived Parameters (not [parameters] targets):");
-                for (address, value) in &derived_values {
+            let from_ratios = problem_mut.params_from_ratios();
+            if !from_ratios.is_empty() {
+                println!("\nParameters set by ratios (not [parameters] targets):");
+                for (address, value) in &from_ratios {
                     println!("  {} = {:.6}", address, value);
                 }
             }
@@ -524,9 +524,9 @@ fn main() {
                 for (target, value) in &param_values {
                     writeln!(&mut output, "  {} = {:.6}", target, value).unwrap();
                 }
-                if !derived_values.is_empty() {
-                    writeln!(&mut output, "\nDerived Parameters (not [parameters] targets):").unwrap();
-                    for (address, value) in &derived_values {
+                if !from_ratios.is_empty() {
+                    writeln!(&mut output, "\nParameters set by ratios (not [parameters] targets):").unwrap();
+                    for (address, value) in &from_ratios {
                         writeln!(&mut output, "  {} = {:.6}", address, value).unwrap();
                     }
                 }

@@ -403,14 +403,14 @@ Execute model optimisation using optimization algorithms (interruptible).
       "node.mygr4jnode.x3":89.12,
       "node.mygr4jnode.x4":1.234
     },
-    "params_derived":{},
+    "params_from_ratios":{},
     "success":true,
     "message":"Optimization completed successfully"
   }
 }
 ```
 
-`params_physical` holds one entry per `[parameters]` target. `params_derived` holds values a node derived from them, which are not targets: for a Sacramento node calibrated on `sarvaonpctim` or `lzpkonlzsk` it holds `node.<name>.sarva` or `node.<name>.lzpk`. It is empty when nothing was derived.
+`params_physical` holds one entry per `[parameters]` target. `params_from_ratios` holds the parameters the mapped ratios set, which are not targets: for a Sacramento node calibrated on `sarvaonpctim` or `lzpkonlzsk` it holds `node.<name>.sarva` or `node.<name>.lzpk`. It is empty when no ratio is mapped.
 
 #### Result Retrieval Commands
 

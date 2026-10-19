@@ -183,7 +183,7 @@ fn test_sacramento_node_store_outputs() {
 // Ratio parameters (sarvaonpctim, lzpkonlzsk)
 // ---------------------------------------------------------------------------
 
-use crate::numerical::opt::optimisable_component::{Derived, OptimisableComponent};
+use crate::numerical::opt::optimisable_component::{OptimisableComponent, Ratio};
 
 /// Setting a ratio writes its numerator from the denominator the node holds
 /// at that moment, and the ratio reads back.
@@ -240,14 +240,14 @@ fn test_ratio_param_is_not_remembered() {
     assert_eq!(n.sacramento_model.sarva, 0.03);
 }
 
-/// Only the ratios are derived, and each names its numerator and denominator.
+/// Only the two ratios are ratios, and each names its numerator and denominator.
 #[test]
-fn test_ratio_params_name_what_they_write() {
+fn test_ratio_params_name_their_numerator_and_denominator() {
     let n = SacramentoNode::new();
-    assert_eq!(n.derives("sarvaonpctim"), Some(Derived { writes: "sarva", from: "pctim" }));
-    assert_eq!(n.derives("lzpkonlzsk"), Some(Derived { writes: "lzpk", from: "lzsk" }));
+    assert_eq!(n.ratio_of("sarvaonpctim"), Some(Ratio { numerator: "sarva", denominator: "pctim" }));
+    assert_eq!(n.ratio_of("lzpkonlzsk"), Some(Ratio { numerator: "lzpk", denominator: "lzsk" }));
     for name in ["sarva", "lzpk", "pctim", "lzsk", "lztwm", "nonsense"] {
-        assert_eq!(n.derives(name), None, "'{}'", name);
+        assert_eq!(n.ratio_of(name), None, "'{}'", name);
     }
 }
 
@@ -301,13 +301,13 @@ fn test_ratio_params_reach_the_model() {
     assert!((sac.lzsk - 0.2).abs() < 1e-12);
     assert!((sac.lzpk - 0.04).abs() < 1e-12);
 
-    // The derived numerators are reported apart from the mappings
-    let derived = problem.derived_params();
-    assert_eq!(derived.len(), 2);
-    assert_eq!(derived[0].0, "node.my_sac.sarva");
-    assert!((derived[0].1 - 0.025).abs() < 1e-12);
-    assert_eq!(derived[1].0, "node.my_sac.lzpk");
-    assert!((derived[1].1 - 0.04).abs() < 1e-12);
+    // The numerators the ratios set are reported apart from the mappings
+    let from_ratios = problem.params_from_ratios();
+    assert_eq!(from_ratios.len(), 2);
+    assert_eq!(from_ratios[0].0, "node.my_sac.sarva");
+    assert!((from_ratios[0].1 - 0.025).abs() < 1e-12);
+    assert_eq!(from_ratios[1].0, "node.my_sac.lzpk");
+    assert!((from_ratios[1].1 - 0.04).abs() < 1e-12);
 }
 
 /// A configuration that maps every parameter the node lists, which is what
@@ -395,7 +395,7 @@ fn test_numerators_are_accepted_but_not_listed() {
     assert!((sac.lzpk - 0.1).abs() < 1e-12);
 }
 
-/// A ratio mapped without its denominator derives the numerator from the
+/// A ratio mapped without its denominator sets the numerator from the
 /// denominator in the model file, and leaves that denominator alone.
 #[test]
 fn test_ratio_without_denominator_uses_the_model_value() {
@@ -411,15 +411,16 @@ fn test_ratio_without_denominator_uses_the_model_value() {
     assert!((sac.sarva - 0.5 * pctim).abs() < 1e-12);
 }
 
-/// A ratio mapped alongside its numerator fails when the candidate is applied.
+/// A ratio mapped alongside its numerator is refused when the candidate is applied,
+/// which resolves the targets first.
 #[test]
-fn test_ratio_with_numerator_fails_set_params() {
+fn test_ratio_with_numerator_is_refused() {
     let mut problem = picnic_problem(vec![
         "node.my_sac.sarvaonpctim = lin_range(g(1), 0, 1)",
         "node.my_sac.sarva = lin_range(g(2), 0, 0.1)",
     ]);
     let err = problem.set_params(&[0.5, 0.5]).unwrap_err();
-    assert!(err.contains("cannot both be optimised"), "got: {}", err);
+    assert!(err.contains("cannot both be mapped"), "got: {}", err);
 }
 
 /// A parameter name the node does not have is refused when the targets are
@@ -438,7 +439,7 @@ fn test_unknown_parameter_name_fails_resolve() {
         "node.my_sac.sarvaonpctim = lin_range(g(1), 0, 1)",
         "node.my_sac.sarva = lin_range(g(2), 0, 0.1)",
     ]);
-    assert!(problem.resolve().unwrap_err().contains("cannot both be optimised"));
+    assert!(problem.resolve().unwrap_err().contains("cannot both be mapped"));
 
     let mut problem = picnic_problem(vec![
         "node.my_sac.lztwm = lin_range(g(1), 10, 600)",
@@ -528,17 +529,17 @@ fn picnic_config_file(parameters: &str) -> String {
     path.to_string_lossy().into_owned()
 }
 
-/// optimise_from_file reports the derived numerator apart from the mapped
-/// parameters, and stops on a bad address before running any candidate.
+/// optimise_from_file reports the numerator the ratio set apart from the
+/// mapped parameters, and stops on a bad address before running any candidate.
 #[test]
-fn test_optimise_from_file_reports_derived_and_checks_addresses() {
+fn test_optimise_from_file_reports_ratio_numerators_and_checks_addresses() {
     let config = picnic_config_file(
         "node.my_sac.sarvaonpctim = lin_range(g(1), 0.1, 1)\nnode.my_sac.lztwm = lin_range(g(2), 50, 200)");
     let outcome = crate::run::optimise_from_file(&config, None, None, None).unwrap();
     assert_eq!(outcome.parameters.len(), 2);
-    assert_eq!(outcome.derived_parameters.len(), 1);
-    assert_eq!(outcome.derived_parameters[0].0, "node.my_sac.sarva");
-    assert!(outcome.derived_parameters[0].1 > 0.0);
+    assert_eq!(outcome.parameters_from_ratios.len(), 1);
+    assert_eq!(outcome.parameters_from_ratios[0].0, "node.my_sac.sarva");
+    assert!(outcome.parameters_from_ratios[0].1 > 0.0);
 
     let config = picnic_config_file("node.my_sac.lztwn = lin_range(g(1), 10, 600)");
     let err = crate::run::optimise_from_file(&config, None, None, None).err().expect("a bad address is an error");
