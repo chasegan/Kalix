@@ -382,8 +382,9 @@ m.get_outputs(["node.my_dam.volume",
 m.get_outputs([...], missing_ok=True)    # zero-fill anything absent (§7.1)
 ```
 
-- Index: UTC `DatetimeIndex` named `"time"`, `"s"` precision, matching
-  `read_pixie()`. Columns/series named by their output reference string.
+- Index: UTC `DatetimeIndex` named `"date"`, or `"datetime"` when the
+  timestamps carry a time of day (the engine's CSV heading rule), `"s"`
+  precision, matching `read_pixie()`. Columns/series named by their output reference string.
 - Only series listed in `[outputs]` are recorded. Requesting anything else
   raises, with a message pointing at the patch idiom:
   `m.patch({"outputs": {"node.x.dsflow": ""}}).run()`.

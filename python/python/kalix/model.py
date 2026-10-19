@@ -353,7 +353,9 @@ class Model:
         Returns
         -------
         DataFrame
-            Index is a UTC ``DatetimeIndex`` named ``"time"``; columns are
+            Index is a UTC ``DatetimeIndex`` named ``"date"``, or
+            ``"datetime"`` when the timestamps carry a time of day (the
+            engine's CSV heading rule); columns are
             output names with float64 values, in request order (or
             declaration order for ``names=None``). Column names are the
             outputs' *canonical stored* names -- the casing they were

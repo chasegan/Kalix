@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from kalix._native import _convert_file_raw, _read_pixie_raw, _write_pixie_raw
-from kalix._util import PathLike, build_time_indexed_df
+from kalix._util import PathLike, build_time_indexed_df, index_name
 
 __all__ = ["convert", "read_pixie", "write_pixie"]
 
@@ -29,8 +29,9 @@ def read_pixie(path: PathLike) -> pd.DataFrame:
     Returns
     -------
     DataFrame
-        Index is a UTC ``DatetimeIndex`` named ``"time"``; columns are series
-        names with float64 values.
+        Index is a UTC ``DatetimeIndex`` named ``"date"``, or ``"datetime"``
+        when the timestamps carry a time of day (the engine's CSV heading
+        rule); columns are series names with float64 values.
     """
     timestamps_sec, series_dict = _read_pixie_raw(str(path))
     return build_time_indexed_df(timestamps_sec, series_dict)
@@ -93,7 +94,7 @@ def _coerce_to_datetime_index(df: pd.DataFrame) -> pd.DataFrame:
         ) from e
 
     new_index = pd.DatetimeIndex(new_index)
-    new_index.name = "time"
+    new_index.name = index_name(new_index)
 
     df = df.copy(deep=False)
     if column_name is not None:
