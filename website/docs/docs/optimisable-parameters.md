@@ -24,9 +24,11 @@ There are two families of address:
 | `const.<name>` | A model constant from the `[const]` section |
 | `node.<name>.<param>` | A parameter of a named node. Supported by `gr4j`, `gr4jsg`, `sacramento`, `awbm`, `surm` and `routing` nodes |
 
-KalixIDE lists every valid address for the loaded model (via the engine's `get_optimisable_params` command), which is the quickest way to discover what a given model exposes.
+KalixIDE lists the addresses the loaded model offers (via the engine's `get_optimisable_params` command), which is the quickest way to discover what a given model exposes. A few older addresses are accepted without being listed; the Sacramento section below names them.
 
 ### Validation and infeasible candidates
+
+The addresses themselves are checked before the optimisation starts. One that names a missing node, or a parameter the node does not have, stops the run with an error.
 
 Candidate values are applied to the model as-is; the engine re-validates all parameters at the start of every run. A candidate that fails validation — or that produces non-finite flows inside the assessment window — is treated as **infeasible** and scores an objective of infinity, so it cannot win but also teaches the optimiser nothing. Keep your `lin_range`/`log_range` bounds inside each parameter's valid range so evaluations aren't wasted on infeasible candidates.
 
@@ -84,20 +86,20 @@ A node with a glacier (an `ice_params` line) exposes four more. A node without o
 
 ## Sacramento nodes (`type = sacramento`)
 
-All seventeen Sacramento parameters are optimisable. The ranges below are typical search bounds (used in Kalix's regression calibrations); see the [Sacramento node page](sacramento.md) for what each parameter means.
+All seventeen Sacramento parameters are optimisable. Two of them, `lzpk` and `sarva`, are searched as ratios to another parameter. The ranges below are typical search bounds; see the [Sacramento node page](sacramento.md) for what each parameter means.
 
 | Parameter | Common search range |
 | --- | --- |
 | `adimp` | 1e−5 – 0.15, log |
 | `lzfpm` | 1 – 300, log |
 | `lzfsm` | 1 – 350, log |
-| `lzpk` | 0.001 – 0.6, log |
+| `lzpkonlzsk` | 0.001 – 1, log |
 | `lzsk` | 0.001 – 0.9, log |
 | `lztwm` | 10 – 600, log |
 | `pctim` | 1e−5 – 0.11, log |
 | `pfree` | 0.01 – 0.5, log |
 | `rexp` | 1 – 6, log |
-| `sarva` | 1e−5 – 0.11, log |
+| `sarvaonpctim` | 1e−4 – 1, log |
 | `side` | 1e−5 – 0.1, log |
 | `ssout` | 1e−5 – 0.1, log |
 | `uzfwm` | 5 – 155, log |
@@ -105,6 +107,48 @@ All seventeen Sacramento parameters are optimisable. The ranges below are typica
 | `uztwm` | 12 – 180, log |
 | `zperc` | 1 – 600, log |
 | `laguh` | 0 – 3, linear |
+
+### The ratios `lzpkonlzsk` and `sarvaonpctim`
+
+| Parameter | Meaning | Sets |
+| --- | --- | --- |
+| `lzpkonlzsk` | `lzpk / lzsk` | `lzpk` |
+| `sarvaonpctim` | `sarva / pctim` | `sarva` |
+
+The optimiser searches the ratio, and the numerator is derived from it and the denominator (`lzpk = lzpkonlzsk × lzsk`). An upper bound of 1 on `lzpkonlzsk` keeps `lzpk` at or below `lzsk`: the primary store is the slow one by convention, and the engine does not enforce it. For `sarvaonpctim` the bound is likewise a choice: `sarva` may exceed `pctim`.
+
+The denominator is usually searched alongside its ratio. If it is left out of `[parameters]`, it keeps the value in the model file, which must then be non-zero: a ratio to zero is undefined, and every candidate would write a numerator of 0. Such a configuration stops before the optimisation starts, with an error naming the fix.
+
+```ini
+[parameters]
+node.my_sac.lzpkonlzsk = log_range(g(1), 0.001, 1)
+node.my_sac.lzsk = log_range(g(2), 0.001, 0.9)
+node.my_sac.sarvaonpctim = log_range(g(3), 0.0001, 1)
+```
+
+Here `lzsk` is searched and `pctim` stays as the model file has it.
+
+The saved model holds `lzpk` and `sarva` as usual; the ratios are not model properties. The reverse also holds: searching `pctim` without its ratio leaves `sarva` where the model file has it, so the ratio moves. To hold the ratio instead and let `sarva` follow `pctim`, as the Fors calibration tool does, map the ratio to a constant:
+
+```ini
+[parameters]
+node.my_sac.pctim = log_range(g(1), 1E-05, 0.11)
+node.my_sac.sarvaonpctim = 0.5
+```
+
+### Searching `lzpk` and `sarva` directly
+
+The ratios are what KalixIDE offers, and with the bounds above they keep `lzpk` at or below `lzsk` and `sarva` at or below `pctim`.
+
+`lzpk` and `sarva` are still accepted as addresses, so a configuration written before the ratios existed runs unchanged. KalixIDE no longer lists them. To search one independently of its denominator, for example to let `sarva` exceed `pctim`, write its line by hand in place of the ratio's:
+
+```ini
+[parameters]
+node.my_sac.lzpk = log_range(g(1), 0.001, 0.6)
+node.my_sac.sarva = log_range(g(3), 1E-05, 0.11)
+```
+
+The bounds shown are typical ones. A parameter cannot be mapped together with its own ratio.
 
 Sacramento nodes whose rainfall input is a linear combination of stations also expose the [rainfall input parameters](#rainfall-input-parameters-rf_bias-rf_di) below.
 

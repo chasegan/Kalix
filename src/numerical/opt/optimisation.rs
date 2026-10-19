@@ -70,11 +70,32 @@ pub struct OptimisationProblem {
 
     /// Parameter targets resolved once (first set_params) from their string
     /// addresses to direct indices - no per-evaluation string splitting,
-    /// lowercasing, or node lookups. One entry per config mapping, in order.
-    resolved_targets: Option<Vec<ResolvedTarget>>,
+    /// lowercasing, or node lookups.
+    resolved_targets: Option<ResolvedTargets>,
 
     /// Simulated-series index per comparison, resolved on first evaluation.
     sim_series_indices: Option<Vec<usize>>,
+}
+
+/// What target resolution produces, kept together so no part goes stale.
+struct ResolvedTargets {
+    /// One entry per config mapping, in order.
+    targets: Vec<ResolvedTarget>,
+    /// Mapping indices in the order to apply them: ratios last, so each is
+    /// computed from the candidate's own denominator.
+    order: Vec<usize>,
+    /// The numerators the mapped ratios set, for reporting.
+    ratios: Vec<RatioParam>,
+}
+
+/// A mapped ratio parameter (OptimisableComponent::ratio_of).
+struct RatioParam {
+    /// Its index in the config's mappings.
+    mapping_idx: usize,
+    node_idx: usize,
+    /// The numerator it sets, and its address ("node.name.param").
+    numerator: &'static str,
+    numerator_address: String,
 }
 
 /// A parameter target address, pre-resolved for the evaluation hot path.
@@ -125,20 +146,23 @@ impl OptimisationProblem {
     /// Resolve every mapping's target address ("node.name.param" or
     /// "const.constant") to a direct index. Runs once per problem; the per-
     /// evaluation path then applies values by index with no string work.
-    fn resolve_targets(&mut self) -> Result<Vec<ResolvedTarget>, String> {
-        let mut resolved = Vec::with_capacity(self.config.mappings.len());
+    fn resolve_targets(&mut self) -> Result<ResolvedTargets, String> {
+        let n = self.config.mappings.len();
+
+        // Resolve every address first: node names are looked up case-
+        // insensitively, so the checks below compare resolved targets, not
+        // the strings as the modeller spelled them.
+        let mut targets = Vec::with_capacity(n);
         for mapping in &self.config.mappings {
             let target = &mapping.target;
             let parts: Vec<&str> = target.split('.').collect();
-
             if parts.len() >= 2 && parts[0] == "const" {
                 // Same registration path set_param used, so behaviour
                 // (including creating a not-yet-seen constant) is unchanged.
                 let idx = self.model.data_cache.constants.add_if_needed_and_get_idx(target);
-                resolved.push(ResolvedTarget::Constant(idx));
+                targets.push(ResolvedTarget::Constant(idx));
             } else if parts.len() == 3 && parts[0] == "node" {
                 let node_name = parts[1];
-                let param_name = parts[2];
                 let node_idx = self.model.get_node_idx(node_name)
                     .ok_or_else(|| format!("Node not found: {}", node_name))?;
                 let node = &self.model.nodes[node_idx];
@@ -148,29 +172,107 @@ impl OptimisationProblem {
                         node_name, node.get_type_as_string()
                     ));
                 }
-                resolved.push(ResolvedTarget::NodeParam {
+                targets.push(ResolvedTarget::NodeParam {
                     node_idx,
-                    param_name: param_name.to_string(),
+                    param_name: parts[2].to_string(),
                 });
             } else {
                 return Err(format!("Invalid target address: '{}'. Expected 'node.name.param' or 'const.constant_name'", target));
             }
         }
-        Ok(resolved)
+        // The mapping index of the node parameter `name` on node `node_idx`.
+        let mapped = |node_idx: usize, name: &str| -> Option<usize> {
+            targets.iter().position(|t| matches!(t,
+                ResolvedTarget::NodeParam { node_idx: n, param_name } if *n == node_idx && param_name == name))
+        };
+
+        let mut order = Vec::with_capacity(n);
+        let mut ratios: Vec<RatioParam> = Vec::new();
+        let mut ratio_order = Vec::new();
+        for (i, resolved) in targets.iter().enumerate() {
+            let ResolvedTarget::NodeParam { node_idx, param_name } = resolved else {
+                order.push(i);
+                continue;
+            };
+            let target = &self.config.mappings[i].target;
+            let node_name = target.split('.').nth(1).unwrap();
+            let component = self.model.nodes[*node_idx].optimisable().unwrap();
+            // get_param reads every name set_param can set (see the trait),
+            // so a name that does not read back is refused.
+            match component.ratio_of(param_name) {
+                Some(r) => {
+                    let numerator_address = format!("node.{}.{}", node_name, r.numerator);
+                    let denominator_address = format!("node.{}.{}", node_name, r.denominator);
+                    // A ratio is undefined when the model holds a zero
+                    // denominator, and mapped alone it would search nothing.
+                    // A mapped denominator is written before the ratio on
+                    // every candidate, so the model's value does not matter
+                    // then and is not read.
+                    if mapped(*node_idx, r.denominator).is_none() {
+                        component.get_param(param_name).map_err(|e| format!(
+                            "Cannot optimise '{}': {}. Map '{}' as well, map '{}' directly, \
+                             or give '{}' a non-zero value in the model.",
+                            target, e, denominator_address, numerator_address, denominator_address
+                        ))?;
+                    }
+                    ratio_order.push(i);
+                    ratios.push(RatioParam {
+                        mapping_idx: i,
+                        node_idx: *node_idx,
+                        numerator: r.numerator,
+                        numerator_address,
+                    });
+                }
+                None => {
+                    component.get_param(param_name)
+                        .map_err(|e| format!("Cannot optimise '{}': {}", target, e))?;
+                    order.push(i);
+                }
+            }
+        }
+
+        // A ratio cannot be mapped with its numerator, nor with another
+        // ratio that sets the same numerator.
+        for r in &ratios {
+            let clash = mapped(r.node_idx, r.numerator)
+                .or_else(|| ratios.iter()
+                    .find(|o| o.node_idx == r.node_idx && o.numerator == r.numerator && o.mapping_idx != r.mapping_idx)
+                    .map(|o| o.mapping_idx));
+            if let Some(other) = clash {
+                let target = &self.config.mappings[r.mapping_idx].target;
+                return Err(format!(
+                    "'{}' and '{}' cannot both be mapped: '{}' sets '{}'",
+                    target, self.config.mappings[other].target, target, r.numerator_address
+                ));
+            }
+        }
+
+        order.extend(ratio_order);
+        Ok(ResolvedTargets { targets, order, ratios })
+    }
+
+    /// Resolve the parameter targets now rather than on the first candidate.
+    /// Call before optimising: an optimiser scores a failed candidate as
+    /// infinity and carries on, so a bad address would otherwise fail every
+    /// candidate instead of stopping the run.
+    pub fn resolve(&mut self) -> Result<(), String> {
+        if self.resolved_targets.is_none() {
+            self.resolved_targets = Some(self.resolve_targets()?);
+        }
+        Ok(())
     }
 
     /// Apply parameter values to the model via the pre-resolved targets.
     fn apply_params_to_model(&mut self, genes: &[f64]) -> Result<(), String> {
-        if self.resolved_targets.is_none() {
-            self.resolved_targets = Some(self.resolve_targets()?);
-        }
-        let targets = self.resolved_targets.as_ref().unwrap();
+        self.resolve()?;
+        let resolved = self.resolved_targets.as_ref().unwrap();
 
         // Physical values in mapping order (no target strings on this path)
         let values = self.config.evaluate_values(genes);
 
-        for (target, &value) in targets.iter().zip(values.iter()) {
-            match target {
+        for &i in &resolved.order {
+            let value = values[i];
+            match &resolved.targets[i] {
                 ResolvedTarget::Constant(idx) => {
                     self.model.data_cache.constants.set_value_by_idx(*idx, value);
                 }
@@ -183,6 +285,25 @@ impl OptimisationProblem {
             }
         }
         Ok(())
+    }
+
+    /// The numerators the mapped ratios set, as (address, value) read from
+    /// the model now: e.g. Sacramento's sarva when sarvaonpctim is mapped.
+    /// These are not [parameters] targets. Empty until the targets have been
+    /// resolved.
+    pub fn params_from_ratios(&self) -> Vec<(String, f64)> {
+        let Some(resolved) = &self.resolved_targets else {
+            return Vec::new();
+        };
+        resolved.ratios.iter()
+            .map(|r| {
+                let value = self.model.nodes[r.node_idx].optimisable()
+                    .expect("checked during target resolution")
+                    .get_param(r.numerator)
+                    .expect("a numerator is a plain parameter and always reads back");
+                (r.numerator_address.clone(), value)
+            })
+            .collect()
     }
 
     /// Align observed and simulated timeseries temporally.
@@ -337,8 +458,9 @@ impl Optimisable for OptimisationProblem {
             config: self.config.clone(),
             comparisons: self.comparisons.clone(),
             expression: self.expression.clone(),
-            // Resolved indices stay valid in the clone (same node order,
-            // same constants table, same series layout).
+            // Resolved lazily on the worker's first candidate: the clone has
+            // the same node order and constants table, so it resolves the
+            // same way.
             resolved_targets: None,
             sim_series_indices: self.sim_series_indices.clone(),
         })

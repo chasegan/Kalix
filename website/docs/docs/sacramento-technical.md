@@ -173,7 +173,7 @@ With SIDE > 0 the engine runs the lower-zone free water stores at (1 + SIDE) tim
 | LZSK | Lower zone supplemental depletion | 0.01 – 0.25 | day⁻¹ |
 | LZPK | Lower zone primary depletion | 0.0001 – 0.025 | day⁻¹ |
 
-LZSK > LZPK by definition: supplemental baseflow always drains faster than primary baseflow.
+LZSK > LZPK by convention: the supplemental store is the one that drains faster. The engine does not enforce the ordering; calibrating `lzpkonlzsk` with an upper bound of 1 keeps it (see [optimisable parameters](optimisable-parameters.md#the-ratios-lzpkonlzsk-and-sarvaonpctim)).
 
 ### Percolation
 
@@ -249,7 +249,7 @@ Things to keep in mind when using them:
 
 - **Sensitivity ordering.** UZTWM, LZTWM, UZK, LZSK, LZPK, ZPERC, and REXP are typically the most sensitive parameters; SARVA, SIDE, SSOUT, and PFREE are usually low-sensitivity.
 
-- **Constraint between LZSK and LZPK.** Always ensure LZSK > LZPK during calibration; this is a structural requirement, not a recommendation.
+- **Constraint between LZSK and LZPK.** Keep LZPK at or below LZSK during calibration, so that the two stores keep their roles. Searching the ratio `lzpkonlzsk` with an upper bound of 1 does this for you.
 
 - **Constraint between LZFSM and LZFPM.** No fixed ordering, but extreme differences between the two are physically unusual.
 

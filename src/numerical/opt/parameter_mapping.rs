@@ -1,16 +1,16 @@
-/// Gene-based parameter mapping system for optimisation.
-///
-/// Each line in the INI `[parameters]` section is a `target = expression` mapping where
-/// `expression` is a full Kalix expression that may call `g(i)` (gene lookup), `lin_range`,
-/// `log_range`, or any of the built-in math functions. Expressions are parsed by the
-/// Kalix expression engine (`crate::functions`) and evaluated against a [`Gene`] that
-/// the optimiser populates each iteration.
-///
-/// The dimensionality of the optimisation problem is determined by a **discovery pass**:
-/// every expression is evaluated once with the gene in [`GeneMode::Discovery`], during
-/// which each call to `g(i)` registers `i` in the gene's map. After the pass, the gene's
-/// dimension count equals the number of unique indices the modeller referenced — sparse
-/// indices like `g(1)` and `g(3)` (skipping `g(2)`) produce a 2-D problem, not a 3-D one.
+//! Gene-based parameter mapping system for optimisation.
+//!
+//! Each line in the INI `[parameters]` section is a `target = expression` mapping where
+//! `expression` is a full Kalix expression that may call `g(i)` (gene lookup), `lin_range`,
+//! `log_range`, or any of the built-in math functions. Expressions are parsed by the
+//! Kalix expression engine (`crate::functions`) and evaluated against a [`Gene`] that
+//! the optimiser populates each iteration.
+//!
+//! The dimensionality of the optimisation problem is determined by a **discovery pass**:
+//! every expression is evaluated once with the gene in [`GeneMode::Discovery`], during
+//! which each call to `g(i)` registers `i` in the gene's map. After the pass, the gene's
+//! dimension count equals the number of unique indices the modeller referenced — sparse
+//! indices like `g(1)` and `g(3)` (skipping `g(2)`) produce a 2-D problem, not a 3-D one.
 
 use std::collections::HashMap;
 use std::sync::Arc;
