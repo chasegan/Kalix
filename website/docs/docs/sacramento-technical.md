@@ -10,7 +10,7 @@ This page is the technical reference for the Sacramento Soil Moisture Accounting
 
 The Sacramento Soil Moisture Accounting model (SAC-SMA, or simply Sacramento) is a lumped, conceptual, continuous rainfall-runoff model developed by Burnash, Ferral, and McGuire at the US National Weather Service River Forecast Center in Sacramento, California (Burnash et al., 1973; Burnash, 1995). It is the operational rainfall-runoff model of the US NWS and one of the most widely used and studied models in operational hydrology.
 
-Sacramento is more complex than parsimonious models like GR4J. It represents soil moisture through five conceptual stores split across two zones, plus impervious-area runoff and channel-loss components. The added complexity provides flexibility to fit a wide range of hydrological regimes, but at the cost of increased parameter identifiability challenges during calibration.
+Sacramento is more complex than parsimonious models like GR4J. It represents soil moisture through five conceptual stores split across two zones, plus impervious-area runoff and loss terms. The added complexity provides flexibility to fit a wide range of hydrological regimes, but at the cost of increased parameter identifiability challenges during calibration.
 
 ## Conceptual structure
 
@@ -37,15 +37,17 @@ The runoff-generation processes are:
 
 - **Supplemental baseflow** from LZFS at depletion rate LZSK (fast).
 
-- **Channel losses** SIDE (subsurface side losses) and SSOUT (subsurface out).
+- **Losses** SIDE (the side loss: baseflow lost to groundwater before it reaches the channel) and SSOUT (taken from channel flow).
 
 - **Riparian ET** from the SARVA area.
 
-Generated runoff is routed through a unit hydrograph (parameterised in Kalix as LagUH — see [LagUH](sacramento.md#laguh) and the implementation notes below) to produce the final streamflow.
+Surface runoff, interflow and impervious-area runoff are routed through a unit hydrograph (parameterised in Kalix as LagUH — see [LagUH](sacramento.md#laguh) and the implementation notes below). Baseflow is added unrouted to give the final streamflow.
 
 ## Mathematical formulation
 
 This section gives the standard SAC-SMA equations. State variables are written in lower case (uztw, uzfw, lztw, lzfp, lzfs) and parameter capacities in upper case (UZTWM, UZFWM, etc.) for clarity, even though Kalix uses lower case for parameter names in the configuration file.
+
+Kalix runs the two lower-zone free water stores at enlarged capacities LZFPM′ = LZFPM · (1 + SIDE) and LZFSM′ = LZFSM · (1 + SIDE); the extra room holds the side loss, water that leaves as groundwater without reaching the channel. The contents of these effective stores are written lzfp′ and lzfs′ below. The stores the node reports are lzfp = lzfp′ / (1 + SIDE) and lzfs = lzfs′ / (1 + SIDE), which range from 0 to LZFPM and LZFSM. With SIDE = 0 the two forms are the same.
 
 ### Tension-water filling order
 
@@ -97,31 +99,33 @@ DEMAND = PBASE · [ 1 + ZPERC · (LZdef / LZmax)^REXP ]
 
 where:
 
-- PBASE = LZFPM · LZPK + LZFSM · LZSK
+- PBASE = LZFPM′ · LZPK + LZFSM′ · LZSK
 
-- LZdef = (LZTWM − lztw) + (LZFPM − lzfp) + (LZFSM − lzfs)
+- LZdef = (LZTWM − lztw) + (LZFPM′ − lzfp′) + (LZFSM′ − lzfs′)
 
-- LZmax = LZTWM + LZFPM + LZFSM
+- LZmax = LZTWM + LZFPM′ + LZFSM′
 
-Actual percolation is the lesser of demand and available supply:
+Actual percolation is the least of demand, available supply and the room left in the lower zone:
 
 ```jsx
-PERC = min( DEMAND · uzfw / UZFWM,  uzfw )
+PERC = min( DEMAND · uzfw / UZFWM,  uzfw,  LZdef )
 ```
 
 A fraction PFREE goes directly to the lower-zone free-water stores; the remainder (1 − PFREE) goes to LZTW first, with overflow distributed to LZFP and LZFS.
 
 ### Lower-zone baseflow
 
-- QBp = lzfp · LZPK (primary, slow)
+- QBp = lzfp′ · LZPK (primary, slow)
 
-- QBs = lzfs · LZSK (supplemental, fast)
+- QBs = lzfs′ · LZSK (supplemental, fast)
 
 - QB = QBp + QBs
 
-### Channel losses
+Of QB, the fraction 1 / (1 + SIDE) reaches the channel. The rest, SIDE / (1 + SIDE), is the side loss. In terms of the reported stores, the baseflow that reaches the channel is lzfp · LZPK + lzfs · LZSK in the model's equations; the engine drains the stores in sub-steps, so the recorded series reproduce this only approximately.
 
-SIDE represents losses from the channel system; SSOUT represents subsurface flow that bypasses the gauge. These reduce the effective baseflow contribution to streamflow.
+### Losses
+
+SIDE is the ratio of baseflow that leaves the catchment as groundwater to baseflow that reaches the channel; this side loss is taken before the channel (see Lower-zone baseflow). SSOUT is a fixed depth in mm taken from channel flow each step, or all of the flow if there is less than that. Riparian ET, up to SARVA · E, is then taken from what remains. All three reduce the streamflow at the gauge.
 
 ### Impervious-area runoff
 
@@ -129,13 +133,17 @@ SIDE represents losses from the channel system; SSOUT represents subsurface flow
 
 - Variable impervious: ROvar = P · ADIMP · (uztw / UZTWM)
 
-### Total channel inflow before routing
+### Routing and channel flow
+
+Surface runoff, interflow and baseflow are generated on the pervious area, so each is scaled by the pervious fraction 1 − PCTIM − ADIMP. Surface runoff, interflow and impervious-area runoff are routed through the unit hydrograph (UH, see Implementation notes); baseflow is not:
 
 ```jsx
-Qch = ROsurf + QI + QB + ROimp + ROvar − channel losses
+Qquick = UH[ (1 − PCTIM − ADIMP) · (ROsurf + QI) + ROimp + ROvar ]
+Qbase  = (1 − PCTIM − ADIMP) · QB / (1 + SIDE)
+Qch    = max( 0,  Qquick + Qbase − SSOUT )
 ```
 
-In Kalix, Qch is then routed through the unit hydrograph (see Implementation notes) to produce `runoff_depth` [mm], converted to `runoff_volume` [ML] using the catchment area.
+Riparian ET, up to SARVA · E, is then taken from Qch. What remains is `runoff_depth` [mm], converted to `runoff_volume` [ML] using the catchment area.
 
 ## Parameters
 
@@ -154,6 +162,8 @@ params = adimp, lzfpm, lzfsm, lzpk, lzsk, lztwm, pctim, pfree, rexp, sarva, side
 | LZTWM | Lower zone tension water max | 1 – 500 | mm |
 | LZFSM | Lower zone supplemental free water max | 1 – 1000 | mm |
 | LZFPM | Lower zone primary free water max | 1 – 1000 | mm |
+
+With SIDE > 0 the engine runs the lower-zone free water stores at (1 + SIDE) times LZFPM and LZFSM but reports them divided by the same factor, so `lzfp` and `lzfs` fill to LZFPM and LZFSM; see Mathematical formulation.
 
 ### Depletion rates
 
@@ -185,8 +195,8 @@ LZSK > LZPK by definition: supplemental baseflow always drains faster than prima
 | Parameter | Description | Typical bounds | Units |
 | --- | --- | --- | --- |
 | SARVA | Riparian-vegetation ET fraction | 0 – 0.1 | — |
-| SIDE | Side-channel loss fraction | 0 – 0.5 | — |
-| SSOUT | Subsurface outflow fraction | 0 – 0.1 | — |
+| SIDE | Ratio of baseflow lost to groundwater to baseflow reaching the channel | 0 – 0.5 | — |
+| SSOUT | Depth taken from channel flow each step | 0 – 0.1 | mm |
 
 ### Routing
 
@@ -206,6 +216,28 @@ The Sacramento node exposes the internal flux components separately from total r
 | floin | Interflow (from UZFW depletion) |
 | flobf | Baseflow (sum of primary and supplemental) |
 | roimp | Impervious-area runoff (fixed plus variable) |
+
+## Soil moisture store outputs
+
+The node reports the contents of each of the five soil moisture stores at the end of every step:
+
+| Output | Store | Capacity |
+| --- | --- | --- |
+| uztw | Upper zone tension water | UZTWM |
+| uzfw | Upper zone free water | UZFWM |
+| lztw | Lower zone tension water | LZTWM |
+| lzfp | Lower zone primary free water | LZFPM |
+| lzfs | Lower zone supplemental free water | LZFSM |
+
+Things to keep in mind when using them:
+
+- **Depths over the pervious area.** Each output is a depth in mm over the pervious part of the catchment, which is the fraction 1 − PCTIM − ADIMP. Multiply by that fraction for a depth over the whole catchment, and by the catchment area for a volume in ML.
+
+- **Lower-zone free water has the side loss divided out.** `lzfp` and `lzfs` are the effective stores defined under Mathematical formulation divided by (1 + SIDE), so they fill to LZFPM and LZFSM. A water balance over the five reported stores does not close on its own when SIDE > 0: the side loss is removed from `lzfp` and `lzfs` as water enters them, and returned when free water resupplies lower-zone tension water. To close a balance, use the effective stores: the change in uztw + uzfw + lztw + (1 + SIDE) · (lzfp + lzfs), scaled by the pervious fraction and the catchment area, accounts for `flosf`, `floin` and `flobf` exactly, where `flobf` is baseflow before the side loss.
+
+- **The impervious areas are not included.** The fixed impervious area (PCTIM) holds no water. The variable impervious area (ADIMP) holds tension water of its own, which is not reported.
+
+- **Stores start empty.** All stores are empty at the start of the simulation, so the early part of each series reflects the warm-up (see Calibration guidance).
 
 ## Calibration guidance
 
