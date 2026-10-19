@@ -446,6 +446,70 @@ fn test_unknown_parameter_name_fails_resolve() {
     problem.resolve().unwrap();
 }
 
+/// Set a parameter on the picnic model directly, as if the model file held it.
+fn picnic_set(problem: &mut OptimisationProblem, name: &str, value: f64) {
+    let idx = problem.model.get_node_idx("my_sac").unwrap();
+    problem.model.nodes[idx].optimisable_mut().unwrap().set_param(name, value).unwrap();
+}
+
+/// A ratio mapped alone against a zero denominator in the model file would
+/// search nothing: every candidate writes a numerator of 0. The problem
+/// refuses it when the targets are resolved, naming both ways out.
+#[test]
+fn test_ratio_alone_against_zero_denominator_fails_resolve() {
+    for (ratio, from, written) in [("sarvaonpctim", "pctim", "sarva"), ("lzpkonlzsk", "lzsk", "lzpk")] {
+        let mut problem = picnic_problem(vec![
+            &format!("node.my_sac.{} = lin_range(g(1), 0, 1)", ratio),
+            "node.my_sac.lztwm = lin_range(g(2), 10, 600)",
+        ]);
+        picnic_set(&mut problem, from, 0.0);
+        let err = problem.resolve().unwrap_err();
+        for expected in [
+            &format!("Cannot optimise 'node.my_sac.{}'", ratio),
+            &format!("{} is 0", from),
+            &format!("Map 'node.my_sac.{}' as well", from),
+            &format!("map 'node.my_sac.{}' directly", written),
+        ] {
+            assert!(err.contains(expected.as_str()), "{}: expected {:?} in {:?}", ratio, expected, err);
+        }
+    }
+}
+
+/// With the denominator mapped too, a zero in the model file is overwritten
+/// before the ratio is applied, so it is not a reason to refuse the run. A
+/// candidate at exactly zero gives a numerator of 0 and is applied without
+/// error; the denominator is left where the candidate put it.
+#[test]
+fn test_ratio_with_mapped_denominator_resolves_whatever_the_file_holds() {
+    let mut problem = picnic_problem(vec![
+        "node.my_sac.sarvaonpctim = lin_range(g(1), 0, 1)",
+        "node.my_sac.pctim = lin_range(g(2), 0, 0.1)",
+    ]);
+    picnic_set(&mut problem, "pctim", 0.0);
+    problem.resolve().unwrap();
+
+    problem.set_params(&[0.5, 0.0]).unwrap();
+    let sac = &picnic_sacramento(&problem).sacramento_model;
+    assert_eq!(sac.pctim, 0.0);
+    assert_eq!(sac.sarva, 0.0);
+
+    problem.set_params(&[0.5, 0.4]).unwrap();
+    let sac = &picnic_sacramento(&problem).sacramento_model;
+    assert!((sac.pctim - 0.04).abs() < 1e-12);
+    assert!((sac.sarva - 0.02).abs() < 1e-12);
+
+    // A constant expression counts as mapped: the Fors way of holding the ratio.
+    let mut problem = picnic_problem(vec![
+        "node.my_sac.sarvaonpctim = 0.5",
+        "node.my_sac.pctim = lin_range(g(1), 0, 0.1)",
+    ]);
+    picnic_set(&mut problem, "pctim", 0.0);
+    problem.resolve().unwrap();
+    problem.set_params(&[0.4]).unwrap();
+    let sac = &picnic_sacramento(&problem).sacramento_model;
+    assert!((sac.sarva - 0.02).abs() < 1e-12);
+}
+
 /// Write an optimisation config for the picnic model to a temp file.
 fn picnic_config_file(parameters: &str) -> String {
     let models = std::env::current_dir().unwrap().join("src/tests/example_models/8");

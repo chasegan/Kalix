@@ -94,9 +94,6 @@ struct DerivedParam {
     /// The parameter written, and its address ("node.name.param").
     written: &'static str,
     written_address: String,
-    /// The parameter it is written from, and its address.
-    from: &'static str,
-    from_address: String,
     /// The mapping target that writes it.
     target: String,
 }
@@ -179,21 +176,35 @@ impl OptimisationProblem {
                 };
                 // get_param reads every name set_param can set (see the
                 // trait), so a name that does not read back is refused.
-                component.get_param(param_name)
-                    .map_err(|e| format!("Cannot optimise '{}': {}", target, e))?;
                 match component.derives(param_name) {
                     Some(d) => {
+                        let written_address = format!("node.{}.{}", node_name, d.writes);
+                        let from_address = format!("node.{}.{}", node_name, d.from);
+                        // A ratio is undefined when the model holds a zero
+                        // denominator, and mapped alone it would search
+                        // nothing. A mapped denominator is written before the
+                        // ratio on every candidate, so the model's value does
+                        // not matter then and is not read.
+                        let from_mapped = self.config.mappings.iter().any(|m| m.target == from_address);
+                        if !from_mapped {
+                            component.get_param(param_name).map_err(|e| format!(
+                                "Cannot optimise '{}': {}. Map '{}' as well, or map '{}' directly.",
+                                target, e, from_address, written_address
+                            ))?;
+                        }
                         derived_order.push(i);
                         derived.push(DerivedParam {
                             node_idx,
                             written: d.writes,
-                            written_address: format!("node.{}.{}", node_name, d.writes),
-                            from: d.from,
-                            from_address: format!("node.{}.{}", node_name, d.from),
+                            written_address,
                             target: target.clone(),
                         });
                     }
-                    None => order.push(i),
+                    None => {
+                        component.get_param(param_name)
+                            .map_err(|e| format!("Cannot optimise '{}': {}", target, e))?;
+                        order.push(i);
+                    }
                 }
                 targets.push(ResolvedTarget::NodeParam {
                     node_idx,
