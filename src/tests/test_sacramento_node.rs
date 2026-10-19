@@ -170,8 +170,8 @@ fn test_sacramento_node_store_outputs() {
     }
 
     //Each store stays within its capacity. The lower zone free water stores
-    //include the side component.
-    let capacities = [uztwm, uzfwm, lztwm, lzfpm * (1.0 + side), lzfsm * (1.0 + side)];
+    //have the side component divided out, so lzfpm and lzfsm bound them.
+    let capacities = [uztwm, uzfwm, lztwm, lzfpm, lzfsm];
     for (j, store) in stores.iter().enumerate() {
         let max = recorded[j].iter().cloned().fold(f64::MIN, f64::max);
         let min = recorded[j].iter().cloned().fold(f64::MAX, f64::min);

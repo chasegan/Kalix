@@ -116,9 +116,9 @@ fn test_uz_free_water_evap_independent_of_history() {
     assert_eq!(runoff_a, runoff_b);
 }
 
-/// Builds a Sacramento model with every area fraction and the side loss
-/// switched on, for testing the store outputs.
-fn make_store_test_model() -> Sacramento {
+/// Builds a Sacramento model with every area fraction switched on and the
+/// given side loss, for testing the store outputs.
+fn make_store_test_model(side: f64) -> Sacramento {
     let mut s = Sacramento::new();
     s.set_params(
         0.1,   // adimp
@@ -131,7 +131,7 @@ fn make_store_test_model() -> Sacramento {
         0.11,  // pfree
         1.5,   // rexp
         0.0,   // sarva
-        0.2,   // side
+        side,
         0.0,   // ssout
         25.0,  // uzfwm
         0.2,   // uzk
@@ -147,7 +147,7 @@ fn make_store_test_model() -> Sacramento {
 /// reaches no other store.
 #[test]
 fn test_stores_after_rain_held_in_tension_water() {
-    let mut s = make_store_test_model();
+    let mut s = make_store_test_model(0.2);
     assert_eq!(s.get_uztw() + s.get_uzfw() + s.get_lztw() + s.get_lzfp() + s.get_lzfs(), 0.0,
         "stores start empty");
 
@@ -160,36 +160,35 @@ fn test_stores_after_rain_held_in_tension_water() {
     assert_eq!(s.get_lzfs(), 0.0);
 }
 
-/// The five stores are depths over the pervious area. With no evaporation, the
-/// only ways water leaves them are surface flow, interflow and baseflow, which
-/// the model reports scaled by the pervious fraction, so every step must satisfy
+/// Deterministic rain: dry spells, light falls, and storms big enough to
+/// fill the upper zone and generate surface runoff.
+fn store_test_rain_at(i: usize) -> f64 {
+    match i % 23 {
+        0 => 85.0,
+        1 => 40.0,
+        5 | 6 => 12.0,
+        11 => 3.0,
+        17 => 150.0,
+        _ => 0.0,
+    }
+}
+
+/// The five stores are depths over the pervious area. With no evaporation and
+/// no side loss, the only ways water leaves them are surface flow, interflow
+/// and baseflow, which the model reports scaled by the pervious fraction, so
+/// every step must satisfy
 ///   pervious fraction * (rain - change in the five stores) = flosf + floin + flobf.
-/// This holds only if the lower zone free water stores include the side
-/// component, because flobf is baseflow before the side loss.
 #[test]
 fn test_stores_close_pervious_water_balance_without_evap() {
-    let mut s = make_store_test_model();
+    let mut s = make_store_test_model(0.0);
     let pervious_fraction = 1.0 - s.pctim - s.adimp;
     let total = |s: &Sacramento| s.get_uztw() + s.get_uzfw() + s.get_lztw() + s.get_lzfp() + s.get_lzfs();
-
-    // Deterministic rain: dry spells, light falls, and storms big enough to
-    // fill the upper zone and generate surface runoff.
-    let rain_at = |i: usize| -> f64 {
-        match i % 23 {
-            0 => 85.0,
-            1 => 40.0,
-            5 | 6 => 12.0,
-            11 => 3.0,
-            17 => 150.0,
-            _ => 0.0,
-        }
-    };
 
     let mut previous = total(&s);
     let mut saw_surface_runoff = false;
     let mut saw_baseflow = false;
     for i in 0..2000 {
-        let rain = rain_at(i);
+        let rain = store_test_rain_at(i);
         s.run_step(rain, 0.0);
         let current = total(&s);
         let generated = s.flosf + s.floin + s.flobf;
@@ -200,4 +199,36 @@ fn test_stores_close_pervious_water_balance_without_evap() {
         previous = current;
     }
     assert!(saw_surface_runoff && saw_baseflow, "rain pattern should exercise surface runoff and baseflow");
+}
+
+/// With a side loss, lzfp and lzfs are the stores with the side component
+/// divided out, as Fors records them. They fill to lzfpm and lzfsm, not to
+/// (1 + side) times those. In this form the water lost to groundwater never
+/// sits in a store: it leaves the balance when it percolates, so what leaves
+/// the stores is at least what reaches the channel. The gap is the side loss,
+/// which is zero on a step with no percolation into free water.
+#[test]
+fn test_stores_with_side_loss_stay_within_capacity() {
+    let mut s = make_store_test_model(0.2);
+    let pervious_fraction = 1.0 - s.pctim - s.adimp;
+    let total = |s: &Sacramento| s.get_uztw() + s.get_uzfw() + s.get_lztw() + s.get_lzfp() + s.get_lzfs();
+
+    let mut previous = total(&s);
+    let mut max_lzfp = 0.0f64;
+    let mut max_lzfs = 0.0f64;
+    for i in 0..2000 {
+        let rain = store_test_rain_at(i);
+        s.run_step(rain, 0.0);
+        let current = total(&s);
+        let channel = s.flosf + s.floin + s.flobf / (1.0 + s.side);
+        let side_loss = pervious_fraction * (rain - (current - previous)) - channel;
+        assert!(side_loss > -1e-9, "step {}: more water reached the channel than left the stores, by {}", i, -side_loss);
+        max_lzfp = max_lzfp.max(s.get_lzfp());
+        max_lzfs = max_lzfs.max(s.get_lzfs());
+        previous = current;
+    }
+    // The primary store fills under this rain, so its bound is tested where it
+    // binds. The supplemental store drains too fast to fill.
+    assert!(max_lzfp > 0.9 * s.lzfpm && max_lzfp <= s.lzfpm + 1e-9, "lzfp peaked at {} against lzfpm {}", max_lzfp, s.lzfpm);
+    assert!(max_lzfs > 0.0 && max_lzfs <= s.lzfsm + 1e-9, "lzfs peaked at {} against lzfsm {}", max_lzfs, s.lzfsm);
 }

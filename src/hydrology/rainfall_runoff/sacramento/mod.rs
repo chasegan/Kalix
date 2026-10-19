@@ -575,17 +575,17 @@ impl Sacramento {
         self.lztwc
     }
 
-    /// Returns the lower zone primary free water [mm], including the `side`
-    /// component: the form that closes the pervious area mass balance.
+    /// Returns the lower zone primary free water [mm], with the `side`
+    /// component divided out, so it fills to `lzfpm`. Fors records the same.
     #[inline]
     pub fn get_lzfp(&self) -> f64 {
-        self.alzfpc
+        self.lzfpc
     }
 
-    /// Returns the lower zone supplemental free water [mm], including the `side`
-    /// component: the form that closes the pervious area mass balance.
+    /// Returns the lower zone supplemental free water [mm], with the `side`
+    /// component divided out, so it fills to `lzfsm`. Fors records the same.
     #[inline]
     pub fn get_lzfs(&self) -> f64 {
-        self.alzfsc
+        self.lzfsc
     }
 }
