@@ -232,8 +232,11 @@ fn _simulate_from_file(
 /// other Python threads make progress (optimisation is long and multi-threaded).
 ///
 /// Returns a dict with: `best_objective`, `n_evaluations`, `success`,
-/// `message`, `parameters` ({target: physical_value}), and
-/// `optimised_model_ini` (the optimised model serialised back to an INI string).
+/// `message`, `parameters` ({target: physical_value}), `parameters_from_ratios`
+/// ({address: value} for the parameters that mapped ratios set, such as a
+/// Sacramento node's `sarva` from `sarvaonpctim`; empty when no ratio is
+/// mapped), and `optimised_model_ini` (the optimised model serialised back to
+/// an INI string).
 ///
 /// `progress`, if given, must be a Python callable. It is invoked once per
 /// generation with a dict of `{n_evaluations, best_objective, elapsed_seconds}`.
@@ -279,6 +282,10 @@ fn _optimise_from_file<'py>(
     for (target, value) in &outcome.parameters {
         params.set_item(target, value)?;
     }
+    let from_ratios = PyDict::new_bound(py);
+    for (address, value) in &outcome.parameters_from_ratios {
+        from_ratios.set_item(address, value)?;
+    }
 
     let result = PyDict::new_bound(py);
     result.set_item("best_objective", outcome.best_objective)?;
@@ -286,6 +293,7 @@ fn _optimise_from_file<'py>(
     result.set_item("success", outcome.success)?;
     result.set_item("message", outcome.message)?;
     result.set_item("parameters", params)?;
+    result.set_item("parameters_from_ratios", from_ratios)?;
     result.set_item("optimised_model_ini", outcome.optimised_model_ini)?;
     Ok(result)
 }
