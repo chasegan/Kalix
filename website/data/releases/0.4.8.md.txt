@@ -9,13 +9,13 @@ assets:
 pip: "pip install kalix==0.4.8"
 ---
 
-- New! Give your nodes descriptive dispay names using [annotations](https://kalix.org/docs/conventions/#annotations):
-    - Kalix annotation are special comments that start with "#@". They are still treated as comments by the engine, but they have speical powers in the IDE.
+- New! Give your nodes descriptive display names using [annotations](https://kalix.org/docs/conventions/#annotations):
+    - Kalix annotations are special comments that start with "#@". They are still treated as comments by the engine, but they have special powers in the IDE.
     - Kalix's first annotation, `aka`, allows you to assign alternative names just for the node diagram, e.g. `#@aka = Teemburra Dam (147,500 ML)`.
-    - Click the node-label button in the IDE to cycles between label modes: formal names, akas only, hidden.
+    - Click the node-label button in the IDE to cycle between label modes: formal names, akas only, hidden.
 - Improved account behaviour for [regulated users](https://kalix.org/docs/regulated-user/#accounts) with travel time:
     - Each account maintains a record of committed water, i.e. orders placed against the account but not yet diverted.
-    - Regualted user orders are limited by the forecasted account balance (current balance minus commitments).
+    - Regulated user orders are limited by the forecasted account balance (current balance minus commitments).
     - Regulated user diversions are limited by the actual account balance.
     - New account output: `acc.<name>.committed`, also on group aggregates.
 - [`Sacramento` node](https://kalix.org/docs/sacramento/) features:
