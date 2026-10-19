@@ -54,10 +54,11 @@ dividers. Omit any block that has no items; never reorder them.
 | ① | **Primary** | the default action (what double-click / Enter does) — usually one item |
 | ② | **Context-specific** | actions unique to this thing (Compare…, external handoff like Reveal / Launch Terminal) |
 | ③ | **Clipboard** | Cut, Copy, Paste — and copy-derivatives (Copy path) |
-| ④ | **Create** | New file…, New folder… |
-| ⑤ | **Modify** | Rename…, Duplicate… |
-| ⑥ | **Destructive** | Delete — *always isolated in its own block* |
-| ⑦ | **View / state** | Expand, Collapse, Show hidden files, Zoom to fit, Refresh — the things that change presentation, never data |
+| ④ | **Selection** | Select all, Select nodes — changes what the blocks below act on, never data |
+| ⑤ | **Create** | New file…, New folder… |
+| ⑥ | **Modify** | Rename…, Duplicate… |
+| ⑦ | **Destructive** | Delete — *always isolated in its own block* |
+| ⑧ | **View / state** | Expand, Collapse, Show hidden files, Zoom to fit, Refresh — the things that change presentation, never data |
 
 Rationale: the eye enters at the top, so the most-wanted action is first;
 the most-dangerous action sits alone where it can't be hit by momentum;
@@ -344,3 +345,8 @@ this document.
   parts), ! excludes, /.../ is a regex, "..." keeps spaces." Existing
   tooltips are not re-cut by this entry; it is the standard the next one
   is held to.
+- *2026-10-19* — §1 gained a Selection block ④ between Clipboard and Create,
+  and the later blocks were renumbered. Selection changes what the blocks
+  below act on and no data, so it follows the clipboard verbs, as in every
+  editor; the editor's menu already did this. Harvested from the map's
+  `Select nodes` submenu (#452).

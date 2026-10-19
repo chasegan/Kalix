@@ -155,11 +155,10 @@ public class MapContextMenuManager {
 
         menu.addSeparator();
 
-        // Select nodes: "All" always; the network walks only when there is a selection to
-        // walk from (ADR-0002 §4 hides what cannot apply). The title keeps "nodes" because the
-        // selection also holds links, which these items never add (§2.3). Each child is the
-        // object of the title (§6): "Select nodes: upstream". Sits below the clipboard block,
-        // as in the editor's menu: the §1 skeleton has no block for selection.
+        // Selection block, per ADR-0002 §1 block ④. "All" always; the network walks only
+        // when there is a selection to walk from (§4 hides what cannot apply). The title
+        // keeps "nodes" because the selection also holds links, which these items never add
+        // (§2.3). Each child is the object of the title (§6): "Select nodes: upstream".
         if (!model.getAllNodes().isEmpty()) {
             JMenu selectMenu = new JMenu("Select nodes");
             selectMenu.add(selectAllItem());
@@ -175,7 +174,7 @@ public class MapContextMenuManager {
             menu.addSeparator();
         }
 
-        // Create block, per ADR-0002 §1 block ④. Verb-first per §2.2: the
+        // Create block, per ADR-0002 §1 block ⑤. Verb-first per §2.2: the
         // children are the objects of the verb, not values to pick among, so this is a
         // menu item that happens to have a submenu — not a category title under §6.
         JMenu insertNodeTemplateMenu = new JMenu("Insert node");
