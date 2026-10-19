@@ -16,7 +16,8 @@ import java.time.format.DateTimeParseException;
  * <ul>
  *   <li>{@link #formatForStepSize} — for resolution-aware display (hover tooltips, file
  *       exports). Pick a single format for the whole series so every row/point is
- *       consistent. Driven by the timeseries' step_size.</li>
+ *       consistent. Driven by the timeseries' step_size. {@link #needsTimeOfDay} is the
+ *       rule it applies, exposed so a CSV heading can follow the same rule.</li>
  *   <li>{@link #formatForTickInterval} — for axis tick labels. Driven by the spacing
  *       between adjacent ticks so the format stays useful as the user zooms in and out.</li>
  * </ul>
@@ -53,7 +54,6 @@ public final class TimeFormatUtil {
      * is a multiple of 86400s, or 0 for unknown) at midnight format as {@code yyyy-MM-dd};
      * sub-daily or off-midnight (e.g. 9am daily) series format as full ISO datetime. A
      * whole-day step keeps every point at the same time of day, so a series stays consistent.
-     * Mirrors the engine's {@code needs_time_of_day}.
      */
     public static String formatForStepSize(LocalDateTime dateTime, long stepSeconds) {
         return dateTime.format(needsTimeOfDay(dateTime, stepSeconds) ? ISO_DATETIME : DATE_ONLY);
@@ -67,13 +67,13 @@ public final class TimeFormatUtil {
     }
 
     /**
-     * The heading for a CSV timestamp column whose rows {@link #formatForStepSize} writes:
-     * {@code date} when they are bare dates, {@code datetime} when they carry a time of day.
-     * Matches the engine's output files, so a tool that finds the column in one finds it in
-     * the other. {@code firstTimestampMs} is the column's first row.
+     * Whether {@link #formatForStepSize} writes this timestamp with a time of day: always for
+     * a sub-daily step, and for a daily-or-coarser step (or 0, unknown) only off midnight.
+     * Mirrors the engine's {@code needs_time_of_day} in {@code src/tid/utils.rs}; change both
+     * together.
      */
-    public static String columnHeadingForStepSize(long firstTimestampMs, long stepSeconds) {
-        return needsTimeOfDay(toUtc(firstTimestampMs), stepSeconds) ? "datetime" : "date";
+    public static boolean needsTimeOfDay(long timestampMs, long stepSeconds) {
+        return needsTimeOfDay(toUtc(timestampMs), stepSeconds);
     }
 
     private static boolean needsTimeOfDay(LocalDateTime dateTime, long stepSeconds) {

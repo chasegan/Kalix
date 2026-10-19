@@ -24,8 +24,8 @@ import java.util.List;
  * multiple time series to CSV files. The resulting CSV format includes:</p>
  *
  * <ul>
- *   <li>First column: timestamps, headed "date" when they are bare dates and "datetime"
- *       when they carry a time of day, as the engine's output files are</li>
+ *   <li>First column: timestamps, headed "date" when every row is a bare date and
+ *       "datetime" when any row carries a time of day, as the engine's output files are</li>
  *   <li>Subsequent columns: One column per time series with series names as headers</li>
  *   <li>Missing values (NaN) are represented as empty cells</li>
  *   <li>Datetime formatting adapts based on precision (date-only vs. date-time)</li>
@@ -33,7 +33,7 @@ import java.util.List;
  *
  * <p><strong>CSV Format Example:</strong></p>
  * <pre>
- * date,Series1,Series2,Series3
+ * datetime,Series1,Series2,Series3
  * 2023-01-01,10.5,20.1,
  * 2023-01-01T12:30:00,11.2,21.3,15.8
  * 2023-01-02,12.0,,16.2
@@ -86,8 +86,9 @@ public class TimeSeriesCsvExporter {
     /**
      * Exports a dataset to a CSV file with plot type awareness.
      *
-     * <p>For EXCEEDANCE plot type, the first column will be "Percentile" with percentages.
-     * For other plot types, the first column will be "Datetime" with timestamps.</p>
+     * <p>For EXCEEDANCE plot type, the first column is "Percentile" with percentages.
+     * For other plot types it is the timestamps, headed "date" or "datetime" (see the class
+     * doc).</p>
      *
      * @param dataSet the dataset to export; must not be null
      * @param outputFile the target CSV file; will be created or overwritten
@@ -171,21 +172,15 @@ public class TimeSeriesCsvExporter {
         // Sub-daily series get ISO datetime; daily-or-coarser get date-only. Inferred from the
         // first regular-interval series; falls back to date-only if none is regular.
         long stepSeconds = CsvExportUtil.inferStepSeconds(allSeries);
-        String firstColumn = isExceedance ? "Percentile"
-            : TimeFormatUtil.columnHeadingForStepSize(firstTimestamp(allSeries), stepSeconds);
+        String firstHeader = isExceedance ? "Percentile"
+            : anyRowNeedsTime(allSeries, stepSeconds) ? "datetime" : "date";
 
         try (Writer writer = openWriter(file)) {
-            writeHeader(writer, firstColumn, headers);
+            writeHeader(writer, firstHeader, headers);
             writeDataRows(writer, allSeries, isExceedance, stepSeconds);
         }
     }
 
-    /**
-     * Writes the CSV header row with column names.
-     *
-     * <p>The header names the first column ("date", "datetime" or "Percentile" for exceedance),
-     * followed by each time series name. Series names are properly escaped for CSV format.</p>
-     */
     /**
      * UTF-8 writer for the output file; a one-entry zip archive when the name
      * says {@code .csv.zip} — the extension is the single source of truth for
@@ -196,20 +191,30 @@ public class TimeSeriesCsvExporter {
         return CsvZipFormat.newUtf8Writer(file);
     }
 
-    /** The earliest timestamp across the series, which heads the first data row. */
-    private static long firstTimestamp(List<TimeSeriesData> allSeries) {
-        long first = Long.MAX_VALUE;
+    /**
+     * Whether any row {@link #writeDataRows} will write carries a time of day. Rows are
+     * formatted one by one, so series on different grids (midnight and 9am daily, say) mix
+     * bare dates and datetimes in one column; the heading then says "datetime". A sub-daily
+     * step answers on the first timestamp.
+     */
+    private static boolean anyRowNeedsTime(List<TimeSeriesData> allSeries, long stepSeconds) {
         for (TimeSeriesData series : allSeries) {
-            if (series.getPointCount() > 0) {
-                first = Math.min(first, series.getFirstTimestamp());
+            for (long timestamp : series.getTimestamps()) {
+                if (TimeFormatUtil.needsTimeOfDay(timestamp, stepSeconds)) {
+                    return true;
+                }
             }
         }
-        return first == Long.MAX_VALUE ? 0L : first;
+        return false;
     }
 
-    private static void writeHeader(Writer writer, String firstColumn, List<String> headers)
+    /**
+     * Writes the CSV header row: the first column's heading ("date", "datetime" or
+     * "Percentile"), then each series name, escaped for CSV.
+     */
+    private static void writeHeader(Writer writer, String firstHeader, List<String> headers)
             throws IOException {
-        writer.write(firstColumn);
+        writer.write(firstHeader);
         for (String header : headers) {
             writer.write(",");
             writer.write(CsvExportUtil.escapeCsvField(header));

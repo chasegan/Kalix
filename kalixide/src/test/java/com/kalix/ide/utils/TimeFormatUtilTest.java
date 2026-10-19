@@ -7,7 +7,9 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TimeFormatUtilTest {
 
@@ -16,6 +18,17 @@ class TimeFormatUtilTest {
 
     private static final long MS_2024_01_15_MIDNIGHT =
         LocalDateTime.of(2024, 1, 15, 0, 0, 0).toEpochSecond(ZoneOffset.UTC) * 1000L;
+
+    // ---- needsTimeOfDay ----
+
+    @Test
+    void needsTimeOfDayFollowsTheStepAndTheClock() {
+        assertFalse(TimeFormatUtil.needsTimeOfDay(MS_2024_01_15_MIDNIGHT, 86400));
+        assertFalse(TimeFormatUtil.needsTimeOfDay(MS_2024_01_15_MIDNIGHT, 7 * 86400));
+        assertFalse(TimeFormatUtil.needsTimeOfDay(MS_2024_01_15_MIDNIGHT, 0));
+        assertTrue(TimeFormatUtil.needsTimeOfDay(MS_2024_01_15_14_30, 86400));
+        assertTrue(TimeFormatUtil.needsTimeOfDay(MS_2024_01_15_MIDNIGHT, 3600));
+    }
 
     // ---- formatForStepSize ----
 

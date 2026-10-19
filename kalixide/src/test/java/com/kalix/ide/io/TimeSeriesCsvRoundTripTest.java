@@ -344,7 +344,24 @@ class TimeSeriesCsvRoundTripTest {
         TimeSeriesCsvExporter.export(ds, out, null, LABELS);
 
         List<String> lines = Files.readAllLines(out.toPath(), StandardCharsets.UTF_8);
+        assertEquals("datetime,a", lines.get(0));
         assertEquals("2020-01-01T01:00:00,2.0", lines.get(2));
+    }
+
+    @Test
+    void exportOfMixedGridsIsHeadedDatetime() throws Exception {
+        long nineAm = dayMillis("2020-01-01") + 9 * 3_600_000L;
+        DataSet ds = new DataSet();
+        ds.addSeries(new DatasetSeries("/x", "a"), daily("2020-01-01", 1.0, 2.0));
+        ds.addSeries(new DatasetSeries("/x", "b"), new TimeSeriesData(new long[] {nineAm}, new double[] {5.0}));
+
+        File out = tempDir.resolve("mixed.csv").toFile();
+        TimeSeriesCsvExporter.export(ds, out, null, LABELS);
+
+        List<String> lines = Files.readAllLines(out.toPath(), StandardCharsets.UTF_8);
+        assertEquals("datetime,a,b", lines.get(0), "one row carries a time, so the column does");
+        assertEquals("2020-01-01,1.0,", lines.get(1));
+        assertEquals("2020-01-01T09:00:00,,5.0", lines.get(2));
     }
 
     @Test
