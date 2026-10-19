@@ -6,7 +6,7 @@ title: "ADR-0012: Inputs must share the simulation grid; Kalix does not realign 
 
 - **Status**: Proposed
 - **Date**: 2026-10-16
-- **Deciders**: Ciaran (@Eldred777)
+- **Deciders**: Chas Egan (@chasegan); proposed by Ciaran (@Eldred777)
 - **Tags**: engine, io
 
 ## Context and problem statement
