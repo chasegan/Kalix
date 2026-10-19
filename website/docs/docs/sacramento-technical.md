@@ -47,7 +47,7 @@ Surface runoff, interflow and impervious-area runoff are routed through a unit h
 
 This section gives the standard SAC-SMA equations. State variables are written in lower case (uztw, uzfw, lztw, lzfp, lzfs) and parameter capacities in upper case (UZTWM, UZFWM, etc.) for clarity, even though Kalix uses lower case for parameter names in the configuration file.
 
-Kalix tracks the two lower-zone free water stores at an effective capacity, larger than the parameter, that also holds the water that will leave the catchment as groundwater without reaching the channel: LZFPM′ = LZFPM · (1 + SIDE) and LZFSM′ = LZFSM · (1 + SIDE). On this page lzfp and lzfs are the contents of these effective stores, so they range from 0 to LZFPM′ and LZFSM′. With SIDE = 0 the effective capacities equal the parameters.
+Kalix, like Fors, runs the two lower-zone free water stores at an effective capacity, larger than the parameter, that also holds the water that will leave the catchment as groundwater without reaching the channel: LZFPM′ = LZFPM · (1 + SIDE) and LZFSM′ = LZFSM · (1 + SIDE). The contents of these effective stores are written lzfp′ and lzfs′ below. The stores the node reports are lzfp = lzfp′ / (1 + SIDE) and lzfs = lzfs′ / (1 + SIDE), which range from 0 to LZFPM and LZFSM. With SIDE = 0 the two forms are the same.
 
 ### Tension-water filling order
 
@@ -101,7 +101,7 @@ where:
 
 - PBASE = LZFPM′ · LZPK + LZFSM′ · LZSK
 
-- LZdef = (LZTWM − lztw) + (LZFPM′ − lzfp) + (LZFSM′ − lzfs)
+- LZdef = (LZTWM − lztw) + (LZFPM′ − lzfp′) + (LZFSM′ − lzfs′)
 
 - LZmax = LZTWM + LZFPM′ + LZFSM′
 
@@ -115,13 +115,13 @@ A fraction PFREE goes directly to the lower-zone free-water stores; the remainde
 
 ### Lower-zone baseflow
 
-- QBp = lzfp · LZPK (primary, slow)
+- QBp = lzfp′ · LZPK (primary, slow)
 
-- QBs = lzfs · LZSK (supplemental, fast)
+- QBs = lzfs′ · LZSK (supplemental, fast)
 
 - QB = QBp + QBs
 
-Of QB, the fraction 1 / (1 + SIDE) reaches the channel. The rest, SIDE / (1 + SIDE), is the side loss.
+Of QB, the fraction 1 / (1 + SIDE) reaches the channel. The rest, SIDE / (1 + SIDE), is the side loss. In terms of the reported stores, the baseflow that reaches the channel is lzfp · LZPK + lzfs · LZSK.
 
 ### Losses
 
@@ -163,7 +163,7 @@ params = adimp, lzfpm, lzfsm, lzpk, lzsk, lztwm, pctim, pfree, rexp, sarva, side
 | LZFSM | Lower zone supplemental free water max | 1 – 1000 | mm |
 | LZFPM | Lower zone primary free water max | 1 – 1000 | mm |
 
-With SIDE > 0 the lower-zone free water stores fill to (1 + SIDE) times LZFSM and LZFPM; see Mathematical formulation.
+With SIDE > 0 the engine runs the lower-zone free water stores at (1 + SIDE) times LZFSM and LZFPM, but reports them divided back, so `lzfs` and `lzfp` fill to LZFSM and LZFPM; see Mathematical formulation.
 
 ### Depletion rates
 
@@ -226,14 +226,14 @@ The node reports the contents of each of the five soil moisture stores at the en
 | uztw | Upper zone tension water | UZTWM |
 | uzfw | Upper zone free water | UZFWM |
 | lztw | Lower zone tension water | LZTWM |
-| lzfp | Lower zone primary free water | LZFPM′ (effective) |
-| lzfs | Lower zone supplemental free water | LZFSM′ (effective) |
+| lzfp | Lower zone primary free water | LZFPM |
+| lzfs | Lower zone supplemental free water | LZFSM |
 
 Things to keep in mind when using them:
 
 - **Depths over the pervious area.** Each output is a depth in mm over the pervious part of the catchment, which is the fraction 1 − PCTIM − ADIMP. 
 
-- **Lower-zone free water includes the side component.** `lzfp` and `lzfs` are the effective stores defined under Mathematical formulation, so their capacities are LZFPM′ and LZFSM′: (1 + SIDE) times the parameters. Use these values for a water balance: the water draining from the two stores in a step, scaled to the whole catchment, is `flobf`, which is baseflow before the side loss.
+- **Lower-zone free water has the side component divided out.** `lzfp` and `lzfs` are the effective stores defined under Mathematical formulation divided by (1 + SIDE), as Fors records them, so they fill to LZFPM and LZFSM. The baseflow that drains from them to the channel in a step is lzfp · LZPK + lzfs · LZSK, which scaled to the whole catchment is `flobf` / (1 + SIDE). `flobf` itself is baseflow before the side loss. In this form the water lost to groundwater never sits in a store: it leaves the pervious-area balance when it percolates into free water.
 
 - **The impervious areas are not included.** The fixed impervious area (PCTIM) holds no water. The variable impervious area (ADIMP) holds tension water of its own, which is not reported.
 

@@ -53,8 +53,8 @@ All seventeen model parameters — and the rainfall-weighting terms, when `rain`
 | uztw | Upper zone tension water at the end of the step [mm] |
 | uzfw | Upper zone free water at the end of the step [mm] |
 | lztw | Lower zone tension water at the end of the step [mm] |
-| lzfp | Lower zone primary free water at the end of the step, including the `side` component [mm] |
-| lzfs | Lower zone supplemental free water at the end of the step, including the `side` component [mm] |
+| lzfp | Lower zone primary free water at the end of the step [mm] |
+| lzfs | Lower zone supplemental free water at the end of the step [mm] |
 | area | Catchment area [km2] — the declared `area` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
 
 The five store results (`uztw`, `uzfw`, `lztw`, `lzfp`, `lzfs`) are depths over the pervious area; see [Soil moisture store outputs](sacramento-technical.md#soil-moisture-store-outputs).

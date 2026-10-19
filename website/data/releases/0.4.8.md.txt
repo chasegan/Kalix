@@ -10,4 +10,4 @@ pip: "pip install kalix==0.4.8"
 ---
 
 - New! Soil moisture store outputs on the [`sacramento` node](https://kalix.org/docs/sacramento/): `uztw`, `uzfw`, `lztw`, `lzfp` and `lzfs` record the contents of the five stores at the end of each step.
-    - Each is a depth in mm over the pervious area. `lzfp` and `lzfs` include the water that is later lost through `side`, so they can exceed `lzfpm` and `lzfsm`; see [Soil moisture store outputs](https://kalix.org/docs/sacramento-technical/#soil-moisture-store-outputs).
+    - Each is a depth in mm over the pervious area, and each fills to its capacity parameter; see [Soil moisture store outputs](https://kalix.org/docs/sacramento-technical/#soil-moisture-store-outputs).
