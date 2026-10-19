@@ -158,15 +158,16 @@ public class MapContextMenuManager {
         // Grow the selection along the network; with nothing to grow from, offer only select all.
         // Below the clipboard block, as in the editor's menu: ADR-0002 §1 has no block for selection.
         if (!model.getSelectionSeedNodes().isEmpty()) {
+            // Each child is the object of "Select" (ADR-0002 §6): "Select upstream". The
+            // context supplies "nodes" (§2.3), so the children do not repeat it.
             JMenu selectMenu = new JMenu("Select");
-            selectMenu.add(growSelectionItem("Connected nodes", NodeAdjacency::connected));
-            selectMenu.add(selectAllItem("All nodes"));
             selectMenu.add(growSelectionItem("Upstream", NodeAdjacency::upstream));
-            selectMenu.add(growSelectionItem("Upstream including distributaries",
-                NodeAdjacency::upstreamWithDistributaries));
+            selectMenu.add(growSelectionItem("Connected upstream", NodeAdjacency::connectedUpstream));
             selectMenu.add(growSelectionItem("Downstream", NodeAdjacency::downstream));
-            selectMenu.add(growSelectionItem("Downstream including tributaries",
-                NodeAdjacency::downstreamWithTributaries));
+            selectMenu.add(growSelectionItem("Connected downstream", NodeAdjacency::connectedDownstream));
+            selectMenu.addSeparator();
+            selectMenu.add(growSelectionItem("Connected", NodeAdjacency::connected));
+            selectMenu.add(selectAllItem("All"));
             menu.add(selectMenu);
             menu.addSeparator();
         } else if (!model.getAllNodes().isEmpty()) {

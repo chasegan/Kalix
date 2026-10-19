@@ -39,57 +39,63 @@ final class NodeAdjacency {
 
     /** The nodes and everything upstream of them. */
     Set<String> upstream(Set<String> nodes) {
-        return reach(nodes, upstreamOf);
+        return reach(nodes, upstreamOf, Set.of());
     }
 
     /** The nodes and everything downstream of them. */
     Set<String> downstream(Set<String> nodes) {
-        return reach(nodes, downstreamOf);
+        return reach(nodes, downstreamOf, Set.of());
     }
 
     /**
-     * {@link #upstream} plus the branches that leave it, each followed down to its
-     * terminus or to where it rejoins the flow below the nodes.
+     * Everything joined to the nodes, in either direction, without passing through the
+     * river below them. In a tree this is {@link #upstream}; in a braided network it also
+     * takes the branches that leave the upstream reach, and whatever joins those branches.
      */
-    Set<String> upstreamWithDistributaries(Set<String> nodes) {
-        var up = reach(nodes, upstreamOf);
-        var down = reach(nodes, downstreamOf);
-
-        // Everything below the upstream nodes, less what lies below the nodes themselves.
-        var result = reach(up, downstreamOf);
-        result.removeAll(down);
-        result.addAll(up);
-        return result;
+    Set<String> connectedUpstream(Set<String> nodes) {
+        return reach(nodes, adjacent, below(nodes));
     }
 
     /**
-     * {@link #downstream} plus the tributaries that join it, each followed up to its
-     * headwaters.
+     * Everything joined to the nodes, in either direction, without passing through the
+     * river above them. In a tree this is {@link #downstream} plus the tributaries that
+     * join it; in a braided network it also takes whatever leaves those tributaries.
      */
-    Set<String> downstreamWithTributaries(Set<String> nodes) {
-        var up = reach(nodes, upstreamOf);
-        var down = reach(nodes, downstreamOf);
-
-        // Everything above the downstream nodes, less what lies above the nodes themselves.
-        var result = reach(down, upstreamOf);
-        result.removeAll(up);
-        result.addAll(down);
-        return result;
+    Set<String> connectedDownstream(Set<String> nodes) {
+        return reach(nodes, adjacent, above(nodes));
     }
 
     /** The nodes and everything linked to them in either direction. */
     Set<String> connected(Set<String> nodes) {
-        return reach(nodes, adjacent);
+        return reach(nodes, adjacent, Set.of());
     }
 
-    /** The nodes and everything reachable from them by following {@code adjacency}. */
-    private static Set<String> reach(Set<String> nodes, Map<String, List<String>> adjacency) {
+    /** The river below the nodes: downstream of them and not also upstream of them. */
+    private Set<String> below(Set<String> nodes) {
+        var below = reach(nodes, downstreamOf, Set.of());
+        below.removeAll(reach(nodes, upstreamOf, Set.of()));
+        return below;
+    }
+
+    /** The river above the nodes: upstream of them and not also downstream of them. */
+    private Set<String> above(Set<String> nodes) {
+        var above = reach(nodes, upstreamOf, Set.of());
+        above.removeAll(reach(nodes, downstreamOf, Set.of()));
+        return above;
+    }
+
+    /**
+     * The nodes and everything reachable from them by following {@code adjacency},
+     * never stepping onto a node in {@code blocked}.
+     */
+    private static Set<String> reach(Set<String> nodes, Map<String, List<String>> adjacency,
+                                     Set<String> blocked) {
         var stack = new ArrayDeque<>(nodes);
         var visited = new HashSet<>(nodes);
         while (!stack.isEmpty()) {
             var node = stack.pop();
             for (var next : adjacency.getOrDefault(node, List.of())) {
-                if (visited.add(next)) {
+                if (!blocked.contains(next) && visited.add(next)) {
                     stack.push(next);
                 }
             }
