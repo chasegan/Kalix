@@ -133,12 +133,11 @@ RSyntaxTextArea (library)
 
 **KalixTextArea** (base class) provides:
 - Monospace font configuration via FontManager
-- Font metrics that follow the screen: `paintComponent` compares the paint scale with
-  the scale the metrics were measured at and re-applies the font on a change. RSyntaxTextArea
-  caches metrics per device scale and refreshes only at first paint, so a monitor drag or a
-  display-scale change left the caret and glyphs misaligned (issue #162). Painting, not
-  `addNotify` or the `graphicsConfiguration` property, because only the paint `Graphics`
-  is reliably available and reliably current.
+- Font metrics that follow the screen: `paintComponent` re-applies the font whenever the
+  scale the cached metrics were measured at differs from the scale of the screen the editor
+  is on, first paint included (issue #162). This is the one place metrics are kept in step
+  with the screen; the Javadoc on `paintComponent` says why not `addNotify` or the
+  `graphicsConfiguration` property.
 - Common settings (anti-aliasing, tab handling)
 - One `WeakRegistry` of live instances (`utils/WeakRegistry.java`, shared with
   `VirtualTextArea`): `updateAllFontSizes` and `updateAllForThemeChange` reach every editor,
