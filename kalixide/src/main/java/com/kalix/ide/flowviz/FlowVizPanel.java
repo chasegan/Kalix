@@ -20,6 +20,7 @@ import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
+import com.kalix.ide.flowviz.transform.AggregatedSeriesCache;
 import com.kalix.ide.flowviz.transform.AggregationPipeline;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.flowviz.stats.MaskMode;
@@ -35,6 +36,7 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -129,6 +131,9 @@ public class FlowVizPanel extends JPanel {
     // Key format: "aggregationPeriod_aggregationMethod_plotType_referenceSeries"
     // Set to null to force rebuild (done by refreshData())
     private TransformKey lastTransformKey = null;
+
+    /** Step 1's aggregates, reused while the pool holds the same data (see {@link AggregatedSeriesCache}). */
+    private final AggregatedSeriesCache aggregateCache = new AggregatedSeriesCache();
 
     /**
      * True once the user has zoomed/panned this plot. Live-updating owners (the
@@ -1183,6 +1188,15 @@ public class FlowVizPanel extends JPanel {
     }
 
     /**
+     * Returns the visible series (in selection order and under the current
+     * aggregation settings) as a map built from the cache.
+     */
+    public LinkedHashMap<SeriesRef, TimeSeriesData> aggregatedSeries() {
+        return AggregationPipeline.aggregate(aggregateCache, originalDataSet, visibleSeries,
+            aggregationPeriod, aggregationMethod, seasonalMaskMode);
+    }
+
+    /**
      * Sets the mask mode for this plot.
      * When ALL, only timestamps where all visible series have valid data are included.
      */
@@ -1415,7 +1429,8 @@ public class FlowVizPanel extends JPanel {
         // pool) through the one shared AggregationPipeline - the same orchestration
         // that feeds the stats table, so the two projections can never disagree.
         // The transient aggregatedDataSet is keyed by SeriesRef directly - the
-        // pipeline never touches string identity.
+        // pipeline never touches string identity. Series whose pool data hasn't
+        // changed come straight from aggregateCache.
         //
         // NOTE: Seasonal masking happens as part of this step, not as a later filter. The
         // aggregator excludes masked-out months from accumulation so they never resemble
@@ -1426,6 +1441,7 @@ public class FlowVizPanel extends JPanel {
         // docs for why this cannot be done after aggregation (#235).
         DataSet aggregatedDataSet = new DataSet();
         AggregationPipeline.aggregate(
+            aggregateCache,
             originalDataSet,
             visibleSeries,
             aggregationPeriod,
