@@ -1,0 +1,15 @@
+---
+version: "0.4.9"
+date: TBD
+prerelease: false
+assets:
+  Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.9/KalixIDE-Windows-0.4.9-Portable.zip"
+  macOS: "https://github.com/chasegan/Kalix/releases/download/v0.4.9/KalixIDE-macOS-0.4.9-Portable.zip"
+  Linux: "https://github.com/chasegan/Kalix/releases/download/v0.4.9/KalixIDE-Linux-0.4.9-Portable.zip"
+pip: "pip install kalix==0.4.9"
+---
+
+- Minor bug fix (#479):
+    - An input with only one row of data, or none, now stops the run with an error naming the input, instead of crashing.
+    - So do inputs on different timesteps, and inputs with no timestep of data in common (e.g. an all-blank column, or date ranges that don't overlap).
+    - Python: `set_input()` now raises `ModelValidationError` for such data. Previously it assumed a daily timestep for a single row, and raised `ValueError` for no rows.
