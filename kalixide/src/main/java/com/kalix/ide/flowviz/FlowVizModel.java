@@ -8,7 +8,7 @@ import java.util.List;
  * Maintains a list of {@link FlowVizState} snapshots with a current position pointer.
  * Pushing a new state truncates any redo states ahead of the current position.
  */
-public class FlowVizStateHistory {
+public class FlowVizModel {
 
     // Generous by design: a FlowVizState is a list of refs, a set of sources, a few
     // enums and four doubles, so even a full history is kilobytes per tab. The old
@@ -84,7 +84,7 @@ public class FlowVizStateHistory {
     /**
      * Replaces this history's contents with a copy of another's.
      */
-    public void copyFrom(FlowVizStateHistory other) {
+    public void copyFrom(FlowVizModel other) {
         history.clear();
         history.addAll(other.history);
         currentIndex = other.currentIndex;

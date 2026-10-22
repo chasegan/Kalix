@@ -33,7 +33,7 @@ After construction, refs flow through these collections:
 | `tab.selectedSeries` (per tab) | `Set<SeriesRef>` | `VisualizationTabManager.TabInfo` |
 | `sharedColorMap` | `Map<SeriesRef, Color>` | `SeriesColorManager` (reference shared with `VisualizationTabManager`, `FlowVizPanel`, `TimeSeriesRenderer`, `CoordinateDisplayManager`) |
 | `FlowVizPanel.visibleSeries` | `List<SeriesRef>` | `FlowVizPanel` (reference shared with `TimeSeriesRenderer`, `CoordinateDisplayManager`, `PlotInteractionManager` via supplier) |
-| `FlowVizState.visibleSeries` | `List<SeriesRef>` | `FlowVizStateHistory` (undo/redo) |
+| `FlowVizState.visibleSeries` | `List<SeriesRef>` | `FlowVizModel` (undo/redo) |
 | `StatsTableModel.seriesData` (`SeriesStats.ref`) | row identity by ref | `StatsTableModel` |
 | `StatsTableModel.originalSeriesCache` | `Map<SeriesRef, TimeSeriesData>` | `StatsTableModel` |
 | `TimeSeriesRenderer.seriesRenderModes` | `Map<SeriesRef, SeriesRenderMode>` | `TimeSeriesRenderer` |

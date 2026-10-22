@@ -19,7 +19,7 @@ import java.util.Set;
 
 /**
  * Immutable snapshot of all user-facing plot state.
- * Used by {@link FlowVizStateHistory} for undo/redo navigation.
+ * Used by {@link FlowVizModel} for undo/redo navigation.
  *
  * <p>Identity in {@code visibleSeries} is carried as {@link SeriesRef}, not as a
  * rendered label. This means undo restores the same logical series even if the run
