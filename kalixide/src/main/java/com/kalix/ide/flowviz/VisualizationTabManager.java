@@ -10,14 +10,8 @@ import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.flowviz.models.StatsTableModel;
-import com.kalix.ide.flowviz.rendering.LineShape;
 import com.kalix.ide.flowviz.stats.MaskMode;
-import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
 import com.kalix.ide.flowviz.transform.AggregationPipeline;
-import com.kalix.ide.flowviz.transform.AggregationMethod;
-import com.kalix.ide.flowviz.transform.AggregationPeriod;
-import com.kalix.ide.flowviz.transform.PlotType;
-import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import com.formdev.flatlaf.FlatClientProperties;
@@ -57,15 +51,14 @@ import java.util.Set;
  * <h2>Data Architecture</h2>
  * All tabs share a {@link DataSet} ({@code sharedDataSet}) as a data pool and a color map.
  * The pool accumulates all fetched time series and does not shrink on deselect.
- * Each tab maintains its own {@code selectedSeries} set (in {@code TabInfo}) controlling
- * which series from the pool it displays. Plot tabs render only their selected series;
- * stats tabs compute statistics only for theirs.
+ * Each tab's {@link FlowVizModel} holds its selection, which decides the series from the
+ * pool its pages show.
  *
  * <h2>Unified Tabs</h2>
- * Every tab owns the full bundle: a {@link FlowVizPanel} — the canonical state owner
- * (selection, checked sources, aggregation, mask, undo history) — plus a
- * {@link StatsVizPanel} projection of the same state. The tab's view mode
- * decides which projection is mounted:
+ * Every tab owns the full bundle: a {@link FlowVizModel} — the one state owner (selection,
+ * checked sources, aggregation, mask, undo history) — and three pages projecting it:
+ * a {@link FlowVizPanel}, a {@link StatsVizPanel} and a {@link DataVizPanel}. The tab's
+ * view mode decides which page is shown:
  * <ul>
  *   <li><b>PLOT</b> - the time-series chart (transforms, LOD rendering)</li>
  *   <li><b>STATS</b> - the statistics table (min/max/mean/etc.), fed from the
@@ -122,108 +115,52 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Settings that can be copied between tabs.
-     * Makes it explicit what settings are shareable and provides a clean interface for copying.
+     * A tab's display preferences: how its plot is drawn, outside the undoable state.
+     * New tabs take them from preferences; a duplicate copies its source's.
      */
-    public static class TabSettings {
-        // Tab name copied from the source tab when duplicating (null = leave the new tab unnamed)
-        public String name = null;
+    private record DisplayPrefs(boolean showCoordinates, boolean legendCollapsed, boolean legendEnabled,
+                                boolean connectAcrossGaps, boolean showOrphanMarkers) {
 
-        // Aggregation settings (common to both plot and stats tabs)
-        public AggregationPeriod aggregationPeriod = AggregationPeriod.ORIGINAL;
-        public AggregationMethod aggregationMethod = AggregationMethod.SUM;
-
-        /**
-         * Mask mode carried across duplication; {@code null} = the created kind's
-         * default (plot NONE / stats ALL). Plot duplication also restores mask via
-         * the copied history; this field makes cross-kind duplication deliberate
-         * and stops stats duplication silently resetting the mask.
-         */
-        public MaskMode maskMode = null;
-        public SeasonalMaskMode seasonalMaskMode = SeasonalMaskMode.DISABLED;
-
-        /** Which view the created tab shows; duplication copies it (a duplicate looks identical). */
-        FlowVizView activeView = FlowVizView.PLOT;
-
-        /**
-         * Whether {@link #name} is a machine-assigned default. A duplicate of a
-         * default-named tab gets a fresh number (two "View 1"s help nobody); a
-         * duplicate of a user-named tab keeps the copied name.
-         */
-        boolean nameIsDefault = false;
-
-        // Plot-specific settings (ignored when creating stats tabs)
-        public PlotType plotType = PlotType.VALUES;
-        public YAxisScale yAxisScale = YAxisScale.LINEAR;
-        public boolean autoYMode = true;
-        public boolean showCoordinates = false;
-        public boolean legendCollapsed = false;
-        public boolean legendEnabled = true;
-        // Missing-data handling (context menu > Missing data). Mutually exclusive; both
-        // false = default "break at gaps".
-        public boolean connectAcrossGaps = false;
-        public boolean showOrphanMarkers = false;
-        // Shape of line series (context menu > Line shape).
-        public LineShape lineShape = LineShape.STRAIGHT;
-
-        // Series selection from source tab (null = inherit from active tab)
-        public Set<SeriesRef> selectedSeries = null;
-
-        // Checked data sources from source tab (null = inherit from active tab)
-        public Set<SourceRef> checkedSources = null;
-
-        // Source plot panel for history duplication (null = no history to copy)
-        public FlowVizPanel sourceVizPanel = null;
-
-        /**
-         * Extracts settings from a tab. Every tab's canonical state lives on its
-         * {@link FlowVizPanel}, whatever view it currently shows, so there is one
-         * factory — the history reference makes duplication Chrome-style (full
-         * undo history, current state restored) for both views.
-         */
-        public static TabSettings fromTab(TabInfo tabInfo) {
-            FlowVizPanel vizPanel = tabInfo.vizPanel;
-            TabSettings settings = new TabSettings();
-            settings.name = tabInfo.name;
-            settings.nameIsDefault = tabInfo.name != null && tabInfo.name.equals(tabInfo.defaultName);
-            settings.activeView = tabInfo.viewMode;
-            settings.aggregationPeriod = vizPanel.getAggregationPeriod();
-            settings.aggregationMethod = vizPanel.getAggregationMethod();
-            settings.maskMode = vizPanel.getMaskMode();
-            settings.seasonalMaskMode = vizPanel.getSeasonalMaskMode();
-            settings.plotType = vizPanel.getPlotType();
-            settings.yAxisScale = vizPanel.getYAxisScale();
-            settings.autoYMode = vizPanel.isAutoYMode();
-            settings.showCoordinates = vizPanel.isShowCoordinates();
-            settings.legendCollapsed = vizPanel.isLegendCollapsed();
-            settings.legendEnabled = vizPanel.isLegendEnabled();
-            settings.connectAcrossGaps = vizPanel.isConnectAcrossGaps();
-            settings.showOrphanMarkers = vizPanel.isShowOrphanMarkers();
-            settings.lineShape = vizPanel.getLineShape();
-            settings.selectedSeries = new LinkedHashSet<>(tabInfo.selectedSeries);
-            settings.checkedSources = new LinkedHashSet<>(tabInfo.checkedSources);
-            settings.sourceVizPanel = vizPanel;
-            return settings;
+        static DisplayPrefs fromPreferences() {
+            return new DisplayPrefs(PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.get(),
+                PreferenceKeys.PLOT_LEGEND_COLLAPSED.get(), PreferenceKeys.PLOT_LEGEND_ENABLED.get(),
+                false, false);
         }
 
-        /**
-         * Get default settings from preferences.
-         */
-        public static TabSettings getDefaults() {
-            TabSettings settings = new TabSettings();
-            settings.showCoordinates = PreferenceKeys.FLOWVIZ_SHOW_COORDINATES.get();
-            settings.autoYMode = PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get();
-            settings.legendCollapsed = PreferenceKeys.PLOT_LEGEND_COLLAPSED.get();
-            settings.legendEnabled = PreferenceKeys.PLOT_LEGEND_ENABLED.get();
-            return settings;
+        static DisplayPrefs of(FlowVizPanel panel) {
+            return new DisplayPrefs(panel.isShowCoordinates(), panel.isLegendCollapsed(),
+                panel.isLegendEnabled(), panel.isConnectAcrossGaps(), panel.isShowOrphanMarkers());
+        }
+
+        void applyTo(FlowVizPanel panel) {
+            panel.setShowCoordinates(showCoordinates);
+            // Order matters: setConnectAcrossGaps(true) clears orphan markers and vice versa,
+            // so apply connect first — for every valid (mutually exclusive) combination the
+            // net result matches the source tab.
+            panel.setConnectAcrossGaps(connectAcrossGaps);
+            panel.setShowOrphanMarkers(showOrphanMarkers);
+            // Unconditional: the new legend manager starts from the global preference, which
+            // may disagree with this tab's settings in either direction.
+            panel.setLegendCollapsed(legendCollapsed);
+            panel.setLegendEnabled(legendEnabled);
         }
     }
 
     /**
-     * Represents a visualization tab. Every tab owns the full bundle — a
-     * {@link FlowVizPanel} (the canonical state owner: selection, sources,
-     * aggregation, mask, undo history) plus a {@link StatsVizPanel}
-     * projection of the same state — and mounts one of them per its view mode.
+     * The state a fresh tab of the given view starts in: the defaults, with the view's
+     * overlap mask — none on a plot, ALL on the stats (their historical default).
+     */
+    static FlowVizState defaultState(FlowVizView view) {
+        MaskMode mask = switch (view) {
+            case PLOT, DATA -> MaskMode.NONE;
+            case STATS -> MaskMode.ALL;
+        };
+        return FlowVizState.defaults().withMaskMode(mask);
+    }
+
+    /**
+     * Represents a visualization tab: its pages over one {@link FlowVizModel}, reached
+     * through the plot page's {@link FlowVizPanel#model()}, and the tab's UI handles.
      * Package-private: {@link FlowVizToolbarBuilder} drives the panel through it.
      */
     static class TabInfo {
@@ -233,15 +170,6 @@ public class VisualizationTabManager {
         final FlowVizPanel vizPanel;
         final StatsVizPanel statsVizPanel;
         final DataVizPanel dataVizPanel;
-
-        // Per-tab selected series. Preserves insertion order for legend consistency
-        // and the bivariate statistics reference (first series).
-        final Set<SeriesRef> selectedSeries = new LinkedHashSet<>();
-
-        // Per-tab checked data sources — the source-tree context this tab was built in.
-        // Restored verbatim (with the series checks) when the tab becomes active, so a
-        // tab is a complete view: sources + series + plot settings. Empty restores empty.
-        final Set<SourceRef> checkedSources = new LinkedHashSet<>();
 
         /** The hidden data projection missed a state/data change; rebuild when shown. */
         boolean dataDirty = false;
@@ -267,6 +195,15 @@ public class VisualizationTabManager {
             this.vizPanel = vizPanel;
             this.statsVizPanel = statsVizPanel;
             this.dataVizPanel = dataVizPanel;
+        }
+
+        FlowVizModel model() {
+            return vizPanel.model();
+        }
+
+        /** The selected series, in order: the first is the bivariate reference. */
+        List<SeriesRef> selection() {
+            return model().current().getVisibleSeries();
         }
 
         void rename(String name) {
@@ -379,34 +316,43 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Adds a new plot tab with default settings from preferences.
+     * Adds a plot tab that inherits the active tab's series and sources (or, with no tab
+     * yet, every series in the pool), with default settings. It is not selected.
      *
      * @return The created FlowVizPanel
      */
     public FlowVizPanel addPlotTab() {
-        return addPlotTabFromSettings(TabSettings.getDefaults());
+        TabInfo active = getActiveTab();
+        FlowVizState initial = defaultState(FlowVizView.PLOT)
+            .withVisibleSeries(active != null ? active.selection() : new ArrayList<>(sharedDataSet.getSeriesRefs()))
+            .withCheckedSources(active != null ? active.model().current().getCheckedSources() : Set.of());
+        return addTab(initial, FlowVizView.PLOT, DisplayPrefs.fromPreferences(), null, null, false).vizPanel;
+    }
+
+    /**
+     * Adds a plot tab in {@code initial}'s state, and selects it.
+     *
+     * @return The created FlowVizPanel
+     */
+    public FlowVizPanel addPlotTab(FlowVizState initial) {
+        return addTab(initial, FlowVizView.PLOT, DisplayPrefs.fromPreferences(), null, null, true).vizPanel;
     }
 
     /**
      * Adds a plot tab with <em>no series selected</em> — the blank-slate counterpart to
      * duplicating a tab and clearing its selection by hand.
      *
-     * <p>The checked <em>sources</em> are deliberately inherited from the active tab
-     * (left null, so {@link #inheritedSources} resolves them) while the series selection
-     * is set to an explicit empty set. Starting with no sources would empty the outputs
-     * tree too, forcing the source to be re-checked before any series could be picked —
-     * more work than the gesture this replaces, not less.</p>
-     *
-     * <p>The empty-but-non-null selection also marks this as a deliberate choice rather
-     * than "inherit", which is what makes {@link #addPlotTabFromSettings} focus the new
-     * tab on creation.</p>
+     * <p>The checked <em>sources</em> are deliberately inherited from the active tab.
+     * Starting with no sources would empty the outputs tree too, forcing the source to be
+     * re-checked before any series could be picked — more work than the gesture this
+     * replaces, not less.</p>
      *
      * @return The created FlowVizPanel
      */
     public FlowVizPanel addEmptyPlotTab() {
-        TabSettings settings = TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        return addPlotTabFromSettings(settings);
+        TabInfo active = getActiveTab();
+        return addPlotTab(defaultState(FlowVizView.PLOT)
+            .withCheckedSources(active != null ? active.model().current().getCheckedSources() : Set.of()));
     }
 
     /**
@@ -424,36 +370,45 @@ public class VisualizationTabManager {
      * @return The created FlowVizPanel
      */
     public FlowVizPanel addDefaultPlotTab() {
-        TabSettings settings = TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>();
-        settings.checkedSources.add(new LastSource());
-        return addPlotTabFromSettings(settings);
+        return addPlotTab(defaultState(FlowVizView.PLOT).withCheckedSources(Set.of(new LastSource())));
     }
 
     /**
-     * Adds a new plot tab with settings copied from another tab.
-     * The new plot tab will have the same settings and all series from the source tab.
+     * Adds a stats-view tab in {@code initial}'s state, and selects it.
      *
-     * @param settings The settings to apply to the new plot tab
-     * @return The created FlowVizPanel
+     * @return The created StatsTableModel (the tab's stats projection)
      */
-    public FlowVizPanel addPlotTabFromSettings(TabSettings settings) {
-        return addTabFromSettings(settings, FlowVizView.PLOT).vizPanel;
+    public StatsTableModel addStatsTab(FlowVizState initial) {
+        return addTab(initial, FlowVizView.STATS, DisplayPrefs.fromPreferences(), null, null, true)
+            .statsVizPanel.model();
     }
 
     /**
-     * Creates a unified tab. Every tab gets the full bundle (panel as state
-     * owner, stats model as projection); {@code viewMode} decides which is
-     * mounted — the view toggle (next stage) will switch them live.
+     * Duplicates a tab, Chrome-style: the copy has the source's whole undo history, its
+     * current state, display preferences and page. A default-named source gives the copy
+     * a fresh number (two "View 1"s help nobody); a user-chosen name is kept.
      */
-    private TabInfo addTabFromSettings(TabSettings settings, FlowVizView viewMode) {
+    TabInfo duplicateTab(TabInfo source) {
+        String name = source.name != null && source.name.equals(source.defaultName) ? null : source.name;
+        return addTab(source.model().current(), source.viewMode, DisplayPrefs.of(source.vizPanel),
+            name, source.vizPanel, true);
+    }
+
+    /**
+     * Creates a tab: one {@link FlowVizModel} and the three pages over it, in
+     * {@code initial}'s state; {@code viewMode} decides which page shows.
+     *
+     * @param name a user-chosen name, or null for a fresh "View n"
+     * @param historySource a panel whose history the tab copies (duplication), or null
+     */
+    private TabInfo addTab(FlowVizState initial, FlowVizView viewMode, DisplayPrefs prefs,
+                           String name, FlowVizPanel historySource, boolean select) {
         // One model per tab owns its state; the pages project it.
         FlowVizModel model = new FlowVizModel();
         FlowVizPanel vizPanel = new FlowVizPanel(model);
         vizPanel.setDataSet(sharedDataSet);
         vizPanel.setStyleResolver(styleResolver);
-       // Read through the current host at each dialog open (the host can be
+        // Read through the current host at each dialog open (the host can be
         // installed after early tabs exist).
         vizPanel.setBaseDirectorySupplier(() -> host.baseDirectory());
 
@@ -467,68 +422,34 @@ public class VisualizationTabManager {
             dataVizPanel.setLabelResolver(labels);
         }
 
-        // Use series from settings if provided, otherwise inherit from active tab
-        Set<SeriesRef> inheritedSeries;
-        if (settings.selectedSeries != null) {
-            inheritedSeries = new LinkedHashSet<>(settings.selectedSeries);
-        } else {
-            TabInfo activeTab = getActiveTab();
-            inheritedSeries = activeTab != null
-                ? new LinkedHashSet<>(activeTab.selectedSeries)
-                : new LinkedHashSet<>(sharedDataSet.getSeriesRefs());
-        }
-        // TabInfo exists BEFORE the construction batch so the panel's snapshot
-        // supplier can read the tab's true source context: history entry #1 must
-        // carry the sources it was born with, or the first undo back to it would
-        // wrongly clear them.
         JPanel containerPanel = new JPanel(new BorderLayout());
-        // Naming: a user-chosen name is kept (duplication of a renamed tab); an
-        // absent or default-pattern name gets a fresh "View n".
-        String name;
-        if (settings.name == null || settings.name.isEmpty() || settings.nameIsDefault) {
-            name = "View " + nextViewNumber++;
-        } else {
-            name = settings.name;
+        String tabName = name != null && !name.isEmpty() ? name : "View " + nextViewNumber++;
+        TabInfo tabInfo = new TabInfo(viewMode, tabName, containerPanel, vizPanel, statsVizPanel, dataVizPanel);
+        if (!tabName.equals(name)) {
+            tabInfo.defaultName = tabName;
         }
-        TabInfo tabInfo = new TabInfo(viewMode, name, containerPanel, vizPanel, statsVizPanel, dataVizPanel);
-        if (!name.equals(settings.name)) {
-            tabInfo.defaultName = name;
-        }
-        tabInfo.selectedSeries.addAll(inheritedSeries);
-        tabInfo.checkedSources.addAll(inheritedSources(settings));
-        vizPanel.setCheckedSourcesSupplier(() -> new LinkedHashSet<>(tabInfo.checkedSources));
 
-        // One batched change: series + settings land as a single rebuild and a single
+        // One batched change: the initial state lands as a single rebuild and a single
         // history entry, so a fresh tab starts with a one-entry history (no construction
-        // intermediates for undo to walk into) and Reset is one undoable step.
-        vizPanel.batchStateChange(() -> {
-            vizPanel.setVisibleSeries(new ArrayList<>(inheritedSeries));
-            applyPlotSettings(vizPanel, settings);
-            // Mask: carried explicitly (duplication), else the created kind's
-            // default — plot NONE (the panel default), stats ALL (the historical
-            // stats default). Undoable like every other shared setting.
-            if (settings.maskMode != null) {
-                vizPanel.setMaskMode(settings.maskMode);
-            } else if (viewMode == FlowVizView.STATS) {
-                vizPanel.setMaskMode(MaskMode.ALL);
+        // intermediates for undo to walk into).
+        vizPanel.batchStateChange(() -> model.update(s -> initial));
+        prefs.applyTo(vizPanel);
+
+        // Duplicating copies the source's full history (the batch above already pushed
+        // this tab's own initial entry, which the copy replaces). Done BEFORE the toolbar
+        // is built, which initialises its controls from the state.
+        if (historySource != null) {
+            vizPanel.copyHistoryFrom(historySource);
+        }
+
+        // Undo and redo move the whole tab: its data page follows, and the window
+        // trees reproject when it is the active tab.
+        model.addListener((old, now, cause) -> {
+            if (cause == FlowVizModel.Cause.RESTORE) {
+                refreshDataProjection(tabInfo);
+                notifyTabMutated(tabInfo);
             }
-            // The seasonal mask needs no such handling: applyPlotSettings above already
-            // set it (it has no per-view default).
         });
-
-        // Populate legend with inherited series (colour resolved at render time)
-        for (SeriesRef ref : inheritedSeries) {
-            vizPanel.addLegendSeries(ref);
-        }
-
-        // Duplicating copies the source's full history (the batchStateChange above
-        // already pushed this tab's own initial entry, which the copy replaces).
-        // Done BEFORE the toolbar is built: copyHistoryFrom restores the source's current
-        // state, and the toolbar controls initialise by reading the panel — building
-        // first left them showing defaults that disagreed with the restored state.
-        if (settings.sourceVizPanel != null) {
-            vizPanel.copyHistoryFrom(settings.sourceVizPanel);
-        }
 
         tabs.add(tabInfo);
 
@@ -539,13 +460,11 @@ public class VisualizationTabManager {
 
         FlowVizToolbarBuilder toolbarBuilder = new FlowVizToolbarBuilder(tabInfo);
         toolbarBuilder
-            .setOnUndoRedo(state -> {
-                syncTabSelectionFromState(vizPanel, state);
-                toolbarBuilder.getController().updateFromState(state);
-            })
+            .setOnUndoRedo(state -> toolbarBuilder.getController().updateFromState(state))
             .setOnStateApplied(() -> refreshDataProjection(tabInfo))
             .setOnViewToggle(mode -> switchView(tabInfo, mode));
-        containerPanel.add(toolbarBuilder.build(settings.autoYMode, settings.showCoordinates), BorderLayout.NORTH);
+        containerPanel.add(toolbarBuilder.build(model.current().isAutoYMode(), prefs.showCoordinates()),
+            BorderLayout.NORTH);
         tabInfo.vizToolbar = toolbarBuilder;
 
         // Every tab mounts every page in a CardLayout — the view toggle switches
@@ -563,8 +482,7 @@ public class VisualizationTabManager {
         tabbedPane.addTab(tabInfo.name, containerPanel);
         setupTabHandle(index, tabInfo);
 
-        // Select the new tab (only when duplicating, not for initial default tabs)
-        if (settings.selectedSeries != null) {
+        if (select) {
             tabbedPane.setSelectedIndex(index);
         }
 
@@ -607,20 +525,6 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Adds a new statistics-view tab with the given settings.
-     *
-     * @return The created StatsTableModel (the tab's stats projection)
-     */
-    public StatsTableModel addStatsTabFromSettings(TabSettings settings) {
-        return addTabFromSettings(settings, FlowVizView.STATS).statsVizPanel.model();
-    }
-
-    /** Creates a tab honouring the settings' recorded view (Duplicate's path). */
-    TabInfo addTabFromSettings(TabSettings settings) {
-        return addTabFromSettings(settings, settings.activeView);
-    }
-
-    /**
      * Sets up a tab with an icon and interaction handlers.
      */
     private void setupTabHandle(int index, TabInfo tabInfo) {
@@ -660,17 +564,14 @@ public class VisualizationTabManager {
         }
     }
 
-    /**
-     * The settings of the tab behind {@code tabPanel}, for seeding a new tab from it.
-     * Falls back to the defaults if the tab can no longer be found, which is what a
-     * plain "add tab" starts from too.
-     */
-    private TabSettings settingsOfTab(JPanel tabPanel) {
+    /** Duplicates the tab behind {@code tabPanel}; a tab that can no longer be found gets a default tab instead. */
+    private void duplicateTabOf(JPanel tabPanel) {
         int tabIndex = tabbedPane.indexOfTabComponent(tabPanel);
         if (tabIndex == -1 || tabIndex >= tabs.size()) {
-            return TabSettings.getDefaults();
+            addPlotTab(defaultState(FlowVizView.PLOT));
+            return;
         }
-        return TabSettings.fromTab(tabs.get(tabIndex));
+        duplicateTab(tabs.get(tabIndex));
     }
 
     /**
@@ -695,7 +596,7 @@ public class VisualizationTabManager {
         // existence — in place, keeping the tab's name and history, undoable — so it is
         // a modify action; the destructive block that §1 ⑥ and §8 isolate is Remove alone.
         JMenuItem duplicateItem = new JMenuItem("Duplicate");
-        duplicateItem.addActionListener(e -> addTabFromSettings(settingsOfTab(tabPanel)));
+        duplicateItem.addActionListener(e -> duplicateTabOf(tabPanel));
         contextMenu.add(duplicateItem);
 
         JMenuItem resetItem = new JMenuItem("Reset");
@@ -867,33 +768,25 @@ public class VisualizationTabManager {
     /**
      * Resets the tab at {@code index} in place: default settings from preferences, no
      * series selected, no checked sources — while preserving the tab's identity (name,
-     * position, toolbar) and, for plot tabs, its undo history, onto which the reset
-     * lands as one undoable entry. Uses the same {@link #applyPlotSettings} as tab
-     * creation, so a reset tab cannot drift from what a genuinely new tab looks like.
+     * position, toolbar) and its undo history, onto which the reset lands as one
+     * undoable entry. It starts from the same {@link #defaultState} as a new tab, so a
+     * reset tab cannot drift from what a genuinely new tab looks like.
      */
     void resetTabAt(int index) {
         if (index < 0 || index >= tabs.size()) {
             return;
         }
         TabInfo tab = tabs.get(index);
-        TabSettings settings = TabSettings.getDefaults();
 
-        tab.selectedSeries.clear();
-        tab.checkedSources.clear();
-
-        // One reset path for both views: the panel owns the state, so a stats-view
-        // reset is now just as undoable as a plot-view one. Mask semantics per view
-        // are preserved: a plot-view reset leaves the mask alone (as it always has),
-        // a stats-view reset restores the stats default (ALL). The seasonal mask has
-        // no per-view default, so applyPlotSettings clears it for both.
-        tab.vizPanel.batchStateChange(() -> {
-            tab.vizPanel.setVisibleSeries(new ArrayList<>());
-            applyPlotSettings(tab.vizPanel, settings);
-            if (tab.viewMode == FlowVizView.STATS) {
-                tab.vizPanel.setMaskMode(MaskMode.ALL);
-            }
-        });
-        tab.vizPanel.getLegendManager().clear();
+        // One reset path for every view. Mask semantics per view are preserved: a
+        // plot-view reset leaves the mask alone (as it always has), a stats-view reset
+        // restores the stats default (ALL). The seasonal mask has no per-view default.
+        FlowVizState reset = switch (tab.viewMode) {
+            case PLOT, DATA -> defaultState(tab.viewMode).withMaskMode(tab.model().current().getMaskMode());
+            case STATS -> defaultState(FlowVizView.STATS);
+        };
+        tab.vizPanel.batchStateChange(() -> tab.model().update(s -> reset));
+        DisplayPrefs.fromPreferences().applyTo(tab.vizPanel);
         if (tab.vizToolbar != null) {
             tab.vizToolbar.getController().updateFromState(tab.vizPanel.currentState());
         }
@@ -904,40 +797,7 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Applies a TabSettings' plot configuration to a panel — the single owner of "what
-     * settings a plot tab has", used by both tab creation and in-place Reset so the two
-     * can never drift apart. Call inside {@link FlowVizPanel#batchStateChange}: several of
-     * these setters would otherwise each rebuild and push history.
-     */
-    private static void applyPlotSettings(FlowVizPanel vizPanel, TabSettings settings) {
-        vizPanel.setAggregation(settings.aggregationPeriod, settings.aggregationMethod);
-        vizPanel.setPlotType(settings.plotType);
-        vizPanel.setYAxisScale(settings.yAxisScale);
-        vizPanel.setAutoYMode(settings.autoYMode);
-        // The seasonal mask is also part of FlowVizState, so on the duplication path
-        // copyHistoryFrom writes it again a moment later. That is deliberate, not an
-        // oversight: the two agree by construction (fromPlotTab reads the same panel
-        // copyHistoryFrom copies), and both writes land inside batchStateChange, where
-        // restoringState makes a setter a bare field assignment - no rebuild, no fit, no
-        // history push. Keeping it here is what lets reset and duplicate share one path.
-        // (maskMode is NOT set here: it carries a per-view default, applied at creation.)
-        vizPanel.setSeasonalMaskMode(settings.seasonalMaskMode);
-        vizPanel.setShowCoordinates(settings.showCoordinates);
-        // Order matters: setConnectAcrossGaps(true) clears orphan markers and vice versa,
-        // so apply connect first — for every valid (mutually exclusive) combination the
-        // net result matches the source tab.
-        vizPanel.setConnectAcrossGaps(settings.connectAcrossGaps);
-        vizPanel.setShowOrphanMarkers(settings.showOrphanMarkers);
-        // Line shape is part of FlowVizState too, so the note on the seasonal mask applies.
-        vizPanel.setLineShape(settings.lineShape);
-        // Unconditional: the new legend manager starts from the global preference, which
-        // may disagree with this tab's settings in either direction.
-        vizPanel.setLegendCollapsed(settings.legendCollapsed);
-        vizPanel.setLegendEnabled(settings.legendEnabled);
-    }
-
-    /**
-     * Updates all plot tabs using each tab's own per-tab selected series.
+     * Refreshes every tab from the pool (each shows its own selection).
      *
      * @param resetZoom If true, resets zoom to fit all data. If false, preserves current zoom.
      */
@@ -945,7 +805,6 @@ public class VisualizationTabManager {
         for (TabInfo tab : tabs) {
             if (tab.viewMode == FlowVizView.PLOT) {
                 tab.vizPanel.setStyleResolver(styleResolver);
-                tab.vizPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
                 tab.vizPanel.refreshData(resetZoom);
             } else {
                 // Hidden plot page: skipped, refreshed when the view toggles.
@@ -962,7 +821,6 @@ public class VisualizationTabManager {
         for (TabInfo tab : tabs) {
             if (tab.vizPanel == targetPanel) {
                 tab.vizPanel.setStyleResolver(styleResolver);
-                tab.vizPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
                 tab.vizPanel.refreshData(resetZoom);
                 tab.statsVizPanel.refresh();
                 refreshDataProjection(tab);
@@ -987,13 +845,13 @@ public class VisualizationTabManager {
     /**
      * Reprojects the window-level views (the source and outputs trees, via
      * {@link VizHost#onActiveTabChanged}) after an in-place
-     * mutation of a tab's canonical record (selectedSeries / checkedSources).
+     * mutation of a tab's state (its selection or checked sources).
      * The trees mirror the ACTIVE tab only, so the active-tab guard lives here
      * and nowhere else: mutating a background tab stays silent, and its state
      * is projected later by activation ("Empty restores empty").
      *
      * <p>Every in-place mutation of a tab's record must end here — Reset and
-     * the undo/redo sync do. Mutations that happen while the corresponding
+     * undo/redo (through the tab's model listener) do. Mutations that happen while the corresponding
      * tree nodes are being removed in the same operation (removeRunData,
      * removeLoadedDataset) deliberately do not: their projection is corrected
      * at the source, and firing a restore mid-removal would be wrong. For
@@ -1036,20 +894,9 @@ public class VisualizationTabManager {
      */
     public Set<SeriesRef> getTargetTabSelectedSeries() {
         TabInfo tab = getTargetTab();
-        return tab != null ? Collections.unmodifiableSet(tab.selectedSeries) : Collections.emptySet();
-    }
-
-    /**
-     * Resolves the source context a new tab should start with: from the settings if
-     * recorded there (duplication), otherwise the active tab's (fresh tab created while
-     * another is showing), otherwise empty (startup default tabs).
-     */
-    private Set<SourceRef> inheritedSources(TabSettings settings) {
-        if (settings.checkedSources != null) {
-            return settings.checkedSources;
-        }
-        TabInfo activeTab = getActiveTab();
-        return activeTab != null ? activeTab.checkedSources : Collections.emptySet();
+        return tab != null
+            ? Collections.unmodifiableSet(new LinkedHashSet<>(tab.selection()))
+            : Collections.emptySet();
     }
 
     /**
@@ -1057,7 +904,7 @@ public class VisualizationTabManager {
      */
     public Set<SourceRef> getTargetTabCheckedSources() {
         TabInfo tab = getTargetTab();
-        return tab != null ? Collections.unmodifiableSet(tab.checkedSources) : Collections.emptySet();
+        return tab != null ? tab.model().current().getCheckedSources() : Collections.emptySet();
     }
 
     /**
@@ -1077,14 +924,15 @@ public class VisualizationTabManager {
 
     /**
      * Records the checked data sources on the target tab (in the given order).
-     * Pure bookkeeping — no visual side effects; the source tree itself is the
+     * Pure bookkeeping — no visual side effects and no history entry of its own
+     * ({@link #pushTargetTabHistory} records it); the source tree itself is the
      * caller's responsibility.
      */
     public void setTargetTabCheckedSources(Set<SourceRef> sources) {
         TabInfo tab = getTargetTab();
         if (tab == null) return;
-        tab.checkedSources.clear();
-        tab.checkedSources.addAll(sources);
+        Set<SourceRef> ordered = new LinkedHashSet<>(sources);
+        tab.model().update(s -> s.withCheckedSources(ordered));
     }
 
     /**
@@ -1095,7 +943,12 @@ public class VisualizationTabManager {
      */
     public void removeSourceFromAllTabs(SourceRef ref) {
         for (TabInfo tab : tabs) {
-            tab.checkedSources.remove(ref);
+            Set<SourceRef> sources = tab.model().current().getCheckedSources();
+            if (sources.contains(ref)) {
+                Set<SourceRef> kept = new LinkedHashSet<>(sources);
+                kept.remove(ref);
+                tab.model().update(s -> s.withCheckedSources(kept));
+            }
         }
     }
 
@@ -1124,23 +977,16 @@ public class VisualizationTabManager {
         // Merge: retain still-selected series in their current order, then append the
         // genuinely-new ones (LinkedHashSet.addAll skips refs already present).
         Set<SeriesRef> ordered = new LinkedHashSet<>();
-        for (SeriesRef ref : tab.selectedSeries) {
+        for (SeriesRef ref : tab.selection()) {
             if (series.contains(ref)) {
                 ordered.add(ref);
             }
         }
         ordered.addAll(series);
 
-        tab.selectedSeries.clear();
-        tab.selectedSeries.addAll(ordered);
-
-        // The panel is the state owner for every tab: the selection lands there
-        // (undoably) whatever view is showing. The display refresh is only paid
-        // for the visible plot page; the stats projection follows (or dirties).
-        tab.vizPanel.clearLegend();
-        for (SeriesRef ref : ordered) {
-            tab.vizPanel.addLegendSeries(ref);
-        }
+        // The selection lands in the tab's state (undoably) whatever view is showing.
+        // The display refresh is only paid for the visible plot page; the other pages
+        // follow the model (or dirty).
         tab.vizPanel.setStyleResolver(styleResolver);
         tab.vizPanel.setVisibleSeries(new ArrayList<>(ordered));
         if (tab.viewMode == FlowVizView.PLOT) {
@@ -1178,41 +1024,9 @@ public class VisualizationTabManager {
     public Set<SeriesRef> getAllSelectedSeriesAcrossTabs() {
         Set<SeriesRef> all = new HashSet<>();
         for (TabInfo tab : tabs) {
-            all.addAll(tab.selectedSeries);
+            all.addAll(tab.selection());
         }
         return all;
-    }
-
-    /**
-     * Syncs TabInfo.selectedSeries and tree after an undo/redo changes visible series.
-     */
-    void syncTabSelectionFromState(FlowVizPanel panel, com.kalix.ide.flowviz.FlowVizState state) {
-        TabInfo mutated = null;
-        for (TabInfo tab : tabs) {
-            if (tab.vizPanel == panel) {
-                tab.selectedSeries.clear();
-                tab.selectedSeries.addAll(state.getVisibleSeries());
-                // The snapshot is the complete view: source context restores too.
-                // Refs whose run/dataset has since been removed fail silently at
-                // projection (unfindable paths are skipped) — see FlowVizState.
-                tab.checkedSources.clear();
-                tab.checkedSources.addAll(state.getCheckedSources());
-
-                // Rebuild legend to match (colour resolved at render time)
-                panel.clearLegend();
-                for (SeriesRef ref : state.getVisibleSeries()) {
-                    panel.addLegendSeries(ref);
-                }
-                // The table projections follow the restored state (or dirty).
-                refreshDataProjection(tab);
-                mutated = tab;
-                break;
-            }
-        }
-
-        if (mutated != null) {
-            notifyTabMutated(mutated);
-        }
     }
 
     // (renameSeriesAcrossTabs removed — identity is now SeriesRef-typed, which is stable
@@ -1224,7 +1038,7 @@ public class VisualizationTabManager {
      */
     public boolean isSeriesSelectedOnAnyTab(SeriesRef seriesRef) {
         for (TabInfo tab : tabs) {
-            if (tab.selectedSeries.contains(seriesRef)) {
+            if (tab.selection().contains(seriesRef)) {
                 return true;
             }
         }
@@ -1267,7 +1081,7 @@ public class VisualizationTabManager {
     public void updateSeriesInStatsTabsWithAggregation(SeriesRef ref, TimeSeriesData data) {
         loadStates.remove(ref);
         for (TabInfo tab : tabs) {
-            if (tab.selectedSeries.contains(ref)) {
+            if (tab.selection().contains(ref)) {
                 tab.statsVizPanel.refresh();
                 refreshDataProjection(tab);
             }
@@ -1293,16 +1107,15 @@ public class VisualizationTabManager {
     private void setLoadState(SeriesRef ref, SeriesLoadState state) {
         loadStates.put(ref, state);
         for (TabInfo tab : tabs) {
-            if (tab.selectedSeries.contains(ref)) {
+            if (tab.selection().contains(ref)) {
                 tab.statsVizPanel.refresh();
             }
         }
     }
 
     /**
-     * Removes the given series from <em>every</em> tab — clearing each tab's
-     * selectedSeries set, the legend and visible-series list on plot tabs, and the
-     * stats model on stats tabs. Plot data is refreshed once per affected plot tab.
+     * Removes the given series from <em>every</em> tab's selection; every page follows.
+     * Plot data is refreshed once per affected plot tab.
      */
     public void removeSeriesFromAllTabs(Collection<SeriesRef> refs) {
         if (refs.isEmpty()) {
@@ -1314,16 +1127,13 @@ public class VisualizationTabManager {
         pruneLoadStates();
     }
 
-    /** Drops refs from one tab's selection and every page that shows it. */
+    /** Drops refs from one tab's selection; every page follows the model. */
     private void removeSeriesFromTab(TabInfo tab, Collection<SeriesRef> refs) {
-        boolean changed = tab.selectedSeries.removeAll(refs);
-        if (!changed) {
+        List<SeriesRef> kept = new ArrayList<>(tab.selection());
+        if (!kept.removeAll(refs)) {
             return;
         }
-        for (SeriesRef ref : refs) {
-            tab.vizPanel.removeLegendSeries(ref);
-        }
-        tab.vizPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
+        tab.vizPanel.setVisibleSeries(kept);
         if (tab.viewMode == FlowVizView.PLOT) {
             tab.vizPanel.refreshData(false);
         }
