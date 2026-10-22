@@ -23,18 +23,15 @@ class TabNamingTest {
             ref -> new LineStyle(Color.BLACK, StrokeStyle.values()[0]));
     }
 
-    private static VisualizationTabManager.TabSettings emptySettings() {
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>();
-        return settings;
+    private static FlowVizState emptySettings() {
+        return FlowVizState.defaults();
     }
 
     @Test
     void defaultNamesIncrementMonotonically() {
         VisualizationTabManager mgr = manager();
-        mgr.addPlotTabFromSettings(emptySettings());
-        mgr.addStatsTabFromSettings(emptySettings());
+        mgr.addPlotTab(emptySettings());
+        mgr.addStatsTab(emptySettings());
         assertEquals("View 1", mgr.tabAt(0).name);
         assertEquals("View 2", mgr.tabAt(1).name);
     }
@@ -42,17 +39,17 @@ class TabNamingTest {
     @Test
     void duplicatingADefaultNamedTabMintsAFreshNumber() {
         VisualizationTabManager mgr = manager();
-        mgr.addPlotTabFromSettings(emptySettings()); // View 1
-        mgr.addTabFromSettings(VisualizationTabManager.TabSettings.fromTab(mgr.tabAt(0)));
+        mgr.addPlotTab(emptySettings()); // View 1
+        mgr.duplicateTab(mgr.tabAt(0));
         assertEquals("View 2", mgr.tabAt(1).name, "two 'View 1's help nobody");
     }
 
     @Test
     void duplicatingAUserNamedTabKeepsTheName() {
         VisualizationTabManager mgr = manager();
-        mgr.addPlotTabFromSettings(emptySettings());
+        mgr.addPlotTab(emptySettings());
         mgr.tabAt(0).rename("Calibration");
-        mgr.addTabFromSettings(VisualizationTabManager.TabSettings.fromTab(mgr.tabAt(0)));
+        mgr.duplicateTab(mgr.tabAt(0));
         assertEquals("Calibration", mgr.tabAt(1).name, "a chosen name is the user's to keep");
     }
 }

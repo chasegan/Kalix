@@ -56,11 +56,8 @@ class SeasonalMaskStateTest {
             ref -> new LineStyle(Color.BLACK, StrokeStyle.values()[0]));
     }
 
-    private static VisualizationTabManager.TabSettings emptySettings() {
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>();
-        return settings;
+    private static FlowVizState emptySettings() {
+        return FlowVizState.defaults();
     }
 
     @Test
@@ -119,7 +116,7 @@ class SeasonalMaskStateTest {
     @Test
     void resetClearsTheSeasonalMask() {
         VisualizationTabManager mgr = manager();
-        mgr.addPlotTabFromSettings(emptySettings());
+        mgr.addPlotTab(emptySettings());
         mgr.getTargetVizPanel().setSeasonalMaskMode(SUMMER);
 
         mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex());
@@ -131,13 +128,12 @@ class SeasonalMaskStateTest {
     @Test
     void undoOfResetBringsTheSeasonalMaskBack() {
         VisualizationTabManager mgr = manager();
-        mgr.addPlotTabFromSettings(emptySettings());
+        mgr.addPlotTab(emptySettings());
         FlowVizPanel panel = mgr.getTargetVizPanel();
         panel.setSeasonalMaskMode(SUMMER);
 
         mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex());
         FlowVizState undone = panel.undo();
-        mgr.syncTabSelectionFromState(panel, undone);
 
         assertEquals(SUMMER, panel.getSeasonalMaskMode(),
             "a reset is one undoable step, and the mask comes back with the rest of the view");

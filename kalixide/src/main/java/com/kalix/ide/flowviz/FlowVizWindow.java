@@ -285,7 +285,6 @@ public class FlowVizWindow extends JFrame {
 
                 dataPanel.addSeries(ref, seriesColor, data.getPointCount());
                 requestPlotPanelUpdate();
-                vizPanel.addLegendSeries(ref);
                 updateTitle();
             }
 
@@ -293,7 +292,6 @@ public class FlowVizWindow extends JFrame {
             public void onSeriesRemoved(SeriesRef ref) {
                 dataPanel.removeSeries(ref);
                 requestPlotPanelUpdate();
-                vizPanel.removeLegendSeries(ref);
                 updateTitle();
             }
 
