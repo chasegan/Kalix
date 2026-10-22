@@ -1374,16 +1374,4 @@ public class VisualizationTabManager {
         }
         refreshDataProjection(tab);
     }
-
-    /**
-     * Removes a series from every stats-view tab's selection and projection.
-     */
-    public void removeSeriesFromStatsTabs(SeriesRef ref) {
-        for (TabInfo tab : tabs) {
-            if (tab.viewMode == FlowVizView.STATS) {
-                // The panel's series list too, or the stats would bring it back.
-                removeSeriesFromTab(tab, List.of(ref));
-            }
-        }
-    }
 }

@@ -1018,11 +1018,6 @@ public class RunManager extends JFrame {
         Set<SeriesRef> updatedSeries = new LinkedHashSet<>(tabSeries);
         updatedSeries.removeAll(seriesToRemove);
         tabManager.setTargetTabSelectedSeries(updatedSeries);
-
-        // Remove from stats tables
-        for (SeriesRef ref : seriesToRemove) {
-            tabManager.removeSeriesFromStatsTabs(ref);
-        }
     }
 
     /**
