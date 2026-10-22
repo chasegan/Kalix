@@ -1376,6 +1376,9 @@ public class FlowVizPanel extends JPanel {
      * for DIFFERENCE plot types. If so, triggers recalculation.
      */
     private void checkReferenceSeriesChange() {
+        if (restoringState) {
+            return; // restoreState rebuilds once at the end and applies the snapshot's viewport
+        }
         // Only check if current plot type requires reference series
         if (!plotType.requiresReferenceSeries()) {
             lastReferenceSeries = null;
