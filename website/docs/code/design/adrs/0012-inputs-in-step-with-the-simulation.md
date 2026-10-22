@@ -85,15 +85,17 @@ Error: Specified start '2020-01-02' is out of step with the input data, which is
 
 **Structural** — `Model::auto_determine_simulation_period` and the input fill
 in `Model::configure` (`src/model.rs`) check every input and `start`/`end`
-via `same_phase` (`src/timeseries.rs`); `needs_time_of_day`
-(`src/tid/utils.rs`) keeps the time of day when writing. Tests:
-`src/tests/test_input_phase.rs` and `test_save_keeps_time_of_day_on_start_and_end`
-in `src/tests/test_model_io_ini.rs`.
+via `same_phase` (`src/timeseries.rs`) for the phase, and compare `step_size`
+for the timestep; `needs_time_of_day` (`src/tid/utils.rs`) keeps the time of
+day when writing. Tests: `src/tests/test_input_phase.rs`,
+`test_save_keeps_time_of_day_on_start_and_end` in
+`src/tests/test_model_io_ini.rs`, and the mixed-timestep tests in
+`src/tests/test_input_validation.rs`.
 
 ## Links and references
 
 - Related: [ADR-0005](0005-node-definition-order.md)
-- Pull request: [#475](https://github.com/chasegan/Kalix/pull/475)
+- Pull requests: [#475](https://github.com/chasegan/Kalix/pull/475), [#483](https://github.com/chasegan/Kalix/pull/483) (timestep check)
 
 ## Amendments
 
