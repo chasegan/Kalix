@@ -110,11 +110,17 @@ class StatsAggregationEquivalenceTest {
         List<List<String>> expected = snapshot(batch);
         assertFalse(expected.isEmpty(), "fixture sanity: statistics were computed");
 
-        // Path B: per-series async updates into a visible stats view.
-        VisualizationTabManager async = manager(new DataSet());
+        // Path B: per-series async updates into a visible stats view. Each series
+        // reaches the pool first, as every production caller publishes it.
+        DataSet asyncPool = new DataSet();
+        VisualizationTabManager async = manager(asyncPool);
         async.addStatsTabFromSettings(statsSettings(AggregationPeriod.DAILY, AggregationMethod.MEAN));
-        async.updateSeriesInStatsTabsWithAggregation(R1, daily(1, 2, 3, 4, 5, 6));
-        async.updateSeriesInStatsTabsWithAggregation(R2, daily(2, 4, 6, 8, 10, 12));
+        TimeSeriesData first = daily(1, 2, 3, 4, 5, 6);
+        asyncPool.addSeries(R1, first);
+        async.updateSeriesInStatsTabsWithAggregation(R1, first);
+        TimeSeriesData second = daily(2, 4, 6, 8, 10, 12);
+        asyncPool.addSeries(R2, second);
+        async.updateSeriesInStatsTabsWithAggregation(R2, second);
         assertEquals(expected, snapshot(async.getAllStatsModels().get(0)),
             "async per-series path must match the batch path");
 
@@ -250,5 +256,21 @@ class StatsAggregationEquivalenceTest {
         duplicate.addStatsTabFromSettings(maskedSettings(carried));
         assertEquals(carried, duplicate.getTargetVizPanel().getSeasonalMaskMode(),
             "duplication carries the seasonal selection, as it does the overlap mask");
+    }
+
+    @Test
+    void removingAStatsSeriesAlsoLeavesThePanel() {
+        VisualizationTabManager mgr = manager(pool());
+        StatsTableModel model = mgr.addStatsTabFromSettings(
+            statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM));
+        mgr.removeSeriesFromStatsTabs(R1);
+
+        // The stats project from the panel's list, so a stale entry there would bring R1 back.
+        assertEquals(List.of(R2), mgr.tabAt(0).vizPanel.currentState().getVisibleSeries());
+        VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
+        mgr.switchView(tab, FlowVizView.PLOT);
+        mgr.updateAllTabs(false);
+        mgr.switchView(tab, FlowVizView.STATS); // re-projects from the panel
+        assertEquals(1, model.getRowCount(), "R1 stays gone after the next projection");
     }
 }
