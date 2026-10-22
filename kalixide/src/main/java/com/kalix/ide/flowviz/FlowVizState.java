@@ -35,6 +35,11 @@ import java.util.Set;
  */
 public final class FlowVizState {
 
+    /** A fresh tab before anything is chosen: no series, native resolution, every option off. */
+    public static final FlowVizState INITIAL = new FlowVizState(List.of(), Set.of(),
+        AggregationPeriod.ORIGINAL, AggregationMethod.SUM, PlotType.VALUES, YAxisScale.LINEAR,
+        LineShape.STRAIGHT, MaskMode.NONE, SeasonalMaskMode.DISABLED, false, 0, 0, 0, 0);
+
     private final List<SeriesRef> visibleSeries;
     private final Set<SourceRef> checkedSources;
     private final AggregationPeriod aggregationPeriod;
@@ -85,28 +90,70 @@ public final class FlowVizState {
         this.maxValue = maxValue;
     }
 
-    /**
-     * Captures the current state from a FlowVizPanel's fields.
-     */
-    public static FlowVizState capture(List<SeriesRef> visibleSeries,
-                                    Set<SourceRef> checkedSources,
-                                    AggregationPeriod aggregationPeriod,
-                                    AggregationMethod aggregationMethod,
-                                    PlotType plotType,
-                                    YAxisScale yAxisScale,
-                                    LineShape lineShape,
-                                    MaskMode maskMode,
-                                    SeasonalMaskMode seasonalMaskMode,
-                                    boolean autoYMode,
-                                    ViewPort viewport) {
-        long startTime = viewport != null ? viewport.getStartTimeMs() : 0;
-        long endTime = viewport != null ? viewport.getEndTimeMs() : 0;
-        double min = viewport != null ? viewport.getMinValue() : 0;
-        double max = viewport != null ? viewport.getMaxValue() : 0;
+    public FlowVizState withVisibleSeries(List<SeriesRef> series) {
+        return new FlowVizState(series, checkedSources, aggregationPeriod, aggregationMethod, plotType,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, startTimeMs, endTimeMs, minValue, maxValue);
+    }
 
-        return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod,
-            aggregationMethod, plotType, yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode,
-            startTime, endTime, min, max);
+    public FlowVizState withCheckedSources(Set<SourceRef> sources) {
+        return new FlowVizState(visibleSeries, sources, aggregationPeriod, aggregationMethod, plotType,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, startTimeMs, endTimeMs, minValue, maxValue);
+    }
+
+    public FlowVizState withAggregation(AggregationPeriod period, AggregationMethod method) {
+        return new FlowVizState(visibleSeries, checkedSources, period, method, plotType,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, startTimeMs, endTimeMs, minValue, maxValue);
+    }
+
+    public FlowVizState withPlotType(PlotType type) {
+        return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, type,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, startTimeMs, endTimeMs, minValue, maxValue);
+    }
+
+    public FlowVizState withYAxisScale(YAxisScale scale) {
+        return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
+            scale, lineShape, maskMode, seasonalMaskMode, autoYMode, startTimeMs, endTimeMs, minValue, maxValue);
+    }
+
+    public FlowVizState withLineShape(LineShape shape) {
+        return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
+            yAxisScale, shape, maskMode, seasonalMaskMode, autoYMode, startTimeMs, endTimeMs, minValue, maxValue);
+    }
+
+    public FlowVizState withMaskMode(MaskMode mode) {
+        return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
+            yAxisScale, lineShape, mode, seasonalMaskMode, autoYMode, startTimeMs, endTimeMs, minValue, maxValue);
+    }
+
+    public FlowVizState withSeasonalMaskMode(SeasonalMaskMode mode) {
+        return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
+            yAxisScale, lineShape, maskMode, mode, autoYMode, startTimeMs, endTimeMs, minValue, maxValue);
+    }
+
+    public FlowVizState withAutoYMode(boolean autoY) {
+        return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoY, startTimeMs, endTimeMs, minValue, maxValue);
+    }
+
+    /** The viewport's bounds; a null viewport records zeros. */
+    public FlowVizState withViewport(ViewPort viewport) {
+        return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode,
+            viewport != null ? viewport.getStartTimeMs() : 0, viewport != null ? viewport.getEndTimeMs() : 0,
+            viewport != null ? viewport.getMinValue() : 0, viewport != null ? viewport.getMaxValue() : 0);
+    }
+
+    /** True when the two differ in anything but the viewport bounds and checked sources: what the plot draws. */
+    public boolean differsInPlotFrom(FlowVizState other) {
+        return autoYMode != other.autoYMode
+            || !Objects.equals(visibleSeries, other.visibleSeries)
+            || aggregationPeriod != other.aggregationPeriod
+            || aggregationMethod != other.aggregationMethod
+            || plotType != other.plotType
+            || yAxisScale != other.yAxisScale
+            || lineShape != other.lineShape
+            || maskMode != other.maskMode
+            || !Objects.equals(seasonalMaskMode, other.seasonalMaskMode);
     }
 
     public List<SeriesRef> getVisibleSeries() { return visibleSeries; }
