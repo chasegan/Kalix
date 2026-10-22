@@ -95,7 +95,7 @@ tasks.jar {
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(23))
+        languageVersion.set(JavaLanguageVersion.of(25))
     }
 }
 
@@ -103,7 +103,7 @@ java {
 // (config/checkstyle/checkstyle.xml). .editorconfig stops the IDE producing them in the
 // first place; this is the backstop for anything hand-written or from another editor.
 checkstyle {
-    toolVersion = "10.21.1"
+    toolVersion = "14.3.0"
     maxWarnings = 0
 }
 

@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  JDK_VERSION: '23'
+  JDK_VERSION: '25'
 
 jobs:
   rust-test:
@@ -48,7 +48,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JDK_VERSION }}
