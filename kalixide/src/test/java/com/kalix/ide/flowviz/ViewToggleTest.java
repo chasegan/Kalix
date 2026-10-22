@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -121,6 +122,27 @@ class ViewToggleTest {
         mgr.duplicateTab(mgr.tabAt(0));
         assertEquals(FlowVizView.STATS, mgr.tabAt(1).viewMode,
             "a duplicate opens on the same page as its source");
+    }
+
+    @Test
+    void theDataPageFollowsTheModelLazily() {
+        DataSet pool = new DataSet();
+        pool.addSeries(REF, daily(1, 2, 3));
+        VisualizationTabManager mgr = manager(pool);
+        mgr.addPlotTab(settingsWith(REF));
+        VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
+        assertTrue(tab.dataVizPanel.isDirty(), "a plot-view tab's data page starts lazy");
+
+        mgr.switchView(tab, FlowVizView.DATA);
+        DataGrid shown = tab.dataVizPanel.getGrid();
+        assertEquals(3, shown.rowCount(), "the shown data page is populated");
+
+        mgr.updateAllTabs(false); // nothing actually changed
+        assertSame(shown, tab.dataVizPanel.getGrid(), "an unchanged display keeps the grid (and any Find)");
+
+        pool.addSeries(REF, daily(1, 2, 3, 4)); // new data arrives
+        mgr.updateSeriesInStatsTabsWithAggregation(REF, pool.getSeries(REF));
+        assertEquals(4, tab.dataVizPanel.getGrid().rowCount(), "the shown page follows new data");
     }
 
     /** A host that only counts active-tab-change notifications. */
