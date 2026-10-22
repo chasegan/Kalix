@@ -425,10 +425,10 @@ public class VisualizationTabManager {
             tabInfo.defaultName = tabName;
         }
 
-        // One batched change: the initial state lands as a single rebuild and a single
-        // history entry, so a fresh tab starts with a one-entry history (no construction
+        // One change: the initial state lands as a single rebuild and a single history
+        // entry, so a fresh tab starts with a one-entry history (no construction
         // intermediates for undo to walk into).
-        vizPanel.batchStateChange(() -> model.update(s -> initial));
+        model.replace(initial);
         prefs.applyTo(vizPanel);
 
         // Duplicating copies the source's full history (the batch above already pushed
@@ -743,7 +743,6 @@ public class VisualizationTabManager {
      */
     private void detachTabCallbacks(TabInfo tab) {
         tab.vizPanel.setOnHistoryChanged(null);
-        tab.vizPanel.setOnAutoYModeChanged(null);
         tab.vizPanel.getLegendManager().setOnEnabledChanged(null);
     }
 
@@ -767,7 +766,7 @@ public class VisualizationTabManager {
             case PLOT, DATA -> defaultState(tab.viewMode).withMaskMode(tab.model().current().getMaskMode());
             case STATS -> defaultState(FlowVizView.STATS);
         };
-        tab.vizPanel.batchStateChange(() -> tab.model().update(s -> reset));
+        tab.model().replace(reset);
         DisplayPrefs.fromPreferences().applyTo(tab.vizPanel);
 
         // The canonical record changed in place: reproject the trees (active tab only).
@@ -911,7 +910,7 @@ public class VisualizationTabManager {
         TabInfo tab = getTargetTab();
         if (tab == null) return;
         Set<SourceRef> ordered = new LinkedHashSet<>(sources);
-        tab.model().update(s -> s.withCheckedSources(ordered));
+        tab.model().amend(s -> s.withCheckedSources(ordered));
     }
 
     /**
@@ -926,7 +925,7 @@ public class VisualizationTabManager {
             if (sources.contains(ref)) {
                 Set<SourceRef> kept = new LinkedHashSet<>(sources);
                 kept.remove(ref);
-                tab.model().update(s -> s.withCheckedSources(kept));
+                tab.model().amend(s -> s.withCheckedSources(kept));
             }
         }
     }
@@ -966,7 +965,7 @@ public class VisualizationTabManager {
         // The selection lands in the tab's state (undoably) whatever view is showing;
         // every page follows the model (or dirties).
         tab.vizPanel.setStyleResolver(styleResolver);
-        tab.vizPanel.setVisibleSeries(new ArrayList<>(ordered));
+        tab.model().update(s -> s.withVisibleSeries(new ArrayList<>(ordered)));
         pruneLoadStates();
     }
 
@@ -1088,6 +1087,6 @@ public class VisualizationTabManager {
         if (!kept.removeAll(refs)) {
             return;
         }
-        tab.vizPanel.setVisibleSeries(kept);
+        tab.model().update(s -> s.withVisibleSeries(kept));
     }
 }

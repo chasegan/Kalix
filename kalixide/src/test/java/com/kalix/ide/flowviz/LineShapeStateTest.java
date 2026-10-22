@@ -39,14 +39,14 @@ class LineShapeStateTest {
 
         FlowVizPanel panel = new FlowVizPanel();
         panel.setDataSet(pool);
-        panel.setVisibleSeries(List.of(REF));
+        panel.model().update(st -> st.withVisibleSeries(List.of(REF)));
         return panel;
     }
 
     @Test
     void changingTheShapeIsUndoableAndRedoable() {
         FlowVizPanel panel = panelWithData();
-        panel.setLineShape(LineShape.STEPPED);
+        panel.model().update(st -> st.withLineShape(LineShape.STEPPED));
         assertTrue(panel.canUndo(), "a line shape change is a state change, so it is undoable");
 
         panel.undo();
@@ -59,8 +59,8 @@ class LineShapeStateTest {
     @Test
     void reselectingTheSameShapePushesNoHistory() {
         FlowVizPanel panel = panelWithData();
-        panel.setLineShape(LineShape.STEPPED);
-        panel.setLineShape(LineShape.STEPPED);
+        panel.model().update(st -> st.withLineShape(LineShape.STEPPED));
+        panel.model().update(st -> st.withLineShape(LineShape.STEPPED));
 
         panel.undo();
         assertEquals(LineShape.STRAIGHT, panel.getLineShape(),
@@ -70,7 +70,7 @@ class LineShapeStateTest {
     @Test
     void theShapeIsCarriedInTheCapturedState() {
         FlowVizPanel panel = panelWithData();
-        panel.setLineShape(LineShape.STEPPED);
+        panel.model().update(st -> st.withLineShape(LineShape.STEPPED));
         assertEquals(LineShape.STEPPED, panel.currentState().getLineShape());
     }
 
@@ -80,7 +80,7 @@ class LineShapeStateTest {
             ref -> new LineStyle(Color.BLACK, StrokeStyle.values()[0]));
         mgr.addPlotTab(FlowVizState.defaults());
         FlowVizPanel panel = mgr.getTargetVizPanel();
-        panel.setLineShape(LineShape.STEPPED);
+        panel.model().update(st -> st.withLineShape(LineShape.STEPPED));
 
         mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex());
         assertEquals(LineShape.STRAIGHT, panel.getLineShape(), "reset returns the shape to straight");

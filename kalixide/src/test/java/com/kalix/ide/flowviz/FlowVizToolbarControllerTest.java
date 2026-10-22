@@ -57,7 +57,7 @@ class VizToolbarControllerTest {
         Container root = (Container) mgr.getTabbedPane().getSelectedComponent();
 
         // As the plot's context menu does: straight to the state, not through the toolbar.
-        mgr.getTargetVizPanel().setYAxisScale(YAxisScale.LOG);
+        mgr.getTargetVizPanel().model().update(st -> st.withYAxisScale(YAxisScale.LOG));
 
         assertEquals(YAxisScale.LOG.getDisplayName(), combo(root, "Y-axis scale").getSelectedItem());
     }
@@ -68,7 +68,7 @@ class VizToolbarControllerTest {
         mgr.addPlotTab(FlowVizState.defaults());
 
         FlowVizPanel panel = mgr.getTargetVizPanel();
-        panel.setAggregation(AggregationPeriod.DAILY, AggregationMethod.MEAN); // entry 2
+        panel.model().update(st -> st.withAggregation(AggregationPeriod.DAILY, AggregationMethod.MEAN)); // entry 2
 
         FlowVizToolbarController controller = mgr.tabAt(0).vizToolbar.getController();
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
@@ -140,7 +140,7 @@ class VizToolbarControllerTest {
         assertNotNull(button);
 
         SeasonalMaskMode winter = SeasonalMaskMode.of(Set.of(Month.JUNE, Month.JULY));
-        panel.setSeasonalMaskMode(winter);
+        panel.model().update(st -> st.withSeasonalMaskMode(winter));
         // The button is not an observer of the panel: like the combos, it is reconciled
         // only through updateFromState (undo/redo and reset), and otherwise drives it.
         mgr.tabAt(0).vizToolbar.getController().updateFromState(panel.currentState());

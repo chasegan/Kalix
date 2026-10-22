@@ -29,8 +29,8 @@ class FlowVizPanelZoomToFitTest {
         dataSet.addSeries(ref, new TimeSeriesData(
             new long[] {0, DAY, 2 * DAY}, new double[] {0.0, 0.5, 0.9}));
         panel.setDataSet(dataSet);
-        panel.setVisibleSeries(List.of(ref));
-        panel.setYAxisScale(YAxisScale.LOG);
+        panel.model().update(st -> st.withVisibleSeries(List.of(ref)));
+        panel.model().update(st -> st.withYAxisScale(YAxisScale.LOG));
         panel.refreshData(true);
 
         panel.zoomToFit();

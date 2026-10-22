@@ -38,14 +38,14 @@ class FlowVizPanelFitRulesTest {
     @Test
     void newReferenceOnADifferencePlotRefitsYAndKeepsXUnderAutoY() {
         FlowVizPanel panel = panel(new double[] {0, 10, 20}, new double[] {5, 5, 5});
-        panel.setVisibleSeries(List.of(A, B));
-        panel.setPlotType(PlotType.DIFFERENCE);
-        panel.setAutoYMode(true);
+        panel.model().update(st -> st.withVisibleSeries(List.of(A, B)));
+        panel.model().update(st -> st.withPlotType(PlotType.DIFFERENCE));
+        panel.model().update(st -> st.withAutoYMode(true));
         panel.refreshData(true);
         ViewPort before = panel.viewportForTests();
         assertTrue(before.getMaxValue() < 10, "against a, b's differences top out at 5");
 
-        panel.setVisibleSeries(List.of(B, A)); // b becomes the reference
+        panel.model().update(st -> st.withVisibleSeries(List.of(B, A))); // b becomes the reference
 
         ViewPort after = panel.viewportForTests();
         assertEquals(before.getStartTimeMs(), after.getStartTimeMs(), "auto-Y keeps the X range");
@@ -56,12 +56,12 @@ class FlowVizPanelFitRulesTest {
     @Test
     void scaleSwitchWithAutoYOffKeepsTheBoundsAndRecordsAnEntry() {
         FlowVizPanel panel = panel(new double[] {100, 150, 200}, new double[] {120, 140, 160});
-        panel.setVisibleSeries(List.of(A, B));
+        panel.model().update(st -> st.withVisibleSeries(List.of(A, B)));
         panel.refreshData(true);
         ViewPort before = panel.viewportForTests();
         assertTrue(before.getMinValue() > 0, "fixture: a positive fit, showable on log");
 
-        panel.setYAxisScale(YAxisScale.LOG);
+        panel.model().update(st -> st.withYAxisScale(YAxisScale.LOG));
 
         ViewPort after = panel.viewportForTests();
         assertEquals(before.getMinValue(), after.getMinValue(), 1e-12, "no re-fit with auto-Y off");

@@ -136,7 +136,7 @@ public class FlowVizWindow extends JFrame {
             ? d.baseName()
             : String.valueOf(ref));
         // Auto-Y mode and precision will be initialized by action manager
-        vizPanel.setAutoYMode(true);  // Default value, will be updated by loadPreferences
+        vizPanel.model().update(st -> st.withAutoYMode(true));  // Default value, will be updated by loadPreferences
         vizPanel.setPrecision64Supplier(() -> actionManager == null || actionManager.isPrecision64());
         dataPanel = new DataPanel();
         dataPanel.setPreferredSize(new Dimension(250, 0));
@@ -399,7 +399,8 @@ public class FlowVizWindow extends JFrame {
         }
 
         vizPanel.setStyleResolver(new MapStyleResolver(colorMap));
-        vizPanel.setVisibleSeries(visibleRefs);
+        List<SeriesRef> shown = visibleRefs;
+        vizPanel.model().update(st -> st.withVisibleSeries(shown));
     }
 
     private void updatePlotVisibility() {
@@ -408,7 +409,8 @@ public class FlowVizWindow extends JFrame {
         if (visibleRefs.isEmpty() && !dataSet.isEmpty()) {
             visibleRefs = dataSet.getSeriesRefs();
         }
-        vizPanel.setVisibleSeries(visibleRefs);
+        List<SeriesRef> shown = visibleRefs;
+        vizPanel.model().update(st -> st.withVisibleSeries(shown));
     }
 
     private void setupDataManager() {
