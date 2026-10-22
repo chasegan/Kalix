@@ -41,6 +41,7 @@ import com.kalix.ide.preferences.ui.NodeDiagramPreferencePage;
 import com.kalix.ide.preferences.ui.PreferencePage;
 import com.kalix.ide.preferences.ui.SystemPreferencePage;
 import com.kalix.ide.preferences.ui.ThemePreferencePage;
+import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.ErrorLog;
@@ -525,7 +526,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             // application theme's linked node palette).
             map.setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
             map.setShowGridlines(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
-            map.setShowLabels(PreferenceKeys.MAP_SHOW_LABELS.get());
+            map.setLabelMode(NodeLabelMode.saved());
         }
 
         if (document.isModel()) {
@@ -965,11 +966,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         }
 
         if (labelsToggleButton != null) {
-            boolean labelsVisible = isLabelsVisible();
-            labelsToggleButton.setSelected(labelsVisible);
-            labelsToggleButton.setToolTipText(labelsVisible
-                ? "Node labels visible - click to hide"
-                : "Node labels hidden (shown on hover) - click to show");
+            ToolBarBuilder.applyLabelMode(labelsToggleButton, getLabelMode());
         }
     }
 
@@ -1706,7 +1703,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
                 syncToggleButtonStates();
             }),
             themePage,
-            new FontPreferencePage(textEditor, ThemeManager::notifyFontSizeChanged),
+            new FontPreferencePage(ThemeManager::notifyFontSizeChanged),
             linterPage,
             new NodeDiagramPreferencePage(onMapPreferencesChanged, visible -> syncToggleButtonStates()),
             new DataVisualizationPreferencePage(onFlowVizPreferencesChanged),
@@ -1940,16 +1937,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
-    public void toggleLabels(boolean showLabels) {
+    public void setLabelMode(NodeLabelMode mode) {
         // Apply to every open document's map so background tabs stay consistent.
         for (KalixDocument document : documentManager.getDocuments()) {
             MapPanel map = document.getMapPanel();
             if (map != null) {
-                map.setShowLabels(showLabels);
+                map.setLabelMode(mode);
             }
         }
-        // Save preference
-        PreferenceKeys.MAP_SHOW_LABELS.set(showLabels);
+        mode.save();
     }
     
     @Override
@@ -1976,11 +1972,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
-    public boolean isLabelsVisible() {
+    public NodeLabelMode getLabelMode() {
         // Falls back to the saved preference before any document/map exists (toolbar build).
         return mapPanel != null
-            ? mapPanel.isShowLabels()
-            : PreferenceKeys.MAP_SHOW_LABELS.get();
+            ? mapPanel.getLabelMode()
+            : NodeLabelMode.saved();
     }
 
     @Override

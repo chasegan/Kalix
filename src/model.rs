@@ -12,8 +12,8 @@ use crate::misc::simulation_context::{
 use crate::model_inputs::DynamicInput;
 use crate::nodes::{Link, Node, NodeEnum};
 use crate::ordering::simple_nodewise_ordering::SimpleNodewiseOrderingSystem;
-use crate::tid::utils::u64_to_iso_datetime_string;
-use crate::timeseries::Timeseries;
+use crate::tid::utils::{time_of_day_string, u64_to_date_string_for_step_size, u64_to_iso_datetime_string};
+use crate::timeseries::{same_phase, Timeseries};
 use crate::timeseries_input::{SourceOrigin, TimeseriesInput, TimeseriesInputDefinition};
 use rustc_hash::FxHashMap;
 use std::collections::{HashMap, HashSet};
@@ -580,6 +580,16 @@ impl Model {
                 }
                 for full_path in paths_to_fill {
                     if let Some(idx) = self.data_cache.get_series_idx(&*full_path, false) {
+                        // Inputs out of step with the simulation are rejected; the lookup below would shift them.
+                        if !same_phase(input_ts.start_timestamp, self.configuration.sim_start_timestamp,
+                                       self.configuration.sim_stepsize) {
+                            return Err(format!(
+                                "Input '{}' is out of step with the simulation: {} against {}. \
+                                 All inputs must share the same time of day.",
+                                full_path, time_of_day_string(input_ts.start_timestamp),
+                                time_of_day_string(self.configuration.sim_start_timestamp)
+                            ));
+                        }
                         self.data_cache.series[idx].values.clear();
                         self.data_cache.series[idx].start_timestamp =
                             self.configuration.sim_start_timestamp;
@@ -789,6 +799,7 @@ impl Model {
         // Go through all the critical inputs and make sure they are all in the model.
         // As you find them, you can go ahead and update the mask of data availability.
         let mut critical_data_availability_mask: Option<Timeseries> = None;
+        let mut first_critical_name = String::new();
         for ci in civ {
             let ci_lower = ci.to_lowercase();
 
@@ -818,8 +829,18 @@ impl Model {
                         None => {
                             //This is the first critical data source
                             critical_data_availability_mask = Some(ts.timeseries.clone());
+                            first_critical_name = ci.to_string();
                         }
                         Some(ref mut mask) => {
+                            // Out-of-phase inputs are rejected, never realigned.
+                            if !same_phase(mask.start_timestamp, ts.timeseries.start_timestamp, mask.step_size) {
+                                return Err(format!(
+                                    "Input '{}' is out of step with '{}': {} against {}. \
+                                     All inputs must share the same time of day.",
+                                    ci, first_critical_name, time_of_day_string(ts.timeseries.start_timestamp),
+                                    time_of_day_string(mask.start_timestamp)
+                                ));
+                            }
                             mask.mask_with(&ts.timeseries);
                         }
                     }
@@ -864,7 +885,21 @@ impl Model {
         self.configuration.sim_end_timestamp = end_timestamp;
         self.configuration.sim_nsteps = n_steps;
 
-        // Override with dates specified in the model, if relevant
+        // Override with dates specified in the model, if relevant. They must be in
+        // step with the data: a start between two steps would shift every input.
+        let data_start = self.configuration.sim_start_timestamp;
+        let step = self.configuration.sim_stepsize;
+        let check_in_step = |what: &str, ts: u64| -> Result<(), String> {
+            if same_phase(ts, data_start, step) {
+                return Ok(());
+            }
+            let suggestion = data_start + (ts - data_start).div_ceil(step) * step;
+            Err(format!(
+                "Specified {} '{}' is out of step with the input data, which is at {}; use '{}'.",
+                what, u64_to_date_string_for_step_size(ts, step), time_of_day_string(data_start),
+                u64_to_date_string_for_step_size(suggestion, step)
+            ))
+        };
         match self.configuration.specified_sim_start_timestamp {
             Some(timestamp) => {
                 if (timestamp < self.configuration.sim_start_timestamp)
@@ -872,6 +907,7 @@ impl Model {
                 {
                     return Err("Specified start inconsistent with input data.".to_string());
                 }
+                check_in_step("start", timestamp)?;
                 self.configuration.sim_start_timestamp = timestamp;
                 self.configuration.sim_nsteps = 1
                     + (self.configuration.sim_end_timestamp
@@ -887,6 +923,7 @@ impl Model {
                 {
                     return Err("Specified end inconsistent with input data.".to_string());
                 }
+                check_in_step("end", timestamp)?;
                 self.configuration.sim_end_timestamp = timestamp;
                 self.configuration.sim_nsteps = 1
                     + (self.configuration.sim_end_timestamp
@@ -1037,7 +1074,7 @@ impl Model {
         // Initialise the ordering system
         // TODO: I am doing this in "initialize_network" because it relies on execution order being resolved (which we do above).
         self.simple_ordering_system
-            .initialize(&mut self.nodes, &self.links, &self.incoming_links)?;
+            .initialize(&mut self.nodes, &self.links, &self.incoming_links, &mut self.account_manager)?;
 
         // Return
         Ok(())

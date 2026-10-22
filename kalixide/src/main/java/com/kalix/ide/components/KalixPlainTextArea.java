@@ -2,18 +2,13 @@ package com.kalix.ide.components;
 
 import org.fife.ui.rsyntaxtextarea.SyntaxConstants;
 
-import java.lang.ref.WeakReference;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-
 /**
  * Plain text area for non-syntax-highlighted content such as logs and output.
  *
  * Extends KalixTextArea to inherit:
  * <ul>
  *   <li>Monospace font configuration</li>
- *   <li>Windows cursor alignment fix</li>
+ *   <li>Font metrics that follow the screen the editor is shown on</li>
  *   <li>Common editor settings</li>
  * </ul>
  *
@@ -24,8 +19,6 @@ import java.util.List;
  * @see KalixIniTextArea for Kalix INI file editing
  */
 public class KalixPlainTextArea extends KalixTextArea {
-
-    private static final List<WeakReference<KalixPlainTextArea>> instances = new ArrayList<>();
 
     /**
      * Creates a plain text area with default dimensions.
@@ -43,7 +36,6 @@ public class KalixPlainTextArea extends KalixTextArea {
     public KalixPlainTextArea(int rows, int cols) {
         super(rows, cols);
         initialize();
-        registerInstance();
     }
 
     /**
@@ -66,32 +58,5 @@ public class KalixPlainTextArea extends KalixTextArea {
         setCodeFoldingEnabled(false);
         setMarkOccurrences(false);
         setHighlightCurrentLine(false);
-    }
-
-    private void registerInstance() {
-        synchronized (instances) {
-            instances.add(new WeakReference<>(this));
-        }
-    }
-
-    /**
-     * Updates the font size for all KalixPlainTextArea instances.
-     *
-     * @param fontSize the new font size in points
-     */
-    public static void updateAllFontSizes(int fontSize) {
-        synchronized (instances) {
-            Iterator<WeakReference<KalixPlainTextArea>> iterator = instances.iterator();
-            while (iterator.hasNext()) {
-                WeakReference<KalixPlainTextArea> ref = iterator.next();
-                KalixPlainTextArea textArea = ref.get();
-
-                if (textArea == null) {
-                    iterator.remove();
-                } else {
-                    textArea.updateFontSize(fontSize);
-                }
-            }
-        }
     }
 }

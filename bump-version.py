@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Bump Kalix version across VERSION, Cargo.toml, python/Cargo.toml,
-python/pyproject.toml, python/uv.lock.
+python/pyproject.toml, Cargo.lock and python/uv.lock.
 
 Usage:
     python bump-version.py 0.3.0   # bump to 0.3.0
@@ -27,14 +27,16 @@ for rel in ("Cargo.toml", "python/Cargo.toml", "python/pyproject.toml"):
     )
 
 
-def bump_lock(text, version, package="kalix"):
-    """Rewrite `package`'s own version inside its [[package]] block in a uv.lock.
+def bump_lock(text, version, package):
+    """Rewrite `package`'s own version inside its [[package]] block in a lockfile.
 
-    uv.lock records the project itself as a package, and that version is a
-    mirror of pyproject.toml rather than a resolution result — so writing it
-    here produces exactly what `uv lock` would. Doing it this way (instead of
-    shelling out to uv) keeps this script stdlib-only and offline, and stops a
-    version bump from quietly re-resolving dependencies into the same commit.
+    Both Cargo.lock and uv.lock record the workspace's own crates or project as
+    packages, and that version is a mirror of the manifest rather than a
+    resolution result — so writing it here produces exactly what `cargo` or
+    `uv lock` would. Doing it this way (instead of shelling out) keeps this
+    script stdlib-only and offline, and stops a version bump from quietly
+    re-resolving dependencies into the same commit. CI builds the wheel with
+    `--locked`, so a Cargo.lock left behind would fail the release.
 
     Scans block-by-block rather than matching a fixed key order, so it does not
     depend on how uv happens to order or space the keys it writes. Raises
@@ -63,13 +65,16 @@ def bump_lock(text, version, package="kalix"):
 
 
 # newline="" on both ends so the file's existing line endings survive the
-# round-trip untouched (this one is long enough that a wholesale CRLF/LF
+# round-trip untouched (these are long enough that a wholesale CRLF/LF
 # flip would bury the one-line change).
-lock = root / "python/uv.lock"
-with open(lock, encoding="utf-8", newline="") as f:
-    lock_text = f.read()
-lock_text = bump_lock(lock_text, new)
-with open(lock, "w", encoding="utf-8", newline="") as f:
-    f.write(lock_text)
+for rel, packages in (("Cargo.lock", ("kalix", "kalix-python")),
+                      ("python/uv.lock", ("kalix",))):
+    lock = root / rel
+    with open(lock, encoding="utf-8", newline="") as f:
+        lock_text = f.read()
+    for package in packages:
+        lock_text = bump_lock(lock_text, new, package)
+    with open(lock, "w", encoding="utf-8", newline="") as f:
+        f.write(lock_text)
 
 print(f"Bumped to {new}")

@@ -133,13 +133,20 @@ RSyntaxTextArea (library)
 
 **KalixTextArea** (base class) provides:
 - Monospace font configuration via FontManager
-- Windows cursor alignment fix via `addNotify()` override
+- Font metrics that follow the screen: `paintComponent` re-applies the font whenever the
+  scale the cached metrics were measured at differs from the scale of the screen the editor
+  is on, first paint included (issue #162). This is the one place metrics are kept in step
+  with the screen; the Javadoc on `paintComponent` says why not `addNotify` or the
+  `graphicsConfiguration` property.
 - Common settings (anti-aliasing, tab handling)
+- One `WeakRegistry` of live instances (`utils/WeakRegistry.java`, shared with
+  `VirtualTextArea`): `updateAllFontSizes` and `updateAllForThemeChange` reach every editor,
+  and `forEachInstance(Class, Consumer)` lets a subclass sweep its own kind. Windows do
+  not keep registries of their editors.
 
 **KalixIniTextArea** adds:
 - Kalix INI syntax highlighting
-- Syntax theme support
-- Global preference update methods
+- Syntax theme support, applied to every instance via `updateAllSyntaxThemes`
 
 **KalixPlainTextArea** adds:
 - No syntax highlighting (SYNTAX_STYLE_NONE)
@@ -154,7 +161,7 @@ Key files: `KalixTextArea.java`, `KalixIniTextArea.java`, `KalixPlainTextArea.ja
 
 ### Text Editor with RSyntaxTextArea
 Enhanced text editor using manager pattern:
-- **Uses KalixIniTextArea**: Inherits font and cursor alignment fixes
+- **Uses KalixIniTextArea**: Inherits the font configuration and screen-aware metrics
 - **Manager classes**: `TextSearchManager`, `TextNavigationManager`, `FileDropManager`
 - **Features**: Mark occurrences, current line highlighting, Ctrl+F/Ctrl+H shortcuts
 
@@ -166,6 +173,18 @@ Enhanced map visualization:
 - **Mouse event fix**: Proper separation of click navigation and drag operations
 
 Key files: `NodeTheme.java`, `TextCoordinateUpdater.java`
+
+### Annotations (ADR-0010)
+A `#@key = value` line at column zero is an annotation: a comment the IDE reads and
+the engine never does. `IniSyntax.annotation()` is the only lexer for it, and to every
+other `IniSyntax` rule the line is still a comment, so parsers that strip comments are
+untouched. `ModelParser` attaches an `aka` above a `[node.*]` header to that node
+(`ModelNode.getAka()`); a code line in between orphans it. `NodeLabelMode` owns what
+the map draws per node (names / aka only / hidden, with the hover rule) and the one
+toolbar button cycles it; `MapRenderer` draws the lines it is given. The editor
+tokenises annotation lines as `Token.ANNOTATION`.
+
+Key files: `IniSyntax.java`, `ModelParser.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`
 
 ### Code Quality Improvements
 Systematic refactoring addressing code smells:

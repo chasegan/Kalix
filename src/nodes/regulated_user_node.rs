@@ -17,8 +17,13 @@ pub struct SupplyOutlet {
     /// Holds each accepted order for the user's travel time, so that it is delivered on the
     /// step the ordered water arrives at the user. Sized by the ordering system.
     pub order_buffer: FifoBuffer,
+    /// Holds the order as it arrived, uncapped, for the same travel time: the delivery the
+    /// user plans down the outlet. Only pushed when the user has accounts, where the two can
+    /// differ; otherwise `demand` is read from `order_due`.
+    pub demand_buffer: FifoBuffer,
     order: f64,     // The order arriving on this outlet, this step
     order_due: f64, // The accepted order that falls due today
+    demand: f64,    // The order that arrived on this outlet travel_time steps ago, as it arrived: the planned delivery
     flow: f64,      // What is sent down the outlet this step
     recorder_idx_flow: Option<usize>,
     recorder_idx_order: Option<usize>,
@@ -38,15 +43,23 @@ pub struct RegulatedUserNode {
     pub order_travel_time: usize,
     pub order_value: f64, //Captured during the ordering phase if in regulated zones
     pub order_buffer: FifoBuffer,
+    /// Holds the demand - the order expression as evaluated, before the accounts cap it -
+    /// for the travel time, so that the user plans to divert its whole demand when the
+    /// water arrives, not just the part it could order. The accounts' forecast gates what
+    /// is ordered, never what is taken: the take is capped by the balance of the day. Only
+    /// pushed when the user has accounts, where demand and order can differ.
+    pub demand_buffer: FifoBuffer,
     pub pump_capacity: DynamicInput,
     /// Optional flow-phase demand for water above the arriving order (e.g.
     /// off-allocation access announced on flow conditions). Evaluated at flow
     /// time, supplied from what the regulated delivery leaves behind, and
     /// debited to the same accounts.
     pub opportunistic_demand: DynamicInput,
-    /// Ordered account references (deemed order-of-use). Orders are capped by
-    /// the summed balance at order time, deliveries are capped and debited at
-    /// flow time — debit-on-use semantics (kalix-allocation-components.md §3.6).
+    /// Ordered account references (deemed order-of-use). Orders are capped at
+    /// order time by the summed balance less the orders already en route (the
+    /// accounts' `committed` forecast), and the accepted order is committed
+    /// there until it falls due. Deliveries are capped and debited at flow
+    /// time — debit-on-use semantics (kalix-allocation-components.md §3.6).
     pub account_idxs: Vec<usize>,
     /// Order-authorisation accounts (debit-on-order). They extend the order
     /// cap, and the portion of the approved order beyond the regular balance
@@ -57,6 +70,7 @@ pub struct RegulatedUserNode {
 
     // Internal state only
     order_due: f64,
+    demand: f64, // The demand that falls due today: what the user plans to divert
     /// Factor applied to this node's own order as it is sent upstream:
     /// the network sees order_factor * order, while `order`, `order_due` and
     /// the delivery use the order as placed. 1 (the default) is a no-op:
@@ -101,6 +115,7 @@ impl RegulatedUserNode {
             order_input: DynamicInput::default(),
             opportunistic_demand: DynamicInput::default(),
             order_buffer: FifoBuffer::default(),
+            demand_buffer: FifoBuffer::default(),
             order_factor: 1.0,
             ..Default::default()
         }
@@ -135,6 +150,14 @@ impl RegulatedUserNode {
     fn total_account_balance(&self, account_manager: &AccountManager) -> f64 {
         self.account_idxs.iter()
             .map(|&idx| account_manager.get_account_balance(idx).max(0.0))
+            .sum()
+    }
+
+    /// What the regular accounts can still cover: each balance less the orders
+    /// already committed against it, floored at zero account by account.
+    fn total_account_uncommitted(&self, account_manager: &AccountManager) -> f64 {
+        self.account_idxs.iter()
+            .map(|&idx| account_manager.get_account_uncommitted_balance(idx))
             .sum()
     }
 
@@ -193,8 +216,10 @@ impl Node for RegulatedUserNode {
         // run's final orders fall due at the start of the second.
         self.order_travel_time = 0;
         self.order_buffer = FifoBuffer::default();
+        self.demand_buffer = FifoBuffer::default();
         self.order_value = 0.0;
         self.order_due = 0.0;
+        self.demand = 0.0;
 
         // Checks
         if !(self.order_factor >= 0.0 && self.order_factor.is_finite()) {
@@ -277,30 +302,45 @@ impl RegulatedUserNode {
 
         // The orders arriving on the supply outlets. They become this user's order: they are
         // capped by its accounts and scaled by its order_factor along with its own.
+        let has_accounts = !self.account_idxs.is_empty();
         if SUPPLY_OUTLETS {
             for supply_outlet in &mut self.supply_outlets {
                 supply_outlet.order = self.dsorders[supply_outlet.outlet as usize].max(0.0);
                 if let Some(idx) = supply_outlet.recorder_idx_order {
                     data_cache.add_value_at_index(idx, supply_outlet.order);
                 }
+                // The planned delivery is the order as it arrived, whatever the accounts
+                // let the user order (see demand_buffer)
+                if has_accounts {
+                    supply_outlet.demand = supply_outlet.demand_buffer.push(supply_outlet.order);
+                }
             }
         }
 
-        self.order_value = self.order_input.get_value(data_cache);
+        // The demand: a negative demand is no demand
+        let demand = self.order_input.get_value(data_cache).max(0.0);
+        self.order_value = demand;
 
-        // Cap the order by what the user owns: don't order water you can't take
-        // (§3.6 — enforced where orders originate, not inside the storage).
+        // Cap the order by what the user owns and has not already ordered: don't
+        // order water you can't take (§3.6 — enforced where orders originate, not
+        // inside the storage). With travel time, the orders placed over the last
+        // T steps are still en route and will be debited when they arrive, so the
+        // cap is the balance less those orders - the accounts' `committed`
+        // forecast - and the order accepted now is committed in its turn, due in
+        // the travel time. Only the diversion is ever debited; the account
+        // releases the commitment on the step the order falls due, delivered or
+        // not (AccountManager::end_of_step).
         // order_accounts extend the cap, and the portion of the approved order
-        // beyond the regular balance is debited from them NOW (debit-on-order,
-        // excess-only, walked in list order). Regular accounts keep
-        // debit-on-use at flow time; the two never pay for the same water.
+        // beyond what the regular accounts can cover is debited from them NOW
+        // (debit-on-order, excess-only, walked in list order). Regular accounts
+        // keep debit-on-use at flow time; the two never pay for the same water.
         //
         // Where the cap bites, the supply outlets are served first, in outlet order, and the
         // user's own order takes what is left - the same order of service as at flow time.
         if !self.account_idxs.is_empty() || !self.order_account_idxs.is_empty() {
-            let regular_balance = self.total_account_balance(_account_manager);
+            let regular_available = self.total_account_uncommitted(_account_manager);
             let order_balance = self.total_order_account_balance(_account_manager);
-            let mut remaining = regular_balance + order_balance;
+            let mut remaining = regular_available + order_balance;
             let mut outlet_orders_accepted = 0.0;
             if SUPPLY_OUTLETS {
                 for supply_outlet in &mut self.supply_outlets {
@@ -309,10 +349,29 @@ impl RegulatedUserNode {
                     outlet_orders_accepted += supply_outlet.order;
                 }
             }
-            // Ensure non-negativity of orders, as below: a negative order is no order
-            self.order_value = self.order_value.max(0.0).min(remaining);
+            self.order_value = self.order_value.min(remaining);
             let order_placed = if SUPPLY_OUTLETS { outlet_orders_accepted + self.order_value } else { self.order_value };
-            let mut excess = (order_placed - regular_balance).max(0.0);
+
+            // Commit the accepted order to the regular accounts, in list order
+            // against what each can still cover. Any part beyond that (an order
+            // the order_accounts authorised) goes on the first account, which is
+            // where its delivery will be debited first.
+            if !self.account_idxs.is_empty() {
+                let mut to_commit = order_placed;
+                for &account_idx in &self.account_idxs {
+                    if to_commit <= 0.0 { break; }
+                    let commit = to_commit.min(_account_manager.get_account_uncommitted_balance(account_idx));
+                    if commit > 0.0 {
+                        _account_manager.commit_account(account_idx, commit, self.order_travel_time);
+                        to_commit -= commit;
+                    }
+                }
+                if to_commit > 0.0 {
+                    _account_manager.commit_account(self.account_idxs[0], to_commit, self.order_travel_time);
+                }
+            }
+
+            let mut excess = (order_placed - regular_available).max(0.0);
             for &account_idx in &self.order_account_idxs {
                 if excess <= 0.0 { break; }
                 let debit = excess.min(_account_manager.get_account_balance(account_idx).max(0.0));
@@ -321,20 +380,21 @@ impl RegulatedUserNode {
                     excess -= debit;
                 }
             }
-        } else {
-            // Ensure non-negativity of orders
-            self.order_value = self.order_value.max(0.0);
         }
 
-        // TODO: is this where things are supposed to happen?
-
-        // Get demand value (this is equal to our old order, which is due to arrive today)
+        // The order placed travel_time steps ago falls due today. So does the demand of that
+        // step, which is what the user plans to divert: with accounts it is held in its own
+        // buffer because the cap can make it exceed the order; without, it is the order.
         self.order_due = self.order_buffer.push(self.order_value);
+        self.demand = if has_accounts { self.demand_buffer.push(demand) } else { self.order_due };
 
         // Each supply outlet's accepted order is held for the same travel time
         if SUPPLY_OUTLETS {
             for supply_outlet in &mut self.supply_outlets {
                 supply_outlet.order_due = supply_outlet.order_buffer.push(supply_outlet.order);
+                if !has_accounts {
+                    supply_outlet.demand = supply_outlet.order_due;
+                }
                 if let Some(idx) = supply_outlet.recorder_idx_order_due {
                     data_cache.add_value_at_index(idx, supply_outlet.order_due);
                 }
@@ -349,7 +409,7 @@ impl RegulatedUserNode {
             data_cache.add_value_at_index(idx, self.order_due);
         }
         if let Some(idx) = self.recorder_idx_demand {
-            data_cache.add_value_at_index(idx, self.order_due);
+            data_cache.add_value_at_index(idx, self.demand);
         }
     }
 
@@ -373,18 +433,18 @@ impl RegulatedUserNode {
             }
         };
 
-        // Determine the regulated diversion value
-        // assume demand = order_due
-        // The orders due on the supply outlets are served first, in outlet order, and the
-        // user's own order from what is left.
+        // Determine the regulated diversion value: the demand that falls due today, which is
+        // the order due unless the accounts capped the order (see demand_buffer).
+        // The demands due on the supply outlets are served first, in outlet order, and the
+        // user's own demand from what is left.
         let mut outlet_take = 0.0;
         if SUPPLY_OUTLETS {
             for supply_outlet in &mut self.supply_outlets {
-                supply_outlet.flow = supply_outlet.order_due.min(available - outlet_take);
+                supply_outlet.flow = supply_outlet.demand.min(available - outlet_take);
                 outlet_take += supply_outlet.flow;
             }
         }
-        let mut own_regulated = if SUPPLY_OUTLETS { self.order_due.min(available - outlet_take) } else { self.order_due.min(available) };
+        let mut own_regulated = if SUPPLY_OUTLETS { self.demand.min(available - outlet_take) } else { self.demand.min(available) };
         let mut diversion_regulated = if SUPPLY_OUTLETS { outlet_take + own_regulated } else { own_regulated };
 
         // Opportunistic take: demand for water above the arriving order (e.g.

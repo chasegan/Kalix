@@ -5,7 +5,7 @@ use crate::hydrology::rainfall_runoff::sacramento::Sacramento;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
 use crate::misc::location::Location;
-use crate::numerical::opt::optimisable_component::OptimisableComponent;
+use crate::numerical::opt::optimisable_component::{OptimisableComponent, Ratio};
 
 const MAX_DS_LINKS: usize = 1;
 
@@ -43,6 +43,11 @@ pub struct SacramentoNode {
     recorder_idx_dsflow: Option<usize>,
     recorder_idx_ds_1: Option<usize>,
     recorder_idx_ds_1_order: Option<usize>,
+    recorder_idx_uztw: Option<usize>,
+    recorder_idx_uzfw: Option<usize>,
+    recorder_idx_lztw: Option<usize>,
+    recorder_idx_lzfs: Option<usize>,
+    recorder_idx_lzfp: Option<usize>,
 }
 
 impl SacramentoNode {
@@ -95,7 +100,11 @@ impl Node for SacramentoNode {
         self.recorder_idx_dsflow = recorder(data_cache, &self.name, "dsflow");
         self.recorder_idx_ds_1 = recorder(data_cache, &self.name, "ds_1");
         self.recorder_idx_ds_1_order = recorder(data_cache, &self.name, "ds_1_order");
-
+        self.recorder_idx_uztw = recorder(data_cache, &self.name, "uztw");
+        self.recorder_idx_uzfw = recorder(data_cache, &self.name, "uzfw");
+        self.recorder_idx_lztw = recorder(data_cache, &self.name, "lztw");
+        self.recorder_idx_lzfs = recorder(data_cache, &self.name, "lzfs");
+        self.recorder_idx_lzfp = recorder(data_cache, &self.name, "lzfp");
         //Return
         Ok(())
     }
@@ -162,26 +171,46 @@ impl Node for SacramentoNode {
         if let Some(idx) = self.recorder_idx_ds_1 {
             data_cache.add_value_at_index(idx, self.dsflow_primary);
         }
+        if let Some(idx) = self.recorder_idx_uztw {
+            data_cache.add_value_at_index(idx, self.sacramento_model.get_uztw());
+        }
+        if let Some(idx) = self.recorder_idx_uzfw {
+            data_cache.add_value_at_index(idx, self.sacramento_model.get_uzfw());
+        }
+        if let Some(idx) = self.recorder_idx_lztw {
+            data_cache.add_value_at_index(idx, self.sacramento_model.get_lztw());
+        }
+        if let Some(idx) = self.recorder_idx_lzfp {
+            data_cache.add_value_at_index(idx, self.sacramento_model.get_lzfp());
+        }
+        if let Some(idx) = self.recorder_idx_lzfs {
+            data_cache.add_value_at_index(idx, self.sacramento_model.get_lzfs());
+        }
 
         // Reset upstream inflow for next timestep
         self.usflow = 0.0;
     }
-
-
-
-
 }
 
 // ============================================================================
 // OptimisableComponent Implementation
 // ============================================================================
 
+/// A ratio parameter read back. Undefined when the denominator is 0 or NaN,
+/// and says so rather than returning NaN or infinity.
+fn ratio(numerator: f64, denominator: f64, name: &str, from: &str) -> Result<f64, String> {
+    if denominator == 0.0 || denominator.is_nan() {
+        Err(format!("{} is undefined: {} is {}", name, from, denominator))
+    } else {
+        Ok(numerator / denominator)
+    }
+}
+
 impl OptimisableComponent for SacramentoNode {
     fn set_param(&mut self, name: &str, value: f64) -> Result<(), String> {
         // Try to handle as rainfall weight parameter first
-        match RainfallWeightHandler::try_set_param(&mut self.rain_mm_input, name, value, &self.name)? {
-            true => return Ok(()), // Parameter was handled
-            false => {} // Not a rainfall parameter, continue to standard parameters
+        if RainfallWeightHandler::try_set_param(&mut self.rain_mm_input, name, value, &self.name)? {
+            return Ok(())
         }
 
         // Standard Sacramento parameters
@@ -254,7 +283,24 @@ impl OptimisableComponent for SacramentoNode {
                 self.sacramento_model.set_laguh(value);
                 Ok(())
             },
+            // The ratios write their numerator from the denominator held now
+            "sarvaonpctim" => {
+                self.sacramento_model.sarva = value * self.sacramento_model.pctim;
+                Ok(())
+            },
+            "lzpkonlzsk" => {
+                self.sacramento_model.lzpk = value * self.sacramento_model.lzsk;
+                Ok(())
+            },
             _ => Err(format!("Unknown Sacramento parameter: {}", name)),
+        }
+    }
+
+    fn ratio_of(&self, name: &str) -> Option<Ratio> {
+        match name {
+            "sarvaonpctim" => Some(Ratio { numerator: "sarva", denominator: "pctim" }),
+            "lzpkonlzsk" => Some(Ratio { numerator: "lzpk", denominator: "lzsk" }),
+            _ => None,
         }
     }
 
@@ -283,15 +329,19 @@ impl OptimisableComponent for SacramentoNode {
             "uztwm" => Ok(self.sacramento_model.uztwm),
             "zperc" => Ok(self.sacramento_model.zperc),
             "laguh" => Ok(self.sacramento_model.get_laguh()),
+            "sarvaonpctim" => ratio(self.sacramento_model.sarva, self.sacramento_model.pctim, name, "pctim"),
+            "lzpkonlzsk" => ratio(self.sacramento_model.lzpk, self.sacramento_model.lzsk, name, "lzsk"),
             _ => Err(format!("Unknown Sacramento parameter: {}", name)),
         }
     }
 
     fn list_params(&self) -> Vec<String> {
         let mut params = vec![
-            "adimp", "lzfpm", "lzfsm", "lzpk", "lzsk", "lztwm",
-            "pctim", "pfree", "rexp", "sarva", "side",
-            "ssout", "uzfwm", "uzk", "uztwm", "zperc", "laguh"
+            // The ratios stand where lzpk and sarva did; those two are still
+            // accepted, but no longer offered.
+            "adimp", "lzfpm", "lzfsm", "lzpkonlzsk", "lzsk", "lztwm",
+            "pctim", "pfree", "rexp", "sarvaonpctim", "side",
+            "ssout", "uzfwm", "uzk", "uztwm", "zperc", "laguh",
         ]
         .iter()
         .map(|s| s.to_string())

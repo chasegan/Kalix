@@ -90,7 +90,7 @@ The arguments worth knowing:
 
 Kalix infers the output format from the file extension:
 
-- `.csv` — a regular comma-separated file with a `Time` column and one column per output
+- `.csv` — a regular comma-separated file with a `date` column (`datetime` for sub-daily or off-midnight data) and one column per output
 
 - `.pxb` — Pixie, Kalix's native Gorilla-compressed format (a `.pxt` header file is written alongside the `.pxb` data file)
 

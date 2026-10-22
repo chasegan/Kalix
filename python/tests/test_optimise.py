@@ -86,8 +86,9 @@ def test_optimise_finds_beale_minimum(tmp_path):
 
     assert set(res) == {
         "best_objective", "n_evaluations", "success",
-        "message", "parameters", "optimised_model_ini",
+        "message", "parameters", "parameters_from_ratios", "optimised_model_ini",
     }
+    assert res["parameters_from_ratios"] == {}, "constants are not ratios"
     assert isinstance(res["best_objective"], float)
     assert isinstance(res["n_evaluations"], int) and res["n_evaluations"] > 0
     assert res["success"] is True

@@ -452,6 +452,50 @@ class NodeSectionLocatorTest {
         assertEquals(text.indexOf("\r\n\r\n") + 2, a.contentEnd());
     }
 
+    // --- annotations (ADR-0010 §3): a section's span starts at its first annotation ---
+
+    @Test
+    void annotationAboveAHeaderBelongsToThatSection() {
+        String text = "[node.a]\nloc = 1, 2\n\n#@aka = Bee\n[node.b]\nloc = 3, 4\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        NodeSection b = NodeSectionLocator.find(text, "b");
+        assertEquals(text.indexOf("#@aka"), a.end());
+        assertEquals(text.indexOf("#@aka"), b.start());
+        assertEquals(text.length(), b.contentEnd()); // the header is content, the annotation is not
+    }
+
+    @Test
+    void ordinaryCommentsBeforeTheFirstAnnotationStayWithTheSectionAbove() {
+        String text = "[node.a]\nloc = 1, 2\n# a's tail\n\n#@aka = Bee\n\n# b's intro\n[node.b]\nloc = 3, 4\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        NodeSection b = NodeSectionLocator.find(text, "b");
+        assertEquals(text.indexOf("#@aka"), a.end());
+        assertEquals(text.indexOf("#@aka"), b.start());
+    }
+
+    @Test
+    void annotationOrphanedByACodeLineDoesNotStartTheNextSection() {
+        String text = "[node.a]\n#@aka = Not b\nloc = 1, 2\n\n[node.b]\nloc = 3, 4\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        NodeSection b = NodeSectionLocator.find(text, "b");
+        assertEquals(text.indexOf("[node.b]"), a.end());
+        assertEquals(text.indexOf("[node.b]"), b.start());
+    }
+
+    @Test
+    void annotationAboveANonNodeHeaderEndsTheSectionAbove() {
+        String text = "[node.a]\nloc = 1, 2\n\n#@aka = The outputs\n[outputs]\nnode.a.dsflow\n";
+        NodeSection a = NodeSectionLocator.find(text, "a");
+        assertEquals(text.indexOf("#@aka"), a.end());
+    }
+
+    @Test
+    void disabledAnnotationIsAnOrdinaryComment() {
+        String text = "[node.a]\nloc = 1, 2\n\n# #@aka = Bee\n[node.b]\nloc = 3, 4\n";
+        NodeSection b = NodeSectionLocator.find(text, "b");
+        assertEquals(text.indexOf("[node.b]"), b.start());
+    }
+
     @Test
     void contentEndStopsAtANonNodeHeader() {
         String text = "[node.a]\nloc = 1, 2\n\n[outputs]\nnode.a.dsflow\n";

@@ -464,7 +464,7 @@ public class CoordinateDisplayManager {
         }
 
         // Standard time formatting. Pick the format from the visible series' step_size so the
-        // hover shows ISO datetime for sub-daily data and date-only for daily, consistently
+        // hover shows date-only for midnight daily data and ISO datetime otherwise, consistently
         // across every point in the same hover (no mid-frame format flicker on midnight rows).
         long stepSeconds = inferStepSecondsFromVisibleSeries();
         return TimeFormatUtil.formatForStepSize(timestampMs, stepSeconds);

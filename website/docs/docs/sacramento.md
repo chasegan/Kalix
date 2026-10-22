@@ -50,13 +50,20 @@ All seventeen model parameters — and the rainfall-weighting terms, when `rain`
 | floin | Internal flux component - interflow [ML] |
 | flobf | Internal flux component - baseflow [ML] |
 | roimp | Internal flux component - impervious runoff [ML] |
+| uztw | Upper zone tension water at the end of the step [mm] |
+| uzfw | Upper zone free water at the end of the step [mm] |
+| lztw | Lower zone tension water at the end of the step [mm] |
+| lzfp | Lower zone primary free water at the end of the step [mm] |
+| lzfs | Lower zone supplemental free water at the end of the step [mm] |
 | area | Catchment area [km2] — the declared `area` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
+
+The five store results (`uztw`, `uzfw`, `lztw`, `lzfp`, `lzfs`) are depths over the pervious area; see [Soil moisture store outputs](sacramento-technical.md#soil-moisture-store-outputs).
 
 ## How the node works
 
 The sacramento node adds inflows from a Sacramento rainfall-runoff model (Burnash, 1973) to the system. The downstream flow is therefore
 
-`dsflow=usflow+runoff\_volume`
+`dsflow = usflow + runoff_volume`
 
 Parameters for soil moisture and Stores
 
@@ -88,15 +95,15 @@ Parameters for Runoff and Losses
 
 - ADIMP (Impervious Area Delay): Influences the time delay for runoff from the impervious area.
 
-- SIDE: A parameter related to channel side losses.
+- SIDE: Ratio of baseflow lost to groundwater to baseflow that reaches the channel.
 
-- SSOUT: Represents losses from the surface storage.
+- SSOUT: Fixed depth [mm] taken from channel flow each step.
 
 - SARVA: A parameter for losses from the system.
 
 Parameters for Runoff Routing
 
-- LagUH is a single-value reparameterisation of the five original unit hydrogrpah parameters UH1 -UH5. This represents the shape of the unit hydrogrpah which is used to route instantaneous runoff through the system allowing for delays in the runoff process.
+- LagUH is a single-value reparameterisation of the five original unit hydrograph parameters UH1 - UH5. This represents the shape of the unit hydrograph which is used to route instantaneous runoff through the system allowing for delays in the runoff process.
 
 ![](../assets/docs-nodes-sacramento/image.png)
 

@@ -313,13 +313,39 @@ fn push_4digit(out: &mut String, v: u32) {
     out.push((b'0' + (v % 10) as u8) as char);
 }
 
-/// Append the date/datetime string for `value` to `out`, choosing the format
-/// from step_size like u64_to_date_string_for_step_size, via the fast
-/// formatter (chrono fallback outside years 0-9999).
-pub fn append_date_string_for_step_size(out: &mut String, value: u64, step_size: u64) {
-    let with_time = !(step_size == 0 || step_size % 86400 == 0);
+fn is_midnight(value: u64) -> bool {
+    wrap_to_i64(value).rem_euclid(86400) == 0
+}
+
+/// The UTC time of day of `value` as "HH:MM:SS".
+pub fn time_of_day_string(value: u64) -> String {
+    let secs = wrap_to_i64(value).rem_euclid(86400);
+    format!("{:02}:{:02}:{:02}", secs / 3600, (secs / 60) % 60, secs % 60)
+}
+
+/// True if timestamps on a grid starting at `start` need a time of day to
+/// print without loss: sub-daily steps, or daily-or-coarser steps off midnight
+/// (e.g. 9am data). A whole-day step keeps every point at the same time of
+/// day, so the answer holds for the whole series. Mirrored by the IDE's
+/// `TimeFormatUtil.needsTimeOfDay`; change both together.
+pub fn needs_time_of_day(start: u64, step_size: u64) -> bool {
+    let sub_daily = !(step_size == 0 || step_size % 86400 == 0);
+    sub_daily || !is_midnight(start)
+}
+
+/// Append `value` to `out` as "%Y-%m-%d", or "%Y-%m-%dT%H:%M:%S" if `with_time`,
+/// via the fast formatter (chrono fallback outside years 0-9999).
+pub fn append_date_string(out: &mut String, value: u64, with_time: bool) {
     if !fast_format_timestamp(out, wrap_to_i64(value), with_time) {
-        out.push_str(&u64_to_date_string_for_step_size(value, step_size));
+        out.push_str(&chrono_date_string(value, with_time));
+    }
+}
+
+fn chrono_date_string(value: u64, with_time: bool) -> String {
+    let format = if with_time { "%Y-%m-%dT%H:%M:%S" } else { "%Y-%m-%d" };
+    match DateTime::from_timestamp(wrap_to_i64(value), 0) {
+        Some(dt) => dt.format(format).to_string(),
+        None => value.to_string(),
     }
 }
 
@@ -409,8 +435,7 @@ pub fn u64_to_iso_datetime_string(value: u64) -> String {
 pub fn u64_to_auto_datetime_string(value: u64) -> String {
     match DateTime::from_timestamp(wrap_to_i64(value), 0) {
         Some(dt) => {
-            // Check if it's a whole day (midnight)
-            if dt.hour() == 0 && dt.minute() == 0 && dt.second() == 0 {
+            if is_midnight(value) {
                 dt.format("%Y-%m-%d").to_string()
             } else {
                 dt.format("%Y-%m-%dT%H:%M:%S").to_string()
@@ -430,24 +455,17 @@ pub fn u64_to_auto_datetime_string(value: u64) -> String {
 /// # Arguments
 ///
 /// * `value` - A u64 timestamp (wrapped UNIX timestamp in seconds)
-/// * `step_size` - Step size in seconds. A multiple of 86400 (daily or coarser) selects date-only
-///   format; anything sub-daily selects ISO datetime format. Step size 0 is treated as date-only
-///   (legacy/unconfigured fallback).
+/// * `step_size` - Step size in seconds. A multiple of 86400 (daily or coarser)
+///   aligned to midnight selects date-only format; anything else (e.g.
+///   sub-daily, daily aligned to 9am) selects ISO datetime format. Step size 0
+///   is treated as daily (legacy/unconfigured fallback).
 ///
 /// # Returns
 ///
-/// * `YYYY-MM-DD` if step_size is 0 or a multiple of 86400
+/// * `YYYY-MM-DD` if step_size is 0 or a multiple of 86400 and `value` is at midnight
 /// * `YYYY-MM-DDTHH:MM:SS` otherwise
 pub fn u64_to_date_string_for_step_size(value: u64, step_size: u64) -> String {
-    let format = if step_size == 0 || step_size % 86400 == 0 {
-        "%Y-%m-%d"
-    } else {
-        "%Y-%m-%dT%H:%M:%S"
-    };
-    match DateTime::from_timestamp(wrap_to_i64(value), 0) {
-        Some(dt) => dt.format(format).to_string(),
-        None => value.to_string(),
-    }
+    chrono_date_string(value, needs_time_of_day(value, step_size))
 }
 
 
@@ -546,12 +564,24 @@ mod tests {
             (86400 * 365 * 51, 86400),           // ~2021
             (-86400 * 365 * 81, 86400),          // ~1889
             (86400 * 365 * 51 + 52200, 3600),    // sub-daily -> datetime format
+            (86400 * 365 * 51 + 32400, 86400),   // daily at 9am -> datetime format
         ] {
             let wrapped = wrap_to_u64(timestamp);
             let mut fast = String::new();
-            append_date_string_for_step_size(&mut fast, wrapped, step);
+            append_date_string(&mut fast, wrapped, needs_time_of_day(wrapped, step));
             let chrono_str = u64_to_date_string_for_step_size(wrapped, step);
             assert_eq!(fast, chrono_str, "format mismatch at timestamp {}", timestamp);
+        }
+    }
+
+    /// Daily data off midnight keeps its time of day; at midnight it stays date-only.
+    #[test]
+    fn test_daily_format_keeps_time_off_midnight() {
+        let midnight = date_string_to_u64_with_format("2020-01-01", "%Y-%m-%d").unwrap();
+        let nine_am = date_string_to_u64_with_format("2020-01-01T09:00:00", "%Y-%m-%dT%H:%M:%S").unwrap();
+        for step in [86400u64, 7 * 86400, 0] {
+            assert_eq!(u64_to_date_string_for_step_size(midnight, step), "2020-01-01");
+            assert_eq!(u64_to_date_string_for_step_size(nine_am, step), "2020-01-01T09:00:00");
         }
     }
 }

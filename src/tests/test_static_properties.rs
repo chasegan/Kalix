@@ -447,3 +447,37 @@ fn awbm_optimisable_params_follow_the_variant() {
     assert!(node.set_param("k_surf", 0.4).unwrap_err().contains("Unknown AWBM parameter"));
     assert!(node.set_param("bfi", 0.4).unwrap_err().contains("Unknown AWBM parameter"));
 }
+
+/// The optimiser checks an address by reading the parameter back, so every
+/// name a node lists must read. A listed name that did not would be offered by
+/// the IDE and then refused.
+#[test]
+fn every_listed_optimisable_param_reads_back() {
+    use crate::numerical::opt::optimisable_component::OptimisableComponent;
+
+    let mut pwl_routing = crate::nodes::routing_node::RoutingNode::<false>::new();
+    pwl_routing.set_routing_table(vec![0.0, 50.0, 500.0], vec![2.0, 1.5, 1.0]);
+    let mut two_tap = crate::nodes::awbm_node::AwbmNode::new();
+    two_tap.awbm_model.variant = crate::hydrology::rainfall_runoff::awbm::AwbmVariant::TwoTap;
+    let mut glacier = crate::nodes::gr4jsg_node::Gr4jsgNode::new();
+    glacier.gr4jsg_model.glacier = true;
+
+    let nodes: Vec<(&str, Box<dyn OptimisableComponent>)> = vec![
+        ("gr4j", Box::new(crate::nodes::gr4j_node::Gr4jNode::new())),
+        ("sacramento", Box::new(crate::nodes::sacramento_node::SacramentoNode::new())),
+        ("awbm", Box::new(crate::nodes::awbm_node::AwbmNode::new())),
+        ("awbm two_tap", Box::new(two_tap)),
+        ("surm", Box::new(crate::nodes::surm_node::SurmNode::new())),
+        ("gr4jsg", Box::new(crate::nodes::gr4jsg_node::Gr4jsgNode::new())),
+        ("gr4jsg glacier", Box::new(glacier)),
+        ("routing nlm", Box::new(crate::nodes::routing_node::RoutingNode::<false>::new())),
+        ("routing pwl", Box::new(pwl_routing)),
+    ];
+    for (node_type, node) in &nodes {
+        let params = node.list_params();
+        assert!(!params.is_empty(), "{node_type} lists no parameters");
+        for param in params {
+            assert!(node.get_param(&param).is_ok(), "{node_type}: listed '{param}' does not read back");
+        }
+    }
+}

@@ -90,6 +90,9 @@ repository has the complete record.
 
 Newest first.
 
+- [ADR-0012 — Inputs must be in step with the simulation; Kalix does not realign them](0012-inputs-in-step-with-the-simulation.md)
+- [ADR-0011 — Guard dependencies with a committed lockfile, not a scheduled audit](0011-no-scheduled-dependency-audit.md)
+- [ADR-0010 — Carry IDE metadata in annotation comments](0010-annotations.md)
 - [ADR-0009 — Add an option only when it is faster or clearer than what a modeller can already write](0009-options-faster-or-clearer.md)
 - [ADR-0008 — State ordering knowledge per node type, in exhaustive matches](0008-ordering-knowledge-in-exhaustive-matches.md)
 - [ADR-0007 — File-tree colour](0007-file-tree-colour.md)

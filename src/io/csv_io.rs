@@ -2,7 +2,7 @@ extern crate csv;
 
 use crate::io::error::KalixIoError;
 use crate::timeseries::Timeseries;
-use crate::tid::utils::{append_date_string_for_step_size, date_string_to_u64_flexible, date_string_to_u64_with_format};
+use crate::tid::utils::{append_date_string, date_string_to_u64_flexible, date_string_to_u64_with_format, needs_time_of_day};
 use std::fs;
 use std::path::Path;
 
@@ -344,28 +344,31 @@ pub fn write_ts_opts(filename: &str, timeseries_vector: Vec<&Timeseries>, zip_in
         }
     }
 
+    // One date format for the whole file, from the first series' grid (all series in a
+    // write share it in practice); the heading names it, "date" being what most
+    // post-processing tools look for.
+    let first = timeseries_vector.first();
+    let with_time = first.is_some_and(|ts| needs_time_of_day(ts.start_timestamp, ts.step_size));
+
     // Build the whole file in one buffer, reserved up front so a large output
     // never regrows (a 45 MB result file would otherwise be memcpy'd ~20
     // times as the buffer doubles).
     let estimated_row_bytes = 21 + timeseries_vector.len() * 20;
     let mut data_string = String::with_capacity(64 + data_length * estimated_row_bytes);
-    data_string.push_str("Time");
+    data_string.push_str(if with_time { "datetime" } else { "date" });
     for ts in timeseries_vector.iter() {
         data_string.push_str(",");
         data_string.push_str(&ts.name);
     }
     data_string.push_str("\r\n");
 
-    // Build the data section. Pick a single date format for the whole file based on the
-    // step_size of the first series (all series in a write share the same step_size in
-    // practice). Sub-daily data gets ISO datetime; daily-or-coarser gets date-only.
-    // Values are written straight into the buffer (no per-cell temporary String
-    // for ordinary magnitudes), in the shortest exact form - see push_f64_compact.
-    if timeseries_vector.len() > 0 {
-        let step_size = timeseries_vector[0].step_size;
+    // Build the data section. Values are written straight into the buffer (no per-cell
+    // temporary String for ordinary magnitudes), in the shortest exact form - see
+    // push_f64_compact.
+    if let Some(first) = first {
         for i in 0..data_length {
-            let timestamp = timeseries_vector[0].timestamp_at(i);
-            append_date_string_for_step_size(&mut data_string, timestamp, step_size);
+            let timestamp = first.timestamp_at(i);
+            append_date_string(&mut data_string, timestamp, with_time);
             for ts in timeseries_vector.iter() {
                 data_string.push(',');
                 push_f64_compact(&mut data_string, ts.values[i]);

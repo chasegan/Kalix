@@ -2,11 +2,17 @@ package com.kalix.ide.components;
 
 import com.kalix.ide.managers.FontManager;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.utils.WeakRegistry;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.TokenTypes;
 
 import javax.swing.UIManager;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.Graphics;
+import java.awt.GraphicsConfiguration;
+import java.util.function.Consumer;
 
 /**
  * Base class for all text editor components in Kalix IDE.
@@ -14,8 +20,9 @@ import java.awt.Font;
  * Provides common configuration that ensures consistent behavior across platforms:
  * <ul>
  *   <li>Monospace font configuration (JetBrains Mono with fallbacks)</li>
- *   <li>Windows cursor alignment fix via addNotify() override</li>
+ *   <li>Font metrics that follow the screen the editor is shown on</li>
  *   <li>Common editor settings (anti-aliasing, tab handling, etc.)</li>
+ *   <li>A registry of live instances, so a preference change reaches every editor</li>
  * </ul>
  *
  * Subclasses should extend this class rather than RSyntaxTextArea directly to
@@ -25,6 +32,8 @@ import java.awt.Font;
  * @see KalixPlainTextArea for plain text display (logs, output)
  */
 public abstract class KalixTextArea extends RSyntaxTextArea {
+
+    private static final WeakRegistry<KalixTextArea> instances = new WeakRegistry<>();
 
     /**
      * Creates a KalixTextArea with default dimensions.
@@ -42,6 +51,7 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     protected KalixTextArea(int rows, int cols) {
         super(rows, cols);
         initializeBase();
+        instances.add(this);
     }
 
     /**
@@ -60,17 +70,56 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     }
 
     /**
-     * Re-applies font after component realization to fix Windows cursor alignment.
+     * Keeps the cached font metrics in step with the screen this editor is shown on.
      *
-     * On Windows, RSyntaxTextArea may not correctly calculate font metrics when
-     * setFont() is called before the component has a valid Graphics context.
-     * This override ensures proper font metrics by re-applying the font once
-     * the component is connected to a native screen resource.
+     * <p>RSyntaxTextArea measures text with {@link FontMetrics} it caches from the
+     * component's {@code Graphics}: once when first shown, and again whenever the font is
+     * set. Those metrics belong to the device scale of the screen they were taken on. With
+     * fractional metrics off, each glyph advance is rounded to whole device pixels, so a
+     * 125% screen and a 100% screen measure the same string differently. Painting always
+     * uses the live screen, so metrics from another screen leave the caret and the glyphs
+     * under it misaligned
+     * (<a href="https://github.com/chasegan/Kalix/issues/162">#162</a>). That happens
+     * when the window is dragged to a monitor with another scale or the display scale
+     * changes while the IDE runs, and it can happen from the start: the first measurement
+     * runs in {@code addNotify}, from the configuration the window has at that moment, and
+     * a window learns which screen it is really on only after it is shown.
+     *
+     * <p>Each paint therefore compares the scale the metrics were measured at, which they
+     * record in their {@link java.awt.font.FontRenderContext}, with the scale of the screen
+     * this editor is on, and re-applies the font when they differ. Judging the metrics
+     * themselves, rather than remembering what was last done to them, means a measurement
+     * that lands on the wrong screen is corrected at the next paint. Judging against the
+     * screen, rather than the {@code Graphics} in hand, means a paint into an off-screen
+     * image, as when a tab is dragged, neither disturbs the metrics nor triggers a
+     * remeasure. The {@code graphicsConfiguration} property and {@code addNotify} were
+     * tried first and each misses a case: the property fires on a re-attached component
+     * before it can measure, and {@code addNotify} runs before the window has found its
+     * screen.
      */
     @Override
-    public void addNotify() {
-        super.addNotify();
-        configureMonospaceFont();
+    protected void paintComponent(Graphics g) {
+        GraphicsConfiguration screen = getGraphicsConfiguration();
+        if (screen != null) {
+            remeasureUnlessMeasuredAt(screen.getDefaultTransform().getScaleX());
+        }
+        super.paintComponent(g);
+    }
+
+    /**
+     * Rebuilds the font metrics unless they were measured at the given device scale.
+     * Re-applying the current font is RSyntaxTextArea's public route to its (private)
+     * metrics refresh, which measures with the component's own {@code Graphics} and so
+     * lands on the screen's scale; it also updates the margin line and the current-line
+     * highlight. All token styles are measured together, so any one stands for them all.
+     *
+     * @param screenScale device pixels per user-space unit of the screen the editor is on
+     */
+    void remeasureUnlessMeasuredAt(double screenScale) {
+        FontMetrics metrics = getFontMetricsForTokenType(TokenTypes.IDENTIFIER);
+        if (metrics != null && metrics.getFontRenderContext().getTransform().getScaleX() != screenScale) {
+            setFont(getFont());
+        }
     }
 
     /**
@@ -92,6 +141,34 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     public void updateFontSize(int fontSize) {
         Font monoFont = FontManager.getMonospaceFont(fontSize);
         setFont(monoFont);
+    }
+
+    /**
+     * Updates the font size of every live Kalix text area.
+     *
+     * @param fontSize the new font size in points
+     */
+    public static void updateAllFontSizes(int fontSize) {
+        instances.forEach(textArea -> textArea.updateFontSize(fontSize));
+    }
+
+    /**
+     * Re-resolves theme-dependent colours in every live Kalix text area.
+     * Called when the application theme changes.
+     */
+    public static void updateAllForThemeChange() {
+        instances.forEach(KalixTextArea::updateCurrentLineHighlight);
+    }
+
+    /**
+     * Applies an action to every live instance of the given subclass.
+     *
+     * @param type   the text area class to visit; other instances are skipped
+     * @param action what to do with each one
+     * @param <T>    the text area class
+     */
+    protected static <T extends KalixTextArea> void forEachInstance(Class<T> type, Consumer<? super T> action) {
+        instances.forEach(type, action);
     }
 
     /**

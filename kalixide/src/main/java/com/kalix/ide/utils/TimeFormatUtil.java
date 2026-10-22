@@ -16,7 +16,8 @@ import java.time.format.DateTimeParseException;
  * <ul>
  *   <li>{@link #formatForStepSize} — for resolution-aware display (hover tooltips, file
  *       exports). Pick a single format for the whole series so every row/point is
- *       consistent. Driven by the timeseries' step_size.</li>
+ *       consistent. Driven by the timeseries' step_size. {@link #needsTimeOfDay} is the
+ *       rule it applies, exposed so a CSV heading can follow the same rule.</li>
  *   <li>{@link #formatForTickInterval} — for axis tick labels. Driven by the spacing
  *       between adjacent ticks so the format stays useful as the user zooms in and out.</li>
  * </ul>
@@ -50,13 +51,12 @@ public final class TimeFormatUtil {
 
     /**
      * Format a timestamp for resolution-aware display. Daily-or-coarser series (step_size
-     * is a multiple of 86400s) format as {@code yyyy-MM-dd}; sub-daily series format as
-     * full ISO datetime. A step_size of 0 (unknown) defaults to date-only.
+     * is a multiple of 86400s, or 0 for unknown) at midnight format as {@code yyyy-MM-dd};
+     * sub-daily or off-midnight (e.g. 9am daily) series format as full ISO datetime. A
+     * whole-day step keeps every point at the same time of day, so a series stays consistent.
      */
     public static String formatForStepSize(LocalDateTime dateTime, long stepSeconds) {
-        DateTimeFormatter formatter = (stepSeconds <= 0 || stepSeconds % 86400 == 0)
-            ? DATE_ONLY : ISO_DATETIME;
-        return dateTime.format(formatter);
+        return dateTime.format(needsTimeOfDay(dateTime, stepSeconds) ? ISO_DATETIME : DATE_ONLY);
     }
 
     /**
@@ -64,6 +64,21 @@ public final class TimeFormatUtil {
      */
     public static String formatForStepSize(long timestampMs, long stepSeconds) {
         return formatForStepSize(toUtc(timestampMs), stepSeconds);
+    }
+
+    /**
+     * Whether {@link #formatForStepSize} writes this timestamp with a time of day: always for
+     * a sub-daily step, and for a daily-or-coarser step (or 0, unknown) only off midnight.
+     * Mirrors the engine's {@code needs_time_of_day} in {@code src/tid/utils.rs}; change both
+     * together.
+     */
+    public static boolean needsTimeOfDay(long timestampMs, long stepSeconds) {
+        return needsTimeOfDay(toUtc(timestampMs), stepSeconds);
+    }
+
+    private static boolean needsTimeOfDay(LocalDateTime dateTime, long stepSeconds) {
+        boolean dailyOrCoarser = stepSeconds <= 0 || stepSeconds % 86400 == 0;
+        return !(dailyOrCoarser && dateTime.toLocalTime().equals(LocalTime.MIDNIGHT));
     }
 
     /**

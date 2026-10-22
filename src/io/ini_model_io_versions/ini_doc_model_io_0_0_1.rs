@@ -1631,8 +1631,8 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
     ini_doc.validate_section("kalix");
     ini_doc.validate_property("kalix", "version");
 
-    // Set start and end dates if specified. Format matches the simulation step_size — daily
-    // models stay as YYYY-MM-DD, sub-daily models use ISO datetime so the time-of-day isn't lost.
+    // Set start and end dates if specified. Midnight daily models stay as YYYY-MM-DD;
+    // sub-daily or off-midnight (e.g. 9am) ones use ISO datetime so the time of day isn't lost.
     let sim_stepsize = model.configuration.sim_stepsize;
     if let Some(start_timestamp) = model.configuration.specified_sim_start_timestamp {
         ini_doc.set_property("kalix", "start", &u64_to_date_string_for_step_size(start_timestamp, sim_stepsize));

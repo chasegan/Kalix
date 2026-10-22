@@ -102,4 +102,46 @@ class IniSyntaxTest {
         assertFalse(IniSyntax.isSectionHeaderLine("a = [1]"));
         assertFalse(IniSyntax.isSectionHeaderLine(""));
     }
+
+    // --- annotations (ADR-0010 §2) ---
+
+    @Test
+    void annotationIsHashAtAtColumnZeroThenKeyEqualsValue() {
+        IniSyntax.Annotation a = IniSyntax.annotation("#@aka = Teemburra Dam");
+        assertEquals("aka", a.key());
+        assertEquals("Teemburra Dam", a.value());
+        assertEquals(new IniSyntax.Annotation("aka", "x"), IniSyntax.annotation("#@ aka=x  "));
+        assertEquals(new IniSyntax.Annotation("aka", ""), IniSyntax.annotation("#@aka ="));
+    }
+
+    @Test
+    void annotationValueIsVerbatimToEndOfLine() {
+        assertEquals("Weir #3 = big", IniSyntax.annotation("#@aka = Weir #3 = big").value());
+        assertEquals("{\"x1\": [10, 2000]}", IniSyntax.annotation("#@pycalib.bounds = {\"x1\": [10, 2000]}").value());
+    }
+
+    @Test
+    void anyOtherPrefixIsAnOrdinaryComment() {
+        assertFalse(IniSyntax.isAnnotationLine("##@aka = x"));
+        assertFalse(IniSyntax.isAnnotationLine("# #@aka = x"));
+        assertFalse(IniSyntax.isAnnotationLine("  #@aka = x"));
+        assertFalse(IniSyntax.isAnnotationLine("# comment"));
+        assertFalse(IniSyntax.isAnnotationLine(null));
+        assertNull(IniSyntax.annotation("##@aka = x"));
+    }
+
+    @Test
+    void malformedAnnotationIsAnAttemptButHasNoKeyAndValue() {
+        assertTrue(IniSyntax.isAnnotationLine("#@"));
+        assertTrue(IniSyntax.isAnnotationLine("#@aka"));
+        assertNull(IniSyntax.annotation("#@aka"));
+        assertNull(IniSyntax.annotation("#@ = no key"));
+    }
+
+    @Test
+    void annotationIsStillACommentToEveryOtherRule() {
+        assertEquals(0, IniSyntax.commentStart("#@aka = x"));
+        assertTrue(IniSyntax.isBlankOrComment("#@aka = x"));
+        assertFalse(IniSyntax.isSectionHeaderLine("#@aka = [x]"));
+    }
 }

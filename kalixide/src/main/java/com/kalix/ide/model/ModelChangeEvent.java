@@ -41,6 +41,10 @@ public class ModelChangeEvent {
         return type;
     }
     
+    /**
+     * The node name or link id the event concerns, or null when it concerns several or
+     * none: a bulk selection, a cleared selection, a reload.
+     */
     public String getEntityId() {
         return entityId;
     }

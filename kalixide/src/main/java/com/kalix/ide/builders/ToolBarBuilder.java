@@ -4,6 +4,7 @@ import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.icons.KalixIcon;
+import com.kalix.ide.rendering.NodeLabelMode;
 import com.kalix.ide.utils.ThemeUtils;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
@@ -407,7 +408,7 @@ public class ToolBarBuilder {
      * 
      * @return Color for toolbar icons that contrasts with the current theme
      */
-    private Color getThemeAwareIconColor() {
+    private static Color getThemeAwareIconColor() {
         return ThemeUtils.iconColor(UIManager.getColor("ToolBar.background"));
     }
 
@@ -523,40 +524,48 @@ public class ToolBarBuilder {
     }
 
     /**
-     * Creates a toggle button for node labels with theme-aware tag icon.
-     * Mirrors {@link #createGridToggleButton()} — same shape, same state source.
+     * Creates the node-label button. One button cycles the three {@link NodeLabelMode}s
+     * (names, aka, hidden): it is selected while labels are drawn, and its icon says
+     * which text — the tag for names, the "A" for akas. Mirrors
+     * {@link #createGridToggleButton()} in shape and state source.
      *
      * @return Configured JToggleButton for node labels
      */
     private JToggleButton createLabelsToggleButton() {
-        FontIcon icon = FontIcon.of(FontAwesomeSolid.TAG, AppConstants.TOOLBAR_ICON_SIZE);
-        Color iconColor = getThemeAwareIconColor();
-        icon.setIconColor(iconColor);
-
-        JToggleButton labelsButton = new JToggleButton(icon);
+        JToggleButton labelsButton = new JToggleButton();
         labelsButton.setFocusPainted(false);
 
-        // Set initial state
-        boolean labelsVisible = callbacks.isLabelsVisible();
-        labelsButton.setSelected(labelsVisible);
-        labelsButton.setToolTipText(labelsVisible
-            ? "Node labels visible - click to hide"
-            : "Node labels hidden (shown on hover) - click to show");
+        applyLabelMode(labelsButton, callbacks.getLabelMode());
 
-        // Add action listener
         labelsButton.addActionListener(e -> {
-            boolean newState = !callbacks.isLabelsVisible();
-            callbacks.toggleLabels(newState);
-            labelsButton.setSelected(newState);
-            labelsButton.setToolTipText(newState
-                ? "Node labels visible - click to hide"
-                : "Node labels hidden (shown on hover) - click to show");
+            NodeLabelMode next = callbacks.getLabelMode().next();
+            callbacks.setLabelMode(next);
+            applyLabelMode(labelsButton, next);
         });
 
         // Set accessible name for screen readers
-        labelsButton.getAccessibleContext().setAccessibleName("Toggle Node Labels");
+        labelsButton.getAccessibleContext().setAccessibleName("Node labels");
 
         return labelsButton;
+    }
+
+    /** Sets the button's icon, selection and tooltip to match {@code mode}. */
+    public static void applyLabelMode(JToggleButton labelsButton, NodeLabelMode mode) {
+        FontIcon icon = FontIcon.of(mode == NodeLabelMode.AKA ? FontAwesomeSolid.FONT : FontAwesomeSolid.TAG,
+                AppConstants.TOOLBAR_ICON_SIZE);
+        icon.setIconColor(getThemeAwareIconColor());
+        labelsButton.setIcon(icon);
+        labelsButton.setSelected(mode.drawsLabels());
+        labelsButton.setToolTipText(labelModeTooltip(mode));
+    }
+
+    /** The current mode and what the next click does, e.g. "Node labels: akas only - click to hide". */
+    private static String labelModeTooltip(NodeLabelMode mode) {
+        return switch (mode) {
+            case NAMES -> "Node labels: names - click to show akas only";
+            case AKA -> "Node labels: akas only - click to hide";
+            case HIDDEN -> "Node labels: hidden (shown on hover) - click to show names";
+        };
     }
 
 }

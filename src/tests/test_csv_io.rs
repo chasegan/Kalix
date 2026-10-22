@@ -255,6 +255,7 @@ fn test_csv_writer_uses_iso_datetime_for_hourly() {
         written.contains("2020-01-01T01:00:00"),
         "Hourly output should preserve time-of-day. Got:\n{}", written
     );
+    assert!(written.starts_with("datetime,col1\r\n"), "Hourly output is headed datetime. Got:\n{}", written);
 }
 
 
@@ -287,6 +288,7 @@ fn test_csv_writer_uses_date_only_for_daily() {
         !written.contains("T00:00:00"),
         "Daily output should not have ISO time component. Got:\n{}", written
     );
+    assert!(written.starts_with("date,col1\r\n"), "Daily output is headed date. Got:\n{}", written);
 }
 
 /// End-to-end check: load an hourly model, run it, write outputs. The exported CSV must

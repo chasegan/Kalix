@@ -29,13 +29,11 @@ The CSV format has a single header row, and a single timestamp column.
 
 **Rows:** Column names are written in the top row, separated by commas.
 
-**Columns:** Timestamps are written in the first column, and follow an ISO format. For daily timesteps this reduces to “YYYY-MM-DD”. This column is named “Time”. Subsequent columns contain model results. These appear in the output CSV file in the same order that they are specified in the model file.
-
-![](../assets/docs-concepts-model-outputs/image.png)
+**Columns:** Timestamps are written in the first column, and follow an ISO format. For daily (or longer) timesteps at midnight this reduces to “YYYY-MM-DD”; daily data at another time of day, such as 9am, keeps the time (e.g. “2020-01-01T09:00:00”). The column is headed “date” when its values are bare dates and “datetime” when they carry a time, so a daily model stamped at 9am writes a “datetime” column. Subsequent columns contain model results. These appear in the output CSV file in the same order that they are specified in the model file.
 
 You can read the output file into a Pandas dataframe for postprocessing simply:
 
 ```python
   import pandas as pd
-  df = pd.read_csv('blarg.csv', parse_dates=['Time'], index_col='Time')
+  df = pd.read_csv('blarg.csv', parse_dates=[0], index_col=0)
 ```

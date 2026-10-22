@@ -251,7 +251,7 @@ End the session and exit.
 - Description: Save all of the run's output timeseries to file
 - Parameters: `path` (string, optional), `format` (string, optional, default "csv")
 - Supported formats:
-  - `"csv"` (default): single wide CSV with a `Datetime` column and one column per output series.
+  - `"csv"` (default): single wide CSV with a `date` column (`datetime` when the timestamps carry a time of day) and one column per output series.
   - `"pixie"`: writes a `.pxt` (metadata) / `.pxb` (compressed binary) pair. The `path` is treated as a base path; a trailing `.pxt`/`.pxb` is stripped before writing, and `r.path` reports the `.pxt` file.
 
 **get_mass_balance_report**

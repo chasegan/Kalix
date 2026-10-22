@@ -98,11 +98,12 @@ Account state is published as ordinary series — readable in any
 | `acc.<name>.allocation` | Allocation to date: balance plus use since the last reset (see [Allocation systems](allocation-systems.md)). |
 | `acc.<name>.allocation_pct` | Allocation as a percentage (nominally 0-100) of the account size. `NaN` for a zero-size account (and NaN counts as true in a [condition](dynamic-expressions.md), so a bare `acc.<name>.allocation_pct` trigger on such an account fires every step). The allocation percentage may be >100% — the allocations are not clamped to the account `size`. |
 | `acc.<name>.use` | Water taken since the last `reset_allocation` — the use term of the allocation. Fed only by user takes, like `debits`. |
+| `acc.<name>.committed` | Orders accepted by [regulated users](regulated-user.md#accounts) against this account and not yet due, as the step's ordering begins — their best guess of the diversions to come. A forecast, not a debit: the balance does not move until the water is diverted, and `opening_balance − committed` is the headroom the step's orders are capped by. Each order leaves the tally on the step after it falls due, delivered or not. Written before ordering, like `opening_balance`. |
 | `acc.<name>.size` | Account size, as declared. |
 | `acc.<name>.initial` | Opening balance at the start of the run, as declared (defaults to 0 if omitted). |
 
-<a id="groups"></a>`opening_balance`, `closing_balance`, `debits`, `allocation`
-and `use` are also published for the **group aggregate**, summed over its
+<a id="groups"></a>`opening_balance`, `closing_balance`, `debits`, `allocation`,
+`use` and `committed` are also published for the **group aggregate**, summed over its
 members: `acc.<group>.use`, `acc.<group>.closing_balance`, and so on — so a
 resource assessment can write `/ acc.gs.size` instead of a magic total that
 silently goes stale when an entitlement changes.
@@ -131,8 +132,8 @@ fixed for the whole run rather than computed, so they read cleanly
 *everywhere*, from the very first line of the model, with no write-timing
 caveat and (like [`const.*`](constants.md)) no
 [offset syntax](referencing-model-results.md#temporal-offset-for-node-outputs).
-`opening_balance` is written before ordering and flow, so it reads cleanly
-mid-step. The others are written at end of step; reading them earlier in the
+`opening_balance` and `committed` are written before ordering and flow, so
+they read cleanly mid-step. The others are written at end of step; reading them earlier in the
 same step needs the previous-step offset, e.g. `acc.smith.closing_balance[-1,
 0]` — including `use`, whose `[-1, 0]` read on a reset morning is still the
 *old* period's total (the reset fires later that same step).

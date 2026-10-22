@@ -272,7 +272,7 @@ mod tests {
             .expect("output is a valid zip archive");
         assert_eq!(archive.len(), 1, "exactly one entry");
         let mut entry = archive.by_index(0).unwrap();
-        assert_eq!(entry.name(), csv_io::zip_inner_name(&zipped.0),
+        assert_eq!(entry.name().unwrap(), csv_io::zip_inner_name(&zipped.0),
             "the entry is named from the real archive name minus .zip (pandas' \
              convention), never from the temp staging name");
         let mut decompressed = Vec::new();

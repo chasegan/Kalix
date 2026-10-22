@@ -139,6 +139,11 @@
         "flosf",
         "flobf",
         "floin",
+        "uztw",
+        "uzfw",
+        "lztw",
+        "lzfp",
+        "lzfs",
         "area"
       ],
       "required_params": [
@@ -1186,6 +1191,22 @@
     "malformed_section_header": {
       "severity": "error",
       "description": "A line starting with '[' must be a complete [section] header"
+    },
+    "annotation_malformed": {
+      "severity": "error",
+      "description": "An annotation is '#@key = value'"
+    },
+    "annotation_misplaced": {
+      "severity": "error",
+      "description": "An annotation sits directly above a section header"
+    },
+    "annotation_unknown_key": {
+      "severity": "warning",
+      "description": "Kalix does not know this annotation key"
+    },
+    "annotation_no_effect": {
+      "severity": "warning",
+      "description": "This annotation means nothing on this kind of section"
     }
   },
   "data_types": {

@@ -137,9 +137,6 @@ public final class UIConstants {
         /** Text area columns for JSON edit dialog */
         public static final int DIALOG_COLS = 50;
 
-        /** Font size for log text area */
-        public static final int FONT_SIZE = 12;
-
         /** Message displayed when no log is available */
         public static final String NO_LOG_MESSAGE = "No communication log available for this session.";
 
