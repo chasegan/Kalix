@@ -159,6 +159,12 @@ public class TreeContextMenu {
                     sel -> host.showMassBalanceReport(file(sel))
                 ).withTooltip("Run this model as saved, then show its mass balance report."),
                 item(
+                    "Validate mass balance",
+                    sel -> isModelAndText(sel) && context == BuildContext.FileTree,
+                    sel -> host.validateMassBalance(modelOf(sel), otherThanModel(sel))
+                ).withTooltip("Run the selected model as saved, then compare its mass balance"
+                    + " with the selected file."),
+                item(
                     "Unzip", TreeContextMenu::isSingleZip,
                     sel -> fileOps.unzipFile(file(sel))
                 )
@@ -295,6 +301,22 @@ public class TreeContextMenu {
         return sel.size() == 1 && isModelFile(sel.getFirst());
     }
 
+    /**
+     * True for one model file and one text file, in either order: the text file is taken
+     * to be a mass balance report. A text file is anything {@link DocumentKind} would open
+     * as text, short of a zip archive.
+     */
+    static boolean isModelAndText(List<FileTreeNode> sel) {
+        if (sel.size() != 2 || hasDirectory(sel) || !isNotPlainZip(sel)) {
+            return false;
+        }
+        long models = sel.stream().filter(TreeContextMenu::isModelFile).count();
+        long texts = sel.stream()
+            .filter(x -> DocumentKind.forFile(x.getFile()) == DocumentKind.TEXT)
+            .count();
+        return models == 1 && texts == 1;
+    }
+
     private static boolean isModelFile(FileTreeNode node) {
         return !node.isDirectory() && DocumentKind.forFile(node.getFile()) == DocumentKind.MODEL;
     }
@@ -346,6 +368,14 @@ public class TreeContextMenu {
 
     private static File file(List<FileTreeNode> sel, int index) {
         return sel.get(index).getFile();
+    }
+
+    private static File modelOf(List<FileTreeNode> sel) {
+        return sel.stream().filter(TreeContextMenu::isModelFile).findFirst().orElseThrow().getFile();
+    }
+
+    private static File otherThanModel(List<FileTreeNode> sel) {
+        return sel.stream().filter(x -> !isModelFile(x)).findFirst().orElseThrow().getFile();
     }
 
     private static List<File> files(List<FileTreeNode> sel) {

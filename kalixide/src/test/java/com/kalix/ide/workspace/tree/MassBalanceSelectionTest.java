@@ -43,4 +43,27 @@ class MassBalanceSelectionTest {
         assertFalse(TreeContextMenu.isSingleModel(sel(folder("models.ini"))));
         assertFalse(TreeContextMenu.isSingleModel(sel(file("a.ini"), file("b.ini"))));
     }
+
+    @Test
+    void modelAndTextFileOfferValidationInEitherOrder() throws IOException {
+        FileTreeNode model = file("model.ini");
+        FileTreeNode report = file("mbal.txt");
+
+        assertTrue(TreeContextMenu.isModelAndText(sel(model, report)));
+        assertTrue(TreeContextMenu.isModelAndText(sel(report, model)));
+        assertTrue(TreeContextMenu.isModelAndText(sel(model, file("report"))));
+    }
+
+    @Test
+    void otherPairsDoNotOfferValidation() throws IOException {
+        FileTreeNode model = file("model.ini");
+
+        assertFalse(TreeContextMenu.isModelAndText(sel(model, file("other.ini"))));
+        assertFalse(TreeContextMenu.isModelAndText(sel(model, file("flows.csv"))));
+        assertFalse(TreeContextMenu.isModelAndText(sel(model, file("archive.zip"))));
+        assertFalse(TreeContextMenu.isModelAndText(sel(model, folder("reports"))));
+        assertFalse(TreeContextMenu.isModelAndText(sel(file("a.txt"), file("b.txt"))));
+        assertFalse(TreeContextMenu.isModelAndText(sel(model)));
+        assertFalse(TreeContextMenu.isModelAndText(sel(model, file("mbal.txt"), file("notes.txt"))));
+    }
 }

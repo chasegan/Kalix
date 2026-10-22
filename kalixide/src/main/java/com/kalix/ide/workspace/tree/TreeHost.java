@@ -31,6 +31,9 @@ public interface TreeHost {
     /** Runs the model file as saved, then shows the run's mass balance report. */
     void showMassBalanceReport(File model);
 
+    /** Runs the model file as saved, then compares its mass balance report with {@code reference}. */
+    void validateMassBalance(File model, File reference);
+
     /**
      * Shows or hides hidden (dot-prefixed) entries across the application, persisting the choice.
      * Routed through the host so the tree's context-menu toggle and the View-menu toggle share one

@@ -42,6 +42,19 @@ public class MassBalanceActions {
     }
 
     /**
+     * Runs {@code model}, then compares its mass balance report with the text of
+     * {@code reference}. Call on the EDT.
+     */
+    public void validate(File model, File reference) {
+        // Read now, so an unreadable reference is reported before a run is started.
+        String referenceReport = readOrReport(reference, "reference");
+        if (referenceReport == null) return;
+
+        runThenGetReport(model, (runName, report) ->
+            MassBalanceComparison.showResult(parentFrame, runName, report, referenceReport));
+    }
+
+    /**
      * Runs {@code model} from disk in its own folder and hands the run's name and mass
      * balance report to {@code onReport} on the EDT. A run that fails or is stopped has
      * already been reported by the run itself, so {@code onReport} is simply not called.

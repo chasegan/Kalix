@@ -834,6 +834,12 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             }
 
             @Override
+            public void validateMassBalance(File model, File reference) {
+                new MassBalanceActions(KalixIDE.this, stdioTaskManager, statusReporter)
+                    .validate(model, reference);
+            }
+
+            @Override
             public void setShowHiddenFiles(boolean show) {
                 KalixIDE.this.toggleShowHiddenFiles(show);
             }
