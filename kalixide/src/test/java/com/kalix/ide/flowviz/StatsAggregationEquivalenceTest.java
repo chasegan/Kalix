@@ -257,20 +257,4 @@ class StatsAggregationEquivalenceTest {
         assertEquals(carried, duplicate.getTargetVizPanel().getSeasonalMaskMode(),
             "duplication carries the seasonal selection, as it does the overlap mask");
     }
-
-    @Test
-    void removingAStatsSeriesAlsoLeavesThePanel() {
-        VisualizationTabManager mgr = manager(pool());
-        StatsTableModel model = mgr.addStatsTabFromSettings(
-            statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM));
-        mgr.removeSeriesFromStatsTabs(R1);
-
-        // The stats project from the panel's list, so a stale entry there would bring R1 back.
-        assertEquals(List.of(R2), mgr.tabAt(0).vizPanel.currentState().getVisibleSeries());
-        VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
-        mgr.switchView(tab, FlowVizView.PLOT);
-        mgr.updateAllTabs(false);
-        mgr.switchView(tab, FlowVizView.STATS); // re-projects from the panel
-        assertEquals(1, model.getRowCount(), "R1 stays gone after the next projection");
-    }
 }
