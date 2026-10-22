@@ -15,6 +15,17 @@ pub struct InMemoryColumn {
     pub values: Vec<f64>,
 }
 
+/// The ways `set_input()` can fail.
+#[derive(Debug, thiserror::Error)]
+pub enum SetInputError {
+    /// The alias isn't declared in `[data]`.
+    #[error("{0}")]
+    Undeclared(String),
+    /// The data can't be used, e.g. no rows, or one row and so no timestep.
+    #[error("{0}")]
+    Data(String),
+}
+
 /// Supply in-memory data for a declared `[data]` alias (`set_input()`).
 ///
 /// `alias` must already name a source in `[data]` — either a bare declaration
@@ -23,25 +34,26 @@ pub struct InMemoryColumn {
 /// isn't declared is rejected rather than silently creating an unused dataset —
 /// the model definition stays the single source of truth for what it consumes.
 ///
-/// The only failure path for this function is if the input `alias` if not
-/// declared in the `[data]` section.
+/// Fails if `alias` isn't declared, or if the data fails the same timestep
+/// check `configure()` applies (pass `step_size` 0 for one row). A rejected
+/// call leaves the model unchanged.
 pub fn set_input(
     model: &mut Model,
     alias: &str,
     start_timestamp: u64,
     step_size: u64,
     columns: Vec<InMemoryColumn>,
-) -> Result<(), String> {
+) -> Result<(), SetInputError> {
     let alias_sanitized = sanitize_name(alias);
 
     let source_idx = model
         .input_sources
         .iter()
         .position(|s| s.alias().map(sanitize_name).as_deref() == Some(alias_sanitized.as_str()))
-        .ok_or_else(|| format!(
+        .ok_or_else(|| SetInputError::Undeclared(format!(
             "input '{alias}' is not declared in [data] -- set_input() supplies values \
              for an existing declaration, it does not add one (declare it first, e.g. via patch)"
-        ))?;
+        )))?;
 
     // Preserve how this source re-declares itself in the INI so a save/
     // to_string() round trip keeps naming the file or bare alias it stands in
@@ -58,10 +70,12 @@ pub fn set_input(
         .map(|(i, col)| build_column(&alias_sanitized, i + 1, col, start_timestamp, step_size))
         .collect();
 
-    model.input_sources[source_idx] = TimeseriesInputDefinition::InMemoryDefinition {
+    let source = TimeseriesInputDefinition::InMemoryDefinition {
         origin,
         columns: ts_columns,
     };
+    source.check_has_timestep().map_err(SetInputError::Data)?;
+    model.input_sources[source_idx] = source;
     Ok(())
 }
 
@@ -194,6 +208,8 @@ mod tests {
 
         let err = set_input(&mut model, "not_declared", start(), DAY, one_column("flow", vec![1.0]))
             .expect_err("an undeclared alias must be rejected");
+        assert!(matches!(err, SetInputError::Undeclared(_)), "Got: {err:?}");
+        let err = err.to_string();
         assert!(
             err.contains("not_declared") && err.contains("not declared"),
             "error should name the bad alias. Got: {err}"
@@ -277,11 +293,24 @@ mod tests {
         let mut model = IniModelIO::read_model_string(model_ini_with_bare_declaration())
             .expect("model should parse");
 
-        let err = set_input(&mut model, "obs", start(), DAY, one_column("flow", vec![]));
-        // Empty is allowed at this layer (no timestamps to validate against);
-        // an empty *timestamps* array is what the Python binding rejects --
-        // this module only requires columns and timestamps to agree in length.
-        assert!(err.is_ok(), "an empty column with no timestamps to mismatch against is not this module's job to reject");
+        let err = set_input(&mut model, "obs", start(), 0, one_column("flow", vec![]))
+            .expect_err("empty data must be rejected");
+        assert!(matches!(err, SetInputError::Data(_)), "Got: {err:?}");
+        assert_eq!(err.to_string(), "input 'obs' (supplied in memory) has no data");
+        // A rejected call leaves the declaration as it was.
+        assert!(matches!(model.input_sources[0], TimeseriesInputDefinition::Declaration { .. }));
+    }
+
+    #[test]
+    fn set_input_rejects_one_row() {
+        let mut model = IniModelIO::read_model_string(model_ini_with_bare_declaration())
+            .expect("model should parse");
+
+        let err = set_input(&mut model, "obs", start(), 0, one_column("flow", vec![1.0]))
+            .expect_err("one row must be rejected");
+        assert!(matches!(err, SetInputError::Data(_)), "Got: {err:?}");
+        assert_eq!(err.to_string(),
+                   "input 'obs' (supplied in memory) has only one row; at least two are needed to infer the timestep");
     }
 
     #[test]

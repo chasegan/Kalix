@@ -565,12 +565,14 @@ class Model:
         Raises
         ------
         kalix.KalixKeyError
-            If `alias` is not declared in the model's ``[data]`` section --
-            the only engine-side failure this call has.
+            If `alias` is not declared in the model's ``[data]`` section.
+        kalix.ModelValidationError
+            If `data` has no rows, or only one (no timestep to infer) -- the
+            same check the engine applies to a CSV input.
         TypeError
             If `data` is not indexed by a `pd.DatetimeIndex`.
         ValueError
-            If the index is empty or its step is not regular, or if a column
+            If `data` has no columns, the index's step is not regular, or a column
             is not the same length as the index. Like the `TypeError` above,
             these are argument problems rejected before the engine is
             consulted, so they stay builtin (see `kalix.error`).
