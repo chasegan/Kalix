@@ -32,7 +32,6 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -1059,14 +1058,6 @@ public class FlowVizPanel extends JPanel {
      */
     public DataSet getDisplayDataSet() {
         return displayDataSet;
-    }
-
-    /**
-     * Returns the visible series (in selection order and under the current
-     * aggregation settings) as a map built from the cache.
-     */
-    public LinkedHashMap<SeriesRef, TimeSeriesData> aggregatedSeries() {
-        return model.aggregated();
     }
 
     /**
