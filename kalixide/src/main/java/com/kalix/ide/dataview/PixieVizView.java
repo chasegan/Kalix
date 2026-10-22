@@ -8,7 +8,6 @@ import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DefaultLabelResolver;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
-import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.flowviz.style.PaletteSeriesStyleResolver;
 import com.kalix.ide.flowviz.style.PlotPaletteManager;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
@@ -163,11 +162,6 @@ public final class PixieVizView extends JPanel {
             List<SeriesRef> removed = new ArrayList<>(dataSet.getSeriesRefs());
             for (SeriesRef r : removed) {
                 dataSet.removeSeries(r);
-            }
-            for (StatsTableModel model : vizManager.getAllStatsModels()) {
-                for (SeriesRef r : removed) {
-                    model.removeSeries(r);
-                }
             }
             vizManager.updateAllTabs(false);
             tablePanel.getTable().getTableHeader().repaint();

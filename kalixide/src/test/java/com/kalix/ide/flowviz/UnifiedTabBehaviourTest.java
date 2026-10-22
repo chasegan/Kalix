@@ -143,7 +143,7 @@ class UnifiedTabBehaviourTest {
             new com.kalix.ide.flowviz.data.TimeSeriesData(t, new double[] {1, 2}));
 
         VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
-        assertTrue(tab.statsDirty, "the hidden projection is marked, not computed");
+        assertTrue(tab.statsVizPanel.isDirty(), "the hidden projection is marked, not computed");
         assertEquals(0, tab.statsVizPanel.model().getRowCount(), "no eager stats work for a hidden page");
     }
 
