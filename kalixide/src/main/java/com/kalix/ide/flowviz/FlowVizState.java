@@ -10,6 +10,7 @@ import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
+import com.kalix.ide.preferences.PreferenceKeys;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -39,6 +40,11 @@ public final class FlowVizState {
     public static final FlowVizState INITIAL = new FlowVizState(List.of(), Set.of(),
         AggregationPeriod.ORIGINAL, AggregationMethod.SUM, PlotType.VALUES, YAxisScale.LINEAR,
         LineShape.STRAIGHT, MaskMode.NONE, SeasonalMaskMode.DISABLED, false, 0, 0, 0, 0);
+
+    /** A new tab's state: {@link #INITIAL}, with auto-Y as the user's preference has it. */
+    public static FlowVizState defaults() {
+        return INITIAL.withAutoYMode(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get());
+    }
 
     private final List<SeriesRef> visibleSeries;
     private final Set<SourceRef> checkedSources;

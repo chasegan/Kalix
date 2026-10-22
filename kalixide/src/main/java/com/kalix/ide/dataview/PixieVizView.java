@@ -1,6 +1,7 @@
 package com.kalix.ide.dataview;
 
 import com.kalix.ide.flowviz.FlowVizPanel;
+import com.kalix.ide.flowviz.FlowVizState;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
 import com.kalix.ide.flowviz.data.DataSet;
@@ -132,10 +133,7 @@ public final class PixieVizView extends JPanel {
             }
         });
 
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>(); // the no-sources host state
-        vizManager.addPlotTabFromSettings(settings);
+        vizManager.addPlotTab(FlowVizState.defaults()); // no series, no sources: the no-sources host state
         installHeaderInteractions();
     }
 

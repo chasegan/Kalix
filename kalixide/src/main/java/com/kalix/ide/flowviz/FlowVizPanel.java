@@ -3,7 +3,6 @@ package com.kalix.ide.flowviz;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
-import com.kalix.ide.flowviz.data.SourceRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.LineShape;
 import com.kalix.ide.flowviz.rendering.PlotColors;
@@ -198,6 +197,7 @@ public class FlowVizPanel extends JPanel {
         setupMouseListeners();
 
         visibleSeries.addAll(model.current().getVisibleSeries());
+        legendManager.setSeries(model.current().getVisibleSeries());
         renderer.setLineShape(model.current().getLineShape());
         model.addListener(this::onStateChanged);
     }
@@ -825,39 +825,6 @@ public class FlowVizPanel extends JPanel {
     // Legend management methods
 
     /**
-     * Adds a series to the plot legend. The legend stores only the ref for identity;
-     * the display label and colour are projected at render time (via the
-     * {@link LabelResolver} and {@link SeriesStyleResolver}) so the entry tracks
-     * renames and palette changes automatically.
-     */
-    public void addLegendSeries(SeriesRef ref) {
-        if (legendManager != null) {
-            legendManager.addSeries(ref);
-            repaint();
-        }
-    }
-
-    /**
-     * Removes a series from the plot legend.
-     */
-    public void removeLegendSeries(SeriesRef ref) {
-        if (legendManager != null) {
-            legendManager.removeSeries(ref);
-            repaint();
-        }
-    }
-
-    /**
-     * Clears all series from the plot legend.
-     */
-    public void clearLegend() {
-        if (legendManager != null) {
-            legendManager.clear();
-            repaint();
-        }
-    }
-
-    /**
      * Gets the legend manager for direct access.
      */
     public PlotLegendManager getLegendManager() {
@@ -1107,28 +1074,15 @@ public class FlowVizPanel extends JPanel {
         this.onHistoryChanged = callback;
     }
 
-    /**
-     * Supplies the owning tab's checked sources at snapshot time, so undo captures
-     * the complete view (sources + series + settings) without the panel knowing
-     * anything about the window's trees. Set by VisualizationTabManager before the
-     * construction batch, so even history entry #1 carries true sources.
-     */
-    public void setCheckedSourcesSupplier(Supplier<Set<SourceRef>> supplier) {
-        this.checkedSourcesSupplier = supplier;
-    }
-
-    private Supplier<Set<SourceRef>> checkedSourcesSupplier;
 
     /**
-     * Records the current state as an undo entry (if changed), with the viewport and the
-     * tab's checked sources as they are now. Called after user-initiated changes. Skipped
-     * during restores and batches, and before data is loaded (to avoid junk history from
-     * initial setup).
+     * Records the current state as an undo entry (if changed), with the viewport as it is
+     * now. Called after user-initiated changes. Skipped during restores and batches, and
+     * before data is loaded (to avoid junk history from initial setup).
      */
     public void pushState() {
         if (restoringState || originalDataSet == null) return;
-        Set<SourceRef> sources = checkedSourcesSupplier != null ? checkedSourcesSupplier.get() : Set.of();
-        model.update(s -> s.withCheckedSources(sources).withViewport(currentViewport));
+        model.update(s -> s.withViewport(currentViewport));
         if (model.record() && onHistoryChanged != null) {
             onHistoryChanged.run();
         }
@@ -1149,6 +1103,7 @@ public class FlowVizPanel extends JPanel {
     private void onStateChanged(FlowVizState old, FlowVizState now, FlowVizModel.Cause cause) {
         visibleSeries.clear();
         visibleSeries.addAll(now.getVisibleSeries());
+        legendManager.setSeries(now.getVisibleSeries());
         renderer.setLineShape(now.getLineShape());
         switch (cause) {
             case RESTORE -> applyRestored(old, now);
@@ -1230,11 +1185,8 @@ public class FlowVizPanel extends JPanel {
     /**
      * Undoes the last state change. Returns the restored state, or null if at beginning.
      *
-     * <p><b>Callers must route the returned state through
-     * {@code VisualizationTabManager.syncTabSelectionFromState}</b> (as the toolbar's
-     * undo button does): this method restores only the panel; the tab's canonical
-     * record and the window trees sync at that call-site seam. A direct caller — a
-     * future key binding, say — that skips it silently desyncs the trees.</p>
+     * <p>The model notifies every listener of the restore, so the other pages and the
+     * window trees follow without any further call.</p>
      */
     public FlowVizState undo() {
         FlowVizState state = model.undo();
@@ -1246,7 +1198,7 @@ public class FlowVizPanel extends JPanel {
 
     /**
      * Redoes the last undone state change. Returns the restored state, or null if at end.
-     * Same call-site contract as {@link #undo()}: route the result through the sync seam.
+     * Listeners follow, as for {@link #undo()}.
      */
     public FlowVizState redo() {
         FlowVizState state = model.redo();

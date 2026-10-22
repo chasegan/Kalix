@@ -1,6 +1,7 @@
 package com.kalix.ide.dataview;
 
 import com.kalix.ide.flowviz.FlowVizPanel;
+import com.kalix.ide.flowviz.FlowVizState;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
 import com.kalix.ide.flowviz.data.DataSet;
@@ -265,19 +266,17 @@ public final class DataVizView extends JPanel {
             }
         });
 
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>(); // the no-sources host state
+        FlowVizState initial = FlowVizState.defaults(); // no sources: the no-sources host state
         String firstColumn = firstDataColumnName();
         DatasetSeries firstRef = firstColumn != null ? new DatasetSeries(datasetId(), firstColumn) : null;
         if (firstRef != null) {
             // First data column plotted by default, so the region is never blank.
-            settings.selectedSeries.add(firstRef);
+            initial = initial.withVisibleSeries(List.of(firstRef));
             defaultSelectionPending = false;
         } else {
             defaultSelectionPending = true; // structure not indexed yet; owed on arrival
         }
-        FlowVizPanel firstPanel = manager.addPlotTabFromSettings(settings);
+        FlowVizPanel firstPanel = manager.addPlotTab(initial);
         if (firstRef != null) {
             pendingZoomFit.put(firstPanel, firstRef); // fit once the default column's data lands
         }

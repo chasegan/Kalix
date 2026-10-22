@@ -78,10 +78,7 @@ class LineShapeStateTest {
     void undoOfResetBringsTheShapeBack() {
         VisualizationTabManager mgr = new VisualizationTabManager(new DataSet(),
             ref -> new LineStyle(Color.BLACK, StrokeStyle.values()[0]));
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>();
-        mgr.addPlotTabFromSettings(settings);
+        mgr.addPlotTab(FlowVizState.defaults());
         FlowVizPanel panel = mgr.getTargetVizPanel();
         panel.setLineShape(LineShape.STEPPED);
 
@@ -89,7 +86,6 @@ class LineShapeStateTest {
         assertEquals(LineShape.STRAIGHT, panel.getLineShape(), "reset returns the shape to straight");
 
         FlowVizState undone = panel.undo();
-        mgr.syncTabSelectionFromState(panel, undone);
         assertEquals(LineShape.STEPPED, panel.getLineShape(),
             "a reset is one undoable step, and the shape comes back with the rest of the view");
     }

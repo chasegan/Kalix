@@ -52,10 +52,7 @@ class VizToolbarControllerTest {
     @Test
     void updateFromStateReflectsSilently() {
         VisualizationTabManager mgr = manager();
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>();
-        mgr.addPlotTabFromSettings(settings);
+        mgr.addPlotTab(FlowVizState.defaults());
 
         FlowVizPanel panel = mgr.getTargetVizPanel();
         panel.setAggregation(AggregationPeriod.DAILY, AggregationMethod.MEAN); // entry 2
@@ -100,11 +97,8 @@ class VizToolbarControllerTest {
         return null;
     }
 
-    private static VisualizationTabManager.TabSettings emptySettings() {
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>();
-        return settings;
+    private static FlowVizState emptySettings() {
+        return FlowVizState.defaults();
     }
 
     /**
@@ -114,7 +108,7 @@ class VizToolbarControllerTest {
     @Test
     void theSeasonalButtonIsSharedByBothViews() {
         VisualizationTabManager mgr = manager();
-        mgr.addPlotTabFromSettings(emptySettings());
+        mgr.addPlotTab(emptySettings());
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
         SeasonalMaskButton button = seasonalButton(tabRoot);
         assertNotNull(button, "the merged toolbar carries the seasonal mask button");
@@ -126,7 +120,7 @@ class VizToolbarControllerTest {
     @Test
     void updateFromStateReflectsTheSeasonalMaskSilently() {
         VisualizationTabManager mgr = manager();
-        mgr.addPlotTabFromSettings(emptySettings());
+        mgr.addPlotTab(emptySettings());
         FlowVizPanel panel = mgr.getTargetVizPanel();
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
         SeasonalMaskButton button = seasonalButton(tabRoot);

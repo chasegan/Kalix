@@ -46,11 +46,8 @@ class ViewToggleTest {
             ref -> new LineStyle(Color.BLACK, StrokeStyle.values()[0]));
     }
 
-    private static VisualizationTabManager.TabSettings settingsWith(SeriesRef... series) {
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>(List.of(series));
-        settings.checkedSources = new LinkedHashSet<>();
-        return settings;
+    private static FlowVizState settingsWith(SeriesRef... series) {
+        return FlowVizState.defaults().withVisibleSeries(List.of(series));
     }
 
     private static AbstractButton button(Container root, String tooltip) {
@@ -71,7 +68,7 @@ class ViewToggleTest {
     @Test
     void toggleIsPresentationOnlyNoHistoryNoTreeNoise() {
         VisualizationTabManager mgr = manager(new DataSet());
-        mgr.addPlotTabFromSettings(settingsWith());
+        mgr.addPlotTab(settingsWith());
         AtomicInteger treeNotifications = new AtomicInteger();
         mgr.setHost(countingHost(treeNotifications));
 
@@ -90,7 +87,7 @@ class ViewToggleTest {
         DataSet pool = new DataSet();
         pool.addSeries(REF, daily(1, 2, 3));
         VisualizationTabManager mgr = manager(pool);
-        mgr.addPlotTabFromSettings(settingsWith(REF));
+        mgr.addPlotTab(settingsWith(REF));
 
         VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
         assertTrue(tab.statsVizPanel.isDirty(), "a plot-view tab's stats page starts lazy");
@@ -105,7 +102,7 @@ class ViewToggleTest {
     @Test
     void toggleRoundTripReturnsToThePlotView() {
         VisualizationTabManager mgr = manager(new DataSet());
-        mgr.addPlotTabFromSettings(settingsWith());
+        mgr.addPlotTab(settingsWith());
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
 
         button(tabRoot, "Stats view").doClick();
@@ -118,14 +115,10 @@ class ViewToggleTest {
     @Test
     void duplicationCarriesTheActiveView() {
         VisualizationTabManager mgr = manager(new DataSet());
-        mgr.addPlotTabFromSettings(settingsWith());
+        mgr.addPlotTab(settingsWith());
         button((Container) mgr.getTabbedPane().getSelectedComponent(), "Stats view").doClick();
 
-        VisualizationTabManager.TabSettings duplicated =
-            VisualizationTabManager.TabSettings.fromTab(mgr.tabAt(0));
-        assertEquals(FlowVizView.STATS, duplicated.activeView);
-
-        mgr.addTabFromSettings(duplicated);
+        mgr.duplicateTab(mgr.tabAt(0));
         assertEquals(FlowVizView.STATS, mgr.tabAt(1).viewMode,
             "a duplicate opens on the same page as its source");
     }

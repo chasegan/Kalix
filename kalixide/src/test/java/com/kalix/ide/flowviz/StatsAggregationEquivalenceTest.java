@@ -76,14 +76,10 @@ class StatsAggregationEquivalenceTest {
         return rows;
     }
 
-    private static VisualizationTabManager.TabSettings statsSettings(
-            AggregationPeriod period, AggregationMethod method) {
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>(List.of(R1, R2));
-        settings.checkedSources = new LinkedHashSet<>();
-        settings.aggregationPeriod = period;
-        settings.aggregationMethod = method;
-        return settings;
+    private static FlowVizState statsSettings(AggregationPeriod period, AggregationMethod method) {
+        return VisualizationTabManager.defaultState(FlowVizView.STATS)
+            .withVisibleSeries(List.of(R1, R2))
+            .withAggregation(period, method);
     }
 
     /** Finds a combo by tooltip anywhere in the active tab's component tree. */
@@ -106,7 +102,7 @@ class StatsAggregationEquivalenceTest {
     void allThreeStatsFillPathsProduceIdenticalTables() {
         // Path A: batch rebuild at tab creation (pool already populated).
         StatsTableModel batch = manager(pool())
-            .addStatsTabFromSettings(statsSettings(AggregationPeriod.DAILY, AggregationMethod.MEAN));
+            .addStatsTab(statsSettings(AggregationPeriod.DAILY, AggregationMethod.MEAN));
         List<List<String>> expected = snapshot(batch);
         assertFalse(expected.isEmpty(), "fixture sanity: statistics were computed");
 
@@ -115,7 +111,7 @@ class StatsAggregationEquivalenceTest {
         DataSet asyncPool = new DataSet();
         VisualizationTabManager async = manager(asyncPool);
         StatsTableModel asyncModel =
-            async.addStatsTabFromSettings(statsSettings(AggregationPeriod.DAILY, AggregationMethod.MEAN));
+            async.addStatsTab(statsSettings(AggregationPeriod.DAILY, AggregationMethod.MEAN));
         TimeSeriesData first = daily(1, 2, 3, 4, 5, 6);
         asyncPool.addSeries(R1, first);
         async.updateSeriesInStatsTabsWithAggregation(R1, first);
@@ -129,7 +125,7 @@ class StatsAggregationEquivalenceTest {
         // (which now drive the state-owning panel — undoably).
         VisualizationTabManager toolbar = manager(pool());
         StatsTableModel toolbarModel = toolbar
-            .addStatsTabFromSettings(statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM));
+            .addStatsTab(statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM));
         Container tabRoot = (Container) toolbar.getTabbedPane().getSelectedComponent();
         JComboBox<?> periodCombo = combo(tabRoot, "Aggregation");
         JComboBox<?> methodCombo = combo(tabRoot, "Aggregation method");
@@ -151,17 +147,16 @@ class StatsAggregationEquivalenceTest {
         // Default: a stats-view tab starts at the historical ALL default.
         VisualizationTabManager defaults = manager(new DataSet());
         StatsTableModel model = defaults
-            .addStatsTabFromSettings(statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM));
+            .addStatsTab(statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM));
         assertEquals(MaskMode.ALL, model.getMaskMode());
         assertEquals(MaskMode.ALL, defaults.getTargetVizPanel().getMaskMode(),
             "the panel owns the mask; the model is its projection");
 
         // Carried: duplication-style settings preserve a non-default mask.
         VisualizationTabManager carried = manager(new DataSet());
-        VisualizationTabManager.TabSettings settings =
-            statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM);
-        settings.maskMode = MaskMode.NONE;
-        StatsTableModel duplicate = carried.addStatsTabFromSettings(settings);
+        FlowVizState settings = statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM)
+            .withMaskMode(MaskMode.NONE);
+        StatsTableModel duplicate = carried.addStatsTab(settings);
         assertEquals(MaskMode.NONE, duplicate.getMaskMode(),
             "duplication no longer silently resets the mask to ALL");
     }
@@ -187,12 +182,10 @@ class StatsAggregationEquivalenceTest {
         throw new AssertionError("no such statistic column: " + name);
     }
 
-    private static VisualizationTabManager.TabSettings maskedSettings(SeasonalMaskMode mask) {
-        VisualizationTabManager.TabSettings settings =
-            statsSettings(AggregationPeriod.ANNUAL_JAN_DEC, AggregationMethod.SUM);
-        settings.selectedSeries = new LinkedHashSet<>(List.of(R1));
-        settings.seasonalMaskMode = mask;
-        return settings;
+    private static FlowVizState maskedSettings(SeasonalMaskMode mask) {
+        return statsSettings(AggregationPeriod.ANNUAL_JAN_DEC, AggregationMethod.SUM)
+            .withVisibleSeries(List.of(R1))
+            .withSeasonalMaskMode(mask);
     }
 
     private static DataSet yearPool() {
@@ -209,7 +202,7 @@ class StatsAggregationEquivalenceTest {
     @Test
     void seasonalMaskReachesTheStatsTableWithoutEmptyingIt() {
         VisualizationTabManager mgr = manager(yearPool());
-        StatsTableModel model = mgr.addStatsTabFromSettings(
+        StatsTableModel model = mgr.addStatsTab(
             maskedSettings(SeasonalMaskMode.of(Set.of(Month.FEBRUARY))));
 
         assertEquals(1, model.getRowCount(),
@@ -222,7 +215,7 @@ class StatsAggregationEquivalenceTest {
     @Test
     void statsAndPlotAgreeUnderASeasonalMask() {
         VisualizationTabManager mgr = manager(yearPool());
-        StatsTableModel model = mgr.addStatsTabFromSettings(
+        StatsTableModel model = mgr.addStatsTab(
             maskedSettings(SeasonalMaskMode.of(Set.of(Month.JANUARY))));
 
         FlowVizPanel panel = mgr.getTargetVizPanel();
@@ -236,10 +229,9 @@ class StatsAggregationEquivalenceTest {
 
     @Test
     void seasonalMaskIsHonouredAtNativeResolution() {
-        VisualizationTabManager.TabSettings settings =
-            maskedSettings(SeasonalMaskMode.of(Set.of(Month.FEBRUARY)));
-        settings.aggregationPeriod = AggregationPeriod.ORIGINAL;
-        StatsTableModel model = manager(yearPool()).addStatsTabFromSettings(settings);
+        FlowVizState settings = maskedSettings(SeasonalMaskMode.of(Set.of(Month.FEBRUARY)))
+            .withAggregation(AggregationPeriod.ORIGINAL, AggregationMethod.SUM);
+        StatsTableModel model = manager(yearPool()).addStatsTab(settings);
 
         assertEquals(29.0, stat(model, "Points"), 1e-9,
             "ORIGINAL aggregates nothing, but the mask must still filter the points");
@@ -248,13 +240,13 @@ class StatsAggregationEquivalenceTest {
     @Test
     void statsTabCreationCarriesTheSeasonalMask() {
         VisualizationTabManager defaults = manager(new DataSet());
-        defaults.addStatsTabFromSettings(statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM));
+        defaults.addStatsTab(statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM));
         assertEquals(SeasonalMaskMode.DISABLED, defaults.getTargetVizPanel().getSeasonalMaskMode(),
             "a fresh tab starts unmasked");
 
         SeasonalMaskMode carried = SeasonalMaskMode.of(Set.of(Month.JUNE, Month.JULY));
         VisualizationTabManager duplicate = manager(new DataSet());
-        duplicate.addStatsTabFromSettings(maskedSettings(carried));
+        duplicate.addStatsTab(maskedSettings(carried));
         assertEquals(carried, duplicate.getTargetVizPanel().getSeasonalMaskMode(),
             "duplication carries the seasonal selection, as it does the overlap mask");
     }
@@ -263,9 +255,8 @@ class StatsAggregationEquivalenceTest {
     void loadStatesShowAsPlaceholdersUntilDataArrives() {
         DataSet pool = new DataSet();
         VisualizationTabManager mgr = manager(pool);
-        VisualizationTabManager.TabSettings settings = statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM);
-        settings.selectedSeries = new LinkedHashSet<>(List.of(R1));
-        StatsTableModel model = mgr.addStatsTabFromSettings(settings);
+        StatsTableModel model = mgr.addStatsTab(
+            statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM).withVisibleSeries(List.of(R1)));
 
         mgr.addLoadingSeriesInStatsTabs(R1);
         assertEquals(1, model.getRowCount(), "a loading series has a placeholder row");
@@ -281,9 +272,8 @@ class StatsAggregationEquivalenceTest {
     void dataReachingThePoolByAnotherPathIsNotHiddenByALoadingMark() {
         DataSet pool = pool();
         VisualizationTabManager mgr = manager(pool);
-        VisualizationTabManager.TabSettings settings = statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM);
-        settings.selectedSeries = new LinkedHashSet<>(List.of(R1));
-        StatsTableModel model = mgr.addStatsTabFromSettings(settings);
+        StatsTableModel model = mgr.addStatsTab(
+            statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM).withVisibleSeries(List.of(R1)));
 
         // Marked loading, but the request in flight publishes under another ref: the
         // mark is never cleared, while the pool holds R1's data.
@@ -295,9 +285,8 @@ class StatsAggregationEquivalenceTest {
     void aFailedFetchShowsErrorUntilARetrySucceeds() {
         DataSet pool = new DataSet();
         VisualizationTabManager mgr = manager(pool);
-        VisualizationTabManager.TabSettings settings = statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM);
-        settings.selectedSeries = new LinkedHashSet<>(List.of(R1));
-        StatsTableModel model = mgr.addStatsTabFromSettings(settings);
+        StatsTableModel model = mgr.addStatsTab(
+            statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM).withVisibleSeries(List.of(R1)));
 
         mgr.addErrorSeriesInStatsTabs(R1, "boom");
         assertEquals("Error", model.getValueAt(0, 2));
