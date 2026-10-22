@@ -534,8 +534,8 @@ impl Model {
             ));
         }
 
-        //2c) Reject inputs with no timestep (empty or one row). Everything below
-        //   divides by the step, so this must come before step 4.
+        //2c) Reject inputs with no timestep: no rows, one row, or a step of 0.
+        //   Steps 4 and 6 divide by the step, so this must come first.
         for source in &self.input_sources {
             source.check_has_timestep()?;
         }

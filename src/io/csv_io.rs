@@ -235,7 +235,8 @@ fn read_ts_records<R: std::io::Read>(
             ts.step_size = step_size;
         }
         // If step_size could not be inferred (single row or empty), step_size remains 0.
-        // The downstream simulation step-size validation will surface any mismatch.
+        // The reader stays permissive so plots and convert can open such a file;
+        // configure() rejects it (TimeseriesInputDefinition::check_has_timestep).
     }
 
     // Return
