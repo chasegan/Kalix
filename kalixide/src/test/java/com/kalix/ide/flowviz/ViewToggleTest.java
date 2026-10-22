@@ -94,12 +94,12 @@ class ViewToggleTest {
 
         VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
         assertTrue(tab.statsDirty, "a plot-view tab's stats page starts lazy");
-        assertEquals(0, tab.statsModel.getRowCount());
+        assertEquals(0, tab.statsVizPanel.model().getRowCount());
 
         button((Container) mgr.getTabbedPane().getSelectedComponent(), "Stats view").doClick();
 
         assertFalse(tab.statsDirty, "the toggle honoured the dirty mark");
-        assertEquals(1, tab.statsModel.getRowCount(), "the shown stats page is populated");
+        assertEquals(1, tab.statsVizPanel.model().getRowCount(), "the shown stats page is populated");
     }
 
     @Test

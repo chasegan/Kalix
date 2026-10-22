@@ -8,10 +8,7 @@ import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.components.SeasonalMaskButton;
 import com.kalix.ide.components.WrapLayout;
-import com.kalix.ide.filedialog.FileDialogFilter;
-import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.utils.DialogUtils;
 
 import com.formdev.flatlaf.FlatClientProperties;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
@@ -23,17 +20,14 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JTable;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -58,7 +52,6 @@ class FlowVizToolbarBuilder {
 
     private final JToolBar toolbar;
     private final VisualizationTabManager.TabInfo tabInfo;
-    private final JTable statsTable;
 
     private Consumer<FlowVizState> onUndoRedo;
     private Runnable onStateApplied;
@@ -81,9 +74,8 @@ class FlowVizToolbarBuilder {
     private final List<JComponent> plotAndDataComponents = new ArrayList<>();
     private FlowVizToolbarController controller;
 
-    FlowVizToolbarBuilder(VisualizationTabManager.TabInfo tabInfo, JTable statsTable) {
+    FlowVizToolbarBuilder(VisualizationTabManager.TabInfo tabInfo) {
         this.tabInfo = tabInfo;
-        this.statsTable = statsTable;
         this.toolbar = new JToolBar();
         this.toolbar.setFloatable(false);
         this.toolbar.setRollover(true);
@@ -234,7 +226,7 @@ class FlowVizToolbarBuilder {
         JButton button = createIconButton(FontAwesomeSolid.SAVE, "Save Data", () -> {
             switch (tabInfo.viewMode) {
                 case PLOT, DATA -> tabInfo.vizPanel.saveData();
-                case STATS -> saveStatsData();
+                case STATS -> tabInfo.statsVizPanel.saveData();
             }
         });
         toolbar.add(button);
@@ -443,54 +435,6 @@ class FlowVizToolbarBuilder {
     private void applied() {
         if (onStateApplied != null) {
             onStateApplied.run();
-        }
-    }
-
-    /** Saves stats data to CSV. */
-    private void saveStatsData() {
-        // The suggested name carries the conventional extension; the dialog takes whatever
-        // the user types verbatim and confirms any overwrite itself.
-        java.util.Optional<File> chosen = KalixFileDialog.saveFile(statsTable)
-            .title("Save Statistics")
-            .suggestedName("statistics.csv")
-            .filters(
-                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"))
-            .show();
-        if (chosen.isPresent()) {
-            File file = chosen.get();
-
-            // The extension is the format: a name ending .csv.zip writes a
-            // one-entry zip (and either way the text is UTF-8, like the data
-            // exporter).
-            try (java.io.Writer writer = com.kalix.ide.io.CsvZipFormat.newUtf8Writer(file)) {
-                // Write header (dynamic columns from table)
-                for (int col = 0; col < statsTable.getColumnCount(); col++) {
-                    if (col > 0) writer.write(",");
-                    writer.write(statsTable.getColumnName(col));
-                }
-                writer.write("\n");
-
-                // Write data rows
-                for (int row = 0; row < statsTable.getRowCount(); row++) {
-                    for (int col = 0; col < statsTable.getColumnCount(); col++) {
-                        if (col > 0) writer.write(",");
-                        Object value = statsTable.getValueAt(row, col);
-                        writer.write(value != null ? value.toString() : "");
-                    }
-                    writer.write("\n");
-                }
-
-                JOptionPane.showMessageDialog(statsTable,
-                    "Statistics saved successfully to:\n" + file.getAbsolutePath(),
-                    "Save Complete",
-                    JOptionPane.INFORMATION_MESSAGE);
-
-            } catch (java.io.IOException ex) {
-                DialogUtils.showError(statsTable,
-                    "Error saving statistics: " + ex.getMessage(),
-                    "Save Error");
-            }
         }
     }
 
