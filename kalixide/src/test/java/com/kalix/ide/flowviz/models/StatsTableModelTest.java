@@ -87,6 +87,15 @@ class StatsTableModelTest {
     }
 
     @Test
+    void dataInThePoolIsShownEvenWhileMarkedLoading() {
+        StatsTableModel model = new StatsTableModel();
+        model.project(annualAggregates(), List.of(REF), MaskMode.NONE, Map.of(REF, SeriesLoadState.LOADING));
+
+        assertTrue(statValue(model, "Points").contains("3"),
+            "a fetch that ended without clearing its state must not hide the data");
+    }
+
+    @Test
     void aFailedFetchShowsErrorInEveryColumnEvenOverOldData() {
         StatsTableModel model = new StatsTableModel();
         model.project(annualAggregates(), List.of(REF), MaskMode.NONE,
