@@ -23,6 +23,7 @@ import com.kalix.ide.handlers.FileDropHandler;
 import com.kalix.ide.managers.ThemeManager;
 import com.kalix.ide.managers.RecentFilesManager;
 import com.kalix.ide.managers.FileOperationsManager;
+import com.kalix.ide.managers.MassBalanceActions;
 import com.kalix.ide.managers.VersionChecker;
 import com.kalix.ide.managers.TitleBarManager;
 import com.kalix.ide.managers.StdioTaskManager;
@@ -825,6 +826,11 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             @Override
             public void compareFiles(File left, File right) {
                 KalixIDE.this.compareFiles(left, right);
+            }
+
+            @Override
+            public void showMassBalanceReport(File model) {
+                new MassBalanceActions(KalixIDE.this, stdioTaskManager, statusReporter).showReport(model);
             }
 
             @Override

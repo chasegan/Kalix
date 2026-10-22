@@ -1,5 +1,6 @@
 package com.kalix.ide.workspace.tree;
 
+import com.kalix.ide.document.DocumentKind;
 import com.kalix.ide.icons.MenuIcons;
 import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.utils.PlatformUtils;
@@ -153,6 +154,11 @@ public class TreeContextMenu {
                     sel -> host.compareFiles(file(sel, 0), file(sel, 1))
                 ),
                 item(
+                    "Show mass balance report",
+                    sel -> isSingleModel(sel) && context == BuildContext.FileTree,
+                    sel -> host.showMassBalanceReport(file(sel))
+                ).withTooltip("Run this model as saved, then show its mass balance report."),
+                item(
                     "Unzip", TreeContextMenu::isSingleZip,
                     sel -> fileOps.unzipFile(file(sel))
                 )
@@ -282,6 +288,15 @@ public class TreeContextMenu {
 
     private static boolean isSingleNonZipFile(List<FileTreeNode> sel) {
         return sel.size() == 1 && !sel.getFirst().isDirectory() && isNotPlainZip(sel);
+    }
+
+    /** True for one model file (by extension, as {@link DocumentKind} decides). */
+    static boolean isSingleModel(List<FileTreeNode> sel) {
+        return sel.size() == 1 && isModelFile(sel.getFirst());
+    }
+
+    private static boolean isModelFile(FileTreeNode node) {
+        return !node.isDirectory() && DocumentKind.forFile(node.getFile()) == DocumentKind.MODEL;
     }
 
     private static boolean isTwoFiles(List<FileTreeNode> sel) {

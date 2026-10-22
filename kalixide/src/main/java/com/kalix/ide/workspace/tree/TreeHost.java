@@ -28,6 +28,9 @@ public interface TreeHost {
     /** Opens a diff comparing two files against each other ({@code left} vs {@code right}). */
     void compareFiles(File left, File right);
 
+    /** Runs the model file as saved, then shows the run's mass balance report. */
+    void showMassBalanceReport(File model);
+
     /**
      * Shows or hides hidden (dot-prefixed) entries across the application, persisting the choice.
      * Routed through the host so the tree's context-menu toggle and the View-menu toggle share one
