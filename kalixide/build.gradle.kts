@@ -80,18 +80,11 @@ application {
     // Grant native access for JNA (taskbar AppUserModelID, directory watcher) and the
     // Foreign Function & Memory API (Windows "Reveal in File Manager" calls the Shell API
     // directly). JDK 24+ (JEP 472) warns on restricted native access by default and will
-    // eventually block it; this covers `gradlew run`, the installDist start scripts, and
-    // the jpackage app image. Launchers that bypass the application plugin (an IDE
-    // "Application" run configuration, bare `java -cp`) must pass the same flag in their
-    // own VM options; `java -jar` is covered by the manifest attribute below.
+    // eventually block it; this covers `gradlew run`, the installDist start scripts, the
+    // jpackage app image and (below) the test JVM. Launchers that bypass the application
+    // plugin — an IDE "Application" run configuration, bare `java -cp` — must pass the
+    // same flag in their own VM options.
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
-}
-
-tasks.jar {
-    manifest {
-        // The `java -jar` counterpart of applicationDefaultJvmArgs (JEP 472).
-        attributes["Enable-Native-Access"] = "ALL-UNNAMED"
-    }
 }
 
 java {
@@ -110,6 +103,9 @@ checkstyle {
 
 tasks.test {
     useJUnitPlatform()
+    // The same JVM flags the IDE runs with: FsWatcherTest starts a real directory watcher,
+    // which on macOS goes through JNA and would otherwise print a JEP 472 warning.
+    jvmArgs(application.applicationDefaultJvmArgs)
     // Run headless everywhere, matching Linux CI. Without this a component that throws
     // HeadlessException passes on a developer's Mac and fails only after push — which is
     // exactly how DocumentWorkspaceViewTest reached main red.
