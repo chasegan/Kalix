@@ -51,7 +51,7 @@ pub fn set_input(
         .iter()
         .position(|s| s.alias().map(sanitize_name).as_deref() == Some(alias_sanitized.as_str()))
         .ok_or_else(|| SetInputError::Undeclared(format!(
-            "input '{alias}' is not declared in [data] -- set_input() supplies values \
+            "Input '{alias}' is not declared in [data] -- set_input() supplies values \
              for an existing declaration, it does not add one (declare it first, e.g. via patch)"
         )))?;
 
@@ -296,7 +296,7 @@ mod tests {
         let err = set_input(&mut model, "obs", start(), 0, one_column("flow", vec![]))
             .expect_err("empty data must be rejected");
         assert!(matches!(err, SetInputError::Data(_)), "Got: {err:?}");
-        assert_eq!(err.to_string(), "input 'obs' (supplied in memory) has no data");
+        assert_eq!(err.to_string(), "Input 'obs' (supplied in memory) has no data");
         // A rejected call leaves the declaration as it was.
         assert!(matches!(model.input_sources[0], TimeseriesInputDefinition::Declaration { .. }));
     }
@@ -310,7 +310,7 @@ mod tests {
             .expect_err("one row must be rejected");
         assert!(matches!(err, SetInputError::Data(_)), "Got: {err:?}");
         assert_eq!(err.to_string(),
-                   "input 'obs' (supplied in memory) has only one row; at least two are needed to infer the timestep");
+                   "Input 'obs' (supplied in memory) has only one row; at least two are needed to infer the timestep");
     }
 
     #[test]

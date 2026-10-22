@@ -294,7 +294,7 @@ observed_flows =             # declared, no backing file: MUST be supplied
 
 The empty-value form declares an input that exists only at runtime. A
 `run()` while any such input is unsupplied fails validation with a direct
-message ("input 'observed_flows' declared but not supplied") rather than a
+message ("Input 'observed_flows' declared but not supplied") rather than a
 downstream reference-resolution error. Outside the Python API (CLI, IDE),
 an empty-valued input declaration is a validation error at configure time —
 nothing there can supply it, so failing is correct, not a limitation.

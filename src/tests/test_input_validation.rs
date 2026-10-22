@@ -240,7 +240,7 @@ fn test_one_row_critical_input_fails_at_configure() {
     let mut model = model_with_inputs("", &format!("flows = {path}"), "data.flows.by_name.flow");
     let err = model.configure().expect_err("configure() must reject a one-row input");
     assert_eq!(err, format!(
-        "input 'flows' ({path}) has only one row; at least two are needed to infer the timestep"));
+        "Input 'flows' ({path}) has only one row; at least two are needed to infer the timestep"));
 }
 
 /// With a start given, the period override divided by zero before the fill did.
@@ -262,7 +262,7 @@ fn test_one_row_non_critical_input_fails_at_configure() {
         "", &format!("good = {good}\n{one_row}"), "data.good.by_name.flow");
     let err = model.configure().expect_err("configure() must reject a one-row input");
     assert_eq!(err, format!(
-        "input '{one_row}' has only one row; at least two are needed to infer the timestep"));
+        "Input '{one_row}' has only one row; at least two are needed to infer the timestep"));
 }
 
 /// A header-only input used to underflow when sizing the simulation period.
@@ -271,7 +271,7 @@ fn test_header_only_input_fails_at_configure() {
     let path = write_temp_csv("flows.csv", "date,flow\n");
     let mut model = model_with_inputs("", &format!("flows = {path}"), "data.flows.by_name.flow");
     let err = model.configure().expect_err("configure() must reject an input with no rows");
-    assert_eq!(err, format!("input 'flows' ({path}) has no data"));
+    assert_eq!(err, format!("Input 'flows' ({path}) has no data"));
 }
 
 /// A critical input with rows but no values used to underflow when sizing the period.
@@ -348,7 +348,7 @@ fn test_pixie_source_with_empty_later_series_fails_at_configure() {
     let pxt = write_temp_pixie(vec![], |f| { f[2] = "2000-01-01".into(); f[3] = "2000-01-01".into(); });
     let mut model = model_with_inputs("", &format!("p = {pxt}"), "data.p.by_name.b");
     let err = model.configure().expect_err("configure() must reject an empty series");
-    assert_eq!(err, format!("series 'b' of input 'p' ({pxt}) has no data"));
+    assert_eq!(err, format!("Series 'b' of input 'p' ({pxt}) has no data"));
 }
 
 /// A later Pixie series with timestep 0 used to divide by zero once a start was given.
@@ -358,7 +358,7 @@ fn test_pixie_source_with_zero_timestep_series_fails_at_configure() {
     let mut model = model_with_inputs(
         "[kalix]\nstart = 2000-01-01\n", &format!("p = {pxt}"), "data.p.by_name.b");
     let err = model.configure().expect_err("configure() must reject a zero timestep");
-    assert_eq!(err, format!("series 'b' of input 'p' ({pxt}) has a timestep of 0"));
+    assert_eq!(err, format!("Series 'b' of input 'p' ({pxt}) has a timestep of 0"));
 }
 
 

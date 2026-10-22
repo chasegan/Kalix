@@ -529,7 +529,7 @@ impl Model {
             .collect();
         if !undeclared.is_empty() {
             return Err(format!(
-                "input '{}' declared but not supplied",
+                "Input '{}' declared but not supplied",
                 undeclared.join("', '")
             ));
         }

@@ -108,8 +108,8 @@ impl TimeseriesInputDefinition {
         // Name the series only when some of the source's series pass (Pixie series are independent).
         let reject = |bad: &dyn Fn(&Timeseries) -> bool, what: &str| match columns.iter().find(|c| bad(&c.timeseries)) {
             None => Ok(()),
-            Some(_) if columns.iter().all(|c| bad(&c.timeseries)) => Err(format!("input {} {}", name, what)),
-            Some(c) => Err(format!("series '{}' of input {} {}", c.col_name, name, what)),
+            Some(_) if columns.iter().all(|c| bad(&c.timeseries)) => Err(format!("Input {} {}", name, what)),
+            Some(c) => Err(format!("Series '{}' of input {} {}", c.col_name, name, what)),
         };
         reject(&|ts| ts.len() == 0, "has no data")?;
         reject(&|ts| ts.len() == 1 && ts.step_size == 0,
