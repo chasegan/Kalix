@@ -1,9 +1,12 @@
 package com.kalix.ide.flowviz.stats;
 
+import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 
 import java.time.LocalDate;
 import java.time.Month;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -128,6 +131,44 @@ public class TimeSeriesMasker {
 
             return k == out.length ? out : java.util.Arrays.copyOf(out, k);
         }
+    }
+
+    /**
+     * The plot's overlap-mask step over an aggregated set, deliberately applied AFTER
+     * aggregation, unlike the seasonal mask: it answers "where do the DISPLAYED points
+     * overlap?", and the stats table masks its own aggregates the same way, so one shared
+     * mask setting means the same thing in both views. ALL keeps only the timestamps where
+     * every series is valid; EACH filters each non-reference series to its pairwise overlap
+     * with the reference (the first series), exactly the data its bivariate statistic uses,
+     * while the reference keeps its own valid points. NONE, or fewer than two series,
+     * returns the input unchanged.
+     */
+    public static DataSet maskOverlap(DataSet aggregated, MaskMode maskMode) {
+        if (maskMode == MaskMode.ALL && aggregated.getSeriesRefs().size() > 1) {
+            List<TimeSeriesData> allSeries = new ArrayList<>();
+            for (SeriesRef ref : aggregated.getSeriesRefs()) {
+                allSeries.add(aggregated.getSeries(ref));
+            }
+            Mask mask = createAllMask(allSeries);
+
+            DataSet masked = new DataSet();
+            for (SeriesRef ref : aggregated.getSeriesRefs()) {
+                masked.addSeries(ref, mask.apply(aggregated.getSeries(ref)));
+            }
+            return masked;
+        }
+        if (maskMode == MaskMode.EACH && aggregated.getSeriesRefs().size() > 1) {
+            List<SeriesRef> refs = new ArrayList<>(aggregated.getSeriesRefs());
+            TimeSeriesData reference = aggregated.getSeries(refs.get(0));
+            DataSet masked = new DataSet();
+            masked.addSeries(refs.get(0), reference);
+            for (int i = 1; i < refs.size(); i++) {
+                TimeSeriesData series = aggregated.getSeries(refs.get(i));
+                masked.addSeries(refs.get(i), createEachMask(reference, series).apply(series));
+            }
+            return masked;
+        }
+        return aggregated;
     }
 
     /**

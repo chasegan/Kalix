@@ -4,7 +4,10 @@ import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.dataview.DataFindController;
 import com.kalix.ide.dataview.FindableData;
+import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.transform.PlotType;
+import com.kalix.ide.io.TimeSeriesCsvExporter;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -26,22 +29,35 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.List;
 
 /**
  * A visualization tab's Data page: the series the plot draws (after aggregation,
  * masking and the plot-type transform) as a table, spelled exactly as the plot's
  * Save Data writes them.
  *
- * <p>The page holds no data of its own. The tab manager hands it an immutable
- * {@link DataGrid} on every refresh; the table model and the unified Find both
- * read that one snapshot, and because Find's staleness check is identity, a scan
- * started against a replaced grid is dropped.
+ * <p>The page holds no data of its own. It listens to the tab's {@link FlowVizModel} and,
+ * when shown, builds an immutable {@link DataGrid} from the model's display set — the
+ * same object the plot draws, so the two agree by construction; while hidden it only
+ * notes that it is out of date. The table model and the unified Find both read that
+ * one snapshot, and because Find's staleness check is identity, a scan started
+ * against a replaced grid is dropped.
  */
 public final class DataVizPanel extends JPanel {
 
     private final DataGridTableModel tableModel = new DataGridTableModel();
     private LabelResolver labelResolver;
     private final JTable table;
+    private final FlowVizModel model;
+    private boolean shown;
+    private boolean dirty = true;
+    // What the current grid was built from: an unchanged display set and headers keep
+    // the grid, so the table's selection and a running Find survive refreshes that
+    // change nothing. Headers are compared, not assumed: a rename changes the labels
+    // under an unchanged display set.
+    private DataSet gridDisplay;
+    private PlotType gridPlotType;
+    private List<String> gridHeaders;
 
     // Context-menu handles: the viz mount inserts its items around these.
     private JPopupMenu tableMenu;
@@ -50,8 +66,14 @@ public final class DataVizPanel extends JPanel {
     /** The unified Find, shared by every tabular view via {@link FindableData}. */
     private final DataFindController findController;
 
-    public DataVizPanel() {
+    public DataVizPanel(FlowVizModel model) {
         super(new BorderLayout());
+        this.model = model;
+        model.addListener((old, now, cause) -> {
+            if (cause != FlowVizModel.Cause.USER || now.differsInPlotFrom(old)) {
+                refresh();
+            }
+        });
 
         table = new JTable(tableModel);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF); // wide files scroll horizontally
@@ -154,9 +176,40 @@ public final class DataVizPanel extends JPanel {
         );
     }
 
-    /** Shows a new snapshot. EDT only. */
-    void setGrid(DataGrid grid) {
-        tableModel.setGrid(grid);
+    /** Shows or hides the page; a page shown while out of date rebuilds at once. */
+    public void setShown(boolean shown) {
+        this.shown = shown;
+        if (shown && dirty) {
+            rebuild();
+        }
+    }
+
+    /** Something under the page changed: rebuild now if shown, else when shown. */
+    public void refresh() {
+        if (shown) {
+            rebuild();
+        } else {
+            dirty = true;
+        }
+    }
+
+    /** Whether the hidden page has missed a change — package-private, for tests. */
+    boolean isDirty() {
+        return dirty;
+    }
+
+    private void rebuild() {
+        dirty = false;
+        DataSet display = model.display();
+        PlotType plotType = model.current().getPlotType();
+        List<String> headers = TimeSeriesCsvExporter.dataColumnHeaders(display, labelResolver);
+        if (display == gridDisplay && plotType == gridPlotType && headers.equals(gridHeaders)) {
+            return;
+        }
+        gridDisplay = display;
+        gridPlotType = plotType;
+        gridHeaders = headers;
+        tableModel.setGrid(DataGrid.of(display, plotType, labelResolver));
     }
 
     /** The snapshot currently shown — package-private, for tests. */
@@ -166,11 +219,7 @@ public final class DataVizPanel extends JPanel {
 
     public void setLabelResolver(LabelResolver labelResolver) {
         this.labelResolver = labelResolver;
-    }
-
-    /** The labels the next snapshot is built with; null leaves the export's fallback. */
-    LabelResolver labelResolver() {
-        return labelResolver;
+        refresh();
     }
 
     /** Opens the unified Find — public: the above-gate text side and menu routing share it. */

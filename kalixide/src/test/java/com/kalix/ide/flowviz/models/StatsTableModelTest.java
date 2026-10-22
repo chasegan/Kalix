@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz.models;
 
+import com.kalix.ide.flowviz.SeriesLoadState;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
@@ -10,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class StatsTableModelTest {
 
     private static final SeriesRef REF = new DatasetSeries("/t.csv", "flow");
+    private static final SeriesRef OTHER = new DatasetSeries("/t.csv", "other");
 
     private static long jan1(int year) {
         return LocalDate.of(year, 1, 1).atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
@@ -54,8 +58,7 @@ class StatsTableModelTest {
     @Test
     void januaryStampedAggregatesAreNotFilteredOut() {
         StatsTableModel model = new StatsTableModel();
-        model.setMaskMode(MaskMode.NONE);
-        model.setSeries(annualAggregates());
+        model.project(annualAggregates(), List.of(REF), MaskMode.NONE, Map.of());
 
         assertEquals(1, model.getRowCount(),
             "the series must produce a row - re-masking these January-stamped points emptied it");
@@ -66,28 +69,50 @@ class StatsTableModelTest {
     @Test
     void statisticsCoverEveryPointHandedToTheModel() {
         StatsTableModel model = new StatsTableModel();
-        model.setMaskMode(MaskMode.NONE);
-        model.setSeries(annualAggregates());
+        model.project(annualAggregates(), List.of(REF), MaskMode.NONE, Map.of());
 
         assertEquals(20.0, Double.parseDouble(statValue(model, "Mean")), 1e-9,
             "mean of 10/20/30 - computed over the points as given, unfiltered");
     }
 
     @Test
-    void theIncrementalPathAgreesWithTheBatchPath() {
-        StatsTableModel batch = new StatsTableModel();
-        batch.setMaskMode(MaskMode.NONE);
-        batch.setSeries(annualAggregates());
+    void rowsFollowTheSelectionWithPlaceholdersForSeriesStillFetching() {
+        StatsTableModel model = new StatsTableModel();
+        model.project(annualAggregates(), List.of(OTHER, REF), MaskMode.NONE,
+            Map.of(OTHER, SeriesLoadState.LOADING));
 
-        StatsTableModel incremental = new StatsTableModel();
-        incremental.setMaskMode(MaskMode.NONE);
-        incremental.addOrUpdateSeries(REF, annualAggregates().get(REF));
+        assertEquals(2, model.getRowCount());
+        assertEquals("", String.valueOf(model.getValueAt(0, 2)), "the loading row is blank");
+        assertTrue(statValue(model, "Points").isEmpty(), "row 0 is the placeholder");
+    }
 
-        assertEquals(batch.getRowCount(), incremental.getRowCount());
-        for (int column = 0; column < batch.getColumnCount(); column++) {
-            assertEquals(String.valueOf(batch.getValueAt(0, column)),
-                String.valueOf(incremental.getValueAt(0, column)),
-                "addOrUpdateSeries used to mask where setSeries did too - both must now pass through");
+    @Test
+    void dataInThePoolIsShownEvenWhileMarkedLoading() {
+        StatsTableModel model = new StatsTableModel();
+        model.project(annualAggregates(), List.of(REF), MaskMode.NONE, Map.of(REF, SeriesLoadState.LOADING));
+
+        assertTrue(statValue(model, "Points").contains("3"),
+            "a fetch that ended without clearing its state must not hide the data");
+    }
+
+    @Test
+    void aFailedFetchShowsErrorInEveryColumnEvenOverOldData() {
+        StatsTableModel model = new StatsTableModel();
+        model.project(annualAggregates(), List.of(REF), MaskMode.NONE,
+            Map.of(REF, new SeriesLoadState.Failed("gone")));
+
+        assertEquals(1, model.getRowCount());
+        for (int column = 2; column < model.getColumnCount(); column++) {
+            assertEquals("Error", model.getValueAt(0, column));
         }
+    }
+
+    @Test
+    void aSelectedSeriesWithNeitherDataNorALoadStateHasNoRow() {
+        StatsTableModel model = new StatsTableModel();
+        model.project(annualAggregates(), List.of(OTHER, REF), MaskMode.NONE, Map.of());
+
+        assertEquals(1, model.getRowCount(), "OTHER has no data and isn't loading: no row");
+        assertEquals(MaskMode.NONE, model.getMaskMode());
     }
 }

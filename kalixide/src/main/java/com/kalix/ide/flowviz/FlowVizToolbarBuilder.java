@@ -53,8 +53,6 @@ class FlowVizToolbarBuilder {
     private final JToolBar toolbar;
     private final VisualizationTabManager.TabInfo tabInfo;
 
-    private Consumer<FlowVizState> onUndoRedo;
-    private Runnable onStateApplied;
     private Consumer<FlowVizView> onViewToggle;
 
     private JToggleButton plotViewToggle;
@@ -91,17 +89,6 @@ class FlowVizToolbarBuilder {
                 toolbar.revalidate();
             }
         });
-    }
-
-    FlowVizToolbarBuilder setOnUndoRedo(Consumer<FlowVizState> callback) {
-        this.onUndoRedo = callback;
-        return this;
-    }
-
-    /** Invoked after a control applied a state change, so the owner reprojects the stats table. */
-    FlowVizToolbarBuilder setOnStateApplied(Runnable callback) {
-        this.onStateApplied = callback;
-        return this;
     }
 
     FlowVizToolbarBuilder setOnViewToggle(Consumer<FlowVizView> callback) {
@@ -141,6 +128,15 @@ class FlowVizToolbarBuilder {
         controller = new FlowVizToolbarController(
             aggregationPeriodCombo, aggregationMethodCombo, maskCombo,
             plotTypeCombo, ySpaceCombo, autoYToggle, seasonalMaskButton);
+        // The controls show the model's state, whoever changed it: this toolbar, the
+        // plot's context menu, a reset, an undo or redo. Setting them is silent. Only
+        // the toolbar's own auto-Y toggle records the preference: other paths change
+        // this plot, not the default.
+        tabInfo.model().addListener((old, now, cause) -> {
+            if (cause != FlowVizModel.Cause.DATA) {
+                controller.updateFromState(now);
+            }
+        });
         applyViewMode(tabInfo.viewMode);
         return toolbar;
     }
@@ -233,18 +229,9 @@ class FlowVizToolbarBuilder {
     }
 
     private void addUndoRedoButtons() {
-        JButton undoButton = createIconButton(FontAwesomeSolid.UNDO, "Undo", () -> {
-            FlowVizState state = tabInfo.vizPanel.undo();
-            if (state != null && onUndoRedo != null) {
-                onUndoRedo.accept(state);
-            }
-        });
-        JButton redoButton = createIconButton(FontAwesomeSolid.REDO, "Redo", () -> {
-            FlowVizState state = tabInfo.vizPanel.redo();
-            if (state != null && onUndoRedo != null) {
-                onUndoRedo.accept(state);
-            }
-        });
+        // The controls follow a restore through the model (see build()).
+        JButton undoButton = createIconButton(FontAwesomeSolid.UNDO, "Undo", tabInfo.vizPanel::undo);
+        JButton redoButton = createIconButton(FontAwesomeSolid.REDO, "Redo", tabInfo.vizPanel::redo);
 
         // Initialise from the panel: a duplicated tab has history before its toolbar exists.
         undoButton.setEnabled(tabInfo.vizPanel.canUndo());
@@ -294,9 +281,7 @@ class FlowVizToolbarBuilder {
         maskCombo.addActionListener(e -> {
             String selected = (String) maskCombo.getSelectedItem();
             if (selected != null) {
-                tabInfo.vizPanel.setMaskMode(
-                    MaskMode.fromDisplayName(selected.substring("Mask ".length())));
-                applied();
+                tabInfo.model().update(st -> st.withMaskMode(MaskMode.fromDisplayName(selected.substring("Mask ".length()))));
             }
         });
         toolbar.add(maskCombo);
@@ -310,8 +295,7 @@ class FlowVizToolbarBuilder {
     private void addSeasonalMaskButton() {
         toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
         seasonalMaskButton = new SeasonalMaskButton(mode -> {
-            tabInfo.vizPanel.setSeasonalMaskMode(mode);
-            applied();
+            tabInfo.model().update(st -> st.withSeasonalMaskMode(mode));
         }, ToolbarConstants.BUTTON_ICON_SIZE, tabInfo.vizPanel.getSeasonalMaskMode());
         // The component leaves sizing to its host so it matches whatever toolbar it joins.
         ToolbarConstants.applyButtonSizing(seasonalMaskButton);
@@ -327,8 +311,7 @@ class FlowVizToolbarBuilder {
         if (periodStr != null && methodStr != null) {
             AggregationPeriod period = AggregationPeriod.fromDisplayName(periodStr);
             AggregationMethod method = AggregationMethod.fromDisplayName(methodStr);
-            tabInfo.vizPanel.setAggregation(period, method);
-            applied();
+            tabInfo.model().update(st -> st.withAggregation(period, method));
         }
     }
 
@@ -347,11 +330,7 @@ class FlowVizToolbarBuilder {
             if (selected == null || selected == tabInfo.vizPanel.getPlotType()) {
                 return;
             }
-            tabInfo.vizPanel.setPlotTypeAndMaskMode(selected,
-                selected.isDataMaskDefault() ? MaskMode.ALL : MaskMode.NONE);
-            // Reflect the panel's resulting mask silently (the mask is shared state now).
-            FlowVizToolbarController.setSilently(maskCombo, maskItem(tabInfo.vizPanel.getMaskMode()));
-            applied();
+            tabInfo.model().update(st -> st.withPlotType(selected).withMaskMode(selected.isDataMaskDefault() ? MaskMode.ALL : MaskMode.NONE));
         });
         plotAndData(plotTypeCombo);
     }
@@ -363,7 +342,7 @@ class FlowVizToolbarBuilder {
         ySpaceCombo.addActionListener(e -> {
             String selected = (String) ySpaceCombo.getSelectedItem();
             if (selected != null) {
-                tabInfo.vizPanel.setYAxisScale(YAxisScale.fromDisplayName(selected));
+                tabInfo.model().update(st -> st.withYAxisScale(YAxisScale.fromDisplayName(selected)));
             }
         });
         plotOnly(ySpaceCombo);
@@ -373,12 +352,9 @@ class FlowVizToolbarBuilder {
         autoYToggle = createToggleButton(FontAwesomeSolid.ARROWS_ALT_V, "Auto-Y Mode", initialState);
         autoYToggle.addActionListener(e -> {
             boolean enabled = autoYToggle.isSelected();
-            tabInfo.vizPanel.setAutoYMode(enabled);
+            tabInfo.model().update(st -> st.withAutoYMode(enabled));
             PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(enabled);
         });
-        // Follow changes made elsewhere (context menu, explicit axis limits). Only the
-        // toolbar records the preference: those paths change this plot, not the default.
-        tabInfo.vizPanel.setOnAutoYModeChanged(() -> autoYToggle.setSelected(tabInfo.vizPanel.isAutoYMode()));
         plotOnly(autoYToggle);
     }
 
@@ -413,7 +389,7 @@ class FlowVizToolbarBuilder {
         // Built here rather than via createIconButton: the action needs the button to anchor the popup.
         button.addActionListener(e -> {
             JPopupMenu menu = new JPopupMenu();
-            LineShapeMenu.addItems(menu, tabInfo.vizPanel::setLineShape)
+            LineShapeMenu.addItems(menu, shape -> tabInfo.model().update(st -> st.withLineShape(shape)))
                 .get(tabInfo.vizPanel.getLineShape()).setSelected(true);
             menu.show(button, 0, button.getHeight());
         });
@@ -430,12 +406,6 @@ class FlowVizToolbarBuilder {
     private void plotAndData(JComponent component) {
         plotAndDataComponents.add(component);
         toolbar.add(component);
-    }
-
-    private void applied() {
-        if (onStateApplied != null) {
-            onStateApplied.run();
-        }
     }
 
     /** Creates a standard icon button. */

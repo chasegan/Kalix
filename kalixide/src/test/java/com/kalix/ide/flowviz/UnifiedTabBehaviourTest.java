@@ -43,11 +43,8 @@ class UnifiedTabBehaviourTest {
             ref -> new LineStyle(Color.BLACK, StrokeStyle.values()[0]));
     }
 
-    private static VisualizationTabManager.TabSettings emptySettings() {
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>();
-        return settings;
+    private static FlowVizState emptySettings() {
+        return FlowVizState.defaults();
     }
 
     private static JComboBox<?> combo(Container root, String tooltip) {
@@ -83,7 +80,7 @@ class UnifiedTabBehaviourTest {
     @Test
     void statsViewUndoButtonWalksSharedHistoryAndResyncsControls() {
         VisualizationTabManager mgr = manager(new DataSet());
-        mgr.addStatsTabFromSettings(emptySettings());
+        mgr.addStatsTab(emptySettings());
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
         JComboBox<?> periodCombo = combo(tabRoot, "Aggregation");
         assertNotNull(periodCombo);
@@ -104,7 +101,7 @@ class UnifiedTabBehaviourTest {
     @Test
     void sourceTicksOnStatsViewTabsPushHistory() {
         VisualizationTabManager mgr = manager(new DataSet());
-        mgr.addStatsTabFromSettings(emptySettings());
+        mgr.addStatsTab(emptySettings());
         FlowVizPanel panel = mgr.getTargetVizPanel();
         assertFalse(panel.canUndo(), "fresh tab: one-entry history");
 
@@ -117,7 +114,7 @@ class UnifiedTabBehaviourTest {
     @Test
     void statsViewResetIsOneUndoableEntry() {
         VisualizationTabManager mgr = manager(new DataSet());
-        mgr.addStatsTabFromSettings(emptySettings());
+        mgr.addStatsTab(emptySettings());
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
         combo(tabRoot, "Aggregation").setSelectedItem(AggregationPeriod.DAILY.getDisplayName());
         FlowVizPanel panel = mgr.getTargetVizPanel();
@@ -134,29 +131,25 @@ class UnifiedTabBehaviourTest {
     @Test
     void hiddenStatsProjectionStaysLazyOnPlotViewTabs() {
         VisualizationTabManager mgr = manager(new DataSet());
-        VisualizationTabManager.TabSettings settings = emptySettings();
-        settings.selectedSeries = new LinkedHashSet<>(List.of(REF));
-        mgr.addPlotTabFromSettings(settings);
+        mgr.addPlotTab(emptySettings().withVisibleSeries(List.of(REF)));
 
         long[] t = {1_577_836_800_000L, 1_577_836_800_000L + DAY_MS};
         mgr.updateSeriesInStatsTabsWithAggregation(REF,
             new com.kalix.ide.flowviz.data.TimeSeriesData(t, new double[] {1, 2}));
 
         VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
-        assertTrue(tab.statsDirty, "the hidden projection is marked, not computed");
+        assertTrue(tab.statsVizPanel.isDirty(), "the hidden projection is marked, not computed");
         assertEquals(0, tab.statsVizPanel.model().getRowCount(), "no eager stats work for a hidden page");
     }
 
     @Test
     void duplicationCarriesHistoryForStatsViewTabs() {
         VisualizationTabManager mgr = manager(new DataSet());
-        mgr.addStatsTabFromSettings(emptySettings());
+        mgr.addStatsTab(emptySettings());
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
         combo(tabRoot, "Aggregation").setSelectedItem(AggregationPeriod.DAILY.getDisplayName());
 
-        VisualizationTabManager.TabSettings duplicated =
-            VisualizationTabManager.TabSettings.fromTab(mgr.tabAt(0));
-        mgr.addStatsTabFromSettings(duplicated);
+        mgr.duplicateTab(mgr.tabAt(0));
 
         FlowVizPanel copy = mgr.getTargetVizPanel(); // the new tab is selected
         assertEquals(AggregationPeriod.DAILY, copy.getAggregationPeriod());

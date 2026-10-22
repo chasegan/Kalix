@@ -144,10 +144,7 @@ class DataVizViewTest {
             SwingUtilities.invokeAndWait(() -> {
                 // "View 2": a fresh empty tab, then its first column — the pool
                 // is NOT empty (View 1's data), so the fit must be per-tab.
-                VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-                settings.selectedSeries = new java.util.LinkedHashSet<>();
-                settings.checkedSources = new java.util.LinkedHashSet<>();
-                view.vizManagerForTests().addPlotTabFromSettings(settings);
+                view.vizManagerForTests().addPlotTab(com.kalix.ide.flowviz.FlowVizState.defaults());
                 view.toggleColumn(2);
                 org.junit.jupiter.api.Assertions.assertFalse(view.pendingZoomFitForTests().isEmpty(),
                     "the new tab owes a zoom fit");

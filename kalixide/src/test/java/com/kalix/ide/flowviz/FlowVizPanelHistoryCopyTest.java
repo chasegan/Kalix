@@ -24,9 +24,9 @@ class PlotPanelHistoryCopyTest {
     private static FlowVizPanel panelWithHistory() {
         FlowVizPanel panel = new FlowVizPanel();
         panel.setDataSet(new DataSet());
-        panel.setVisibleSeries(List.of());                                   // entry 1 (defaults)
-        panel.setAggregation(AggregationPeriod.DAILY, AggregationMethod.MEAN); // entry 2
-        panel.setMaskMode(MaskMode.EACH);                                    // entry 3
+        panel.model().update(st -> st.withVisibleSeries(List.of()));                                   // entry 1 (defaults)
+        panel.model().update(st -> st.withAggregation(AggregationPeriod.DAILY, AggregationMethod.MEAN)); // entry 2
+        panel.model().update(st -> st.withMaskMode(MaskMode.EACH));                                    // entry 3
         return panel;
     }
 
