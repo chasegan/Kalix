@@ -148,9 +148,11 @@ public class StatsTableModel extends AbstractTableModel {
     /**
      * Replaces the table with one row per selected series, in selection order:
      * <ul>
-     *   <li>a series with a load state shows a placeholder — blank while loading,
-     *       "Error" in every column when its fetch failed;</li>
-     *   <li>otherwise a series with data shows its statistics;</li>
+     *   <li>a series whose fetch failed shows "Error" in every column;</li>
+     *   <li>otherwise a series with data shows its statistics, even while a load state
+     *       says it is loading: data in the pool is never hidden by a fetch that ended
+     *       without clearing its state;</li>
+     *   <li>a loading series without data shows a blank placeholder;</li>
      *   <li>a series with neither has no row (say, one restored by undo after its run
      *       was deleted).</li>
      * </ul>
@@ -164,7 +166,7 @@ public class StatsTableModel extends AbstractTableModel {
         LinkedHashMap<SeriesRef, TimeSeriesData> withData = new LinkedHashMap<>();
         for (SeriesRef ref : selection) {
             TimeSeriesData data = aggregated.get(ref);
-            if (data != null && !loadStates.containsKey(ref)) {
+            if (data != null && !(loadStates.get(ref) instanceof SeriesLoadState.Failed)) {
                 withData.put(ref, data);
             }
         }
@@ -173,12 +175,12 @@ public class StatsTableModel extends AbstractTableModel {
         List<SeriesStats> rows = new ArrayList<>();
         for (SeriesRef ref : selection) {
             SeriesLoadState load = loadStates.get(ref);
-            if (load instanceof SeriesLoadState.Loading) {
-                rows.add(new SeriesStats(ref));
-            } else if (load instanceof SeriesLoadState.Failed) {
+            if (load instanceof SeriesLoadState.Failed) {
                 rows.add(errorRow(ref));
             } else if (computed.containsKey(ref)) {
                 rows.add(computed.get(ref));
+            } else if (load instanceof SeriesLoadState.Loading) {
+                rows.add(new SeriesStats(ref));
             }
         }
         seriesData.clear();
