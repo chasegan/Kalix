@@ -32,14 +32,10 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
-import javax.swing.JTable;
 import javax.swing.Icon;
-import javax.swing.UIManager;
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.FlowLayout;
 import java.awt.GridBagConstraints;
@@ -67,7 +63,7 @@ import java.util.Set;
  * <h2>Unified Tabs</h2>
  * Every tab owns the full bundle: a {@link FlowVizPanel} — the canonical state owner
  * (selection, checked sources, aggregation, mask, undo history) — plus a
- * {@link StatsTableModel} projection of the same state. The tab's view mode
+ * {@link StatsVizPanel} projection of the same state. The tab's view mode
  * decides which projection is mounted:
  * <ul>
  *   <li><b>PLOT</b> - the time-series chart (transforms, LOD rendering)</li>
@@ -223,7 +219,7 @@ public class VisualizationTabManager {
     /**
      * Represents a visualization tab. Every tab owns the full bundle — a
      * {@link FlowVizPanel} (the canonical state owner: selection, sources,
-     * aggregation, mask, undo history) plus a {@link StatsTableModel}
+     * aggregation, mask, undo history) plus a {@link StatsVizPanel}
      * projection of the same state — and mounts one of them per its view mode.
      * Package-private: {@link FlowVizToolbarBuilder} drives the panel through it.
      */
@@ -232,7 +228,7 @@ public class VisualizationTabManager {
         FlowVizView viewMode;
         final JComponent component;
         final FlowVizPanel vizPanel;
-        final StatsTableModel statsModel;
+        final StatsVizPanel statsVizPanel;
         final DataVizPanel dataVizPanel;
 
         // Per-tab selected series. Preserves insertion order for legend consistency
@@ -262,13 +258,13 @@ public class VisualizationTabManager {
         JPanel viewCards; // CardLayout holding the plot, stats and data pages
 
         TabInfo(FlowVizView viewMode, String name, JComponent component, 
-                FlowVizPanel vizPanel, StatsTableModel statsModel, DataVizPanel dataVizPanel
+                FlowVizPanel vizPanel, StatsVizPanel statsVizPanel, DataVizPanel dataVizPanel
             ) {
             this.viewMode = viewMode;
             this.name = name;
             this.component = component;
             this.vizPanel = vizPanel;
-            this.statsModel = statsModel;
+            this.statsVizPanel = statsVizPanel;
             this.dataVizPanel = dataVizPanel;
         }
 
@@ -335,7 +331,7 @@ public class VisualizationTabManager {
         for (TabInfo tab : tabs) {
             if (labels != null) {
                 tab.vizPanel.setLabelResolver(labels);
-                tab.statsModel.setLabelResolver(labels);
+                tab.statsVizPanel.setLabelResolver(labels);
                 tab.dataVizPanel.setLabelResolver(labels);
             }
         }
@@ -459,13 +455,13 @@ public class VisualizationTabManager {
         // installed after early tabs exist).
         vizPanel.setBaseDirectorySupplier(() -> host.baseDirectory());
 
-        StatsTableModel statsModel = new StatsTableModel();
+        StatsVizPanel statsVizPanel = new StatsVizPanel();
         DataVizPanel dataVizPanel = new DataVizPanel();
 
         LabelResolver labels = host.labelResolver();
         if (labels != null) {
             vizPanel.setLabelResolver(labels);
-            statsModel.setLabelResolver(labels);
+            statsVizPanel.setLabelResolver(labels);
             dataVizPanel.setLabelResolver(labels);
         }
 
@@ -492,7 +488,7 @@ public class VisualizationTabManager {
         } else {
             name = settings.name;
         }
-        TabInfo tabInfo = new TabInfo(viewMode, name, containerPanel, vizPanel, statsModel, dataVizPanel);
+        TabInfo tabInfo = new TabInfo(viewMode, name, containerPanel, vizPanel, statsVizPanel, dataVizPanel);
         if (!name.equals(settings.name)) {
             tabInfo.defaultName = name;
         }
@@ -534,24 +530,11 @@ public class VisualizationTabManager {
 
         tabs.add(tabInfo);
 
-        // Every tab mounts BOTH pages in a CardLayout — the view toggle switches
-        // them live with no re-parenting (re-parenting would trip FlowVizPanel's
-        // removeNotify teardown and flicker).
-        JTable table = new JTable(statsModel);
-        table.setFillsViewportHeight(true);
-        table.setRowSelectionAllowed(false);
-        applyStatsTableRenderer(table);
-        // Narrow index column (0); wider Series column (1) for longer series names.
-        if (table.getColumnCount() > 1) {
-            table.getColumnModel().getColumn(0).setMaxWidth(48);
-            table.getColumnModel().getColumn(0).setPreferredWidth(40);
-            table.getColumnModel().getColumn(1).setPreferredWidth(200);
-        }
         // Populate the visible table page now; a hidden one just starts dirty
         // and catches up on toggle.
         refreshProjections(tabInfo);
 
-        FlowVizToolbarBuilder toolbarBuilder = new FlowVizToolbarBuilder(tabInfo, table);
+        FlowVizToolbarBuilder toolbarBuilder = new FlowVizToolbarBuilder(tabInfo);
         toolbarBuilder
             .setOnUndoRedo(state -> {
                 syncTabSelectionFromState(vizPanel, state);
@@ -562,9 +545,12 @@ public class VisualizationTabManager {
         containerPanel.add(toolbarBuilder.build(settings.autoYMode, settings.showCoordinates), BorderLayout.NORTH);
         tabInfo.vizToolbar = toolbarBuilder;
 
+        // Every tab mounts every page in a CardLayout — the view toggle switches
+        // them live with no re-parenting (re-parenting would trip FlowVizPanel's
+        // removeNotify teardown and flicker).
         JPanel viewCards = new JPanel(new CardLayout());
         viewCards.add(vizPanel, FlowVizView.PLOT.name());
-        viewCards.add(new JScrollPane(table), FlowVizView.STATS.name());
+        viewCards.add(statsVizPanel, FlowVizView.STATS.name());
         viewCards.add(dataVizPanel, FlowVizView.DATA.name());
         ((CardLayout) viewCards.getLayout()).show(viewCards, viewMode.name());
         tabInfo.viewCards = viewCards;
@@ -620,63 +606,12 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Applies a custom cell renderer to the stats table that colors statistic values.
-     * The index (column 0) and Series (column 1) columns remain default, while statistic
-     * columns use a muted theme color.
-     */
-    private void applyStatsTableRenderer(JTable table) {
-        table.setDefaultRenderer(Object.class, new javax.swing.table.DefaultTableCellRenderer() {
-            @Override
-            public java.awt.Component getTableCellRendererComponent(
-                    JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
-
-                java.awt.Component c = super.getTableCellRendererComponent(
-                    table, value, isSelected, hasFocus, row, column);
-
-                if (c instanceof JLabel) {
-                    JLabel label = (JLabel) c;
-
-                    if (!isSelected) {
-                        if (column <= 1) {
-                            // Index and Series columns - use default foreground color
-                            Color defaultColor = UIManager.getColor("Table.foreground");
-                            if (defaultColor != null) {
-                                label.setForeground(defaultColor);
-                            }
-                        } else {
-                            // Statistic columns - use muted theme color
-                            Color statsColor = UIManager.getColor("Label.disabledForeground");
-                            if (statsColor == null) {
-                                // Fallback to a semi-transparent default text color
-                                Color defaultColor = UIManager.getColor("Table.foreground");
-                                if (defaultColor != null) {
-                                    statsColor = new Color(
-                                        defaultColor.getRed(),
-                                        defaultColor.getGreen(),
-                                        defaultColor.getBlue(),
-                                        160  // ~63% opacity
-                                    );
-                                }
-                            }
-                            if (statsColor != null) {
-                                label.setForeground(statsColor);
-                            }
-                        }
-                    }
-                }
-
-                return c;
-            }
-        });
-    }
-
-    /**
      * Adds a new statistics-view tab with the given settings.
      *
      * @return The created StatsTableModel (the tab's stats projection)
      */
     public StatsTableModel addStatsTabFromSettings(TabSettings settings) {
-        return addTabFromSettings(settings, FlowVizView.STATS).statsModel;
+        return addTabFromSettings(settings, FlowVizView.STATS).statsVizPanel.model();
     }
 
     /** Creates a tab honouring the settings' recorded view (Duplicate's path). */
@@ -1226,10 +1161,10 @@ public class VisualizationTabManager {
             return;
         }
         tab.statsDirty = false;
-        if (tab.statsModel.getMaskMode() != tab.vizPanel.getMaskMode()) {
-            tab.statsModel.setMaskMode(tab.vizPanel.getMaskMode());
+        if (tab.statsVizPanel.model().getMaskMode() != tab.vizPanel.getMaskMode()) {
+            tab.statsVizPanel.model().setMaskMode(tab.vizPanel.getMaskMode());
         }
-        tab.statsModel.setSeries(AggregationPipeline.aggregate(
+        tab.statsVizPanel.model().setSeries(AggregationPipeline.aggregate(
             sharedDataSet, tab.selectedSeries,
             tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod(),
             tab.vizPanel.getSeasonalMaskMode()
@@ -1342,7 +1277,7 @@ public class VisualizationTabManager {
     public List<StatsTableModel> getAllStatsModels() {
         List<StatsTableModel> models = new ArrayList<>();
         for (TabInfo tab : tabs) {
-            models.add(tab.statsModel);
+            models.add(tab.statsVizPanel.model());
         }
         return models;
     }
@@ -1371,7 +1306,7 @@ public class VisualizationTabManager {
                 );
 
                 if (aggregatedData != null) {
-                    tab.statsModel.addOrUpdateSeries(ref, aggregatedData);
+                    tab.statsVizPanel.model().addOrUpdateSeries(ref, aggregatedData);
                 }
             } else {
                 tab.statsDirty = true; // hidden projection catches up when shown
@@ -1390,7 +1325,7 @@ public class VisualizationTabManager {
                 continue;
             }
             if (tab.viewMode == FlowVizView.STATS) {
-                tab.statsModel.addLoadingSeries(ref);
+                tab.statsVizPanel.model().addLoadingSeries(ref);
             } else {
                 tab.statsDirty = true;
             }
@@ -1407,7 +1342,7 @@ public class VisualizationTabManager {
                 continue;
             }
             if (tab.viewMode == FlowVizView.STATS) {
-                tab.statsModel.addErrorSeries(ref, errorMessage);
+                tab.statsVizPanel.model().addErrorSeries(ref, errorMessage);
             } else {
                 tab.statsDirty = true;
             }
@@ -1430,7 +1365,7 @@ public class VisualizationTabManager {
             }
             for (SeriesRef ref : refs) {
                 tab.vizPanel.removeLegendSeries(ref);
-                tab.statsModel.removeSeries(ref);
+                tab.statsVizPanel.model().removeSeries(ref);
             }
             tab.vizPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
             if (tab.viewMode == FlowVizView.PLOT) {
@@ -1447,7 +1382,7 @@ public class VisualizationTabManager {
         for (TabInfo tab : tabs) {
             if (tab.viewMode == FlowVizView.STATS) {
                 tab.selectedSeries.remove(ref);
-                tab.statsModel.removeSeries(ref);
+                tab.statsVizPanel.model().removeSeries(ref);
             }
         }
     }

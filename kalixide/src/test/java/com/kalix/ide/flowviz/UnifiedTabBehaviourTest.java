@@ -144,7 +144,7 @@ class UnifiedTabBehaviourTest {
 
         VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
         assertTrue(tab.statsDirty, "the hidden projection is marked, not computed");
-        assertEquals(0, tab.statsModel.getRowCount(), "no eager stats work for a hidden page");
+        assertEquals(0, tab.statsVizPanel.model().getRowCount(), "no eager stats work for a hidden page");
     }
 
     @Test
