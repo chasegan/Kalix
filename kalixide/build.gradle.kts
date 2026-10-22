@@ -2,7 +2,7 @@ plugins {
     application
     java
     checkstyle
-    id("org.beryx.runtime") version "1.13.1"
+    id("org.beryx.runtime") version "2.0.1"
 }
 
 // Read version from root VERSION file
@@ -69,6 +69,9 @@ dependencies {
 
     testImplementation(platform("org.junit:junit-bom:5.9.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
+    // Gradle 9 no longer puts the JUnit Platform launcher on the test runtime classpath
+    // for us; the version comes from the BOM above.
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 application {
