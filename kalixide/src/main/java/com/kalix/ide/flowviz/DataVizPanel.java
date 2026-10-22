@@ -7,6 +7,7 @@ import com.kalix.ide.dataview.FindableData;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.transform.PlotType;
+import com.kalix.ide.io.TimeSeriesCsvExporter;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -28,6 +29,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.List;
 
 /**
  * A visualization tab's Data page: the series the plot draws (after aggregation,
@@ -49,10 +51,13 @@ public final class DataVizPanel extends JPanel {
     private final FlowVizModel model;
     private boolean shown;
     private boolean dirty = true;
-    // What the current grid was built from: an unchanged display set keeps the grid,
-    // so the table's selection and a running Find survive refreshes that change nothing.
+    // What the current grid was built from: an unchanged display set and headers keep
+    // the grid, so the table's selection and a running Find survive refreshes that
+    // change nothing. Headers are compared, not assumed: a rename changes the labels
+    // under an unchanged display set.
     private DataSet gridDisplay;
     private PlotType gridPlotType;
+    private List<String> gridHeaders;
 
     // Context-menu handles: the viz mount inserts its items around these.
     private JPopupMenu tableMenu;
@@ -197,11 +202,13 @@ public final class DataVizPanel extends JPanel {
         dirty = false;
         DataSet display = model.display();
         PlotType plotType = model.current().getPlotType();
-        if (display == gridDisplay && plotType == gridPlotType) {
+        List<String> headers = TimeSeriesCsvExporter.dataColumnHeaders(display, labelResolver);
+        if (display == gridDisplay && plotType == gridPlotType && headers.equals(gridHeaders)) {
             return;
         }
         gridDisplay = display;
         gridPlotType = plotType;
+        gridHeaders = headers;
         tableModel.setGrid(DataGrid.of(display, plotType, labelResolver));
     }
 
@@ -212,7 +219,6 @@ public final class DataVizPanel extends JPanel {
 
     public void setLabelResolver(LabelResolver labelResolver) {
         this.labelResolver = labelResolver;
-        gridDisplay = null; // the headers change
         refresh();
     }
 
