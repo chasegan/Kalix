@@ -557,11 +557,14 @@ impl Model {
             for col in source.columns() {
                 let input_ts = &col.timeseries;
 
-                // Validate that input step size matches simulation step size
+                // Validate that input step size matches simulation step size. Name the
+                // input by its data reference: two files can share a column header.
                 if input_ts.step_size != self.configuration.sim_stepsize {
                     return Err(format!(
-                        "Input timeseries '{}' has step_size {} but simulation requires step_size {}",
-                        input_ts.name, input_ts.step_size, self.configuration.sim_stepsize
+                        "Input '{}' has a timestep of {}s but the simulation runs at {}s. \
+                         All inputs must share the same timestep.",
+                        col.alias_colname_path.as_deref().unwrap_or(&col.full_colname_path),
+                        input_ts.step_size, self.configuration.sim_stepsize
                     ));
                 }
 

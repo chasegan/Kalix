@@ -306,6 +306,17 @@ fn test_critical_inputs_with_different_timesteps_fail_at_configure() {
                      All inputs must share the same timestep.");
 }
 
+/// A non-critical input on a different timestep is caught when the data is filled, by name.
+#[test]
+fn test_non_critical_input_with_different_timestep_fails_at_configure() {
+    let a = write_temp_csv("a.csv", TWO_ROW_CSV);
+    let h = write_temp_csv("h.csv", "date,flow\n2000-01-01T00:00:00,1.0\n2000-01-01T01:00:00,2.0\n");
+    let mut model = model_with_inputs("", &format!("a = {a}\nh = {h}"), "data.a.by_name.flow");
+    let err = model.configure().expect_err("configure() must reject mixed timesteps");
+    assert_eq!(err, "Input 'data.h.by_name.flow' has a timestep of 3600s but the simulation runs at 86400s. \
+                     All inputs must share the same timestep.");
+}
+
 /// Writes a Pixie pair holding series `a` (three daily values) and `b` (`b_values`), then
 /// rewrites `b`'s index row with `edit_b`, standing in for a .pxt from another tool.
 fn write_temp_pixie(b_values: Vec<f64>, edit_b: impl Fn(&mut Vec<String>)) -> String {
