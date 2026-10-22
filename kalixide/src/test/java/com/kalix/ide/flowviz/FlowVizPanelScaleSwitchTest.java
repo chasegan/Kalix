@@ -31,12 +31,12 @@ class FlowVizPanelScaleSwitchTest {
         dataSet.addSeries(ref, new TimeSeriesData(
             new long[] {0, DAY, 2 * DAY}, new double[] {-5, 50, 100}));
         panel.setDataSet(dataSet);
-        panel.setVisibleSeries(List.of(ref));
+        panel.model().update(st -> st.withVisibleSeries(List.of(ref)));
         panel.refreshData(true);
         assertFalse(panel.isAutoYMode(), "auto-Y off is the mode under test");
         assertTrue(panel.viewportForTests().getMinValue() < 0, "the linear fit reaches below zero");
 
-        panel.setYAxisScale(YAxisScale.LOG);
+        panel.model().update(st -> st.withYAxisScale(YAxisScale.LOG));
 
         ViewPort v = panel.viewportForTests();
         assertEquals(1e-6, v.getMinValue(), 1e-15, "the stored minimum is the drawn fallback, not -5");

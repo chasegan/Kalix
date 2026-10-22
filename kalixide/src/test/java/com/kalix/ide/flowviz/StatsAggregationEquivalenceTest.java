@@ -219,7 +219,7 @@ class StatsAggregationEquivalenceTest {
             maskedSettings(SeasonalMaskMode.of(Set.of(Month.JANUARY))));
 
         FlowVizPanel panel = mgr.getTargetVizPanel();
-        panel.setVisibleSeries(List.of(R1));
+        panel.model().update(st -> st.withVisibleSeries(List.of(R1)));
         double plotted = panel.displayDataSetForTests().getSeries(R1).getValues()[0];
 
         assertEquals(31.0, plotted, 1e-9, "the plot aggregates January's 31 days");
