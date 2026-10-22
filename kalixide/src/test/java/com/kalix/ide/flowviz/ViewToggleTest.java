@@ -145,6 +145,23 @@ class ViewToggleTest {
         assertEquals(4, tab.dataVizPanel.getGrid().rowCount(), "the shown page follows new data");
     }
 
+    @Test
+    void aRenameReachesTheDataPageHeaders() {
+        DataSet pool = new DataSet();
+        pool.addSeries(REF, daily(1, 2, 3));
+        VisualizationTabManager mgr = manager(pool);
+        mgr.addPlotTab(settingsWith(REF));
+        VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
+        String[] name = {"before"};
+        tab.dataVizPanel.setLabelResolver(ref -> name[0]);
+        mgr.switchView(tab, FlowVizView.DATA);
+        assertEquals("before", tab.dataVizPanel.getGrid().seriesHeader(0));
+
+        name[0] = "after"; // a rename: same display set, new label
+        mgr.updateAllTabs(false);
+        assertEquals("after", tab.dataVizPanel.getGrid().seriesHeader(0));
+    }
+
     /** A host that only counts active-tab-change notifications. */
     private static VizHost countingHost(java.util.concurrent.atomic.AtomicInteger counter) {
         return new VizHost() {
