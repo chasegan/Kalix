@@ -53,8 +53,6 @@ class FlowVizToolbarBuilder {
     private final JToolBar toolbar;
     private final VisualizationTabManager.TabInfo tabInfo;
 
-    private Consumer<FlowVizState> onUndoRedo;
-    private Runnable onStateApplied;
     private Consumer<FlowVizView> onViewToggle;
 
     private JToggleButton plotViewToggle;
@@ -91,17 +89,6 @@ class FlowVizToolbarBuilder {
                 toolbar.revalidate();
             }
         });
-    }
-
-    FlowVizToolbarBuilder setOnUndoRedo(Consumer<FlowVizState> callback) {
-        this.onUndoRedo = callback;
-        return this;
-    }
-
-    /** Invoked after a control applied a state change, so the owner reprojects the stats table. */
-    FlowVizToolbarBuilder setOnStateApplied(Runnable callback) {
-        this.onStateApplied = callback;
-        return this;
     }
 
     FlowVizToolbarBuilder setOnViewToggle(Consumer<FlowVizView> callback) {
@@ -141,6 +128,12 @@ class FlowVizToolbarBuilder {
         controller = new FlowVizToolbarController(
             aggregationPeriodCombo, aggregationMethodCombo, maskCombo,
             plotTypeCombo, ySpaceCombo, autoYToggle, seasonalMaskButton);
+        // Undo and redo, from any page or key: the controls show the restored state.
+        tabInfo.model().addListener((old, now, cause) -> {
+            if (cause == FlowVizModel.Cause.RESTORE) {
+                controller.updateFromState(now);
+            }
+        });
         applyViewMode(tabInfo.viewMode);
         return toolbar;
     }
@@ -233,18 +226,9 @@ class FlowVizToolbarBuilder {
     }
 
     private void addUndoRedoButtons() {
-        JButton undoButton = createIconButton(FontAwesomeSolid.UNDO, "Undo", () -> {
-            FlowVizState state = tabInfo.vizPanel.undo();
-            if (state != null && onUndoRedo != null) {
-                onUndoRedo.accept(state);
-            }
-        });
-        JButton redoButton = createIconButton(FontAwesomeSolid.REDO, "Redo", () -> {
-            FlowVizState state = tabInfo.vizPanel.redo();
-            if (state != null && onUndoRedo != null) {
-                onUndoRedo.accept(state);
-            }
-        });
+        // The controls follow a restore through the model (see build()).
+        JButton undoButton = createIconButton(FontAwesomeSolid.UNDO, "Undo", tabInfo.vizPanel::undo);
+        JButton redoButton = createIconButton(FontAwesomeSolid.REDO, "Redo", tabInfo.vizPanel::redo);
 
         // Initialise from the panel: a duplicated tab has history before its toolbar exists.
         undoButton.setEnabled(tabInfo.vizPanel.canUndo());
@@ -296,7 +280,6 @@ class FlowVizToolbarBuilder {
             if (selected != null) {
                 tabInfo.vizPanel.setMaskMode(
                     MaskMode.fromDisplayName(selected.substring("Mask ".length())));
-                applied();
             }
         });
         toolbar.add(maskCombo);
@@ -311,7 +294,6 @@ class FlowVizToolbarBuilder {
         toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
         seasonalMaskButton = new SeasonalMaskButton(mode -> {
             tabInfo.vizPanel.setSeasonalMaskMode(mode);
-            applied();
         }, ToolbarConstants.BUTTON_ICON_SIZE, tabInfo.vizPanel.getSeasonalMaskMode());
         // The component leaves sizing to its host so it matches whatever toolbar it joins.
         ToolbarConstants.applyButtonSizing(seasonalMaskButton);
@@ -328,7 +310,6 @@ class FlowVizToolbarBuilder {
             AggregationPeriod period = AggregationPeriod.fromDisplayName(periodStr);
             AggregationMethod method = AggregationMethod.fromDisplayName(methodStr);
             tabInfo.vizPanel.setAggregation(period, method);
-            applied();
         }
     }
 
@@ -351,7 +332,6 @@ class FlowVizToolbarBuilder {
                 selected.isDataMaskDefault() ? MaskMode.ALL : MaskMode.NONE);
             // Reflect the panel's resulting mask silently (the mask is shared state now).
             FlowVizToolbarController.setSilently(maskCombo, maskItem(tabInfo.vizPanel.getMaskMode()));
-            applied();
         });
         plotAndData(plotTypeCombo);
     }
@@ -430,12 +410,6 @@ class FlowVizToolbarBuilder {
     private void plotAndData(JComponent component) {
         plotAndDataComponents.add(component);
         toolbar.add(component);
-    }
-
-    private void applied() {
-        if (onStateApplied != null) {
-            onStateApplied.run();
-        }
     }
 
     /** Creates a standard icon button. */

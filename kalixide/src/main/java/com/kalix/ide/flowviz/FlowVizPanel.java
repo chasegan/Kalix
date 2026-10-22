@@ -127,6 +127,8 @@ public class FlowVizPanel extends JPanel {
     // The tab's state and undo history live in the model; the panel draws them.
     private final FlowVizModel model;
     private boolean restoringState = false;  // Suppresses pushState() during restores and batches
+    private boolean shown = true;            // A hidden page defers data refreshes...
+    private boolean stale = false;           // ...and catches up when shown
     private Runnable onHistoryChanged;       // Callback for toolbar button enable/disable
     private Runnable onAutoYModeChanged;     // Callback for the toolbar auto-Y toggle
 
@@ -205,6 +207,19 @@ public class FlowVizPanel extends JPanel {
     /** The model this panel draws. */
     public FlowVizModel model() {
         return model;
+    }
+
+    /**
+     * Shows or hides the page. A hidden plot skips refreshes for new data and catches up
+     * when shown; changes of state still rebuild and fit at once, so the viewport is
+     * right whichever page made them.
+     */
+    public void setShown(boolean shown) {
+        this.shown = shown;
+        if (shown && stale) {
+            stale = false;
+            refreshData(false);
+        }
     }
 
     private FlowVizState state() {
@@ -642,6 +657,7 @@ public class FlowVizPanel extends JPanel {
     }
 
     public void saveData() {
+        rebuildDisplayDataSet(); // current even when saved from another page
         if (plotInteractionManager != null) {
             plotInteractionManager.saveData();
         }
@@ -1019,12 +1035,11 @@ public class FlowVizPanel extends JPanel {
     }
 
     /**
-     * The data as displayed (aggregated, masked, transformed) — what Save Data
-     * exports. Call {@link #refreshData} first if the source data may have changed
-     * while the plot page was hidden.
+     * The data as displayed (aggregated, masked, transformed) — what Save Data exports —
+     * current whether or not this page is showing.
      */
     public DataSet getDisplayDataSet() {
-        return displayDataSet;
+        return model.display();
     }
 
     /**
@@ -1107,7 +1122,13 @@ public class FlowVizPanel extends JPanel {
         renderer.setLineShape(now.getLineShape());
         switch (cause) {
             case RESTORE -> applyRestored(old, now);
-            case DATA -> refreshData(false);
+            case DATA -> {
+                if (shown) {
+                    refreshData(false);
+                } else {
+                    stale = true;
+                }
+            }
             case USER -> applyUserChange(old, now);
         }
     }

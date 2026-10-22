@@ -67,8 +67,7 @@ import java.util.Set;
  *   <li><b>DATA</b> - the plot's display data as a table, across the whole
  *       period, spelled exactly as the plot's Save Data writes it</li>
  * </ul>
- * The hidden projection is lazy: data and state changes mark it dirty and it
- * recomputes when shown (the view toggle arrives in the next stage).
+ * Hidden pages are lazy: what they miss marks them dirty, and they catch up when shown.
  *
  * <h2>New Tab Behavior</h2>
  * New tabs inherit the active tab's series selection and settings. Plot tabs created
@@ -170,9 +169,6 @@ public class VisualizationTabManager {
         final FlowVizPanel vizPanel;
         final StatsVizPanel statsVizPanel;
         final DataVizPanel dataVizPanel;
-
-        /** The hidden data projection missed a state/data change; rebuild when shown. */
-        boolean dataDirty = false;
 
         // Tab identifier: starts as a machine default ("View n"), user-renamable
         String name;
@@ -413,7 +409,7 @@ public class VisualizationTabManager {
         vizPanel.setBaseDirectorySupplier(() -> host.baseDirectory());
 
         StatsVizPanel statsVizPanel = new StatsVizPanel(model, () -> loadStates);
-        DataVizPanel dataVizPanel = new DataVizPanel();
+        DataVizPanel dataVizPanel = new DataVizPanel(model);
 
         LabelResolver labels = host.labelResolver();
         if (labels != null) {
@@ -442,27 +438,21 @@ public class VisualizationTabManager {
             vizPanel.copyHistoryFrom(historySource);
         }
 
-        // Undo and redo move the whole tab: its data page follows, and the window
-        // trees reproject when it is the active tab.
+        // Undo and redo move the whole tab: the pages follow the model themselves, and
+        // the window trees reproject when it is the active tab.
         model.addListener((old, now, cause) -> {
             if (cause == FlowVizModel.Cause.RESTORE) {
-                refreshDataProjection(tabInfo);
                 notifyTabMutated(tabInfo);
             }
         });
 
         tabs.add(tabInfo);
 
-        // Populate the visible table page now; a hidden one just starts dirty
-        // and catches up on toggle.
-        statsVizPanel.setShown(viewMode == FlowVizView.STATS);
-        refreshDataProjection(tabInfo);
+        // The shown page draws now; hidden ones start dirty and catch up on toggle.
+        showPages(tabInfo, viewMode);
 
         FlowVizToolbarBuilder toolbarBuilder = new FlowVizToolbarBuilder(tabInfo);
-        toolbarBuilder
-            .setOnUndoRedo(state -> toolbarBuilder.getController().updateFromState(state))
-            .setOnStateApplied(() -> refreshDataProjection(tabInfo))
-            .setOnViewToggle(mode -> switchView(tabInfo, mode));
+        toolbarBuilder.setOnViewToggle(mode -> switchView(tabInfo, mode));
         containerPanel.add(toolbarBuilder.build(model.current().isAutoYMode(), prefs.showCoordinates()),
             BorderLayout.NORTH);
         tabInfo.vizToolbar = toolbarBuilder;
@@ -492,8 +482,7 @@ public class VisualizationTabManager {
     /**
      * Switches a tab between its pages. Pure presentation: no history entry
      * (Ctrl+Z must never flip the page), no tree reprojection (the selection is
-     * unchanged). The newly shown page catches up — a dirty stats or data
-     * projection recomputes, a stale plot page refreshes.
+     * unchanged). The newly shown page catches up on whatever it missed.
      */
     void switchView(TabInfo tab, FlowVizView mode) {
         if (tab.viewMode == mode) {
@@ -504,24 +493,17 @@ public class VisualizationTabManager {
         if (tab.vizToolbar != null) {
             tab.vizToolbar.applyViewMode(mode);
         }
-        tab.statsVizPanel.setShown(mode == FlowVizView.STATS); // a dirty page catches up
-        switch (mode) {
-            case STATS -> {
-            }
-            case PLOT -> {
-                // The plot page skipped display refreshes while hidden; the panel
-                // already holds the selection, so this is a rebuild, not a re-push.
-                tab.vizPanel.refreshData(false);
-                if (tab == getActiveTab()) {
-                    lastActivePlotTabIndex = tabbedPane.getSelectedIndex();
-                }
-            }
-            case DATA -> {
-                if (tab.dataDirty) {
-                    refreshDataProjection(tab);
-                }
-            }
+        showPages(tab, mode);
+        if (mode == FlowVizView.PLOT && tab == getActiveTab()) {
+            lastActivePlotTabIndex = tabbedPane.getSelectedIndex();
         }
+    }
+
+    /** Tells each page whether it is the one showing. */
+    private static void showPages(TabInfo tab, FlowVizView mode) {
+        tab.vizPanel.setShown(mode == FlowVizView.PLOT);
+        tab.statsVizPanel.setShown(mode == FlowVizView.STATS);
+        tab.dataVizPanel.setShown(mode == FlowVizView.DATA);
     }
 
     /**
@@ -790,40 +772,40 @@ public class VisualizationTabManager {
         if (tab.vizToolbar != null) {
             tab.vizToolbar.getController().updateFromState(tab.vizPanel.currentState());
         }
-        refreshDataProjection(tab);
 
         // The canonical record changed in place: reproject the trees (active tab only).
         notifyTabMutated(tab);
     }
 
     /**
-     * Refreshes every tab from the pool (each shows its own selection).
+     * Tells every tab that the pool changed; each page refreshes, or catches up when
+     * shown.
      *
-     * @param resetZoom If true, resets zoom to fit all data. If false, preserves current zoom.
+     * @param resetZoom If true, plot-view tabs zoom to fit all data. If false, zoom is kept.
      */
     public void updateAllTabs(boolean resetZoom) {
         for (TabInfo tab : tabs) {
-            if (tab.viewMode == FlowVizView.PLOT) {
-                tab.vizPanel.setStyleResolver(styleResolver);
-                tab.vizPanel.refreshData(resetZoom);
-            } else {
-                // Hidden plot page: skipped, refreshed when the view toggles.
-                refreshDataProjection(tab);
+            tab.vizPanel.setStyleResolver(styleResolver);
+            tab.model().dataChanged();
+            if (resetZoom && tab.viewMode == FlowVizView.PLOT) {
+                tab.vizPanel.refreshData(true);
             }
-            tab.statsVizPanel.refresh();
         }
     }
 
     /**
-     * Updates only the target plot tab (identified by FlowVizPanel reference).
+     * Tells the tab of {@code targetPanel} that the pool changed.
+     *
+     * @param resetZoom If true, the plot zooms to fit all data. If false, zoom is kept.
      */
     public void updateTab(FlowVizPanel targetPanel, boolean resetZoom) {
         for (TabInfo tab : tabs) {
             if (tab.vizPanel == targetPanel) {
                 tab.vizPanel.setStyleResolver(styleResolver);
-                tab.vizPanel.refreshData(resetZoom);
-                tab.statsVizPanel.refresh();
-                refreshDataProjection(tab);
+                tab.model().dataChanged();
+                if (resetZoom) {
+                    tab.vizPanel.refreshData(true);
+                }
                 return;
             }
         }
@@ -984,38 +966,16 @@ public class VisualizationTabManager {
         }
         ordered.addAll(series);
 
-        // The selection lands in the tab's state (undoably) whatever view is showing.
-        // The display refresh is only paid for the visible plot page; the other pages
-        // follow the model (or dirty).
+        // The selection lands in the tab's state (undoably) whatever view is showing;
+        // every page follows the model (or dirties).
         tab.vizPanel.setStyleResolver(styleResolver);
         tab.vizPanel.setVisibleSeries(new ArrayList<>(ordered));
-        if (tab.viewMode == FlowVizView.PLOT) {
-            tab.vizPanel.refreshData(false);
-        }
-        refreshDataProjection(tab);
         pruneLoadStates();
     }
 
     /** Forgets the fetch state of series no tab selects any more, so the map stays as small as the selections. */
     private void pruneLoadStates() {
         loadStates.keySet().retainAll(getAllSelectedSeriesAcrossTabs());
-    }
-
-    /**
-     * Brings a tab's data page in line with its panel state — immediately when the
-     * data view is showing, else a dirty mark for the view toggle to honour. The
-     * plot skips data refreshes while hidden and its transform cache is keyed on
-     * settings, not data contents, so the display data is rebuilt first.
-     */
-    private void refreshDataProjection(TabInfo tab) {
-        if (tab.viewMode != FlowVizView.DATA) {
-            tab.dataDirty = true;
-            return;
-        }
-        tab.dataDirty = false;
-        tab.vizPanel.refreshData(false);
-        tab.dataVizPanel.setGrid(DataGrid.of(
-            tab.vizPanel.getDisplayDataSet(), tab.vizPanel.getPlotType(), tab.dataVizPanel.labelResolver()));
     }
 
     /**
@@ -1082,8 +1042,7 @@ public class VisualizationTabManager {
         loadStates.remove(ref);
         for (TabInfo tab : tabs) {
             if (tab.selection().contains(ref)) {
-                tab.statsVizPanel.refresh();
-                refreshDataProjection(tab);
+                tab.model().dataChanged();
             }
         }
     }
@@ -1115,7 +1074,6 @@ public class VisualizationTabManager {
 
     /**
      * Removes the given series from <em>every</em> tab's selection; every page follows.
-     * Plot data is refreshed once per affected plot tab.
      */
     public void removeSeriesFromAllTabs(Collection<SeriesRef> refs) {
         if (refs.isEmpty()) {
@@ -1134,9 +1092,5 @@ public class VisualizationTabManager {
             return;
         }
         tab.vizPanel.setVisibleSeries(kept);
-        if (tab.viewMode == FlowVizView.PLOT) {
-            tab.vizPanel.refreshData(false);
-        }
-        refreshDataProjection(tab);
     }
 }
