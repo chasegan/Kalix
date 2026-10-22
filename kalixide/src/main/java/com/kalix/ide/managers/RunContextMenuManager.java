@@ -8,6 +8,7 @@ import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.StatusReporter;
+import com.kalix.ide.windows.MassBalanceComparison;
 import com.kalix.ide.windows.MassBalanceReportWindow;
 import com.kalix.ide.windows.MinimalEditorWindow;
 import com.kalix.ide.windows.SessionManagerWindow;
@@ -25,7 +26,6 @@ import javax.swing.event.PopupMenuListener;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
-import java.awt.Component;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -626,7 +626,7 @@ public class RunContextMenuManager {
             new MassBalanceReportWindow(
                 runInfo.getRunName(), report, baseDirectorySupplier,
                 (window, reference) ->
-                    massBalanceDiffOrOK(window, runInfo.getRunName(), report, reference)
+                    MassBalanceComparison.showResult(window, runInfo.getRunName(), report, reference)
             ).setVisible(true);
         });
     }
@@ -647,52 +647,8 @@ public class RunContextMenuManager {
                 );
                 return;
             }
-            massBalanceDiffOrOK(parentFrame, runInfo.getRunName(), report, referenceReport);
+            MassBalanceComparison.showResult(parentFrame, runInfo.getRunName(), report, referenceReport);
         });
-    }
-
-    // A reference more than this many times the report's length is not compared. The
-    // comparison and the diff run on the EDT, and the reference can be whatever the
-    // active editor tab holds, a large data file included. The figure is arbitrary.
-    private static final int MAX_REFERENCE_TO_REPORT_LENGTH = 10;
-
-    /**
-     * Compares a run's mass balance report with a reference report: an info box over
-     * {@code parent} if they match, a diff window if they do not. A reference far
-     * larger than the report is refused, with a message.
-     */
-    private void massBalanceDiffOrOK(Component parent, String runName, String report,
-                                     String referenceReport) {
-        if (referenceReport.length() > (long) MAX_REFERENCE_TO_REPORT_LENGTH * report.length()) {
-            JOptionPane.showMessageDialog(
-                parent,
-                "The reference is more than " + MAX_REFERENCE_TO_REPORT_LENGTH
-                    + " times the size of this run's mass balance report, so it was not compared.",
-                "Reference Too Large",
-                JOptionPane.WARNING_MESSAGE
-            );
-            return;
-        }
-
-        // Ignores leading and trailing whitespace, as `kalix simulate -v` does, and line
-        // endings: a reference checked out on Windows has CRLF, the engine's report LF.
-        String thisText = normaliseReport(report);
-        String referenceText = normaliseReport(referenceReport);
-        if (thisText.equals(referenceText)) {
-            JOptionPane.showMessageDialog(
-                parent,
-                "Mass balance validation successful: the run's report matches the reference.",
-                "Validation Successful",
-                JOptionPane.INFORMATION_MESSAGE
-            );
-            return;
-        }
-        String title = "Changes: " + runName + " vs Reference Mass Balance";
-        DiffWindow.ofPlainText(thisText, referenceText, title, "Reference Mass Balance", runName);
-    }
-
-    private static String normaliseReport(String report) {
-        return report.replaceAll("\\R", "\n").strip();
     }
 
     /**
