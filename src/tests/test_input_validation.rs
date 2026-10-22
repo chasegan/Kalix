@@ -362,6 +362,36 @@ fn test_pixie_source_with_zero_timestep_series_fails_at_configure() {
 }
 
 
+/// Two rows are enough: the timestep comes from the gap between them.
+#[test]
+fn test_two_row_input_configures() {
+    let path = write_temp_csv("flows.csv", TWO_ROW_CSV);
+    let mut model = model_with_inputs("", &format!("flows = {path}"), "data.flows.by_name.flow");
+    model.configure().expect("two rows must configure");
+    assert_eq!(model.configuration.sim_stepsize, 86400);
+    assert_eq!(model.configuration.sim_nsteps, 2);
+}
+
+/// Two rows with one blank value still have a timestep; the period is the one row with data.
+#[test]
+fn test_two_row_input_with_one_blank_runs_one_step() {
+    let path = write_temp_csv("flows.csv", "date,flow\n2000-01-01,1.0\n2000-01-02,\n");
+    let mut model = model_with_inputs("", &format!("flows = {path}"), "data.flows.by_name.flow");
+    model.configure().expect("a two-row input with one value must configure");
+    assert_eq!(model.configuration.sim_nsteps, 1);
+}
+
+/// A one-row Pixie series carries its timestep in the index, so unlike a one-row CSV it runs.
+#[test]
+fn test_one_row_pixie_series_configures() {
+    let pxt = write_temp_pixie(vec![1.0], |_| {});
+    let mut model = model_with_inputs("", &format!("p = {pxt}"), "data.p.by_name.b");
+    model.configure().expect("a one-row Pixie series with a timestep must configure");
+    assert_eq!(model.configuration.sim_stepsize, 86400);
+    assert_eq!(model.configuration.sim_nsteps, 1);
+}
+
+
 /// A declaration doesn't need the `=` — the custom INI parser treats a bare
 /// key line (no `=`, same syntax as a direct file path) and `alias =` as
 /// identical (key present, value empty), and the model-loading code only
