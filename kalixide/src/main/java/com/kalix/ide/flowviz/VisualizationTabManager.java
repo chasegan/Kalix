@@ -1147,6 +1147,12 @@ public class VisualizationTabManager {
             tab.vizPanel.refreshData(false);
         }
         refreshDataProjection(tab);
+        pruneLoadStates();
+    }
+
+    /** Forgets the fetch state of series no tab selects any more, so the map stays as small as the selections. */
+    private void pruneLoadStates() {
+        loadStates.keySet().retainAll(getAllSelectedSeriesAcrossTabs());
     }
 
     /**
@@ -1305,6 +1311,7 @@ public class VisualizationTabManager {
         for (TabInfo tab : tabs) {
             removeSeriesFromTab(tab, refs);
         }
+        pruneLoadStates();
     }
 
     /** Drops refs from one tab's selection and every page that shows it. */
