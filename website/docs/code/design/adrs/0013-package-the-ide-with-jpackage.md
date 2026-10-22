@@ -13,20 +13,20 @@ title: "ADR-0013: Package the IDE with the JDK's jpackage, not a plugin"
 
 The IDE ships as a self-contained app image: the application jars plus a
 runtime cut from the JDK with jlink, wrapped by jpackage into
-`KalixIDE.app`, `KalixIDE/` or `KalixIDE.exe`. The release scripts and the
-Windows MSI build consume that directory.
+`KalixIDE.app` on macOS and a `KalixIDE/` directory elsewhere. The release
+scripts and the Windows MSI build consume that directory.
 
 Until October 2026 the image was produced by the `org.beryx.runtime` Gradle
 plugin. Moving the IDE to JDK 25 forced Gradle 9, and Gradle 9 forced the
 plugin to its 2.0 line, which raised the question of whether the plugin
 should stay at all. Its 2.0.1 release still calls `Task.project` at
-execution time, which Gradle 9.8 reports as an error in Gradle 10; the
-issue reporting it has had no maintainer reply, nor has the one reporting
-that `jpackageHome` is ignored, and the project has carried an open call
-for co-maintainers since 2022. Meanwhile the plugin's actual work for this
-build had shrunk to nothing: for a classpath application jpackage runs
-jlink itself when given `--add-modules` and `--jlink-options`, and the
-module list was already written out by hand.
+execution time, which Gradle 9.8 warns will fail in Gradle 10; the issue
+reporting it has had no maintainer reply, nor has the one reporting that
+`jpackageHome` is ignored, and the project has carried an open call for
+co-maintainers since 2022. The plugin was also doing nothing here that
+jpackage does not do itself: given `--add-modules` and `--jlink-options` it
+runs jlink for a classpath application, and the module list was already
+written by hand.
 
 ## Decision drivers
 
@@ -50,40 +50,39 @@ module list was already written out by hand.
 
 ## Decision
 
-Chosen option: **2**.
+Chosen option: **2**, because the whole job is one command line the JDK
+documents, and nothing else needs maintaining.
 
 1. **The app image is built by the JDK's own `jpackage`, invoked from one
    `Exec` task in `build.gradle.kts`.** The task takes the jars from
    `installDist`, the module list and jlink options from two named lists
    beside it, and the launcher's JVM options from
    `applicationDefaultJvmArgs`, so `gradlew run`, the start scripts and
-   the image carry the same flags. About thirty lines, all of them
-   documented by the JDK.
+   the image carry the same flags. Every option it passes is one jpackage
+   documents.
 2. **The tool comes from the Java toolchain**, not from the JVM running
    Gradle. The compiler, the test JVM and the bundled runtime are then the
    same JDK by construction.
 3. **The module list is explicit and justified in place.** jlink is told
    which modules to include, each unusual entry says who needs it, and
-   jdeps is the check. No plugin's suggestion mechanism is relied on,
-   which also sidesteps JEP 493: Temurin 24 and later ship without
-   `jmods/`.
+   jdeps is the check.
 4. **No installer is configured in Gradle.** The pipeline ships the image;
    the Windows MSI is built separately by `build-msi.bat`, so there is one
-   way to build an installer. Unchanged from before, restated so it is not
-   reopened when a plugin offers an `installerType`.
+   way to build an installer. This predates the change and is recorded so
+   it is not reopened.
 
 ### Consequences
 
 - ✅ No third-party build plugin stands between the IDE and the JDK.
 - ✅ Configuration-cache compatible today; nothing to wait on for Gradle 10.
-- ✅ The task reproduces the plugin's image on JDK 25 exactly: identical
-  launcher configuration, `Info.plist` and module set. The only
-  difference is that the runtime's `bin/java` and `bin/keytool` are now
-  stripped, which is jpackage's default and which nothing referenced.
+- ✅ On JDK 25 the task reproduces the plugin's image: same launcher
+  configuration, `Info.plist` and module set. The runtime's `bin/java` and
+  `bin/keytool` are now stripped, which is jpackage's default, and nothing
+  referenced them.
 - ❌ Options are spelled as strings, not typed DSL. Accepted: there are
-  fourteen of them and the JDK documents each one.
-- ❌ A platform-specific jpackage quirk is ours to handle rather than a
-  plugin author's. Accepted: the plugin was not handling them either.
+  thirteen, and jpackage documents each one.
+- ❌ Platform-specific jpackage quirks are ours to handle. Accepted: the
+  plugin passed them through untouched.
 
 ## Pros and cons of the options
 
@@ -107,8 +106,9 @@ Chosen option: **2**.
 ### Option 4: gradlex module packaging
 
 - ✅ Well maintained.
-- ❌ Requires a modular application; four of the IDE's dependencies have
-  no module name and one is reached by reflection.
+- ❌ Requires a modular application; seven of the IDE's dependencies ship
+  no module descriptor, three of them no module name at all, and
+  `AutoCompleteManager` reaches into a private field of one by reflection.
 
 ## Worked example
 
@@ -119,18 +119,20 @@ change is reading two files: `app/KalixIDE.cfg` for the classpath and
 
 ## Enforcement
 
-- **Structural**: §1 and §2 are the only packaging path in the build; the
-  release scripts call `gradlew jpackageImage` and nothing else produces
-  the image.
-- **Advisory**: §3 and §4 are held by review and the comments beside the
-  lists.
+- **Structural**: §2. The task resolves `jpackage` from the Java
+  toolchain, so another JDK cannot be used without editing the build.
+  `build-portable-zip.{sh,bat}` call `gradlew jpackageImage` and nothing
+  else produces the image.
+- **Advisory**: §1, §3 and §4 are held by review and by the comments
+  beside the lists.
 
 ## Links and references
 
 - Issue: [#350](https://github.com/chasegan/Kalix/issues/350) (the
   original JDK 25 scoping, which flagged the plugin's bus factor).
+- Related: [ADR-0011](0011-no-scheduled-dependency-audit.md), the same
+  reluctance to carry a build dependency for no present need.
 - External: [jpackage](https://docs.oracle.com/en/java/javase/25/docs/specs/man/jpackage.html),
-  [JEP 493](https://openjdk.org/jeps/493),
   [badass-runtime-plugin issue #166](https://github.com/beryx/badass-runtime-plugin/issues/166).
 
 ## Amendments
