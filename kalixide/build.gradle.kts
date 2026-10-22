@@ -191,7 +191,6 @@ tasks.register<Exec>("jpackageImage") {
         "--copyright", "Copyright 2024-2025 Kalix",
         "--icon", iconFile
     )
-    // The launcher's JVM options are the application plugin's, so every launch path —
-    // `gradlew run`, the installDist scripts and the app image — carries the same flags.
+    // Same JVM options as every other launch path; see application {}.
     application.applicationDefaultJvmArgs.forEach { args("--java-options", it) }
 }
