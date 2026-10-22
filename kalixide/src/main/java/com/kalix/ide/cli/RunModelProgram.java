@@ -25,6 +25,15 @@ public class RunModelProgram extends AbstractSessionProgram {
         FAILED                     // Program failed with error
     }
 
+    /** How a run ended, as reported to {@link #setOnFinished}. */
+    public enum Outcome {
+        SUCCEEDED,
+        STOPPED,
+        FAILED
+    }
+
+    private volatile Consumer<Outcome> onFinished = outcome -> { };
+
     // Written on monitor threads (handleMessage) and the installer thread
     // (onSessionReady); read from the EDT (state descriptions, isActive).
     // Transitions are guarded by synchronized methods; volatile covers the reads.
@@ -58,6 +67,27 @@ public class RunModelProgram extends AbstractSessionProgram {
      */
     public void start(String modelText) {
         this.modelText = modelText;
+    }
+
+    /**
+     * Sets what to call once the run ends, whether it succeeds, is stopped or fails.
+     * Called at most once, on a session thread with this program's lock held, so the
+     * callback should hand its work to another thread. Set it before the program is
+     * installed.
+     *
+     * @param onFinished receives how the run ended
+     */
+    public void setOnFinished(Consumer<Outcome> onFinished) {
+        this.onFinished = onFinished;
+    }
+
+    /** Moves to a final state and reports the outcome, unless the run has already ended. */
+    private synchronized void finish(Outcome outcome) {
+        if (!isActive()) {
+            return;
+        }
+        currentState = outcome == Outcome.FAILED ? ProgramState.FAILED : ProgramState.COMPLETED;
+        onFinished.accept(outcome);
     }
 
     @Override
@@ -94,7 +124,7 @@ public class RunModelProgram extends AbstractSessionProgram {
         String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelText);
         sessionManager.sendCommand(sessionKey, loadCommand)
             .exceptionally(throwable -> {
-                currentState = ProgramState.FAILED;
+                finish(Outcome.FAILED);
                 statusUpdater.error("Failed to send model to " + getDisplayName() + ": " + throwable.getMessage());
                 return null;
             });
@@ -111,7 +141,7 @@ public class RunModelProgram extends AbstractSessionProgram {
                 return true;
 
             case ERROR:
-                currentState = ProgramState.FAILED;
+                finish(Outcome.FAILED);
                 statusUpdater.error("Failed to start " + getDisplayName() + ": " + extractErrorMessage(message));
                 return true;
 
@@ -136,7 +166,7 @@ public class RunModelProgram extends AbstractSessionProgram {
 
             case ERROR:
                 // Model loading failed
-                currentState = ProgramState.FAILED;
+                finish(Outcome.FAILED);
                 String errorMsg = extractErrorMessage(message);
                 statusUpdater.error("Model loading failed in " + getDisplayName() + ": " + errorMsg);
                 return true;
@@ -158,14 +188,14 @@ public class RunModelProgram extends AbstractSessionProgram {
                 String runCommand = JsonStdioProtocol.Commands.runSimulation();
                 sessionManager.sendCommand(sessionKey, runCommand)
                     .exceptionally(throwable -> {
-                        currentState = ProgramState.FAILED;
+                        finish(Outcome.FAILED);
                         statusUpdater.error("Failed to start simulation in " + getDisplayName() + ": " + throwable.getMessage());
                         return null;
                     });
                 return true;
 
             case ERROR:
-                currentState = ProgramState.FAILED;
+                finish(Outcome.FAILED);
                 statusUpdater.error("Error before simulation start in " + getDisplayName() + ": " + extractErrorMessage(message));
                 return true;
 
@@ -210,8 +240,6 @@ public class RunModelProgram extends AbstractSessionProgram {
                 if (!"run_simulation".equals(message.getCommand())) {
                     return false;
                 }
-                currentState = ProgramState.COMPLETED;
-
                 // Extract outputs from compact protocol result message
                 try {
                     JsonNode resultNode = message.getResult();
@@ -250,17 +278,18 @@ public class RunModelProgram extends AbstractSessionProgram {
                 }
 
                 statusUpdater.accept("Model run completed successfully in " + getDisplayName());
+                finish(Outcome.SUCCEEDED);
                 return true;
                 
             case STOPPED:
                 // Simulation was interrupted
-                currentState = ProgramState.COMPLETED; // Still considered completed, just stopped early
+                finish(Outcome.STOPPED);
                 statusUpdater.accept("Model run stopped in " + getDisplayName());
                 return true;
                 
             case ERROR:
                 // Simulation failed
-                currentState = ProgramState.FAILED;
+                finish(Outcome.FAILED);
                 String errorMsg = extractErrorMessage(message);
                 statusUpdater.error("Simulation failed in " + getDisplayName() + ": " + errorMsg);
                 return true;
