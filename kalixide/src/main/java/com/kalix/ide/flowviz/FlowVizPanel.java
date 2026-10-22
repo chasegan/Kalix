@@ -40,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
+import java.util.function.UnaryOperator;
 import com.kalix.ide.preferences.PreferenceKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -107,16 +108,8 @@ public class FlowVizPanel extends JPanel {
     private final TimeSeriesRenderer renderer;  // Contains LOD cache - clear via renderer.clearCache()
     private ViewPort currentViewport;
     private SeriesStyleResolver styleResolver;  // Resolves each series to its colour + stroke
+    // The renderer's and overlays' view of the selection, kept in step with the state.
     private final List<SeriesRef> visibleSeries;
-    private boolean autoYMode = false;
-
-    // Transform settings (per-tab) - changes trigger displayDataSet rebuild
-    private AggregationPeriod aggregationPeriod = AggregationPeriod.ORIGINAL;
-    private AggregationMethod aggregationMethod = AggregationMethod.SUM;
-    private PlotType plotType = PlotType.VALUES;
-    private YAxisScale yAxisScale = YAxisScale.LINEAR;
-    private MaskMode maskMode = MaskMode.NONE;
-    private SeasonalMaskMode seasonalMaskMode = SeasonalMaskMode.DISABLED;
     private XAxisType xAxisTypeOverride = null;  // If set, overrides automatic axis type selection
 
     // Reference series tracking for DIFFERENCE plot types
@@ -153,9 +146,10 @@ public class FlowVizPanel extends JPanel {
     private final PlotInteractionManager plotInteractionManager;
     private final PlotLegendManager legendManager;
 
-    // === UNDO/REDO ===
-    private final FlowVizModel stateHistory = new FlowVizModel();
-    private boolean restoringState = false;  // Suppresses pushState() during restore
+    // === STATE ===
+    // The tab's state and undo history live in the model; the panel draws them.
+    private final FlowVizModel model;
+    private boolean restoringState = false;  // Suppresses pushState() during restores and batches
     private Runnable onHistoryChanged;       // Callback for toolbar button enable/disable
     private Runnable onAutoYModeChanged;     // Callback for the toolbar auto-Y toggle
 
@@ -170,7 +164,14 @@ public class FlowVizPanel extends JPanel {
     private SeriesSlotManager registeredSlotManager;
     private final javax.swing.Timer viewportCoalesceTimer;  // Coalesces rapid zoom/pan changes
 
+    /** A standalone plot with a private model. */
     public FlowVizPanel() {
+        this(new FlowVizModel());
+    }
+
+    /** A plot of {@code model}'s state; the panel follows every change of it. */
+    public FlowVizPanel(FlowVizModel model) {
+        this.model = model;
         // Background is theme-driven; set here and re-resolved in updateUI() on theme switch.
         setBackground(PlotColors.fromUIManager().background);
 
@@ -210,13 +211,26 @@ public class FlowVizPanel extends JPanel {
         );
 
         // Setup plot type supplier for format-aware export
-        plotInteractionManager.setPlotTypeSupplier(() -> plotType);
-        plotInteractionManager.setAutoYModeSupplier(() -> autoYMode);
+        plotInteractionManager.setPlotTypeSupplier(() -> state().getPlotType());
+        plotInteractionManager.setAutoYModeSupplier(() -> state().isAutoYMode());
 
         // Resolver for projecting ref-keyed series to column headers on CSV export.
         plotInteractionManager.setLabelResolverSupplier(() -> labelResolver);
 
         setupMouseListeners();
+
+        visibleSeries.addAll(model.current().getVisibleSeries());
+        renderer.setLineShape(model.current().getLineShape());
+        model.addListener(this::onStateChanged);
+    }
+
+    /** The model this panel draws. */
+    public FlowVizModel model() {
+        return model;
+    }
+
+    private FlowVizState state() {
+        return model.current();
     }
 
     @Override
@@ -305,24 +319,7 @@ public class FlowVizPanel extends JPanel {
     }
 
     public void setVisibleSeries(List<SeriesRef> visibleSeries) {
-        this.visibleSeries.clear();
-        this.visibleSeries.addAll(visibleSeries);
-
-        // Check if reference series changed for DIFFERENCE plot types
-        checkReferenceSeriesChange();
-
-        if (restoringState) {
-            return; // restoreState rebuilds once at the end and manages history itself
-        }
-
-        // Self-invalidating: displayDataSet must always cover the visible series. The
-        // transform key includes the series list, so this is a no-op when nothing
-        // changed - but a re-shown series that was absent from the last rebuild
-        // used to silently not render until some other setting forced a rebuild.
-        rebuildDisplayDataSet();
-
-        pushState();
-        repaint();
+        apply(s -> s.withVisibleSeries(visibleSeries));
     }
 
     /**
@@ -357,6 +354,7 @@ public class FlowVizPanel extends JPanel {
         // negative, and padding from that gives NaN bounds and a blank view. Fit to the
         // smallest showable value instead, as auto-Y does, or to the default view when
         // nothing is showable.
+        YAxisScale yAxisScale = state().getYAxisScale();
         double domainFloor = yAxisScale.domainFloor();
         if (minValue <= domainFloor) {
             minValue = smallestAbove(displayDataSet, domainFloor);
@@ -420,7 +418,8 @@ public class FlowVizPanel extends JPanel {
         Rectangle plotArea = getPlotArea();
         XAxisType xAxisType = determineXAxisType();
         currentViewport = new ViewPort(startTime, endTime, -10.0, 10.0,
-                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale, xAxisType);
+                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height,
+                                     state().getYAxisScale(), xAxisType);
     }
 
     /**
@@ -468,9 +467,7 @@ public class FlowVizPanel extends JPanel {
         if (xAxisTypeOverride != null) {
             return xAxisTypeOverride;
         }
-        if (plotType == PlotType.EXCEEDANCE) return XAxisType.PERCENTILE;
-        if (plotType == PlotType.DOUBLE_MASS) return XAxisType.NUMERIC;
-        return XAxisType.TIME;
+        return xAxisTypeFor(state().getPlotType());
     }
 
     private void setupMouseListeners() {
@@ -643,18 +640,14 @@ public class FlowVizPanel extends JPanel {
     
     /**
      * Sets auto-Y mode: whether X-only navigation (wheel zoom, pan, pasted X limits)
-     * keeps the Y range fitted to the visible data. This is the single owner of the
-     * mode; the interaction manager reads it through a supplier and the toolbar follows
-     * it through {@link #setOnAutoYModeChanged}. Enabling fits Y immediately, so every
-     * entry point (toolbar, context menu) behaves the same and records one history entry.
+     * keeps the Y range fitted to the visible data. The interaction manager reads it
+     * through a supplier and the toolbar follows it through {@link #setOnAutoYModeChanged}.
+     * Enabling fits Y immediately, so every entry point (toolbar, context menu) behaves
+     * the same and records one history entry.
      */
     public void setAutoYMode(boolean autoYMode) {
-        if (this.autoYMode == autoYMode) return;
-        this.autoYMode = autoYMode;
-        if (autoYMode) {
-            fitYAxis();
-        }
-        pushState();
+        if (state().isAutoYMode() == autoYMode) return;
+        apply(s -> s.withAutoYMode(autoYMode));
         if (onAutoYModeChanged != null) {
             onAutoYModeChanged.run();
         }
@@ -676,7 +669,7 @@ public class FlowVizPanel extends JPanel {
     }
 
     public boolean isAutoYMode() {
-        return autoYMode;
+        return state().isAutoYMode();
     }
 
     public void setShowCoordinates(boolean showCoordinates) {
@@ -808,21 +801,14 @@ public class FlowVizPanel extends JPanel {
      */
     public void setLineShape(LineShape shape) {
         // Guard on "no change" so re-picking the current shape pushes no history entry.
-        if (renderer == null || shape == null || shape == renderer.getLineShape()) {
+        if (shape == null || shape == state().getLineShape()) {
             return;
         }
-        renderer.setLineShape(shape);
-
-        if (restoringState) {
-            return; // restoreState / batchStateChange repaint and push once at the end
-        }
-
-        repaint();
-        pushState();
+        apply(s -> s.withLineShape(shape));
     }
 
     public LineShape getLineShape() {
-        return renderer != null ? renderer.getLineShape() : LineShape.STRAIGHT;
+        return state().getLineShape();
     }
 
     /**
@@ -842,7 +828,7 @@ public class FlowVizPanel extends JPanel {
                 currentViewport.getMinValue(),
                 currentViewport.getMaxValue(),
                 plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                yAxisScale,
+                state().getYAxisScale(),
                 newAxisType
             );
         }
@@ -907,40 +893,15 @@ public class FlowVizPanel extends JPanel {
         if (period == null || method == null) {
             return;
         }
-
-        this.aggregationPeriod = period;
-        this.aggregationMethod = method;
-
-        if (restoringState) {
-            return; // restoreState rebuilds once at the end
-        }
-
-        rebuildDisplayDataSet();
-
-        // If Auto-Y mode is enabled, preserve X zoom and fit Y-axis to new data
-        // Otherwise, zoom to fit both axes (user expects to see all the new data)
-        if (autoYMode) {
-            fitYAxis();
-        } else {
-            zoomToFit();
-        }
-        pushState();
+        apply(s -> s.withAggregation(period, method));
     }
 
-    /**
-     * Gets the current aggregation period.
-     * @return The current aggregation period
-     */
     public AggregationPeriod getAggregationPeriod() {
-        return aggregationPeriod;
+        return state().getAggregationPeriod();
     }
 
-    /**
-     * Gets the current aggregation method.
-     * @return The current aggregation method
-     */
     public AggregationMethod getAggregationMethod() {
-        return aggregationMethod;
+        return state().getAggregationMethod();
     }
 
     /** The transformed dataset the renderer draws — package-private, for tests. */
@@ -1019,33 +980,11 @@ public class FlowVizPanel extends JPanel {
         if (scale == null) {
             return;
         }
-
-        this.yAxisScale = scale;
-
-        // Update viewport with new scale
-        if (currentViewport != null) {
-            currentViewport = currentViewport.withYAxisScale(scale);
-        }
-
-        if (restoringState) {
-            return; // restoreState applies the snapshot viewport itself
-        }
-
-        // If Auto-Y mode is enabled, re-fit Y-axis to data in the new scale
-        if (autoYMode) {
-            fitYAxis();
-        } else {
-            repaint();
-        }
-        pushState();
+        apply(s -> s.withYAxisScale(scale));
     }
 
-    /**
-     * Gets the current Y-axis scale.
-     * @return the current Y-axis scale
-     */
     public YAxisScale getYAxisScale() {
-        return yAxisScale;
+        return state().getYAxisScale();
     }
 
     /**
@@ -1056,57 +995,25 @@ public class FlowVizPanel extends JPanel {
         if (type == null) {
             return;
         }
-        setPlotTypeAndMaskMode(type, this.maskMode);
+        setPlotTypeAndMaskMode(type, state().getMaskMode());
     }
 
     /**
-     * Sets plot type and mask mode together as one atomic action: both fields update, the
-     * display dataset rebuilds once (not twice), and exactly one entry is pushed to undo
-     * history. Pushing the two changes separately would leave a "phantom" intermediate state
-     * (new plot type, stale mask mode) that undo would visit but the user never actually saw
-     * — used by the plot-type dropdown, which changes both together (per
-     * {@link PlotType#isDataMaskDefault()}).
+     * Sets plot type and mask mode together as one atomic action: the display dataset
+     * rebuilds once and exactly one entry is pushed to undo history. Pushing the two
+     * changes separately would leave a "phantom" intermediate state (new plot type, stale
+     * mask mode) that undo would visit but the user never actually saw — used by the
+     * plot-type dropdown, which changes both together (per {@link PlotType#isDataMaskDefault()}).
      *
-     * <p>This is the primitive: {@link #setPlotType} and {@link #setMaskMode} delegate here,
-     * so the rebuild/fit/push tail lives in exactly one place. The mask concerned is the
-     * <em>overlapping-data</em> mask ({@link MaskMode}) only; further filter dimensions
-     * (e.g. a seasonal filter, issue #235) are deliberately outside this coupling and belong
-     * in orthogonal fields, not new MaskMode variants.</p>
+     * <p>The mask concerned is the <em>overlapping-data</em> mask ({@link MaskMode}) only;
+     * further filter dimensions (e.g. a seasonal filter, issue #235) are deliberately outside
+     * this coupling and belong in orthogonal fields, not new MaskMode variants.</p>
      */
     public void setPlotTypeAndMaskMode(PlotType type, MaskMode maskMode) {
         if (type == null || maskMode == null) {
             return;
         }
-        boolean plotTypeChanged = type != this.plotType;
-        if (!plotTypeChanged && maskMode == this.maskMode) {
-            return;
-        }
-
-        PlotType oldPlotType = this.plotType;
-        this.plotType = type;
-        if (plotTypeChanged) {
-            lastReferenceSeries = null; // Reset reference tracking
-        }
-        this.maskMode = maskMode;
-
-        if (restoringState) {
-            return; // restoreState rebuilds once at the end
-        }
-
-        rebuildDisplayDataSet();
-
-        // If the X-axis domain changed, the viewport must be fully recalculated (X zoom
-        // can't be preserved); otherwise follow the same logic as aggregation changes.
-        boolean xAxisDomainChanged = xAxisTypeFor(oldPlotType) != xAxisTypeFor(type);
-
-        if (xAxisDomainChanged) {
-            zoomToFit();
-        } else if (autoYMode) {
-            fitYAxis();
-        } else {
-            zoomToFit();
-        }
-        pushState();
+        apply(s -> s.withPlotType(type).withMaskMode(maskMode));
     }
 
     /**
@@ -1123,38 +1030,35 @@ public class FlowVizPanel extends JPanel {
     }
 
     /**
-     * Runs several state changes as one atomic action: the setters called inside
-     * {@code changes} only assign fields (their own rebuild/fit/push is suppressed via
-     * {@code restoringState}, the same contract {@code restoreState} uses), then the
-     * display dataset rebuilds once, the viewport is fitted once — domain-aware, exactly
-     * as {@link #setPlotTypeAndMaskMode} fits — and exactly one entry is pushed to undo
-     * history. Nesting inside an outer batch or restore is safe: the inner call only
-     * assigns fields and the outermost caller does the single rebuild/fit/push.
+     * Runs several state changes as one atomic action: the model notifies once at the end,
+     * the viewport is fitted once — domain-aware, as a plot-type change fits — and exactly
+     * one entry is pushed to undo history. Nesting is safe: the outermost batch does the
+     * single fit and push.
      *
      * <p>Used wherever a gesture changes several fields at once (tab construction,
      * tab reset) so undo never visits an intermediate state the user did not see.</p>
      */
     public void batchStateChange(Runnable changes) {
-        PlotType oldPlotType = this.plotType;
+        PlotType oldPlotType = state().getPlotType();
 
         boolean wasRestoring = restoringState;
         restoringState = true;
         try {
-            changes.run();
+            model.batch(changes);
         } finally {
             restoringState = wasRestoring;
         }
 
         if (restoringState) {
-            return; // nested: the outermost batch/restore rebuilds once at its own end
+            return; // nested: the outermost batch fits and pushes once at its own end
         }
 
         rebuildDisplayDataSet();
 
-        boolean xAxisDomainChanged = xAxisTypeFor(oldPlotType) != xAxisTypeFor(this.plotType);
+        boolean xAxisDomainChanged = xAxisTypeFor(oldPlotType) != xAxisTypeFor(state().getPlotType());
         if (xAxisDomainChanged) {
             zoomToFit();
-        } else if (autoYMode) {
+        } else if (state().isAutoYMode()) {
             fitYAxis();
         } else {
             zoomToFit();
@@ -1162,20 +1066,13 @@ public class FlowVizPanel extends JPanel {
         pushState();
     }
 
-    /**
-     * The current undo-history snapshot, or null if none has been pushed yet. Lets owners
-     * (e.g. the toolbar controller after a batched change) resync UI from the same
-     * {@link FlowVizState} the undo machinery uses, rather than from a parallel reading.
-     */
+    /** The tab's current state: what the toolbar and the window trees resync from. */
     public FlowVizState currentState() {
-        return stateHistory.current();
+        return state();
     }
 
-    /**
-     * Gets the current plot type.
-     */
     public PlotType getPlotType() {
-        return plotType;
+        return state().getPlotType();
     }
 
     /**
@@ -1192,8 +1089,9 @@ public class FlowVizPanel extends JPanel {
      * aggregation settings) as a map built from the cache.
      */
     public LinkedHashMap<SeriesRef, TimeSeriesData> aggregatedSeries() {
-        return AggregationPipeline.aggregate(aggregateCache, originalDataSet, visibleSeries,
-            aggregationPeriod, aggregationMethod, seasonalMaskMode);
+        FlowVizState s = state();
+        return AggregationPipeline.aggregate(aggregateCache, originalDataSet, s.getVisibleSeries(),
+            s.getAggregationPeriod(), s.getAggregationMethod(), s.getSeasonalMaskMode());
     }
 
     /**
@@ -1204,7 +1102,7 @@ public class FlowVizPanel extends JPanel {
         if (mode == null) {
             return;
         }
-        setPlotTypeAndMaskMode(this.plotType, mode);
+        setPlotTypeAndMaskMode(state().getPlotType(), mode);
     }
 
     /**
@@ -1212,40 +1110,25 @@ public class FlowVizPanel extends JPanel {
      * Orthogonal to {@link #getMaskMode()}, which is the validity/overlap mask.
      */
     public SeasonalMaskMode getSeasonalMaskMode() {
-        return seasonalMaskMode;
+        return state().getSeasonalMaskMode();
     }
 
     /**
      * Gets the current mask mode.
      */
     public MaskMode getMaskMode() {
-        return maskMode;
+        return state().getMaskMode();
     }
 
     /**
-     * Sets the seasonal (per-month) mask. The panel owns this for the whole tab, so the
-     * change reaches both the plot and the stats projection.
+     * Sets the seasonal (per-month) mask. The state is the whole tab's, so the change
+     * reaches both the plot and the stats projection.
      */
     public void setSeasonalMaskMode(SeasonalMaskMode mode) {
-        // Guard on "no change", not on a particular value - returning early for DISABLED
-        // would mean the off state never gets stored and the mask could never be cleared.
-        if (mode == null || mode.equals(this.seasonalMaskMode)) {
+        if (mode == null) {
             return;
         }
-        this.seasonalMaskMode = mode;
-
-        if (restoringState) {
-            return; // restoreState rebuilds once at the end
-        }
-
-        rebuildDisplayDataSet();
-
-        if (autoYMode) {
-            fitYAxis();
-        } else {
-            zoomToFit();
-        }
-        pushState();
+        apply(s -> s.withSeasonalMaskMode(mode));
     }
 
     // === UNDO/REDO ===
@@ -1271,56 +1154,110 @@ public class FlowVizPanel extends JPanel {
     private Supplier<Set<SourceRef>> checkedSourcesSupplier;
 
     /**
-     * Captures and pushes the current state to history (if changed).
-     * Called after user-initiated setting changes. Skipped during state restore
-     * and before data is loaded (to avoid junk history from initial setup).
+     * Records the current state as an undo entry (if changed), with the viewport and the
+     * tab's checked sources as they are now. Called after user-initiated changes. Skipped
+     * during restores and batches, and before data is loaded (to avoid junk history from
+     * initial setup).
      */
     public void pushState() {
         if (restoringState || originalDataSet == null) return;
-        FlowVizState state = FlowVizState.capture(
-            visibleSeries,
-            checkedSourcesSupplier != null ? checkedSourcesSupplier.get() : Set.of(),
-            aggregationPeriod, aggregationMethod,
-            plotType, yAxisScale, getLineShape(), maskMode, seasonalMaskMode, autoYMode, currentViewport);
-        if (stateHistory.pushIfChanged(state) && onHistoryChanged != null) {
+        Set<SourceRef> sources = checkedSourcesSupplier != null ? checkedSourcesSupplier.get() : Set.of();
+        model.update(s -> s.withCheckedSources(sources).withViewport(currentViewport));
+        if (model.record() && onHistoryChanged != null) {
             onHistoryChanged.run();
         }
     }
 
+    /** One user change: update the model (the listener rebuilds and fits), then record it. */
+    private void apply(UnaryOperator<FlowVizState> change) {
+        model.update(change);
+        pushState();
+    }
+
     /**
-     * Restores plot state from a snapshot without pushing to history. Runs the full
-     * transform pipeline exactly ONCE: while {@code restoringState} is set, the
-     * setters only assign fields (no rebuild, no zoom-to-fit, no history push) and
-     * the single {@code refreshData(false)} at the end rebuilds against the final
-     * settings. Undo on a large dataset used to pay up to five full aggregations.
+     * Follows the model. A restore applies the snapshot's viewport and rebuilds once; a
+     * user change rebuilds what it affects and fits as the change calls for (the rules each
+     * setter used to apply for itself); a change of only the viewport or the checked
+     * sources needs nothing.
      */
-    private void restoreState(FlowVizState state) {
+    private void onStateChanged(FlowVizState old, FlowVizState now, FlowVizModel.Cause cause) {
+        visibleSeries.clear();
+        visibleSeries.addAll(now.getVisibleSeries());
+        renderer.setLineShape(now.getLineShape());
+        switch (cause) {
+            case RESTORE -> applyRestored(old, now);
+            case DATA -> refreshData(false);
+            case USER -> applyUserChange(old, now);
+        }
+    }
+
+    private void applyUserChange(FlowVizState old, FlowVizState now) {
+        if (!now.differsInPlotFrom(old)) {
+            return;
+        }
+        boolean plotTypeChanged = now.getPlotType() != old.getPlotType();
+        boolean shapeChanged = plotTypeChanged
+            || now.getAggregationPeriod() != old.getAggregationPeriod()
+            || now.getAggregationMethod() != old.getAggregationMethod()
+            || now.getMaskMode() != old.getMaskMode()
+            || !now.getSeasonalMaskMode().equals(old.getSeasonalMaskMode());
+        boolean seriesChanged = !now.getVisibleSeries().equals(old.getVisibleSeries());
+        boolean scaleChanged = now.getYAxisScale() != old.getYAxisScale();
+        boolean autoYSwitchedOn = now.isAutoYMode() && !old.isAutoYMode();
+
+        if (scaleChanged && currentViewport != null) {
+            currentViewport = currentViewport.withYAxisScale(now.getYAxisScale());
+        }
+        if (plotTypeChanged) {
+            lastReferenceSeries = null; // Reset reference tracking
+        }
+        if (seriesChanged) {
+            checkReferenceSeriesChange(); // a new reference re-fits Y on difference plots
+        }
+        if (seriesChanged || shapeChanged) {
+            rebuildDisplayDataSet();
+        }
+
+        // If the X-axis domain changed, X zoom can't be preserved; otherwise auto-Y keeps
+        // the X zoom and fits Y, and without it the user expects to see all the new data.
+        if (shapeChanged) {
+            if (xAxisTypeFor(old.getPlotType()) != xAxisTypeFor(now.getPlotType())) {
+                zoomToFit();
+            } else if (now.isAutoYMode()) {
+                fitYAxis();
+            } else {
+                zoomToFit();
+            }
+        } else if ((scaleChanged || autoYSwitchedOn) && now.isAutoYMode()) {
+            fitYAxis();
+        }
+        repaint();
+    }
+
+    /**
+     * Applies a restored snapshot. Runs the full transform pipeline exactly ONCE against
+     * the final settings and applies the snapshot's viewport, with no fit and no history
+     * push. Undo on a large dataset used to pay up to five full aggregations.
+     */
+    private void applyRestored(FlowVizState old, FlowVizState now) {
+        boolean wasRestoring = restoringState;
         restoringState = true;
         viewportCoalesceTimer.stop();
         try {
-            // Apply settings
-            setVisibleSeries(state.getVisibleSeries());
-            setAggregation(state.getAggregationPeriod(), state.getAggregationMethod());
-            setPlotType(state.getPlotType());
-            setYAxisScale(state.getYAxisScale());
-            setLineShape(state.getLineShape());
-            setMaskMode(state.getMaskMode());
-            setSeasonalMaskMode(state.getSeasonalMaskMode());
-            autoYMode = state.isAutoYMode();
-
-            // Apply viewport zoom/pan
+            if (now.getPlotType() != old.getPlotType()) {
+                lastReferenceSeries = null;
+            }
             if (currentViewport != null) {
                 currentViewport = new ViewPort(
-                    state.getStartTimeMs(), state.getEndTimeMs(),
-                    state.getMinValue(), state.getMaxValue(),
+                    now.getStartTimeMs(), now.getEndTimeMs(),
+                    now.getMinValue(), now.getMaxValue(),
                     currentViewport.getPlotX(), currentViewport.getPlotY(),
                     currentViewport.getPlotWidth(), currentViewport.getPlotHeight(),
-                    state.getYAxisScale(), determineXAxisType());
+                    now.getYAxisScale(), determineXAxisType());
             }
-
             refreshData(false);
         } finally {
-            restoringState = false;
+            restoringState = wasRestoring;
         }
     }
 
@@ -1334,10 +1271,9 @@ public class FlowVizPanel extends JPanel {
      * future key binding, say — that skips it silently desyncs the trees.</p>
      */
     public FlowVizState undo() {
-        FlowVizState state = stateHistory.undo();
-        if (state != null) {
-            restoreState(state);
-            if (onHistoryChanged != null) onHistoryChanged.run();
+        FlowVizState state = model.undo();
+        if (state != null && onHistoryChanged != null) {
+            onHistoryChanged.run();
         }
         return state;
     }
@@ -1347,27 +1283,22 @@ public class FlowVizPanel extends JPanel {
      * Same call-site contract as {@link #undo()}: route the result through the sync seam.
      */
     public FlowVizState redo() {
-        FlowVizState state = stateHistory.redo();
-        if (state != null) {
-            restoreState(state);
-            if (onHistoryChanged != null) onHistoryChanged.run();
+        FlowVizState state = model.redo();
+        if (state != null && onHistoryChanged != null) {
+            onHistoryChanged.run();
         }
         return state;
     }
 
-    public boolean canUndo() { return stateHistory.canUndo(); }
-    public boolean canRedo() { return stateHistory.canRedo(); }
+    public boolean canUndo() { return model.canUndo(); }
+    public boolean canRedo() { return model.canRedo(); }
 
     /**
      * Copies the full state history from another FlowVizPanel (Chrome-style tab duplication).
      * Restores the current state including viewport so the new tab looks identical.
      */
     public void copyHistoryFrom(FlowVizPanel source) {
-        stateHistory.copyFrom(source.stateHistory);
-        FlowVizState current = stateHistory.current();
-        if (current != null) {
-            restoreState(current);
-        }
+        model.copyFrom(source.model);
         if (onHistoryChanged != null) onHistoryChanged.run();
     }
 
@@ -1380,7 +1311,7 @@ public class FlowVizPanel extends JPanel {
             return; // restoreState rebuilds once at the end and applies the snapshot's viewport
         }
         // Only check if current plot type requires reference series
-        if (!plotType.requiresReferenceSeries()) {
+        if (!state().getPlotType().requiresReferenceSeries()) {
             lastReferenceSeries = null;
             return;
         }
@@ -1393,7 +1324,7 @@ public class FlowVizPanel extends JPanel {
             // Reference series changed - need to recalculate
             rebuildDisplayDataSet();
 
-            if (autoYMode) {
+            if (state().isAutoYMode()) {
                 fitYAxis();
             }
         }
@@ -1405,6 +1336,14 @@ public class FlowVizPanel extends JPanel {
      * Uses caching to avoid unnecessary recomputation.
      */
     private void rebuildDisplayDataSet() {
+        FlowVizState state = state();
+        List<SeriesRef> visibleSeries = state.getVisibleSeries();
+        AggregationPeriod aggregationPeriod = state.getAggregationPeriod();
+        AggregationMethod aggregationMethod = state.getAggregationMethod();
+        PlotType plotType = state.getPlotType();
+        MaskMode maskMode = state.getMaskMode();
+        SeasonalMaskMode seasonalMaskMode = state.getSeasonalMaskMode();
+
         if (originalDataSet == null) {
             displayDataSet = null;
             return;
