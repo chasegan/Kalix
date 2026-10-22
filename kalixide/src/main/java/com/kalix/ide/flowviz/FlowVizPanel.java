@@ -1110,8 +1110,11 @@ public class FlowVizPanel extends JPanel {
      * existing X zoom). Shared by {@link #setPlotType} and {@link #setPlotTypeAndMaskMode}.
      */
     private static XAxisType xAxisTypeFor(PlotType type) {
-        return type == PlotType.EXCEEDANCE ? XAxisType.PERCENTILE
-            : type == PlotType.DOUBLE_MASS ? XAxisType.NUMERIC : XAxisType.TIME;
+        return switch (type) {
+            case EXCEEDANCE -> XAxisType.PERCENTILE;
+            case DOUBLE_MASS -> XAxisType.NUMERIC;
+            case VALUES, CUMULATIVE, DIFFERENCE, CUMULATIVE_DIFFERENCE, RESIDUAL_MASS -> XAxisType.TIME;
+        };
     }
 
     /**
