@@ -215,6 +215,142 @@ type = blackhole
 }
 
 
+/// Writes `csv` to a fresh temp file and returns its path.
+fn write_temp_csv(name: &str, csv: &str) -> String {
+    let dir = std::env::temp_dir().join("kalix_tests").join(uuid::Uuid::new_v4().to_string());
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join(name);
+    std::fs::write(&path, csv).unwrap();
+    path.display().to_string()
+}
+
+/// A model with `[data]` entries `data`, an inflow fed by `inflow`, and an optional `[kalix]` block.
+fn model_with_inputs(kalix: &str, data: &str, inflow: &str) -> Model {
+    let ini = format!("{kalix}\n[data]\n{data}\n\n[node.src]\ntype = inflow\ninflow = {inflow}\nds_1 = sink\n\n[node.sink]\ntype = blackhole\n");
+    IniModelIO::read_model_string(&ini).expect("Model should parse")
+}
+
+const ONE_ROW_CSV: &str = "date,flow\n2000-01-01,1.0\n";
+const TWO_ROW_CSV: &str = "date,flow\n2000-01-01,1.0\n2000-01-02,2.0\n";
+
+/// A one-row critical input has no timestep; configure used to divide by zero (#479).
+#[test]
+fn test_one_row_critical_input_fails_at_configure() {
+    let path = write_temp_csv("flows.csv", ONE_ROW_CSV);
+    let mut model = model_with_inputs("", &format!("flows = {path}"), "data.flows.by_name.flow");
+    let err = model.configure().expect_err("configure() must reject a one-row input");
+    assert_eq!(err, format!(
+        "input 'flows' ({path}) has only one row; at least two are needed to infer the timestep"));
+}
+
+/// With a start given, the period override divided by zero before the fill did.
+#[test]
+fn test_one_row_input_with_specified_start_fails_at_configure() {
+    let path = write_temp_csv("flows.csv", ONE_ROW_CSV);
+    let mut model = model_with_inputs(
+        "[kalix]\nstart = 2000-01-01\n", &format!("flows = {path}"), "data.flows.by_name.flow");
+    let err = model.configure().expect_err("configure() must reject a one-row input");
+    assert!(err.contains("has only one row"), "Got: {}", err);
+}
+
+/// A one-row input nothing reads gets the same error, not a step mismatch.
+#[test]
+fn test_one_row_non_critical_input_fails_at_configure() {
+    let good = write_temp_csv("good.csv", TWO_ROW_CSV);
+    let one_row = write_temp_csv("spare.csv", ONE_ROW_CSV);
+    let mut model = model_with_inputs(
+        "", &format!("good = {good}\n{one_row}"), "data.good.by_name.flow");
+    let err = model.configure().expect_err("configure() must reject a one-row input");
+    assert_eq!(err, format!(
+        "input '{one_row}' has only one row; at least two are needed to infer the timestep"));
+}
+
+/// A header-only input used to underflow when sizing the simulation period.
+#[test]
+fn test_header_only_input_fails_at_configure() {
+    let path = write_temp_csv("flows.csv", "date,flow\n");
+    let mut model = model_with_inputs("", &format!("flows = {path}"), "data.flows.by_name.flow");
+    let err = model.configure().expect_err("configure() must reject an input with no rows");
+    assert_eq!(err, format!("input 'flows' ({path}) has no data"));
+}
+
+/// A critical input with rows but no values used to underflow when sizing the period.
+#[test]
+fn test_all_blank_critical_input_fails_at_configure() {
+    let path = write_temp_csv("flows.csv", "date,flow\n2000-01-01,\n2000-01-02,\n");
+    let mut model = model_with_inputs("", &format!("flows = {path}"), "data.flows.by_name.flow");
+    let err = model.configure().expect_err("configure() must reject a critical input with no values");
+    assert_eq!(err, "No timestep has data for every critical input ('data.flows.by_name.flow').");
+}
+
+/// Critical inputs with no dates in common hit the same underflow.
+#[test]
+fn test_non_overlapping_critical_inputs_fail_at_configure() {
+    let a = write_temp_csv("a.csv", TWO_ROW_CSV);
+    let b = write_temp_csv("b.csv", "date,flow\n2005-01-01,1.0\n2005-01-02,2.0\n");
+    let mut model = model_with_inputs(
+        "", &format!("a = {a}\nb = {b}"), "data.a.by_name.flow + data.b.by_name.flow");
+    let err = model.configure().expect_err("configure() must reject critical inputs with no overlap");
+    assert!(err.starts_with("No timestep has data for every critical input"), "Got: {}", err);
+}
+
+/// Critical inputs on different timesteps used to panic in Timeseries::mask_with.
+#[test]
+fn test_critical_inputs_with_different_timesteps_fail_at_configure() {
+    let a = write_temp_csv("a.csv", TWO_ROW_CSV);
+    let h = write_temp_csv("h.csv", "date,flow\n2000-01-01T00:00:00,1.0\n2000-01-01T01:00:00,2.0\n");
+    let mut model = model_with_inputs(
+        "", &format!("a = {a}\nh = {h}"), "data.a.by_name.flow + data.h.by_name.flow");
+    let err = model.configure().expect_err("configure() must reject mixed timesteps");
+    assert_eq!(err, "Input 'data.h.by_name.flow' has a timestep of 3600s but 'data.a.by_name.flow' has 86400s. \
+                     All inputs must share the same timestep.");
+}
+
+/// Writes a Pixie pair holding series `a` (three daily values) and `b` (`b_values`), then
+/// rewrites `b`'s index row with `edit_b`, standing in for a .pxt from another tool.
+fn write_temp_pixie(b_values: Vec<f64>, edit_b: impl Fn(&mut Vec<String>)) -> String {
+    let dir = std::env::temp_dir().join("kalix_tests").join(uuid::Uuid::new_v4().to_string());
+    std::fs::create_dir_all(&dir).unwrap();
+    let base = dir.join("p").display().to_string();
+    let series = |name: &str, values: Vec<f64>| {
+        let mut ts = crate::timeseries::Timeseries::new(86400);
+        ts.name = name.into();
+        ts.start_timestamp = crate::tid::utils::wrap_to_u64(946_684_800);
+        ts.values = values;
+        ts
+    };
+    crate::io::pixie_io::write_series(&base, &[&series("a", vec![1.0, 2.0, 3.0]), &series("b", b_values)]).unwrap();
+    let pxt = format!("{base}.pxt");
+    let text = std::fs::read_to_string(&pxt).unwrap();
+    let mut lines: Vec<String> = text.lines().map(String::from).collect();
+    let mut fields: Vec<String> = lines[2].split(',').map(String::from).collect();
+    edit_b(&mut fields);
+    lines[2] = fields.join(",");
+    std::fs::write(&pxt, lines.join("\n") + "\n").unwrap();
+    pxt
+}
+
+/// Pixie series are independent, so a later empty series must be caught too.
+#[test]
+fn test_pixie_source_with_empty_later_series_fails_at_configure() {
+    // Kalix's own writer gives an empty series unreadable dates; another tool might not.
+    let pxt = write_temp_pixie(vec![], |f| { f[2] = "2000-01-01".into(); f[3] = "2000-01-01".into(); });
+    let mut model = model_with_inputs("", &format!("p = {pxt}"), "data.p.by_name.b");
+    let err = model.configure().expect_err("configure() must reject an empty series");
+    assert_eq!(err, format!("series 'b' of input 'p' ({pxt}) has no data"));
+}
+
+/// A later Pixie series with timestep 0 used to divide by zero once a start was given.
+#[test]
+fn test_pixie_source_with_zero_timestep_series_fails_at_configure() {
+    let pxt = write_temp_pixie(vec![1.0, 2.0, 3.0], |f| f[4] = "0".into());
+    let mut model = model_with_inputs(
+        "[kalix]\nstart = 2000-01-01\n", &format!("p = {pxt}"), "data.p.by_name.b");
+    let err = model.configure().expect_err("configure() must reject a zero timestep");
+    assert_eq!(err, format!("series 'b' of input 'p' ({pxt}) has a timestep of 0"));
+}
+
+
 /// A declaration doesn't need the `=` — the custom INI parser treats a bare
 /// key line (no `=`, same syntax as a direct file path) and `alias =` as
 /// identical (key present, value empty), and the model-loading code only
