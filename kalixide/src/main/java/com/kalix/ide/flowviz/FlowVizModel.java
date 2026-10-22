@@ -1,12 +1,27 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.flowviz.data.DataSet;
+import com.kalix.ide.flowviz.data.SeriesRef;
+import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.stats.MaskMode;
+import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
+import com.kalix.ide.flowviz.stats.TimeSeriesMasker;
+import com.kalix.ide.flowviz.transform.AggregatedSeriesCache;
+import com.kalix.ide.flowviz.transform.AggregationMethod;
+import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.flowviz.transform.AggregationPipeline;
+import com.kalix.ide.flowviz.transform.PlotType;
+import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
+
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.function.UnaryOperator;
 
 /**
  * The one owner of a tab's state: the current {@link FlowVizState}, its undo/redo history,
- * and the listeners that project it (the plot, and later the stats and data pages).
+ * the listeners that project it (the plot, stats and data pages), and the data derived
+ * from it: the aggregated series and the display set every page reads.
  *
  * <p>A change is one {@link #update}; listeners receive the old and new snapshots and
  * work out for themselves what changed. Recording a history entry is a separate step,
@@ -42,6 +57,22 @@ public class FlowVizModel {
     private int batchDepth;
     private FlowVizState batchStart;
 
+    // === DERIVED DATA ===
+    // Both are computed on demand and reused while the settings and the pool's data
+    // objects are unchanged, so new data is noticed without invalidation calls.
+    private DataSet pool;
+    private final AggregatedSeriesCache aggregateCache = new AggregatedSeriesCache();
+
+    /** What a display set was built from: the settings it depends on, and its aggregates by identity. */
+    private record DisplayKey(AggregationPeriod period, AggregationMethod method, PlotType plotType,
+                              MaskMode maskMode, SeasonalMaskMode seasonalMaskMode,
+                              List<SeriesRef> visibleSeries) {
+    }
+
+    private DisplayKey displayKey;
+    private List<TimeSeriesData> displaySources = List.of();
+    private DataSet display;
+
     /** The current state, never null. */
     public FlowVizState current() {
         return state;
@@ -49,6 +80,56 @@ public class FlowVizModel {
 
     public void addListener(Listener listener) {
         listeners.add(listener);
+    }
+
+    /** The shared data pool the state's series resolve against. */
+    public void setPool(DataSet pool) {
+        this.pool = pool;
+        this.display = null;
+    }
+
+    /**
+     * The visible series, aggregated under the current settings, in selection order (the
+     * first is the bivariate reference). A fresh map; series missing from the pool are
+     * skipped. The seasonal mask is applied inside aggregation (#235).
+     */
+    public LinkedHashMap<SeriesRef, TimeSeriesData> aggregated() {
+        return AggregationPipeline.aggregate(aggregateCache, pool, state.getVisibleSeries(),
+            state.getAggregationPeriod(), state.getAggregationMethod(), state.getSeasonalMaskMode());
+    }
+
+    /**
+     * What the plot draws and the data page tabulates: {@link #aggregated()}, then the
+     * overlap mask ({@link TimeSeriesMasker#maskOverlap}), then the plot-type transform.
+     * The same object is returned while nothing it depends on has changed.
+     */
+    public DataSet display() {
+        LinkedHashMap<SeriesRef, TimeSeriesData> aggregated = aggregated();
+        DisplayKey key = new DisplayKey(state.getAggregationPeriod(), state.getAggregationMethod(),
+            state.getPlotType(), state.getMaskMode(), state.getSeasonalMaskMode(), state.getVisibleSeries());
+        List<TimeSeriesData> sources = List.copyOf(aggregated.values());
+        if (display != null && key.equals(displayKey) && sameObjects(sources, displaySources)) {
+            return display;
+        }
+        DataSet aggregatedSet = new DataSet();
+        aggregated.forEach(aggregatedSet::addSeries);
+        DataSet masked = TimeSeriesMasker.maskOverlap(aggregatedSet, state.getMaskMode());
+        display = PlotTypeTransformer.transform(masked, state.getPlotType(), state.getVisibleSeries());
+        displayKey = key;
+        displaySources = sources;
+        return display;
+    }
+
+    private static boolean sameObjects(List<TimeSeriesData> a, List<TimeSeriesData> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (int i = 0; i < a.size(); i++) {
+            if (a.get(i) != b.get(i)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Applies a change and notifies listeners with cause USER; no-op when nothing changed. */
