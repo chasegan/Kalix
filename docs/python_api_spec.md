@@ -490,8 +490,10 @@ cases:
   `"delete"` (`ValueError`), or a `mode="delete"` snippet carrying property
   lines rather than bare section headers (`ValueError`).
 - `set_input()` given data not indexed by a `DatetimeIndex` (`TypeError`),
-  or with an empty/irregular index or mismatched column lengths
-  (`ValueError`).
+  or with no columns, an irregular index or mismatched column lengths
+  (`ValueError`). Data with no rows, or one row and so no timestep, is the
+  engine's check, the same one a CSV input gets at configure time
+  (`ModelValidationError`).
 
 `OSError` likewise stays builtin throughout: a missing or unreadable file is
 a filesystem fact, not a statement about the model. The distinction is typed
@@ -526,7 +528,7 @@ the complaint*, not how far through the file the engine had got.
 | Type | Raised by |
 |---|---|
 | `ModelParseError` | `load_file()`, `load_string()`, `patch()` — a value in the content could not be read |
-| `ModelValidationError` | the same three, when the model they describe doesn't hold together; also `run()`, when the model cannot be configured |
+| `ModelValidationError` | the same three, when the model they describe doesn't hold together; `run()`, when the model cannot be configured; `set_input()` given data with no rows or only one |
 | `SimulationError` | `run()`, when the simulation itself fails |
 | `KalixKeyError` | `get()`, `get_section()`, `get_outputs()` naming an output that isn't there (with `missing_ok=False`), `patch(mode="delete")` (with `missing_ok=False`), `set_input()` on an undeclared alias |
 | `KalixRuntimeError` | `get_outputs()`/`get_mass_balance()` before `run()`; `get_outputs()` on an output whose recorded series is a length other than the run's; `to_string()`/`save()`/`patch()` on a model with no INI document |
