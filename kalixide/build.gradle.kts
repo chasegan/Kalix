@@ -2,7 +2,6 @@ plugins {
     application
     java
     checkstyle
-    id("org.beryx.runtime") version "2.0.1"
 }
 
 // Read version from root VERSION file
@@ -14,9 +13,11 @@ val kalixVersion = file("../VERSION").readText().trim()
 // reports and won't ever collide with a real version we ship. The real version lives in
 // version.txt (titlebar/About) and is untouched, so this only affects the launcher metadata
 // macOS records in Get Info. Once the real major reaches >= 1 the substitution stops.
+val osName = System.getProperty("os.name").lowercase()
+val isMac = osName.contains("mac")
+val isWindows = osName.contains("win")
 val jpackageVersion = run {
     val base = kalixVersion.substringBefore("-")
-    val isMac = System.getProperty("os.name").lowercase().contains("mac")
     val parts = base.split(".").toMutableList()
     if (isMac && (parts.firstOrNull()?.toIntOrNull() ?: 0) < 1) {
         parts[0] = "9999" // sentinel; macOS bundle metadata only — version.txt keeps the real version
@@ -80,7 +81,7 @@ application {
     // Foreign Function & Memory API (Windows "Reveal in File Manager" calls the Shell API
     // directly). JDK 24+ (JEP 472) warns on restricted native access by default and will
     // eventually block it; this covers `gradlew run`, the installDist start scripts, and
-    // runtime-plugin images. Launchers that bypass the application plugin (an IDE
+    // the jpackage app image. Launchers that bypass the application plugin (an IDE
     // "Application" run configuration, bare `java -cp`) must pass the same flag in their
     // own VM options; `java -jar` is covered by the manifest attribute below.
     applicationDefaultJvmArgs = listOf("--enable-native-access=ALL-UNNAMED")
@@ -127,43 +128,75 @@ tasks.processResources {
     }
 }
 
-runtime {
-    options.set(listOf("--strip-debug", "--compress", "2", "--no-header-files", "--no-man-pages"))
-    modules.set(listOf(
-        "java.desktop",
-        "java.logging",
-        "java.xml",
-        "java.prefs",
-        "java.naming",
-        "jdk.unsupported"
-    ))
+// ---------------------------------------------------------------------------------------
+// App image: build/jpackage/KalixIDE (KalixIDE.app on macOS), consumed by
+// ../build-portable-zip.{sh,bat} and ../build-msi.bat. It is made by the toolchain JDK's
+// own jpackage, which for a classpath application runs jlink itself, so the bundled
+// runtime is cut from the JDK the IDE was compiled against and holds exactly the modules
+// listed here. No installer is configured on purpose: the release pipeline ships the app
+// image, and the Windows MSI is produced separately by build-msi.bat (per-machine, for
+// Ivanti Trusted Ownership), so there is one way to build an installer, not two.
 
-    jpackage {
-        jpackageHome = System.getProperty("java.home")
-        imageName = "KalixIDE"
+// jdeps agrees with this list. java.naming is only logback's optional JNDI context
+// selector, and jdk.unsupported is directory-watcher's com.sun.nio.file FILE_TREE
+// modifier on Windows; neither first-party code nor any dependency uses sun.misc.Unsafe.
+val runtimeModules = listOf(
+    "java.desktop",
+    "java.logging",
+    "java.xml",
+    "java.prefs",
+    "java.naming",
+    "jdk.unsupported"
+)
 
-        // Per-platform launcher icon: .ico (Windows), .icns (macOS, multi-res
-        // incl. retina), .png (Linux — jpackage won't accept an .icns there).
-        // All three are regenerated from the master SVG by ../make-icons.sh.
-        val osName = System.getProperty("os.name").lowercase()
-        val iconFile = when {
-            osName.contains("win") -> file("src/main/resources/icons/kalix.ico")
-            osName.contains("mac") -> file("src/main/resources/icons/kalix.icns")
-            else -> file("src/main/resources/icons/kalix-256.png")
-        }
+// Replaces jpackage's default jlink options, which are these minus the compression.
+val jlinkOptions = listOf(
+    "--strip-native-commands", "--strip-debug", "--compress=zip-6", "--no-header-files", "--no-man-pages"
+)
 
-        imageOptions = listOf(
-            "--app-version", jpackageVersion,
-            "--vendor", "Kalix",
-            "--copyright", "Copyright 2024-2025 Kalix",
-            "--icon", iconFile.absolutePath
-        )
-
-        // No installerOptions here on purpose: the release pipeline builds only
-        // the app *image* (jpackageImage), and the Windows MSI is produced
-        // separately by build-msi.bat (per-machine, for Ivanti Trusted
-        // Ownership). Keeping installer config out of Gradle avoids a second,
-        // divergent way to build an installer.
-    }
+val jpackageTool = javaToolchains.launcherFor(java.toolchain).map {
+    it.metadata.installationPath.file(if (isWindows) "bin/jpackage.exe" else "bin/jpackage")
 }
 
+tasks.register<Exec>("jpackageImage") {
+    group = "distribution"
+    description = "Builds the self-contained KalixIDE app image with the toolchain's jpackage."
+
+    val appLibs = tasks.installDist.get().destinationDir.resolve("lib")
+    val imageDir = layout.buildDirectory.dir("jpackage").get().asFile
+    // Per-platform launcher icon: .ico (Windows), .icns (macOS, multi-res incl. retina),
+    // .png (Linux — jpackage won't accept an .icns there). All three are regenerated from
+    // the master SVG by ../make-icons.sh.
+    val iconFile = when {
+        isWindows -> file("src/main/resources/icons/kalix.ico")
+        isMac -> file("src/main/resources/icons/kalix.icns")
+        else -> file("src/main/resources/icons/kalix-256.png")
+    }
+
+    inputs.files(tasks.installDist)
+    inputs.file(iconFile)
+    inputs.property("appVersion", jpackageVersion)
+    outputs.dir(imageDir)
+
+    // jpackage refuses to write over an existing app image.
+    doFirst { imageDir.deleteRecursively() }
+
+    executable = jpackageTool.get().asFile.absolutePath
+    args(
+        "--type", "app-image",
+        "--dest", imageDir,
+        "--name", "KalixIDE",
+        "--input", appLibs,
+        "--main-jar", tasks.jar.get().archiveFileName.get(),
+        "--main-class", application.mainClass.get(),
+        "--add-modules", runtimeModules.joinToString(","),
+        "--jlink-options", jlinkOptions.joinToString(" "),
+        "--app-version", jpackageVersion,
+        "--vendor", "Kalix",
+        "--copyright", "Copyright 2024-2025 Kalix",
+        "--icon", iconFile
+    )
+    // The launcher's JVM options are the application plugin's, so every launch path —
+    // `gradlew run`, the installDist scripts and the app image — carries the same flags.
+    application.applicationDefaultJvmArgs.forEach { args("--java-options", it) }
+}
