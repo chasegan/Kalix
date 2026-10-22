@@ -110,11 +110,17 @@ class StatsAggregationEquivalenceTest {
         List<List<String>> expected = snapshot(batch);
         assertFalse(expected.isEmpty(), "fixture sanity: statistics were computed");
 
-        // Path B: per-series async updates into a visible stats view.
-        VisualizationTabManager async = manager(new DataSet());
+        // Path B: per-series async updates into a visible stats view. Each series
+        // reaches the pool first, as every production caller publishes it.
+        DataSet asyncPool = new DataSet();
+        VisualizationTabManager async = manager(asyncPool);
         async.addStatsTabFromSettings(statsSettings(AggregationPeriod.DAILY, AggregationMethod.MEAN));
-        async.updateSeriesInStatsTabsWithAggregation(R1, daily(1, 2, 3, 4, 5, 6));
-        async.updateSeriesInStatsTabsWithAggregation(R2, daily(2, 4, 6, 8, 10, 12));
+        TimeSeriesData first = daily(1, 2, 3, 4, 5, 6);
+        asyncPool.addSeries(R1, first);
+        async.updateSeriesInStatsTabsWithAggregation(R1, first);
+        TimeSeriesData second = daily(2, 4, 6, 8, 10, 12);
+        asyncPool.addSeries(R2, second);
+        async.updateSeriesInStatsTabsWithAggregation(R2, second);
         assertEquals(expected, snapshot(async.getAllStatsModels().get(0)),
             "async per-series path must match the batch path");
 

@@ -45,19 +45,43 @@ public final class AggregationPipeline {
             AggregationPeriod period, AggregationMethod method,
             SeasonalMaskMode seasonalMaskMode
     ) {
+        return aggregate(null, pool, orderedSeries, period, method, seasonalMaskMode);
+    }
+
+    /**
+     * As {@link #aggregate(DataSet, Collection, AggregationPeriod, AggregationMethod,
+     * SeasonalMaskMode)}, reusing {@code cache}'s aggregates where the pool still holds
+     * the data they were computed from. A null cache aggregates everything afresh.
+     */
+    public static LinkedHashMap<SeriesRef, TimeSeriesData> aggregate(
+            AggregatedSeriesCache cache, DataSet pool, Collection<SeriesRef> orderedSeries,
+            AggregationPeriod period, AggregationMethod method,
+            SeasonalMaskMode seasonalMaskMode
+    ) {
         LinkedHashMap<SeriesRef, TimeSeriesData> aggregated = new LinkedHashMap<>();
-        if (pool == null) {
-            return aggregated;
+        if (cache != null) {
+            cache.useSettings(period, method, seasonalMaskMode);
         }
-        for (SeriesRef ref : orderedSeries) {
-            TimeSeriesData original = pool.getSeries(ref);
-            if (original == null) {
-                continue;
+        if (pool != null) {
+            for (SeriesRef ref : orderedSeries) {
+                TimeSeriesData original = pool.getSeries(ref);
+                if (original == null) {
+                    continue;
+                }
+                TimeSeriesData series = cache != null ? cache.get(ref, original) : null;
+                if (series == null) {
+                    series = TimeSeriesAggregator.aggregate(original, period, method, seasonalMaskMode);
+                    if (series != null && cache != null) {
+                        cache.put(ref, original, series);
+                    }
+                }
+                if (series != null) {
+                    aggregated.put(ref, series);
+                }
             }
-            TimeSeriesData series = TimeSeriesAggregator.aggregate(original, period, method, seasonalMaskMode);
-            if (series != null) {
-                aggregated.put(ref, series);
-            }
+        }
+        if (cache != null) {
+            cache.retainOnly(aggregated.keySet());
         }
         return aggregated;
     }
