@@ -66,6 +66,7 @@ class FlowVizToolbarBuilder {
 
     private JToggleButton plotViewToggle;
     private JToggleButton statsViewToggle;
+    private JToggleButton dataViewToggle;
     private JComboBox<String> aggregationPeriodCombo;
     private JComboBox<String> aggregationMethodCombo;
     private JComboBox<String> maskCombo;
@@ -74,7 +75,7 @@ class FlowVizToolbarBuilder {
     private JComboBox<String> ySpaceCombo;
     private JToggleButton autoYToggle;
 
-    /** The plot-only cluster (incl. its separators/labels), hidden in the stats view. */
+    /** The plot-only cluster (incl. its separators/labels), hidden in the stats and data views. */
     private final List<JComponent> plotOnlyComponents = new ArrayList<>();
     private FlowVizToolbarController controller;
 
@@ -127,7 +128,7 @@ class FlowVizToolbarBuilder {
         addMaskControls();
         addSeasonalMaskButton();
 
-        // --- Plot-only cluster (hidden in the stats view) ---
+        // --- Plot-only cluster (hidden in the stats and data views) ---
         plotOnly(new JToolBar.Separator());
         // Reads as one phrase: "Type: [Linear] [Exceedance]".
         plotOnly(new JLabel("Type:"));
@@ -155,8 +156,8 @@ class FlowVizToolbarBuilder {
     }
 
     /**
-     * Reflects a view switch into the toolbar: the plot-only cluster hides in the
-     * stats view and the toggle pair follows. Selection is set directly (no action
+     * Reflects a view switch into the toolbar: the plot-only cluster shows only in
+     * the plot view, and the toggles follow. Selection is set directly (no action
      * fires), so this is safe from the switch path itself.
      */
     void applyViewMode(FlowVizView mode) {
@@ -164,8 +165,12 @@ class FlowVizToolbarBuilder {
         for (JComponent component : plotOnlyComponents) {
             component.setVisible(plot);
         }
-        plotViewToggle.setSelected(plot);
-        statsViewToggle.setSelected(!plot);
+        JToggleButton selected = switch (mode) {
+            case PLOT -> plotViewToggle;
+            case STATS -> statsViewToggle;
+            case DATA -> dataViewToggle;
+        };
+        selected.setSelected(true); // the ButtonGroup deselects the others
         toolbar.revalidate();
         toolbar.repaint();
     }
@@ -173,22 +178,26 @@ class FlowVizToolbarBuilder {
     private void addViewToggle() {
         plotViewToggle = viewToggleButton(FontAwesomeSolid.CHART_LINE, "Plot view");
         statsViewToggle = viewToggleButton(FontAwesomeSolid.CALCULATOR, "Stats view");
+        dataViewToggle = viewToggleButton(FontAwesomeSolid.TABLE, "Data view");
         ButtonGroup group = new ButtonGroup();
         group.add(plotViewToggle);
         group.add(statsViewToggle);
+        group.add(dataViewToggle);
         plotViewToggle.addActionListener(e -> fireViewToggle(FlowVizView.PLOT));
         statsViewToggle.addActionListener(e -> fireViewToggle(FlowVizView.STATS));
+        dataViewToggle.addActionListener(e -> fireViewToggle(FlowVizView.DATA));
         // Rigid holder: FlatLaf's tab-style buttons size slightly differently per
         // selection state, which nudged everything to the right of the pair on
-        // every toggle. GridLayout forces two equal fixed cells regardless.
-        JPanel holder = new JPanel(new java.awt.GridLayout(1, 2, 0, 0));
+        // every toggle. GridLayout forces three equal fixed cells regardless.
+        JPanel holder = new JPanel(new java.awt.GridLayout(1, 3, 0, 0));
         holder.setOpaque(false);
-        Dimension pair = new Dimension(ToolbarConstants.BUTTON_SIZE.width * 2, ToolbarConstants.BUTTON_SIZE.height);
-        holder.setPreferredSize(pair);
-        holder.setMinimumSize(pair);
-        holder.setMaximumSize(pair);
+        Dimension size = new Dimension(ToolbarConstants.BUTTON_SIZE.width * 3, ToolbarConstants.BUTTON_SIZE.height);
+        holder.setPreferredSize(size);
+        holder.setMinimumSize(size);
+        holder.setMaximumSize(size);
         holder.add(plotViewToggle);
         holder.add(statsViewToggle);
+        holder.add(dataViewToggle);
         toolbar.add(holder);
     }
 
@@ -211,13 +220,12 @@ class FlowVizToolbarBuilder {
     }
 
     private void addSaveButton() {
-        // Shared position, view-dispatched action: the plot's timeseries save or
-        // the stats table's CSV export, whichever page is showing.
+        // Shared position, view-dispatched action: the plot's timeseries save (which
+        // is also exactly what the data page shows) or the stats table's CSV export.
         JButton button = createIconButton(FontAwesomeSolid.SAVE, "Save Data", () -> {
-            if (tabInfo.viewMode == FlowVizView.PLOT) {
-                tabInfo.vizPanel.saveData();
-            } else {
-                saveStatsData();
+            switch (tabInfo.viewMode) {
+                case PLOT, DATA -> tabInfo.vizPanel.saveData();
+                case STATS -> saveStatsData();
             }
         });
         toolbar.add(button);
@@ -411,7 +419,7 @@ class FlowVizToolbarBuilder {
         plotOnly(button);
     }
 
-    /** Adds a component to the toolbar AND records it as plot-only (hidden in stats view). */
+    /** Adds a component to the toolbar AND records it as plot-only (hidden in the stats and data views). */
     private void plotOnly(JComponent component) {
         plotOnlyComponents.add(component);
         toolbar.add(component);

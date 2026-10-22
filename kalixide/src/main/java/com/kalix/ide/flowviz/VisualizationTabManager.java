@@ -1,6 +1,7 @@
 package com.kalix.ide.flowviz;
 
 import com.kalix.ide.components.TabDragReorderer;
+import com.kalix.ide.dataview.DataViewPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.LastSource;
@@ -34,7 +35,6 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JTable;
-import javax.swing.JToolBar;
 import javax.swing.Icon;
 import javax.swing.UIManager;
 import java.awt.BorderLayout;
@@ -74,6 +74,8 @@ import java.util.Set;
  *   <li><b>STATS</b> - the statistics table (min/max/mean/etc.), fed from the
  *       same aggregation settings through the shared {@link AggregationPipeline},
  *       so the two projections can never disagree</li>
+ *   <li><b>DATA</b> - the plot's display data as a table, across the whole
+ *       period, spelled exactly as the plot's Save Data writes it</li>
  * </ul>
  * The hidden projection is lazy: data and state changes mark it dirty and it
  * recomputes when shown (the view toggle arrives in the next stage).
@@ -231,6 +233,7 @@ public class VisualizationTabManager {
         final JComponent component;
         final FlowVizPanel vizPanel;
         final StatsTableModel statsModel;
+        final DataVizPanel dataVizPanel;
 
         // Per-tab selected series. Preserves insertion order for legend consistency
         // and the bivariate statistics reference (first series).
@@ -243,6 +246,8 @@ public class VisualizationTabManager {
 
         /** The hidden stats projection missed a state/data change; recompute when shown. */
         boolean statsDirty = false;
+        /** The hidden data projection missed a state/data change; rebuild when shown. */
+        boolean dataDirty = false;
 
         // Tab identifier: starts as a machine default ("View n"), user-renamable
         String name;
@@ -254,14 +259,17 @@ public class VisualizationTabManager {
         // Toolbar/view handles, set once built: let in-place operations (Reset,
         // the view toggle) drive the tab's UI from its actual state.
         FlowVizToolbarBuilder vizToolbar;
-        JPanel viewCards; // CardLayout holding the plot page and the stats page
+        JPanel viewCards; // CardLayout holding the plot, stats and data pages
 
-        TabInfo(FlowVizView viewMode, String name, JComponent component, FlowVizPanel vizPanel, StatsTableModel statsModel) {
+        TabInfo(FlowVizView viewMode, String name, JComponent component, 
+                FlowVizPanel vizPanel, StatsTableModel statsModel, DataVizPanel dataVizPanel
+            ) {
             this.viewMode = viewMode;
             this.name = name;
             this.component = component;
             this.vizPanel = vizPanel;
             this.statsModel = statsModel;
+            this.dataVizPanel = dataVizPanel;
         }
 
         void rename(String name) {
@@ -328,6 +336,7 @@ public class VisualizationTabManager {
             if (labels != null) {
                 tab.vizPanel.setLabelResolver(labels);
                 tab.statsModel.setLabelResolver(labels);
+                tab.dataVizPanel.setLabelResolver(labels);
             }
         }
     }
@@ -446,17 +455,18 @@ public class VisualizationTabManager {
         FlowVizPanel vizPanel = new FlowVizPanel();
         vizPanel.setDataSet(sharedDataSet);
         vizPanel.setStyleResolver(styleResolver);
-        LabelResolver labels = host.labelResolver();
-        if (labels != null) {
-            vizPanel.setLabelResolver(labels);
-        }
-        // Read through the current host at each dialog open (the host can be
+       // Read through the current host at each dialog open (the host can be
         // installed after early tabs exist).
         vizPanel.setBaseDirectorySupplier(() -> host.baseDirectory());
 
         StatsTableModel statsModel = new StatsTableModel();
+        DataVizPanel dataVizPanel = new DataVizPanel();
+
+        LabelResolver labels = host.labelResolver();
         if (labels != null) {
+            vizPanel.setLabelResolver(labels);
             statsModel.setLabelResolver(labels);
+            dataVizPanel.setLabelResolver(labels);
         }
 
         // Use series from settings if provided, otherwise inherit from active tab
@@ -482,7 +492,7 @@ public class VisualizationTabManager {
         } else {
             name = settings.name;
         }
-        TabInfo tabInfo = new TabInfo(viewMode, name, containerPanel, vizPanel, statsModel);
+        TabInfo tabInfo = new TabInfo(viewMode, name, containerPanel, vizPanel, statsModel, dataVizPanel);
         if (!name.equals(settings.name)) {
             tabInfo.defaultName = name;
         }
@@ -537,9 +547,9 @@ public class VisualizationTabManager {
             table.getColumnModel().getColumn(0).setPreferredWidth(40);
             table.getColumnModel().getColumn(1).setPreferredWidth(200);
         }
-        // Populate the visible stats page now; a hidden one just starts dirty
+        // Populate the visible table page now; a hidden one just starts dirty
         // and catches up on toggle.
-        refreshStatsProjection(tabInfo);
+        refreshProjections(tabInfo);
 
         FlowVizToolbarBuilder toolbarBuilder = new FlowVizToolbarBuilder(tabInfo, table);
         toolbarBuilder
@@ -547,7 +557,7 @@ public class VisualizationTabManager {
                 syncTabSelectionFromState(vizPanel, state);
                 toolbarBuilder.getController().updateFromState(state);
             })
-            .setOnStateApplied(() -> refreshStatsProjection(tabInfo))
+            .setOnStateApplied(() -> refreshProjections(tabInfo))
             .setOnViewToggle(mode -> switchView(tabInfo, mode));
         containerPanel.add(toolbarBuilder.build(settings.autoYMode, settings.showCoordinates), BorderLayout.NORTH);
         tabInfo.vizToolbar = toolbarBuilder;
@@ -555,6 +565,7 @@ public class VisualizationTabManager {
         JPanel viewCards = new JPanel(new CardLayout());
         viewCards.add(vizPanel, FlowVizView.PLOT.name());
         viewCards.add(new JScrollPane(table), FlowVizView.STATS.name());
+        viewCards.add(dataVizPanel, FlowVizView.DATA.name());
         ((CardLayout) viewCards.getLayout()).show(viewCards, viewMode.name());
         tabInfo.viewCards = viewCards;
         containerPanel.add(viewCards, BorderLayout.CENTER);
@@ -572,10 +583,10 @@ public class VisualizationTabManager {
     }
 
     /**
-     * Switches a tab between its plot and stats pages. Pure presentation: no
-     * history entry (Ctrl+Z must never flip the page), no tree reprojection
-     * (the selection is unchanged). The newly shown page catches up — a dirty
-     * stats projection recomputes, a stale plot page refreshes.
+     * Switches a tab between its pages. Pure presentation: no history entry
+     * (Ctrl+Z must never flip the page), no tree reprojection (the selection is
+     * unchanged). The newly shown page catches up — a dirty stats or data
+     * projection recomputes, a stale plot page refreshes.
      */
     void switchView(TabInfo tab, FlowVizView mode) {
         if (tab.viewMode == mode) {
@@ -586,16 +597,24 @@ public class VisualizationTabManager {
         if (tab.vizToolbar != null) {
             tab.vizToolbar.applyViewMode(mode);
         }
-        if (mode == FlowVizView.STATS) {
-            if (tab.statsDirty) {
-                refreshStatsProjection(tab);
+        switch (mode) {
+            case STATS -> {
+                if (tab.statsDirty) {
+                    refreshStatsProjection(tab);
+                }
             }
-        } else {
-            // The plot page skipped display refreshes while hidden; the panel
-            // already holds the selection, so this is a rebuild, not a re-push.
-            tab.vizPanel.refreshData(false);
-            if (tab == getActiveTab()) {
-                lastActivePlotTabIndex = tabbedPane.getSelectedIndex();
+            case PLOT -> {
+                // The plot page skipped display refreshes while hidden; the panel
+                // already holds the selection, so this is a rebuild, not a re-push.
+                tab.vizPanel.refreshData(false);
+                if (tab == getActiveTab()) {
+                    lastActivePlotTabIndex = tabbedPane.getSelectedIndex();
+                }
+            }
+            case DATA -> {
+                if (tab.dataDirty) {
+                    refreshDataProjection(tab);
+                }
             }
         }
     }
@@ -942,7 +961,7 @@ public class VisualizationTabManager {
         if (tab.vizToolbar != null) {
             tab.vizToolbar.getController().updateFromState(tab.vizPanel.currentState());
         }
-        refreshStatsProjection(tab);
+        refreshProjections(tab);
 
         // The canonical record changed in place: reproject the trees (active tab only).
         notifyTabMutated(tab);
@@ -997,6 +1016,7 @@ public class VisualizationTabManager {
                 // stage). The visible stats page is refreshed via the explicit
                 // calls (updateSeriesInStatsTabsWithAggregation, projections).
                 tab.statsDirty = true;
+                refreshDataProjection(tab);
             }
         }
     }
@@ -1010,6 +1030,7 @@ public class VisualizationTabManager {
                 tab.vizPanel.setStyleResolver(styleResolver);
                 tab.vizPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
                 tab.vizPanel.refreshData(resetZoom);
+                refreshDataProjection(tab);
                 return;
             }
         }
@@ -1190,7 +1211,7 @@ public class VisualizationTabManager {
         if (tab.viewMode == FlowVizView.PLOT) {
             tab.vizPanel.refreshData(false);
         }
-        refreshStatsProjection(tab);
+        refreshProjections(tab);
     }
 
     /**
@@ -1213,6 +1234,29 @@ public class VisualizationTabManager {
             tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod(),
             tab.vizPanel.getSeasonalMaskMode()
         ));
+    }
+
+    /**
+     * Brings a tab's data page in line with its panel state — immediately when the
+     * data view is showing, else a dirty mark for the view toggle to honour. The
+     * plot skips data refreshes while hidden and its transform cache is keyed on
+     * settings, not data contents, so the display data is rebuilt first.
+     */
+    private void refreshDataProjection(TabInfo tab) {
+        if (tab.viewMode != FlowVizView.DATA) {
+            tab.dataDirty = true;
+            return;
+        }
+        tab.dataDirty = false;
+        tab.vizPanel.refreshData(false);
+        tab.dataVizPanel.setGrid(DataGrid.of(
+            tab.vizPanel.getDisplayDataSet(), tab.vizPanel.getPlotType(), tab.dataVizPanel.labelResolver()));
+    }
+
+    /** Both table projections follow a state change together, so they cannot drift. */
+    private void refreshProjections(TabInfo tab) {
+        refreshStatsProjection(tab);
+        refreshDataProjection(tab);
     }
 
     /**
@@ -1246,8 +1290,8 @@ public class VisualizationTabManager {
                 for (SeriesRef ref : state.getVisibleSeries()) {
                     panel.addLegendSeries(ref);
                 }
-                // The stats projection follows the restored state (or dirties).
-                refreshStatsProjection(tab);
+                // The table projections follow the restored state (or dirty).
+                refreshProjections(tab);
                 mutated = tab;
                 break;
             }
@@ -1332,6 +1376,7 @@ public class VisualizationTabManager {
             } else {
                 tab.statsDirty = true; // hidden projection catches up when shown
             }
+            refreshDataProjection(tab);
         }
     }
 
@@ -1391,6 +1436,7 @@ public class VisualizationTabManager {
             if (tab.viewMode == FlowVizView.PLOT) {
                 tab.vizPanel.refreshData(false);
             }
+            refreshDataProjection(tab);
         }
     }
 

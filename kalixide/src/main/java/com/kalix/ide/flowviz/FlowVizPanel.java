@@ -1174,6 +1174,15 @@ public class FlowVizPanel extends JPanel {
     }
 
     /**
+     * The data as displayed (aggregated, masked, transformed) — what Save Data
+     * exports. Call {@link #refreshData} first if the source data may have changed
+     * while the plot page was hidden.
+     */
+    public DataSet getDisplayDataSet() {
+        return displayDataSet;
+    }
+
+    /**
      * Sets the mask mode for this plot.
      * When ALL, only timestamps where all visible series have valid data are included.
      */
