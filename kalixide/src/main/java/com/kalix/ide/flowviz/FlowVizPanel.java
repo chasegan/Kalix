@@ -19,12 +19,8 @@ import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
-import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
-import com.kalix.ide.flowviz.transform.AggregatedSeriesCache;
-import com.kalix.ide.flowviz.transform.AggregationPipeline;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.flowviz.stats.MaskMode;
-import com.kalix.ide.flowviz.stats.TimeSeriesMasker;
 
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
@@ -49,22 +45,20 @@ import org.slf4j.LoggerFactory;
  * Panel for rendering time series plots with support for aggregation, transforms, and LOD rendering.
  *
  * <h2>Data Flow and Caching</h2>
- * There are TWO caching layers that must be invalidated when data changes:
+ * There are two caching layers:
  * <ol>
- *   <li><b>Transform cache</b> ({@code displayDataSet}, keyed by {@code lastTransformKey}):
- *       Caches aggregated/transformed data. Invalidated by setting {@code lastTransformKey = null}.</li>
+ *   <li><b>Display set</b> ({@link FlowVizModel#display()}): aggregated, masked and transformed
+ *       data, cached by the model against its settings and the identity of the data it
+ *       was built from, so new data in the pool is noticed without invalidation calls.</li>
  *   <li><b>LOD rendering cache</b> (in {@link TimeSeriesRenderer} → {@link com.kalix.ide.flowviz.rendering.LODManager}):
- *       Caches pixel-level min/max bands for efficient rendering. Invalidated by {@code renderer.clearCache()}.</li>
+ *       Caches pixel-level min/max bands for efficient rendering. Cleared whenever the
+ *       display set is replaced.</li>
  * </ol>
  *
  * <h2>IMPORTANT: Refreshing Data</h2>
- * When underlying data changes, call {@link #refreshData(boolean)} which:
- * <ul>
- *   <li>Invalidates both caches</li>
- *   <li>Rebuilds {@code displayDataSet} from {@code originalDataSet}</li>
- *   <li>Triggers repaint</li>
- * </ul>
- * Simply calling {@code repaint()} is NOT sufficient - it will render stale cached data!
+ * When underlying data changes, call {@link #refreshData(boolean)}, which takes the model's
+ * current display set and repaints. Simply calling {@code repaint()} is NOT sufficient - it
+ * will render the display set taken at the last refresh!
  *
  * <h2>Rendering Pipeline</h2>
  * <pre>
@@ -100,11 +94,10 @@ public class FlowVizPanel extends JPanel {
 
 
     // === DATA FLOW ===
-    // originalDataSet → [transforms] → displayDataSet → [LOD] → screen
-    // Both displayDataSet and LOD have caches that must be invalidated via refreshData()
+    // originalDataSet → [model: transforms] → displayDataSet → [LOD] → screen
 
     private DataSet originalDataSet;  // Reference to shared dataset (same for all plot tabs)
-    private DataSet displayDataSet;   // Transformed data for display (CACHED - see lastTransformKey)
+    private DataSet displayDataSet;   // The model's display set as of the last refresh
     private final TimeSeriesRenderer renderer;  // Contains LOD cache - clear via renderer.clearCache()
     private ViewPort currentViewport;
     private SeriesStyleResolver styleResolver;  // Resolves each series to its colour + stroke
@@ -119,14 +112,6 @@ public class FlowVizPanel extends JPanel {
     // Set by the owner (typically RunManager via VisualizationTabManager) after construction.
     private LabelResolver labelResolver;
 
-    // === TRANSFORM CACHE ===
-    // displayDataSet is cached and only rebuilt when transform settings change.
-    // Key format: "aggregationPeriod_aggregationMethod_plotType_referenceSeries"
-    // Set to null to force rebuild (done by refreshData())
-    private TransformKey lastTransformKey = null;
-
-    /** Step 1's aggregates, reused while the pool holds the same data (see {@link AggregatedSeriesCache}). */
-    private final AggregatedSeriesCache aggregateCache = new AggregatedSeriesCache();
 
     /**
      * True once the user has zoomed/panned this plot. Live-updating owners (the
@@ -134,12 +119,6 @@ public class FlowVizPanel extends JPanel {
      * every data update the moment the user chooses their own view.
      */
     private boolean userViewportTouched = false;
-
-    /** Value-equality cache key for the transform pipeline (see rebuildDisplayDataSet). */
-    private record TransformKey(AggregationPeriod period, AggregationMethod method,
-                                PlotType plotType, Object referenceKey, MaskMode maskMode,
-                                SeasonalMaskMode seasonalMaskMode,
-                                List<SeriesRef> visibleSeries) {}
 
     // Managers
     private final CoordinateDisplayManager coordinateDisplayManager;
@@ -276,6 +255,7 @@ public class FlowVizPanel extends JPanel {
 
     public void setDataSet(DataSet dataSet) {
         this.originalDataSet = dataSet;
+        model.setPool(dataSet);
 
         // Rebuild display dataset with current transforms
         rebuildDisplayDataSet();
@@ -959,9 +939,6 @@ public class FlowVizPanel extends JPanel {
     }
 
     public void refreshData(boolean resetZoom) {
-        // Invalidate transform cache to force rebuild with new data
-        lastTransformKey = null;
-
         rebuildDisplayDataSet();
 
         // Refit viewport if we have data and resetZoom is requested
@@ -1089,9 +1066,7 @@ public class FlowVizPanel extends JPanel {
      * aggregation settings) as a map built from the cache.
      */
     public LinkedHashMap<SeriesRef, TimeSeriesData> aggregatedSeries() {
-        FlowVizState s = state();
-        return AggregationPipeline.aggregate(aggregateCache, originalDataSet, s.getVisibleSeries(),
-            s.getAggregationPeriod(), s.getAggregationMethod(), s.getSeasonalMaskMode());
+        return model.aggregated();
     }
 
     /**
@@ -1331,116 +1306,24 @@ public class FlowVizPanel extends JPanel {
     }
 
     /**
-     * Rebuilds the display dataset by applying current transformation settings.
-     * Pipeline: Aggregation → Masking → Plot Type Transform → (Y-axis scale applied during render)
-     * Uses caching to avoid unnecessary recomputation.
+     * Takes the model's display set (aggregated, masked, transformed). The model caches
+     * it and notices new data by itself, so this is cheap when nothing changed; when the
+     * set is new, the renderer's LOD cache is dropped so it never draws stale lines.
      */
     private void rebuildDisplayDataSet() {
-        FlowVizState state = state();
-        List<SeriesRef> visibleSeries = state.getVisibleSeries();
-        AggregationPeriod aggregationPeriod = state.getAggregationPeriod();
-        AggregationMethod aggregationMethod = state.getAggregationMethod();
-        PlotType plotType = state.getPlotType();
-        MaskMode maskMode = state.getMaskMode();
-        SeasonalMaskMode seasonalMaskMode = state.getSeasonalMaskMode();
-
-        if (originalDataSet == null) {
-            displayDataSet = null;
-            return;
+        DataSet display = model.display();
+        if (display != displayDataSet) {
+            renderer.clearCache();
+            displayDataSet = display;
         }
-
-        // Generate cache key from current transform settings. A record holding the
-        // actual values (including a frozen copy of the series list) gives true value
-        // equality - the previous string key folded the list to its hashCode, so two
-        // different selections with colliding hashes could falsely reuse a stale
-        // displayDataSet.
-        Object referenceKey = plotType.requiresReferenceSeries() && !visibleSeries.isEmpty()
-            ? visibleSeries.get(0) : "none";
-        TransformKey transformKey = new TransformKey(aggregationPeriod, aggregationMethod,
-            plotType, referenceKey, maskMode, seasonalMaskMode, List.copyOf(visibleSeries));
-
-        // Check if we can reuse cached result
-        if (transformKey.equals(lastTransformKey) && displayDataSet != null) {
-            return; // Already computed
-        }
-
-        // Display data is changing - clear LOD rendering cache so renderer doesn't draw stale lines
-        renderer.clearCache();
-
-        // Step 1: Build aggregated dataset (only for visible series, not the full
-        // pool) through the one shared AggregationPipeline - the same orchestration
-        // that feeds the stats table, so the two projections can never disagree.
-        // The transient aggregatedDataSet is keyed by SeriesRef directly - the
-        // pipeline never touches string identity. Series whose pool data hasn't
-        // changed come straight from aggregateCache.
-        //
-        // NOTE: Seasonal masking happens as part of this step, not as a later filter. The
-        // aggregator excludes masked-out months from accumulation so they never resemble
-        // missing data, and narrows its completeness window to the months actually asked
-        // for - which leaves a genuinely truncated period free to still read NaN. That
-        // distinction is the whole point: the statistics must be able to tell a month that
-        // was deselected from one whose data is absent. See the pipeline note in the class
-        // docs for why this cannot be done after aggregation (#235).
-        DataSet aggregatedDataSet = new DataSet();
-        AggregationPipeline.aggregate(
-            aggregateCache,
-            originalDataSet,
-            visibleSeries,
-            aggregationPeriod,
-            aggregationMethod,
-            seasonalMaskMode
-        ).forEach(aggregatedDataSet::addSeries);
-
-        // Step 2: Validity/overlapping data masking - deliberately AFTER aggregation,
-        // unlike the seasonal mask. It answers "where do the DISPLAYED points overlap?",
-        // and the stats table masks its own aggregates the same way, so keeping it here
-        // is what makes one shared mask setting mean the same thing in both views.
-        if (maskMode == MaskMode.ALL && aggregatedDataSet.getSeriesRefs().size() > 1) {
-            java.util.List<TimeSeriesData> allSeries = new java.util.ArrayList<>();
-            for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
-                allSeries.add(aggregatedDataSet.getSeries(ref));
-            }
-            TimeSeriesMasker.Mask mask = TimeSeriesMasker.createAllMask(allSeries);
-
-            DataSet maskedDataSet = new DataSet();
-            for (SeriesRef ref : aggregatedDataSet.getSeriesRefs()) {
-                TimeSeriesData masked = mask.apply(aggregatedDataSet.getSeries(ref));
-                maskedDataSet.addSeries(ref, masked);
-            }
-            aggregatedDataSet = maskedDataSet;
-        } else if (maskMode == MaskMode.EACH && aggregatedDataSet.getSeriesRefs().size() > 1) {
-            // EACH on the plot: each non-reference series filtered to its pairwise
-            // overlap with the reference - exactly the data its bivariate statistic
-            // uses - while the reference draws on its own valid points. Makes the
-            // shared mask setting mean the same thing in both views.
-            java.util.List<SeriesRef> refs = new java.util.ArrayList<>(aggregatedDataSet.getSeriesRefs());
-            TimeSeriesData reference = aggregatedDataSet.getSeries(refs.get(0));
-            DataSet maskedDataSet = new DataSet();
-            maskedDataSet.addSeries(refs.get(0), reference);
-            for (int i = 1; i < refs.size(); i++) {
-                TimeSeriesData series = aggregatedDataSet.getSeries(refs.get(i));
-                TimeSeriesMasker.Mask mask = TimeSeriesMasker.createEachMask(reference, series);
-                maskedDataSet.addSeries(refs.get(i), mask.apply(series));
-            }
-            aggregatedDataSet = maskedDataSet;
-        }
-
-        // Step 3: Apply plot type transformation
-        displayDataSet = PlotTypeTransformer.transform(
-            aggregatedDataSet,
-            plotType,
-            visibleSeries
-        );
 
         // Update reference tracking
-        if (plotType.requiresReferenceSeries() && !visibleSeries.isEmpty()) {
-            lastReferenceSeries = visibleSeries.get(0);
+        FlowVizState state = state();
+        if (state.getPlotType().requiresReferenceSeries() && !state.getVisibleSeries().isEmpty()) {
+            lastReferenceSeries = state.getVisibleSeries().get(0);
         } else {
             lastReferenceSeries = null;
         }
-
-        // Update cache key
-        lastTransformKey = transformKey;
     }
 
 }

@@ -114,14 +114,15 @@ class StatsAggregationEquivalenceTest {
         // reaches the pool first, as every production caller publishes it.
         DataSet asyncPool = new DataSet();
         VisualizationTabManager async = manager(asyncPool);
-        async.addStatsTabFromSettings(statsSettings(AggregationPeriod.DAILY, AggregationMethod.MEAN));
+        StatsTableModel asyncModel =
+            async.addStatsTabFromSettings(statsSettings(AggregationPeriod.DAILY, AggregationMethod.MEAN));
         TimeSeriesData first = daily(1, 2, 3, 4, 5, 6);
         asyncPool.addSeries(R1, first);
         async.updateSeriesInStatsTabsWithAggregation(R1, first);
         TimeSeriesData second = daily(2, 4, 6, 8, 10, 12);
         asyncPool.addSeries(R2, second);
         async.updateSeriesInStatsTabsWithAggregation(R2, second);
-        assertEquals(expected, snapshot(async.getAllStatsModels().get(0)),
+        assertEquals(expected, snapshot(asyncModel),
             "async per-series path must match the batch path");
 
         // Path C: the stats toolbar's recompute, driven through the real combos

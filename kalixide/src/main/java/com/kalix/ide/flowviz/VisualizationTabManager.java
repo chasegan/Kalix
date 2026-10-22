@@ -43,10 +43,12 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -94,6 +96,8 @@ public class VisualizationTabManager {
     private final SeriesStyleResolver styleResolver;  // Shared resolver — consistent styling across all tabs
     private VizHost host = new VizHost() { };  // all-defaults host until the owner installs one
     private final List<TabInfo> tabs;
+    /** Fetch states of series not (yet) in the pool, shared by every tab: fetching is per series. */
+    private final Map<SeriesRef, SeriesLoadState> loadStates = new HashMap<>();
 
     // Tab change tracking
     private int lastActivePlotTabIndex = 0;
@@ -239,8 +243,6 @@ public class VisualizationTabManager {
         // tab is a complete view: sources + series + plot settings. Empty restores empty.
         final Set<SourceRef> checkedSources = new LinkedHashSet<>();
 
-        /** The hidden stats projection missed a state/data change; recompute when shown. */
-        boolean statsDirty = false;
         /** The hidden data projection missed a state/data change; rebuild when shown. */
         boolean dataDirty = false;
 
@@ -446,15 +448,16 @@ public class VisualizationTabManager {
      * mounted — the view toggle (next stage) will switch them live.
      */
     private TabInfo addTabFromSettings(TabSettings settings, FlowVizView viewMode) {
-        // Create the state-owning panel with the shared dataset
-        FlowVizPanel vizPanel = new FlowVizPanel();
+        // One model per tab owns its state; the pages project it.
+        FlowVizModel model = new FlowVizModel();
+        FlowVizPanel vizPanel = new FlowVizPanel(model);
         vizPanel.setDataSet(sharedDataSet);
         vizPanel.setStyleResolver(styleResolver);
        // Read through the current host at each dialog open (the host can be
         // installed after early tabs exist).
         vizPanel.setBaseDirectorySupplier(() -> host.baseDirectory());
 
-        StatsVizPanel statsVizPanel = new StatsVizPanel();
+        StatsVizPanel statsVizPanel = new StatsVizPanel(model, () -> loadStates);
         DataVizPanel dataVizPanel = new DataVizPanel();
 
         LabelResolver labels = host.labelResolver();
@@ -531,7 +534,8 @@ public class VisualizationTabManager {
 
         // Populate the visible table page now; a hidden one just starts dirty
         // and catches up on toggle.
-        refreshProjections(tabInfo);
+        statsVizPanel.setShown(viewMode == FlowVizView.STATS);
+        refreshDataProjection(tabInfo);
 
         FlowVizToolbarBuilder toolbarBuilder = new FlowVizToolbarBuilder(tabInfo);
         toolbarBuilder
@@ -539,7 +543,7 @@ public class VisualizationTabManager {
                 syncTabSelectionFromState(vizPanel, state);
                 toolbarBuilder.getController().updateFromState(state);
             })
-            .setOnStateApplied(() -> refreshProjections(tabInfo))
+            .setOnStateApplied(() -> refreshDataProjection(tabInfo))
             .setOnViewToggle(mode -> switchView(tabInfo, mode));
         containerPanel.add(toolbarBuilder.build(settings.autoYMode, settings.showCoordinates), BorderLayout.NORTH);
         tabInfo.vizToolbar = toolbarBuilder;
@@ -582,11 +586,9 @@ public class VisualizationTabManager {
         if (tab.vizToolbar != null) {
             tab.vizToolbar.applyViewMode(mode);
         }
+        tab.statsVizPanel.setShown(mode == FlowVizView.STATS); // a dirty page catches up
         switch (mode) {
             case STATS -> {
-                if (tab.statsDirty) {
-                    refreshStatsProjection(tab);
-                }
             }
             case PLOT -> {
                 // The plot page skipped display refreshes while hidden; the panel
@@ -895,7 +897,7 @@ public class VisualizationTabManager {
         if (tab.vizToolbar != null) {
             tab.vizToolbar.getController().updateFromState(tab.vizPanel.currentState());
         }
-        refreshProjections(tab);
+        refreshDataProjection(tab);
 
         // The canonical record changed in place: reproject the trees (active tab only).
         notifyTabMutated(tab);
@@ -946,12 +948,10 @@ public class VisualizationTabManager {
                 tab.vizPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
                 tab.vizPanel.refreshData(resetZoom);
             } else {
-                // Hidden plot page: skipped, refreshed when the view toggles (next
-                // stage). The visible stats page is refreshed via the explicit
-                // calls (updateSeriesInStatsTabsWithAggregation, projections).
-                tab.statsDirty = true;
+                // Hidden plot page: skipped, refreshed when the view toggles.
                 refreshDataProjection(tab);
             }
+            tab.statsVizPanel.refresh();
         }
     }
 
@@ -964,6 +964,7 @@ public class VisualizationTabManager {
                 tab.vizPanel.setStyleResolver(styleResolver);
                 tab.vizPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
                 tab.vizPanel.refreshData(resetZoom);
+                tab.statsVizPanel.refresh();
                 refreshDataProjection(tab);
                 return;
             }
@@ -1145,25 +1146,7 @@ public class VisualizationTabManager {
         if (tab.viewMode == FlowVizView.PLOT) {
             tab.vizPanel.refreshData(false);
         }
-        refreshProjections(tab);
-    }
-
-    /**
-     * Brings a tab's stats projection in line with its panel state (selection,
-     * aggregation, mask) — immediately when the stats view is showing, else a
-     * dirty mark for the view toggle to honour. One shared-pipeline call, one
-     * batch recompute.
-     */
-    private void refreshStatsProjection(TabInfo tab) {
-        if (tab.viewMode != FlowVizView.STATS) {
-            tab.statsDirty = true;
-            return;
-        }
-        tab.statsDirty = false;
-        if (tab.statsVizPanel.model().getMaskMode() != tab.vizPanel.getMaskMode()) {
-            tab.statsVizPanel.model().setMaskMode(tab.vizPanel.getMaskMode());
-        }
-        tab.statsVizPanel.model().setSeries(tab.vizPanel.aggregatedSeries());
+        refreshDataProjection(tab);
     }
 
     /**
@@ -1181,12 +1164,6 @@ public class VisualizationTabManager {
         tab.vizPanel.refreshData(false);
         tab.dataVizPanel.setGrid(DataGrid.of(
             tab.vizPanel.getDisplayDataSet(), tab.vizPanel.getPlotType(), tab.dataVizPanel.labelResolver()));
-    }
-
-    /** Both table projections follow a state change together, so they cannot drift. */
-    private void refreshProjections(TabInfo tab) {
-        refreshStatsProjection(tab);
-        refreshDataProjection(tab);
     }
 
     /**
@@ -1221,7 +1198,7 @@ public class VisualizationTabManager {
                     panel.addLegendSeries(ref);
                 }
                 // The table projections follow the restored state (or dirty).
-                refreshProjections(tab);
+                refreshDataProjection(tab);
                 mutated = tab;
                 break;
             }
@@ -1266,80 +1243,52 @@ public class VisualizationTabManager {
         return vizPanels;
     }
 
-    /**
-     * Gets every tab's stats projection (all tabs have one).
-     */
-    public List<StatsTableModel> getAllStatsModels() {
-        List<StatsTableModel> models = new ArrayList<>();
-        for (TabInfo tab : tabs) {
-            models.add(tab.statsVizPanel.model());
-        }
-        return models;
-    }
-
     /** The tab at the given strip index — package-private, for tests. */
     TabInfo tabAt(int index) {
         return tabs.get(index);
     }
 
     /**
-     * Updates a series in all stats tabs, applying aggregation settings.
-     * This should be called instead of directly calling model.addOrUpdateSeries().
+     * A series' data has arrived: its load state clears, and every tab that shows it
+     * reprojects (hidden pages catch up when shown). Each page reads the aggregate from
+     * its tab's cache, which resolves the ref against the pool.
      *
-     * <p>The caller publishes {@code data} to the pool first: the aggregate is read
-     * from the tab's cache, which resolves the ref against the pool.
+     * <p>The caller publishes {@code data} to the pool first.
      *
      * @param ref The identity of the series
-     * @param data The original (unaggregated) time series data
+     * @param data The original (unaggregated) time series data, already in the pool
      */
     public void updateSeriesInStatsTabsWithAggregation(SeriesRef ref, TimeSeriesData data) {
+        loadStates.remove(ref);
         for (TabInfo tab : tabs) {
-            if (!tab.selectedSeries.contains(ref)) {
-                continue;
+            if (tab.selectedSeries.contains(ref)) {
+                tab.statsVizPanel.refresh();
+                refreshDataProjection(tab);
             }
-            if (tab.viewMode == FlowVizView.STATS) {
-                TimeSeriesData aggregatedData = tab.vizPanel.aggregatedSeries().get(ref);
-
-                if (aggregatedData != null) {
-                    tab.statsVizPanel.model().addOrUpdateSeries(ref, aggregatedData);
-                }
-            } else {
-                tab.statsDirty = true; // hidden projection catches up when shown
-            }
-            refreshDataProjection(tab);
         }
     }
 
     /**
-     * Adds a loading series entry to the stats projection of every tab that
-     * includes the given ref (visible stats pages only; hidden ones dirty).
+     * Marks a series as loading: every tab that shows it gets a blank placeholder row
+     * in its stats page until the data arrives.
      */
     public void addLoadingSeriesInStatsTabs(SeriesRef ref) {
-        for (TabInfo tab : tabs) {
-            if (!tab.selectedSeries.contains(ref)) {
-                continue;
-            }
-            if (tab.viewMode == FlowVizView.STATS) {
-                tab.statsVizPanel.model().addLoadingSeries(ref);
-            } else {
-                tab.statsDirty = true;
-            }
-        }
+        setLoadState(ref, SeriesLoadState.LOADING);
     }
 
     /**
-     * Adds an error series entry to the stats projection of every tab that
-     * includes the given ref (visible stats pages only; hidden ones dirty).
+     * Marks a series' fetch as failed: every tab that shows it gets an "Error" row in
+     * its stats page.
      */
     public void addErrorSeriesInStatsTabs(SeriesRef ref, String errorMessage) {
+        setLoadState(ref, new SeriesLoadState.Failed(errorMessage));
+    }
+
+    private void setLoadState(SeriesRef ref, SeriesLoadState state) {
+        loadStates.put(ref, state);
         for (TabInfo tab : tabs) {
-            if (!tab.selectedSeries.contains(ref)) {
-                continue;
-            }
-            if (tab.viewMode == FlowVizView.STATS) {
-                tab.statsVizPanel.model().addErrorSeries(ref, errorMessage);
-            } else {
-                tab.statsDirty = true;
+            if (tab.selectedSeries.contains(ref)) {
+                tab.statsVizPanel.refresh();
             }
         }
     }
@@ -1366,7 +1315,6 @@ public class VisualizationTabManager {
         }
         for (SeriesRef ref : refs) {
             tab.vizPanel.removeLegendSeries(ref);
-            tab.statsVizPanel.model().removeSeries(ref);
         }
         tab.vizPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
         if (tab.viewMode == FlowVizView.PLOT) {
