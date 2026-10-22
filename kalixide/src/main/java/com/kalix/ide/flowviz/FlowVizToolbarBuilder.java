@@ -77,6 +77,8 @@ class FlowVizToolbarBuilder {
 
     /** The plot-only cluster (incl. its separators/labels), hidden in the stats and data views. */
     private final List<JComponent> plotOnlyComponents = new ArrayList<>();
+    /** Controls that shape the data page too (the plot type), hidden only in the stats view. */
+    private final List<JComponent> plotAndDataComponents = new ArrayList<>();
     private FlowVizToolbarController controller;
 
     FlowVizToolbarBuilder(VisualizationTabManager.TabInfo tabInfo, JTable statsTable) {
@@ -128,14 +130,14 @@ class FlowVizToolbarBuilder {
         addMaskControls();
         addSeasonalMaskButton();
 
-        // --- Plot-only cluster (hidden in the stats and data views) ---
-        plotOnly(new JToolBar.Separator());
-        // Reads as one phrase: "Type: [Linear] [Exceedance]".
-        plotOnly(new JLabel("Type:"));
+        // --- Plot type (plot and data views), then the plot-only cluster ---
+        plotAndData(new JToolBar.Separator());
+        // Reads as one phrase: "Type: [Exceedance] [Linear]".
+        plotAndData(new JLabel("Type:"));
+        plotAndData((JComponent) Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
+        addPlotTypeDropdown();
         plotOnly((JComponent) Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
         addYSpaceDropdown();
-        plotOnly((JComponent) Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
-        addPlotTypeDropdown();
         plotOnly(new JToolBar.Separator());
         addAutoYToggle(initialAutoY);
         addCoordinatesToggle(initialShowCoordinates);
@@ -157,13 +159,20 @@ class FlowVizToolbarBuilder {
 
     /**
      * Reflects a view switch into the toolbar: the plot-only cluster shows only in
-     * the plot view, and the toggles follow. Selection is set directly (no action
+     * the plot view, the plot type in the plot and data views, and the toggles follow. Selection is set directly (no action
      * fires), so this is safe from the switch path itself.
      */
     void applyViewMode(FlowVizView mode) {
         boolean plot = mode == FlowVizView.PLOT;
         for (JComponent component : plotOnlyComponents) {
             component.setVisible(plot);
+        }
+        boolean shapesData = switch (mode) {
+            case PLOT, DATA -> true;
+            case STATS -> false;
+        };
+        for (JComponent component : plotAndDataComponents) {
+            component.setVisible(shapesData);
         }
         JToggleButton selected = switch (mode) {
             case PLOT -> plotViewToggle;
@@ -352,7 +361,7 @@ class FlowVizToolbarBuilder {
             FlowVizToolbarController.setSilently(maskCombo, maskItem(tabInfo.vizPanel.getMaskMode()));
             applied();
         });
-        plotOnly(plotTypeCombo);
+        plotAndData(plotTypeCombo);
     }
 
     private void addYSpaceDropdown() {
@@ -422,6 +431,12 @@ class FlowVizToolbarBuilder {
     /** Adds a component to the toolbar AND records it as plot-only (hidden in the stats and data views). */
     private void plotOnly(JComponent component) {
         plotOnlyComponents.add(component);
+        toolbar.add(component);
+    }
+
+    /** Adds a component to the toolbar AND records it as shown in the plot and data views. */
+    private void plotAndData(JComponent component) {
+        plotAndDataComponents.add(component);
         toolbar.add(component);
     }
 
