@@ -769,9 +769,6 @@ public class VisualizationTabManager {
         };
         tab.vizPanel.batchStateChange(() -> tab.model().update(s -> reset));
         DisplayPrefs.fromPreferences().applyTo(tab.vizPanel);
-        if (tab.vizToolbar != null) {
-            tab.vizToolbar.getController().updateFromState(tab.vizPanel.currentState());
-        }
 
         // The canonical record changed in place: reproject the trees (active tab only).
         notifyTabMutated(tab);
