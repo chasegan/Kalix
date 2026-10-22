@@ -783,7 +783,7 @@ public class PlotInteractionManager {
         autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
         autoYMenuItem.addActionListener(e -> {
             if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setAutoYMode(autoYMenuItem.isSelected());
+                vizPanel.model().update(st -> st.withAutoYMode(autoYMenuItem.isSelected()));
             }
         });
         contextMenu.add(autoYMenuItem);
@@ -795,7 +795,7 @@ public class PlotInteractionManager {
             JRadioButtonMenuItem scaleItem = new JRadioButtonMenuItem(scale.getDisplayName());
             scaleItem.addActionListener(e -> {
                 if (parentComponent instanceof FlowVizPanel) {
-                    ((FlowVizPanel) parentComponent).setYAxisScale(scale);
+                    ((FlowVizPanel) parentComponent).model().update(st -> st.withYAxisScale(scale));
                 }
             });
             yAxisScaleGroup.add(scaleItem);
@@ -809,7 +809,7 @@ public class PlotInteractionManager {
         JMenu lineShapeMenu = new JMenu("Line shape");
         lineShapeMenuItems.putAll(LineShapeMenu.addItems(lineShapeMenu, shape -> {
             if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setLineShape(shape);
+                vizPanel.model().update(st -> st.withLineShape(shape));
             }
         }));
         contextMenu.add(lineShapeMenu);
@@ -957,7 +957,7 @@ public class PlotInteractionManager {
     private void applyExplicitLimits(long startTime, long endTime, double minValue, double maxValue) {
         acceptNewAxes(startTime, endTime, minValue, maxValue);
         if (parentComponent instanceof FlowVizPanel vizPanel) {
-            vizPanel.setAutoYMode(false);
+            vizPanel.model().update(st -> st.withAutoYMode(false));
         }
     }
 

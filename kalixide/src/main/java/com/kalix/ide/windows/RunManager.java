@@ -184,7 +184,7 @@ public class RunManager extends JFrame {
     private java.util.function.Consumer<SessionManager.SessionEvent> sessionEventListener;
 
     // === SELECTION STATE ===
-    // Per-tab selected series are managed by VisualizationTabManager (TabInfo.selectedSeries).
+    // Per-tab selected series live in each tab's FlowVizModel, managed by VisualizationTabManager.
     // The shared plotDataSet acts as a data pool — series are added but never removed on deselect.
 
     // === WINDOW COLLABORATORS ===

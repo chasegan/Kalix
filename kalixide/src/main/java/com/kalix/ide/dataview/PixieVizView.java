@@ -1,6 +1,7 @@
 package com.kalix.ide.dataview;
 
 import com.kalix.ide.flowviz.FlowVizPanel;
+import com.kalix.ide.flowviz.FlowVizState;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
 import com.kalix.ide.flowviz.data.DataSet;
@@ -8,7 +9,6 @@ import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.DefaultLabelResolver;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
-import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.flowviz.style.PaletteSeriesStyleResolver;
 import com.kalix.ide.flowviz.style.PlotPaletteManager;
 import com.kalix.ide.flowviz.style.SeriesSlotManager;
@@ -133,10 +133,7 @@ public final class PixieVizView extends JPanel {
             }
         });
 
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>(); // the no-sources host state
-        vizManager.addPlotTabFromSettings(settings);
+        vizManager.addPlotTab(FlowVizState.defaults()); // no series, no sources: the no-sources host state
         installHeaderInteractions();
     }
 
@@ -163,11 +160,6 @@ public final class PixieVizView extends JPanel {
             List<SeriesRef> removed = new ArrayList<>(dataSet.getSeriesRefs());
             for (SeriesRef r : removed) {
                 dataSet.removeSeries(r);
-            }
-            for (StatsTableModel model : vizManager.getAllStatsModels()) {
-                for (SeriesRef r : removed) {
-                    model.removeSeries(r);
-                }
             }
             vizManager.updateAllTabs(false);
             tablePanel.getTable().getTableHeader().repaint();

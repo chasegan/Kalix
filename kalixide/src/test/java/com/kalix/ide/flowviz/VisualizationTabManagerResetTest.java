@@ -37,17 +37,14 @@ class VisualizationTabManagerResetTest {
             ref -> new LineStyle(Color.BLACK, StrokeStyle.values()[0]));
     }
 
-    private static VisualizationTabManager.TabSettings emptySettings() {
-        VisualizationTabManager.TabSettings s = VisualizationTabManager.TabSettings.getDefaults();
-        s.selectedSeries = new LinkedHashSet<>();
-        s.checkedSources = new LinkedHashSet<>();
-        return s;
+    private static FlowVizState emptySettings() {
+        return FlowVizState.defaults();
     }
 
     @Test
     void activeTabResetNotifiesOnceAndClearsCanonicalRecord() {
         VisualizationTabManager mgr = newManager();
-        mgr.addPlotTabFromSettings(emptySettings());
+        mgr.addPlotTab(emptySettings());
         mgr.setTargetTabSelectedSeries(Set.of(REF));
         mgr.setTargetTabCheckedSources(Set.of(SRC));
 
@@ -65,8 +62,8 @@ class VisualizationTabManagerResetTest {
     @Test
     void backgroundTabResetIsSilentAndFocusPreserving() {
         VisualizationTabManager mgr = newManager();
-        mgr.addPlotTabFromSettings(emptySettings());          // tab 0
-        mgr.addPlotTabFromSettings(emptySettings());          // tab 1, becomes active
+        mgr.addPlotTab(emptySettings());          // tab 0
+        mgr.addPlotTab(emptySettings());          // tab 1, becomes active
         mgr.setTargetTabSelectedSeries(Set.of(REF));          // lands on tab 1
         mgr.getTabbedPane().setSelectedIndex(0);              // tab 0 active
 
@@ -89,14 +86,13 @@ class VisualizationTabManagerResetTest {
     @Test
     void undoSyncRoutesThroughTheSameSeam() {
         VisualizationTabManager mgr = newManager();
-        mgr.addPlotTabFromSettings(emptySettings());
+        mgr.addPlotTab(emptySettings());
         mgr.setTargetTabSelectedSeries(Set.of(REF)); // pushes an undoable selection state
 
         AtomicInteger notifications = new AtomicInteger();
         mgr.setHost(countingHost(notifications));
 
         FlowVizState undone = mgr.getTargetVizPanel().undo();
-        mgr.syncTabSelectionFromState(mgr.getTargetVizPanel(), undone);
 
         assertEquals(1, notifications.get(), "undo sync must reproject the trees once");
         assertEquals(undone.getVisibleSeries(), new ArrayList<>(mgr.getTargetTabSelectedSeries()),
@@ -106,9 +102,7 @@ class VisualizationTabManagerResetTest {
     @Test
     void constructionSnapshotCarriesTrueSources() {
         VisualizationTabManager mgr = newManager();
-        VisualizationTabManager.TabSettings settings = emptySettings();
-        settings.checkedSources = new LinkedHashSet<>(Set.of(SRC));
-        mgr.addPlotTabFromSettings(settings);
+        mgr.addPlotTab(emptySettings().withCheckedSources(Set.of(SRC)));
 
         assertEquals(Set.of(SRC), mgr.getTargetVizPanel().currentState().getCheckedSources(),
             "history entry #1 must carry the sources the tab was born with");
@@ -117,9 +111,7 @@ class VisualizationTabManagerResetTest {
     @Test
     void sourceChangesAreUndoableAndRestoreThroughTheSeam() {
         VisualizationTabManager mgr = newManager();
-        VisualizationTabManager.TabSettings settings = emptySettings();
-        settings.checkedSources = new LinkedHashSet<>(Set.of(SRC));
-        mgr.addPlotTabFromSettings(settings);           // entry 1: {SRC}
+        mgr.addPlotTab(emptySettings().withCheckedSources(Set.of(SRC))); // entry 1: {SRC}
 
         mgr.setTargetTabCheckedSources(Set.of());       // source-only change...
         mgr.pushTargetTabHistory();                      // ...is its own undo entry
@@ -127,7 +119,6 @@ class VisualizationTabManagerResetTest {
 
         mgr.pushTargetTabHistory();                      // unchanged state dedupes
         FlowVizState undone = mgr.getTargetVizPanel().undo();
-        mgr.syncTabSelectionFromState(mgr.getTargetVizPanel(), undone);
 
         assertEquals(Set.of(SRC), mgr.getTargetTabCheckedSources(),
             "undo restores the source context into the canonical record");
@@ -138,9 +129,7 @@ class VisualizationTabManagerResetTest {
     @Test
     void undoOfResetRestoresTheCompleteView() {
         VisualizationTabManager mgr = newManager();
-        VisualizationTabManager.TabSettings settings = emptySettings();
-        settings.checkedSources = new LinkedHashSet<>(Set.of(SRC));
-        mgr.addPlotTabFromSettings(settings);           // entry 1: sources={SRC}
+        mgr.addPlotTab(emptySettings().withCheckedSources(Set.of(SRC))); // entry 1: sources={SRC}
         mgr.setTargetTabSelectedSeries(Set.of(REF));    // entry 2: +series
 
         AtomicInteger notifications = new AtomicInteger();
@@ -150,7 +139,6 @@ class VisualizationTabManagerResetTest {
         assertEquals(1, notifications.get());
 
         FlowVizState undone = mgr.getTargetVizPanel().undo();
-        mgr.syncTabSelectionFromState(mgr.getTargetVizPanel(), undone);
 
         assertEquals(2, notifications.get(), "undo-of-reset reprojects the trees");
         assertEquals(Set.of(REF), mgr.getTargetTabSelectedSeries(),
@@ -162,10 +150,8 @@ class VisualizationTabManagerResetTest {
     @Test
     void statsTabResetNotifiesAndClearsCanonicalRecord() {
         VisualizationTabManager mgr = newManager();
-        VisualizationTabManager.TabSettings settings = emptySettings();
-        settings.selectedSeries = new LinkedHashSet<>(Set.of(REF));
-        settings.checkedSources = new LinkedHashSet<>(Set.of(SRC));
-        mgr.addStatsTabFromSettings(settings);          // stats tab, selected
+        mgr.addStatsTab(VisualizationTabManager.defaultState(FlowVizView.STATS)
+            .withVisibleSeries(List.of(REF)).withCheckedSources(Set.of(SRC))); // stats tab, selected
 
         AtomicInteger notifications = new AtomicInteger();
         mgr.setHost(countingHost(notifications));
@@ -187,9 +173,7 @@ class VisualizationTabManagerResetTest {
             new DatasetSource("/test/a.csv"), new DatasetSource("/test/b.csv"),
             new DatasetSource("/test/c.csv"), new DatasetSource("/test/d.csv"));
         VisualizationTabManager mgr = newManager();
-        VisualizationTabManager.TabSettings settings = emptySettings();
-        settings.checkedSources = new LinkedHashSet<>(ordered);
-        mgr.addPlotTabFromSettings(settings);
+        mgr.addPlotTab(emptySettings().withCheckedSources(new LinkedHashSet<>(ordered)));
 
         assertEquals(ordered,
             new ArrayList<>(mgr.getTargetVizPanel().currentState().getCheckedSources()),

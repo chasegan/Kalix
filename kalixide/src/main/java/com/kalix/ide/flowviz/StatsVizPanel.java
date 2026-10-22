@@ -3,6 +3,7 @@ package com.kalix.ide.flowviz;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.flowviz.data.LabelResolver;
+import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.utils.DialogUtils;
@@ -21,23 +22,40 @@ import java.awt.Component;
 import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * A visualization tab's Stats page: one row of statistics per selected series,
  * computed from the aggregated data the tab's shared controls describe.
  *
  * <p>The page owns its table and its Save; the settings it reflects (aggregation,
- * mask, seasonal mask) belong to the tab, and the tab manager projects them into
- * {@link #model()}.
+ * mask, seasonal mask) belong to the tab's {@link FlowVizModel}. The page listens to it and
+ * projects when shown; while hidden it only notes that it is out of date, and catches up
+ * when shown.
  */
 public final class StatsVizPanel extends JPanel {
 
     private final StatsTableModel model = new StatsTableModel();
     private final JTable table;
+    private final FlowVizModel tabModel;
+    private final Supplier<Map<SeriesRef, SeriesLoadState>> loadStates;
+    private boolean shown;
+    private boolean dirty = true;
 
-    public StatsVizPanel() {
+    /**
+     * @param loadStates the fetch state of series not yet in the pool, shared by every tab
+     */
+    public StatsVizPanel(FlowVizModel tabModel, Supplier<Map<SeriesRef, SeriesLoadState>> loadStates) {
         super(new BorderLayout());
+        this.tabModel = tabModel;
+        this.loadStates = loadStates;
+        tabModel.addListener((old, now, cause) -> {
+            if (cause != FlowVizModel.Cause.USER || affectsStats(old, now)) {
+                refresh();
+            }
+        });
 
         table = new JTable(model);
         table.setFillsViewportHeight(true);
@@ -55,6 +73,42 @@ public final class StatsVizPanel extends JPanel {
     /** The statistics this page shows. */
     public StatsTableModel model() {
         return model;
+    }
+
+    /** Shows or hides the page; a page shown while out of date projects at once. */
+    public void setShown(boolean shown) {
+        this.shown = shown;
+        if (shown && dirty) {
+            project();
+        }
+    }
+
+    /** Something under the page changed (data, load states): project now if shown, else later. */
+    public void refresh() {
+        if (shown) {
+            project();
+        } else {
+            dirty = true;
+        }
+    }
+
+    /** Whether the hidden page has missed a change — package-private, for tests. */
+    boolean isDirty() {
+        return dirty;
+    }
+
+    private void project() {
+        dirty = false;
+        FlowVizState state = tabModel.current();
+        model.project(tabModel.aggregated(), state.getVisibleSeries(), state.getMaskMode(), loadStates.get());
+    }
+
+    private static boolean affectsStats(FlowVizState old, FlowVizState now) {
+        return !now.getVisibleSeries().equals(old.getVisibleSeries())
+            || now.getAggregationPeriod() != old.getAggregationPeriod()
+            || now.getAggregationMethod() != old.getAggregationMethod()
+            || now.getMaskMode() != old.getMaskMode()
+            || !now.getSeasonalMaskMode().equals(old.getSeasonalMaskMode());
     }
 
     public void setLabelResolver(LabelResolver labelResolver) {

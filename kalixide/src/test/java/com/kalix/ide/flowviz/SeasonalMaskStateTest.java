@@ -47,7 +47,7 @@ class SeasonalMaskStateTest {
 
         FlowVizPanel panel = new FlowVizPanel();
         panel.setDataSet(pool);
-        panel.setVisibleSeries(List.of(REF));
+        panel.model().update(st -> st.withVisibleSeries(List.of(REF)));
         return panel;
     }
 
@@ -56,17 +56,14 @@ class SeasonalMaskStateTest {
             ref -> new LineStyle(Color.BLACK, StrokeStyle.values()[0]));
     }
 
-    private static VisualizationTabManager.TabSettings emptySettings() {
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>();
-        return settings;
+    private static FlowVizState emptySettings() {
+        return FlowVizState.defaults();
     }
 
     @Test
     void changingTheSelectionIsUndoableAndRedoable() {
         FlowVizPanel panel = panelWithData();
-        panel.setSeasonalMaskMode(SUMMER);
+        panel.model().update(st -> st.withSeasonalMaskMode(SUMMER));
         assertTrue(panel.canUndo(), "a month selection is a state change, so it is undoable");
 
         FlowVizState undone = panel.undo();
@@ -81,8 +78,8 @@ class SeasonalMaskStateTest {
     @Test
     void undoWalksBackThroughSuccessiveSelections() {
         FlowVizPanel panel = panelWithData();
-        panel.setSeasonalMaskMode(SUMMER);
-        panel.setSeasonalMaskMode(WINTER);
+        panel.model().update(st -> st.withSeasonalMaskMode(SUMMER));
+        panel.model().update(st -> st.withSeasonalMaskMode(WINTER));
 
         panel.undo();
         assertEquals(SUMMER, panel.getSeasonalMaskMode(), "one step back is the previous selection");
@@ -93,14 +90,14 @@ class SeasonalMaskStateTest {
     @Test
     void reselectingTheSameMonthsPushesNoHistory() {
         FlowVizPanel panel = panelWithData();
-        panel.setSeasonalMaskMode(SUMMER);
+        panel.model().update(st -> st.withSeasonalMaskMode(SUMMER));
         panel.undo();
         panel.redo();
         assertFalse(panel.canRedo(), "fixture sanity: history is at its end");
 
         // An equal-but-distinct instance: the guard must compare by value, which is why
         // the mode is a record over an EnumSet rather than an identity-based holder.
-        panel.setSeasonalMaskMode(SeasonalMaskMode.of(Set.of(Month.FEBRUARY, Month.JANUARY)));
+        panel.model().update(st -> st.withSeasonalMaskMode(SeasonalMaskMode.of(Set.of(Month.FEBRUARY, Month.JANUARY))));
 
         assertFalse(panel.canRedo(), "no entry was pushed");
         panel.undo();
@@ -111,7 +108,7 @@ class SeasonalMaskStateTest {
     @Test
     void theMaskIsCarriedInTheCapturedState() {
         FlowVizPanel panel = panelWithData();
-        panel.setSeasonalMaskMode(WINTER);
+        panel.model().update(st -> st.withSeasonalMaskMode(WINTER));
         assertEquals(WINTER, panel.currentState().getSeasonalMaskMode(),
             "the snapshot carries the mask, which is what makes duplication and undo work");
     }
@@ -119,8 +116,8 @@ class SeasonalMaskStateTest {
     @Test
     void resetClearsTheSeasonalMask() {
         VisualizationTabManager mgr = manager();
-        mgr.addPlotTabFromSettings(emptySettings());
-        mgr.getTargetVizPanel().setSeasonalMaskMode(SUMMER);
+        mgr.addPlotTab(emptySettings());
+        mgr.getTargetVizPanel().model().update(st -> st.withSeasonalMaskMode(SUMMER));
 
         mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex());
 
@@ -131,13 +128,12 @@ class SeasonalMaskStateTest {
     @Test
     void undoOfResetBringsTheSeasonalMaskBack() {
         VisualizationTabManager mgr = manager();
-        mgr.addPlotTabFromSettings(emptySettings());
+        mgr.addPlotTab(emptySettings());
         FlowVizPanel panel = mgr.getTargetVizPanel();
-        panel.setSeasonalMaskMode(SUMMER);
+        panel.model().update(st -> st.withSeasonalMaskMode(SUMMER));
 
         mgr.resetTabAt(mgr.getTabbedPane().getSelectedIndex());
         FlowVizState undone = panel.undo();
-        mgr.syncTabSelectionFromState(panel, undone);
 
         assertEquals(SUMMER, panel.getSeasonalMaskMode(),
             "a reset is one undoable step, and the mask comes back with the rest of the view");
