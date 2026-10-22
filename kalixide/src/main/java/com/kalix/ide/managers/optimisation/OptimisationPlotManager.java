@@ -65,7 +65,7 @@ public class OptimisationPlotManager {
             : String.valueOf(ref));
         this.convergencePlot.setDataSet(convergenceDataSet);
         this.convergencePlot.setXAxisType(XAxisType.COUNT); // Use COUNT x-axis for evaluation numbers
-        this.convergencePlot.setYAxisScale(YAxisScale.LOG); // Use LOG scale for objective values
+        this.convergencePlot.model().update(st -> st.withYAxisScale(YAxisScale.LOG)); // Use LOG scale for objective values
         this.convergencePlot.setPreferredSize(new Dimension(0, PLOT_HEIGHT));
 
         logger.debug("Created optimisation plot manager");
@@ -220,7 +220,7 @@ public class OptimisationPlotManager {
         visibleSeries.add(REF_BEST_OBJECTIVE);
 
         convergencePlot.setStyleResolver(new MapStyleResolver(colors));
-        convergencePlot.setVisibleSeries(visibleSeries);
+        convergencePlot.model().update(st -> st.withVisibleSeries(visibleSeries));
 
         // Configure rendering modes: Best Objective as LINE, Population as POINTS only
         convergencePlot.setSeriesRenderMode(REF_BEST_OBJECTIVE, SeriesRenderMode.LINE);

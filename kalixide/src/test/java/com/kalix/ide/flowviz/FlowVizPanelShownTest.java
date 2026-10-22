@@ -35,7 +35,7 @@ class FlowVizPanelShownTest {
         DataSet pool = new DataSet();
         pool.addSeries(A, days(3));
         panel.setDataSet(pool);
-        panel.setVisibleSeries(List.of(A));
+        panel.model().update(st -> st.withVisibleSeries(List.of(A)));
         assertEquals(3, panel.displayDataSetForTests().getSeries(A).getPointCount());
 
         panel.setShown(false);

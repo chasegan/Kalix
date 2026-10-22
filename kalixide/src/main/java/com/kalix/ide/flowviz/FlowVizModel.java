@@ -23,17 +23,21 @@ import java.util.function.UnaryOperator;
  * the listeners that project it (the plot, stats and data pages), and the data derived
  * from it: the aggregated series and the display set every page reads.
  *
- * <p>A change is one {@link #update}; listeners receive the old and new snapshots and
- * work out for themselves what changed. Recording a history entry is a separate step,
- * {@link #record()}, so the owner can first fold in what a change produced (the
- * fitted viewport) and the entry holds what the user saw.
+ * <p>A change is one {@link #update}, and one history entry; listeners receive the old
+ * and new snapshots and work out for themselves what changed. The entry is recorded
+ * after every listener has run, so what a change produced (the plot's fitted viewport,
+ * folded in with {@link #amend}) is part of it, and undo returns to what the user saw.
+ * Nothing is recorded until the model has a pool: setup is not history.
  *
  * <p>EDT only.
  */
 public class FlowVizModel {
 
-    /** Why the state changed: a user gesture, an undo/redo/copy, or new data. */
-    public enum Cause { USER, RESTORE, DATA }
+    /**
+     * Why the state changed: a user gesture; a whole new state to show in full (a new or
+     * reset tab); an undo, redo or copy; or new data under an unchanged state.
+     */
+    public enum Cause { USER, REPLACE, RESTORE, DATA }
 
     /** Receives every change of the current state. */
     @FunctionalInterface
@@ -53,9 +57,7 @@ public class FlowVizModel {
     private final List<Listener> listeners = new ArrayList<>();
     private FlowVizState state = FlowVizState.INITIAL;
 
-    // Migration shim: updates inside batch() notify once, at the end.
-    private int batchDepth;
-    private FlowVizState batchStart;
+    private Runnable onHistoryChanged;
 
     // === DERIVED DATA ===
     // Both are computed on demand and reused while the settings and the pool's data
@@ -132,7 +134,7 @@ public class FlowVizModel {
         return true;
     }
 
-    /** Applies a change and notifies listeners with cause USER; no-op when nothing changed. */
+    /** Applies a change (cause USER) and records it; no-op when nothing changed. */
     public void update(UnaryOperator<FlowVizState> change) {
         FlowVizState next = change.apply(state);
         if (next.equals(state)) {
@@ -140,26 +142,38 @@ public class FlowVizModel {
         }
         FlowVizState old = state;
         state = next;
-        if (batchDepth == 0) {
-            fire(old, next, Cause.USER);
-        }
+        fire(old, next, Cause.USER);
+        recordIfReady();
     }
 
     /**
-     * Runs several updates as one change: listeners hear once, with the state before
-     * the first and after the last. Nests. Migration shim for the panel's forwarding
-     * setters; removed once callers compose their changes into one {@link #update}.
+     * Replaces the whole state (cause REPLACE) and records it: a new or reset tab, which
+     * listeners show in full (the plot fits all of it) even where little changed.
      */
-    public void batch(Runnable changes) {
-        if (batchDepth++ == 0) {
-            batchStart = state;
-        }
-        try {
-            changes.run();
-        } finally {
-            if (--batchDepth == 0 && !state.equals(batchStart)) {
-                fire(batchStart, state, Cause.USER);
-            }
+    public void replace(FlowVizState next) {
+        FlowVizState old = state;
+        state = next;
+        fire(old, next, Cause.REPLACE);
+        recordIfReady();
+    }
+
+    /**
+     * Changes the state without notifying anyone or recording an entry: for what no
+     * page draws from — the viewport bounds a change produced, and the checked sources,
+     * which ride into the next entry recorded.
+     */
+    public void amend(UnaryOperator<FlowVizState> change) {
+        state = change.apply(state);
+    }
+
+    /** Called whenever the history changes (an entry recorded, undo, redo, copy). */
+    public void setOnHistoryChanged(Runnable onHistoryChanged) {
+        this.onHistoryChanged = onHistoryChanged;
+    }
+
+    private void recordIfReady() {
+        if (pool != null) {
+            record();
         }
     }
 
@@ -192,6 +206,7 @@ public class FlowVizModel {
 
         history.add(state);
         currentIndex = history.size() - 1;
+        historyChanged();
         return true;
     }
 
@@ -237,6 +252,8 @@ public class FlowVizModel {
         currentIndex = other.currentIndex;
         if (currentIndex >= 0) {
             restore(history.get(currentIndex));
+        } else {
+            historyChanged();
         }
     }
 
@@ -248,6 +265,13 @@ public class FlowVizModel {
         FlowVizState old = state;
         state = snapshot;
         fire(old, snapshot, Cause.RESTORE);
+        historyChanged();
+    }
+
+    private void historyChanged() {
+        if (onHistoryChanged != null) {
+            onHistoryChanged.run();
+        }
     }
 
     private void fire(FlowVizState old, FlowVizState now, Cause cause) {
