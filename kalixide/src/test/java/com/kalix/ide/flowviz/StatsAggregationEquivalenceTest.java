@@ -258,4 +258,53 @@ class StatsAggregationEquivalenceTest {
         assertEquals(carried, duplicate.getTargetVizPanel().getSeasonalMaskMode(),
             "duplication carries the seasonal selection, as it does the overlap mask");
     }
+
+    @Test
+    void loadStatesShowAsPlaceholdersUntilDataArrives() {
+        DataSet pool = new DataSet();
+        VisualizationTabManager mgr = manager(pool);
+        VisualizationTabManager.TabSettings settings = statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM);
+        settings.selectedSeries = new LinkedHashSet<>(List.of(R1));
+        StatsTableModel model = mgr.addStatsTabFromSettings(settings);
+
+        mgr.addLoadingSeriesInStatsTabs(R1);
+        assertEquals(1, model.getRowCount(), "a loading series has a placeholder row");
+        assertEquals("", String.valueOf(model.getValueAt(0, 2)), "and the placeholder is blank");
+
+        TimeSeriesData data = daily(1, 2, 3);
+        pool.addSeries(R1, data);
+        mgr.updateSeriesInStatsTabsWithAggregation(R1, data);
+        assertEquals(3.0, stat(model, "Points"), 1e-9, "the published data replaces the placeholder");
+    }
+
+    @Test
+    void dataReachingThePoolByAnotherPathIsNotHiddenByALoadingMark() {
+        DataSet pool = pool();
+        VisualizationTabManager mgr = manager(pool);
+        VisualizationTabManager.TabSettings settings = statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM);
+        settings.selectedSeries = new LinkedHashSet<>(List.of(R1));
+        StatsTableModel model = mgr.addStatsTabFromSettings(settings);
+
+        // Marked loading, but the request in flight publishes under another ref: the
+        // mark is never cleared, while the pool holds R1's data.
+        mgr.addLoadingSeriesInStatsTabs(R1);
+        assertEquals(6.0, stat(model, "Points"), 1e-9);
+    }
+
+    @Test
+    void aFailedFetchShowsErrorUntilARetrySucceeds() {
+        DataSet pool = new DataSet();
+        VisualizationTabManager mgr = manager(pool);
+        VisualizationTabManager.TabSettings settings = statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM);
+        settings.selectedSeries = new LinkedHashSet<>(List.of(R1));
+        StatsTableModel model = mgr.addStatsTabFromSettings(settings);
+
+        mgr.addErrorSeriesInStatsTabs(R1, "boom");
+        assertEquals("Error", model.getValueAt(0, 2));
+
+        TimeSeriesData data = daily(1, 2);
+        pool.addSeries(R1, data);
+        mgr.updateSeriesInStatsTabsWithAggregation(R1, data);
+        assertEquals(2.0, stat(model, "Points"), 1e-9);
+    }
 }
