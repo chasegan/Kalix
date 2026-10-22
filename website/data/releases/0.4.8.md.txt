@@ -9,7 +9,7 @@ assets:
 pip: "pip install kalix==0.4.8"
 ---
 
-- New! Mass balance report and validation in the Run Manager. Right-click a finished run and choose `Show mass balance report` to open its report in a read-only window, or `Validate mass balance` to compare it with the report open in the main editor.
-    - In the report window, `Validate…` compares against a reference file you pick and `Save…` writes the report to a file.
-    - A matching report is confirmed; otherwise a side-by-side diff opens. The comparison is of the report text, as `kalix simulate -v` does, ignoring line endings.
+- New! View and validate mass balances in the Run Manager and the file tree.
+    - In the Run Manager, right-click a completed run and choose `Show mass balance report` to open its report in a read-only window, or `Validate mass balance` to compare it with the report open in the main editor.
+    - In the file tree, right-click a model file and choose `Show mass balance report` (this will execute a new run), or select a model file and report file together and choose `Validate mass balance` as per the Run Manager.
 - Improved: `kalix simulate -v` (`--verify-mass-balance`) ignores line endings, so a reference report with Windows line endings no longer fails the check.
