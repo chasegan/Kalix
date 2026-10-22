@@ -117,6 +117,9 @@ public class TreeContextMenu {
                 if (entry.icon != null) {
                     item.setIcon(entry.icon.get());
                 }
+                if (entry.tooltip != null) {
+                    item.setToolTipText(entry.tooltip);
+                }
                 item.addActionListener(e -> entry.action.accept(selection));
                 menu.add(item);
             }
@@ -340,7 +343,7 @@ public class TreeContextMenu {
 
     private static Entry item(String label, Predicate<List<FileTreeNode>> visible,
             Consumer<List<FileTreeNode>> action) {
-        return new Entry(sel -> label, visible, null, action, null);
+        return new Entry(sel -> label, visible, null, action, null, null);
     }
 
     /**
@@ -350,7 +353,7 @@ public class TreeContextMenu {
      */
     private static Entry item(String label, Predicate<List<FileTreeNode>> visible,
             Consumer<List<FileTreeNode>> action, Supplier<Icon> icon) {
-        return new Entry(sel -> label, visible, null, action, icon);
+        return new Entry(sel -> label, visible, null, action, icon, null);
     }
 
     /**
@@ -360,19 +363,25 @@ public class TreeContextMenu {
     private static Entry checkbox(String label, Predicate<List<FileTreeNode>> visible,
             Predicate<List<FileTreeNode>> checked,
             Consumer<List<FileTreeNode>> action) {
-        return new Entry(sel -> label, visible, checked, action, null);
+        return new Entry(sel -> label, visible, checked, action, null, null);
     }
 
     /**
      * A single menu item: its label (selection-dependent), applicability, optional
      * checkbox state
-     * ({@code checked}, null for a plain item), handler, and optional landmark icon
-     * supplier.
+     * ({@code checked}, null for a plain item), handler, optional landmark icon
+     * supplier, and optional tooltip.
      */
     private record Entry(Function<List<FileTreeNode>, String> label,
             Predicate<List<FileTreeNode>> visible,
             Predicate<List<FileTreeNode>> checked,
             Consumer<List<FileTreeNode>> action,
-            Supplier<Icon> icon) {
+            Supplier<Icon> icon,
+            String tooltip) {
+
+        /** This entry with a tooltip, worded per the 2026-10-04 amendment to ADR-0002. */
+        Entry withTooltip(String text) {
+            return new Entry(label, visible, checked, action, icon, text);
+        }
     }
 }
