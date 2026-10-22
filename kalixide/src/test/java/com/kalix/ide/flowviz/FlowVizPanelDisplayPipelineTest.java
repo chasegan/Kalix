@@ -46,13 +46,13 @@ class PlotPanelDisplayPipelineTest {
 
         FlowVizPanel panel = new FlowVizPanel();
         panel.setDataSet(pool);
-        panel.setVisibleSeries(List.of(REF));
+        panel.model().update(st -> st.withVisibleSeries(List.of(REF)));
 
         DataSet displayed = panel.displayDataSetForTests();
         assertNotNull(displayed, "visible series must reach the display pipeline");
         assertEquals(6, displayed.getSeries(REF).getPointCount(), "ORIGINAL keeps every point");
 
-        panel.setAggregation(AggregationPeriod.MONTHLY, AggregationMethod.MEAN);
+        panel.model().update(st -> st.withAggregation(AggregationPeriod.MONTHLY, AggregationMethod.MEAN));
         assertEquals(1, panel.displayDataSetForTests().getSeries(REF).getPointCount(),
             "six January days aggregate to one monthly point");
     }
@@ -68,8 +68,8 @@ class PlotPanelDisplayPipelineTest {
 
         FlowVizPanel panel = new FlowVizPanel();
         panel.setDataSet(pool);
-        panel.setVisibleSeries(List.of(a, b));
-        panel.setMaskMode(com.kalix.ide.flowviz.stats.MaskMode.EACH);
+        panel.model().update(st -> st.withVisibleSeries(List.of(a, b)));
+        panel.model().update(st -> st.withMaskMode(com.kalix.ide.flowviz.stats.MaskMode.EACH));
 
         DataSet displayed = panel.displayDataSetForTests();
         // The reference draws on its own valid points, untouched (3 points, gap at 1)...
@@ -109,12 +109,12 @@ class PlotPanelDisplayPipelineTest {
 
         FlowVizPanel panel = new FlowVizPanel();
         panel.setDataSet(pool);
-        panel.setVisibleSeries(List.of(REF));
-        panel.setAggregation(AggregationPeriod.ANNUAL_JAN_DEC, AggregationMethod.SUM);
+        panel.model().update(st -> st.withVisibleSeries(List.of(REF)));
+        panel.model().update(st -> st.withAggregation(AggregationPeriod.ANNUAL_JAN_DEC, AggregationMethod.SUM));
         assertEquals(366.0, panel.displayDataSetForTests().getSeries(REF).getValues()[0], 0.0,
             "unmasked: all 366 days of 2020 sum into one annual point");
 
-        panel.setSeasonalMaskMode(SeasonalMaskMode.of(Set.of(Month.JANUARY)));
+        panel.model().update(st -> st.withSeasonalMaskMode(SeasonalMaskMode.of(Set.of(Month.JANUARY))));
         TimeSeriesData masked = panel.displayDataSetForTests().getSeries(REF);
         assertEquals(1, masked.getPointCount(), "still one annual point");
         assertEquals(31.0, masked.getValues()[0], 0.0,
@@ -132,9 +132,9 @@ class PlotPanelDisplayPipelineTest {
 
         FlowVizPanel panel = new FlowVizPanel();
         panel.setDataSet(pool);
-        panel.setVisibleSeries(List.of(REF));
-        panel.setAggregation(AggregationPeriod.ANNUAL_JAN_DEC, AggregationMethod.SUM);
-        panel.setSeasonalMaskMode(SeasonalMaskMode.of(Set.of(Month.FEBRUARY)));
+        panel.model().update(st -> st.withVisibleSeries(List.of(REF)));
+        panel.model().update(st -> st.withAggregation(AggregationPeriod.ANNUAL_JAN_DEC, AggregationMethod.SUM));
+        panel.model().update(st -> st.withSeasonalMaskMode(SeasonalMaskMode.of(Set.of(Month.FEBRUARY))));
 
         TimeSeriesData masked = panel.displayDataSetForTests().getSeries(REF);
         assertNotNull(masked, "excluding the period's start month must not wipe the series");
