@@ -17,7 +17,6 @@ import com.kalix.ide.flowviz.transform.AggregationPipeline;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
 import com.kalix.ide.flowviz.transform.PlotType;
-import com.kalix.ide.flowviz.transform.TimeSeriesAggregator;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.preferences.PreferenceKeys;
 
@@ -1164,11 +1163,7 @@ public class VisualizationTabManager {
         if (tab.statsVizPanel.model().getMaskMode() != tab.vizPanel.getMaskMode()) {
             tab.statsVizPanel.model().setMaskMode(tab.vizPanel.getMaskMode());
         }
-        tab.statsVizPanel.model().setSeries(AggregationPipeline.aggregate(
-            sharedDataSet, tab.selectedSeries,
-            tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod(),
-            tab.vizPanel.getSeasonalMaskMode()
-        ));
+        tab.statsVizPanel.model().setSeries(tab.vizPanel.aggregatedSeries());
     }
 
     /**
@@ -1291,6 +1286,9 @@ public class VisualizationTabManager {
      * Updates a series in all stats tabs, applying aggregation settings.
      * This should be called instead of directly calling model.addOrUpdateSeries().
      *
+     * <p>The caller publishes {@code data} to the pool first: the aggregate is read
+     * from the tab's cache, which resolves the ref against the pool.
+     *
      * @param ref The identity of the series
      * @param data The original (unaggregated) time series data
      */
@@ -1300,10 +1298,7 @@ public class VisualizationTabManager {
                 continue;
             }
             if (tab.viewMode == FlowVizView.STATS) {
-                TimeSeriesData aggregatedData = TimeSeriesAggregator.aggregate(
-                    data, tab.vizPanel.getAggregationPeriod(), tab.vizPanel.getAggregationMethod(),
-                    tab.vizPanel.getSeasonalMaskMode()
-                );
+                TimeSeriesData aggregatedData = tab.vizPanel.aggregatedSeries().get(ref);
 
                 if (aggregatedData != null) {
                     tab.statsVizPanel.model().addOrUpdateSeries(ref, aggregatedData);
@@ -1359,20 +1354,25 @@ public class VisualizationTabManager {
             return;
         }
         for (TabInfo tab : tabs) {
-            boolean changed = tab.selectedSeries.removeAll(refs);
-            if (!changed) {
-                continue;
-            }
-            for (SeriesRef ref : refs) {
-                tab.vizPanel.removeLegendSeries(ref);
-                tab.statsVizPanel.model().removeSeries(ref);
-            }
-            tab.vizPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
-            if (tab.viewMode == FlowVizView.PLOT) {
-                tab.vizPanel.refreshData(false);
-            }
-            refreshDataProjection(tab);
+            removeSeriesFromTab(tab, refs);
         }
+    }
+
+    /** Drops refs from one tab's selection and every page that shows it. */
+    private void removeSeriesFromTab(TabInfo tab, Collection<SeriesRef> refs) {
+        boolean changed = tab.selectedSeries.removeAll(refs);
+        if (!changed) {
+            return;
+        }
+        for (SeriesRef ref : refs) {
+            tab.vizPanel.removeLegendSeries(ref);
+            tab.statsVizPanel.model().removeSeries(ref);
+        }
+        tab.vizPanel.setVisibleSeries(new ArrayList<>(tab.selectedSeries));
+        if (tab.viewMode == FlowVizView.PLOT) {
+            tab.vizPanel.refreshData(false);
+        }
+        refreshDataProjection(tab);
     }
 
     /**
@@ -1381,8 +1381,8 @@ public class VisualizationTabManager {
     public void removeSeriesFromStatsTabs(SeriesRef ref) {
         for (TabInfo tab : tabs) {
             if (tab.viewMode == FlowVizView.STATS) {
-                tab.selectedSeries.remove(ref);
-                tab.statsVizPanel.model().removeSeries(ref);
+                // The panel's series list too, or the stats would bring it back.
+                removeSeriesFromTab(tab, List.of(ref));
             }
         }
     }
