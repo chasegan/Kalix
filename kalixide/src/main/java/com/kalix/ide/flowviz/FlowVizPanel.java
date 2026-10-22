@@ -154,7 +154,7 @@ public class FlowVizPanel extends JPanel {
     private final PlotLegendManager legendManager;
 
     // === UNDO/REDO ===
-    private final FlowVizStateHistory stateHistory = new FlowVizStateHistory();
+    private final FlowVizModel stateHistory = new FlowVizModel();
     private boolean restoringState = false;  // Suppresses pushState() during restore
     private Runnable onHistoryChanged;       // Callback for toolbar button enable/disable
     private Runnable onAutoYModeChanged;     // Callback for the toolbar auto-Y toggle
