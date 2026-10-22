@@ -60,7 +60,7 @@ cargo build --release        # the Rust simulation engine + CLI
 Install via [rustup](https://rustup.rs/); build with `cargo`.
 </div>
 <div class="kx-card-item" markdown>
-#### JDK 23
+#### JDK 25
 Temurin or equivalent; the IDE builds with the bundled `gradlew`.
 </div>
 <div class="kx-card-item" markdown>
