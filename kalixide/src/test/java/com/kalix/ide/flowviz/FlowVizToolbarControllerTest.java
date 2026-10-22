@@ -7,6 +7,7 @@ import com.kalix.ide.flowviz.style.LineStyle;
 import com.kalix.ide.flowviz.style.StrokeStyle;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.flowviz.transform.YAxisScale;
 
 import org.junit.jupiter.api.Test;
 
@@ -47,6 +48,18 @@ class VizToolbarControllerTest {
             }
         }
         return null;
+    }
+
+    @Test
+    void theToolbarFollowsAChangeMadeElsewhere() {
+        VisualizationTabManager mgr = manager();
+        mgr.addPlotTab(emptySettings());
+        Container root = (Container) mgr.getTabbedPane().getSelectedComponent();
+
+        // As the plot's context menu does: straight to the state, not through the toolbar.
+        mgr.getTargetVizPanel().setYAxisScale(YAxisScale.LOG);
+
+        assertEquals(YAxisScale.LOG.getDisplayName(), combo(root, "Y-axis scale").getSelectedItem());
     }
 
     @Test

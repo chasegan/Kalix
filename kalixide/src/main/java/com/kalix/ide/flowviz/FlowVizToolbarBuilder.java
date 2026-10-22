@@ -128,9 +128,10 @@ class FlowVizToolbarBuilder {
         controller = new FlowVizToolbarController(
             aggregationPeriodCombo, aggregationMethodCombo, maskCombo,
             plotTypeCombo, ySpaceCombo, autoYToggle, seasonalMaskButton);
-        // Undo and redo, from any page or key: the controls show the restored state.
+        // The controls show the model's state, whoever changed it: this toolbar, the
+        // plot's context menu, a reset, an undo or redo. Setting them is silent.
         tabInfo.model().addListener((old, now, cause) -> {
-            if (cause == FlowVizModel.Cause.RESTORE) {
+            if (cause != FlowVizModel.Cause.DATA) {
                 controller.updateFromState(now);
             }
         });
@@ -330,8 +331,6 @@ class FlowVizToolbarBuilder {
             }
             tabInfo.vizPanel.setPlotTypeAndMaskMode(selected,
                 selected.isDataMaskDefault() ? MaskMode.ALL : MaskMode.NONE);
-            // Reflect the panel's resulting mask silently (the mask is shared state now).
-            FlowVizToolbarController.setSilently(maskCombo, maskItem(tabInfo.vizPanel.getMaskMode()));
         });
         plotAndData(plotTypeCombo);
     }
