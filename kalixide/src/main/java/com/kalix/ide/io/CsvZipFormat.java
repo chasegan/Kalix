@@ -11,11 +11,9 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
@@ -63,17 +61,7 @@ public final class CsvZipFormat {
      * exactly-one rule's evidence. Reads only the central directory.
      */
     public static List<String> fileEntryNames(File file) throws IOException {
-        List<String> names = new ArrayList<>();
-        try (ZipFile zip = new ZipFile(file)) {
-            Enumeration<? extends ZipEntry> entries = zip.entries();
-            while (entries.hasMoreElements()) {
-                ZipEntry entry = entries.nextElement();
-                if (!entry.isDirectory()) {
-                    names.add(entry.getName());
-                }
-            }
-        }
-        return names;
+        return ZipArchive.fileEntryNames(file);
     }
 
     /**

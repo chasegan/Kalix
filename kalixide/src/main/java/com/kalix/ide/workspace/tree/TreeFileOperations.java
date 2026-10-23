@@ -3,6 +3,7 @@ package com.kalix.ide.workspace.tree;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.kalix.ide.io.ZipArchive;
 import com.kalix.ide.utils.DialogUtils;
 
 import javax.swing.JOptionPane;
@@ -22,8 +23,6 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import net.lingala.zip4j.ZipFile;
-import net.lingala.zip4j.model.FileHeader;
 
 /**
  * The side-effecting file operations behind the project tree's context menu and keyboard
@@ -533,17 +532,7 @@ class TreeFileOperations {
         List<File> targets = withoutDescendants(files);
         String zipFileName = getZipFileName(targets, rootFile);
         // Compressing a data folder is slow; run it off the EDT. The watcher adds the archive.
-        offEdt(() -> {
-            try (ZipFile zipFile = new ZipFile(zipFileName)) {
-                for (File file : targets) {
-                    if (file.isDirectory()) {
-                        zipFile.addFolder(file);
-                    } else {
-                        zipFile.addFile(file);
-                    }
-                }
-            }
-        }, error -> {
+        offEdt(() -> ZipArchive.create(new File(zipFileName), targets), error -> {
             if (error != null) {
                 JOptionPane.showMessageDialog(parent, error, "Zip", JOptionPane.WARNING_MESSAGE);
             }
@@ -608,9 +597,9 @@ class TreeFileOperations {
     }
 
     /**
-     * Unzip the selected zip folder into the same directory. Zip4j extracts by overwriting any
-     * existing file of the same name without warning, so entries that would collide with
-     * existing files are surfaced in a confirmation prompt first.
+     * Unzip the selected zip folder into the same directory. Extraction overwrites any existing
+     * file of the same name, so entries that would collide with existing files are surfaced in
+     * a confirmation prompt first.
      */
     void unzipFile(File file) {
         File targetDir = file.getParentFile();
@@ -618,20 +607,16 @@ class TreeFileOperations {
         // archive, and the answer is needed before we can prompt. Extraction is the heavy
         // part, so that alone goes off the EDT (reopening the zip on the worker).
         List<String> collisions;
-        try (ZipFile zipFile = new ZipFile(file)) {
-            collisions = collidingEntries(zipFile, targetDir);
-        } catch (IllegalStateException | IOException ex) {
+        try {
+            collisions = collidingEntries(file, targetDir);
+        } catch (IOException ex) {
             JOptionPane.showMessageDialog(parent, ex.getMessage(), "Unzip", JOptionPane.WARNING_MESSAGE);
             return;
         }
         if (!collisions.isEmpty() && !confirmOverwrite(collisions)) {
             return;
         }
-        offEdt(() -> {
-            try (ZipFile zipFile = new ZipFile(file)) {
-                zipFile.extractAll(targetDir.getAbsolutePath());
-            }
-        }, error -> {
+        offEdt(() -> ZipArchive.extractAll(file, targetDir), error -> {
             if (error != null) {
                 JOptionPane.showMessageDialog(parent, error, "Unzip", JOptionPane.WARNING_MESSAGE);
             }
@@ -643,11 +628,11 @@ class TreeFileOperations {
      * Directory entries are skipped: extracting into an existing folder merges its contents
      * rather than overwriting the folder itself, so it isn't a collision.
      */
-    private static List<String> collidingEntries(ZipFile zipFile, File targetDir) throws IOException {
+    private static List<String> collidingEntries(File zip, File targetDir) throws IOException {
         List<String> collisions = new ArrayList<>();
-        for (FileHeader header : zipFile.getFileHeaders()) {
-            if (!header.isDirectory() && new File(targetDir, header.getFileName()).exists()) {
-                collisions.add(header.getFileName());
+        for (String name : ZipArchive.fileEntryNames(zip)) {
+            if (new File(targetDir, name).exists()) {
+                collisions.add(name);
             }
         }
         return collisions;
