@@ -184,12 +184,20 @@ public final class DataVizPanel extends JPanel {
         }
     }
 
-    /** Something under the page changed: rebuild now if shown, else when shown. */
+    /**
+     * Something under the page changed: rebuild now if shown, else when shown. A hidden
+     * page lets go of a grid showing a series the tab no longer selects, whose data the
+     * pool may have dropped.
+     */
     public void refresh() {
         if (shown) {
             rebuild();
         } else {
             dirty = true;
+            if (gridDisplay != null && !model.current().getVisibleSeries().containsAll(gridDisplay.getSeriesRefs())) {
+                gridDisplay = null;
+                tableModel.setGrid(DataGrid.EMPTY);
+            }
         }
     }
 
