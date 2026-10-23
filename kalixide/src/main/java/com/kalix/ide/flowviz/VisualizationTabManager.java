@@ -444,6 +444,9 @@ public class VisualizationTabManager {
             if (cause == FlowVizModel.Cause.RESTORE) {
                 notifyTabMutated(tabInfo);
             }
+            if (!now.getVisibleSeries().equals(old.getVisibleSeries())) {
+                host.onSelectionsChanged();
+            }
         });
 
         tabs.add(tabInfo);
@@ -733,6 +736,7 @@ public class VisualizationTabManager {
         if (tabs.isEmpty()) {
             addDefaultPlotTab();
         }
+        host.onSelectionsChanged();
     }
 
     /**

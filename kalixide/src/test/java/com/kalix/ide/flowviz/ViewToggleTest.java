@@ -146,6 +146,26 @@ class ViewToggleTest {
     }
 
     @Test
+    void aHiddenDataPageLetsGoOfADeselectedSeries() {
+        SeriesRef other = new DatasetSeries("/t.csv", "two");
+        DataSet pool = new DataSet();
+        pool.addSeries(REF, daily(1, 2, 3));
+        pool.addSeries(other, daily(4, 5, 6));
+        VisualizationTabManager mgr = manager(pool);
+        mgr.addPlotTab(settingsWith(REF, other));
+        VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
+        mgr.switchView(tab, FlowVizView.DATA);
+        assertEquals(2, tab.dataVizPanel.getGrid().seriesCount());
+        mgr.switchView(tab, FlowVizView.PLOT);
+
+        mgr.setTargetTabSelectedSeries(new LinkedHashSet<>(List.of(REF)));
+        assertSame(DataGrid.EMPTY, tab.dataVizPanel.getGrid(), "the hidden grid no longer holds the deselected data");
+
+        mgr.switchView(tab, FlowVizView.DATA);
+        assertEquals(1, tab.dataVizPanel.getGrid().seriesCount(), "and rebuilds when shown");
+    }
+
+    @Test
     void aRenameReachesTheDataPageHeaders() {
         DataSet pool = new DataSet();
         pool.addSeries(REF, daily(1, 2, 3));
