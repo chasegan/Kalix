@@ -98,11 +98,9 @@ public final class AppConstants {
     public static final String TOOLBAR_SESSIONS_TOOLTIP = "Run Manager";
     public static final String TOOLBAR_OPTIMISER_TOOLTIP = "Optimiser";
     
-    // Branding: the toolbar wordmark, one PNG per scale named <base>-<height>.png and rendered
-    // from graphics/banners by ../make-icons.sh. ToolBarBuilder stacks them into one
-    // multi-resolution image so the screen's scale picks the render.
-    public static final String KALIX_LOGO_LIGHT = "/images/kalix_banner_light";
-    public static final String KALIX_LOGO_DARK = "/images/kalix_banner_dark";
+    // Toolbar logo: one PNG per scale, <base>-<height>.png, rendered from graphics/banners by
+    // make-icons.sh at the repo root; ToolBarBuilder stacks them into one multi-resolution image.
+    public static final String KALIX_LOGO_LIGHT = "/images/kalix_toolbar_light";
+    public static final String KALIX_LOGO_DARK = "/images/kalix_toolbar_dark";
     public static final int TOOLBAR_LOGO_HEIGHT = 24; // Logical height for toolbar
-    public static final int[] TOOLBAR_LOGO_SCALES = {1, 2, 3};
 }

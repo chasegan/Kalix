@@ -65,7 +65,7 @@ public class ThemeManager {
     }
 
     /**
-     * Switches to a new theme with animation. When the node or syntax theme is
+     * Switches to a new theme. When the node or syntax theme is
      * in follow mode (the default), the matching linked palette is applied to
      * all documents and editors as part of the same switch.
      *

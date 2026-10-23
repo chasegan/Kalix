@@ -268,29 +268,38 @@ public class ToolBarBuilder {
     }
     
     /**
-     * Loads the toolbar wordmark as a multi-resolution image: the artwork at 1x, 2x and 3x the
-     * logical height, rendered from the vector by ../make-icons.sh, so the JDK paints the
-     * variant matching the screen's scale and the logo stays crisp on Retina and on 125–200%
-     * Windows scaling. The theme chooses the light or dark artwork. Falls back to a generated
-     * placeholder if the images cannot be read.
+     * Loads the toolbar logo: the artwork at 1x, 2x and 3x of {@link AppConstants#TOOLBAR_LOGO_HEIGHT},
+     * rendered by make-icons.sh at the repo root and stacked in a {@link BaseMultiResolutionImage},
+     * so the JDK paints the variant for the screen's scale. The theme chooses the light or dark
+     * artwork; a generated placeholder stands in if the images cannot be read.
      */
     private Icon loadLogoIcon() {
         String base = isDarkTheme() ? AppConstants.KALIX_LOGO_DARK : AppConstants.KALIX_LOGO_LIGHT;
         try {
-            Image[] variants = new Image[AppConstants.TOOLBAR_LOGO_SCALES.length];
-            for (int i = 0; i < variants.length; i++) {
-                String path = base + "-" + AppConstants.TOOLBAR_LOGO_HEIGHT * AppConstants.TOOLBAR_LOGO_SCALES[i] + ".png";
-                URL url = getClass().getResource(path);
-                if (url == null) {
-                    throw new IOException("Missing resource " + path);
-                }
-                variants[i] = ImageIO.read(url);
-            }
-            return new ImageIcon(new BaseMultiResolutionImage(variants));
+            return new ImageIcon(multiResolutionImage(base, AppConstants.TOOLBAR_LOGO_HEIGHT));
         } catch (IOException e) {
             logger.warn("Failed to load Kalix logo", e);
             return new ImageIcon(createFallbackLogo());
         }
+    }
+
+    /**
+     * {@code <base>-<h>.png} for h = height x 1, 2, 3, as make-icons.sh writes them. The variants
+     * go in ascending order: the first sets the icon's logical size, and the JDK picks the first
+     * variant at least as large as the scaled request.
+     */
+    private Image multiResolutionImage(String base, int height) throws IOException {
+        Image[] variants = new Image[3];
+        for (int i = 0; i < variants.length; i++) {
+            String path = base + "-" + height * (i + 1) + ".png";
+            URL url = getClass().getResource(path);
+            Image image = url == null ? null : ImageIO.read(url);
+            if (image == null) {
+                throw new IOException("Missing or unreadable " + path);
+            }
+            variants[i] = image;
+        }
+        return new BaseMultiResolutionImage(variants);
     }
 
     /**

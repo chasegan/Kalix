@@ -2,8 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" version="1.1"
      width="949.341560pt" height="228.741166pt" viewBox="0 0 949.341560 228.741166">
   <!-- Kalix wordmark, vector-traced from the approved artwork.
-       Font-independent and transparent: renders identically and crisply on
-       macOS, Windows and Linux at any display scale (via FlatSVGIcon). -->
+       Font-independent and transparent; make-icons.sh renders the toolbar PNG set from it. -->
   <g transform="translate(-43.500000,234.848547) scale(0.100000,-0.100000)"
 fill="#ffffff" stroke="none">
 <path d="M9160 2335 c-25 -30 -28 -109 -15 -335 8 -124 15 -301 17 -395 3
