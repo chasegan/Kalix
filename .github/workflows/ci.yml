@@ -52,8 +52,6 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ env.JDK_VERSION }}
-      # `check`, not `test`: Checkstyle is wired into the check lifecycle, so running
-      # `test` alone would leave the no-wildcard-imports rule unenforced on main.
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
         with:
@@ -61,6 +59,8 @@ jobs:
           # Terms of Use. 'basic' is the action's open-source GitHub Actions cache, and
           # caching the distribution and dependencies between runs is all this job needs.
           cache-provider: basic
+      # `check`, not `test`: Checkstyle is wired into the check lifecycle, so running
+      # `test` alone would leave the no-wildcard-imports rule unenforced on main.
       - name: Java tests and checks
         working-directory: kalixide
         shell: bash
