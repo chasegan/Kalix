@@ -132,9 +132,11 @@ tasks.processResources {
 // image, and the Windows MSI is produced separately by build-msi.bat (per-machine, for
 // Ivanti Trusted Ownership), so there is one way to build an installer, not two.
 
-// jdeps agrees with this list. java.naming is only logback's optional JNDI context
-// selector, and jdk.unsupported is directory-watcher's com.sun.nio.file FILE_TREE
-// modifier on Windows; neither first-party code nor any dependency uses sun.misc.Unsafe.
+// jdeps derives this list, plus java.sql, which only jackson-databind's optional SQL
+// type handlers want and which is left out on purpose. java.naming is only logback's
+// optional JNDI context selector, and jdk.unsupported is directory-watcher's
+// com.sun.nio.file FILE_TREE modifier on Windows; neither first-party code nor any
+// dependency uses sun.misc.Unsafe.
 val runtimeModules = listOf(
     "java.desktop",
     "java.logging",
@@ -188,7 +190,7 @@ tasks.register<Exec>("jpackageImage") {
         "--jlink-options", jlinkOptions.joinToString(" "),
         "--app-version", jpackageVersion,
         "--vendor", "Kalix",
-        "--copyright", "Copyright 2024-2025 Kalix",
+        "--copyright", "Copyright 2024-2026 Kalix",
         "--icon", iconFile
     )
     // Same JVM options as every other launch path; see application {}.
