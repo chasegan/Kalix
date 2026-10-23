@@ -4,13 +4,16 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.FileSystemLoopException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
@@ -25,7 +28,7 @@ import java.util.zip.ZipOutputStream;
 /**
  * Zip archives on disk: the file tree's Zip and Unzip, and the {@code .csv.zip} entry check.
  * Pure I/O, no Swing. Entry names use '/' on every platform, and a folder goes in under its
- * own name so that unzipping gives the folder back.
+ * path from the folder shared by every target, so that unzipping there gives it back.
  */
 public final class ZipArchive {
 
@@ -35,21 +38,24 @@ public final class ZipArchive {
     /**
      * Writes {@code zip} holding the targets, named relative to the nearest folder that holds
      * them all: {@code x.csv} when every target sits in one folder, {@code a/x.csv} and
-     * {@code b/x.csv} when they do not. A folder goes in recursively under its name, empty
-     * subfolders included and symbolic links followed. The archive being written is skipped if
-     * it lies inside a target. On failure no archive is left behind.
+     * {@code b/x.csv} when they do not. A folder goes in recursively, empty subfolders included
+     * and symbolic links followed; a link whose target is missing fails the archive. Targets
+     * must not overlap or repeat, or two entries share a name and the archive fails. The
+     * archive being written is skipped if it lies inside a target. An existing file at
+     * {@code zip} is refused, and on failure no archive is left behind.
      */
     public static void create(File zip, List<File> targets) throws IOException {
         Path zipPath = zip.toPath().toAbsolutePath().normalize();
         List<Path> paths = targets.stream().map(t -> t.toPath().toAbsolutePath().normalize()).toList();
         Path base = commonParent(paths);
-        try (ZipOutputStream out = new ZipOutputStream(
-                new BufferedOutputStream(Files.newOutputStream(zipPath)))) {
+        // Opened before the try so that an existing file fails here and is not deleted below.
+        OutputStream file = Files.newOutputStream(zipPath, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        try (ZipOutputStream out = new ZipOutputStream(new BufferedOutputStream(file))) {
             for (Path path : paths) {
                 if (Files.isDirectory(path)) {
                     addFolder(out, base, path, zipPath);
                 } else {
-                    addFile(out, path, entryName(base, path));
+                    addFile(out, path, entryName(base, path), Files.getLastModifiedTime(path));
                 }
             }
         } catch (IOException | RuntimeException e) {
@@ -90,8 +96,12 @@ public final class ZipArchive {
 
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                    if (attrs.isSymbolicLink()) {
+                        // Links are followed, so this is only true when the target is missing.
+                        throw new NoSuchFileException(file.toString(), null, "the symbolic link's target does not exist");
+                    }
                     if (!file.equals(skip)) {
-                        addFile(out, file, entryName(base, file));
+                        addFile(out, file, entryName(base, file), attrs.lastModifiedTime());
                     }
                     return FileVisitResult.CONTINUE;
                 }
@@ -106,9 +116,9 @@ public final class ZipArchive {
             });
     }
 
-    private static void addFile(ZipOutputStream out, Path file, String name) throws IOException {
+    private static void addFile(ZipOutputStream out, Path file, String name, FileTime modified) throws IOException {
         ZipEntry entry = new ZipEntry(name);
-        entry.setLastModifiedTime(Files.getLastModifiedTime(file));
+        entry.setLastModifiedTime(modified);
         out.putNextEntry(entry);
         Files.copy(file, out);
         out.closeEntry();

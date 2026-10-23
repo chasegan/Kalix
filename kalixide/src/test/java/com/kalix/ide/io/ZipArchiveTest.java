@@ -74,30 +74,50 @@ class ZipArchiveTest {
     }
 
     @Test
-    void filesFromDifferentFoldersKeepTheirFolders() throws IOException {
+    void targetsFromDifferentFoldersKeepTheirPathsFromTheSharedFolder() throws IOException {
         write("a/x.csv", "a");
         write("b/x.csv", "b");
+        write("c/deep/folder/y.txt", "y");
         File zip = tempDir.resolve("files.zip").toFile();
 
-        ZipArchive.create(zip, List.of(tempDir.resolve("a/x.csv").toFile(), tempDir.resolve("b/x.csv").toFile()));
+        ZipArchive.create(zip, List.of(tempDir.resolve("a/x.csv").toFile(), tempDir.resolve("b/x.csv").toFile(),
+            tempDir.resolve("c/deep/folder").toFile()));
 
-        assertEquals(List.of("a/x.csv", "b/x.csv"), ZipArchive.fileEntryNames(zip).stream().sorted().toList());
+        assertEquals(List.of("a/x.csv", "b/x.csv", "c/deep/folder/y.txt"),
+            ZipArchive.fileEntryNames(zip).stream().sorted().toList());
+    }
+
+    private void symlink(String link, String target) throws IOException {
+        try {
+            Files.createSymbolicLink(tempDir.resolve(link), tempDir.resolve(target));
+        } catch (IOException | UnsupportedOperationException e) {
+            Assumptions.abort("symbolic links unavailable here: " + e);
+        }
     }
 
     @Test
     void symbolicLinksAreFollowed() throws IOException {
         write("data/real/f.txt", "f");
-        try {
-            Files.createSymbolicLink(tempDir.resolve("data/link"), tempDir.resolve("data/real"));
-        } catch (IOException | UnsupportedOperationException e) {
-            Assumptions.abort("symbolic links unavailable here: " + e);
-        }
+        symlink("data/link", "data/real");
         File zip = tempDir.resolve("data.zip").toFile();
 
         ZipArchive.create(zip, List.of(tempDir.resolve("data").toFile()));
 
         assertEquals(List.of("data/link/f.txt", "data/real/f.txt"),
             ZipArchive.fileEntryNames(zip).stream().sorted().toList());
+    }
+
+    @Test
+    void danglingLinkFailsWithTheReason() throws IOException {
+        write("data/f.txt", "f");
+        symlink("data/broken", "data/missing");
+        File zip = tempDir.resolve("data.zip").toFile();
+
+        IOException ex = assertThrows(IOException.class,
+            () -> ZipArchive.create(zip, List.of(tempDir.resolve("data").toFile())));
+
+        assertTrue(ex.getMessage().contains("target does not exist"), ex.getMessage());
+        assertFalse(zip.exists());
     }
 
     @Test
@@ -108,6 +128,17 @@ class ZipArchiveTest {
             () -> ZipArchive.create(zip, List.of(tempDir.resolve("does-not-exist.txt").toFile())));
 
         assertFalse(zip.exists());
+    }
+
+    @Test
+    void existingFileAtTheArchivePathIsRefusedAndKept() throws IOException {
+        Path existing = write("keep.zip", "not touched");
+        write("a.txt", "a");
+
+        assertThrows(IOException.class,
+            () -> ZipArchive.create(existing.toFile(), List.of(tempDir.resolve("a.txt").toFile())));
+
+        assertEquals("not touched", Files.readString(existing));
     }
 
     @Test
