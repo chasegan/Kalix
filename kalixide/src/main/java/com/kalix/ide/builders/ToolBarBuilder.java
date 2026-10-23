@@ -1,6 +1,5 @@
 package com.kalix.ide.builders;
 
-import com.formdev.flatlaf.extras.FlatSVGIcon;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.icons.KalixIcon;
@@ -11,6 +10,7 @@ import org.kordamp.ikonli.swing.FontIcon;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.imageio.ImageIO;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
@@ -25,7 +25,10 @@ import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.RenderingHints;
 import java.awt.event.ActionListener;
+import java.awt.image.BaseMultiResolutionImage;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.net.URL;
 
 /**
  * Builder class for creating and configuring the application toolbar.
@@ -252,7 +255,7 @@ public class ToolBarBuilder {
         JButton brandingButton = new JButton(logoIcon);
         brandingButton.setToolTipText(AppConstants.APP_WEBSITE_URL);
         brandingButton.setFocusPainted(false);
-        // The logo artwork runs to the edges of its SVG viewBox, so add a little
+        // The logo artwork runs to the edges of its canvas, so add a little
         // breathing room around it - weighted to the left, where it sits against
         // the window edge (top, left, bottom, right).
         brandingButton.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 6));
@@ -265,72 +268,29 @@ public class ToolBarBuilder {
     }
     
     /**
-     * Loads the Kalix logo as a resolution-independent icon for the toolbar, choosing the
-     * appropriate version based on the current theme.
-     *
-     * <p>The logo is rendered from its SVG source via {@link FlatSVGIcon}, which rasterises the
-     * vector at the actual device scale every time it paints. This keeps the logo crisp on any
-     * display density (Retina on macOS, 125-200% scaling on Windows, fractional scaling on Linux)
-     * rather than upscaling a fixed-size bitmap. Falls back to the bundled raster logo, then to a
-     * generated placeholder, if the SVG cannot be loaded.
-     *
-     * @return A theme-appropriate, HiDPI-aware logo icon
+     * Loads the toolbar wordmark as a multi-resolution image: the artwork at 1x, 2x and 3x the
+     * logical height, rendered from the vector by ../make-icons.sh, so the JDK paints the
+     * variant matching the screen's scale and the logo stays crisp on Retina and on 125–200%
+     * Windows scaling. The theme chooses the light or dark artwork. Falls back to a generated
+     * placeholder if the images cannot be read.
      */
     private Icon loadLogoIcon() {
-        boolean isDarkTheme = isDarkTheme();
-
-        // Preferred: scalable vector logo.
-        String svgPath = isDarkTheme ? AppConstants.KALIX_LOGO_DARK_SVG_PATH : AppConstants.KALIX_LOGO_SVG_PATH;
-        java.net.URL svgUrl = getClass().getResource(svgPath);
-        if (svgUrl != null) {
-            try {
-                FlatSVGIcon svgIcon = new FlatSVGIcon(svgUrl);
-                int intrinsicHeight = svgIcon.getIconHeight();
-                if (intrinsicHeight > 0) {
-                    // Scale to the target logical height while preserving aspect ratio.
-                    return svgIcon.derive((float) AppConstants.TOOLBAR_LOGO_HEIGHT / intrinsicHeight);
-                }
-                return svgIcon;
-            } catch (Exception e) {
-                logger.warn("Failed to load Kalix SVG logo, falling back to raster", e);
-            }
-        }
-
-        // Fallback: bundled raster logo, scaled to the toolbar height.
-        return loadRasterLogo(isDarkTheme);
-    }
-
-    /**
-     * Loads the bundled raster logo as a fallback when the SVG source is unavailable.
-     *
-     * @param isDarkTheme Whether the dark-theme variant should be used
-     * @return Scaled raster logo, or a generated placeholder if loading fails
-     */
-    private ImageIcon loadRasterLogo(boolean isDarkTheme) {
+        String base = isDarkTheme() ? AppConstants.KALIX_LOGO_DARK : AppConstants.KALIX_LOGO_LIGHT;
         try {
-            String logoPath = isDarkTheme ? AppConstants.KALIX_LOGO_DARK_PATH : AppConstants.KALIX_LOGO_PATH;
-            java.net.URL logoUrl = getClass().getResource(logoPath);
-
-            if (logoUrl != null) {
-                ImageIcon originalIcon = new ImageIcon(logoUrl);
-                Image originalImage = originalIcon.getImage();
-
-                int originalWidth = originalImage.getWidth(null);
-                int originalHeight = originalImage.getHeight(null);
-                int targetHeight = AppConstants.TOOLBAR_LOGO_HEIGHT;
-                int targetWidth = (originalWidth * targetHeight) / originalHeight;
-
-                Image scaledImage = originalImage.getScaledInstance(
-                    targetWidth, targetHeight, Image.SCALE_SMOOTH);
-
-                return new ImageIcon(scaledImage);
+            Image[] variants = new Image[AppConstants.TOOLBAR_LOGO_SCALES.length];
+            for (int i = 0; i < variants.length; i++) {
+                String path = base + "-" + AppConstants.TOOLBAR_LOGO_HEIGHT * AppConstants.TOOLBAR_LOGO_SCALES[i] + ".png";
+                URL url = getClass().getResource(path);
+                if (url == null) {
+                    throw new IOException("Missing resource " + path);
+                }
+                variants[i] = ImageIO.read(url);
             }
-        } catch (Exception e) {
+            return new ImageIcon(new BaseMultiResolutionImage(variants));
+        } catch (IOException e) {
             logger.warn("Failed to load Kalix logo", e);
+            return new ImageIcon(createFallbackLogo());
         }
-
-        // Last resort: a simple generated placeholder.
-        return new ImageIcon(createFallbackLogo());
     }
 
     /**

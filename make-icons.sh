@@ -6,6 +6,7 @@ set -euo pipefail
 #
 # One source of truth (graphics/icons/kalix_icon.svg) → every consumed icon:
 #   • KalixIDE runtime window/taskbar PNG set   (IconManager.java)
+#   • KalixIDE toolbar wordmark PNG set          (ToolBarBuilder.java)
 #   • Windows launcher .ico                      (jpackage --icon, Windows)
 #   • macOS launcher .icns                       (proper multi-res; see NOTE)
 #   • Website favicon.png + apple-touch + PWA    (website/docs/assets)
@@ -29,14 +30,21 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ---- Sources -------------------------------------------------------------
 GLYPH_SVG="$REPO_ROOT/graphics/icons/kalix_icon_solid_white_bg.svg"  # master app glyph (white rounded tile)
 FAVICON_SVG="$REPO_ROOT/website/docs/assets/favicon.svg"   # adaptive web favicon (its own art)
+WORDMARK_LIGHT_SVG="$REPO_ROOT/graphics/banners/kalix_toolbar_light.svg"  # toolbar wordmark, light themes
+WORDMARK_DARK_SVG="$REPO_ROOT/graphics/banners/kalix_toolbar_dark.svg"    # toolbar wordmark, dark themes
 
 # ---- Output locations ----------------------------------------------------
 IDE_ICONS="$REPO_ROOT/kalixide/src/main/resources/icons"   # consumed by the IDE build
+IDE_IMAGES="$REPO_ROOT/kalixide/src/main/resources/images" # toolbar wordmark lives here
 WEB_ASSETS="$REPO_ROOT/website/docs/assets"                # consumed by MkDocs
 
 # ---- Size policy ---------------------------------------------------------
 # Runtime set: what IconManager loads + what jpackage takes on macOS/Linux.
 RUNTIME_SIZES=(16 24 32 48 64 128 256 512 1024)
+# Toolbar wordmark: ToolBarBuilder's 24px logical height at 1x, 2x and 3x. The three
+# go into one BaseMultiResolutionImage, so a HiDPI screen paints the 2x or 3x render
+# rather than an upscaled 1x.
+WORDMARK_HEIGHTS=(24 48 72)
 # Windows .ico frames (16/24/32/48 as bitmaps, 256 auto-stored as PNG by magick).
 ICO_SIZES=(16 24 32 48 256)
 # apple-touch-icon must be OPAQUE — iOS renders transparency as black. Flatten
@@ -170,11 +178,22 @@ else
 fi
 
 # --------------------------------------------------------------------------
+# 5. Toolbar wordmark  → kalixide/src/main/resources/images/kalix_banner_<theme>-<h>.png
+# --------------------------------------------------------------------------
+log "Writing toolbar wordmark set → ${IDE_IMAGES#$REPO_ROOT/}/"
+for h in "${WORDMARK_HEIGHTS[@]}"; do
+    rsvg-convert -h "$h" -o "$IDE_IMAGES/kalix_banner_light-$h.png" "$WORDMARK_LIGHT_SVG"
+    rsvg-convert -h "$h" -o "$IDE_IMAGES/kalix_banner_dark-$h.png"  "$WORDMARK_DARK_SVG"
+done
+ok "kalix_banner_{light,dark}-{$(IFS=,; echo "${WORDMARK_HEIGHTS[*]}")}.png"
+
+# --------------------------------------------------------------------------
 # Optional lossless squeeze if a PNG optimiser is installed (purely a size win).
 # --------------------------------------------------------------------------
 if command -v oxipng >/dev/null 2>&1; then
     log "Optimising PNGs with oxipng"
-    oxipng -q -o 4 --strip safe "$IDE_ICONS"/kalix-*.png "$WEB_ASSETS"/*.png 2>/dev/null || true
+    oxipng -q -o 4 --strip safe "$IDE_ICONS"/kalix-*.png "$IDE_IMAGES"/kalix_banner_*-*.png \
+        "$WEB_ASSETS"/*.png 2>/dev/null || true
     ok "oxipng pass complete"
 fi
 
@@ -185,6 +204,8 @@ cat <<'NOTE'
   Wiring (already in place — listed so it's not forgotten if paths move):
     • build.gradle.kts selects .ico / .icns / kalix-256.png per platform.
     • IconManager feeds kalix-dock.png to Taskbar on macOS (padded Dock icon).
+    • ToolBarBuilder stacks kalix_banner_<theme>-{24,48,72}.png into one
+      BaseMultiResolutionImage for the toolbar logo.
     • Web tags + manifest live in overrides/main.html AND the bespoke
       docs/index.html landing page (which bypasses the Material theme).
 
