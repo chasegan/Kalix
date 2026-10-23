@@ -62,7 +62,9 @@ documents, and nothing else needs maintaining.
    documents.
 2. **The tool comes from the Java toolchain**, not from the JVM running
    Gradle. The compiler, the test JVM and the bundled runtime are then the
-   same JDK by construction.
+   same JDK by construction. `build-msi.bat` wraps the finished image with
+   whatever jpackage is on `PATH`; the runtime inside is still the
+   toolchain's.
 3. **The module list is explicit and justified in place.** jlink is told
    which modules to include, each unusual entry says who needs it, and
    jdeps is the check.
