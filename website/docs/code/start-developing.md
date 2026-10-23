@@ -31,7 +31,7 @@ The best way to do this is:
 3. Compile and run your own version of Kalix:
    1. Install compilers and IDEs:
       1. **Rust toolchain**: <https://rustup.rs/> — RustRover uses this under the hood
-      2. **JDK 23**: [https://adoptium.net/](start-developing.md) — pick the Temurin 23 installer for your OS
+      2. **JDK 25**: <https://adoptium.net/> — pick the Temurin 25 installer for your OS
       3. **RustRover**: <https://www.jetbrains.com/rust/>
       4. **IntelliJ IDEA Community Edition**: <https://www.jetbrains.com/idea/download/>
       5. You can confirm Rust and Java are installed by opening a terminal and running `rustc --version` and `java --version`. Each should print a version number.

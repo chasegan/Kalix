@@ -33,7 +33,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  JDK_VERSION: '23'
+  JDK_VERSION: '25'
   PYTHON_VERSION: '3.11'  # only used by bump-version.py during bundle builds
 
 jobs:
@@ -105,7 +105,7 @@ jobs:
         with:
           ref: ${{ needs.verify-version.outputs.tag }}
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: ${{ env.JDK_VERSION }}

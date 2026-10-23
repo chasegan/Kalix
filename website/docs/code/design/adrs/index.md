@@ -90,6 +90,7 @@ repository has the complete record.
 
 Newest first.
 
+- [ADR-0013 — Package the IDE with the JDK's jpackage, not a plugin](0013-package-the-ide-with-jpackage.md)
 - [ADR-0012 — Inputs must be in step with the simulation; Kalix does not realign them](0012-inputs-in-step-with-the-simulation.md)
 - [ADR-0011 — Guard dependencies with a committed lockfile, not a scheduled audit](0011-no-scheduled-dependency-audit.md)
 - [ADR-0010 — Carry IDE metadata in annotation comments](0010-annotations.md)

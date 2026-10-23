@@ -31,4 +31,4 @@ The `kalix` python package ([README](python/README.md)) uses [PyO3](https://gith
 
 ## KalixIDE
 
-KalixIDE is written in Java 23. It is a lightweight, cross-platform model editing tool.
+KalixIDE is written in Java 25. It is a lightweight, cross-platform model editing tool.

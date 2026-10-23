@@ -35,7 +35,7 @@ website/
 ## Build & preview
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+uv venv .venv && uv pip install --python .venv/bin/python -r requirements.lock
 .venv/bin/mkdocs serve            # preview at http://localhost:8000
 scripts/build.sh                  # full build into site/
 ```
