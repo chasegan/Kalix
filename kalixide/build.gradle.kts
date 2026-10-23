@@ -129,9 +129,9 @@ tasks.processResources {
 
 // jdeps --print-module-deps over the install libs gives java.desktop, java.prefs,
 // jdk.unsupported and java.sql. java.sql is left out on purpose: only jackson-databind's
-// optional SQL type handlers want it. jdeps folds java.logging and java.xml into java.sql's
-// transitive requires, so without it both must be named here (all logging goes through
-// java.util.logging; rsyntaxtextarea and autocomplete read XML). jdk.unsupported is
+// optional SQL type handlers want it. jdeps folds java.logging into java.sql's transitive
+// requires, so without it java.logging must be named here (all logging goes through
+// java.util.logging); java.xml comes with java.desktop regardless. jdk.unsupported is
 // directory-watcher's com.sun.nio.file FILE_TREE modifier on Windows; neither first-party
 // code nor any dependency uses sun.misc.Unsafe.
 val runtimeModules = listOf(
