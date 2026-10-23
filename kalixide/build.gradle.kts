@@ -43,7 +43,6 @@ dependencies {
     // FlatLaf modern look and feel
     implementation("com.formdev:flatlaf:3.2.5")
     implementation("com.formdev:flatlaf-extras:3.2.5")
-    implementation("com.formdev:flatlaf-intellij-themes:3.2.5")
     
     // Ikonli icons
     implementation("org.kordamp.ikonli:ikonli-core:12.4.0")
