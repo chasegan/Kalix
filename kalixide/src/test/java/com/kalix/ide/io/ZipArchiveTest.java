@@ -1,5 +1,6 @@
 package com.kalix.ide.io;
 
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -21,8 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Pins what the file tree's Zip and Unzip rely on: a folder is archived under its own name
- * with '/' separators and its empty subfolders, a file at the top level, and extraction gives
- * it all back, overwrites what is already there, and refuses an entry that escapes the target.
+ * with '/' separators and its empty subfolders, files from one folder at the top level and
+ * from several under their folders, links followed, nothing left behind on failure; and
+ * extraction gives it all back, overwrites what is already there, and refuses an entry that
+ * escapes the target.
  */
 class ZipArchiveTest {
 
@@ -68,6 +71,43 @@ class ZipArchiveTest {
         ZipArchive.create(zip, List.of(tempDir.resolve("data").toFile()));
 
         assertEquals(List.of("data/a.txt"), ZipArchive.fileEntryNames(zip));
+    }
+
+    @Test
+    void filesFromDifferentFoldersKeepTheirFolders() throws IOException {
+        write("a/x.csv", "a");
+        write("b/x.csv", "b");
+        File zip = tempDir.resolve("files.zip").toFile();
+
+        ZipArchive.create(zip, List.of(tempDir.resolve("a/x.csv").toFile(), tempDir.resolve("b/x.csv").toFile()));
+
+        assertEquals(List.of("a/x.csv", "b/x.csv"), ZipArchive.fileEntryNames(zip).stream().sorted().toList());
+    }
+
+    @Test
+    void symbolicLinksAreFollowed() throws IOException {
+        write("data/real/f.txt", "f");
+        try {
+            Files.createSymbolicLink(tempDir.resolve("data/link"), tempDir.resolve("data/real"));
+        } catch (IOException | UnsupportedOperationException e) {
+            Assumptions.abort("symbolic links unavailable here: " + e);
+        }
+        File zip = tempDir.resolve("data.zip").toFile();
+
+        ZipArchive.create(zip, List.of(tempDir.resolve("data").toFile()));
+
+        assertEquals(List.of("data/link/f.txt", "data/real/f.txt"),
+            ZipArchive.fileEntryNames(zip).stream().sorted().toList());
+    }
+
+    @Test
+    void failedCreateLeavesNoArchive() {
+        File zip = tempDir.resolve("gone.zip").toFile();
+
+        assertThrows(IOException.class,
+            () -> ZipArchive.create(zip, List.of(tempDir.resolve("does-not-exist.txt").toFile())));
+
+        assertFalse(zip.exists());
     }
 
     @Test
