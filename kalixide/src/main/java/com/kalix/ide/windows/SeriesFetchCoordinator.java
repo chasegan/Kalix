@@ -284,7 +284,6 @@ class SeriesFetchCoordinator {
                 }
 
                 final List<SeriesRef> capturedRefs = new ArrayList<>(refs);
-                final Set<SeriesRef> capturedNewSelection = new LinkedHashSet<>(wanted);
                 // Captured to detect whether "Last" has changed since this request was issued.
                 // Only applied to LastSeries refs; RunSeries / DatasetSeries refs are tied to
                 // their own immutable identity and are not generation-dependent.
@@ -301,8 +300,8 @@ class SeriesFetchCoordinator {
                                 if (lastIsStale && capturedRef instanceof LastSeries) {
                                     continue;
                                 }
-                                // Check if series is still selected on the target tab
-                                if (capturedNewSelection.contains(capturedRef)) {
+                                // Unticked meanwhile: the pool keeps only what some tab selects.
+                                if (tabManager.isSeriesSelectedOnAnyTab(capturedRef)) {
                                     window.publishSeries(capturedRef, timeSeriesData);
                                 }
                             }
@@ -328,13 +327,12 @@ class SeriesFetchCoordinator {
             }
         }
 
-        // The plot pool holds every series it has fetched strongly, for every tab, and
-        // does not shrink on deselect (undo, tab switches and duplication re-select from
-        // it without fetching). So ticking a parent over a large Pixie file (e.g. #430's
-        // 181 x 3.65M points) - or ticking different series in turn, or across tabs -
-        // would decode the file into memory a series at a time. Judge the Pixie series
-        // already in the pool plus the newly ticked ones by the same estimate and budget
-        // as the whole-file views, and fetch none of the new ones if that is over.
+        // The plot pool holds strongly every series some tab selects, and PixieStore keeps
+        // decoded series only softly, so the pool is what holds Pixie data in memory.
+        // Ticking a parent over a large Pixie file (e.g. #430's 181 x 3.65M points) would
+        // decode it a series at a time. Judge the Pixie series already in the pool plus
+        // the newly wanted ones by the same estimate and budget as the whole-file views,
+        // and fetch none of the new ones if that is over.
         String pixieRefusal = pixieSelectionRefusal(wanted);
         boolean pixieRefused = false;
 
@@ -428,9 +426,8 @@ class SeriesFetchCoordinator {
         return String.format(
             "The Pixie series loaded, loading or ticked in the Run Manager (%,d) would need"
                 + " about %s in memory, more than the %s it allows (half the IDE's memory).%n%n"
-                + "The newly ticked series were not loaded. Series stay loaded, even when"
-                + " unticked, until their dataset is removed: remove and re-add a dataset to"
-                + " free its memory, then tick fewer series.",
+                + "The newly ticked series were not loaded. Untick series you no longer need,"
+                + " in every plot tab, to free their memory, then tick fewer series.",
             tally.series, PixieStore.formatBytes(estimate), PixieStore.formatBytes(budget));
     }
 
@@ -558,6 +555,9 @@ class SeriesFetchCoordinator {
                     logger.warn("Failed to decode Pixie series {}", ref, cause);
                     tabManager.addErrorSeriesInStatsTabs(ref, cause.getMessage());
                     return;
+                }
+                if (!tabManager.isSeriesSelectedOnAnyTab(ref)) {
+                    return; // unticked while decoding: never enters the pool
                 }
                 // A tab switch fetches a series still decoding again; the first to settle publishes.
                 if (plotDataSet.getSeries(ref) != data) {
