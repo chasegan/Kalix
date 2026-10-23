@@ -117,4 +117,12 @@ applies and the audit is back on the table.
 
 ## Amendments
 
-*None yet.*
+- *2026-10-23* — The website build was bitten the same way. Its
+  `requirements.txt` set floors only, so each deploy re-resolved the
+  transitive packages; the deploy of 19 October picked up `selectolax`
+  1.0.1, two days old, and the glightbox plugin built on it dropped every
+  image inside a `<figure>` from the published site. The build was green.
+  `website/requirements.lock` now pins every package and is what CI and
+  developers install; `requirements.txt` keeps the intent and the lock is
+  compiled from it. §1 therefore covers the site build as well as the
+  crates.
