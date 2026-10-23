@@ -14,7 +14,7 @@ class WindowsIntegrationTest {
 
     @Test
     @EnabledOnOs(OS.WINDOWS)
-    void setsTheAppUserModelId() {
+    void setsTheAppUserModelId() throws Throwable {
         assertEquals(0, WindowsIntegration.setAppUserModelId(WindowsIntegration.APP_USER_MODEL_ID));
     }
 }

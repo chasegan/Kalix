@@ -40,22 +40,28 @@ public final class WindowsIntegration {
         if (PlatformUtils.getCurrentPlatform() != Platform.WINDOWS) {
             return;
         }
-        int hr = setAppUserModelId(APP_USER_MODEL_ID);
-        if (hr == 0) {
-            logger.debug("Set AppUserModelID to {}", APP_USER_MODEL_ID);
-        } else {
-            logger.warn("Could not set AppUserModelID, HRESULT {}", Integer.toHexString(hr));
+        try {
+            int hr = setAppUserModelId(APP_USER_MODEL_ID);
+            if (hr == 0) {
+                logger.debug("Set AppUserModelID to {}", APP_USER_MODEL_ID);
+            } else {
+                logger.warn("Could not set AppUserModelID, HRESULT 0x{}", Integer.toHexString(hr));
+            }
+        } catch (Throwable t) {
+            logger.warn("Could not call SetCurrentProcessExplicitAppUserModelID", t);
         }
     }
 
     /**
      * Calls shell32's SetCurrentProcessExplicitAppUserModelID with {@code appId}. Windows only.
      *
-     * @return the HRESULT, 0 (S_OK) on success; -1 if the function could not be bound or called
+     * @return the HRESULT, 0 (S_OK) on success
+     * @throws Throwable if the function cannot be bound or the call fails
      */
-    static int setAppUserModelId(String appId) {
+    static int setAppUserModelId(String appId) throws Throwable {
         try (Arena arena = Arena.ofConfined()) {
             Linker linker = Linker.nativeLinker();
+            // The lookup is scoped to this arena; shell32 is loaded by the process anyway.
             SymbolLookup shell32 = SymbolLookup.libraryLookup("shell32.dll", arena);
             MethodHandle setId = linker.downcallHandle(
                 shell32.find("SetCurrentProcessExplicitAppUserModelID").orElseThrow(),
@@ -63,9 +69,6 @@ public final class WindowsIntegration {
             // PCWSTR: UTF-16LE with a NUL terminator, which allocateFrom appends.
             MemorySegment wideId = arena.allocateFrom(appId, StandardCharsets.UTF_16LE);
             return (int) setId.invoke(wideId);
-        } catch (Throwable t) {
-            logger.warn("Could not call SetCurrentProcessExplicitAppUserModelID", t);
-            return -1;
         }
     }
 }

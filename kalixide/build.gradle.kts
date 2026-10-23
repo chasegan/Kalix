@@ -56,12 +56,11 @@ dependencies {
     // Diff utilities for model comparison
     implementation("io.github.java-diff-utils:java-diff-utils:4.12")
 
-    // JNA for Windows native API calls (AppUserModelID for taskbar pinning)
+    // jna is directory-watcher's (FSEvents on macOS); pinned here so the transitive is not an old one.
     implementation("net.java.dev.jna:jna:5.14.0")
 
     // Directory watching with native FSEvents on macOS (project tree live updates)
     implementation("io.methvin:directory-watcher:0.18.0")
-
 
     testImplementation(platform("org.junit:junit-bom:5.9.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
