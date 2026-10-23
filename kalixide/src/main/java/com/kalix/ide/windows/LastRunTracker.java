@@ -292,6 +292,9 @@ class LastRunTracker {
         // Expand the Last run node to show the new child
         timeseriesSourceTree.expandPath(new TreePath(lastRunNode.getPath()));
 
+        // The previous Last run's data leaves the pool unless a tab selects that run directly.
+        window.trimPool();
+
         // Refresh any plotted "[Last]" series to use the new Last run's data
         refreshLastSeries();
         lastChangeListeners.forEach(Runnable::run);
@@ -325,8 +328,8 @@ class LastRunTracker {
      *
      * <h3>Atomic swap (no empty-plot gap)</h3>
      * Writing the new data via {@code addSeries} replaces the {@code RunSeries} entry in a
-     * single EDT operation; the previous Last's {@code RunSeries} entry is left untouched
-     * (it remains valid data for that specific run).
+     * single EDT operation. The previous Last's {@code RunSeries} entry has already left the
+     * pool unless a tab selects that run directly.
      */
     private void refreshLastSeries() {
         if (lastRunInfo == null) {
@@ -380,12 +383,12 @@ class LastRunTracker {
                             if (capturedGeneration != lastRunGeneration) {
                                 return;
                             }
-                            window.publishSeries(ref, timeSeriesData);
-
-                            // Only refresh tabs if something on screen needs to redraw.
-                            if (tabManager.isSeriesSelectedOnAnyTab(ref)) {
-                                tabManager.updateAllTabs(false);
+                            // Unticked meanwhile: the pool keeps only what some tab selects.
+                            if (!tabManager.isSeriesSelectedOnAnyTab(ref)) {
+                                return;
                             }
+                            window.publishSeries(ref, timeSeriesData);
+                            tabManager.updateAllTabs(false);
                         });
                     })
                     .exceptionally(throwable -> {
