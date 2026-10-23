@@ -58,7 +58,6 @@ dependencies {
 
     // JNA for Windows native API calls (AppUserModelID for taskbar pinning)
     implementation("net.java.dev.jna:jna:5.14.0")
-    implementation("net.java.dev.jna:jna-platform:5.14.0")
 
     // Directory watching with native FSEvents on macOS (project tree live updates)
     implementation("io.methvin:directory-watcher:0.18.0")
