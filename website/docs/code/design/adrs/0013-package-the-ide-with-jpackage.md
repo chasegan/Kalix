@@ -4,7 +4,7 @@ title: "ADR-0013: Package the IDE with the JDK's jpackage, not a plugin"
 
 # ADR-0013: Package the IDE with the JDK's jpackage, not a plugin
 
-- **Status**: Proposed
+- **Status**: Accepted
 - **Date**: 2026-10-23
 - **Deciders**: Chas Egan (@chasegan)
 - **Tags**: ide, build
