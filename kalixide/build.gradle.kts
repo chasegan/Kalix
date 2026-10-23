@@ -132,9 +132,12 @@ tasks.processResources {
 // image, and the Windows MSI is produced separately by build-msi.bat (per-machine, for
 // Ivanti Trusted Ownership), so there is one way to build an installer, not two.
 
-// jdeps derives this list, plus java.sql, which only jackson-databind's optional SQL
-// type handlers want and which is left out on purpose. java.naming is only logback's
-// optional JNDI context selector, and jdk.unsupported is directory-watcher's
+// jdeps --print-module-deps over the install libs gives java.desktop, java.prefs,
+// java.naming, jdk.unsupported and java.sql. java.sql is left out on purpose: only
+// jackson-databind's optional SQL type handlers want it. jdeps folds java.logging and
+// java.xml into java.sql's transitive requires, so without it both must be named here
+// (jna, ikonli, jsvg and java-diff-utils log through java.util.logging). java.naming is
+// only logback's optional JNDI context selector, and jdk.unsupported is directory-watcher's
 // com.sun.nio.file FILE_TREE modifier on Windows; neither first-party code nor any
 // dependency uses sun.misc.Unsafe.
 val runtimeModules = listOf(
