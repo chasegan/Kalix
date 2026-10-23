@@ -1,5 +1,14 @@
-# Kalix website build dependencies (kalix.org).
-# Install into an isolated venv:  python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+# Kalix website build dependencies (kalix.org): what the site needs, as floors.
+#
+# Nobody installs from this file. CI and developers install requirements.lock,
+# which is compiled from it with every version pinned:
+#
+#     uv pip compile --universal requirements.txt -o requirements.lock
+#
+# Recompile when you change a line here or want newer packages, then build and
+# look at the result before committing the new lock. The lock exists because an
+# unpinned transitive (selectolax 1.0.1, October 2026) once silently dropped
+# every image inside a <figure> from the published site.
 mkdocs-material>=9.5
 mkdocs-macros-plugin>=1.0
 mkdocs-glightbox>=0.4
