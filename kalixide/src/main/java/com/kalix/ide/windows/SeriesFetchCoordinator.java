@@ -190,12 +190,44 @@ class SeriesFetchCoordinator {
         boolean hasOverlap = currentTabSeries.stream().anyMatch(newSelectedSeries::contains);
         final boolean shouldResetZoom = currentTabSeries.isEmpty() || !hasOverlap;
 
-        // Determine which series need data fetched (not yet in the pool)
-        Set<SeriesRef> seriesToFetch = new HashSet<>(newSelectedSeries);
-        seriesToFetch.removeIf(ref -> plotDataSet.getSeries(ref) != null);
-
         // Capture the target FlowVizPanel for async callbacks
         final FlowVizPanel targetPanel = tabManager.getTargetVizPanel();
+
+        fetchIntoPool(newSelectedSeries, refToLeaf, targetPanel, shouldResetZoom, true);
+
+        // Also assign palette slots for series new to this tab but already in pool
+        for (SeriesRef ref : newSelectedSeries) {
+            if (!currentTabSeries.contains(ref)) {
+                seriesSlotManager.assignSlot(ref);
+            }
+        }
+
+        // Update the target tab's selected series (rebuilds legend, visible series, display)
+        tabManager.setTargetTabSelectedSeries(newSelectedSeries);
+
+        // Only reset zoom when the selection completely changed (no overlap with previous).
+        // Additive selection (Ctrl+click) intentionally preserves both X and Y zoom so the
+        // user can see how the new series looks in their current view window. Auto-Y is not
+        // triggered here — it only applies during pan/zoom interactions and setting changes.
+        if (shouldResetZoom && targetPanel != null) {
+            targetPanel.zoomToFit();
+        }
+    }
+
+    /**
+     * Fetches into the pool every series in {@code wanted} that it lacks: run series from
+     * the request cache or the session, derived series from their records, dataset series
+     * from their sources (Pixie through the memory gate, whose refusal is reported in a
+     * dialog when {@code announceRefusal}, else only in the stats rows). {@code refToLeaf}
+     * names each series' tree leaf, which says where it comes from; a series without one
+     * is skipped. Data arriving later refreshes {@code targetPanel}'s tab, zooming to fit
+     * when {@code shouldResetZoom}.
+     */
+    private void fetchIntoPool(Set<SeriesRef> wanted, Map<SeriesRef, OutputsTreeBuilder.SeriesLeafNode> refToLeaf,
+                               FlowVizPanel targetPanel, boolean shouldResetZoom, boolean announceRefusal) {
+        // Determine which series need data fetched (not yet in the pool)
+        Set<SeriesRef> seriesToFetch = new HashSet<>(wanted);
+        seriesToFetch.removeIf(ref -> plotDataSet.getSeries(ref) != null);
 
         // Group new run series needing fetch by data source. Dataset series take their own
         // path below.
@@ -232,13 +264,6 @@ class SeriesFetchCoordinator {
             }
         }
 
-        // Also assign palette slots for series new to this tab but already in pool
-        for (SeriesRef ref : newSelectedSeries) {
-            if (!currentTabSeries.contains(ref)) {
-                seriesSlotManager.assignSlot(ref);
-            }
-        }
-
         // Fetch run series data into the pool
         for (Map.Entry<String, List<SeriesRef>> entry : dataSourceToRefs.entrySet()) {
             String dataSourceKey = entry.getKey();
@@ -259,7 +284,7 @@ class SeriesFetchCoordinator {
                 }
 
                 final List<SeriesRef> capturedRefs = new ArrayList<>(refs);
-                final Set<SeriesRef> capturedNewSelection = new LinkedHashSet<>(newSelectedSeries);
+                final Set<SeriesRef> capturedNewSelection = new LinkedHashSet<>(wanted);
                 // Captured to detect whether "Last" has changed since this request was issued.
                 // Only applied to LastSeries refs; RunSeries / DatasetSeries refs are tied to
                 // their own immutable identity and are not generation-dependent.
@@ -310,7 +335,7 @@ class SeriesFetchCoordinator {
         // would decode the file into memory a series at a time. Judge the Pixie series
         // already in the pool plus the newly ticked ones by the same estimate and budget
         // as the whole-file views, and fetch none of the new ones if that is over.
-        String pixieRefusal = pixieSelectionRefusal(newSelectedSeries);
+        String pixieRefusal = pixieSelectionRefusal(wanted);
         boolean pixieRefused = false;
 
         // Fetch dataset series into the pool. The sources map is keyed by the
@@ -338,21 +363,38 @@ class SeriesFetchCoordinator {
             }
         }
 
-        if (pixieRefused) {
+        if (pixieRefused && announceRefusal) {
             // After this listener returns, so a modal dialog never runs inside the tree event.
             SwingUtilities.invokeLater(() -> JOptionPane.showMessageDialog(window, pixieRefusal,
                 "Too Much Pixie Data Loaded", JOptionPane.WARNING_MESSAGE));
         }
+    }
 
-        // Update the target tab's selected series (rebuilds legend, visible series, display)
-        tabManager.setTargetTabSelectedSeries(newSelectedSeries);
-
-        // Only reset zoom when the selection completely changed (no overlap with previous).
-        // Additive selection (Ctrl+click) intentionally preserves both X and Y zoom so the
-        // user can see how the new series looks in their current view window. Auto-Y is not
-        // triggered here — it only applies during pan/zoom interactions and setting changes.
-        if (shouldResetZoom && targetPanel != null) {
-            targetPanel.zoomToFit();
+    /**
+     * Fetches what the target tab selects but the pool lacks, as a restored selection
+     * (undo, redo) may: it comes back without a tick, so nothing else fetches it. Leaves
+     * come from the whole outputs tree; a series whose source is gone has none and is
+     * skipped. The tab keeps its view while the data returns.
+     */
+    void fetchMissingForTargetTab() {
+        Set<SeriesRef> wanted = new LinkedHashSet<>(tabManager.getTargetTabSelectedSeries());
+        wanted.removeIf(ref -> plotDataSet.getSeries(ref) != null);
+        if (wanted.isEmpty()) {
+            return;
+        }
+        Map<SeriesRef, OutputsTreeBuilder.SeriesLeafNode> refToLeaf = new HashMap<>();
+        List<OutputsTreeBuilder.SeriesLeafNode> leaves = new ArrayList<>();
+        collectAllLeafNodesRecursive((DefaultMutableTreeNode) timeseriesTreeModel.getRoot(), leaves);
+        for (OutputsTreeBuilder.SeriesLeafNode leaf : leaves) {
+            SeriesRef ref = seriesRefForLeaf(leaf);
+            if (ref != null && wanted.contains(ref)) {
+                refToLeaf.put(ref, leaf);
+            }
+        }
+        wanted.retainAll(refToLeaf.keySet());
+        if (!wanted.isEmpty()) {
+            // No dialog: a refused tick would otherwise re-announce itself on every tab switch.
+            fetchIntoPool(wanted, refToLeaf, tabManager.getTargetVizPanel(), false, false);
         }
     }
 
@@ -517,7 +559,10 @@ class SeriesFetchCoordinator {
                     tabManager.addErrorSeriesInStatsTabs(ref, cause.getMessage());
                     return;
                 }
-                window.publishSeries(ref, data);
+                // A tab switch fetches a series still decoding again; the first to settle publishes.
+                if (plotDataSet.getSeries(ref) != data) {
+                    window.publishSeries(ref, data);
+                }
                 if (targetPanel != null) {
                     tabManager.updateTab(targetPanel, shouldResetZoom);
                 }

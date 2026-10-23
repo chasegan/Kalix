@@ -1350,5 +1350,7 @@ public class RunManager extends JFrame {
         } finally {
             fetchCoordinator.endProgrammaticUpdate();
         }
+        // A selection that came back without a tick (undo, redo) fetches what it lacks.
+        fetchCoordinator.fetchMissingForTargetTab();
     }
 }
