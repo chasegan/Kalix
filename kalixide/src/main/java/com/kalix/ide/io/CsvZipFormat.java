@@ -11,11 +11,9 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
@@ -59,30 +57,12 @@ public final class CsvZipFormat {
     }
 
     /**
-     * Names of the archive's file entries (directories skipped) — the
-     * exactly-one rule's evidence. Reads only the central directory.
-     */
-    public static List<String> fileEntryNames(File file) throws IOException {
-        List<String> names = new ArrayList<>();
-        try (ZipFile zip = new ZipFile(file)) {
-            Enumeration<? extends ZipEntry> entries = zip.entries();
-            while (entries.hasMoreElements()) {
-                ZipEntry entry = entries.nextElement();
-                if (!entry.isDirectory()) {
-                    names.add(entry.getName());
-                }
-            }
-        }
-        return names;
-    }
-
-    /**
      * Opens a stream over the archive's single file entry, refusing an archive
      * that holds any other number (pandas parity). The returned stream is
      * positioned at the entry's decompressed bytes; the caller owns it.
      */
     public static InputStream openSingleEntry(File file) throws IOException {
-        List<String> names = fileEntryNames(file);
+        List<String> names = ZipArchive.fileEntryNames(file);
         if (names.size() != 1) {
             throw new IOException(String.format(
                 "'%s': a .csv.zip must hold exactly one file, found %d", file.getName(), names.size()));

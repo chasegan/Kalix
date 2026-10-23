@@ -3,7 +3,6 @@ package com.kalix.ide.managers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.formdev.flatlaf.FlatPropertiesLaf;
-import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
 import com.kalix.ide.constants.AppConstants;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.themes.KalixTheme;
@@ -66,7 +65,7 @@ public class ThemeManager {
     }
 
     /**
-     * Switches to a new theme with animation. When the node or syntax theme is
+     * Switches to a new theme. When the node or syntax theme is
      * in follow mode (the default), the matching linked palette is applied to
      * all documents and editors as part of the same switch.
      *
@@ -81,11 +80,6 @@ public class ThemeManager {
         this.currentTheme = theme;
         ThemePreferences.storeApplicationTheme(theme);
 
-        // Apply the new theme with animation. FlatLaf's documented order is
-        // showSnapshot -> setLookAndFeel -> update UI -> hideSnapshotWithAnimation,
-        // so the cross-fade blends the OLD look into the fully updated NEW look.
-        FlatAnimatedLafChange.showSnapshot();
-
         try {
             setLookAndFeelForTheme(theme);
 
@@ -98,7 +92,6 @@ public class ThemeManager {
             // re-resolve it now so plots using the default palette recolour live.
             com.kalix.ide.flowviz.style.PlotPaletteManager.onThemeChanged();
 
-            // Update all components while the snapshot overlay is still showing
             updateAllWindows();
 
             // Node and syntax themes in follow mode track the application theme
@@ -108,10 +101,6 @@ public class ThemeManager {
         } catch (UnsupportedLookAndFeelException e) {
             logger.error(AppConstants.ERROR_FAILED_LOOK_AND_FEEL, e);
             return "Failed to switch to " + theme.displayName() + " theme";
-        } finally {
-            // Always dismiss the snapshot overlay, even when the switch fails —
-            // otherwise the UI is left frozen behind the stale snapshot.
-            FlatAnimatedLafChange.hideSnapshotWithAnimation();
         }
     }
 

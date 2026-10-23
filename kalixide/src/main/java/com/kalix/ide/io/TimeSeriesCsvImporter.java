@@ -315,7 +315,7 @@ public class TimeSeriesCsvImporter {
             // is pre-checked to hold exactly one file (pandas parity), then
             // streamed to its first file entry.
             if (CsvZipFormat.isCsvZip(csvFile.getName())
-                    && CsvZipFormat.fileEntryNames(csvFile).size() != 1) {
+                    && ZipArchive.fileEntryNames(csvFile).size() != 1) {
                 errors.add("A .csv.zip must hold exactly one file");
                 return createResult(series, warnings, errors, startTime, null, 0, 0, 0);
             }

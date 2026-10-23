@@ -98,12 +98,9 @@ public final class AppConstants {
     public static final String TOOLBAR_SESSIONS_TOOLTIP = "Run Manager";
     public static final String TOOLBAR_OPTIMISER_TOOLTIP = "Optimiser";
     
-    // Branding
-    // Vector logos render crisply at any display scale (HiDPI/Retina) via FlatSVGIcon.
-    public static final String KALIX_LOGO_SVG_PATH = "/images/kalix_banner_light.svg";
-    public static final String KALIX_LOGO_DARK_SVG_PATH = "/images/kalix_banner_dark.svg";
-    // Raster fallbacks, used only if the SVG sources cannot be loaded.
-    public static final String KALIX_LOGO_PATH = "/images/kalix_banner-124-24.png";
-    public static final String KALIX_LOGO_DARK_PATH = "/images/kalix_banner_dark-124-24.png";
+    // Toolbar logo: one PNG per scale, <base>-<height>.png, rendered from graphics/banners by
+    // make-icons.sh at the repo root; ToolBarBuilder stacks them into one multi-resolution image.
+    public static final String KALIX_LOGO_LIGHT = "/images/kalix_toolbar_light";
+    public static final String KALIX_LOGO_DARK = "/images/kalix_toolbar_dark";
     public static final int TOOLBAR_LOGO_HEIGHT = 24; // Logical height for toolbar
 }

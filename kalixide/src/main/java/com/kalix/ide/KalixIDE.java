@@ -20,6 +20,7 @@ import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.handlers.FileDropHandler;
+import com.kalix.ide.logging.Logging;
 import com.kalix.ide.managers.ThemeManager;
 import com.kalix.ide.managers.RecentFilesManager;
 import com.kalix.ide.managers.FileOperationsManager;
@@ -2300,6 +2301,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * @param args command line arguments; optionally pass a file path as the first argument to open on startup
      */
     public static void main(String[] args) {
+        Logging.install();
         String filePath = args.length > 0 ? args[0] : null;
 
         // Kalix uses the same number/date conventions everywhere in the world:

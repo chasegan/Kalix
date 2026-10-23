@@ -36,14 +36,13 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-core:2.15.2")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.2")
 
-    // Logging framework
+    // Logging: SLF4J over java.util.logging (slf4j-jdk14), configured by
+    // src/main/resources/com/kalix/ide/logging/logging.properties.
     implementation("org.slf4j:slf4j-api:2.0.9")
-    implementation("ch.qos.logback:logback-classic:1.4.11")
+    runtimeOnly("org.slf4j:slf4j-jdk14:2.0.9")
     
     // FlatLaf modern look and feel
     implementation("com.formdev:flatlaf:3.2.5")
-    implementation("com.formdev:flatlaf-extras:3.2.5")
-    implementation("com.formdev:flatlaf-intellij-themes:3.2.5")
     
     // Ikonli icons
     implementation("org.kordamp.ikonli:ikonli-core:12.4.0")
@@ -57,15 +56,11 @@ dependencies {
     // Diff utilities for model comparison
     implementation("io.github.java-diff-utils:java-diff-utils:4.12")
 
-    // JNA for Windows native API calls (AppUserModelID for taskbar pinning)
+    // jna is directory-watcher's (FSEvents on macOS); pinned here so the transitive is not an old one.
     implementation("net.java.dev.jna:jna:5.14.0")
-    implementation("net.java.dev.jna:jna-platform:5.14.0")
 
     // Directory watching with native FSEvents on macOS (project tree live updates)
     implementation("io.methvin:directory-watcher:0.18.0")
-
-    // Source: https://mvnrepository.com/artifact/net.lingala.zip4j/zip4j
-    implementation("net.lingala.zip4j:zip4j:2.11.6")
 
     testImplementation(platform("org.junit:junit-bom:5.9.1"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -133,19 +128,16 @@ tasks.processResources {
 // Ivanti Trusted Ownership), so there is one way to build an installer, not two.
 
 // jdeps --print-module-deps over the install libs gives java.desktop, java.prefs,
-// java.naming, jdk.unsupported and java.sql. java.sql is left out on purpose: only
-// jackson-databind's optional SQL type handlers want it. jdeps folds java.logging and
-// java.xml into java.sql's transitive requires, so without it both must be named here
-// (jna, ikonli, jsvg and java-diff-utils log through java.util.logging). java.naming is
-// only logback's optional JNDI context selector, and jdk.unsupported is directory-watcher's
-// com.sun.nio.file FILE_TREE modifier on Windows; neither first-party code nor any
-// dependency uses sun.misc.Unsafe.
+// jdk.unsupported and java.sql. java.sql is left out on purpose: only jackson-databind's
+// optional SQL type handlers want it. jdeps folds java.logging into java.sql's transitive
+// requires, so without it java.logging must be named here (all logging goes through
+// java.util.logging). java.xml comes with java.desktop. jdk.unsupported is
+// directory-watcher's com.sun.nio.file FILE_TREE modifier on Windows; neither first-party
+// code nor any dependency uses sun.misc.Unsafe.
 val runtimeModules = listOf(
     "java.desktop",
     "java.logging",
-    "java.xml",
     "java.prefs",
-    "java.naming",
     "jdk.unsupported"
 )
 

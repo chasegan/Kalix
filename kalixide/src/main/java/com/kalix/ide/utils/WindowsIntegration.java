@@ -1,87 +1,74 @@
 package com.kalix.ide.utils;
 
-import com.sun.jna.Native;
-import com.sun.jna.WString;
-import com.sun.jna.win32.StdCallLibrary;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.foreign.Arena;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
+import java.lang.foreign.MemorySegment;
+import java.lang.foreign.SymbolLookup;
+import java.lang.foreign.ValueLayout;
+import java.lang.invoke.MethodHandle;
+import java.nio.charset.StandardCharsets;
+
 /**
- * Windows-specific integration utilities using JNA.
+ * Windows-specific process setup, through the Foreign Function and Memory API like
+ * {@link WindowsShellReveal}.
  *
- * This class provides functionality for proper Windows integration, including:
- * - Setting the AppUserModelID for correct taskbar pinning behavior
- *
- * The AppUserModelID is crucial for Windows 7+ taskbar functionality.
- * Without it, pinned Java applications may show the default Java icon
- * instead of the application's custom icon.
+ * <p>Sets the AppUserModelID for the process so that a pinned KalixIDE shows its own taskbar
+ * icon rather than being grouped with other Java applications under the Java icon.
  */
 public final class WindowsIntegration {
 
     private static final Logger logger = LoggerFactory.getLogger(WindowsIntegration.class);
 
     /**
-     * The AppUserModelID for KalixIDE.
-     * This should be a unique identifier in the format: CompanyName.ProductName.SubProduct.VersionInfo
-     * See: https://docs.microsoft.com/en-us/windows/win32/shell/appids
+     * The AppUserModelID for KalixIDE, in the CompanyName.ProductName form. See
+     * https://docs.microsoft.com/en-us/windows/win32/shell/appids
      */
     public static final String APP_USER_MODEL_ID = "Kalix.KalixIDE";
 
     private WindowsIntegration() {
-        // Utility class - prevent instantiation
     }
 
     /**
-     * JNA interface for Shell32.dll functions.
-     */
-    private interface Shell32 extends StdCallLibrary {
-        Shell32 INSTANCE = Native.load("shell32", Shell32.class);
-
-        /**
-         * Sets the Application User Model ID for the current process.
-         *
-         * @param appID The application user model ID string
-         * @return HRESULT - S_OK (0) on success
-         */
-        int SetCurrentProcessExplicitAppUserModelID(WString appID);
-    }
-
-    /**
-     * Initializes Windows-specific integration features.
-     * This should be called early in application startup, before any UI is created.
-     *
-     * On non-Windows platforms, this method does nothing.
+     * Applies the Windows-specific setup. Call early in startup, before any window is created.
+     * On other platforms this does nothing.
      */
     public static void initialize() {
         if (PlatformUtils.getCurrentPlatform() != Platform.WINDOWS) {
             return;
         }
-
-        setAppUserModelID();
+        try {
+            int hr = setAppUserModelId(APP_USER_MODEL_ID);
+            if (hr == 0) {
+                logger.debug("Set AppUserModelID to {}", APP_USER_MODEL_ID);
+            } else {
+                logger.warn("Could not set AppUserModelID, HRESULT 0x{}", Integer.toHexString(hr));
+            }
+        } catch (Throwable t) {
+            logger.warn("Could not call SetCurrentProcessExplicitAppUserModelID", t);
+        }
     }
 
     /**
-     * Sets the AppUserModelID for the current process.
+     * Calls shell32's SetCurrentProcessExplicitAppUserModelID with {@code appId}. Windows only.
      *
-     * This is essential for proper taskbar icon behavior on Windows 7+.
-     * Without this, Windows may group the application with other Java apps
-     * and show the wrong icon when the application is pinned to the taskbar.
+     * @return the HRESULT, 0 (S_OK) on success
+     * @throws Throwable if the function cannot be bound or the call fails
      */
-    private static void setAppUserModelID() {
-        try {
-            int result = Shell32.INSTANCE.SetCurrentProcessExplicitAppUserModelID(
-                new WString(APP_USER_MODEL_ID)
-            );
-
-            if (result == 0) {
-                logger.debug("Successfully set AppUserModelID to: {}", APP_USER_MODEL_ID);
-            } else {
-                logger.warn("Failed to set AppUserModelID, HRESULT: {}", result);
-            }
-        } catch (UnsatisfiedLinkError e) {
-            logger.warn("Could not set AppUserModelID - Shell32 not available: {}", e.getMessage());
-        } catch (Exception e) {
-            logger.warn("Error setting AppUserModelID: {}", e.getMessage());
+    static int setAppUserModelId(String appId) throws Throwable {
+        try (Arena arena = Arena.ofConfined()) {
+            Linker linker = Linker.nativeLinker();
+            // The lookup is scoped to this arena; shell32 is loaded by the process anyway.
+            SymbolLookup shell32 = SymbolLookup.libraryLookup("shell32.dll", arena);
+            MethodHandle setId = linker.downcallHandle(
+                shell32.find("SetCurrentProcessExplicitAppUserModelID").orElseThrow(),
+                FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS));
+            // PCWSTR: UTF-16LE with a NUL terminator, which allocateFrom appends.
+            MemorySegment wideId = arena.allocateFrom(appId, StandardCharsets.UTF_16LE);
+            return (int) setId.invoke(wideId);
         }
     }
 }
