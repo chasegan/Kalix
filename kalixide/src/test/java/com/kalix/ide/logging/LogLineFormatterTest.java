@@ -32,7 +32,8 @@ class LogLineFormatterTest {
 
         String text = new LogLineFormatter().format(record);
 
-        assertTrue(text.startsWith(text.substring(0, 12)) && text.contains(" ERROR a.B - failed"), text);
+        assertTrue(Pattern.compile("(?s)^\\d{2}:\\d{2}:\\d{2}\\.\\d{3} \\[.+\\] ERROR a\\.B - failed\\R.*")
+            .matcher(text).matches(), text);
         assertTrue(text.contains("java.lang.IllegalStateException: boom"), text);
         assertTrue(text.contains("LogLineFormatterTest"), "stack frames present: " + text);
     }

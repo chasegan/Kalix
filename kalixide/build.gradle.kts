@@ -36,8 +36,8 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-core:2.15.2")
     implementation("com.fasterxml.jackson.core:jackson-databind:2.15.2")
 
-    // Logging: SLF4J in the code, java.util.logging underneath (configured by
-    // src/main/resources/logging.properties, installed by com.kalix.ide.logging.Logging).
+    // Logging: SLF4J over java.util.logging (slf4j-jdk14), configured by
+    // src/main/resources/com/kalix/ide/logging/logging.properties.
     implementation("org.slf4j:slf4j-api:2.0.9")
     runtimeOnly("org.slf4j:slf4j-jdk14:2.0.9")
     

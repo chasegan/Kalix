@@ -12,6 +12,8 @@ import java.util.logging.LogRecord;
  * One log line per record: {@code HH:mm:ss.SSS [thread] LEVEL logger - message}, with a stack
  * trace appended when there is one. Levels are named as SLF4J names them, and the logger name
  * is shortened the way logback's {@code %logger{36}} does, so the output reads as it always has.
+ * The thread is the one calling the handler, so the handler must publish synchronously, as
+ * {@code ConsoleHandler} does.
  */
 public final class LogLineFormatter extends Formatter {
 

@@ -5,7 +5,6 @@ import org.slf4j.LoggerFactory;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
-import com.kalix.ide.logging.Logging;
 import com.kalix.ide.builders.MenuBarBuilder;
 import com.kalix.ide.builders.ToolBarBuilder;
 import com.kalix.ide.cli.ProcessExecutor;
@@ -21,6 +20,7 @@ import com.kalix.ide.document.KalixDocument;
 import com.kalix.ide.document.OpenModel;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.handlers.FileDropHandler;
+import com.kalix.ide.logging.Logging;
 import com.kalix.ide.managers.ThemeManager;
 import com.kalix.ide.managers.RecentFilesManager;
 import com.kalix.ide.managers.FileOperationsManager;

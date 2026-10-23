@@ -15,7 +15,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * logging.properties really configures the log manager. java.util.logging reports a
  * misnamed handler or formatter class on stderr and carries on with its defaults, so without
- * this a typo would ship silently.
+ * this a typo would ship silently. readConfiguration resets the handlers first, so the
+ * assertions hold whatever logged earlier in the fork; the configuration then stays installed,
+ * which only changes how later tests' captured log output looks.
  */
 class LoggingTest {
 

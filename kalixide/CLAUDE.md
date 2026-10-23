@@ -200,7 +200,7 @@ Systematic refactoring addressing code smells:
 - `MapRenderer.java` - Stateless rendering operations
 - `UIConstants.java` - Centralized constants with nested organization
 - `FlowVizActionManager.java` - Action delegation and view management
-- `logging.properties` - Logging configuration (java.util.logging, fed by slf4j-jdk14)
+- `logging.properties` - Logging configuration (SLF4J over java.util.logging, slf4j-jdk14)
 
 ### No Wildcard Imports (August 2026)
 **Every import is a single type or a single static member — no `pkg.*`, no
