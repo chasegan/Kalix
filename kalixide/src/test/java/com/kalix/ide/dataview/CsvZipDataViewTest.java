@@ -1,6 +1,7 @@
 package com.kalix.ide.dataview;
 
 import com.kalix.ide.io.CsvZipFormat;
+import com.kalix.ide.io.ZipArchive;
 import com.kalix.ide.preferences.PreferenceKeys;
 
 import org.junit.jupiter.api.Test;
@@ -127,7 +128,7 @@ class CsvZipDataViewTest {
         try (var writer = CsvZipFormat.newUtf8Writer(out.toFile())) {
             writer.write("Date,q\n2020-01-01,3.0\n");
         }
-        assertEquals(java.util.List.of("written.csv"), CsvZipFormat.fileEntryNames(out.toFile()),
+        assertEquals(java.util.List.of("written.csv"), ZipArchive.fileEntryNames(out.toFile()),
             "the single entry is named like the archive minus .zip (pandas' convention)");
         assertEquals("Date,q\n2020-01-01,3.0\n",
             new String(CsvZipFormat.decompressBounded(out.toFile(), 1024), StandardCharsets.UTF_8));

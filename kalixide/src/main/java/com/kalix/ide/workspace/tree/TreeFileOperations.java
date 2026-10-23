@@ -603,9 +603,9 @@ class TreeFileOperations {
      */
     void unzipFile(File file) {
         File targetDir = file.getParentFile();
-        // The collision scan only reads the zip's central directory — quick even for a large
-        // archive, and the answer is needed before we can prompt. Extraction is the heavy
-        // part, so that alone goes off the EDT (reopening the zip on the worker).
+        // The collision scan lists the central directory and stats each entry's target; the
+        // answer is needed before we can prompt. Extraction is the heavy part, so that alone
+        // goes off the EDT.
         List<String> collisions;
         try {
             collisions = collidingEntries(file, targetDir);

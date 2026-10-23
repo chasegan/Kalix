@@ -393,7 +393,7 @@ class TimeSeriesCsvRoundTripTest {
 
         File out = tempDir.resolve("roundtrip.csv.zip").toFile();
         TimeSeriesCsvExporter.export(ds, out, null, LABELS);
-        assertEquals(java.util.List.of("roundtrip.csv"), CsvZipFormat.fileEntryNames(out),
+        assertEquals(java.util.List.of("roundtrip.csv"), ZipArchive.fileEntryNames(out),
             "one entry, named like the archive minus .zip");
 
         TimeSeriesCsvImporter.CsvImportResult result = parse(out);

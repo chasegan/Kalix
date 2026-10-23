@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.time.Instant;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -36,7 +38,8 @@ class ZipArchiveTest {
 
     @Test
     void folderAndFileRoundTrip() throws IOException {
-        write("data/climate/rain.csv", "rain");
+        FileTime stamp = FileTime.from(Instant.parse("2024-05-06T07:08:09Z"));
+        Files.setLastModifiedTime(write("data/climate/rain.csv", "rain"), stamp);
         write("data/notes.txt", "notes");
         Files.createDirectories(tempDir.resolve("data/empty"));
         write("model.ini", "[node.a]");
@@ -53,6 +56,8 @@ class ZipArchiveTest {
         assertEquals("notes", Files.readString(out.resolve("data/notes.txt")));
         assertEquals("[node.a]", Files.readString(out.resolve("model.ini")));
         assertTrue(Files.isDirectory(out.resolve("data/empty")), "empty subfolder survives");
+        assertEquals(stamp.toMillis() / 1000, Files.getLastModifiedTime(out.resolve("data/climate/rain.csv")).toMillis() / 1000,
+            "modification time kept to the second");
     }
 
     @Test

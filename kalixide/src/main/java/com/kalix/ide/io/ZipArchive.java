@@ -20,9 +20,9 @@ import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
 /**
- * Zip archives of workspace files, for the file tree's Zip and Unzip commands. Pure I/O, no
- * Swing. Entry names use '/' on every platform, and a folder goes in under its own name so
- * that unzipping gives the folder back.
+ * Zip archives on disk: the file tree's Zip and Unzip, and the {@code .csv.zip} entry check.
+ * Pure I/O, no Swing. Entry names use '/' on every platform, and a folder goes in under its
+ * own name so that unzipping gives the folder back.
  */
 public final class ZipArchive {
 
