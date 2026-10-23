@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
+import com.kalix.ide.logging.Logging;
 import com.kalix.ide.builders.MenuBarBuilder;
 import com.kalix.ide.builders.ToolBarBuilder;
 import com.kalix.ide.cli.ProcessExecutor;
@@ -2300,6 +2301,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
      * @param args command line arguments; optionally pass a file path as the first argument to open on startup
      */
     public static void main(String[] args) {
+        Logging.install();
         String filePath = args.length > 0 ? args[0] : null;
 
         // Kalix uses the same number/date conventions everywhere in the world:

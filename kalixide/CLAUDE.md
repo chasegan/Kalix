@@ -200,7 +200,7 @@ Systematic refactoring addressing code smells:
 - `MapRenderer.java` - Stateless rendering operations
 - `UIConstants.java` - Centralized constants with nested organization
 - `FlowVizActionManager.java` - Action delegation and view management
-- `logback.xml` - Logging configuration
+- `logging.properties` - Logging configuration (java.util.logging, fed by slf4j-jdk14)
 
 ### No Wildcard Imports (August 2026)
 **Every import is a single type or a single static member — no `pkg.*`, no
@@ -279,7 +279,7 @@ Key architectural pattern throughout the application:
 ## Dependencies
 
 - **RSyntaxTextArea**: Syntax highlighting and enhanced text editing
-- **SLF4J + Logback**: Structured logging framework
+- **SLF4J over java.util.logging** (slf4j-jdk14): logging, configured by `logging.properties`
 - **FlatLaf**: Look and feel themes
 
 ## KalixCLI Communication
