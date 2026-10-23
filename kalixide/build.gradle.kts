@@ -131,13 +131,12 @@ tasks.processResources {
 // jdk.unsupported and java.sql. java.sql is left out on purpose: only jackson-databind's
 // optional SQL type handlers want it. jdeps folds java.logging into java.sql's transitive
 // requires, so without it java.logging must be named here (all logging goes through
-// java.util.logging); java.xml comes with java.desktop regardless. jdk.unsupported is
+// java.util.logging). java.xml comes with java.desktop. jdk.unsupported is
 // directory-watcher's com.sun.nio.file FILE_TREE modifier on Windows; neither first-party
 // code nor any dependency uses sun.misc.Unsafe.
 val runtimeModules = listOf(
     "java.desktop",
     "java.logging",
-    "java.xml",
     "java.prefs",
     "jdk.unsupported"
 )
