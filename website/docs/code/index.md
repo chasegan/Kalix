@@ -50,8 +50,8 @@ Run a remote team on a fork, or join the core team — see [Contact](../contact.
 ```bash
 git clone https://github.com/you/Kalix.git
 cd Kalix
-cargo build --release        # the Rust simulation engine + CLI
-cd kalixide && ./gradlew run      # the Java IDE
+cargo build --release         # the Rust simulation engine + CLI
+cd kalixide && ./gradlew run  # the Java IDE
 ```
 
 <div class="kx-cards" markdown>
