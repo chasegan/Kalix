@@ -34,4 +34,13 @@ class LoggingTest {
         assertEquals(Level.FINE, Logger.getLogger("com.kalix.ide.cli").getLevel());
         assertEquals(Level.WARNING, Logger.getLogger("com.formdev.flatlaf").getLevel());
     }
+
+    @Test
+    void packageLevelsReachLoggersCreatedBeforeInstall() {
+        Logger early = Logger.getLogger("com.kalix.ide.cli.CreatedBeforeInstall");
+
+        Logging.install();
+
+        assertTrue(early.isLoggable(Level.FINE), "parented under com.kalix.ide.cli after install");
+    }
 }
