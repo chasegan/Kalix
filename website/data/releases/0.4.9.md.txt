@@ -12,4 +12,4 @@ pip: "pip install kalix==0.4.9"
 - Input data checks (#479):
     - A CSV input with only one row of data, or none, now stops the run with an error naming the input, instead of crashing. Kalix needs two rows to work out the timestep.
     - So do inputs on different timesteps, and inputs that never all have data on the same timestep (e.g. an all-blank column, or date ranges that don't overlap).
-    - Python: `set_input()` now raises `ModelValidationError` for such data. Previously it assumed a daily timestep for a single row, and raised `ValueError` for no rows.
+    - Python: `set_input()` now raises `ModelValidationError` for data with no rows or one row. Previously it assumed a daily timestep for a single row, and raised `ValueError` for no rows.

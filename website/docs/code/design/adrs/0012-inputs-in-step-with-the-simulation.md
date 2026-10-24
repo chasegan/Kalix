@@ -51,7 +51,7 @@ leaves the pairing of misaligned data in their hands.
 
 1. **Every input a model reads must be in step with the simulation: the same
    timestep and the same phase**, which for daily data is the time of day.
-   Otherwise configure fails, naming the two inputs and their times of day.
+   Otherwise configure fails, naming the two inputs.
    Kalix never shifts a value onto a different time to make it fit. The
    timesteps are still taken from the critical inputs; since they must
    agree, their order no longer changes the result.

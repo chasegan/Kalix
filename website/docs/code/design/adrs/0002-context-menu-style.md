@@ -354,5 +354,5 @@ this document.
   message reads `Error: Input 'flows' has no data`, not `Error: input ...`.
   Harvested from the input-data checks (#483), where new messages had
   drifted to lowercase beside capitalised neighbours and the ADR-0012
-  examples. Existing messages are not re-cut; it is the standard the next
-  one is held to.
+  examples. Other existing messages are not re-cut; it is the standard the
+  next one is held to.
