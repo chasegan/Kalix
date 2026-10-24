@@ -127,8 +127,12 @@ pub struct SeriesInfo {
 
 impl std::fmt::Display for SeriesInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let start_str = u64_to_date_string_for_step_size(self.start_time, self.timestep_seconds);
-        let end_str = u64_to_date_string_for_step_size(self.end_time, self.timestep_seconds);
+        let (start_str, end_str) = if self.point_count == 0 {
+            ("-".to_string(), "-".to_string())
+        } else {
+            (u64_to_date_string_for_step_size(self.start_time, self.timestep_seconds),
+             u64_to_date_string_for_step_size(self.end_time, self.timestep_seconds))
+        };
         write!(
             f,
             "SeriesInfo{{name='{}', points={}, start={}, end={}, timestep={}s}}",
@@ -374,13 +378,17 @@ fn parse_metadata_line(line: &str, line_num: usize) -> Result<SeriesMetadata, Pi
         PixieError::ParseError(format!("Invalid offset at line {}: {}", line_num, fields[1]))
     })?;
 
-    let start_time = parse_timestamp(&fields[2].trim()).map_err(|e| {
-        PixieError::ParseError(format!("Invalid start time at line {}: {}", line_num, e))
-    })?;
-
-    let end_time = parse_timestamp(&fields[3].trim()).map_err(|e| {
-        PixieError::ParseError(format!("Invalid end time at line {}: {}", line_num, e))
-    })?;
+    // Blank start and end mean an empty series.
+    let parse_optional = |field: &str, what: &str| -> Result<u64, PixieError> {
+        if field.trim().is_empty() {
+            return Ok(0);
+        }
+        parse_timestamp(field.trim()).map_err(|e| {
+            PixieError::ParseError(format!("Invalid {} at line {}: {}", what, line_num, e))
+        })
+    };
+    let start_time = parse_optional(&fields[2], "start time")?;
+    let end_time = parse_optional(&fields[3], "end time")?;
 
     let timestep = fields[4].trim().parse::<u64>().map_err(|_| {
         PixieError::ParseError(format!("Invalid timestep at line {}: {}", line_num, fields[4]))
@@ -533,8 +541,12 @@ fn write_metadata_file(metadata_path: &str, metadata_list: &[SeriesMetadata]) ->
 
     // Write data rows
     for meta in metadata_list {
-        let start_time = u64_to_auto_datetime_string(meta.start_time);
-        let end_time = u64_to_auto_datetime_string(meta.end_time);
+        // An empty series has no start or end; the fields are left blank.
+        let (start_time, end_time) = if meta.length == 0 {
+            (String::new(), String::new())
+        } else {
+            (u64_to_auto_datetime_string(meta.start_time), u64_to_auto_datetime_string(meta.end_time))
+        };
 
         writeln!(
             writer,
@@ -613,6 +625,36 @@ mod tests {
         }
 
         // Clean up
+        let _ = fs::remove_file(format!("{}.pxb", base_path));
+        let _ = fs::remove_file(format!("{}.pxt", base_path));
+    }
+
+    #[test]
+    fn test_empty_series_round_trips() {
+        // An empty series has no start or end. The index used to hold an invalid
+        // timestamp for both, so Kalix could not read back its own file.
+        let mut full = Timeseries::new_daily();
+        full.name = "full".to_string();
+        full.push(wrap_to_u64(1577836800), 1.0);
+        full.push(wrap_to_u64(1577923200), 2.0);
+        let mut empty = Timeseries::new_daily();
+        empty.name = "empty".to_string();
+
+        let base_path_buf = std::env::temp_dir().join(format!("test_kalix_empty_{}", std::process::id()));
+        let base_path = base_path_buf.to_str().unwrap();
+        write_series(base_path, &[&full, &empty]).unwrap();
+
+        let index = fs::read_to_string(format!("{}.pxt", base_path)).unwrap();
+        assert!(!index.contains("INVALID"), "{index}");
+        assert!(index.lines().nth(2).unwrap().starts_with("2,"), "{index}");
+
+        let back = read_all_series(base_path).unwrap();
+        assert_eq!(back.len(), 2);
+        assert_eq!(back[0].values, vec![1.0, 2.0]);
+        assert_eq!(back[1].name, "empty");
+        assert!(back[1].values.is_empty());
+        assert!(get_series_info(base_path).unwrap()[1].to_string().contains("points=0, start=-, end=-"));
+
         let _ = fs::remove_file(format!("{}.pxb", base_path));
         let _ = fs::remove_file(format!("{}.pxt", base_path));
     }
