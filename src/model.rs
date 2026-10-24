@@ -792,7 +792,11 @@ impl Model {
                 }
             }
             if self.configuration.sim_start_timestamp > self.configuration.sim_end_timestamp {
-                return Err("Specified start date is before end date.".to_string());
+                return Err(format!(
+                    "Specified start '{}' is after end '{}'.",
+                    u64_to_date_string_for_step_size(self.configuration.sim_start_timestamp, 86400),
+                    u64_to_date_string_for_step_size(self.configuration.sim_end_timestamp, 86400)
+                ));
             }
 
             // Default to daily step size and calculate n_steps //TODO: make this customisable

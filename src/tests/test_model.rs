@@ -531,3 +531,13 @@ fn test_clone_model() {
     assert_eq!(ans.len(), 6);
     assert_eq!(ans.sum(), 38.1);
 }
+
+/// With no critical inputs the period is the specified start and end; a start after the end
+/// is refused, naming both. The message used to say the opposite ("start is before end").
+#[test]
+fn test_specified_start_after_end_is_refused_by_name() {
+    let ini = "[kalix]\nstart = 2020-01-10\nend = 2020-01-04\n\n[node.src]\ntype = inflow\ninflow = 50\nds_1 = sink\n\n[node.sink]\ntype = blackhole\n";
+    let mut model = crate::io::ini_model_io::IniModelIO::read_model_string(ini).expect("model should load");
+    let err = model.configure().expect_err("a start after the end must be refused");
+    assert_eq!(err, "Specified start '2020-01-10' is after end '2020-01-04'.");
+}
