@@ -285,8 +285,10 @@ pub fn write_series_with_precision(
                 CODEC_GORILLA_FLOAT
             };
 
-            // Detect timestep in seconds
-            let timestep_seconds = detect_timestep(series);
+            // The series' step is authoritative: 0 when the source could not say
+            // (a one-row CSV). Written as is, so the Pixie is refused at run
+            // exactly as the CSV is, rather than assumed daily.
+            let timestep_seconds = series.step_size;
 
             // Compress data
             let compressed = compress_series(series, timestep_seconds, codec)?;
@@ -519,15 +521,6 @@ fn compress_series(series: &Timeseries, timestep_seconds: u64, codec: u16) -> Re
                 .map_err(|e| PixieError::CompressionError(format!("Failed to compress float data: {}", e)))
         },
         _ => Err(PixieError::CompressionError(format!("Unsupported codec: {}", codec))),
-    }
-}
-
-fn detect_timestep(series: &Timeseries) -> u64 {
-    // Timesteps are regular by design; the series' step_size is authoritative.
-    if series.step_size > 0 {
-        series.step_size
-    } else {
-        86400 // Default (1 day) for anchorless series
     }
 }
 
