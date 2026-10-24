@@ -917,7 +917,19 @@ impl Model {
             start_not_after_end(start, end, self.configuration.sim_stepsize)?;
         }
         let data_start = self.configuration.sim_start_timestamp;
+        let data_end = self.configuration.sim_end_timestamp;
         let step = self.configuration.sim_stepsize;
+        let check_in_range = |what: &str, ts: u64| -> Result<(), String> {
+            if ts < data_start || ts > data_end {
+                return Err(format!(
+                    "Specified {} '{}' is outside the input data ({} to {}).",
+                    what, u64_to_date_string_for_step_size(ts, step),
+                    u64_to_date_string_for_step_size(data_start, step),
+                    u64_to_date_string_for_step_size(data_end, step)
+                ));
+            }
+            Ok(())
+        };
         let check_in_step = |what: &str, ts: u64| -> Result<(), String> {
             if same_phase(ts, data_start, step) {
                 return Ok(());
@@ -931,11 +943,7 @@ impl Model {
         };
         match self.configuration.specified_sim_start_timestamp {
             Some(timestamp) => {
-                if (timestamp < self.configuration.sim_start_timestamp)
-                    || (timestamp > self.configuration.sim_end_timestamp)
-                {
-                    return Err("Specified start inconsistent with input data.".to_string());
-                }
+                check_in_range("start", timestamp)?;
                 check_in_step("start", timestamp)?;
                 self.configuration.sim_start_timestamp = timestamp;
                 self.configuration.sim_nsteps = 1
@@ -947,11 +955,7 @@ impl Model {
         }
         match self.configuration.specified_sim_end_timestamp {
             Some(timestamp) => {
-                if (timestamp < self.configuration.sim_start_timestamp)
-                    || (timestamp > self.configuration.sim_end_timestamp)
-                {
-                    return Err("Specified end inconsistent with input data.".to_string());
-                }
+                check_in_range("end", timestamp)?;
                 check_in_step("end", timestamp)?;
                 self.configuration.sim_end_timestamp = timestamp;
                 self.configuration.sim_nsteps = 1

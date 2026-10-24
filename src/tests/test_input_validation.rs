@@ -405,6 +405,24 @@ fn test_specified_start_after_end_with_data_is_refused_by_name() {
 }
 
 
+/// A start or end outside the data names the date and the data's range.
+#[test]
+fn test_specified_start_or_end_outside_data_is_refused_by_name() {
+    let csv = "date,flow\n2000-01-01,1.0\n2000-01-02,2.0\n2000-01-03,3.0\n2000-01-04,4.0\n";
+    let path = write_temp_csv("flows.csv", csv);
+    let mut model = model_with_inputs(
+        "[kalix]\nstart = 1999-12-20\n", &format!("flows = {path}"), "data.flows.by_name.flow");
+    let err = model.configure().expect_err("a start before the data must be refused");
+    assert_eq!(err, "Specified start '1999-12-20' is outside the input data (2000-01-01 to 2000-01-04).");
+
+    let path = write_temp_csv("flows.csv", csv);
+    let mut model = model_with_inputs(
+        "[kalix]\nend = 2000-02-01\n", &format!("flows = {path}"), "data.flows.by_name.flow");
+    let err = model.configure().expect_err("an end after the data must be refused");
+    assert_eq!(err, "Specified end '2000-02-01' is outside the input data (2000-01-01 to 2000-01-04).");
+}
+
+
 /// A declaration doesn't need the `=` — the custom INI parser treats a bare
 /// key line (no `=`, same syntax as a direct file path) and `alias =` as
 /// identical (key present, value empty), and the model-loading code only
