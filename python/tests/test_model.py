@@ -1119,6 +1119,28 @@ def test_set_input_undeclared_alias_raises_key_error():
         model.set_input("obs", _obs_frame())
 
 
+def test_set_input_one_row_raises_model_validation_error():
+    """One row has no timestep to infer -- the engine's check, as for a CSV."""
+    frame = pd.DataFrame({"flow": [1.0]}, index=pd.date_range("2000-01-01", periods=1, freq="D"))
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    with pytest.raises(kalix.ModelValidationError, match="only one row"):
+        model.set_input("obs", frame)
+
+
+def test_set_input_empty_frame_raises_model_validation_error():
+    frame = pd.DataFrame({"flow": []}, index=pd.DatetimeIndex([], tz="UTC"))
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    with pytest.raises(kalix.ModelValidationError, match="has no data"):
+        model.set_input("obs", frame)
+
+
+def test_set_input_no_columns_raises_value_error():
+    frame = pd.DataFrame(index=pd.DatetimeIndex([], tz="UTC"))
+    model = kalix.load_string(_MODEL_WITH_DECLARED_INPUT_INI)
+    with pytest.raises(ValueError, match="at least one column"):
+        model.set_input("obs", frame)
+
+
 def test_set_input_irregular_timestep_raises_value_error():
     index = pd.DatetimeIndex(
         ["2000-01-01", "2000-01-02", "2000-01-04", "2000-01-05", "2000-01-06"], tz="UTC"

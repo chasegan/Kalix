@@ -7,7 +7,7 @@ mod error;
 
 use kalix::io::error::KalixIoError;
 use kalix::io::ini_model_io::IniModelIO;
-use kalix::io::model_input_swap;
+use kalix::io::model_input_swap::{self, SetInputError};
 use kalix::io::model_patch::{patch_delete, patch_merge, patch_replace, PatchError};
 use kalix::io::{model_query, pixie_io};
 use kalix::model::{Model, OutputLookupError};
@@ -56,6 +56,13 @@ fn patch_err_to_py<'py>(py: Python<'py>, e: PatchError) -> PyErr {
         PatchError::EmptyModel => error::new_kalix_runtime_error(py, e.to_string()),
         PatchError::IoError(io_err) => io_err_to_py(io_err),
         PatchError::ValidationError(_) => error::ModelValidationError::new_err(e.to_string()),
+    }
+}
+
+fn set_input_err_to_py(py: Python<'_>, e: SetInputError) -> PyErr {
+    match e {
+        SetInputError::Undeclared(_) => error::new_kalix_key_error(py, e.to_string()),
+        SetInputError::Data(_) => error::ModelValidationError::new_err(e.to_string()),
     }
 }
 
@@ -659,11 +666,12 @@ impl PyModel {
                 "column_names and values_per_column must have the same length",
             ));
         }
-        let ts = timestamps_unix_seconds.as_slice()?;
-        if ts.is_empty() {
-            return Err(PyValueError::new_err("No data supplied"));
+        if column_names.is_empty() {
+            return Err(PyValueError::new_err("set_input() needs at least one column"));
         }
+        let ts = timestamps_unix_seconds.as_slice()?;
 
+        // Fewer than two rows gives step 0, as the CSV reader does; the engine rejects it.
         let step_size: u64 = if ts.len() >= 2 {
             let diff = ts[1] - ts[0];
             if diff <= 0 {
@@ -673,7 +681,7 @@ impl PyModel {
             }
             diff as u64
         } else {
-            86400
+            0
         };
         for i in 2..ts.len() {
             if (ts[i] - ts[i - 1]) as u64 != step_size {
@@ -685,7 +693,7 @@ impl PyModel {
                 )));
             }
         }
-        let start_timestamp = wrap_to_u64(ts[0]);
+        let start_timestamp = ts.first().map_or(0, |&t| wrap_to_u64(t));
 
         let mut columns = Vec::with_capacity(column_names.len());
         for (name, arr) in column_names.into_iter().zip(values_per_column.iter()) {
@@ -705,7 +713,7 @@ impl PyModel {
         }
 
         model_input_swap::set_input(&mut slf.inner, alias, start_timestamp, step_size, columns)
-            .map_err(|err_msg| error::new_kalix_key_error(py, err_msg))?;
+            .map_err(|e| set_input_err_to_py(py, e))?;
         slf.has_run = false;
         Ok(slf)
     }

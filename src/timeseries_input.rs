@@ -92,6 +92,30 @@ impl TimeseriesInputDefinition {
             TimeseriesInputDefinition::InMemoryDefinition { origin, .. } => origin.ini_entry(),
         }
     }
+
+    /// Rejects a source with a series that has no rows, or no timestep (step 0:
+    /// one CSV row, or a Pixie index giving 0).
+    pub fn check_has_timestep(&self) -> Result<(), String> {
+        let (name, columns) = match self {
+            TimeseriesInputDefinition::Declaration { .. } => return Ok(()),
+            TimeseriesInputDefinition::FileDefinition { origin: SourceOrigin::File { path, alias: Some(alias) }, columns } =>
+                (format!("'{}' ({})", alias, path), columns),
+            TimeseriesInputDefinition::FileDefinition { origin, columns } =>
+                (format!("'{}'", origin.ini_entry().0), columns),
+            TimeseriesInputDefinition::InMemoryDefinition { origin, columns } =>
+                (format!("'{}' (supplied in memory)", origin.ini_entry().0), columns),
+        };
+        // Name the series only when some of the source's series pass (Pixie series are independent).
+        let reject = |bad: &dyn Fn(&Timeseries) -> bool, what: &str| match columns.iter().find(|c| bad(&c.timeseries)) {
+            None => Ok(()),
+            Some(_) if columns.iter().all(|c| bad(&c.timeseries)) => Err(format!("Input {} {}", name, what)),
+            Some(c) => Err(format!("Series '{}' of input {} {}", c.col_name, name, what)),
+        };
+        reject(&|ts| ts.len() == 0, "has no data")?;
+        reject(&|ts| ts.len() == 1 && ts.step_size == 0,
+               "has only one row; at least two are needed to infer the timestep")?;
+        reject(&|ts| ts.step_size == 0, "has a timestep of 0")
+    }
 }
 
 

@@ -529,9 +529,15 @@ impl Model {
             .collect();
         if !undeclared.is_empty() {
             return Err(format!(
-                "input '{}' declared but not supplied",
+                "Input '{}' declared but not supplied",
                 undeclared.join("', '")
             ));
+        }
+
+        //2c) Reject inputs with no timestep: no rows, one row, or a step of 0.
+        //   Steps 4 and 6 divide by the step, so this must come first.
+        for source in &self.input_sources {
+            source.check_has_timestep()?;
         }
 
         //3) Read the input data from file
@@ -551,11 +557,14 @@ impl Model {
             for col in source.columns() {
                 let input_ts = &col.timeseries;
 
-                // Validate that input step size matches simulation step size
+                // Validate that input step size matches simulation step size. Name the
+                // input by its data reference: two files can share a column header.
                 if input_ts.step_size != self.configuration.sim_stepsize {
                     return Err(format!(
-                        "Input timeseries '{}' has step_size {} but simulation requires step_size {}",
-                        input_ts.name, input_ts.step_size, self.configuration.sim_stepsize
+                        "Input '{}' has a timestep of {}s but the simulation runs at {}s. \
+                         All inputs must share the same timestep.",
+                        col.alias_colname_path.as_deref().unwrap_or(&col.full_colname_path),
+                        input_ts.step_size, self.configuration.sim_stepsize
                     ));
                 }
 
@@ -800,6 +809,7 @@ impl Model {
         // As you find them, you can go ahead and update the mask of data availability.
         let mut critical_data_availability_mask: Option<Timeseries> = None;
         let mut first_critical_name = String::new();
+        let critical_names = civ.join("', '");
         for ci in civ {
             let ci_lower = ci.to_lowercase();
 
@@ -832,6 +842,13 @@ impl Model {
                             first_critical_name = ci.to_string();
                         }
                         Some(ref mut mask) => {
+                            if ts.timeseries.step_size != mask.step_size {
+                                return Err(format!(
+                                    "Input '{}' has a timestep of {}s but '{}' has {}s. \
+                                     All inputs must share the same timestep.",
+                                    ci, ts.timeseries.step_size, first_critical_name, mask.step_size
+                                ));
+                            }
                             // Out-of-phase inputs are rejected, never realigned.
                             if !same_phase(mask.start_timestamp, ts.timeseries.start_timestamp, mask.step_size) {
                                 return Err(format!(
@@ -856,15 +873,12 @@ impl Model {
         // Like Fors, we are going to default to the first period.
         let mask = critical_data_availability_mask.unwrap();
 
-        //Look for the start.
-        //Start and 0 and break when we find the first non-nan value.
-        let mut start_index = 0;
-        for i in 0..mask.len() {
-            if !mask.values[i].is_nan() {
-                start_index = i;
-                break;
-            }
-        }
+        //Look for the start: the first non-nan value. With none, there is no period to run.
+        let Some(start_index) = mask.values.iter().position(|v| !v.is_nan()) else {
+            return Err(format!(
+                "No timestep has data for every critical input ('{}').", critical_names
+            ));
+        };
 
         //Look for the end (exclusive)
         //Start at start_index and then break when we find the first nan value.

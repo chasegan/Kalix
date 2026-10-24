@@ -350,3 +350,9 @@ this document.
   below act on and no data, so it follows the clipboard verbs, as in every
   editor; the editor's menu already did this. Harvested from the map's
   `Select nodes` submenu (#452).
+- *2026-10-23* — engine error messages follow §2.1: sentence case, so a
+  message reads `Error: Input 'flows' has no data`, not `Error: input ...`.
+  Harvested from the input-data checks (#483), where new messages had
+  drifted to lowercase beside capitalised neighbours and the ADR-0012
+  examples. Other existing messages are not re-cut; it is the standard the
+  next one is held to.
