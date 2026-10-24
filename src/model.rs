@@ -282,6 +282,18 @@ pub enum OutputLookupError {
     },
 }
 
+/// A specified `start` after the specified `end` is refused, naming both.
+fn start_not_after_end(start: u64, end: u64, step: u64) -> Result<(), String> {
+    if start > end {
+        return Err(format!(
+            "Specified start '{}' is after end '{}'.",
+            u64_to_date_string_for_step_size(start, step),
+            u64_to_date_string_for_step_size(end, step)
+        ));
+    }
+    Ok(())
+}
+
 impl Model {
     pub fn new() -> Model {
         Model {
@@ -791,13 +803,8 @@ impl Model {
                     );
                 }
             }
-            if self.configuration.sim_start_timestamp > self.configuration.sim_end_timestamp {
-                return Err(format!(
-                    "Specified start '{}' is after end '{}'.",
-                    u64_to_date_string_for_step_size(self.configuration.sim_start_timestamp, 86400),
-                    u64_to_date_string_for_step_size(self.configuration.sim_end_timestamp, 86400)
-                ));
-            }
+            start_not_after_end(self.configuration.sim_start_timestamp,
+                                self.configuration.sim_end_timestamp, 86400)?;
 
             // Default to daily step size and calculate n_steps //TODO: make this customisable
             self.configuration.sim_stepsize = 86400;
@@ -905,6 +912,10 @@ impl Model {
 
         // Override with dates specified in the model, if relevant. They must be in
         // step with the data: a start between two steps would shift every input.
+        if let (Some(start), Some(end)) = (self.configuration.specified_sim_start_timestamp,
+                                           self.configuration.specified_sim_end_timestamp) {
+            start_not_after_end(start, end, self.configuration.sim_stepsize)?;
+        }
         let data_start = self.configuration.sim_start_timestamp;
         let step = self.configuration.sim_stepsize;
         let check_in_step = |what: &str, ts: u64| -> Result<(), String> {
