@@ -103,9 +103,9 @@ fn _read_pixie_raw<'py>(
         return Err(PyValueError::new_err("No series in file"));
     }
 
-    // One DataFrame holds one time grid, so series with values must share it;
-    // a mismatch is refused rather than shown misaligned. An empty series has no
-    // grid of its own and becomes a column of NaN on the others'.
+    // One DataFrame has one set of timestamps, so series with values must share
+    // it; a mismatch is refused rather than shown misaligned. An empty series has
+    // no timestamps of its own and becomes a column of NaN on the others'.
     let mut timestamps: Vec<i64> = Vec::new();
     if let Some(first) = series_list.iter().find(|s| !s.values.is_empty()) {
         for s in series_list.iter().filter(|s| !s.values.is_empty()) {
@@ -114,7 +114,7 @@ fn _read_pixie_raw<'py>(
                 || s.values.len() != first.values.len()
             {
                 return Err(PyValueError::new_err(format!(
-                    "Series '{}' and '{}' are on differing time grids; one DataFrame holds one grid",
+                    "Series '{}' and '{}' do not have the same timestamps; one DataFrame holds one set",
                     first.name, s.name
                 )));
             }
@@ -140,7 +140,7 @@ fn _read_pixie_raw<'py>(
     Ok((ts_array, dict))
 }
 
-/// Write a Pixie .pxt/.pxb pair from a regular-stride time grid and per-series values.
+/// Write a Pixie .pxt/.pxb pair from regularly spaced timestamps and per-series values.
 ///
 /// - `timestamps_unix_seconds`: 1-D numpy array (int64) of Unix seconds; must be regular.
 /// - `series_names`: list of column names, one per array in `values_per_series`.
