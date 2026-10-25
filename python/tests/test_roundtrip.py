@@ -88,6 +88,22 @@ def test_pre1970_timestamps(tmp_path):
                                   check_index_type=_CHECK_INDEX_TYPE)
 
 
+def test_one_row_writes_no_timestep(tmp_path):
+    """One row gives no timestep. The index records 0, not an assumed day, so the
+    Pixie is refused at run exactly as a one-row CSV is; the row still round-trips."""
+    idx = pd.DatetimeIndex(["2020-01-01"], tz="UTC")
+    idx.name = "datetime"
+    df = pd.DataFrame({"v": [1.5]}, index=idx)
+    path = tmp_path / "one.pxb"
+
+    kalix.write_pixie(path, df)
+    fields = (tmp_path / "one.pxt").read_text().splitlines()[1].split(",")
+    assert fields[4].strip() == "0", fields
+    df2 = kalix.read_pixie(path)
+    assert list(df2["v"]) == [1.5]
+    assert list(df2.index) == list(idx)
+
+
 def test_nan_preserved(tmp_path):
     n = 10
     idx = pd.date_range("2020-01-01", periods=n, freq="h", tz="UTC")

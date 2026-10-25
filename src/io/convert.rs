@@ -204,6 +204,42 @@ mod tests {
     }
 
     #[test]
+    fn one_row_csv_keeps_its_unknown_timestep_through_pixie() {
+        // One row gives no timestep. The Pixie index records 0, not an assumed
+        // day, so running the Pixie is refused exactly as running the CSV is.
+        let src = Scratch::new("one.csv");
+        fs::write(&src.0, "Date,flow\n2020-01-01,1.5\n").unwrap();
+
+        let pxt = Scratch::new("one.pxt");
+        let _pxb = Scratch::new("one.pxb");
+        let summary = convert_ts_file(&src.0, &pxt.0).expect("csv -> pixie");
+        assert_eq!(summary.n_points, 1);
+        let index = fs::read_to_string(&pxt.0).unwrap();
+        let fields: Vec<&str> = index.lines().nth(1).unwrap().split(',').collect();
+        assert_eq!(fields[4], "0", "timestep field: {index}");
+
+        let back = Scratch::new("one_back.csv");
+        convert_ts_file(&pxt.0, &back.0).expect("pixie -> csv");
+        let reread = csv_io::read_ts(&back.0).expect("re-read the round trip");
+        assert_eq!(reread.len(), 1);
+        assert_eq!(reread[0].values, vec![1.5], "the single row survives the round trip");
+        assert_eq!(reread[0].step_size, 0, "and still has no timestep");
+    }
+
+    #[test]
+    fn empty_csv_round_trips_through_pixie_with_a_date_heading() {
+        // An empty series has no start, so the heading cannot be decided from it.
+        let src = Scratch::new("empty.csv");
+        fs::write(&src.0, "Date,flow\n").unwrap();
+        let pxt = Scratch::new("empty.pxt");
+        let _pxb = Scratch::new("empty.pxb");
+        convert_ts_file(&src.0, &pxt.0).expect("csv -> pixie");
+        let back = Scratch::new("empty_back.csv");
+        convert_ts_file(&pxt.0, &back.0).expect("pixie -> csv");
+        assert_eq!(fs::read_to_string(&back.0).unwrap().trim_end(), "date,flow");
+    }
+
+    #[test]
     fn pixie_values_survive_at_full_double_precision() {
         // 0.1 is not f32-exact: this fails if the pixie write path ever drops
         // back to the 32-bit codec.

@@ -185,6 +185,54 @@ class PixieRoundTripTest {
         assertEquals(86400L, info.timestepSeconds);
     }
 
+    /** One point has no timestep. The index records 0, as the engine's writer does, so the
+     *  engine refuses to run it just as it refuses a one-row CSV; the point still round-trips. */
+    @Test
+    void onePointSeriesRecordsNoTimestep() throws Exception {
+        TimeSeriesData data = new TimeSeriesData(
+            new LocalDateTime[] { LocalDateTime.of(2020, 1, 1, 0, 0) }, new double[] { 1.5 });
+        String base = tempDir.resolve("one").toString();
+        new PixieWriter().writeToFile(base, List.of(new NamedSeries("v", data)), true);
+
+        String[] fields = Files.readAllLines(tempDir.resolve("one.pxt")).get(1).split(",");
+        assertEquals("0", fields[4].trim());
+        TimeSeriesData reloaded = new PixieReader().readAllSeries(base).get(0).data();
+        assertArrayEquals(data.getTimestamps(), reloaded.getTimestamps());
+        assertArrayEquals(data.getValues(), reloaded.getValues(), 0.0);
+    }
+
+    /** An empty series has no start or end: the index gets blank fields, as the engine writes,
+     *  and the pair reads back with the series empty. */
+    @Test
+    void emptySeriesWritesBlankStartAndEndAndReadsBack() throws Exception {
+        TimeSeriesData empty = new TimeSeriesData(new LocalDateTime[0], new double[0]);
+        String base = tempDir.resolve("blank").toString();
+        new PixieWriter().writeToFile(base,
+            List.of(new NamedSeries("full", dailySeries(3, 1.0)), new NamedSeries("empty", empty)), true);
+
+        String[] fields = Files.readAllLines(tempDir.resolve("blank.pxt")).get(2).split(",");
+        assertEquals("", fields[2].trim());
+        assertEquals("", fields[3].trim());
+        List<NamedSeries> read = new PixieReader().readAllSeries(base);
+        assertEquals(2, read.size());
+        assertEquals(0, read.get(1).data().getPointCount());
+    }
+
+    /** The engine writes an empty series with blank start and end; the index must still read. */
+    @Test
+    void engineWrittenEmptySeriesReads() throws Exception {
+        Files.writeString(tempDir.resolve("empty.pxt"),
+            "index,offset,start_time,end_time,timestep,length,series_name\n"
+            + "1,0,2020-01-01,2020-01-02,86400,2,full\n"
+            + "2,30,,,86400,0,empty\n");
+
+        List<PixieReader.SeriesInfo> infos = new PixieReader()
+            .getSeriesInfo(tempDir.resolve("empty").toString());
+        assertEquals(2, infos.size());
+        assertEquals("empty", infos.get(1).name);
+        assertEquals(0, infos.get(1).pointCount);
+    }
+
     /** Seeking by the index's offset decodes the same series a full read does, in any order. */
     @Test
     void offsetReadMatchesFullRead() throws Exception {

@@ -160,7 +160,7 @@ Zip is the compression option everyone recognises; Pixie remains the faster, sma
 
 The Pixie binary format stores one or more timeseries efficiently using a compression algorithm inspired by [Gorilla](https://www.vldb.org/pvldb/vol8/p1816-teller.pdf). It always uses **two paired files** that share the same base name. Both files are required.
 
-- `.pxt` — index file. A plain-text CSV with one row per series, listing the series name, byte offset into the `.pxb` file, start/end times, timestep, and length. This file is human-readable and can be useful for inspecting the contents of the dataset.
+- `.pxt` — index file. A plain-text CSV with one row per series, listing the series name, byte offset into the `.pxb` file, start/end times, timestep, and length. This file is human-readable and can be useful for inspecting the contents of the dataset. A timestep of 0 means the source gave none (a one-row CSV); a blank start and end mean an empty series.
 
 - `.pxb` — binary file. Contains the actual compressed timeseries data. Each series is written as a single block. Binary offsets recorded in the `.pxt` file allow individual series to be read without decompressing the whole file.
 

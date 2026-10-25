@@ -344,8 +344,7 @@ fn write_temp_pixie(b_values: Vec<f64>, edit_b: impl Fn(&mut Vec<String>)) -> St
 /// Pixie series are independent, so a later empty series must be caught too.
 #[test]
 fn test_pixie_source_with_empty_later_series_fails_at_configure() {
-    // Kalix's own writer gives an empty series unreadable dates; another tool might not.
-    let pxt = write_temp_pixie(vec![], |f| { f[2] = "2000-01-01".into(); f[3] = "2000-01-01".into(); });
+    let pxt = write_temp_pixie(vec![], |_| {});
     let mut model = model_with_inputs("", &format!("p = {pxt}"), "data.p.by_name.b");
     let err = model.configure().expect_err("configure() must reject an empty series");
     assert_eq!(err, format!("Series 'b' of input 'p' ({pxt}) has no data"));

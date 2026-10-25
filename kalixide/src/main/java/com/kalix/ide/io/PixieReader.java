@@ -181,8 +181,9 @@ public class PixieReader {
             SeriesMetadata meta = new SeriesMetadata();
             meta.index = Integer.parseInt(fields.get(0).trim());
             meta.offset = Long.parseLong(fields.get(1).trim());
-            meta.startTime = parseTimestamp(fields.get(2).trim());
-            meta.endTime = parseTimestamp(fields.get(3).trim());
+            // Blank start and end mean an empty series (the engine's writer leaves them so).
+            meta.startTime = parseOptionalTimestamp(fields.get(2));
+            meta.endTime = parseOptionalTimestamp(fields.get(3));
             meta.timestep = Long.parseLong(fields.get(4).trim());
             meta.length = Integer.parseInt(fields.get(5).trim());
             meta.seriesName = fields.get(6).trim();
@@ -213,6 +214,11 @@ public class PixieReader {
 
         result.add(currentField.toString());
         return result;
+    }
+
+    private long parseOptionalTimestamp(String field) throws DateTimeParseException {
+        String trimmed = field.trim();
+        return trimmed.isEmpty() ? 0 : parseTimestamp(trimmed);
     }
 
     private long parseTimestamp(String timestampStr) throws DateTimeParseException {
