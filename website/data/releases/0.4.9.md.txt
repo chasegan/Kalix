@@ -15,4 +15,5 @@ pip: "pip install kalix==0.4.9"
     - A `start` after the `end`, or outside the input data, is refused with both dates named. The old messages said the opposite or blamed the data.
     - `kalix convert`, Python's `write_pixie()` and the IDE no longer stamp a timestep on a single row of data. The Pixie they write records no timestep, so running it is refused just as running a one-row CSV is.
     - A Pixie file holding an empty series can now be read back in the engine and the IDE; its `.pxt` used to hold an invalid start and end.
+    - Python: `read_pixie()` returns an empty series as a column of NaN on the other series' grid. Series with values on different grids are still refused.
     - Python: `set_input()` now raises `ModelValidationError` for data with no rows or one row. Previously it assumed a daily timestep for a single row, and raised `ValueError` for no rows.

@@ -103,34 +103,40 @@ fn _read_pixie_raw<'py>(
         return Err(PyValueError::new_err("No series in file"));
     }
 
-    // v0.1 requires all series share the same time grid.
-    let first = &series_list[0];
-    for s in &series_list[1..] {
-        if s.start_timestamp != first.start_timestamp
-            || s.step_size != first.step_size
-            || s.values.len() != first.values.len()
-        {
-            return Err(PyValueError::new_err(
-                "Series have differing time grids; v0.1 requires alignment",
-            ));
+    // One DataFrame holds one time grid, so series with values must share it;
+    // a mismatch is refused rather than shown misaligned. An empty series has no
+    // grid of its own and becomes a column of NaN on the others'.
+    let grid = series_list.iter().find(|s| !s.values.is_empty());
+    if let Some(first) = grid {
+        for s in series_list.iter().filter(|s| !s.values.is_empty()) {
+            if s.start_timestamp != first.start_timestamp
+                || s.step_size != first.step_size
+                || s.values.len() != first.values.len()
+            {
+                return Err(PyValueError::new_err(
+                    "Series have differing time grids; v0.1 requires alignment",
+                ));
+            }
         }
     }
 
     // Reconstruct timestamps as signed Unix seconds.
-    let n = first.values.len();
+    let n = grid.map_or(0, |first| first.values.len());
     let mut timestamps: Vec<i64> = Vec::with_capacity(n);
-    for i in 0..n {
-        let wrapped = first
-            .start_timestamp
-            .wrapping_add((i as u64).wrapping_mul(first.step_size));
-        timestamps.push(wrap_to_i64(wrapped));
+    if let Some(first) = grid {
+        for i in 0..n {
+            let wrapped = first
+                .start_timestamp
+                .wrapping_add((i as u64).wrapping_mul(first.step_size));
+            timestamps.push(wrap_to_i64(wrapped));
+        }
     }
     let ts_array = timestamps.into_pyarray_bound(py);
 
     let dict = PyDict::new_bound(py);
     for s in series_list {
-        let arr = s.values.into_pyarray_bound(py);
-        dict.set_item(s.name, arr)?;
+        let values = if s.values.is_empty() { vec![f64::NAN; n] } else { s.values };
+        dict.set_item(s.name, values.into_pyarray_bound(py))?;
     }
 
     Ok((ts_array, dict))

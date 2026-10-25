@@ -31,7 +31,9 @@ def read_pixie(path: PathLike) -> pd.DataFrame:
     DataFrame
         Index is a UTC ``DatetimeIndex`` named ``"date"``, or ``"datetime"``
         when the timestamps carry a time of day (the engine's CSV heading
-        rule); columns are series names with float64 values.
+        rule); columns are series names with float64 values. Series with
+        values must share one time grid, else ``ValueError``; an empty series
+        is a column of NaN.
     """
     timestamps_sec, series_dict = _read_pixie_raw(str(path))
     return build_time_indexed_df(timestamps_sec, series_dict)
