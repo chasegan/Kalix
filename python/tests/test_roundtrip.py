@@ -111,8 +111,8 @@ def test_empty_series_is_a_nan_column(tmp_path):
     idx.name = "date"
     kalix.write_pixie(tmp_path / "mixed.pxb", pd.DataFrame({"v": [1.0, 2.0, 3.0]}, index=idx))
 
-    # Append an empty series the way the engine writes one: a block of codec + zero
-    # length in the .pxb, and an index row with blank start and end.
+    # Append an empty series with no timestep, as the IDE writes one: a block of
+    # codec + zero length in the .pxb, and an index row with blank start and end.
     import struct
     pxb = tmp_path / "mixed.pxb"
     offset = pxb.stat().st_size
