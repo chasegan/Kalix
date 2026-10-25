@@ -141,17 +141,17 @@ public class PixieWriter {
         return result;
     }
 
-    /** The series' timestep in epoch seconds (never zero — clamped for sub-second data). */
+    /** The series' timestep in epoch seconds. A single point has none and gets 0, as the engine's
+     *  writer gives it; otherwise never zero (clamped for sub-second data). */
     private long detectTimestepSeconds(TimeSeriesData series) {
+        if (series.getPointCount() < 2) {
+            return 0;
+        }
         if (series.hasRegularInterval()) {
             return Math.max(1, series.getIntervalMillis() / 1000);
         }
 
         // For irregular intervals, calculate average interval
-        if (series.getPointCount() < 2) {
-            return 1; // Default 1 second
-        }
-
         long totalIntervalMs = series.getLastTimestamp() - series.getFirstTimestamp();
         return Math.max(1, totalIntervalMs / (series.getPointCount() - 1) / 1000);
     }
