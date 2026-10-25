@@ -349,7 +349,8 @@ pub fn write_ts_opts(filename: &str, timeseries_vector: Vec<&Timeseries>, zip_in
     // write share it in practice); the heading names it, "date" being what most
     // post-processing tools look for.
     let first = timeseries_vector.first();
-    let with_time = first.is_some_and(|ts| needs_time_of_day(ts.start_timestamp, ts.step_size));
+    let with_time = first.is_some_and(|ts| !ts.values.is_empty()
+        && needs_time_of_day(ts.start_timestamp, ts.step_size));
 
     // Build the whole file in one buffer, reserved up front so a large output
     // never regrows (a 45 MB result file would otherwise be memcpy'd ~20
