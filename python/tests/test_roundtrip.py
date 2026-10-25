@@ -106,7 +106,7 @@ def test_one_row_writes_no_timestep(tmp_path):
 
 def test_empty_series_is_a_nan_column(tmp_path):
     """A file mixing a full series with an empty one reads: the empty series has no
-    grid of its own and comes back as NaN on the full series' grid."""
+    timestamps of its own and comes back as NaN on the full series' timestamps."""
     idx = pd.date_range("2020-01-01", periods=3, freq="D", tz="UTC")
     idx.name = "date"
     kalix.write_pixie(tmp_path / "mixed.pxb", pd.DataFrame({"v": [1.0, 2.0, 3.0]}, index=idx))
@@ -127,19 +127,19 @@ def test_empty_series_is_a_nan_column(tmp_path):
     assert df["empty"].isna().all() and len(df["empty"]) == 3
 
 
-def test_series_with_values_on_different_grids_are_refused(tmp_path):
+def test_series_with_values_on_different_timestamps_are_refused(tmp_path):
     """Two full series on different timesteps cannot share one index; refused, not misaligned."""
     idx = pd.date_range("2020-01-01", periods=3, freq="D", tz="UTC")
     idx.name = "date"
-    kalix.write_pixie(tmp_path / "grids.pxb", pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]}, index=idx))
-    pxt = tmp_path / "grids.pxt"
+    kalix.write_pixie(tmp_path / "steps.pxb", pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]}, index=idx))
+    pxt = tmp_path / "steps.pxt"
     lines = pxt.read_text().splitlines()
     fields = lines[2].split(",")
     fields[4] = "3600"  # the index gives each series its timestep
     lines[2] = ",".join(fields)
     pxt.write_text("\n".join(lines) + "\n")
 
-    with pytest.raises(ValueError, match="differing time grids"):
+    with pytest.raises(ValueError, match="do not have the same timestamps"):
         kalix.read_pixie(pxt)
 
 
