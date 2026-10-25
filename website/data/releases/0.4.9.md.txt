@@ -13,6 +13,6 @@ pip: "pip install kalix==0.4.9"
     - A CSV input with only one row of data, or none, now stops the run with an error naming the input, instead of crashing. Kalix needs two rows to work out the timestep.
     - So do inputs on different timesteps, and inputs that never all have data on the same timestep (e.g. an all-blank column, or date ranges that don't overlap).
     - A `start` after the `end`, or outside the input data, is refused with both dates named. The old messages said the opposite or blamed the data.
-    - `kalix convert` and Python's `write_pixie()` no longer stamp a daily timestep on a one-row CSV. The Pixie they write records no timestep, so running it is refused just as running the CSV is.
-    - A Pixie file holding an empty series can now be read back, in the engine, Python and the IDE; its `.pxt` used to hold an invalid start and end.
+    - `kalix convert`, Python's `write_pixie()` and the IDE no longer stamp a timestep on a single row of data. The Pixie they write records no timestep, so running it is refused just as running a one-row CSV is.
+    - A Pixie file holding an empty series can now be read back in the engine and the IDE; its `.pxt` used to hold an invalid start and end.
     - Python: `set_input()` now raises `ModelValidationError` for data with no rows or one row. Previously it assumed a daily timestep for a single row, and raised `ValueError` for no rows.
