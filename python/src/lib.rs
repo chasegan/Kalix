@@ -160,7 +160,8 @@ fn _write_pixie_raw(
         return Err(PyValueError::new_err("No data to write"));
     }
 
-    // Derive step from first two timestamps; fall back to daily if only one point.
+    // Derive step from first two timestamps. One point gives no step; 0 is
+    // written as is, so the Pixie is refused at run exactly as a one-row CSV is.
     let step_size: u64 = if ts.len() >= 2 {
         let diff = ts[1] - ts[0];
         if diff <= 0 {
@@ -170,7 +171,7 @@ fn _write_pixie_raw(
         }
         diff as u64
     } else {
-        86400
+        0
     };
 
     // Sanity-check regular stride (cheap to do once; cheap to skip later if it gets noisy).
