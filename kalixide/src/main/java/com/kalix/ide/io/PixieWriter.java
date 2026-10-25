@@ -141,8 +141,8 @@ public class PixieWriter {
         return result;
     }
 
-    /** The series' timestep in epoch seconds. A single point has none and gets 0, as the engine's
-     *  writer gives it; otherwise never zero (clamped for sub-second data). */
+    /** The series' timestep in epoch seconds. Fewer than two points give none, so 0, as the
+     *  engine's writer gives it; otherwise never zero (clamped for sub-second data). */
     private long detectTimestepSeconds(TimeSeriesData series) {
         if (series.getPointCount() < 2) {
             return 0;
@@ -168,8 +168,9 @@ public class PixieWriter {
 
             // Write data rows
             for (SeriesMetadata meta : metadataList) {
-                String startTime = formatTimestamp(meta.startTimeSeconds, meta.timestepSeconds);
-                String endTime = formatTimestamp(meta.endTimeSeconds, meta.timestepSeconds);
+                // An empty series has no start or end; the fields are left blank, as the engine does.
+                String startTime = meta.length == 0 ? "" : formatTimestamp(meta.startTimeSeconds, meta.timestepSeconds);
+                String endTime = meta.length == 0 ? "" : formatTimestamp(meta.endTimeSeconds, meta.timestepSeconds);
 
                 pw.printf("%-" + widths.index + "s,%-" + widths.offset + "s,%-" + widths.startTime + "s,%-" + widths.endTime + "s,%-" + widths.timestep + "s,%-" + widths.length + "s,%s%n",
                     meta.index,

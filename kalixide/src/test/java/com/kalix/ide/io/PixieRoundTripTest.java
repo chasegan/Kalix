@@ -201,6 +201,23 @@ class PixieRoundTripTest {
         assertArrayEquals(data.getValues(), reloaded.getValues(), 0.0);
     }
 
+    /** An empty series has no start or end: the index gets blank fields, as the engine writes,
+     *  and the pair reads back with the series empty. */
+    @Test
+    void emptySeriesWritesBlankStartAndEndAndReadsBack() throws Exception {
+        TimeSeriesData empty = new TimeSeriesData(new LocalDateTime[0], new double[0]);
+        String base = tempDir.resolve("blank").toString();
+        new PixieWriter().writeToFile(base,
+            List.of(new NamedSeries("full", dailySeries(3, 1.0)), new NamedSeries("empty", empty)), true);
+
+        String[] fields = Files.readAllLines(tempDir.resolve("blank.pxt")).get(2).split(",");
+        assertEquals("", fields[2].trim());
+        assertEquals("", fields[3].trim());
+        List<NamedSeries> read = new PixieReader().readAllSeries(base);
+        assertEquals(2, read.size());
+        assertEquals(0, read.get(1).data().getPointCount());
+    }
+
     /** The engine writes an empty series with blank start and end; the index must still read. */
     @Test
     void engineWrittenEmptySeriesReads() throws Exception {
