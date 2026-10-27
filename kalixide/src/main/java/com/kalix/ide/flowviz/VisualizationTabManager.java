@@ -445,6 +445,7 @@ public class VisualizationTabManager {
                 notifyTabMutated(tabInfo);
             }
             if (!now.getVisibleSeries().equals(old.getVisibleSeries())) {
+                pruneLoadStates();
                 host.onSelectionsChanged();
             }
         });
@@ -736,6 +737,7 @@ public class VisualizationTabManager {
         if (tabs.isEmpty()) {
             addDefaultPlotTab();
         }
+        pruneLoadStates();
         host.onSelectionsChanged();
     }
 
@@ -970,10 +972,12 @@ public class VisualizationTabManager {
         // every page follows the model (or dirties).
         tab.vizPanel.setStyleResolver(styleResolver);
         tab.model().update(s -> s.withVisibleSeries(new ArrayList<>(ordered)));
-        pruneLoadStates();
     }
 
-    /** Forgets the fetch state of series no tab selects any more, so the map stays as small as the selections. */
+    /**
+     * Forgets the fetch state of series no tab selects any more, on every selection change
+     * (tick, undo, redo, close), so a stale failure never comes back with a restored selection.
+     */
     private void pruneLoadStates() {
         loadStates.keySet().retainAll(getAllSelectedSeriesAcrossTabs());
     }
@@ -1082,7 +1086,6 @@ public class VisualizationTabManager {
         for (TabInfo tab : tabs) {
             removeSeriesFromTab(tab, refs);
         }
-        pruneLoadStates();
     }
 
     /** Drops refs from one tab's selection; every page follows the model. */
