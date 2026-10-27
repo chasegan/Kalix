@@ -59,10 +59,6 @@ public final class DataVizPanel extends JPanel {
     private PlotType gridPlotType;
     private List<String> gridHeaders;
 
-    // Context-menu handles: the viz mount inserts its items around these.
-    private JPopupMenu tableMenu;
-    private JMenuItem copyItem;
-
     /** The unified Find, shared by every tabular view via {@link FindableData}. */
     private final DataFindController findController;
 
@@ -95,11 +91,9 @@ public final class DataVizPanel extends JPanel {
     /** Context menu + keyboard interactions: Find, Copy. */
     private void installInteractions() {
         JPopupMenu menu = new JPopupMenu();
-        this.tableMenu = menu;
         JMenuItem find = new JMenuItem("Find…"); // one Find: dates, values and columns are dialog scopes
         find.addActionListener(e -> openFind());
         JMenuItem copy = new JMenuItem("Copy");
-        this.copyItem = copy;
         copy.addActionListener(e -> {
             // JTable's built-in copy: selected cells as tab-delimited lines.
             Action builtIn = table.getActionMap().get("copy");
