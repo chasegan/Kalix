@@ -56,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
@@ -111,6 +112,11 @@ public class PlotInteractionManager {
     private BooleanSupplier autoYModeSupplier;
     // Which series are drawn against the right axis; consulted only when the view has one
     private Predicate<SeriesRef> onRightAxis = ref -> false;
+
+    // The Key entry under a point (null if none), and the one the open context menu is for
+    private Function<Point, SeriesRef> keyEntryLookup = point -> null;
+    private SeriesRef menuSeries;
+    private JMenuItem moveAxisItem;
 
 
     /**
@@ -304,6 +310,11 @@ public class PlotInteractionManager {
 
     private boolean isAutoYMode() {
         return autoYModeSupplier.getAsBoolean();
+    }
+
+    /** Sets the lookup from a point to the Key entry under it, for the axis menu item. */
+    public void setKeyEntryLookup(Function<Point, SeriesRef> keyEntryLookup) {
+        this.keyEntryLookup = keyEntryLookup;
     }
 
     /** Sets the test for which series are drawn against the right (y2) axis. */
@@ -687,6 +698,13 @@ public class PlotInteractionManager {
         if (!hasPlot()) {
             return;
         }
+        // Over a Key entry the menu can move that series between axes; elsewhere the
+        // item is hidden (ADR-0002 §4).
+        menuSeries = keyEntryLookup.apply(e.getPoint());
+        moveAxisItem.setVisible(menuSeries != null);
+        if (menuSeries != null) {
+            moveAxisItem.setText(onRightAxis.test(menuSeries) ? "Move to Y axis" : "Move to secondary Y axis");
+        }
         contextMenu.show(parentComponent, e.getX(), e.getY());
     }
 
@@ -736,7 +754,7 @@ public class PlotInteractionManager {
 
         // Primary block (ADR-0002 §1, block 1): the default action, which on a plot
         // is what double-click does (see the mouse listener). The skeleton's table lists
-        // "Zoom to fit" under block 7 for panels where it is merely a view command; here
+        // "Zoom to fit" under block 8 for panels where it is merely a view command; here
         // it is the primary one, so it leads.
         JMenuItem zoomToFitItem = new JMenuItem("Zoom to fit");
         zoomToFitItem.addActionListener(e -> zoomToFit());
@@ -812,7 +830,7 @@ public class PlotInteractionManager {
 
         contextMenu.addSeparator();
 
-        // View/state block (block 7): everything that changes how the data is shown, never
+        // View/state block (block 8): everything that changes how the data is shown, never
         // the data. "Set axis limits…" carries an ellipsis because it opens a dialog (2.4);
         // the submenus are category nouns with value children (6).
         JMenuItem setAxes = new JMenuItem("Set axis limits…");
@@ -879,9 +897,17 @@ public class PlotInteractionManager {
 
         contextMenu.addSeparator();
 
-        // Still block 7, but a command rather than a setting (6), so it sits apart from the
-        // settings above. "Key" is what the legend calls itself on screen and on the
-        // toolbar, so the item says "Key" too (2.2: one name per concept).
+        // Still block 8, but commands rather than settings (6), so they sit apart from the
+        // settings above. The axis move is shown only over a Key entry (4).
+        moveAxisItem = new JMenuItem("Move to secondary Y axis");
+        moveAxisItem.addActionListener(e -> {
+            if (menuSeries != null && parentComponent instanceof FlowVizPanel vizPanel) {
+                vizPanel.setSeriesOnRightAxis(menuSeries, !vizPanel.isOnRightAxis(menuSeries));
+            }
+        });
+        contextMenu.add(moveAxisItem);
+        // "Key" is what the legend calls itself on screen and on the toolbar, so the item
+        // says "Key" too (2.2: one name per concept).
         JMenuItem resetKeyItem = new JMenuItem("Reset key");
         resetKeyItem.addActionListener(e -> {
             if (parentComponent instanceof FlowVizPanel vizPanel) {
