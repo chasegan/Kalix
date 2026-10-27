@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
@@ -186,6 +187,9 @@ public class FlowVizPanel extends JPanel {
         renderer.setRightAxisTest(rightAxisSeries::contains);
         coordinateDisplayManager.setRightAxisTest(rightAxisSeries::contains);
         plotInteractionManager.setRightAxisTest(rightAxisSeries::contains);
+        legendManager.setRightAxisTest(rightAxisSeries::contains);
+        legendManager.setOnAxisToggle(ref -> setSeriesOnRightAxis(ref, !isOnRightAxis(ref)));
+        plotInteractionManager.setKeyEntryLookup(point -> legendManager.entryAt(point.x, point.y));
 
         // Default to the global palette with a private slot assignment. An owner
         // (e.g. the Run Manager) typically injects a shared resolver afterwards via
@@ -600,8 +604,10 @@ public class FlowVizPanel extends JPanel {
             @Override
             public void mousePressed(java.awt.event.MouseEvent e) {
                 boolean plainLeftPress = SwingUtilities.isLeftMouseButton(e) && !e.isPopupTrigger();
+                // Ctrl+click (Cmd+click on macOS, where Ctrl+click is the popup gesture)
+                boolean togglesAxis = (e.getModifiersEx() & AppShortcut.menuMask()) != 0;
                 if (plainLeftPress && legendManager != null
-                        && legendManager.handleMousePress(e.getX(), e.getY())) {
+                        && legendManager.handleMousePress(e.getX(), e.getY(), togglesAxis)) {
                     repaint();
                     return; // Event consumed by legend
                 }

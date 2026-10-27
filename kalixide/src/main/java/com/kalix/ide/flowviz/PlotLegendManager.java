@@ -24,6 +24,8 @@ import java.awt.geom.RoundRectangle2D;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * Manages the plot legend display with draggable and collapsible functionality.
@@ -58,6 +60,9 @@ public class PlotLegendManager {
     private static final int DEFAULT_OFFSET = 20;
     private static final int COLLAPSED_WIDTH = 30;  // Width when fully collapsed
     private static final int COLLAPSED_HEIGHT = 24; // Height when fully collapsed
+    private static final int DIVIDER_HEIGHT = 18;   // An axis caption row, above each group
+    private static final String LEFT_CAPTION = "Y axis";
+    private static final String RIGHT_CAPTION = "Secondary Y axis";
 
     // Colors. The theme supplies three legend roles (background, border, foreground)
     // via the Kalix.plot.* keys; the remaining tints are derived from them once per
@@ -94,6 +99,12 @@ public class PlotLegendManager {
     // the click point. Null when style picking is unavailable (non-palette plots).
     private BiConsumer<SeriesRef, Point> onStyleClicked = null;
 
+    // Which series sit on the right axis: they are listed after the divider.
+    private Predicate<SeriesRef> onRightAxis = ref -> false;
+
+    // Callback invoked when an entry is Ctrl/Cmd+clicked, to move it to the other axis.
+    private Consumer<SeriesRef> onAxisToggle = null;
+
     // Series data
     private final List<LegendEntry> entries = new ArrayList<>();
 
@@ -112,6 +123,8 @@ public class PlotLegendManager {
     private int pressX = 0; // Track initial press position
     private int pressY = 0;
     private boolean hasMoved = false; // Track if mouse moved during drag
+    private boolean pressTogglesAxis = false; // The press held the axis-toggle modifier
+    private Listing listing; // Cached by listing(); null when it must be rebuilt
     private int hoveredEntryIndex = -1;
     private boolean collapseButtonHovered = false;
     private boolean titleHovered = false;
@@ -138,6 +151,62 @@ public class PlotLegendManager {
         }
     }
 
+    /**
+     * The entries in listed order -- left-axis series, then right-axis ones -- with the
+     * index of the first right-axis entry. Built per paint and per hit-test from the
+     * current axis assignment, so it never goes stale.
+     */
+    private record Listing(List<LegendEntry> entries, int rightStart) {
+        boolean hasDivider() {
+            return rightStart < entries.size();
+        }
+    }
+
+    /**
+     * The listing as last drawn, so hit-tests match the screen; rebuilt on the next paint
+     * and whenever the entries change.
+     */
+    private Listing listing() {
+        if (listing == null) {
+            listing = buildListing();
+        }
+        return listing;
+    }
+
+    private Listing buildListing() {
+        List<LegendEntry> listed = new ArrayList<>(entries.size());
+        for (LegendEntry entry : entries) {
+            if (!onRightAxis.test(entry.ref)) listed.add(entry);
+        }
+        int rightStart = listed.size();
+        for (LegendEntry entry : entries) {
+            if (onRightAxis.test(entry.ref)) listed.add(entry);
+        }
+        return new Listing(listed, rightStart);
+    }
+
+    /** Top of the {@code index}th listed entry's row, below its group's caption when split. */
+    private int entryTop(Listing listing, int index) {
+        int top = y + HEADER_HEIGHT + PADDING + index * (ENTRY_HEIGHT + ENTRY_SPACING);
+        if (!listing.hasDivider()) return top;
+        return index >= listing.rightStart() ? top + 2 * DIVIDER_HEIGHT : top + DIVIDER_HEIGHT;
+    }
+
+    /** The series whose row contains the point, or null. Null when hidden or collapsed. */
+    public SeriesRef entryAt(int mouseX, int mouseY) {
+        if (!enabled || collapsed || !bounds.contains(mouseX, mouseY)) {
+            return null;
+        }
+        Listing listing = listing();
+        for (int i = 0; i < listing.entries().size(); i++) {
+            Rectangle row = new Rectangle(x + 2, entryTop(listing, i) - 2, bounds.width - 4, ENTRY_HEIGHT);
+            if (row.contains(mouseX, mouseY)) {
+                return listing.entries().get(i).ref;
+            }
+        }
+        return null;
+    }
+
     public PlotLegendManager() {
         loadPreferences();
     }
@@ -160,25 +229,34 @@ public class PlotLegendManager {
         this.onStyleClicked = onStyleClicked;
     }
 
+    /** Sets the test for which series are on the right axis (listed after the divider). */
+    public void setRightAxisTest(Predicate<SeriesRef> onRightAxis) {
+        this.onRightAxis = onRightAxis;
+    }
+
+    /** Sets the callback invoked when an entry is Ctrl/Cmd+clicked; null disables it. */
+    public void setOnAxisToggle(Consumer<SeriesRef> onAxisToggle) {
+        this.onAxisToggle = onAxisToggle;
+    }
+
     /**
-     * Returns the index of the legend entry whose line sample contains the point,
-     * or {@code -1}. Always {@code -1} when style clicking is disabled, so it gates
-     * both the hand cursor and the click action.
+     * Returns the series whose line sample contains the point, or {@code null}. Always
+     * {@code null} when style clicking is disabled, so it gates both the hand cursor and
+     * the click action.
      */
-    private int lineSampleEntryAt(int mouseX, int mouseY) {
+    private SeriesRef lineSampleEntryAt(int mouseX, int mouseY) {
         if (!enabled || collapsed || onStyleClicked == null) {
-            return -1;
+            return null;
         }
-        int entryY = y + HEADER_HEIGHT + PADDING;
-        for (int i = 0; i < entries.size(); i++) {
+        Listing listing = listing();
+        for (int i = 0; i < listing.entries().size(); i++) {
             Rectangle sample = new Rectangle(
-                x + PADDING - 2, entryY - 2, LINE_SAMPLE_WIDTH + 8, ENTRY_HEIGHT);
+                x + PADDING - 2, entryTop(listing, i) - 2, LINE_SAMPLE_WIDTH + 8, ENTRY_HEIGHT);
             if (sample.contains(mouseX, mouseY)) {
-                return i;
+                return listing.entries().get(i).ref;
             }
-            entryY += ENTRY_HEIGHT + ENTRY_SPACING;
         }
-        return -1;
+        return null;
     }
 
     private LineStyle lineStyleFor(SeriesRef ref) {
@@ -219,6 +297,7 @@ public class PlotLegendManager {
         // Remove existing entry with same ref if present
         entries.removeIf(e -> e.ref.equals(ref));
         entries.add(new LegendEntry(ref));
+        listing = null;
     }
 
     /**
@@ -226,6 +305,7 @@ public class PlotLegendManager {
      */
     public void removeSeries(SeriesRef ref) {
         entries.removeIf(e -> e.ref.equals(ref));
+        listing = null;
     }
 
     /**
@@ -233,6 +313,7 @@ public class PlotLegendManager {
      */
     public void clear() {
         entries.clear();
+        listing = null;
     }
 
     /**
@@ -308,6 +389,11 @@ public class PlotLegendManager {
      * Renders the legend on the plot.
      */
     public void render(Graphics2D g2d, ViewPort viewport) {
+        Listing shown = listing;
+        listing = null; // the axis assignment may have changed since the last paint
+        if (shown != null && !shown.equals(listing())) {
+            hoveredEntryIndex = -1; // the rows moved; the next mouse move finds the hover again
+        }
         if (!enabled || entries.isEmpty()) {
             return;
         }
@@ -362,7 +448,7 @@ public class PlotLegendManager {
             drawHeader(g, x, y, width);
 
             // Draw entries
-            drawEntries(g, x, y + HEADER_HEIGHT, width);
+            drawEntries(g, x, width);
         }
 
         g.dispose();
@@ -481,11 +567,16 @@ public class PlotLegendManager {
         g.drawString(buttonText, buttonX, y + 16);
     }
 
-    private void drawEntries(Graphics2D g, int x, int y, int width) {
-        int entryY = y + PADDING;
+    private void drawEntries(Graphics2D g, int x, int width) {
+        Listing listing = listing();
+        if (listing.hasDivider()) {
+            drawDivider(g, x, y + HEADER_HEIGHT + PADDING, width, LEFT_CAPTION);
+            drawDivider(g, x, entryTop(listing, listing.rightStart()) - DIVIDER_HEIGHT, width, RIGHT_CAPTION);
+        }
 
-        for (int i = 0; i < entries.size(); i++) {
-            LegendEntry entry = entries.get(i);
+        for (int i = 0; i < listing.entries().size(); i++) {
+            LegendEntry entry = listing.entries().get(i);
+            int entryY = entryTop(listing, i);
 
             // Draw hover background
             if (i == hoveredEntryIndex) {
@@ -507,9 +598,21 @@ public class PlotLegendManager {
             String transformedName = displayLabel(entry.ref);
             String displayName = truncateText(g, transformedName, width - (PADDING * 2 + LINE_SAMPLE_WIDTH + 6));
             g.drawString(displayName, nameX, entryY + 14);
-
-            entryY += ENTRY_HEIGHT + ENTRY_SPACING;
         }
+    }
+
+    /** The divider above an axis group: a small caption, then a rule to the edge. */
+    private void drawDivider(Graphics2D g, int x, int top, int width, String caption) {
+        g.setFont(new Font("Dialog", Font.PLAIN, 9));
+        FontMetrics fm = g.getFontMetrics();
+        int captionX = x + PADDING;
+        g.setColor(buttonColor);
+        g.drawString(caption, captionX, top + 12);
+
+        int ruleY = top + 8;
+        g.setColor(headerDivider);
+        g.setStroke(new BasicStroke(1.0f));
+        g.drawLine(captionX + fm.stringWidth(caption) + 4, ruleY, x + width - PADDING, ruleY);
     }
 
     /**
@@ -571,7 +674,8 @@ public class PlotLegendManager {
         if (collapsed) {
             return COLLAPSED_HEIGHT;
         }
-        return HEADER_HEIGHT + (ENTRY_HEIGHT + ENTRY_SPACING) * entries.size() + PADDING;
+        int divider = listing().hasDivider() ? 2 * DIVIDER_HEIGHT : 0;
+        return HEADER_HEIGHT + (ENTRY_HEIGHT + ENTRY_SPACING) * entries.size() + divider + PADDING;
     }
 
     /**
@@ -585,12 +689,15 @@ public class PlotLegendManager {
 
     /**
      * Handles mouse press events - start of potential drag or click.
+     * @param togglesAxis the press held the axis-toggle modifier (Ctrl, or Cmd on macOS):
+     *                    a click on an entry then moves it to the other axis
      * @return true if event consumed
      */
-    public boolean handleMousePress(int mouseX, int mouseY) {
+    public boolean handleMousePress(int mouseX, int mouseY, boolean togglesAxis) {
         if (!enabled || !bounds.contains(mouseX, mouseY)) {
             return false;
         }
+        pressTogglesAxis = togglesAxis;
 
         // Start potential drag from anywhere on the legend
         isDragging = true;
@@ -657,9 +764,14 @@ public class PlotLegendManager {
                 // It was a click - trigger appropriate action based on where clicked
                 int mouseX = pressX;
                 int mouseY = pressY;
+                SeriesRef toggled = pressTogglesAxis && onAxisToggle != null ? entryAt(mouseX, mouseY) : null;
 
+                // Ctrl/Cmd+click on an entry moves it to the other axis, wherever on the row
+                if (toggled != null) {
+                    onAxisToggle.accept(toggled);
+                }
                 // Check if title was clicked (cycle display mode) - only when expanded
-                if (!collapsed && titleBounds.contains(mouseX, mouseY)) {
+                else if (!collapsed && titleBounds.contains(mouseX, mouseY)) {
                     cycleDisplayMode();
                 }
                 // Check if collapse button was clicked (toggle collapse)
@@ -669,10 +781,9 @@ public class PlotLegendManager {
                 }
                 // Check if an entry's line sample was clicked (open the style picker)
                 else {
-                    int sampleEntry = lineSampleEntryAt(mouseX, mouseY);
-                    if (sampleEntry >= 0) {
-                        onStyleClicked.accept(entries.get(sampleEntry).ref,
-                            new Point(mouseX, mouseY));
+                    SeriesRef sampleEntry = lineSampleEntryAt(mouseX, mouseY);
+                    if (sampleEntry != null) {
+                        onStyleClicked.accept(sampleEntry, new Point(mouseX, mouseY));
                     }
                 }
             }
@@ -711,16 +822,15 @@ public class PlotLegendManager {
         hoveredEntryIndex = -1;
 
         if (!collapsed && bounds.contains(mouseX, mouseY)) {
-            int entryY = y + HEADER_HEIGHT + PADDING;
-            for (int i = 0; i < entries.size(); i++) {
+            Listing listing = listing();
+            for (int i = 0; i < listing.entries().size(); i++) {
                 Rectangle entryBounds = new Rectangle(
-                    x + 2, entryY - 2, bounds.width - 4, ENTRY_HEIGHT
+                    x + 2, entryTop(listing, i) - 2, bounds.width - 4, ENTRY_HEIGHT
                 );
                 if (entryBounds.contains(mouseX, mouseY)) {
                     hoveredEntryIndex = i;
                     break;
                 }
-                entryY += ENTRY_HEIGHT + ENTRY_SPACING;
             }
         }
 
@@ -745,7 +855,7 @@ public class PlotLegendManager {
 
         // Hand cursor for clickable elements (title, collapse button, line samples)
         if (titleBounds.contains(mouseX, mouseY) || collapseButtonBounds.contains(mouseX, mouseY)
-                || lineSampleEntryAt(mouseX, mouseY) >= 0) {
+                || lineSampleEntryAt(mouseX, mouseY) != null) {
             return Cursor.getPredefinedCursor(Cursor.HAND_CURSOR);
         }
 
