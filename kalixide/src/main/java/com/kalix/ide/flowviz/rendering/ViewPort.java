@@ -11,6 +11,9 @@ public class ViewPort {
     private final double minValue;
     /// Maximum visible value (y-axis max)
     private final double maxValue;
+    /// Right-axis (y2) value range; both NaN when the plot has no right axis
+    private final double y2MinValue;
+    private final double y2MaxValue;
 
     // Plot area dimensions
     /// Left edge of the plot area in screen pixels
@@ -28,10 +31,19 @@ public class ViewPort {
 
     public ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue,
                    int plotX, int plotY, int plotWidth, int plotHeight, YAxisScale yAxisScale, XAxisType xAxisType) {
+        this(startTimeMs, endTimeMs, minValue, maxValue, Double.NaN, Double.NaN,
+             plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
+    }
+
+    private ViewPort(long startTimeMs, long endTimeMs, double minValue, double maxValue,
+                     double y2MinValue, double y2MaxValue,
+                     int plotX, int plotY, int plotWidth, int plotHeight, YAxisScale yAxisScale, XAxisType xAxisType) {
         this.startTimeMs = startTimeMs;
         this.endTimeMs = endTimeMs;
         this.minValue = minValue;
         this.maxValue = maxValue;
+        this.y2MinValue = y2MinValue;
+        this.y2MaxValue = y2MaxValue;
         this.plotX = plotX;
         this.plotY = plotY;
         this.plotWidth = plotWidth;
@@ -194,7 +206,9 @@ public class ViewPort {
         double anchor = transformedMin + ratio * (transformedMax - transformedMin);
         double newTransformedRange = (transformedMax - transformedMin) / factor;
         double newTransformedMin = anchor - newTransformedRange * ratio;
-        return withValueBoundsFrom(newTransformedMin, newTransformedMin + newTransformedRange);
+        ViewPort zoomed = withValueBoundsFrom(newTransformedMin, newTransformedMin + newTransformedRange);
+        // The right axis zooms about the same screen row; each axis refuses its own bad step.
+        return hasY2() ? zoomed.withY2From(forY2().zoomValueAxis(factor, ratio)) : zoomed;
     }
 
     /**
@@ -247,7 +261,7 @@ public class ViewPort {
     }
 
     private ViewPort withValueBounds(double minValue, double maxValue) {
-        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
+        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue,
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
@@ -274,17 +288,18 @@ public class ViewPort {
         // Delta in transformed space (positive deltaPixelsY = pan up = increase values)
         double deltaTransformed = deltaPixelsY * transformedRange / (double) plotHeight;
 
-        return withValueBoundsFrom(transformedMin + deltaTransformed, transformedMax + deltaTransformed)
+        ViewPort panned = withValueBoundsFrom(transformedMin + deltaTransformed, transformedMax + deltaTransformed)
             .withTimeRange(newStartTime, newEndTime);
+        return hasY2() ? panned.withY2From(forY2().panByPixels(0, deltaPixelsY)) : panned;
     }
 
     public ViewPort withTimeRange(long startTimeMs, long endTimeMs) {
-        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
+        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue,
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
     public ViewPort withPlotArea(int plotX, int plotY, int plotWidth, int plotHeight) {
-        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
+        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue,
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 
@@ -295,15 +310,53 @@ public class ViewPort {
      * carrying a value that only becomes real after the next zoom step.
      */
     public ViewPort withYAxisScale(YAxisScale yAxisScale) {
-        ViewPort rescaled = new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
+        ViewPort rescaled = new ViewPort(startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue,
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
-        if (rescaled.isShowable(minValue) && rescaled.isShowable(maxValue)) return rescaled;
-        return rescaled.withValueBounds(yAxisScale.inverseTransform(rescaled.getTransformedMin()),
-                                        yAxisScale.inverseTransform(rescaled.getTransformedMax()));
+        if (!rescaled.isShowable(minValue) || !rescaled.isShowable(maxValue)) {
+            rescaled = rescaled.withValueBounds(yAxisScale.inverseTransform(rescaled.getTransformedMin()),
+                                                yAxisScale.inverseTransform(rescaled.getTransformedMax()));
+        }
+        // Both axes share one scale, so the right axis gets the same rescue.
+        return hasY2() ? rescaled.withY2From(forY2().withYAxisScale(yAxisScale)) : rescaled;
+    }
+
+    /** True when this view has a right (y2) axis. */
+    public boolean hasY2() {
+        return !Double.isNaN(y2MinValue);
+    }
+
+    /** This view with a right axis showing {@code [minValue, maxValue]}. */
+    public ViewPort withY2Bounds(double minValue, double maxValue) {
+        return new ViewPort(startTimeMs, endTimeMs, this.minValue, this.maxValue, minValue, maxValue,
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
+    }
+
+    /** This view with no right axis. */
+    public ViewPort withoutY2() {
+        return withY2Bounds(Double.NaN, Double.NaN);
+    }
+
+    /**
+     * The right axis as a single-axis view: y2's range in the value slot, everything else
+     * shared. Lets series drawing, axis ticks and hit-testing work on y2 unchanged.
+     *
+     * @throws IllegalStateException if this view has no right axis
+     */
+    public ViewPort forY2() {
+        if (!hasY2()) {
+            throw new IllegalStateException("This view has no right axis.");
+        }
+        return new ViewPort(startTimeMs, endTimeMs, y2MinValue, y2MaxValue,
+                          plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
+    }
+
+    /** This view with y2 taken from the value range of a single-axis view. */
+    private ViewPort withY2From(ViewPort y2View) {
+        return withY2Bounds(y2View.minValue, y2View.maxValue);
     }
 
     public ViewPort withXAxisType(XAxisType xAxisType) {
-        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue,
+        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue,
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
     
@@ -321,6 +374,10 @@ public class ViewPort {
     public long getEndTimeMs() { return endTimeMs; }
     public double getMinValue() { return minValue; }
     public double getMaxValue() { return maxValue; }
+    /** The right axis' minimum, or NaN when there is no right axis. */
+    public double getY2MinValue() { return y2MinValue; }
+    /** The right axis' maximum, or NaN when there is no right axis. */
+    public double getY2MaxValue() { return y2MaxValue; }
     public int getPlotX() { return plotX; }
     public int getPlotY() { return plotY; }
     public int getPlotWidth() { return plotWidth; }
@@ -330,7 +387,8 @@ public class ViewPort {
     
     @Override
     public String toString() {
-        return String.format("ViewPort[time: %d-%d, value: %.3f-%.3f, plot: %d,%d %dx%d]",
-            startTimeMs, endTimeMs, minValue, maxValue, plotX, plotY, plotWidth, plotHeight);
+        return String.format("ViewPort[time: %d-%d, value: %.3f-%.3f, y2: %.3f-%.3f, plot: %d,%d %dx%d]",
+            startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue,
+            plotX, plotY, plotWidth, plotHeight);
     }
 }
