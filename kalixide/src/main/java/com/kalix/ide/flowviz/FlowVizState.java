@@ -45,12 +45,17 @@ public final class FlowVizState {
     private final MaskMode maskMode;
     private final SeasonalMaskMode seasonalMaskMode;
     private final boolean autoYMode;
+    // Visible series drawn against the right (y2) axis; a subset of visibleSeries
+    private final Set<SeriesRef> rightAxisSeries;
 
     // Viewport zoom/pan state (excludes transient plotArea dimensions)
     private final long startTimeMs;
     private final long endTimeMs;
     private final double minValue;
     private final double maxValue;
+    // Right-axis range; NaN when the view has no right axis
+    private final double y2MinValue;
+    private final double y2MaxValue;
 
     public FlowVizState(List<SeriesRef> visibleSeries,
                      Set<SourceRef> checkedSources,
@@ -62,10 +67,13 @@ public final class FlowVizState {
                      MaskMode maskMode,
                      SeasonalMaskMode seasonalMaskMode,
                      boolean autoYMode,
+                     Set<SeriesRef> rightAxisSeries,
                      long startTimeMs,
                      long endTimeMs,
                      double minValue,
-                     double maxValue) {
+                     double maxValue,
+                     double y2MinValue,
+                     double y2MaxValue) {
         this.visibleSeries = List.copyOf(visibleSeries);
         // Order-preserving copy: source order is load-bearing (it drives the outputs
         // tree's section order), and Set.copyOf's iteration order is salt-randomised
@@ -79,10 +87,13 @@ public final class FlowVizState {
         this.maskMode = maskMode;
         this.seasonalMaskMode = seasonalMaskMode;
         this.autoYMode = autoYMode;
+        this.rightAxisSeries = Collections.unmodifiableSet(new LinkedHashSet<>(rightAxisSeries));
         this.startTimeMs = startTimeMs;
         this.endTimeMs = endTimeMs;
         this.minValue = minValue;
         this.maxValue = maxValue;
+        this.y2MinValue = y2MinValue;
+        this.y2MaxValue = y2MaxValue;
     }
 
     /**
@@ -98,15 +109,18 @@ public final class FlowVizState {
                                     MaskMode maskMode,
                                     SeasonalMaskMode seasonalMaskMode,
                                     boolean autoYMode,
+                                    Set<SeriesRef> rightAxisSeries,
                                     ViewPort viewport) {
         long startTime = viewport != null ? viewport.getStartTimeMs() : 0;
         long endTime = viewport != null ? viewport.getEndTimeMs() : 0;
         double min = viewport != null ? viewport.getMinValue() : 0;
         double max = viewport != null ? viewport.getMaxValue() : 0;
+        double y2Min = viewport != null ? viewport.getY2MinValue() : Double.NaN;
+        double y2Max = viewport != null ? viewport.getY2MaxValue() : Double.NaN;
 
         return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod,
             aggregationMethod, plotType, yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode,
-            startTime, endTime, min, max);
+            rightAxisSeries, startTime, endTime, min, max, y2Min, y2Max);
     }
 
     public List<SeriesRef> getVisibleSeries() { return visibleSeries; }
@@ -119,10 +133,13 @@ public final class FlowVizState {
     public MaskMode getMaskMode() { return maskMode; }
     public SeasonalMaskMode getSeasonalMaskMode() { return seasonalMaskMode; }
     public boolean isAutoYMode() { return autoYMode; }
+    public Set<SeriesRef> getRightAxisSeries() { return rightAxisSeries; }
     public long getStartTimeMs() { return startTimeMs; }
     public long getEndTimeMs() { return endTimeMs; }
     public double getMinValue() { return minValue; }
     public double getMaxValue() { return maxValue; }
+    public double getY2MinValue() { return y2MinValue; }
+    public double getY2MaxValue() { return y2MaxValue; }
 
     @Override
     public boolean equals(Object o) {
@@ -133,6 +150,9 @@ public final class FlowVizState {
             && endTimeMs == s.endTimeMs
             && Double.compare(minValue, s.minValue) == 0
             && Double.compare(maxValue, s.maxValue) == 0
+            && Double.compare(y2MinValue, s.y2MinValue) == 0
+            && Double.compare(y2MaxValue, s.y2MaxValue) == 0
+            && Objects.equals(rightAxisSeries, s.rightAxisSeries)
             && Objects.equals(visibleSeries, s.visibleSeries)
             && Objects.equals(checkedSources, s.checkedSources)
             && aggregationPeriod == s.aggregationPeriod
@@ -147,7 +167,7 @@ public final class FlowVizState {
     @Override
     public int hashCode() {
         return Objects.hash(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod,
-            plotType, yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode,
-            startTimeMs, endTimeMs, minValue, maxValue);
+            plotType, yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, rightAxisSeries,
+            startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 }

@@ -35,8 +35,10 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import com.kalix.ide.preferences.PreferenceKeys;
 import org.slf4j.Logger;
@@ -92,6 +94,7 @@ public class FlowVizPanel extends JPanel {
     // Plot margins
     private static final int MARGIN_LEFT = 80;
     private static final int MARGIN_RIGHT = 20;
+    private static final int MARGIN_RIGHT_WITH_Y2 = 70; // room for the right axis' labels
     private static final int MARGIN_TOP = 20;
     private static final int MARGIN_BOTTOM = 60;
 
@@ -106,6 +109,9 @@ public class FlowVizPanel extends JPanel {
     private ViewPort currentViewport;
     private SeriesStyleResolver styleResolver;  // Resolves each series to its colour + stroke
     private final List<SeriesRef> visibleSeries;
+    // Visible series drawn against the right (y2) axis. Kept a subset of visibleSeries, so
+    // "right axis in use" is just "non-empty"; the viewport has a y2 range exactly then.
+    private final Set<SeriesRef> rightAxisSeries = new LinkedHashSet<>();
     private boolean autoYMode = false;
 
     // Transform settings (per-tab) - changes trigger displayDataSet rebuild
@@ -177,6 +183,9 @@ public class FlowVizPanel extends JPanel {
         coordinateDisplayManager = new CoordinateDisplayManager(this, visibleSeries);
         plotInteractionManager = new PlotInteractionManager(this, coordinateDisplayManager);
         legendManager = new PlotLegendManager();
+        renderer.setRightAxisTest(rightAxisSeries::contains);
+        coordinateDisplayManager.setRightAxisTest(rightAxisSeries::contains);
+        plotInteractionManager.setRightAxisTest(rightAxisSeries::contains);
 
         // Default to the global palette with a private slot assignment. An owner
         // (e.g. the Run Manager) typically injects a shared resolver afterwards via
@@ -302,6 +311,8 @@ public class FlowVizPanel extends JPanel {
     public void setVisibleSeries(List<SeriesRef> visibleSeries) {
         this.visibleSeries.clear();
         this.visibleSeries.addAll(visibleSeries);
+        // A series that leaves the plot leaves the right axis too; it returns on the left.
+        rightAxisSeries.retainAll(this.visibleSeries);
 
         // Check if reference series changed for DIFFERENCE plot types
         checkReferenceSeriesChange();
@@ -315,9 +326,62 @@ public class FlowVizPanel extends JPanel {
         // changed - but a re-shown series that was absent from the last rebuild
         // used to silently not render until some other setting forced a rebuild.
         rebuildDisplayDataSet();
+        syncRightAxisRange();
 
         pushState();
         repaint();
+    }
+
+    /** True when {@code ref} is drawn against the right (y2) axis. */
+    public boolean isOnRightAxis(SeriesRef ref) {
+        return rightAxisSeries.contains(ref);
+    }
+
+    /** True when at least one visible series is on the right axis, so the plot shows one. */
+    public boolean isRightAxisInUse() {
+        return !rightAxisSeries.isEmpty();
+    }
+
+    /**
+     * Moves a visible series to the right (y2) or left axis: one undoable step. Neither
+     * axis' range is reset; only the right axis' first appearance sizes it, to its series
+     * over the current time window. Auto-Y refits both axes as usual. A series that is no
+     * longer visible (removed since the gesture began) is ignored.
+     */
+    public void setSeriesOnRightAxis(SeriesRef ref, boolean onRight) {
+        if (!visibleSeries.contains(ref)) {
+            return;
+        }
+        boolean changed = onRight ? rightAxisSeries.add(ref) : rightAxisSeries.remove(ref);
+        if (!changed) {
+            return;
+        }
+        syncRightAxisRange();
+        if (autoYMode) {
+            fitYAxis();
+        }
+        repaint();
+        pushState();
+    }
+
+    /**
+     * Gives the viewport a y2 range exactly while the right axis is in use: a new right
+     * axis is fitted to its series over the current time window, an unused one dropped.
+     */
+    private void syncRightAxisRange() {
+        if (currentViewport == null) {
+            return;
+        }
+        if (isRightAxisInUse() && !currentViewport.hasY2()) {
+            // Sized to its series; with nothing showable yet, to the left axis' range
+            double[] y2Range = plotInteractionManager.fittedRangeForAxis(true);
+            if (y2Range == null) {
+                y2Range = new double[]{currentViewport.getMinValue(), currentViewport.getMaxValue()};
+            }
+            currentViewport = currentViewport.withY2Bounds(y2Range[0], y2Range[1]);
+        } else if (!isRightAxisInUse() && currentViewport.hasY2()) {
+            currentViewport = currentViewport.withoutY2();
+        }
     }
 
     /**
@@ -340,33 +404,42 @@ public class FlowVizPanel extends JPanel {
 
         long startTime = displayDataSet.getGlobalMinTime();
         long endTime = displayDataSet.getGlobalMaxTime();
-        Double minValue = displayDataSet.getGlobalMinValue();
-        Double maxValue = displayDataSet.getGlobalMaxValue();
-        
-        if (minValue == null || maxValue == null) {
-            createDefaultViewport();
-            return;
-        }
+        double[] yRange;
+        double[] y2Range = null;
 
-        // The cached global minimum ignores the scale's domain: on LOG it may be zero or
-        // negative, and padding from that gives NaN bounds and a blank view. Fit to the
-        // smallest showable value instead, as auto-Y does, or to the default view when
-        // nothing is showable.
-        double domainFloor = yAxisScale.domainFloor();
-        if (minValue <= domainFloor) {
-            minValue = smallestAbove(displayDataSet, domainFloor);
-            if (minValue == null) {
+        if (isRightAxisInUse()) {
+            // Each axis fits its own series; an axis with nothing showable gets the auto-Y
+            // default, and the default view only when neither has anything.
+            double[] y1 = fitValueRange(showableExtent(ref -> !isOnRightAxis(ref)));
+            double[] y2 = fitValueRange(showableExtent(this::isOnRightAxis));
+            if (y1 == null && y2 == null) {
                 createDefaultViewport();
                 return;
             }
-        }
+            yRange = y1 != null ? y1 : new double[]{-1.0, 1.0};
+            y2Range = y2 != null ? y2 : new double[]{-1.0, 1.0};
+        } else {
+            Double minValue = displayDataSet.getGlobalMinValue();
+            Double maxValue = displayDataSet.getGlobalMaxValue();
 
-        // Clamp minimum value for log scale to prevent zooming too far out
-        // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
-        // This only affects auto-zoom; manual zoom/pan can still access the full range
-        double logScaleMin = PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD.get();
-        if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin && logScaleMin < maxValue) {
-            minValue = logScaleMin;
+            if (minValue == null || maxValue == null) {
+                createDefaultViewport();
+                return;
+            }
+
+            // The cached global minimum ignores the scale's domain: on LOG it may be zero or
+            // negative, and padding from that gives NaN bounds and a blank view. Fit to the
+            // smallest showable value instead, as auto-Y does, or to the default view when
+            // nothing is showable.
+            double domainFloor = yAxisScale.domainFloor();
+            if (minValue <= domainFloor) {
+                minValue = smallestAbove(displayDataSet, domainFloor);
+                if (minValue == null) {
+                    createDefaultViewport();
+                    return;
+                }
+            }
+            yRange = fitValueRange(new double[]{minValue, maxValue});
         }
 
         // Add 5% padding
@@ -382,15 +455,59 @@ public class FlowVizPanel extends JPanel {
             endTime = center + 500;
         }
 
-        // Apply padding to Y values in appropriate space (linear or log)
-        double[] paddedYRange = applyYAxisPadding(minValue, maxValue, yAxisScale, 0.05);
-        minValue = paddedYRange[0];
-        maxValue = paddedYRange[1];
-
         Rectangle plotArea = getPlotArea();
         XAxisType xAxisType = determineXAxisType();
-        currentViewport = new ViewPort(startTime, endTime, minValue, maxValue,
+        currentViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
                                      plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale, xAxisType);
+        if (y2Range != null) {
+            currentViewport = currentViewport.withY2Bounds(y2Range[0], y2Range[1]);
+        }
+    }
+
+    /**
+     * Turns a showable value extent into a fitted axis range: the LOG floor clamp, then 5%
+     * padding in the scale's own space. Null in, null out.
+     */
+    private double[] fitValueRange(double[] extent) {
+        if (extent == null) {
+            return null;
+        }
+        double minValue = extent[0];
+        double maxValue = extent[1];
+
+        // Clamp minimum value for log scale to prevent zooming too far out
+        // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
+        // This only affects auto-zoom; manual zoom/pan can still access the full range
+        double logScaleMin = PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD.get();
+        if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin && logScaleMin < maxValue) {
+            minValue = logScaleMin;
+        }
+
+        // Apply padding to Y values in appropriate space (linear or log)
+        return applyYAxisPadding(minValue, maxValue, yAxisScale, 0.05);
+    }
+
+    /**
+     * The smallest and largest showable values (valid, above the scale's domain floor) of
+     * the displayed series {@code include} accepts, or null if there are none.
+     */
+    private double[] showableExtent(Predicate<SeriesRef> include) {
+        double domainFloor = yAxisScale.domainFloor();
+        double smallest = Double.POSITIVE_INFINITY;
+        double largest = Double.NEGATIVE_INFINITY;
+        for (SeriesRef ref : displayDataSet.getSeriesRefs()) {
+            if (!include.test(ref)) continue;
+            TimeSeriesData series = displayDataSet.getSeries(ref);
+            double[] values = series.getValues();
+            boolean[] validPoints = series.getValidPoints();
+            for (int i = 0; i < series.getPointCount(); i++) {
+                double value = values[i];
+                if (!validPoints[i] || Double.isNaN(value) || value <= domainFloor) continue;
+                smallest = Math.min(smallest, value);
+                largest = Math.max(largest, value);
+            }
+        }
+        return smallest == Double.POSITIVE_INFINITY ? null : new double[]{smallest, largest};
     }
 
     /** The smallest valid value above {@code floor} across every series, or null if none. */
@@ -416,6 +533,9 @@ public class FlowVizPanel extends JPanel {
         XAxisType xAxisType = determineXAxisType();
         currentViewport = new ViewPort(startTime, endTime, -10.0, 10.0,
                                      plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale, xAxisType);
+        if (isRightAxisInUse()) {
+            currentViewport = currentViewport.withY2Bounds(-10.0, 10.0);
+        }
     }
 
     /**
@@ -551,10 +671,11 @@ public class FlowVizPanel extends JPanel {
         int width = getWidth();
         int height = getHeight();
         
+        int marginRight = isRightAxisInUse() ? MARGIN_RIGHT_WITH_Y2 : MARGIN_RIGHT;
         return new Rectangle(
             MARGIN_LEFT,
             MARGIN_TOP,
-            width - MARGIN_LEFT - MARGIN_RIGHT,
+            width - MARGIN_LEFT - marginRight,
             height - MARGIN_TOP - MARGIN_BOTTOM
         );
     }
@@ -829,17 +950,9 @@ public class FlowVizPanel extends JPanel {
 
         // Update viewport with new axis type
         if (currentViewport != null) {
-            XAxisType newAxisType = determineXAxisType();
             Rectangle plotArea = getPlotArea();
-            currentViewport = new ViewPort(
-                currentViewport.getStartTimeMs(),
-                currentViewport.getEndTimeMs(),
-                currentViewport.getMinValue(),
-                currentViewport.getMaxValue(),
-                plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                yAxisScale,
-                newAxisType
-            );
+            currentViewport = currentViewport.withXAxisType(determineXAxisType())
+                .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
         }
 
         repaint();
@@ -1255,7 +1368,8 @@ public class FlowVizPanel extends JPanel {
             visibleSeries,
             checkedSourcesSupplier != null ? checkedSourcesSupplier.get() : Set.of(),
             aggregationPeriod, aggregationMethod,
-            plotType, yAxisScale, getLineShape(), maskMode, seasonalMaskMode, autoYMode, currentViewport);
+            plotType, yAxisScale, getLineShape(), maskMode, seasonalMaskMode, autoYMode,
+            rightAxisSeries, currentViewport);
         if (stateHistory.pushIfChanged(state) && onHistoryChanged != null) {
             onHistoryChanged.run();
         }
@@ -1281,6 +1395,10 @@ public class FlowVizPanel extends JPanel {
             setMaskMode(state.getMaskMode());
             setSeasonalMaskMode(state.getSeasonalMaskMode());
             autoYMode = state.isAutoYMode();
+            // Only refs still visible: a snapshot can outlive its series (see FlowVizState).
+            rightAxisSeries.clear();
+            rightAxisSeries.addAll(state.getRightAxisSeries());
+            rightAxisSeries.retainAll(visibleSeries);
 
             // Apply viewport zoom/pan
             if (currentViewport != null) {
@@ -1290,6 +1408,10 @@ public class FlowVizPanel extends JPanel {
                     currentViewport.getPlotX(), currentViewport.getPlotY(),
                     currentViewport.getPlotWidth(), currentViewport.getPlotHeight(),
                     state.getYAxisScale(), determineXAxisType());
+                if (isRightAxisInUse() && !Double.isNaN(state.getY2MinValue())) {
+                    currentViewport = currentViewport.withY2Bounds(state.getY2MinValue(), state.getY2MaxValue());
+                }
+                syncRightAxisRange();
             }
 
             refreshData(false);

@@ -56,6 +56,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -108,6 +109,8 @@ public class PlotInteractionManager {
     private Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier;
     private Supplier<com.kalix.ide.flowviz.data.LabelResolver> labelResolverSupplier;
     private BooleanSupplier autoYModeSupplier;
+    // Which series are drawn against the right axis; consulted only when the view has one
+    private Predicate<SeriesRef> onRightAxis = ref -> false;
 
 
     /**
@@ -303,6 +306,26 @@ public class PlotInteractionManager {
         return autoYModeSupplier.getAsBoolean();
     }
 
+    /** Sets the test for which series are drawn against the right (y2) axis. */
+    public void setRightAxisTest(Predicate<SeriesRef> onRightAxis) {
+        this.onRightAxis = onRightAxis;
+    }
+
+    /**
+     * The padded value range of one axis' series over the current time window: the range
+     * auto-Y would give that axis. Null when the axis has nothing showable there.
+     */
+    double[] fittedRangeForAxis(boolean rightAxis) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) return null;
+        return fittedRangeForAxis(rightAxis, currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs());
+    }
+
+    /** As {@link #fittedRangeForAxis(boolean)}, over {@code [startTime, endTime]}. */
+    double[] fittedRangeForAxis(boolean rightAxis, long startTime, long endTime) {
+        return calculateVisibleYRange(startTime, endTime, ref -> onRightAxis.test(ref) == rightAxis);
+    }
+
     /**
      * Fits the Y-axis to the data visible in the current X (time) range.
      * Keeps the X zoom unchanged.
@@ -325,14 +348,23 @@ public class PlotInteractionManager {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
 
-        // Calculate Y range for visible data in the time range
-        double[] yRange = calculateVisibleYRange(startTime, endTime);
+        // Fit each axis to its own series in the time range. An axis with nothing showable
+        // there keeps its range: a stock default can be off the scale (-1 on LOG).
+        double[] yRange = fittedRangeForAxis(false, startTime, endTime);
+        if (yRange == null) {
+            yRange = new double[]{currentViewport.getMinValue(), currentViewport.getMaxValue()};
+        }
 
         // Create new viewport (preserve XAxisType for exceedance plots)
         Rectangle plotArea = plotAreaSupplier.get();
         ViewPort newViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
                                           plotArea.x, plotArea.y, plotArea.width, plotArea.height,
                                           currentViewport.getYAxisScale(), currentViewport.getXAxisType());
+        if (currentViewport.hasY2()) {
+            double[] y2Range = fittedRangeForAxis(true, startTime, endTime);
+            newViewport = y2Range != null ? newViewport.withY2Bounds(y2Range[0], y2Range[1])
+                : newViewport.withY2Bounds(currentViewport.getY2MinValue(), currentViewport.getY2MaxValue());
+        }
         viewportUpdater.accept(newViewport);
     }
 
@@ -516,9 +548,12 @@ public class PlotInteractionManager {
         double minValue = currentViewport.screenYToValue(bottomY); // bottom of screen = min value
 
         Rectangle plotArea = plotAreaSupplier.get();
-        ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
-                plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                currentViewport.getYAxisScale(), currentViewport.getXAxisType());
+        ViewPort newViewport = currentViewport.withTimeRange(startTime, endTime).withValueBounds(minValue, maxValue)
+            .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+        if (currentViewport.hasY2()) {
+            ViewPort y2View = currentViewport.forY2();
+            newViewport = newViewport.withY2Bounds(y2View.screenYToValue(bottomY), y2View.screenYToValue(topY));
+        }
         viewportUpdater.accept(newViewport);
 
         parentComponent.repaint();
@@ -552,14 +587,17 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Calculates the visible Y range for a given time range (used in auto-Y mode).
+     * Calculates the visible Y range of the series {@code include} accepts, for a given
+     * time range (used in auto-Y mode and zoom to fit). Null when none of them has a
+     * showable value there.
      */
-    private double[] calculateVisibleYRange(long startTime, long endTime) {
+    private double[] calculateVisibleYRange(long startTime, long endTime,
+                                            Predicate<com.kalix.ide.flowviz.data.SeriesRef> include) {
         DataSet dataSet = dataSetSupplier.get();
         List<com.kalix.ide.flowviz.data.SeriesRef> visibleSeries = visibleSeriesSupplier.get();
 
         if (dataSet == null || dataSet.isEmpty() || visibleSeries.isEmpty()) {
-            return new double[]{-1.0, 1.0}; // Default range
+            return null;
         }
 
         // Get current scale to filter invalid values
@@ -581,6 +619,7 @@ public class PlotInteractionManager {
         // A full-array scan here made pan cost proportional to TOTAL points, which is
         // exactly where the "millions of points smoothly" promise died.
         for (com.kalix.ide.flowviz.data.SeriesRef ref : visibleSeries) {
+            if (!include.test(ref)) continue;
             var series = dataSet.getSeries(ref);
             if (series == null) continue;
 
@@ -603,7 +642,7 @@ public class PlotInteractionManager {
         }
 
         if (!hasValidData) {
-            return new double[]{-1.0, 1.0}; // Default range when no data
+            return null;
         }
 
         // Clamp minimum value for log scale to prevent zooming too far out
@@ -1062,11 +1101,10 @@ public class PlotInteractionManager {
         if (currentViewport == null) {
             return;
         }
+        // Built from the current view: the window's scale, X axis type and y2 carry over
         Rectangle plotArea = plotAreaSupplier.get();
-        ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
-                                            // vvv Window itself does not move or change scale/type vvv
-                                            plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                            currentViewport.getYAxisScale(), currentViewport.getXAxisType());
+        ViewPort newViewport = currentViewport.withTimeRange(startTime, endTime).withValueBounds(minValue, maxValue)
+            .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
         viewportUpdater.accept(newViewport);
         parentComponent.repaint();
     }
