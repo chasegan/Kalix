@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz.transform;
 
+import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.stats.SeasonalMaskMode;
@@ -56,6 +57,16 @@ public final class AggregatedSeriesCache {
     /** Ends a pass: only the series it produced stay cached. */
     void retainOnly(Set<SeriesRef> refs) {
         entries.keySet().retainAll(refs);
+    }
+
+    /**
+     * Drops the entries whose source the pool no longer returns (replaced or evicted),
+     * without aggregating anything, so a hidden page does not keep old data alive.
+     *
+     * @return whether any entry was dropped
+     */
+    public boolean retainCurrent(DataSet pool) {
+        return entries.entrySet().removeIf(e -> pool == null || pool.getSeries(e.getKey()) != e.getValue().source());
     }
 
     /** Entries held — package-private, for tests. */
