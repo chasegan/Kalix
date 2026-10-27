@@ -8,7 +8,6 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.io.TimeSeriesCsvExporter;
 
-import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -20,7 +19,7 @@ import java.util.List;
  * staleness check is identity, so a scan started against an old grid is dropped.
  * Safe to read from any thread.
  *
- * <p>Rows are the merged unique timestamps of every series; cells are looked up by
+ * <p>Rows are the export's own merged timestamps; cells are looked up by
  * binary search rather than held densely (millions of rows times a few series would
  * be hundreds of megabytes). A missing point and a stored NaN both render blank, as
  * the export writes them.
@@ -55,40 +54,7 @@ final class DataGrid implements FindableData {
         List<String> headers = List.copyOf(TimeSeriesCsvExporter.dataColumnHeaders(display, labels));
         long step = TimeSeriesCsvExporter.dataStepSeconds(series);
         return new DataGrid(plotType, step, TimeSeriesCsvExporter.dataFirstHeader(plotType, series, step),
-            headers, series, mergedTimes(series));
-    }
-
-    /** Every distinct timestamp across the series, ascending (each series is sorted). */
-    private static long[] mergedTimes(List<TimeSeriesData> series) {
-        int n = series.size();
-        long[][] timestamps = new long[n][];
-        int[] cursor = new int[n];
-        int total = 0;
-        for (int i = 0; i < n; i++) {
-            timestamps[i] = series.get(i).getTimestamps();
-            total += timestamps[i].length;
-        }
-        long[] merged = new long[total];
-        int count = 0;
-        while (true) {
-            long min = Long.MAX_VALUE;
-            boolean any = false;
-            for (int i = 0; i < n; i++) {
-                if (cursor[i] < timestamps[i].length && timestamps[i][cursor[i]] < min) {
-                    min = timestamps[i][cursor[i]];
-                    any = true;
-                }
-            }
-            if (!any) {
-                return Arrays.copyOf(merged, count);
-            }
-            merged[count++] = min;
-            for (int i = 0; i < n; i++) {
-                while (cursor[i] < timestamps[i].length && timestamps[i][cursor[i]] == min) {
-                    cursor[i]++;
-                }
-            }
-        }
+            headers, series, TimeSeriesCsvExporter.dataRowTimes(series));
     }
 
     int rowCount() {

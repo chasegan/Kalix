@@ -10,10 +10,12 @@ import com.kalix.ide.utils.TimeFormatUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -203,6 +205,25 @@ public class TimeSeriesCsvExporter {
      */
     public static long dataStepSeconds(List<TimeSeriesData> allSeries) {
         return CsvExportUtil.inferStepSeconds(allSeries);
+    }
+
+    /**
+     * Every row's timestamp, ascending, exactly as the export visits them (one per distinct
+     * timestamp across the series). Shared so other tabular views cannot drift.
+     */
+    public static long[] dataRowTimes(List<TimeSeriesData> allSeries) {
+        int total = 0;
+        for (TimeSeriesData series : allSeries) {
+            total += series.getPointCount();
+        }
+        long[] times = new long[total];
+        int[] count = {0};
+        try {
+            CsvExportUtil.forEachMergedRow(allSeries, (timestamp, values) -> times[count[0]++] = timestamp);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e); // unreachable: the consumer does no I/O
+        }
+        return Arrays.copyOf(times, count[0]);
     }
 
     /** A value cell: empty for NaN (missing or stored), else Java's double spelling. */
