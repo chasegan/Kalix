@@ -867,13 +867,17 @@ public class FlowVizPanel extends JPanel {
 
     public void refreshData(boolean resetZoom) {
         rebuildDisplayDataSet();
+        if (resetZoom) {
+            fitToData();
+        }
+        repaint();
+    }
 
-        // Refit viewport if we have data and resetZoom is requested
-        if (resetZoom && displayDataSet != null && !displayDataSet.isEmpty()) {
+    /** Fits the view to the data already shown, if there is any; no rebuild. */
+    public void fitToData() {
+        if (displayDataSet != null && !displayDataSet.isEmpty()) {
             zoomToFit();
         }
-
-        repaint();
     }
 
     public YAxisScale getYAxisScale() {

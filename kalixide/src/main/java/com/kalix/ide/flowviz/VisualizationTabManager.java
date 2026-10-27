@@ -788,9 +788,9 @@ public class VisualizationTabManager {
     public void updateAllTabs(boolean resetZoom) {
         for (TabInfo tab : tabs) {
             tab.vizPanel.setStyleResolver(styleResolver);
-            tab.model().dataChanged();
+            tab.model().dataChanged(); // a shown plot rebuilds here
             if (resetZoom && tab.viewMode == FlowVizView.PLOT) {
-                tab.vizPanel.refreshData(true);
+                tab.vizPanel.fitToData();
             }
         }
     }
@@ -804,8 +804,10 @@ public class VisualizationTabManager {
         for (TabInfo tab : tabs) {
             if (tab.vizPanel == targetPanel) {
                 tab.vizPanel.setStyleResolver(styleResolver);
-                tab.model().dataChanged();
-                if (resetZoom) {
+                tab.model().dataChanged(); // a shown plot rebuilds here
+                if (resetZoom && tab.viewMode == FlowVizView.PLOT) {
+                    tab.vizPanel.fitToData();
+                } else if (resetZoom) {
                     tab.vizPanel.refreshData(true);
                 }
                 return;
