@@ -296,4 +296,21 @@ class StatsAggregationEquivalenceTest {
         mgr.updateSeriesInStatsTabsWithAggregation(R1, data);
         assertEquals(2.0, stat(model, "Points"), 1e-9);
     }
+
+    @Test
+    void aFailureDoesNotComeBackWithASelectionRestoredByRedo() {
+        DataSet pool = new DataSet();
+        VisualizationTabManager mgr = manager(pool);
+        StatsTableModel model = mgr.addStatsTab(
+            statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM).withVisibleSeries(List.of()));
+        mgr.setTargetTabSelectedSeries(new LinkedHashSet<>(List.of(R1)));
+        mgr.addErrorSeriesInStatsTabs(R1, "boom");
+        assertEquals("Error", model.getValueAt(0, 2));
+
+        FlowVizModel tab = mgr.getTargetVizPanel().model();
+        tab.undo(); // R1 deselected without a tick: its failure is forgotten
+        tab.redo();
+        assertEquals(List.of(R1), tab.current().getVisibleSeries());
+        assertEquals(0, model.getRowCount(), "no stale Error row; a refetch reports afresh");
+    }
 }

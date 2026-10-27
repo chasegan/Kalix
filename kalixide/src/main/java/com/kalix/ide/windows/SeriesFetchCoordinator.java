@@ -315,7 +315,10 @@ class SeriesFetchCoordinator {
                     .exceptionally(throwable -> {
                         SwingUtilities.invokeLater(() -> {
                             for (SeriesRef capturedRef : capturedRefs) {
-                                tabManager.addErrorSeriesInStatsTabs(capturedRef, throwable.getMessage());
+                                // Unticked meanwhile: no tab shows its row, so nothing to record.
+                                if (tabManager.isSeriesSelectedOnAnyTab(capturedRef)) {
+                                    tabManager.addErrorSeriesInStatsTabs(capturedRef, throwable.getMessage());
+                                }
                             }
                         });
                         return null;
@@ -549,15 +552,17 @@ class SeriesFetchCoordinator {
                 if (!source.equals(datasetSeriesSources.get(ref))) {
                     return; // dataset removed (or reloaded) meanwhile
                 }
-                if (failure != null) {
-                    Throwable cause = failure instanceof CompletionException && failure.getCause() != null
-                        ? failure.getCause() : failure;
+                Throwable cause = failure instanceof CompletionException && failure.getCause() != null
+                    ? failure.getCause() : failure;
+                if (cause != null) {
                     logger.warn("Failed to decode Pixie series {}", ref, cause);
-                    tabManager.addErrorSeriesInStatsTabs(ref, cause.getMessage());
-                    return;
                 }
                 if (!tabManager.isSeriesSelectedOnAnyTab(ref)) {
-                    return; // unticked while decoding: never enters the pool
+                    return; // unticked while decoding: neither its data nor its failure is kept
+                }
+                if (cause != null) {
+                    tabManager.addErrorSeriesInStatsTabs(ref, cause.getMessage());
+                    return;
                 }
                 // A tab switch fetches a series still decoding again; the first to settle publishes.
                 if (plotDataSet.getSeries(ref) != data) {
