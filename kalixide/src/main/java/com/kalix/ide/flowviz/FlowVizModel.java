@@ -177,9 +177,22 @@ public class FlowVizModel {
         }
     }
 
-    /** Tells listeners the data under the state changed (cause DATA); the state itself is unchanged. */
+    /**
+     * Tells listeners the data under the state changed (cause DATA); the state itself is
+     * unchanged. Derived data built from series the pool has replaced or dropped is let go
+     * first, so a tab whose pages are all hidden holds nothing the pool has released.
+     */
     public void dataChanged() {
+        if (aggregateCache.retainCurrent(pool)) {
+            display = null;
+            displaySources = List.of();
+        }
         fire(state, state, Cause.DATA);
+    }
+
+    /** Whether {@code set} is the display set this model still holds, i.e. not out of date. */
+    public boolean holdsDisplay(DataSet set) {
+        return set != null && set == display;
     }
 
     /**

@@ -186,15 +186,17 @@ public final class DataVizPanel extends JPanel {
 
     /**
      * Something under the page changed: rebuild now if shown, else when shown. A hidden
-     * page lets go of a grid showing a series the tab no longer selects, whose data the
-     * pool may have dropped.
+     * page lets go of a grid the model no longer holds the display set of (its data was
+     * replaced or dropped, e.g. Last moved) or that shows a series the tab no longer
+     * selects, so it keeps nothing alive that the pool has released.
      */
     public void refresh() {
         if (shown) {
             rebuild();
         } else {
             dirty = true;
-            if (gridDisplay != null && !model.current().getVisibleSeries().containsAll(gridDisplay.getSeriesRefs())) {
+            if (gridDisplay != null && (!model.holdsDisplay(gridDisplay)
+                    || !model.current().getVisibleSeries().containsAll(gridDisplay.getSeriesRefs()))) {
                 gridDisplay = null;
                 tableModel.setGrid(DataGrid.EMPTY);
             }

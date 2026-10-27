@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * Pins the hidden plot's laziness: new data while hidden waits, and showing the page
@@ -41,8 +42,8 @@ class FlowVizPanelShownTest {
         panel.setShown(false);
         pool.addSeries(A, days(5));
         panel.model().dataChanged();
-        assertEquals(3, panel.displayDataSetForTests().getSeries(A).getPointCount(),
-            "a hidden plot defers the refresh");
+        assertNull(panel.displayDataSetForTests(),
+            "a hidden plot defers the rebuild, and lets go of the replaced data meanwhile");
 
         panel.setShown(true);
         assertEquals(5, panel.displayDataSetForTests().getSeries(A).getPointCount(),

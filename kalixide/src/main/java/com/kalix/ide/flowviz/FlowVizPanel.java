@@ -966,6 +966,11 @@ public class FlowVizPanel extends JPanel {
                     refreshData(false);
                 } else {
                     stale = true;
+                    // Let go of a display set the model has released; rebuilt when shown.
+                    if (displayDataSet != null && !model.holdsDisplay(displayDataSet)) {
+                        displayDataSet = null;
+                        renderer.clearCache();
+                    }
                 }
             }
             case USER -> applyUserChange(old, now);
