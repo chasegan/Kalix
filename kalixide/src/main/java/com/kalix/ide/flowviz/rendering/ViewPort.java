@@ -260,7 +260,8 @@ public class ViewPort {
         return Double.isFinite(value) && value > yAxisScale.domainFloor();
     }
 
-    private ViewPort withValueBounds(double minValue, double maxValue) {
+    /** This view with the y1 value range {@code [minValue, maxValue]}; everything else kept. */
+    public ViewPort withValueBounds(double minValue, double maxValue) {
         return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue,
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }

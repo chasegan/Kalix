@@ -15,6 +15,7 @@ import java.awt.RenderingHints;
 import java.awt.geom.Path2D;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 public class TimeSeriesRenderer {
 
@@ -26,6 +27,8 @@ public class TimeSeriesRenderer {
     // Resolves each series to its colour + stroke at paint time (late-bound, so
     // palette edits propagate). Set by FlowVizPanel immediately after construction.
     private SeriesStyleResolver styleResolver;
+    // Which series are drawn against the right axis; consulted only when the view has one
+    private Predicate<SeriesRef> onRightAxis = ref -> false;
 
     // Rendering options
     private final boolean showDataPoints = false;
@@ -50,6 +53,11 @@ public class TimeSeriesRenderer {
         this.visibleSeries = visibleSeries;
         this.seriesRenderModes = new java.util.HashMap<>();
         this.axisRenderer = new AxisRenderer();
+    }
+
+    /** Sets the test for which series are drawn against the right (y2) axis. */
+    public void setRightAxisTest(Predicate<SeriesRef> onRightAxis) {
+        this.onRightAxis = onRightAxis;
     }
 
     /** Sets the resolver consulted for each series' colour and stroke. */
@@ -91,12 +99,17 @@ public class TimeSeriesRenderer {
 
         // Draw axes
         axisRenderer.drawAxes(g2d, viewport, axisInfo, colors);
+        ViewPort y2View = viewport.hasY2() ? viewport.forY2() : null;
+        if (y2View != null) {
+            axisRenderer.drawRightValueAxis(g2d, y2View, colors);
+        }
 
         // Draw time series data in legend order (visibleSeries list order)
         for (SeriesRef ref : visibleSeries) {
             TimeSeriesData series = dataSet.getSeries(ref);
             if (series != null && styleResolver != null) {
-                renderSeries(g2d, ref, series, viewport, styleResolver.styleFor(ref));
+                ViewPort seriesView = y2View != null && onRightAxis.test(ref) ? y2View : viewport;
+                renderSeries(g2d, ref, series, seriesView, styleResolver.styleFor(ref));
             }
         }
         

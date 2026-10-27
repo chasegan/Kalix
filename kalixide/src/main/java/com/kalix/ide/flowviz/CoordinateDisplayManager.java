@@ -23,6 +23,7 @@ import java.awt.RenderingHints;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Predicate;
 
 /**
  * Manages the coordinate display overlay system for the FlowViz plot panel.
@@ -53,6 +54,8 @@ public class CoordinateDisplayManager {
     // Current data context, refreshed each paint via updateCoordinateDisplay().
     private DataSet dataSet;
     private ViewPort currentViewport;
+    // Which series are drawn against the right axis; consulted only when the view has one
+    private Predicate<SeriesRef> onRightAxis = ref -> false;
 
     /**
      * Creates a new coordinate display manager for handling mouse hover coordinate display.
@@ -69,6 +72,11 @@ public class CoordinateDisplayManager {
         this.visibleSeries = visibleSeries;
 
         setupCoordinateDisplay();
+    }
+
+    /** Sets the test for which series are drawn against the right (y2) axis. */
+    public void setRightAxisTest(Predicate<SeriesRef> onRightAxis) {
+        this.onRightAxis = onRightAxis;
     }
 
     /** Sets the resolver consulted for the hover marker colour of each series. */
@@ -136,11 +144,13 @@ public class CoordinateDisplayManager {
         // Calculate positions and handle stacking
         List<Rectangle> usedAreas = new ArrayList<>();
 
+        ViewPort y2View = viewport.hasY2() ? viewport.forY2() : null;
         for (CoordinateInfo coord : currentCoordinates) {
-            if (!viewport.isPointVisible(coord.timestamp, coord.value)) continue;
+            ViewPort axisView = y2View != null && onRightAxis.test(coord.seriesRef) ? y2View : viewport;
+            if (!axisView.isPointVisible(coord.timestamp, coord.value)) continue;
 
-            int screenX = viewport.timeToScreenX(coord.timestamp);
-            int screenY = viewport.valueToScreenY(coord.value);
+            int screenX = axisView.timeToScreenX(coord.timestamp);
+            int screenY = axisView.valueToScreenY(coord.value);
 
             // Create coordinate text (single line with comma)
             String timeText = formatTimeForDisplay(coord.timestamp);
