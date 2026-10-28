@@ -96,9 +96,9 @@ err  Invalid message: trailing characters at line 1 column 131
 err  Invalid message: EOF while parsing a value at line 1 column 0
 ```
 
-The IDE learned nothing until the timeout fired 60 seconds later and sent
-the request again. After, a line is whole, and a genuine failure names what
-it is for:
+The IDE learned nothing until the timeout fired 60 seconds later, and the
+series stayed off the plot until it was asked for again. After, a line is
+whole, and a genuine failure names what it is for:
 
 ```json
 {"m":"err","uid":"…","cmd":"get_result","p":{"series_name":"node.x.dsflow","format":"pixie"},"msg":"Command execution error: Result not found: Timeseries 'node.x.dsflow' not found in model results"}
@@ -108,16 +108,17 @@ The IDE fails the pending future for `uid:node.x.dsflow` at once.
 
 ## Enforcement
 
-- **Structural**: §1 — `ProcessExecutor.RunningProcess.sendInput` is the
-  only writer to the engine's stdin, is `synchronized`, and writes one
-  string; `RunningProcessSendInputTest` fires concurrent sends and asserts
-  every line arrives whole. §2 — `non_interruptible_command_runs_inline`
+- **Structural**: §1 — `ProcessExecutor.RunningProcess.sendInput` is
+  `synchronized` and writes one string; `RunningProcessSendInputTest` fires
+  concurrent sends and asserts every line arrives whole. §2 — `non_interruptible_command_runs_inline`
   and `interruptible_command_runs_on_worker` in `src/apis/stdio/handlers.rs`.
   §3 — `create_error_message` in `src/apis/stdio/messages.rs` takes the
   request it answers, with its own tests; `JsonMessageErrorReplyTest` pins
   the IDE's reading of `p`.
-- **Advisory**: that the IDE keeps matching by content and no caller comes
-  to depend on send order.
+- **Advisory**: that `sendInput` stays the only writer to the engine's
+  stdin (`getProcess()` exposes the raw stream, and nothing uses it); that
+  the IDE keeps matching by content and no caller comes to depend on send
+  order.
 
 ## Links and references
 
