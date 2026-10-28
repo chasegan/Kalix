@@ -19,6 +19,8 @@ const BUSY_POLL_INTERVAL: Duration = Duration::from_millis(20);
 struct CommandCompletion {
     session: Session,
     command: String,
+    /// Kept so an `err` can echo the request it answers.
+    parameters: serde_json::Value,
     result: Result<serde_json::Value, CommandError>,
     execution_time_ms: f64,
 }
@@ -93,6 +95,13 @@ pub fn run_stdio_session() -> Result<(), StdioError> {
                         // Best-effort interrupt; process exit ends the worker.
                         let _ = ctx.control.request_interrupt();
                         return Ok(());
+                    }
+                    MSG_COMMAND => {
+                        // Rejected, but still answered: the reply names the command
+                        // and echoes its parameters so the sender can fail that
+                        // request rather than wait for a reply that never comes.
+                        send_error_msg(&transport, &session_id, extract_command_info(&msg),
+                            "Cannot process 'cmd' message while busy".to_string())?;
                     }
                     other => {
                         send_error_msg(&transport, &session_id, None,
@@ -179,7 +188,7 @@ enum StartOutcome {
 /// keeps the session resident between calls, so a burst of `get_result` fetches is
 /// drained one at a time from the ready branch — rather than a second fetch
 /// arriving while a worker still owns the session and being rejected by the
-/// busy-branch `other` arm ("Cannot process 'cmd' message while busy"). The wire
+/// busy branch ("Cannot process 'cmd' message while busy"). The wire
 /// sequence is identical either way (`bsy` → `res`/`err` → `rdy`); only the timing
 /// and the absence of a worker differ.
 fn start_command(
@@ -194,7 +203,7 @@ fn start_command(
     let command_spec = match registry.get_command(&command) {
         Some(spec) => spec,
         None => {
-            send_error_msg(transport, &session_id, Some(command.clone()),
+            send_error_msg(transport, &session_id, Some((command.clone(), parameters)),
                 format!("Unknown command: {}", command))?;
             return Ok(StartOutcome::Ready(session));
         }
@@ -204,7 +213,7 @@ fn start_command(
     transport.send_message(&create_busy_message(session_id.clone(), command.clone(), is_interruptible))?;
 
     if let Err(e) = session.set_busy(command.clone(), is_interruptible) {
-        send_error_msg(transport, &session_id, Some(command),
+        send_error_msg(transport, &session_id, Some((command, parameters)),
             format!("Cannot start command: {}", e))?;
         return Ok(StartOutcome::Ready(session));
     }
@@ -245,8 +254,10 @@ fn execute_to_completion(
     progress_callback: Box<dyn Fn(ProgressInfo) + Send + Sync>,
 ) -> CommandCompletion {
     let start_time = Instant::now();
+    // The command takes its parameters by value; the original is kept for the
+    // reply. The copy is a fraction of what the command then does with them.
     let result = catch_unwind(AssertUnwindSafe(|| {
-        command_spec.execute(&mut session, parameters, progress_callback)
+        command_spec.execute(&mut session, parameters.clone(), progress_callback)
     }))
     .unwrap_or_else(|panic_info| {
         Err(CommandError::ExecutionError(
@@ -257,6 +268,7 @@ fn execute_to_completion(
     CommandCompletion {
         session,
         command,
+        parameters,
         result,
         execution_time_ms: duration_to_ms(start_time.elapsed()),
     }
@@ -299,7 +311,7 @@ fn finish_command(
     transport: &Transport,
     completion: CommandCompletion,
 ) -> Result<Session, StdioError> {
-    let CommandCompletion { session, command, result, execution_time_ms } = completion;
+    let CommandCompletion { session, command, parameters, result, execution_time_ms } = completion;
     let session_id = session.id.clone();
 
     let return_code = match &result {
@@ -319,7 +331,7 @@ fn finish_command(
         }
         Err(command_error) => {
             transport.send_message(&create_error_message(
-                session_id.clone(), Some(command.clone()),
+                session_id.clone(), Some((command.clone(), parameters)),
                 format!("Command execution error: {}", command_error)))?;
             1
         }
@@ -391,13 +403,14 @@ fn answer_query(
     Ok(())
 }
 
+/// `request` is the `(command, parameters)` this error answers, if it answers one.
 fn send_error_msg(
     transport: &Transport,
     session_id: &str,
-    command: Option<String>,
+    request: Option<(String, serde_json::Value)>,
     message: String,
 ) -> Result<(), StdioError> {
-    let error_msg = create_error_message(session_id.to_string(), command, message);
+    let error_msg = create_error_message(session_id.to_string(), request, message);
     transport.send_message(&error_msg)?;
     Ok(())
 }

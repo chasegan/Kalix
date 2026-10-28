@@ -1,6 +1,8 @@
 package com.kalix.ide.managers;
 
+import com.kalix.ide.cli.JsonMessage;
 import com.kalix.ide.cli.JsonStdioProtocol;
+import com.kalix.ide.cli.JsonStdioTypes;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.io.compression.gorilla.GorillaCompressor;
@@ -163,40 +165,32 @@ public class TimeSeriesRequestManager {
         // Create cache key using Kalixcli UID
         String cacheKey = kalixcliUid + ":" + seriesName;
 
-        // Check if already in cache or being processed
-        CompletableFuture<TimeSeriesData> existingRequest = cache.get(cacheKey);
-        if (existingRequest != null) {
-            return existingRequest;
-        }
-
-        // Check completed cache
         TimeSeriesData cachedData = completedCache.get(cacheKey);
         if (cachedData != null) {
             return CompletableFuture.completedFuture(cachedData);
         }
 
-        // Create new request. The timeout is a backstop for responses that never
-        // arrive (wedged CLI, message lost): without it the stuck entry makes the
-        // series permanently unfetchable for this session.
-        CompletableFuture<TimeSeriesData> future = new CompletableFuture<>();
-        future.orTimeout(REQUEST_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
-              .whenComplete((data, throwable) -> {
-                  if (throwable != null) {
-                      cache.remove(cacheKey, future);
-                  }
-              });
-        cache.put(cacheKey, future);
-
-        TimeSeriesRequest request = new TimeSeriesRequest(sessionKey, seriesName, future);
-
-        try {
-            requestQueue.put(request);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            future.completeExceptionally(e);
-            cache.remove(cacheKey);
+        // One request in flight per series. The engine's reply names the series, not
+        // the request, so two callers asking for the same series at once must share
+        // one future: the check and the insert are atomic, and only the caller whose
+        // future went in sends the request. The mapping function touches nothing that
+        // could complete the future, so no callback can re-enter the map inside it.
+        CompletableFuture<TimeSeriesData> fresh = new CompletableFuture<>();
+        CompletableFuture<TimeSeriesData> future = cache.computeIfAbsent(cacheKey, key -> {
+            requestQueue.add(new TimeSeriesRequest(sessionKey, seriesName, fresh)); // unbounded: never fails
+            return fresh;
+        });
+        if (future == fresh) {
+            // The timeout is a backstop for a reply that never arrives (wedged CLI,
+            // message lost): without it the stuck entry makes the series permanently
+            // unfetchable for this session.
+            fresh.orTimeout(REQUEST_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+                 .whenComplete((data, throwable) -> {
+                     if (throwable != null) {
+                         cache.remove(cacheKey, fresh);
+                     }
+                 });
         }
-
         return future;
     }
 
@@ -336,42 +330,50 @@ public class TimeSeriesRequestManager {
             sessionManager.sendCommand(request.sessionKey, command)
                 .exceptionally(throwable -> {
                     logger.error("Failed to send timeseries request for {}", request.seriesName, throwable);
-                    cache.remove(cacheKey);
+                    cache.remove(cacheKey, request.future);
                     request.future.completeExceptionally(throwable);
                     return null;
                 });
 
         } catch (Exception e) {
             logger.error("Failed to process timeseries request for {}", request.seriesName, e);
-            cache.remove(cacheKey);
+            cache.remove(cacheKey, request.future);
             request.future.completeExceptionally(e);
         }
     }
 
     /**
-     * Handle a JSON response from kalixcli and parse timeseries data if it's a get_result response
-     * Call this method when you receive JSON responses from the session
+     * Handles a reply to a get_result command: the {@code res} carrying the series, or the
+     * {@code err} naming the command. Either is matched to its pending request by the
+     * series name it carries ({@code r.series_name} or {@code p.series_name}), never by
+     * arrival order: requests are sent ahead and the engine answers them in its own
+     * order. The message arrives already parsed by SessionManager - these responses
+     * carry multi-MB base64 payloads, so no re-serialize/re-parse happens on this path.
      */
-    public void handleResultMessage(com.kalix.ide.cli.JsonMessage.SystemMessage message) {
-        // The message arrives already parsed by SessionManager - these responses carry
-        // multi-MB base64 payloads, so no re-serialize/re-parse happens on this path.
+    public void handleGetResultReply(JsonMessage.SystemMessage message) {
         if (!"get_result".equals(message.getCommand())) {
+            return;
+        }
+        String kalixcliUid = message.getSessionId() != null ? message.getSessionId() : "";
+
+        if (message.systemMessageType() == JsonStdioTypes.SystemMessageType.ERROR) {
+            JsonNode params = message.getParameters();
+            String seriesName = params != null ? params.path("series_name").asText() : "";
+            String errMsg = message.getErrorMessage() != null
+                ? message.getErrorMessage() : "get_result failed";
+            logger.warn("get_result failed for '{}': {}", seriesName, errMsg);
+            // Without p (an engine predating the echo) the request cannot be identified;
+            // its 60 s backstop still fails it.
+            if (!seriesName.isEmpty()) {
+                failPendingFuture(kalixcliUid + ":" + seriesName,
+                    new RuntimeException("get_result failed: " + errMsg));
+            }
             return;
         }
 
         JsonNode result = message.getResult();
         String seriesName = result != null ? result.path("series_name").asText() : "";
-        String kalixcliUid = message.getSessionId() != null ? message.getSessionId() : "";
         String cacheKey = kalixcliUid + ":" + seriesName;
-
-        if (!Boolean.TRUE.equals(message.getSuccess())) {
-            String errMsg = message.getErrorMessage() != null
-                ? message.getErrorMessage() : "get_result command failed";
-            logger.warn("get_result failed for '{}': {}", seriesName, errMsg);
-            failPendingFuture(cacheKey, new RuntimeException("get_result failed: " + errMsg));
-            return;
-        }
-
         String dataString = result != null ? result.path("data").asText() : "";
         // Format defaults to "pixie" if the field is absent (older responses or defensive fallback).
         String format = result != null ? result.path("format").asText("pixie") : "pixie";

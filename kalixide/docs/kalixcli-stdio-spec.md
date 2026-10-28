@@ -194,12 +194,18 @@ Error during command execution or system operation.
   "m": "err",
   "uid": "sess_20250908_103000_a7b9",
   "cmd": "load_model_file",
+  "p": {"model_path": "/invalid/path/model.ini"},
   "msg": "File not found: /invalid/path/model.ini"
 }
 ```
 
 **Fields:**
 - `cmd` (string, optional): Command that caused the error
+- `p` (object, optional): The command's parameters as sent (same content;
+  key order is not preserved). Present whenever `cmd` is: an error that
+  answers a command echoes the request, so the frontend can match it to the
+  request without relying on reply order. An error that answers no command
+  (malformed input, a `cmd` without `c` or `p`, a bad query) has neither.
 - `msg` (string): Error message
 
 ### 4.9 Query Message (frontend → kalixcli)
@@ -280,7 +286,10 @@ End the session and exit.
 ### 6.2 Error Handling
 - Malformed JSON triggers error response
 - Unknown commands trigger error response
-- Commands sent while busy are rejected (except stop/query)
+- Commands sent while busy are rejected (except stop, query and term)
+- Every `err` that answers a well-formed command names it in `cmd` and
+  echoes its parameters in `p`; the frontend matches replies by content,
+  never by the order they arrive in
 - Error messages include context and suggested fixes where possible
 
 ### 6.3 Interruption Handling
@@ -299,7 +308,11 @@ End the session and exit.
 ## 7. Implementation Notes
 
 ### 7.1 Message Parsing
-- Each message is a complete JSON object on a single line
+- Each message is a complete JSON object on a single line, terminated by `\n`
+- One message is one write: a sender writes the whole line, terminator
+  included, in one call to its writer, under one lock. Writing the text and
+  the terminator separately lets concurrent senders interleave into
+  `{A}{B}\n\n`, two lines kalixcli rejects as malformed
 - Messages must be parsed as they arrive (line-buffered)
 - Invalid JSON should be logged but not crash the session
 - Flattened structure eliminates nested data parsing

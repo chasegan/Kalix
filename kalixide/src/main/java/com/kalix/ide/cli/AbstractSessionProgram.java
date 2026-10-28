@@ -2,6 +2,10 @@ package com.kalix.ide.cli;
 
 import com.kalix.ide.utils.StatusReporter;
 
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
 
 /**
@@ -18,6 +22,9 @@ public abstract class AbstractSessionProgram {
     protected final SessionManager sessionManager;
     protected final StatusReporter statusUpdater;
     protected final Consumer<ProgressParser.ProgressInfo> progressCallback;
+
+    /** Names of every command this program has sent; an {@code err} naming any other is not ours. */
+    private final Set<String> sentCommands = ConcurrentHashMap.newKeySet();
 
     /**
      * Creates a new session program.
@@ -86,6 +93,31 @@ public abstract class AbstractSessionProgram {
     public abstract String getStateDescription();
 
     /**
+     * Sends a command on the program's session, remembering its name. Every command a
+     * program sends goes through here, so {@link #answersAnotherCommand} cannot drift
+     * from what was actually sent.
+     */
+    protected CompletableFuture<Void> send(String commandName, Map<String, Object> parameters) {
+        sentCommands.add(commandName);
+        return sessionManager.sendCommand(sessionKey,
+            JsonStdioProtocol.createCommandMessage(commandName, parameters));
+    }
+
+    /**
+     * True for an {@code err} that does not name a command this program sent, and so is
+     * not the program's to act on (ADR-0014 §3). The engine names the command it is
+     * failing or rejecting, so a fetch ({@code get_result}) rejected while the run is
+     * busy is the fetch's failure, and a Stop that lands while the engine is idle
+     * ("No task is running", naming nothing) is nobody's; neither must fail the run.
+     * Such an error still falls through to the status bar.
+     */
+    protected boolean answersAnotherCommand(JsonMessage.SystemMessage message) {
+        String command = message.getCommand();
+        return message.systemMessageType() == JsonStdioTypes.SystemMessageType.ERROR
+            && (command == null || !sentCommands.contains(command));
+    }
+
+    /**
      * Common utility: Extract error message from a system message.
      * Uses the errorMessage field if available, falls back to taskType.
      *
@@ -115,14 +147,16 @@ public abstract class AbstractSessionProgram {
     }
 
     /**
-     * Common utility: Send a command to the session.
+     * Common utility: Send a command to the session, reporting the outcome of the send.
      *
-     * @param command the JSON command string
+     * @param commandName the command's name
+     * @param parameters the command's parameters
      * @param successMessage message to show on successful send
      * @param errorMessage message to show on error
      */
-    protected void sendCommand(String command, String successMessage, String errorMessage) {
-        sessionManager.sendCommand(sessionKey, command)
+    protected void sendCommand(String commandName, Map<String, Object> parameters,
+                               String successMessage, String errorMessage) {
+        send(commandName, parameters)
             .thenRun(() -> {
                 if (successMessage != null) {
                     statusUpdater.accept(successMessage);

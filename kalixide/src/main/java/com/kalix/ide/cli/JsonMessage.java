@@ -76,6 +76,10 @@ public class JsonMessage {
         @JsonProperty("msg")
         private String errorMessage;
 
+        /** The failed command's parameters, echoed from the request; present whenever {@code cmd} is. */
+        @JsonProperty("p")
+        private JsonNode parameters;
+
         // Getters and setters
         public Integer getReturnCode() { return returnCode; }
         public void setReturnCode(Integer returnCode) { this.returnCode = returnCode; }
@@ -109,6 +113,9 @@ public class JsonMessage {
 
         public String getErrorMessage() { return errorMessage; }
         public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; }
+
+        public JsonNode getParameters() { return parameters; }
+        public void setParameters(JsonNode parameters) { this.parameters = parameters; }
 
 
         public JsonStdioTypes.SystemMessageType systemMessageType() {

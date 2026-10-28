@@ -176,9 +176,10 @@ public class SessionManager {
     }
 
     /**
-     * Sets the time series response handler for processing get_result JSON responses.
+     * Sets the handler for replies to get_result commands: the {@code res} carrying the
+     * series, or the {@code err} naming the command.
      *
-     * @param handler callback to handle JSON responses containing time series data
+     * @param handler callback to handle get_result replies
      */
     public void setTimeSeriesResponseHandler(Consumer<JsonMessage.SystemMessage> handler) {
         this.timeSeriesResponseHandler = handler;
@@ -525,17 +526,21 @@ public class SessionManager {
             session.setKalixcliUid(message.getSessionId());
         }
 
-        // Check if this is a get_result response and route to TimeSeriesRequestManager.
-        // The already-parsed message is handed over directly - these responses carry
-        // multi-MB base64 payloads, and the old parse -> re-serialize -> re-parse round
-        // trip tripled the JSON work on the hottest fetch path.
-        if (isTimeSeriesResponse(message)) {
+        // Route get_result replies to TimeSeriesRequestManager, which matches each to its
+        // pending request by series name. The already-parsed message is handed over
+        // directly - these responses carry multi-MB base64 payloads, and the old parse ->
+        // re-serialize -> re-parse round trip tripled the JSON work on the hottest fetch
+        // path. A res is consumed there; an err also falls through to the generic
+        // handling below so the failure reaches the status bar as well as the requester.
+        if (isGetResultReply(message)) {
             if (timeSeriesResponseHandler != null) {
                 try {
                     timeSeriesResponseHandler.accept(message);
-                    return; // Message was handled by TimeSeriesRequestManager
+                    if (message.systemMessageType() == JsonStdioTypes.SystemMessageType.RESULT) {
+                        return;
+                    }
                 } catch (Exception e) {
-                    logger.error("Failed to handle timeseries response", e);
+                    logger.error("Failed to handle get_result reply", e);
                 }
             } else {
                 logger.warn("TimeSeriesResponseHandler is null, cannot route response");
@@ -599,22 +604,14 @@ public class SessionManager {
     }
 
     /**
-     * Checks if a JSON message is a get_result response that should be handled by TimeSeriesRequestManager.
+     * True for a reply to a get_result command: the {@code res} carrying the series, or
+     * the {@code err} naming the command. Both go to TimeSeriesRequestManager.
      */
-    private boolean isTimeSeriesResponse(JsonMessage.SystemMessage message) {
-        try {
-            // Check if this is a result message
-            JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
-            if (msgType != JsonStdioTypes.SystemMessageType.RESULT) {
-                return false;
-            }
-
-            // Check if the result is for a get_result command
-            String command = message.getCommand();
-            return "get_result".equals(command);
-        } catch (Exception e) {
-            return false;
-        }
+    private boolean isGetResultReply(JsonMessage.SystemMessage message) {
+        JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
+        return (msgType == JsonStdioTypes.SystemMessageType.RESULT
+                || msgType == JsonStdioTypes.SystemMessageType.ERROR)
+            && "get_result".equals(message.getCommand());
     }
 
     /**
