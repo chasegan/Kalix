@@ -533,10 +533,11 @@ class TreeFileOperations {
     /**
      * Copies one entry into {@code targetDir}. A taken name is resolved by {@code policy}:
      * KEEP_BOTH picks a free name; REPLACE puts the copy in place of what is there, a folder
-     * in full. A replace is copied first, beside the target, and swapped in only once the copy
-     * has succeeded, so a source that cannot be read leaves the existing entry untouched. The
-     * source and the entry it would replace are compared by real path, so the same file reached
-     * through a symlink or an alias is never deleted to make room for itself.
+     * in full. A replace is copied first, into a staging folder beside the target, and swapped
+     * in only once the copy has succeeded, so a source that cannot be read leaves the existing
+     * entry untouched. The source and the entry it would replace are compared by real path, so
+     * the same file reached through a symlink is never deleted to make room for itself, and
+     * a folder that contains the source is never replaced.
      */
     static void copyInto(File source, File targetDir, Collision policy) throws IOException {
         Path src = source.toPath();
@@ -557,23 +558,33 @@ class TreeFileOperations {
         if (realSrc.startsWith(realDest)) {
             throw new IOException("the folder it would replace contains it");
         }
-        Path staged = targetDir.toPath().resolve(generateDuplicateName(dest.toFile()));
+        // Staged in a folder nothing else can be using, so a second drop of the same name,
+        // or a user's own "name (1)", cannot collide with a copy in progress.
+        Path stagingDir = Files.createTempDirectory(targetDir.toPath(), source.getName() + ".copying.");
+        Path staged = stagingDir.resolve(source.getName());
         try {
             copyRecursively(src, staged);
         } catch (IOException ex) {
             try {
-                deleteOne(staged.toFile());
+                deleteOne(stagingDir.toFile());
             } catch (IOException ignored) {
-                // The failed copy is what is reported; a leftover partial copy is visible in the tree.
+                // The copy failure is what gets reported; if this clean-up fails too, the
+                // leftover shows in the tree.
             }
             throw ex;
         }
-        if (Files.isDirectory(dest) || Files.isDirectory(staged)) {
-            deleteOne(dest.toFile());
-            Files.move(staged, dest);
-        } else {
-            Files.move(staged, dest, StandardCopyOption.REPLACE_EXISTING);
+        try {
+            if (Files.isDirectory(dest) || Files.isDirectory(staged)) {
+                deleteOne(dest.toFile());
+                Files.move(staged, dest);
+            } else {
+                Files.move(staged, dest, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException ex) {
+            throw new IOException("could not be put in place: " + ex.getMessage()
+                + "; the complete copy is in \"" + stagingDir.getFileName() + "\"", ex);
         }
+        Files.delete(stagingDir);
     }
 
     // --- Copy path ---
