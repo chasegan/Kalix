@@ -1069,6 +1069,11 @@ public class VisualizationTabManager {
         setLoadState(ref, new SeriesLoadState.Failed(errorMessage));
     }
 
+    /** Whether {@code ref}'s fetch is still loading or has failed. */
+    public boolean hasLoadState(SeriesRef ref) {
+        return loadStates.containsKey(ref);
+    }
+
     private void setLoadState(SeriesRef ref, SeriesLoadState state) {
         loadStates.put(ref, state);
         for (TabInfo tab : tabs) {

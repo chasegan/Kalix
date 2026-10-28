@@ -375,11 +375,13 @@ class SeriesFetchCoordinator {
      * Fetches what the target tab selects but the pool lacks, as a restored selection
      * (undo, redo) may: it comes back without a tick, so nothing else fetches it. Leaves
      * come from the whole outputs tree; a series whose source is gone has none and is
-     * skipped. The tab keeps its view while the data returns.
+     * skipped, and so is one still loading or failed: a tab switch must not start a second
+     * decode, or retry a failure (re-ticking does). The tab keeps its view while the data
+     * returns.
      */
     void fetchMissingForTargetTab() {
         Set<SeriesRef> wanted = new LinkedHashSet<>(tabManager.getTargetTabSelectedSeries());
-        wanted.removeIf(ref -> plotDataSet.getSeries(ref) != null);
+        wanted.removeIf(ref -> plotDataSet.getSeries(ref) != null || tabManager.hasLoadState(ref));
         if (wanted.isEmpty()) {
             return;
         }
@@ -564,7 +566,7 @@ class SeriesFetchCoordinator {
                     tabManager.addErrorSeriesInStatsTabs(ref, cause.getMessage());
                     return;
                 }
-                // A tab switch fetches a series still decoding again; the first to settle publishes.
+                // A re-tick while decoding fetches again; the first to settle publishes.
                 if (plotDataSet.getSeries(ref) != data) {
                     window.publishSeries(ref, data);
                 }
