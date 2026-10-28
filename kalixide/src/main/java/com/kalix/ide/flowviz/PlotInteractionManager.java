@@ -89,6 +89,8 @@ public class PlotInteractionManager {
     private JCheckBoxMenuItem autoYMenuItem;
     private JMenuItem pasteXAxisItem;
     private JMenuItem pasteYAxisItem;
+    private JMenuItem copyY2AxisItem;
+    private JMenuItem pasteY2AxisItem;
     private JCheckBoxMenuItem connectGapsMenuItem;
     private JCheckBoxMenuItem orphanMarkersMenuItem;
     private final Map<LineShape, JRadioButtonMenuItem> lineShapeMenuItems = new EnumMap<>(LineShape.class);
@@ -828,6 +830,36 @@ public class PlotInteractionManager {
         });
         contextMenu.add(pasteYAxisItem);
 
+        // The right axis' pair, shown only while the plot has one (4). Same codec as Y.
+        copyY2AxisItem = new JMenuItem("Copy secondary Y axis");
+        copyY2AxisItem.addActionListener(e -> {
+            ViewPort currentViewport = viewportSupplier.get();
+            if (currentViewport != null && currentViewport.hasY2()) {
+                copyStringToClipboard(AxisLimitCodec.formatYLimits(currentViewport.forY2()));
+            }
+        });
+        contextMenu.add(copyY2AxisItem);
+        pasteY2AxisItem = new JMenuItem("Paste secondary Y axis");
+        pasteY2AxisItem.addActionListener(e -> {
+            ViewPort currentViewport = viewportSupplier.get();
+            String text = readClipboardText();
+            if (currentViewport == null || !currentViewport.hasY2() || text == null) {
+                return;
+            }
+            double[] y2;
+            try {
+                y2 = parseY2Limits(text, currentViewport);
+            } catch (IllegalArgumentException ex) {
+                showInvalidInput(parentComponent, ex.getMessage());
+                return;
+            }
+            acceptY2Bounds(y2[0], y2[1]);
+            if (parentComponent instanceof FlowVizPanel vizPanel) {
+                vizPanel.setAutoYMode(false); // an explicit range, as for Paste Y axis
+            }
+        });
+        contextMenu.add(pasteY2AxisItem);
+
         contextMenu.addSeparator();
 
         // View/state block (block 8): everything that changes how the data is shown, never
@@ -923,6 +955,11 @@ public class PlotInteractionManager {
                 boolean clipboardHasText = hasClipboardText();
                 pasteXAxisItem.setEnabled(clipboardHasText);
                 pasteYAxisItem.setEnabled(clipboardHasText);
+                ViewPort currentViewport = viewportSupplier.get();
+                boolean hasY2 = currentViewport != null && currentViewport.hasY2();
+                copyY2AxisItem.setVisible(hasY2);
+                pasteY2AxisItem.setVisible(hasY2);
+                pasteY2AxisItem.setEnabled(clipboardHasText);
 
                 // Sync the checkbox state with the current FlowVizPanel state
                 if (parentComponent instanceof FlowVizPanel vizPanel) {
@@ -1042,6 +1079,9 @@ public class PlotInteractionManager {
 
         JTextField xField = new JTextField(AxisLimitCodec.formatXLimits(currentViewport), 32);
         JTextField yField = new JTextField(AxisLimitCodec.formatYLimits(currentViewport), 32);
+        // A secondary Y row only while the plot has one
+        JTextField y2Field = currentViewport.hasY2()
+            ? new JTextField(AxisLimitCodec.formatYLimits(currentViewport.forY2()), 32) : null;
 
         JPanel form = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
@@ -1049,6 +1089,9 @@ public class PlotInteractionManager {
         gbc.anchor = GridBagConstraints.WEST;
         addAxisFieldRow(form, gbc, 0, "X limits:", xField);
         addAxisFieldRow(form, gbc, 1, "Y limits:", yField);
+        if (y2Field != null) {
+            addAxisFieldRow(form, gbc, 2, "Secondary Y limits:", y2Field);
+        }
 
         JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(parentComponent),
             "Set axis limits", Dialog.ModalityType.APPLICATION_MODAL);  // sentence case (2.1)
@@ -1062,12 +1105,22 @@ public class PlotInteractionManager {
                 long[] x = AxisLimitCodec.parseXLimits(xField.getText(), xAxisType);
                 double[] y = AxisLimitCodec.parseYLimits(yField.getText());
                 ViewPort.validateBounds(x[0], x[1], y[0], y[1]);
-                // An edited Y field is an explicit Y range; an untouched one (the codec's
-                // formatting round-trips exactly) means the user only wanted X, which obeys
-                // auto-Y like any other X-only change.
+                double[] y2 = y2Field != null ? parseY2Limits(y2Field.getText(), currentViewport) : null;
+                // An edited Y or Y2 field is an explicit value range; untouched ones (the
+                // codec's formatting round-trips exactly) mean the user only wanted X, which
+                // obeys auto-Y like any other X-only change. Auto-Y is shared, so either
+                // edit turns it off for both axes.
                 boolean yEdited = y[0] != currentViewport.getMinValue() || y[1] != currentViewport.getMaxValue();
-                if (yEdited) {
-                    applyExplicitLimits(x[0], x[1], y[0], y[1]);
+                boolean y2Edited = y2 != null
+                    && (y2[0] != currentViewport.getY2MinValue() || y2[1] != currentViewport.getY2MaxValue());
+                if (yEdited || y2Edited) {
+                    acceptNewAxes(x[0], x[1], y[0], y[1]);
+                    if (y2Edited) {
+                        acceptY2Bounds(y2[0], y2[1]);
+                    }
+                    if (parentComponent instanceof FlowVizPanel vizPanel) {
+                        vizPanel.setAutoYMode(false);
+                    }
                 } else {
                     applyXLimits(x[0], x[1]);
                 }
@@ -1099,6 +1152,30 @@ public class PlotInteractionManager {
         dialog.pack();
         dialog.setLocationRelativeTo(parentComponent);
         dialog.setVisible(true);
+    }
+
+    /**
+     * Parses and checks right-axis limits, naming Y2 in the message so it cannot be taken
+     * for the Y row.
+     */
+    private static double[] parseY2Limits(String text, ViewPort currentViewport) {
+        try {
+            double[] y2 = AxisLimitCodec.parseYLimits(text);
+            ViewPort.validateBounds(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y2[0], y2[1]);
+            return y2;
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Secondary Y limits: " + ex.getMessage(), ex);
+        }
+    }
+
+    /** Sets the right axis' range, leaving everything else as it is. */
+    private void acceptY2Bounds(double minValue, double maxValue) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null || !currentViewport.hasY2()) {
+            return;
+        }
+        viewportUpdater.accept(currentViewport.withY2Bounds(minValue, maxValue));
+        parentComponent.repaint();
     }
 
     /**
