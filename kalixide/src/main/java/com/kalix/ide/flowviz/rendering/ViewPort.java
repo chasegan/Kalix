@@ -211,6 +211,69 @@ public class ViewPort {
         return hasY2() ? zoomed.withY2From(forY2().zoomValueAxis(factor, ratio)) : zoomed;
     }
 
+    /** Share of the axis always kept between the cursor and the fixed end while dragging one end. */
+    private static final double END_DRAG_MIN_GAP = 0.05;
+
+    /**
+     * This view with one end of the y1 value axis dragged: the value that was under
+     * {@code pressY} follows the cursor to {@code screenY} while the other end stays put.
+     * Call it on the view from the start of the drag, not the last step, so nothing drifts.
+     * Computed in transformed space, and refused like any other unshowable step (see
+     * {@link #withValueBoundsFrom}). The right axis is left alone.
+     *
+     * @param maxEnd true to move the maximum (a grab in the axis' top half), false the minimum
+     */
+    public ViewPort dragValueEnd(boolean maxEnd, int pressY, int screenY) {
+        double transformedMin = getTransformedMin();
+        double transformedMax = getTransformedMax();
+        double anchor = transformedMin + valueRatio(pressY) * (transformedMax - transformedMin);
+        double ratio = valueRatio(screenY);
+        if (maxEnd) {
+            ratio = Math.max(ratio, END_DRAG_MIN_GAP);
+            return withValueBoundsFrom(transformedMin, transformedMin + (anchor - transformedMin) / ratio);
+        }
+        ratio = Math.min(ratio, 1 - END_DRAG_MIN_GAP);
+        return withValueBoundsFrom((anchor - ratio * transformedMax) / (1 - ratio), transformedMax);
+    }
+
+    /** As {@link #dragValueEnd}, on the right axis; y1 is left alone. */
+    public ViewPort dragY2End(boolean maxEnd, int pressY, int screenY) {
+        return withY2From(forY2().dragValueEnd(maxEnd, pressY, screenY));
+    }
+
+    /**
+     * This view with one end of the time axis dragged: the time that was under
+     * {@code pressX} follows the cursor to {@code screenX} while the other end stays put.
+     * Call it on the view from the start of the drag. Returns this view unchanged if the
+     * result would be empty.
+     *
+     * @param endSide true to move the end (a grab in the axis' right half), false the start
+     */
+    public ViewPort dragTimeEnd(boolean endSide, int pressX, int screenX) {
+        double anchor = startTimeMs + timeRatio(pressX) * (endTimeMs - startTimeMs);
+        double ratio = timeRatio(screenX);
+        long newStart = startTimeMs;
+        long newEnd = endTimeMs;
+        if (endSide) {
+            ratio = Math.max(ratio, END_DRAG_MIN_GAP);
+            newEnd = Math.round(startTimeMs + (anchor - startTimeMs) / ratio);
+        } else {
+            ratio = Math.min(ratio, 1 - END_DRAG_MIN_GAP);
+            newStart = Math.round((anchor - ratio * endTimeMs) / (1 - ratio));
+        }
+        return newStart < newEnd ? withTimeRange(newStart, newEnd) : this;
+    }
+
+    /** How far up the plot {@code screenY} is: 0 at the bottom edge, 1 at the top. */
+    private double valueRatio(int screenY) {
+        return plotHeight == 0 ? 0.5 : (double) (plotY + plotHeight - screenY) / plotHeight;
+    }
+
+    /** How far across the plot {@code screenX} is: 0 at the left edge, 1 at the right. */
+    private double timeRatio(int screenX) {
+        return plotWidth == 0 ? 0.5 : (double) (screenX - plotX) / plotWidth;
+    }
+
     /**
      * This view with the value axis re-centred on {@code value} when it is off-screen,
      * keeping the span in transformed space so the zoom level survives on every scale (a

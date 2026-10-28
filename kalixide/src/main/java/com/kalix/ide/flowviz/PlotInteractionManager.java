@@ -236,6 +236,13 @@ public class PlotInteractionManager {
                     zoomRectStartPoint = new Point(e.getPoint());
                     zoomRectCurrentPoint = new Point(e.getPoint());
                     parentComponent.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                } else if (SwingUtilities.isLeftMouseButton(e) && axisHandleAt(e.getPoint()) != null) {
+                    // A press on an axis grabs the end nearest it (the half it landed in)
+                    axisDrag = axisHandleAt(e.getPoint());
+                    axisDragPress = e.getPoint();
+                    axisDragStart = viewportSupplier.get();
+                    axisDragMoved = false;
+                    parentComponent.setCursor(axisDrag.cursor());
                 } else if (SwingUtilities.isLeftMouseButton(e)) {
                     lastMousePos = e.getPoint();
                     isDragging = true;
@@ -263,7 +270,9 @@ public class PlotInteractionManager {
                     showContextMenuIfPlotted(e);
                     return;
                 }
-                if (SwingUtilities.isLeftMouseButton(e) && isZoomSelecting) {
+                if (SwingUtilities.isLeftMouseButton(e) && axisDrag != null) {
+                    finishAxisDrag(e.getPoint());
+                } else if (SwingUtilities.isLeftMouseButton(e) && isZoomSelecting) {
                     completeZoomRectSelection();
                     isZoomSelecting = false;
                     zoomRectStartPoint = null;
@@ -277,7 +286,9 @@ public class PlotInteractionManager {
 
             @Override
             public void mouseDragged(MouseEvent e) {
-                if (isZoomSelecting && zoomRectStartPoint != null) {
+                if (axisDrag != null) {
+                    handleAxisDrag(e.getPoint());
+                } else if (isZoomSelecting && zoomRectStartPoint != null) {
                     zoomRectCurrentPoint = new Point(e.getPoint());
                     parentComponent.repaint();
                 } else if (isDragging && lastMousePos != null) {
@@ -299,6 +310,135 @@ public class PlotInteractionManager {
                 }
             }
         };
+    }
+
+    /** How far out from the plot edge an axis can be grabbed, in pixels. */
+    private static final int AXIS_GRAB_DEPTH = 50;
+    /** Pixels a press must move before it is an axis drag rather than a click (as the Key's). */
+    private static final int AXIS_DRAG_THRESHOLD = 5;
+
+    /** An axis end a press can grab: which axis, and which end moves. */
+    private enum AxisHandle {
+        X_START(Cursor.W_RESIZE_CURSOR), X_END(Cursor.E_RESIZE_CURSOR),
+        Y_MIN(Cursor.S_RESIZE_CURSOR), Y_MAX(Cursor.N_RESIZE_CURSOR),
+        Y2_MIN(Cursor.S_RESIZE_CURSOR), Y2_MAX(Cursor.N_RESIZE_CURSOR);
+
+        private final int cursorType;
+
+        AxisHandle(int cursorType) {
+            this.cursorType = cursorType;
+        }
+
+        Cursor cursor() {
+            return Cursor.getPredefinedCursor(cursorType);
+        }
+    }
+
+    // The axis end being dragged, from where, and the view it started from (null when none)
+    private AxisHandle axisDrag;
+    private Point axisDragPress;
+    private ViewPort axisDragStart;
+    private boolean axisDragMoved;
+
+    /**
+     * The axis end under {@code point}, or null. Each axis is the band just outside its plot
+     * edge: below for X, left for Y, right for Y2 (only while there is one). The half of the
+     * axis the point is in picks the end -- bottom half the minimum, top half the maximum;
+     * left half the start, right half the end.
+     */
+    private AxisHandle axisHandleAt(Point point) {
+        ViewPort viewport = viewportSupplier.get();
+        if (viewport == null || !hasPlot()) {
+            return null;
+        }
+        Rectangle plot = plotAreaSupplier.get();
+        int right = plot.x + plot.width;
+        int bottom = plot.y + plot.height;
+        boolean besidePlot = point.y >= plot.y && point.y <= bottom;
+        boolean upperHalf = point.y < plot.y + plot.height / 2;
+        if (point.x >= plot.x && point.x <= right && point.y > bottom && point.y <= bottom + AXIS_GRAB_DEPTH) {
+            return point.x < plot.x + plot.width / 2 ? AxisHandle.X_START : AxisHandle.X_END;
+        }
+        if (besidePlot && point.x < plot.x && point.x >= plot.x - AXIS_GRAB_DEPTH) {
+            return upperHalf ? AxisHandle.Y_MAX : AxisHandle.Y_MIN;
+        }
+        if (besidePlot && viewport.hasY2() && point.x > right && point.x <= right + AXIS_GRAB_DEPTH) {
+            return upperHalf ? AxisHandle.Y2_MAX : AxisHandle.Y2_MIN;
+        }
+        return null;
+    }
+
+    /** The resize cursor for the axis end under {@code point}, or null when it is not over one. */
+    public Cursor axisCursorAt(Point point) {
+        AxisHandle handle = axisDrag != null ? axisDrag : axisHandleAt(point);
+        return handle != null ? handle.cursor() : null;
+    }
+
+    /**
+     * Moves the grabbed axis end so the value (or time) first grabbed follows the cursor,
+     * once the press has moved {@link #AXIS_DRAG_THRESHOLD} pixels, always computed from the
+     * view at the start of the drag. Only the grabbed axis comes
+     * from that view; the rest is the view as it is now, so a change made meanwhile (a data
+     * refresh, a series leaving the plot) is not undone. Dragging X obeys auto-Y like any
+     * other X-only change; dragging a value axis is an explicit range, so auto-Y goes off
+     * when the drag ends ({@link #finishAxisDrag}).
+     */
+    private void handleAxisDrag(Point point) {
+        ViewPort current = viewportSupplier.get();
+        if (axisDragStart == null || current == null) {
+            return;
+        }
+        // A view the start can no longer stand for ends the drag: the right axis went away,
+        // or the scale or X axis type changed, so its values would land on the wrong axis
+        boolean y2Handle = axisDrag == AxisHandle.Y2_MIN || axisDrag == AxisHandle.Y2_MAX;
+        if ((y2Handle && !current.hasY2()) || current.getYAxisScale() != axisDragStart.getYAxisScale()
+                || current.getXAxisType() != axisDragStart.getXAxisType()) {
+            finishAxisDrag(point);
+            return;
+        }
+        if (!axisDragMoved && axisDragPress.distance(point) < AXIS_DRAG_THRESHOLD) {
+            return; // a click with a little jitter, as when double-clicking to fit
+        }
+        axisDragMoved = true;
+        ViewPort start = axisDragStart;
+        switch (axisDrag) {
+            case X_START, X_END -> {
+                ViewPort dragged = start.dragTimeEnd(axisDrag == AxisHandle.X_END, axisDragPress.x, point.x);
+                if (isAutoYMode()) {
+                    updateViewportWithFittedY(dragged.getStartTimeMs(), dragged.getEndTimeMs());
+                } else {
+                    viewportUpdater.accept(current.withTimeRange(dragged.getStartTimeMs(), dragged.getEndTimeMs()));
+                }
+            }
+            case Y_MIN, Y_MAX -> {
+                ViewPort dragged = start.dragValueEnd(axisDrag == AxisHandle.Y_MAX, axisDragPress.y, point.y);
+                acceptNewAxes(current.getStartTimeMs(), current.getEndTimeMs(),
+                    dragged.getMinValue(), dragged.getMaxValue());
+            }
+            case Y2_MIN, Y2_MAX -> {
+                ViewPort dragged = start.dragY2End(axisDrag == AxisHandle.Y2_MAX, axisDragPress.y, point.y);
+                acceptY2Bounds(dragged.getY2MinValue(), dragged.getY2MaxValue());
+            }
+        }
+        parentComponent.repaint();
+    }
+
+    /**
+     * Ends an axis drag. A value axis that actually moved switches auto-Y off (shared by both
+     * axes), after the viewport, so undo records the two as one step (see
+     * {@link #applyExplicitLimits}). A press without movement changes nothing. The cursor
+     * goes back to whatever {@code point} is over, so a grabbable axis keeps its resize cursor.
+     */
+    private void finishAxisDrag(Point point) {
+        boolean valueAxis = axisDrag != AxisHandle.X_START && axisDrag != AxisHandle.X_END;
+        if (axisDragMoved && valueAxis && parentComponent instanceof FlowVizPanel vizPanel) {
+            vizPanel.setAutoYMode(false);
+        }
+        axisDrag = null;
+        axisDragPress = null;
+        axisDragStart = null;
+        Cursor cursor = axisCursorAt(point);
+        parentComponent.setCursor(cursor != null ? cursor : Cursor.getDefaultCursor());
     }
 
     /**
