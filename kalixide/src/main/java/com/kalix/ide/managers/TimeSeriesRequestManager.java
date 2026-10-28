@@ -172,21 +172,26 @@ public class TimeSeriesRequestManager {
 
         // One request in flight per series. The engine's reply names the series, not
         // the request, so two callers asking for the same series at once must share
-        // one future: the check and the insert are atomic, and only the caller that
-        // created the future sends the request. The timeout is a backstop for a reply
-        // that never arrives (wedged CLI, message lost): without it the stuck entry
-        // makes the series permanently unfetchable for this session.
-        return cache.computeIfAbsent(cacheKey, key -> {
-            CompletableFuture<TimeSeriesData> future = new CompletableFuture<>();
-            future.orTimeout(REQUEST_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
-                  .whenComplete((data, throwable) -> {
-                      if (throwable != null) {
-                          cache.remove(key, future);
-                      }
-                  });
-            requestQueue.add(new TimeSeriesRequest(sessionKey, seriesName, future)); // unbounded: never fails
-            return future;
+        // one future: the check and the insert are atomic, and only the caller whose
+        // future went in sends the request. The mapping function touches nothing that
+        // could complete the future, so no callback can re-enter the map inside it.
+        CompletableFuture<TimeSeriesData> fresh = new CompletableFuture<>();
+        CompletableFuture<TimeSeriesData> future = cache.computeIfAbsent(cacheKey, key -> {
+            requestQueue.add(new TimeSeriesRequest(sessionKey, seriesName, fresh)); // unbounded: never fails
+            return fresh;
         });
+        if (future == fresh) {
+            // The timeout is a backstop for a reply that never arrives (wedged CLI,
+            // message lost): without it the stuck entry makes the series permanently
+            // unfetchable for this session.
+            fresh.orTimeout(REQUEST_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+                 .whenComplete((data, throwable) -> {
+                     if (throwable != null) {
+                         cache.remove(cacheKey, fresh);
+                     }
+                 });
+        }
+        return future;
     }
 
     /**
@@ -325,14 +330,14 @@ public class TimeSeriesRequestManager {
             sessionManager.sendCommand(request.sessionKey, command)
                 .exceptionally(throwable -> {
                     logger.error("Failed to send timeseries request for {}", request.seriesName, throwable);
-                    cache.remove(cacheKey);
+                    cache.remove(cacheKey, request.future);
                     request.future.completeExceptionally(throwable);
                     return null;
                 });
 
         } catch (Exception e) {
             logger.error("Failed to process timeseries request for {}", request.seriesName, e);
-            cache.remove(cacheKey);
+            cache.remove(cacheKey, request.future);
             request.future.completeExceptionally(e);
         }
     }
