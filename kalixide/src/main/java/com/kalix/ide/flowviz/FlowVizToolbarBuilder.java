@@ -8,10 +8,7 @@ import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.components.SeasonalMaskButton;
 import com.kalix.ide.components.WrapLayout;
-import com.kalix.ide.filedialog.FileDialogFilter;
-import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.preferences.PreferenceKeys;
-import com.kalix.ide.utils.DialogUtils;
 
 import com.formdev.flatlaf.FlatClientProperties;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
@@ -23,17 +20,14 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JTable;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -58,14 +52,12 @@ class FlowVizToolbarBuilder {
 
     private final JToolBar toolbar;
     private final VisualizationTabManager.TabInfo tabInfo;
-    private final JTable statsTable;
 
-    private Consumer<FlowVizState> onUndoRedo;
-    private Runnable onStateApplied;
     private Consumer<FlowVizView> onViewToggle;
 
     private JToggleButton plotViewToggle;
     private JToggleButton statsViewToggle;
+    private JToggleButton dataViewToggle;
     private JComboBox<String> aggregationPeriodCombo;
     private JComboBox<String> aggregationMethodCombo;
     private JComboBox<String> maskCombo;
@@ -74,13 +66,14 @@ class FlowVizToolbarBuilder {
     private JComboBox<String> ySpaceCombo;
     private JToggleButton autoYToggle;
 
-    /** The plot-only cluster (incl. its separators/labels), hidden in the stats view. */
+    /** The plot-only cluster (incl. its separators/labels), hidden in the stats and data views. */
     private final List<JComponent> plotOnlyComponents = new ArrayList<>();
+    /** Controls that shape the data page too (the plot type), hidden only in the stats view. */
+    private final List<JComponent> plotAndDataComponents = new ArrayList<>();
     private FlowVizToolbarController controller;
 
-    FlowVizToolbarBuilder(VisualizationTabManager.TabInfo tabInfo, JTable statsTable) {
+    FlowVizToolbarBuilder(VisualizationTabManager.TabInfo tabInfo) {
         this.tabInfo = tabInfo;
-        this.statsTable = statsTable;
         this.toolbar = new JToolBar();
         this.toolbar.setFloatable(false);
         this.toolbar.setRollover(true);
@@ -96,17 +89,6 @@ class FlowVizToolbarBuilder {
                 toolbar.revalidate();
             }
         });
-    }
-
-    FlowVizToolbarBuilder setOnUndoRedo(Consumer<FlowVizState> callback) {
-        this.onUndoRedo = callback;
-        return this;
-    }
-
-    /** Invoked after a control applied a state change, so the owner reprojects the stats table. */
-    FlowVizToolbarBuilder setOnStateApplied(Runnable callback) {
-        this.onStateApplied = callback;
-        return this;
     }
 
     FlowVizToolbarBuilder setOnViewToggle(Consumer<FlowVizView> callback) {
@@ -127,14 +109,14 @@ class FlowVizToolbarBuilder {
         addMaskControls();
         addSeasonalMaskButton();
 
-        // --- Plot-only cluster (hidden in the stats view) ---
-        plotOnly(new JToolBar.Separator());
-        // Reads as one phrase: "Type: [Linear] [Exceedance]".
-        plotOnly(new JLabel("Type:"));
+        // --- Plot type (plot and data views), then the plot-only cluster ---
+        plotAndData(new JToolBar.Separator());
+        // Reads as one phrase: "Type: [Exceedance] [Linear]".
+        plotAndData(new JLabel("Type:"));
+        plotAndData((JComponent) Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
+        addPlotTypeDropdown();
         plotOnly((JComponent) Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
         addYSpaceDropdown();
-        plotOnly((JComponent) Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
-        addPlotTypeDropdown();
         plotOnly(new JToolBar.Separator());
         addAutoYToggle(initialAutoY);
         addCoordinatesToggle(initialShowCoordinates);
@@ -146,6 +128,15 @@ class FlowVizToolbarBuilder {
         controller = new FlowVizToolbarController(
             aggregationPeriodCombo, aggregationMethodCombo, maskCombo,
             plotTypeCombo, ySpaceCombo, autoYToggle, seasonalMaskButton);
+        // The controls show the model's state, whoever changed it: this toolbar, the
+        // plot's context menu, a reset, an undo or redo. Setting them is silent. Only
+        // the toolbar's own auto-Y toggle records the preference: other paths change
+        // this plot, not the default.
+        tabInfo.model().addListener((old, now, cause) -> {
+            if (cause != FlowVizModel.Cause.DATA) {
+                controller.updateFromState(now);
+            }
+        });
         applyViewMode(tabInfo.viewMode);
         return toolbar;
     }
@@ -155,8 +146,8 @@ class FlowVizToolbarBuilder {
     }
 
     /**
-     * Reflects a view switch into the toolbar: the plot-only cluster hides in the
-     * stats view and the toggle pair follows. Selection is set directly (no action
+     * Reflects a view switch into the toolbar: the plot-only cluster shows only in
+     * the plot view, the plot type in the plot and data views, and the toggles follow. Selection is set directly (no action
      * fires), so this is safe from the switch path itself.
      */
     void applyViewMode(FlowVizView mode) {
@@ -164,8 +155,19 @@ class FlowVizToolbarBuilder {
         for (JComponent component : plotOnlyComponents) {
             component.setVisible(plot);
         }
-        plotViewToggle.setSelected(plot);
-        statsViewToggle.setSelected(!plot);
+        boolean shapesData = switch (mode) {
+            case PLOT, DATA -> true;
+            case STATS -> false;
+        };
+        for (JComponent component : plotAndDataComponents) {
+            component.setVisible(shapesData);
+        }
+        JToggleButton selected = switch (mode) {
+            case PLOT -> plotViewToggle;
+            case STATS -> statsViewToggle;
+            case DATA -> dataViewToggle;
+        };
+        selected.setSelected(true); // the ButtonGroup deselects the others
         toolbar.revalidate();
         toolbar.repaint();
     }
@@ -173,22 +175,26 @@ class FlowVizToolbarBuilder {
     private void addViewToggle() {
         plotViewToggle = viewToggleButton(FontAwesomeSolid.CHART_LINE, "Plot view");
         statsViewToggle = viewToggleButton(FontAwesomeSolid.CALCULATOR, "Stats view");
+        dataViewToggle = viewToggleButton(FontAwesomeSolid.TABLE, "Data view");
         ButtonGroup group = new ButtonGroup();
         group.add(plotViewToggle);
         group.add(statsViewToggle);
+        group.add(dataViewToggle);
         plotViewToggle.addActionListener(e -> fireViewToggle(FlowVizView.PLOT));
         statsViewToggle.addActionListener(e -> fireViewToggle(FlowVizView.STATS));
+        dataViewToggle.addActionListener(e -> fireViewToggle(FlowVizView.DATA));
         // Rigid holder: FlatLaf's tab-style buttons size slightly differently per
         // selection state, which nudged everything to the right of the pair on
-        // every toggle. GridLayout forces two equal fixed cells regardless.
-        JPanel holder = new JPanel(new java.awt.GridLayout(1, 2, 0, 0));
+        // every toggle. GridLayout forces three equal fixed cells regardless.
+        JPanel holder = new JPanel(new java.awt.GridLayout(1, 3, 0, 0));
         holder.setOpaque(false);
-        Dimension pair = new Dimension(ToolbarConstants.BUTTON_SIZE.width * 2, ToolbarConstants.BUTTON_SIZE.height);
-        holder.setPreferredSize(pair);
-        holder.setMinimumSize(pair);
-        holder.setMaximumSize(pair);
+        Dimension size = new Dimension(ToolbarConstants.BUTTON_SIZE.width * 3, ToolbarConstants.BUTTON_SIZE.height);
+        holder.setPreferredSize(size);
+        holder.setMinimumSize(size);
+        holder.setMaximumSize(size);
         holder.add(plotViewToggle);
         holder.add(statsViewToggle);
+        holder.add(dataViewToggle);
         toolbar.add(holder);
     }
 
@@ -211,31 +217,21 @@ class FlowVizToolbarBuilder {
     }
 
     private void addSaveButton() {
-        // Shared position, view-dispatched action: the plot's timeseries save or
-        // the stats table's CSV export, whichever page is showing.
+        // Shared position, view-dispatched action: the plot's timeseries save (which
+        // is also exactly what the data page shows) or the stats table's CSV export.
         JButton button = createIconButton(FontAwesomeSolid.SAVE, "Save Data", () -> {
-            if (tabInfo.viewMode == FlowVizView.PLOT) {
-                tabInfo.vizPanel.saveData();
-            } else {
-                saveStatsData();
+            switch (tabInfo.viewMode) {
+                case PLOT, DATA -> tabInfo.vizPanel.saveData();
+                case STATS -> tabInfo.statsVizPanel.saveData();
             }
         });
         toolbar.add(button);
     }
 
     private void addUndoRedoButtons() {
-        JButton undoButton = createIconButton(FontAwesomeSolid.UNDO, "Undo", () -> {
-            FlowVizState state = tabInfo.vizPanel.undo();
-            if (state != null && onUndoRedo != null) {
-                onUndoRedo.accept(state);
-            }
-        });
-        JButton redoButton = createIconButton(FontAwesomeSolid.REDO, "Redo", () -> {
-            FlowVizState state = tabInfo.vizPanel.redo();
-            if (state != null && onUndoRedo != null) {
-                onUndoRedo.accept(state);
-            }
-        });
+        // The controls follow a restore through the model (see build()).
+        JButton undoButton = createIconButton(FontAwesomeSolid.UNDO, "Undo", tabInfo.vizPanel::undo);
+        JButton redoButton = createIconButton(FontAwesomeSolid.REDO, "Redo", tabInfo.vizPanel::redo);
 
         // Initialise from the panel: a duplicated tab has history before its toolbar exists.
         undoButton.setEnabled(tabInfo.vizPanel.canUndo());
@@ -285,9 +281,7 @@ class FlowVizToolbarBuilder {
         maskCombo.addActionListener(e -> {
             String selected = (String) maskCombo.getSelectedItem();
             if (selected != null) {
-                tabInfo.vizPanel.setMaskMode(
-                    MaskMode.fromDisplayName(selected.substring("Mask ".length())));
-                applied();
+                tabInfo.model().update(st -> st.withMaskMode(MaskMode.fromDisplayName(selected.substring("Mask ".length()))));
             }
         });
         toolbar.add(maskCombo);
@@ -301,8 +295,7 @@ class FlowVizToolbarBuilder {
     private void addSeasonalMaskButton() {
         toolbar.add(Box.createHorizontalStrut(ToolbarConstants.HORIZONTAL_SPACING));
         seasonalMaskButton = new SeasonalMaskButton(mode -> {
-            tabInfo.vizPanel.setSeasonalMaskMode(mode);
-            applied();
+            tabInfo.model().update(st -> st.withSeasonalMaskMode(mode));
         }, ToolbarConstants.BUTTON_ICON_SIZE, tabInfo.vizPanel.getSeasonalMaskMode());
         // The component leaves sizing to its host so it matches whatever toolbar it joins.
         ToolbarConstants.applyButtonSizing(seasonalMaskButton);
@@ -318,8 +311,7 @@ class FlowVizToolbarBuilder {
         if (periodStr != null && methodStr != null) {
             AggregationPeriod period = AggregationPeriod.fromDisplayName(periodStr);
             AggregationMethod method = AggregationMethod.fromDisplayName(methodStr);
-            tabInfo.vizPanel.setAggregation(period, method);
-            applied();
+            tabInfo.model().update(st -> st.withAggregation(period, method));
         }
     }
 
@@ -338,13 +330,9 @@ class FlowVizToolbarBuilder {
             if (selected == null || selected == tabInfo.vizPanel.getPlotType()) {
                 return;
             }
-            tabInfo.vizPanel.setPlotTypeAndMaskMode(selected,
-                selected.isDataMaskDefault() ? MaskMode.ALL : MaskMode.NONE);
-            // Reflect the panel's resulting mask silently (the mask is shared state now).
-            FlowVizToolbarController.setSilently(maskCombo, maskItem(tabInfo.vizPanel.getMaskMode()));
-            applied();
+            tabInfo.model().update(st -> st.withPlotType(selected).withMaskMode(selected.isDataMaskDefault() ? MaskMode.ALL : MaskMode.NONE));
         });
-        plotOnly(plotTypeCombo);
+        plotAndData(plotTypeCombo);
     }
 
     private void addYSpaceDropdown() {
@@ -354,7 +342,7 @@ class FlowVizToolbarBuilder {
         ySpaceCombo.addActionListener(e -> {
             String selected = (String) ySpaceCombo.getSelectedItem();
             if (selected != null) {
-                tabInfo.vizPanel.setYAxisScale(YAxisScale.fromDisplayName(selected));
+                tabInfo.model().update(st -> st.withYAxisScale(YAxisScale.fromDisplayName(selected)));
             }
         });
         plotOnly(ySpaceCombo);
@@ -364,12 +352,9 @@ class FlowVizToolbarBuilder {
         autoYToggle = createToggleButton(FontAwesomeSolid.ARROWS_ALT_V, "Auto-Y Mode", initialState);
         autoYToggle.addActionListener(e -> {
             boolean enabled = autoYToggle.isSelected();
-            tabInfo.vizPanel.setAutoYMode(enabled);
+            tabInfo.model().update(st -> st.withAutoYMode(enabled));
             PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(enabled);
         });
-        // Follow changes made elsewhere (context menu, explicit axis limits). Only the
-        // toolbar records the preference: those paths change this plot, not the default.
-        tabInfo.vizPanel.setOnAutoYModeChanged(() -> autoYToggle.setSelected(tabInfo.vizPanel.isAutoYMode()));
         plotOnly(autoYToggle);
     }
 
@@ -404,71 +389,23 @@ class FlowVizToolbarBuilder {
         // Built here rather than via createIconButton: the action needs the button to anchor the popup.
         button.addActionListener(e -> {
             JPopupMenu menu = new JPopupMenu();
-            LineShapeMenu.addItems(menu, tabInfo.vizPanel::setLineShape)
+            LineShapeMenu.addItems(menu, shape -> tabInfo.model().update(st -> st.withLineShape(shape)))
                 .get(tabInfo.vizPanel.getLineShape()).setSelected(true);
             menu.show(button, 0, button.getHeight());
         });
         plotOnly(button);
     }
 
-    /** Adds a component to the toolbar AND records it as plot-only (hidden in stats view). */
+    /** Adds a component to the toolbar AND records it as plot-only (hidden in the stats and data views). */
     private void plotOnly(JComponent component) {
         plotOnlyComponents.add(component);
         toolbar.add(component);
     }
 
-    private void applied() {
-        if (onStateApplied != null) {
-            onStateApplied.run();
-        }
-    }
-
-    /** Saves stats data to CSV. */
-    private void saveStatsData() {
-        // The suggested name carries the conventional extension; the dialog takes whatever
-        // the user types verbatim and confirms any overwrite itself.
-        java.util.Optional<File> chosen = KalixFileDialog.saveFile(statsTable)
-            .title("Save Statistics")
-            .suggestedName("statistics.csv")
-            .filters(
-                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"))
-            .show();
-        if (chosen.isPresent()) {
-            File file = chosen.get();
-
-            // The extension is the format: a name ending .csv.zip writes a
-            // one-entry zip (and either way the text is UTF-8, like the data
-            // exporter).
-            try (java.io.Writer writer = com.kalix.ide.io.CsvZipFormat.newUtf8Writer(file)) {
-                // Write header (dynamic columns from table)
-                for (int col = 0; col < statsTable.getColumnCount(); col++) {
-                    if (col > 0) writer.write(",");
-                    writer.write(statsTable.getColumnName(col));
-                }
-                writer.write("\n");
-
-                // Write data rows
-                for (int row = 0; row < statsTable.getRowCount(); row++) {
-                    for (int col = 0; col < statsTable.getColumnCount(); col++) {
-                        if (col > 0) writer.write(",");
-                        Object value = statsTable.getValueAt(row, col);
-                        writer.write(value != null ? value.toString() : "");
-                    }
-                    writer.write("\n");
-                }
-
-                JOptionPane.showMessageDialog(statsTable,
-                    "Statistics saved successfully to:\n" + file.getAbsolutePath(),
-                    "Save Complete",
-                    JOptionPane.INFORMATION_MESSAGE);
-
-            } catch (java.io.IOException ex) {
-                DialogUtils.showError(statsTable,
-                    "Error saving statistics: " + ex.getMessage(),
-                    "Save Error");
-            }
-        }
+    /** Adds a component to the toolbar AND records it as shown in the plot and data views. */
+    private void plotAndData(JComponent component) {
+        plotAndDataComponents.add(component);
+        toolbar.add(component);
     }
 
     /** Creates a standard icon button. */

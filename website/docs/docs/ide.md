@@ -117,6 +117,16 @@ It is a run manager. Yes.
 
 ![](../assets/docs-using-ide/image_19.png)
 
+### Plot, Stats and Data views
+
+Each plot tab has three views. Switch between them with the toggles at the left of the tab's toolbar:
+
+- **Plot** (the default) draws the ticked series.
+- **Stats** gives one row of statistics per series.
+- **Data** shows the plotted values as a table in export format, i.e., one row per timestamp and one column per series.
+
+The views are three ways of looking at the same tab. They share its ticked series, aggregation, masks and plot type, so switching view never changes what you are looking at, and undo and redo cover changes made in any of them.
+
 ### Filtering the Timeseries tree
 
 Type in the box above the **Timeseries** tree to show only the series you want. Each series is matched on its full name (such as `node.inflow_3.ds_1`) and on its source (such as `Run_2` or `flows.csv`). Case is ignored.

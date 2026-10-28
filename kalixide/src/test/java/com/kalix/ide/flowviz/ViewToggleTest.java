@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -46,11 +47,8 @@ class ViewToggleTest {
             ref -> new LineStyle(Color.BLACK, StrokeStyle.values()[0]));
     }
 
-    private static VisualizationTabManager.TabSettings settingsWith(SeriesRef... series) {
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>(List.of(series));
-        settings.checkedSources = new LinkedHashSet<>();
-        return settings;
+    private static FlowVizState settingsWith(SeriesRef... series) {
+        return FlowVizState.defaults().withVisibleSeries(List.of(series));
     }
 
     private static AbstractButton button(Container root, String tooltip) {
@@ -71,7 +69,7 @@ class ViewToggleTest {
     @Test
     void toggleIsPresentationOnlyNoHistoryNoTreeNoise() {
         VisualizationTabManager mgr = manager(new DataSet());
-        mgr.addPlotTabFromSettings(settingsWith());
+        mgr.addPlotTab(settingsWith());
         AtomicInteger treeNotifications = new AtomicInteger();
         mgr.setHost(countingHost(treeNotifications));
 
@@ -90,22 +88,22 @@ class ViewToggleTest {
         DataSet pool = new DataSet();
         pool.addSeries(REF, daily(1, 2, 3));
         VisualizationTabManager mgr = manager(pool);
-        mgr.addPlotTabFromSettings(settingsWith(REF));
+        mgr.addPlotTab(settingsWith(REF));
 
         VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
-        assertTrue(tab.statsDirty, "a plot-view tab's stats page starts lazy");
-        assertEquals(0, tab.statsModel.getRowCount());
+        assertTrue(tab.statsVizPanel.isDirty(), "a plot-view tab's stats page starts lazy");
+        assertEquals(0, tab.statsVizPanel.model().getRowCount());
 
         button((Container) mgr.getTabbedPane().getSelectedComponent(), "Stats view").doClick();
 
-        assertFalse(tab.statsDirty, "the toggle honoured the dirty mark");
-        assertEquals(1, tab.statsModel.getRowCount(), "the shown stats page is populated");
+        assertFalse(tab.statsVizPanel.isDirty(), "the toggle honoured the dirty mark");
+        assertEquals(1, tab.statsVizPanel.model().getRowCount(), "the shown stats page is populated");
     }
 
     @Test
     void toggleRoundTripReturnsToThePlotView() {
         VisualizationTabManager mgr = manager(new DataSet());
-        mgr.addPlotTabFromSettings(settingsWith());
+        mgr.addPlotTab(settingsWith());
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
 
         button(tabRoot, "Stats view").doClick();
@@ -118,16 +116,70 @@ class ViewToggleTest {
     @Test
     void duplicationCarriesTheActiveView() {
         VisualizationTabManager mgr = manager(new DataSet());
-        mgr.addPlotTabFromSettings(settingsWith());
+        mgr.addPlotTab(settingsWith());
         button((Container) mgr.getTabbedPane().getSelectedComponent(), "Stats view").doClick();
 
-        VisualizationTabManager.TabSettings duplicated =
-            VisualizationTabManager.TabSettings.fromTab(mgr.tabAt(0));
-        assertEquals(FlowVizView.STATS, duplicated.activeView);
-
-        mgr.addTabFromSettings(duplicated);
+        mgr.duplicateTab(mgr.tabAt(0));
         assertEquals(FlowVizView.STATS, mgr.tabAt(1).viewMode,
             "a duplicate opens on the same page as its source");
+    }
+
+    @Test
+    void theDataPageFollowsTheModelLazily() {
+        DataSet pool = new DataSet();
+        pool.addSeries(REF, daily(1, 2, 3));
+        VisualizationTabManager mgr = manager(pool);
+        mgr.addPlotTab(settingsWith(REF));
+        VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
+        assertTrue(tab.dataVizPanel.isDirty(), "a plot-view tab's data page starts lazy");
+
+        mgr.switchView(tab, FlowVizView.DATA);
+        DataGrid shown = tab.dataVizPanel.getGrid();
+        assertEquals(3, shown.rowCount(), "the shown data page is populated");
+
+        mgr.updateAllTabs(false); // nothing actually changed
+        assertSame(shown, tab.dataVizPanel.getGrid(), "an unchanged display keeps the grid (and any Find)");
+
+        pool.addSeries(REF, daily(1, 2, 3, 4)); // new data arrives
+        mgr.updateSeriesInStatsTabsWithAggregation(REF, pool.getSeries(REF));
+        assertEquals(4, tab.dataVizPanel.getGrid().rowCount(), "the shown page follows new data");
+    }
+
+    @Test
+    void aHiddenDataPageLetsGoOfADeselectedSeries() {
+        SeriesRef other = new DatasetSeries("/t.csv", "two");
+        DataSet pool = new DataSet();
+        pool.addSeries(REF, daily(1, 2, 3));
+        pool.addSeries(other, daily(4, 5, 6));
+        VisualizationTabManager mgr = manager(pool);
+        mgr.addPlotTab(settingsWith(REF, other));
+        VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
+        mgr.switchView(tab, FlowVizView.DATA);
+        assertEquals(2, tab.dataVizPanel.getGrid().seriesCount());
+        mgr.switchView(tab, FlowVizView.PLOT);
+
+        mgr.setTargetTabSelectedSeries(new LinkedHashSet<>(List.of(REF)));
+        assertSame(DataGrid.EMPTY, tab.dataVizPanel.getGrid(), "the hidden grid no longer holds the deselected data");
+
+        mgr.switchView(tab, FlowVizView.DATA);
+        assertEquals(1, tab.dataVizPanel.getGrid().seriesCount(), "and rebuilds when shown");
+    }
+
+    @Test
+    void aRenameReachesTheDataPageHeaders() {
+        DataSet pool = new DataSet();
+        pool.addSeries(REF, daily(1, 2, 3));
+        VisualizationTabManager mgr = manager(pool);
+        mgr.addPlotTab(settingsWith(REF));
+        VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
+        String[] name = {"before"};
+        tab.dataVizPanel.setLabelResolver(ref -> name[0]);
+        mgr.switchView(tab, FlowVizView.DATA);
+        assertEquals("before", tab.dataVizPanel.getGrid().seriesHeader(0));
+
+        name[0] = "after"; // a rename: same display set, new label
+        mgr.updateAllTabs(false);
+        assertEquals("after", tab.dataVizPanel.getGrid().seriesHeader(0));
     }
 
     /** A host that only counts active-tab-change notifications. */

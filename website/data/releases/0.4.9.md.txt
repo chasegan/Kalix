@@ -17,3 +17,7 @@ pip: "pip install kalix==0.4.9"
     - A Pixie file holding an empty series can now be read back in the engine and the IDE; its `.pxt` used to hold an invalid start and end.
     - Python: `read_pixie()` returns an empty series as a column of NaN on the other series' timestamps. Series with values on different timesteps are still refused.
     - Python: `set_input()` now raises `ModelValidationError` for data with no rows or one row. Previously it assumed a daily timestep for a single row, and raised `ValueError` for no rows.
+- New! View the plotted data as a table in the Run Manager! A `Data` view in the Run Manager's plot tabs, beside `Plot` and `Stats` (#456).
+    - It shows the plotted values as a table, after the tab's aggregation, masks and plot type, exactly as `Save Data` writes them.
+    - `Find…` (Ctrl+F, then F3 for the next match) and `Copy` work as in the data viewer.
+- Unticked series no longer stay in memory: untick a series in every plot tab to free it.

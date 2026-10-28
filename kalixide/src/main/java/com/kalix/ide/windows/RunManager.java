@@ -184,8 +184,10 @@ public class RunManager extends JFrame {
     private java.util.function.Consumer<SessionManager.SessionEvent> sessionEventListener;
 
     // === SELECTION STATE ===
-    // Per-tab selected series are managed by VisualizationTabManager (TabInfo.selectedSeries).
-    // The shared plotDataSet acts as a data pool — series are added but never removed on deselect.
+    // Per-tab selected series live in each tab's FlowVizModel, managed by VisualizationTabManager.
+    // The shared plotDataSet is a data pool holding exactly what some tab selects: a series
+    // leaves it once no tab selects it (onSelectionsChanged), and a selection restored by
+    // undo or redo fetches what it lacks (onTabChanged).
 
     // === WINDOW COLLABORATORS ===
     // Extracted run bookkeeping / data orchestration (see class javadoc). Constructed in
@@ -440,6 +442,13 @@ public class RunManager extends JFrame {
             @Override
             public void onActiveTabChanged() {
                 onTabChanged();
+            }
+
+            @Override
+            public void onSelectionsChanged() {
+                if (tabManager != null) {
+                    trimPool();
+                }
             }
         });
 
@@ -1018,11 +1027,6 @@ public class RunManager extends JFrame {
         Set<SeriesRef> updatedSeries = new LinkedHashSet<>(tabSeries);
         updatedSeries.removeAll(seriesToRemove);
         tabManager.setTargetTabSelectedSeries(updatedSeries);
-
-        // Remove from stats tables
-        for (SeriesRef ref : seriesToRemove) {
-            tabManager.removeSeriesFromStatsTabs(ref);
-        }
     }
 
     /**
@@ -1128,6 +1132,15 @@ public class RunManager extends JFrame {
      */
     private void onOutputsTreeCheckedChanged() {
         fetchCoordinator.onOutputsTreeCheckedChanged();
+    }
+
+    /**
+     * Drops from the shared pool every series no tab selects. Only Pixie data is held by
+     * the pool alone; the rest comes back from its own holder at once, so one rule serves
+     * every kind.
+     */
+    void trimPool() {
+        plotDataSet.retainSeries(tabManager.getAllSelectedSeriesAcrossTabs());
     }
 
     /**
@@ -1355,5 +1368,7 @@ public class RunManager extends JFrame {
         } finally {
             fetchCoordinator.endProgrammaticUpdate();
         }
+        // A selection that came back without a tick (undo, redo) fetches what it lacks.
+        fetchCoordinator.fetchMissingForTargetTab();
     }
 }

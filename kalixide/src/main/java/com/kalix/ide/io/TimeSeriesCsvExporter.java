@@ -5,17 +5,21 @@ import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.PlotType;
+import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
 import com.kalix.ide.utils.TimeFormatUtil;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Utility class for exporting time series data to CSV format.
@@ -151,34 +155,103 @@ public class TimeSeriesCsvExporter {
         // label. Two series can share a label (the same derived-series name from two
         // files of the same name, say); a second column with a header already used is
         // headed "label (2)", never dropped.
-        List<String> headers = new ArrayList<>();
-        List<TimeSeriesData> allSeries = new ArrayList<>();
-        Map<String, Integer> usesOfLabel = new HashMap<>();
-        for (SeriesRef ref : dataSet.getSeriesRefs()) {
-            TimeSeriesData data = dataSet.getSeries(ref);
-            if (data == null) continue;
-            String label = labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
-            int uses = usesOfLabel.merge(label, 1, Integer::sum);
-            headers.add(uses == 1 ? label : label + " (" + uses + ")");
-            allSeries.add(data);
-        }
+        List<String> headers = dataColumnHeaders(dataSet, labelResolver);
+        List<TimeSeriesData> allSeries = dataColumnSeries(dataSet);
         if (headers.isEmpty()) {
             return;
         }
 
-        boolean isExceedance = (plotType == PlotType.EXCEEDANCE);
-
-        // Pick a single date format for the whole file based on the resolution of the data.
-        // Sub-daily series get ISO datetime; daily-or-coarser get date-only. Inferred from the
-        // first regular-interval series; falls back to date-only if none is regular.
-        long stepSeconds = CsvExportUtil.inferStepSeconds(allSeries);
-        String firstHeader = isExceedance ? "percentile"
-            : anyRowNeedsTime(allSeries, stepSeconds) ? "datetime" : "date";
+        long stepSeconds = dataStepSeconds(allSeries);
+        String firstHeader = dataFirstHeader(plotType, allSeries, stepSeconds);
 
         try (Writer writer = openWriter(file)) {
             writeHeader(writer, firstHeader, headers);
-            writeDataRows(writer, allSeries, isExceedance, stepSeconds);
+            writeDataRows(writer, allSeries, plotType, stepSeconds);
         }
+    }
+
+    /**
+     * One header per series column, in pool order, headed by the ref's projected label.
+     * A label already used is headed "label (2)", never dropped. Shared so other
+     * tabular views cannot drift.
+     */
+    public static List<String> dataColumnHeaders(DataSet dataSet, LabelResolver labelResolver) {
+        List<String> headers = new ArrayList<>();
+        Map<String, Integer> usesOfLabel = new HashMap<>();
+        for (SeriesRef ref : dataSet.getSeriesRefs()) {
+            if (dataSet.getSeries(ref) == null) continue;
+            String label = labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
+            int uses = usesOfLabel.merge(label, 1, Integer::sum);
+            headers.add(uses == 1 ? label : label + " (" + uses + ")");
+        }
+        return headers;
+    }
+
+    /** The series behind {@link #dataColumnHeaders}, in the same order. */
+    public static List<TimeSeriesData> dataColumnSeries(DataSet dataSet) {
+        List<TimeSeriesData> allSeries = new ArrayList<>();
+        for (SeriesRef ref : dataSet.getSeriesRefs()) {
+            TimeSeriesData data = dataSet.getSeries(ref);
+            if (data != null) {
+                allSeries.add(data);
+            }
+        }
+        return allSeries;
+    }
+
+    /**
+     * The step driving the first column's date format: the first regular-interval
+     * series' step, else 0 (date-only). Shared so other tabular views cannot drift.
+     */
+    public static long dataStepSeconds(List<TimeSeriesData> allSeries) {
+        return CsvExportUtil.inferStepSeconds(allSeries);
+    }
+
+    /**
+     * Every row's timestamp, ascending, exactly as the export visits them (one per distinct
+     * timestamp across the series). Shared so other tabular views cannot drift.
+     */
+    public static long[] dataRowTimes(List<TimeSeriesData> allSeries) {
+        int total = 0;
+        for (TimeSeriesData series : allSeries) {
+            total += series.getPointCount();
+        }
+        long[] times = new long[total];
+        int[] count = {0};
+        try {
+            CsvExportUtil.forEachMergedRow(allSeries, (timestamp, values) -> times[count[0]++] = timestamp);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e); // unreachable: the consumer does no I/O
+        }
+        return Arrays.copyOf(times, count[0]);
+    }
+
+    /** A value cell: empty for NaN (missing or stored), else Java's double spelling. */
+    public static String dataValueCell(double value) {
+        return Double.isNaN(value) ? "" : Double.toString(value);
+    }
+
+    /**
+     * The first column's heading: "percentile" for exceedance, else "datetime" when any
+     * row carries a time of day, else "date". Shared so other tabular views cannot drift.
+     */
+    public static String dataFirstHeader(PlotType plotType, List<TimeSeriesData> allSeries, long stepSeconds) {
+        return plotType == PlotType.EXCEEDANCE ? "percentile"
+            : anyRowNeedsTime(allSeries, stepSeconds) ? "datetime" : "date";
+    }
+
+    /**
+     * The first column's cell for a row's timestamp: the percentile for exceedance, else the
+     * date or datetime. Shared so other tabular views cannot drift.
+     */
+    public static String dataFirstCell(PlotType plotType, long timestamp, long stepSeconds) {
+        return plotType == PlotType.EXCEEDANCE ? formatPercentile(timestamp)
+            : TimeFormatUtil.formatForStepSize(timestamp, stepSeconds);
+    }
+
+    /** An exceedance series' fake timestamp as its percentile text ("12.34"). */
+    private static String formatPercentile(long timestamp) {
+        return String.format(Locale.ROOT, "%.2f", (double) timestamp / PlotTypeTransformer.PERCENTILE_SCALE);
     }
 
     /**
@@ -231,30 +304,19 @@ public class TimeSeriesCsvExporter {
      *
      * @param writer the file writer
      * @param allSeries list of all time series data
-     * @param isExceedance true if this is exceedance data (format first column as percentile)
+     * @param plotType the plot type (null for default behavior)
      * @param stepSeconds resolution driving the timestamp format (0 = date-only)
      * @throws IOException if writing fails
      */
     private static void writeDataRows(Writer writer, List<TimeSeriesData> allSeries,
-                                      boolean isExceedance, long stepSeconds) throws IOException {
+                                      PlotType plotType, long stepSeconds) throws IOException {
         StringBuilder row = new StringBuilder(64);
         CsvExportUtil.forEachMergedRow(allSeries, (timestamp, values) -> {
             row.setLength(0);
-            // Format first column based on plot type
-            if (isExceedance) {
-                // Convert fake timestamp to percentile
-                double percentile = (double) timestamp / com.kalix.ide.flowviz.transform.PlotTypeTransformer.PERCENTILE_SCALE;
-                row.append(String.format(java.util.Locale.ROOT, "%.2f", percentile));
-            } else {
-                row.append(TimeFormatUtil.formatForStepSize(timestamp, stepSeconds));
-            }
+            row.append(dataFirstCell(plotType, timestamp, stepSeconds));
 
-            // Write values for each series; NaN/missing → empty cell
             for (double value : values) {
-                row.append(',');
-                if (!Double.isNaN(value)) {
-                    row.append(value);
-                }
+                row.append(',').append(dataValueCell(value));
             }
             writer.write(row.append('\n').toString());
         });

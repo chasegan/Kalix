@@ -7,6 +7,7 @@ import com.kalix.ide.flowviz.style.LineStyle;
 import com.kalix.ide.flowviz.style.StrokeStyle;
 import com.kalix.ide.flowviz.transform.AggregationMethod;
 import com.kalix.ide.flowviz.transform.AggregationPeriod;
+import com.kalix.ide.flowviz.transform.YAxisScale;
 
 import org.junit.jupiter.api.Test;
 
@@ -50,15 +51,24 @@ class VizToolbarControllerTest {
     }
 
     @Test
+    void theToolbarFollowsAChangeMadeElsewhere() {
+        VisualizationTabManager mgr = manager();
+        mgr.addPlotTab(emptySettings());
+        Container root = (Container) mgr.getTabbedPane().getSelectedComponent();
+
+        // As the plot's context menu does: straight to the state, not through the toolbar.
+        mgr.getTargetVizPanel().model().update(st -> st.withYAxisScale(YAxisScale.LOG));
+
+        assertEquals(YAxisScale.LOG.getDisplayName(), combo(root, "Y-axis scale").getSelectedItem());
+    }
+
+    @Test
     void updateFromStateReflectsSilently() {
         VisualizationTabManager mgr = manager();
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>();
-        mgr.addPlotTabFromSettings(settings);
+        mgr.addPlotTab(FlowVizState.defaults());
 
         FlowVizPanel panel = mgr.getTargetVizPanel();
-        panel.setAggregation(AggregationPeriod.DAILY, AggregationMethod.MEAN); // entry 2
+        panel.model().update(st -> st.withAggregation(AggregationPeriod.DAILY, AggregationMethod.MEAN)); // entry 2
 
         FlowVizToolbarController controller = mgr.tabAt(0).vizToolbar.getController();
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
@@ -100,11 +110,8 @@ class VizToolbarControllerTest {
         return null;
     }
 
-    private static VisualizationTabManager.TabSettings emptySettings() {
-        VisualizationTabManager.TabSettings settings = VisualizationTabManager.TabSettings.getDefaults();
-        settings.selectedSeries = new LinkedHashSet<>();
-        settings.checkedSources = new LinkedHashSet<>();
-        return settings;
+    private static FlowVizState emptySettings() {
+        return FlowVizState.defaults();
     }
 
     /**
@@ -114,7 +121,7 @@ class VizToolbarControllerTest {
     @Test
     void theSeasonalButtonIsSharedByBothViews() {
         VisualizationTabManager mgr = manager();
-        mgr.addPlotTabFromSettings(emptySettings());
+        mgr.addPlotTab(emptySettings());
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
         SeasonalMaskButton button = seasonalButton(tabRoot);
         assertNotNull(button, "the merged toolbar carries the seasonal mask button");
@@ -126,14 +133,14 @@ class VizToolbarControllerTest {
     @Test
     void updateFromStateReflectsTheSeasonalMaskSilently() {
         VisualizationTabManager mgr = manager();
-        mgr.addPlotTabFromSettings(emptySettings());
+        mgr.addPlotTab(emptySettings());
         FlowVizPanel panel = mgr.getTargetVizPanel();
         Container tabRoot = (Container) mgr.getTabbedPane().getSelectedComponent();
         SeasonalMaskButton button = seasonalButton(tabRoot);
         assertNotNull(button);
 
         SeasonalMaskMode winter = SeasonalMaskMode.of(Set.of(Month.JUNE, Month.JULY));
-        panel.setSeasonalMaskMode(winter);
+        panel.model().update(st -> st.withSeasonalMaskMode(winter));
         // The button is not an observer of the panel: like the combos, it is reconciled
         // only through updateFromState (undo/redo and reset), and otherwise drives it.
         mgr.tabAt(0).vizToolbar.getController().updateFromState(panel.currentState());
