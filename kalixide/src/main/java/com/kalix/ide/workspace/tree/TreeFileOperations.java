@@ -26,8 +26,10 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * The side-effecting file operations behind the project tree's context menu and keyboard
- * shortcuts: reveal-in-OS, create, rename, delete, and copy-path (full / relative / trailhead).
+ * The side-effecting file operations behind the project tree's context menu, keyboard
+ * shortcuts and drag-and-drop: reveal-in-OS, open-terminal, create, rename, duplicate, delete,
+ * move and copy into a folder (from the tree or the operating system), zip, unzip, and
+ * copy-path (full / relative / trailhead).
  *
  * <p>Kept separate from {@link ProjectTree} so the tree component stays focused on view, model,
  * and event wiring. Operations are selection-aware where it makes sense (copy and delete accept
@@ -391,13 +393,7 @@ class TreeFileOperations {
                 }
                 try {
                     if (copy) {
-                        if (dest.exists()) {
-                            String targetName = generateDuplicateName(dest);
-                            File duplicateDestination = new File(dest.getParentFile(), targetName.trim());
-                            copyRecursively(source.toPath(), duplicateDestination.toPath());
-                        } else {
-                            copyRecursively(source.toPath(), dest.toPath());
-                        }
+                        copyInto(source, targetDir, Collision.KEEP_BOTH);
                     } else {
                         Files.move(source.toPath(), dest.toPath());
                         moved.add(new File[] {source, dest});
