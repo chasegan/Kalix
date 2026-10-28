@@ -73,12 +73,17 @@ class TreeTransferHandler extends TransferHandler {
             return false;
         }
         if (!internal) {
+            if ((support.getSourceDropActions() & COPY) == 0) {
+                return false; // a source that will not let us copy gets the no-drop cursor
+            }
             support.setDropAction(COPY);
         }
         List<File> dragged = draggedFiles(support, internal);
         if (dragged == null) {
-            // Some platforms hand over an external file list only at drop time; accept
-            // provisionally and let importData decide.
+            // The file list is not readable before the drop is accepted: the canImport Swing
+            // runs at drop time, before acceptDrop, always lands here, and so does every
+            // dragOver on Linux (XDnD). Accept provisionally; importData re-runs canImport
+            // after acceptDrop, with the list, and that decides.
             return !internal;
         }
         boolean duplicateInPlace = internal && (support.getDropAction() & COPY) == COPY;
