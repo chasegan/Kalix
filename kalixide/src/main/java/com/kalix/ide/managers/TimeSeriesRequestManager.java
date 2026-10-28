@@ -165,41 +165,28 @@ public class TimeSeriesRequestManager {
         // Create cache key using Kalixcli UID
         String cacheKey = kalixcliUid + ":" + seriesName;
 
-        // Check if already in cache or being processed
-        CompletableFuture<TimeSeriesData> existingRequest = cache.get(cacheKey);
-        if (existingRequest != null) {
-            return existingRequest;
-        }
-
-        // Check completed cache
         TimeSeriesData cachedData = completedCache.get(cacheKey);
         if (cachedData != null) {
             return CompletableFuture.completedFuture(cachedData);
         }
 
-        // Create new request. The timeout is a backstop for responses that never
-        // arrive (wedged CLI, message lost): without it the stuck entry makes the
-        // series permanently unfetchable for this session.
-        CompletableFuture<TimeSeriesData> future = new CompletableFuture<>();
-        future.orTimeout(REQUEST_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
-              .whenComplete((data, throwable) -> {
-                  if (throwable != null) {
-                      cache.remove(cacheKey, future);
-                  }
-              });
-        cache.put(cacheKey, future);
-
-        TimeSeriesRequest request = new TimeSeriesRequest(sessionKey, seriesName, future);
-
-        try {
-            requestQueue.put(request);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            future.completeExceptionally(e);
-            cache.remove(cacheKey);
-        }
-
-        return future;
+        // One request in flight per series. The engine's reply names the series, not
+        // the request, so two callers asking for the same series at once must share
+        // one future: the check and the insert are atomic, and only the caller that
+        // created the future sends the request. The timeout is a backstop for a reply
+        // that never arrives (wedged CLI, message lost): without it the stuck entry
+        // makes the series permanently unfetchable for this session.
+        return cache.computeIfAbsent(cacheKey, key -> {
+            CompletableFuture<TimeSeriesData> future = new CompletableFuture<>();
+            future.orTimeout(REQUEST_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+                  .whenComplete((data, throwable) -> {
+                      if (throwable != null) {
+                          cache.remove(key, future);
+                      }
+                  });
+            requestQueue.add(new TimeSeriesRequest(sessionKey, seriesName, future)); // unbounded: never fails
+            return future;
+        });
     }
 
     /**
