@@ -105,15 +105,19 @@ class TreeTransferHandler extends TransferHandler {
 
     /**
      * The dragged entries a drop into {@code targetDir} would act on, in drag order. Empty when
-     * the drop must be refused: a folder cannot be dropped into itself or a descendant, and an
-     * entry already in the target folder is skipped, unless {@code duplicateInPlace} (an in-tree
-     * copy, which duplicates it under a new name), so a drop that skips everything does nothing.
+     * the drop must be refused: a folder cannot be dropped into itself or a descendant. An
+     * entry already in the target folder is skipped, unless {@code duplicateInPlace}, an
+     * in-tree copy, which duplicates it under a new name. A filesystem root is skipped: it has
+     * no name to copy under. A drop that skips everything does nothing.
      */
     static List<File> actionable(List<File> dragged, File targetDir, boolean duplicateInPlace) {
         Path target = targetDir.toPath().toAbsolutePath().normalize();
         List<File> result = new ArrayList<>();
         for (File f : dragged) {
             Path p = f.toPath().toAbsolutePath().normalize();
+            if (p.getNameCount() == 0) {
+                continue;
+            }
             if (target.startsWith(p)) {
                 return List.of();
             }

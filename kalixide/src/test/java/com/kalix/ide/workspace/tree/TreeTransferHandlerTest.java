@@ -55,6 +55,15 @@ class TreeTransferHandlerTest {
     }
 
     @Test
+    void aFilesystemRootIsSkipped() {
+        // A volume dragged from "This PC" has no name; copying it "under its name" would land
+        // on the target folder itself.
+        File otherVolume = ROOT.toPath().getRoot().toFile();
+        List<File> dragged = List.of(otherVolume, file("a.csv"));
+        assertEquals(List.of("a.csv"), names(TreeTransferHandler.actionable(dragged, file("data"), false)));
+    }
+
+    @Test
     void dragOrderIsKept() {
         List<File> dragged = List.of(file("z.csv"), file("a.csv"), file("m"));
         assertEquals(List.of("z.csv", "a.csv", "m"),
