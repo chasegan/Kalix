@@ -496,12 +496,19 @@ class TreeFileOperations {
     }
 
     private Collision askCollision(List<String> taken, File targetDir) {
-        String message = (taken.size() == 1
-            ? "\"" + taken.get(0) + "\" already exists in \"" + targetDir.getName() + "\"."
-            : taken.size() + " items already exist in \"" + targetDir.getName() + "\":\n\n"
-                + String.join("\n", taken.subList(0, Math.min(taken.size(), 10)))
-                + (taken.size() > 10 ? "\n..." : ""))
-            + "\n\nReplace the existing items, or keep both?";
+        // Folders are marked, and the message says a folder is replaced whole: Explorer merges
+        // folders and Finder replaces them, so half the users would otherwise guess wrong.
+        List<String> shown = taken.stream()
+            .map(name -> new File(targetDir, name).isDirectory() ? name + "/" : name)
+            .toList();
+        boolean anyFolder = shown.stream().anyMatch(name -> name.endsWith("/"));
+        String message = (shown.size() == 1
+            ? "\"" + shown.get(0) + "\" already exists in \"" + targetDir.getName() + "\"."
+            : shown.size() + " items already exist in \"" + targetDir.getName() + "\":\n\n"
+                + String.join("\n", shown.subList(0, Math.min(shown.size(), 10)))
+                + (shown.size() > 10 ? "\n..." : ""))
+            + (anyFolder ? "\nA folder is replaced in full, not merged." : "")
+            + (shown.size() == 1 ? "\n\nReplace it, or keep both?" : "\n\nReplace them, or keep both?");
         Object[] options = {"Replace", "Keep both", "Cancel"};
         int choice = JOptionPane.showOptionDialog(parent, message, "Copy",
             JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[1]);
