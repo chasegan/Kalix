@@ -86,6 +86,26 @@ public abstract class AbstractSessionProgram {
     public abstract String getStateDescription();
 
     /**
+     * True for an {@code err} that names a command this program did not send. A fetch
+     * ({@code get_result}) can run on the session while the program is active, and the
+     * engine names the command it is failing or rejecting (ADR-0014 §3); that error is
+     * the fetch's to handle, and must not fail the run. An {@code err} naming no command
+     * (a malformed line) is still the program's to judge.
+     */
+    protected static boolean answersAnotherCommand(JsonMessage.SystemMessage message, String... ownCommands) {
+        String command = message.getCommand();
+        if (message.systemMessageType() != JsonStdioTypes.SystemMessageType.ERROR || command == null) {
+            return false;
+        }
+        for (String own : ownCommands) {
+            if (own.equals(command)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Common utility: Extract error message from a system message.
      * Uses the errorMessage field if available, falls back to taskType.
      *

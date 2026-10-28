@@ -95,7 +95,8 @@ public class OptimisationProgram extends AbstractSessionProgram {
     @Override
     public synchronized boolean handleMessage(JsonMessage.SystemMessage message) {
         JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
-        if (msgType == null) {
+        if (msgType == null || answersAnotherCommand(message,
+                "load_model_string", "get_optimisable_params", "run_optimisation")) {
             return false;
         }
 

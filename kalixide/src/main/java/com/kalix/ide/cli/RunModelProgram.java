@@ -68,7 +68,7 @@ public class RunModelProgram extends AbstractSessionProgram {
     @Override
     public synchronized boolean handleMessage(JsonMessage.SystemMessage message) {
         JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
-        if (msgType == null) {
+        if (msgType == null || answersAnotherCommand(message, "load_model_string", "run_simulation")) {
             return false;
         }
 
