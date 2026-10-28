@@ -13,6 +13,7 @@ import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -427,10 +428,14 @@ class TreeFileOperations {
         return choice == JOptionPane.YES_OPTION;
     }
 
-    /** Recursively copies {@code source} to {@code dest} (file or directory tree). */
+    /**
+     * Recursively copies {@code source} to {@code dest} (file or directory tree). Symlinks are
+     * followed, so the copy holds what the user sees: a link to a folder used to come across as
+     * an empty folder. A link cycle fails the copy with {@code FileSystemLoopException}.
+     */
     private static void copyRecursively(Path source, Path dest) throws IOException {
         List<Path> paths;
-        try (Stream<Path> walk = Files.walk(source)) {
+        try (Stream<Path> walk = Files.walk(source, FileVisitOption.FOLLOW_LINKS)) {
             paths = walk.collect(Collectors.toList());
         }
         // Files.walk yields parents before children, so directories are created before their
