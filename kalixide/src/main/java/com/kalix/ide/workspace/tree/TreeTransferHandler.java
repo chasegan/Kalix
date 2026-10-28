@@ -2,6 +2,7 @@ package com.kalix.ide.workspace.tree;
 
 import javax.swing.JComponent;
 import javax.swing.JTree;
+import javax.swing.SwingUtilities;
 import javax.swing.TransferHandler;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
@@ -102,7 +103,11 @@ class TreeTransferHandler extends TransferHandler {
             return false;
         }
         if (!internal) {
-            return fileOps.copyIn(actionable(dragged, targetDir, false), targetDir);
+            // Ask about taken names after the OS drop has completed: a prompt inside the drop
+            // callback holds the source application (Explorer in particular) until answered.
+            List<File> files = actionable(dragged, targetDir, false);
+            SwingUtilities.invokeLater(() -> fileOps.copyIn(files, targetDir));
+            return true;
         }
         boolean copy = (support.getDropAction() & COPY) == COPY;
         return fileOps.moveInto(actionable(dragged, targetDir, copy), targetDir, copy);
