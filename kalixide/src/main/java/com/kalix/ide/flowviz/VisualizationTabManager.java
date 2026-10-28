@@ -783,35 +783,35 @@ public class VisualizationTabManager {
      * Tells every tab that the pool changed; each page refreshes, or catches up when
      * shown.
      *
-     * @param resetZoom If true, plot-view tabs zoom to fit all data. If false, zoom is kept.
+     * @param resetZoom If true, every plot zooms to fit all data (a hidden one when shown).
+     *                  If false, zoom is kept.
      */
     public void updateAllTabs(boolean resetZoom) {
         for (TabInfo tab : tabs) {
-            tab.vizPanel.setStyleResolver(styleResolver);
-            tab.model().dataChanged(); // a shown plot rebuilds here
-            if (resetZoom && tab.viewMode == FlowVizView.PLOT) {
-                tab.vizPanel.fitToData();
-            }
+            updateTab(tab, resetZoom);
         }
     }
 
     /**
      * Tells the tab of {@code targetPanel} that the pool changed.
      *
-     * @param resetZoom If true, the plot zooms to fit all data. If false, zoom is kept.
+     * @param resetZoom If true, the plot zooms to fit all data (when shown, if hidden).
+     *                  If false, zoom is kept.
      */
     public void updateTab(FlowVizPanel targetPanel, boolean resetZoom) {
         for (TabInfo tab : tabs) {
             if (tab.vizPanel == targetPanel) {
-                tab.vizPanel.setStyleResolver(styleResolver);
-                tab.model().dataChanged(); // a shown plot rebuilds here
-                if (resetZoom && tab.viewMode == FlowVizView.PLOT) {
-                    tab.vizPanel.fitToData();
-                } else if (resetZoom) {
-                    tab.vizPanel.refreshData(true);
-                }
+                updateTab(tab, resetZoom);
                 return;
             }
+        }
+    }
+
+    private void updateTab(TabInfo tab, boolean resetZoom) {
+        tab.vizPanel.setStyleResolver(styleResolver);
+        tab.model().dataChanged(); // a shown plot rebuilds here
+        if (resetZoom) {
+            tab.vizPanel.fitToData(); // a hidden plot fits when shown
         }
     }
 
