@@ -228,38 +228,29 @@ public class ProcessExecutor {
         }
         
         /**
-         * Sends input to the process via STDIN (interactive mode only).
-         * 
-         * @param input the input to send
+         * Sends one line of input to the process via STDIN (interactive mode only).
+         *
+         * <p>One message is one write. The protocol is line-delimited JSON, and sends
+         * arrive here from several threads at once (a burst of {@code get_result}
+         * requests fans out across the executor pool), so the whole line, terminator
+         * included, goes to the writer in a single call under a single lock. Writing
+         * the text, the newline and the flush as separate calls let two senders
+         * interleave as {@code {A}{B}\n\n}, which the engine rejected as two malformed
+         * lines and the requests behind them were silently lost.
+         *
+         * <p>The terminator is {@code \n} on every platform: that is what the protocol
+         * specifies, and the engine accepts nothing else. {@link #cancel} is
+         * deliberately not under this lock, so a write stuck on a dead process can
+         * still be broken by closing the pipe.
+         *
+         * @param input the line to send; a trailing newline is added if absent
          * @throws IOException if the process is not interactive or writing fails
          */
-        public void sendInput(String input) throws IOException {
+        public synchronized void sendInput(String input) throws IOException {
             if (!interactive || stdinWriter == null) {
                 throw new IOException("Process is not in interactive mode");
             }
-            
-            stdinWriter.write(input);
-            if (!input.endsWith("\n")) {
-                stdinWriter.newLine();
-            }
-            stdinWriter.flush();
-        }
-        
-        /**
-         * Sends multiple lines of input to the process (interactive mode only).
-         * 
-         * @param lines the lines to send
-         * @throws IOException if the process is not interactive or writing fails
-         */
-        public void sendLines(List<String> lines) throws IOException {
-            if (!interactive || stdinWriter == null) {
-                throw new IOException("Process is not in interactive mode");
-            }
-            
-            for (String line : lines) {
-                stdinWriter.write(line);
-                stdinWriter.newLine();
-            }
+            stdinWriter.write(input.endsWith("\n") ? input : input + "\n");
             stdinWriter.flush();
         }
         
@@ -319,17 +310,6 @@ public class ProcessExecutor {
             }
             
             return stderrReader.ready();
-        }
-        
-        /**
-         * Closes the STDIN writer, signaling end of input to the process.
-         * 
-         * @throws IOException if closing fails
-         */
-        public void closeStdin() throws IOException {
-            if (interactive && stdinWriter != null) {
-                stdinWriter.close();
-            }
         }
         
         /**
