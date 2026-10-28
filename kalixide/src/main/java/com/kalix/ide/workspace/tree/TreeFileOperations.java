@@ -15,6 +15,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -513,22 +514,48 @@ class TreeFileOperations {
 
     /**
      * Copies one entry into {@code targetDir}. A taken name is resolved by {@code policy}:
-     * REPLACE deletes what is there first (a folder in full), KEEP_BOTH picks a free name.
+     * KEEP_BOTH picks a free name; REPLACE puts the copy in place of what is there, a folder
+     * in full. A replace is copied first, beside the target, and swapped in only once the copy
+     * has succeeded, so a source that cannot be read leaves the existing entry untouched. The
+     * source and the entry it would replace are compared by real path, so the same file reached
+     * through a symlink or an alias is never deleted to make room for itself.
      */
     static void copyInto(File source, File targetDir, Collision policy) throws IOException {
-        File dest = new File(targetDir, source.getName());
-        if (dest.exists()) {
-            if (policy == Collision.REPLACE) {
-                if (source.toPath().toAbsolutePath().normalize()
-                        .startsWith(dest.toPath().toAbsolutePath().normalize())) {
-                    throw new IOException("the folder it would replace contains it");
-                }
-                deleteOne(dest);
-            } else {
-                dest = new File(targetDir, generateDuplicateName(dest));
-            }
+        Path src = source.toPath();
+        Path dest = targetDir.toPath().resolve(source.getName());
+        if (!Files.exists(dest)) {
+            copyRecursively(src, dest);
+            return;
         }
-        copyRecursively(source.toPath(), dest.toPath());
+        if (policy == Collision.KEEP_BOTH) {
+            copyRecursively(src, targetDir.toPath().resolve(generateDuplicateName(dest.toFile())));
+            return;
+        }
+        Path realSrc = src.toRealPath();
+        Path realDest = dest.toRealPath();
+        if (realSrc.equals(realDest)) {
+            throw new IOException("it is the same file");
+        }
+        if (realSrc.startsWith(realDest)) {
+            throw new IOException("the folder it would replace contains it");
+        }
+        Path staged = targetDir.toPath().resolve(generateDuplicateName(dest.toFile()));
+        try {
+            copyRecursively(src, staged);
+        } catch (IOException ex) {
+            try {
+                deleteOne(staged.toFile());
+            } catch (IOException ignored) {
+                // The failed copy is what is reported; a leftover partial copy is visible in the tree.
+            }
+            throw ex;
+        }
+        if (Files.isDirectory(dest) || Files.isDirectory(staged)) {
+            deleteOne(dest.toFile());
+            Files.move(staged, dest);
+        } else {
+            Files.move(staged, dest, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     // --- Copy path ---
