@@ -425,18 +425,17 @@ public class VisualizationTabManager {
             tabInfo.defaultName = tabName;
         }
 
-        // One change: the initial state lands as a single rebuild and a single history
-        // entry, so a fresh tab starts with a one-entry history (no construction
-        // intermediates for undo to walk into).
-        model.replace(initial);
-        prefs.applyTo(vizPanel);
-
-        // Duplicating copies the source's full history (the batch above already pushed
-        // this tab's own initial entry, which the copy replaces). Done BEFORE the toolbar
-        // is built, which initialises its controls from the state.
-        if (historySource != null) {
+        // One change, one build. A fresh tab's initial state lands as a single rebuild and
+        // a single history entry (no construction intermediates for undo to walk into); a
+        // duplicate instead copies the source's full history and restores its current
+        // entry. Done BEFORE the toolbar is built, which initialises its controls from the
+        // state.
+        if (historySource != null && historySource.model().size() > 0) {
             vizPanel.copyHistoryFrom(historySource);
+        } else {
+            model.replace(initial);
         }
+        prefs.applyTo(vizPanel);
 
         // Undo and redo move the whole tab: the pages follow the model themselves, and
         // the window trees reproject when it is the active tab.
