@@ -188,7 +188,7 @@ enum StartOutcome {
 /// keeps the session resident between calls, so a burst of `get_result` fetches is
 /// drained one at a time from the ready branch — rather than a second fetch
 /// arriving while a worker still owns the session and being rejected by the
-/// busy-branch `other` arm ("Cannot process 'cmd' message while busy"). The wire
+/// busy branch ("Cannot process 'cmd' message while busy"). The wire
 /// sequence is identical either way (`bsy` → `res`/`err` → `rdy`); only the timing
 /// and the absence of a worker differ.
 fn start_command(
