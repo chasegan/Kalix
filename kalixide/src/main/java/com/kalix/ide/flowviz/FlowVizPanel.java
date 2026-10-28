@@ -649,11 +649,10 @@ public class FlowVizPanel extends JPanel {
                         repaint();
                     }
                     Cursor legendCursor = legendManager.getCursor(e.getX(), e.getY());
-                    if (legendCursor != null) {
-                        setCursor(legendCursor);
-                    } else {
-                        setCursor(Cursor.getDefaultCursor());
-                    }
+                    // Outside the Key, an axis shows which end a drag would move
+                    Cursor cursor = legendCursor != null ? legendCursor
+                        : plotInteractionManager.axisCursorAt(e.getPoint());
+                    setCursor(cursor != null ? cursor : Cursor.getDefaultCursor());
                 }
                 plotMouseHandler.mouseMoved(e);
             }
