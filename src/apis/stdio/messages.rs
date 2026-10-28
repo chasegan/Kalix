@@ -97,12 +97,20 @@ pub fn create_result_message(kalixcli_uid: String, command: String, exec_time_ms
     Message::new(MSG_RESULT, Some(kalixcli_uid), fields)
 }
 
-pub fn create_error_message(kalixcli_uid: String, command: Option<String>, message: String) -> Message {
+/// An `err` that answers a `cmd` carries the command's name as `cmd` and its
+/// parameters, exactly as received, as `p`. Replies are matched by content, not
+/// by position: the frontend sends ahead without waiting for `rdy`, so a
+/// reply that only said "get_result failed" could not be tied to the request
+/// it answers. Errors that answer no command (malformed input, a bad query)
+/// carry neither.
+pub fn create_error_message(kalixcli_uid: String, request: Option<(String, serde_json::Value)>, message: String) -> Message {
     let mut fields = serde_json::json!({
         "msg": message
     });
-    if let Some(cmd) = command {
-        fields.as_object_mut().unwrap().insert("cmd".to_string(), serde_json::Value::String(cmd));
+    if let Some((command, params)) = request {
+        let obj = fields.as_object_mut().unwrap();
+        obj.insert("cmd".to_string(), serde_json::Value::String(command));
+        obj.insert("p".to_string(), params);
     }
     Message::new(MSG_ERROR, Some(kalixcli_uid), fields)
 }
@@ -206,6 +214,24 @@ mod tests {
         assert_eq!(msg.fields["n"], 1000);
         assert_eq!(msg.fields["t"], "cal");
         assert_eq!(msg.fields["d"][0], 0.856);
+    }
+
+    #[test]
+    fn error_answering_a_command_echoes_its_name_and_parameters() {
+        let params = serde_json::json!({"series_name": "node.x.dsflow", "format": "pixie"});
+        let msg = create_error_message("uid".to_string(),
+            Some(("get_result".to_string(), params.clone())), "not found".to_string());
+        assert_eq!(msg.m, "err");
+        assert_eq!(msg.fields["cmd"], "get_result");
+        assert_eq!(msg.fields["p"], params);
+        assert_eq!(msg.fields["msg"], "not found");
+    }
+
+    #[test]
+    fn error_answering_no_command_carries_neither_cmd_nor_p() {
+        let msg = create_error_message("uid".to_string(), None, "Invalid message".to_string());
+        assert!(msg.fields.get("cmd").is_none());
+        assert!(msg.fields.get("p").is_none());
     }
 
     #[test]
