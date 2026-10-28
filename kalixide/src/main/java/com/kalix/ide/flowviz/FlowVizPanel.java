@@ -126,8 +126,12 @@ public class FlowVizPanel extends JPanel {
     // The tab's state and undo history live in the model; the panel draws them.
     private final FlowVizModel model;
     private boolean restoringState = false;  // Suppresses pushState() during restores
-    private boolean shown = true;            // A hidden page defers data refreshes...
+    private boolean shown = true;            // A hidden page defers rebuilds and fits...
     private boolean stale = false;           // ...and catches up when shown
+    private Fit pendingFit = Fit.NONE;       // The fit a hidden page owes, the widest asked for
+
+    /** A fit a hidden page owes, ordered by reach: a whole fit covers a Y fit. */
+    private enum Fit { NONE, Y, ALL }
 
     // Repaints this panel whenever the active palette is edited or switched, or a
     // series is moved to a different palette slot, so a palette-backed resolver's
@@ -207,16 +211,49 @@ public class FlowVizPanel extends JPanel {
     }
 
     /**
-     * Shows or hides the page. A hidden plot skips refreshes for new data and catches up
-     * when shown; changes of state still rebuild and fit at once, so the viewport is
-     * right whichever page made them.
+     * Shows or hides the page. A hidden plot does not rebuild or fit: it notes what it
+     * missed and catches up when shown, folding the fit it owed into the current history
+     * entry, so undo returns to the view the change produced.
      */
     public void setShown(boolean shown) {
         this.shown = shown;
-        if (shown && stale) {
+        if (!shown) {
+            return;
+        }
+        if (stale) {
             stale = false;
             refreshData(false);
         }
+        Fit fit = pendingFit;
+        pendingFit = Fit.NONE;
+        switch (fit) {
+            case ALL -> zoomToFit();
+            case Y -> fitYAxis();
+            case NONE -> {
+                return;
+            }
+        }
+        model.amendRecorded(s -> s.withViewport(currentViewport));
+    }
+
+    /** Rebuilds now when shown; a hidden page rebuilds when shown. */
+    private void rebuildOrDefer() {
+        if (shown) {
+            rebuildDisplayDataSet();
+        } else {
+            stale = true;
+        }
+    }
+
+    /** Notes a fit a hidden page owes; returns whether it was deferred. */
+    private boolean deferFit(Fit fit) {
+        if (shown) {
+            return false;
+        }
+        if (fit.compareTo(pendingFit) > 0) {
+            pendingFit = fit;
+        }
+        return true;
     }
 
     private FlowVizState state() {
@@ -609,12 +646,20 @@ public class FlowVizPanel extends JPanel {
         }
     }
     
+    /** Fits both axes to the data; a hidden page fits when shown. */
     public void zoomToFit() {
+        if (deferFit(Fit.ALL)) {
+            return;
+        }
         zoomToFitData();
         repaint();
     }
 
+    /** Fits Y to the data in the current X range; a hidden page fits when shown. */
     public void fitYAxis() {
+        if (deferFit(Fit.Y)) {
+            return;
+        }
         if (plotInteractionManager != null) {
             plotInteractionManager.fitYAxisToCurrentXRange();
         }
@@ -873,8 +918,11 @@ public class FlowVizPanel extends JPanel {
         repaint();
     }
 
-    /** Fits the view to the data already shown, if there is any; no rebuild. */
+    /** Fits the view to the data already shown, if there is any; no rebuild. A hidden page fits when shown. */
     public void fitToData() {
+        if (deferFit(Fit.ALL)) {
+            return;
+        }
         if (displayDataSet != null && !displayDataSet.isEmpty()) {
             zoomToFit();
         }
@@ -986,8 +1034,9 @@ public class FlowVizPanel extends JPanel {
      * plot-type change fits — and fold the fitted viewport into the entry being recorded.
      */
     private void applyReplaced(FlowVizState old) {
+        pendingFit = Fit.NONE; // a whole new state: only its own fit counts
         lastReferenceSeries = null;
-        rebuildDisplayDataSet();
+        rebuildOrDefer();
         if (xAxisTypeFor(old.getPlotType()) != xAxisTypeFor(state().getPlotType())) {
             zoomToFit();
         } else if (state().isAutoYMode()) {
@@ -1022,7 +1071,7 @@ public class FlowVizPanel extends JPanel {
             checkReferenceSeriesChange(); // a new reference re-fits Y on difference plots
         }
         if (seriesChanged || shapeChanged) {
-            rebuildDisplayDataSet();
+            rebuildOrDefer();
         }
 
         // If the X-axis domain changed, X zoom can't be preserved; otherwise auto-Y keeps
@@ -1052,6 +1101,7 @@ public class FlowVizPanel extends JPanel {
         boolean wasRestoring = restoringState;
         restoringState = true;
         viewportCoalesceTimer.stop();
+        pendingFit = Fit.NONE; // the snapshot's viewport wins over a fit owed while hidden
         try {
             if (now.getPlotType() != old.getPlotType()) {
                 lastReferenceSeries = null;
@@ -1118,7 +1168,7 @@ public class FlowVizPanel extends JPanel {
         // Check if reference changed
         if (!java.util.Objects.equals(lastReferenceSeries, newReference)) {
             // Reference series changed - need to recalculate
-            rebuildDisplayDataSet();
+            rebuildOrDefer();
 
             if (state().isAutoYMode()) {
                 fitYAxis();

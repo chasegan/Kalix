@@ -166,6 +166,19 @@ public class FlowVizModel {
         state = change.apply(state);
     }
 
+    /**
+     * As {@link #amend}, and the current history entry takes the change too when it is the
+     * current state: for what a change produced later, such as the fit a hidden plot owed
+     * until it was shown.
+     */
+    public void amendRecorded(UnaryOperator<FlowVizState> change) {
+        boolean recorded = currentIndex >= 0 && state.equals(history.get(currentIndex));
+        state = change.apply(state);
+        if (recorded) {
+            history.set(currentIndex, state);
+        }
+    }
+
     /** Called whenever the history changes (an entry recorded, undo, redo, copy). */
     public void setOnHistoryChanged(Runnable onHistoryChanged) {
         this.onHistoryChanged = onHistoryChanged;
