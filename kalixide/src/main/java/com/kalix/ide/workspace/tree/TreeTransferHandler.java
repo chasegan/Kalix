@@ -3,19 +3,27 @@ package com.kalix.ide.workspace.tree;
 import javax.swing.JComponent;
 import javax.swing.JTree;
 import javax.swing.TransferHandler;
+import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.io.File;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Drag-and-drop for the project tree.
  *
  * <p>As a drag <em>source</em> it exports the selected files/folders as a JVM-local
- * {@link TreeFileTransferable}. As a drop <em>target</em> it accepts such a drag onto a folder
- * node — or onto empty space, which targets the open root — and moves (or, when the user requests
- * COPY via a modifier key, copies) the dragged entries into that folder after a confirmation;
- * the filesystem watcher then reflects the result.
+ * {@link TreeFileTransferable}. As a drop <em>target</em> it accepts two kinds of drag onto a
+ * folder node, or onto empty space, which targets the open root:
+ * <ul>
+ *   <li>a drag from the tree itself moves the entries into that folder after a confirmation, or
+ *       copies them when the user holds the copy modifier;
+ *   <li>a drag from the operating system copies the files in. Always a copy: a target that
+ *       accepts a move entitles the source application to delete the originals afterwards, and
+ *       Windows Explorer does.
+ * </ul>
+ * The filesystem watcher then reflects the result.
  *
  * <p>The move/copy cursor and the no-drop cursor are rendered by the DnD subsystem itself, driven
  * by {@link #getSourceActions} and {@link #canImport} — nothing here sets the cursor.
@@ -51,36 +59,30 @@ class TreeTransferHandler extends TransferHandler {
 
     // --- Target ---
 
-    /**
-     * Determine if drop into folder is allowed.
-     *
-     * <p>Move into same folder is disallowed but copy into same folder is allowed and is
-     * considered a duplicate action.
-     */
     @Override
     public boolean canImport(TransferSupport support) {
-        if (!support.isDrop() || !support.isDataFlavorSupported(TreeFileTransferable.FLAVOR)) {
+        if (!support.isDrop()) {
             return false;
         }
-        boolean copy = (support.getDropAction() & COPY) == COPY;
+        boolean internal = support.isDataFlavorSupported(TreeFileTransferable.FLAVOR);
+        if (!internal && !support.isDataFlavorSupported(DataFlavor.javaFileListFlavor)) {
+            return false;
+        }
         File targetDir = targetDir(support);
-        List<File> dragged = draggedFiles(support);
-        if (targetDir == null || dragged == null || dragged.isEmpty()) {
+        if (targetDir == null) {
             return false;
         }
-        Path target = targetDir.toPath().toAbsolutePath().normalize();
-        boolean anyValid = false;
-        for (File f : dragged) {
-            Path p = f.toPath().toAbsolutePath().normalize();
-            if (target.startsWith(p)) {
-                return false; // dropping a folder into itself or one of its descendants
-            } else if (target.equals(p.getParent()) && copy) {
-                anyValid = true; // duplicate in same folder
-            } else if (!target.equals(p.getParent())) {
-                anyValid = true; // at least one entry would actually move (not a same-folder no-op)
-            }
+        if (!internal) {
+            support.setDropAction(COPY);
         }
-        return anyValid;
+        List<File> dragged = draggedFiles(support, internal);
+        if (dragged == null) {
+            // Some platforms hand over an external file list only at drop time; accept
+            // provisionally and let importData decide.
+            return !internal;
+        }
+        boolean duplicateInPlace = internal && (support.getDropAction() & COPY) == COPY;
+        return !actionable(dragged, targetDir, duplicateInPlace).isEmpty();
     }
 
     @Override
@@ -88,13 +90,38 @@ class TreeTransferHandler extends TransferHandler {
         if (!canImport(support)) {
             return false;
         }
+        boolean internal = support.isDataFlavorSupported(TreeFileTransferable.FLAVOR);
         File targetDir = targetDir(support);
-        List<File> dragged = draggedFiles(support);
-        if (targetDir == null || dragged == null || dragged.isEmpty()) {
+        List<File> dragged = draggedFiles(support, internal);
+        if (targetDir == null || dragged == null) {
             return false;
         }
+        if (!internal) {
+            return fileOps.copyIn(actionable(dragged, targetDir, false), targetDir);
+        }
         boolean copy = (support.getDropAction() & COPY) == COPY;
-        return fileOps.moveInto(dragged, targetDir, copy);
+        return fileOps.moveInto(actionable(dragged, targetDir, copy), targetDir, copy);
+    }
+
+    /**
+     * The dragged entries a drop into {@code targetDir} would act on, in drag order. Empty when
+     * the drop must be refused: a folder cannot be dropped into itself or a descendant, and an
+     * entry already in the target folder is skipped, unless {@code duplicateInPlace} (an in-tree
+     * copy, which duplicates it under a new name), so a drop that skips everything does nothing.
+     */
+    static List<File> actionable(List<File> dragged, File targetDir, boolean duplicateInPlace) {
+        Path target = targetDir.toPath().toAbsolutePath().normalize();
+        List<File> result = new ArrayList<>();
+        for (File f : dragged) {
+            Path p = f.toPath().toAbsolutePath().normalize();
+            if (target.startsWith(p)) {
+                return List.of();
+            }
+            if (duplicateInPlace || !target.equals(p.getParent())) {
+                result.add(f);
+            }
+        }
+        return result;
     }
 
     /**
@@ -111,10 +138,12 @@ class TreeTransferHandler extends TransferHandler {
         return tree.getRootFile(); // empty space -> the open folder
     }
 
+    /** The dragged files, or null when the transferable cannot supply them yet. */
     @SuppressWarnings("unchecked")
-    private List<File> draggedFiles(TransferSupport support) {
+    private static List<File> draggedFiles(TransferSupport support, boolean internal) {
+        DataFlavor flavor = internal ? TreeFileTransferable.FLAVOR : DataFlavor.javaFileListFlavor;
         try {
-            return (List<File>) support.getTransferable().getTransferData(TreeFileTransferable.FLAVOR);
+            return (List<File>) support.getTransferable().getTransferData(flavor);
         } catch (Exception ex) {
             return null;
         }
