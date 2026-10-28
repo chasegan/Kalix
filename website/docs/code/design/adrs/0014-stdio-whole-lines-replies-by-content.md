@@ -59,14 +59,17 @@ can say what it is for.
    time. Commands that cannot be interrupted (`get_result`, `load_model_*`)
    run inline on the session thread, so a burst drains in order; those that
    can (`run_simulation`, optimisation) run on a worker so `stp`, `query`
-   and `term` are serviced meanwhile.
+   and `term` are serviced meanwhile. A command arriving while a worker owns
+   the session is not queued but rejected, with an `err` that names it.
 3. **Replies are matched by content, never by position.** A `res` names its
-   command and its result names what it carries (`r.series_name`). An `err`
-   that answers a command carries `cmd` and the request's parameters as
-   `p`, exactly as sent, whether the command failed, was unknown, or was
+   command, and a `get_result` result names its series (`r.series_name`).
+   An `err` that answers a command carries `cmd` and the request's
+   parameters as `p`, whether the command failed, was unknown, or was
    rejected while busy. An error that answers no command, a malformed line
    or a bad query, carries neither. Send order across IDE threads is not
-   guaranteed, so nothing else could identify the request.
+   guaranteed, so nothing else could identify the request. The rule binds
+   the receiver too: a program driving a run on a session claims only the
+   errors that name its own commands.
 
 Option 2 adds a thread per session with its own lifecycle, for a FIFO order
 no caller depends on. Option 3 turns a burst of *n* fetches into *n* round
@@ -78,8 +81,9 @@ that only `err` had; `res` already names its content.
 
 - ✅ The write fix is one method; nothing new to start, stop or order at
   shutdown.
-- ✅ A failed fetch fails at once. The 60 second timeout remains as the
-  backstop for an engine that never answers.
+- ✅ A failed fetch fails at once against an engine with the echo. The 60
+  second timeout remains as the backstop for an engine that never answers,
+  or an older one that answers without `p`.
 - ❌ `p` echoes the request in full, so a model that fails to load comes
   back in its own `err`. Accepted: it is bounded by what the sender just
   wrote, and one rule with no exceptions beats a per-command one.

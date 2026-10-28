@@ -98,7 +98,7 @@ pub fn create_result_message(kalixcli_uid: String, command: String, exec_time_ms
 }
 
 /// An `err` that answers a `cmd` carries the command's name as `cmd` and its
-/// parameters, exactly as received, as `p`. Replies are matched by content, not
+/// parameters, as received, as `p`. Replies are matched by content, not
 /// by position: the frontend sends ahead without waiting for `rdy`, so a
 /// reply that only said "get_result failed" could not be tied to the request
 /// it answers. Errors that answer no command (malformed input, a bad query)
