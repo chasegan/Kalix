@@ -253,10 +253,15 @@ public class PlotInteractionManager {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
-                    // Double-click: reset zoom to fit all data
+                    // Double-click: reset zoom to fit all data, or on an axis fit just that axis
                     Rectangle plotArea = plotAreaSupplier.get();
                     if (plotArea.contains(e.getPoint())) {
                         zoomToFit();
+                    } else {
+                        AxisHandle handle = axisHandleAt(e.getPoint());
+                        if (handle != null) {
+                            fitAxis(handle);
+                        }
                     }
                 }
             }
@@ -442,6 +447,39 @@ public class PlotInteractionManager {
     }
 
     /**
+     * Fits one axis to its data, leaving the others and the auto-Y mode alone: a one-off
+     * fit, as auto-Y would give that axis now. X fits the whole time span and then obeys
+     * auto-Y like any other X-only change; Y and Y2 fit their own series over the time
+     * window shown.
+     */
+    private void fitAxis(AxisHandle handle) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) {
+            return;
+        }
+        switch (handle) {
+            case X_START, X_END -> {
+                long[] timeRange = parentComponent instanceof FlowVizPanel vizPanel ? vizPanel.fittedTimeRange() : null;
+                if (timeRange != null) {
+                    applyXLimits(timeRange[0], timeRange[1]);
+                }
+            }
+            case Y_MIN, Y_MAX -> {
+                double[] y = fittedRangeForAxis(false);
+                if (y != null) {
+                    acceptNewAxes(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
+                }
+            }
+            case Y2_MIN, Y2_MAX -> {
+                double[] y2 = fittedRangeForAxis(true);
+                if (y2 != null) {
+                    acceptY2Bounds(y2[0], y2[1]);
+                }
+            }
+        }
+    }
+
+    /**
      * Supplies the panel's auto-Y mode, which decides whether X-only navigation refits
      * Y. Read on every use rather than mirrored, so undo/redo and every other path that
      * changes the mode on the panel are seen here without any synchronisation.
@@ -471,12 +509,13 @@ public class PlotInteractionManager {
     double[] fittedRangeForAxis(boolean rightAxis) {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return null;
-        return fittedRangeForAxis(rightAxis, currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs());
+        return fittedRangeForAxis(rightAxis, currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(),
+            currentViewport.getYAxisScale());
     }
 
-    /** As {@link #fittedRangeForAxis(boolean)}, over {@code [startTime, endTime]}. */
-    double[] fittedRangeForAxis(boolean rightAxis, long startTime, long endTime) {
-        return calculateVisibleYRange(startTime, endTime, ref -> onRightAxis.test(ref) == rightAxis);
+    /** As {@link #fittedRangeForAxis(boolean)}, over {@code [startTime, endTime]} on {@code scale}. */
+    double[] fittedRangeForAxis(boolean rightAxis, long startTime, long endTime, YAxisScale scale) {
+        return calculateVisibleYRange(startTime, endTime, scale, ref -> onRightAxis.test(ref) == rightAxis);
     }
 
     /**
@@ -503,20 +542,21 @@ public class PlotInteractionManager {
 
         // Fit each axis to its own series in the time range. An axis with nothing showable
         // there keeps its range: a stock default can be off the scale (-1 on LOG).
-        double[] yRange = fittedRangeForAxis(false, startTime, endTime);
+        YAxisScale scale = currentViewport.getYAxisScale();
+        double[] yRange = fittedRangeForAxis(false, startTime, endTime, scale);
         if (yRange == null) {
             yRange = new double[]{currentViewport.getMinValue(), currentViewport.getMaxValue()};
         }
 
-        // Create new viewport (preserve XAxisType for exceedance plots)
+        // Built from the current view: the X axis type (exceedance plots) and y2 carry over
         Rectangle plotArea = plotAreaSupplier.get();
-        ViewPort newViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
-                                          plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                          currentViewport.getYAxisScale(), currentViewport.getXAxisType());
+        ViewPort newViewport = currentViewport.withTimeRange(startTime, endTime).withValueBounds(yRange[0], yRange[1])
+            .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
         if (currentViewport.hasY2()) {
-            double[] y2Range = fittedRangeForAxis(true, startTime, endTime);
-            newViewport = y2Range != null ? newViewport.withY2Bounds(y2Range[0], y2Range[1])
-                : newViewport.withY2Bounds(currentViewport.getY2MinValue(), currentViewport.getY2MaxValue());
+            double[] y2Range = fittedRangeForAxis(true, startTime, endTime, scale);
+            if (y2Range != null) {
+                newViewport = newViewport.withY2Bounds(y2Range[0], y2Range[1]);
+            }
         }
         viewportUpdater.accept(newViewport);
     }
@@ -740,22 +780,18 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Calculates the visible Y range of the series {@code include} accepts, for a given
-     * time range (used in auto-Y mode and zoom to fit). Null when none of them has a
-     * showable value there.
+     * Calculates the visible Y range on {@code yAxisScale} of the series {@code include}
+     * accepts, for a given time range (used in auto-Y mode and zoom to fit). Null when none
+     * of them has a showable value there.
      */
-    private double[] calculateVisibleYRange(long startTime, long endTime,
-                                            Predicate<com.kalix.ide.flowviz.data.SeriesRef> include) {
+    private double[] calculateVisibleYRange(long startTime, long endTime, YAxisScale yAxisScale,
+                                            Predicate<SeriesRef> include) {
         DataSet dataSet = dataSetSupplier.get();
         List<com.kalix.ide.flowviz.data.SeriesRef> visibleSeries = visibleSeriesSupplier.get();
 
         if (dataSet == null || dataSet.isEmpty() || visibleSeries.isEmpty()) {
             return null;
         }
-
-        // Get current scale to filter invalid values
-        ViewPort currentViewport = viewportSupplier.get();
-        YAxisScale yAxisScale = currentViewport != null ? currentViewport.getYAxisScale() : YAxisScale.LINEAR;
 
         // Values at or below the scale's domain floor have no position on the axis (LOG:
         // y <= 0). The scale owns the rule; resolved once here so the per-point check in
@@ -779,6 +815,19 @@ public class PlotInteractionManager {
             double[] values = series.getValues();
             boolean[] validPoints = series.getValidPoints();
             var range = series.getIndexRange(startTime, endTime);
+
+            // The whole series in range (zoom to fit, a zoomed-out view): its cached extent
+            // is the answer when all of it is showable, so no scan
+            Double seriesMin = series.getMinValue();
+            Double seriesMax = series.getMaxValue();
+            if (range.startIndex == 0 && range.endIndex == series.getPointCount()
+                    && seriesMin != null && seriesMax != null && seriesMin > domainFloor
+                    && !Double.isNaN(seriesMax)) {
+                minValue = Math.min(minValue, seriesMin);
+                maxValue = Math.max(maxValue, seriesMax);
+                hasValidData = true;
+                continue;
+            }
 
             for (int i = range.startIndex; i < range.endIndex; i++) {
                 if (!validPoints[i]) continue;

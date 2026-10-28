@@ -79,6 +79,18 @@ class FlowVizPanelRightAxisTest {
     }
 
     @Test
+    void zoomToFitGivesALeftAxisWithNoSeriesTheRightAxisRange() {
+        panel.setSeriesOnRightAxis(small, true);
+        panel.setSeriesOnRightAxis(large, true);
+        panel.setSeriesOnRightAxis(larger, true);
+
+        panel.zoomToFit();
+
+        assertEquals(view().getY2MinValue(), view().getMinValue(), "an empty axis takes the other's range");
+        assertEquals(view().getY2MaxValue(), view().getMaxValue());
+    }
+
+    @Test
     void laterMovesDoNotResetTheRightAxis() {
         panel.setSeriesOnRightAxis(large, true);
         double y2Min = view().getY2MinValue();
