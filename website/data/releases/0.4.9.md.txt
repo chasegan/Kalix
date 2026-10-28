@@ -17,3 +17,4 @@ pip: "pip install kalix==0.4.9"
     - A Pixie file holding an empty series can now be read back in the engine and the IDE; its `.pxt` used to hold an invalid start and end.
     - Python: `read_pixie()` returns an empty series as a column of NaN on the other series' timestamps. Series with values on different timesteps are still refused.
     - Python: `set_input()` now raises `ModelValidationError` for data with no rows or one row. Previously it assumed a daily timestep for a single row, and raised `ValueError` for no rows.
+- IDE: files dragged from Finder or Explorer onto the project tree are copied into the folder they land on. If a name is already taken, you're asked to replace it or keep both (#469).

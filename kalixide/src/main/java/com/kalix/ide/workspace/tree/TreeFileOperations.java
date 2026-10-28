@@ -13,8 +13,11 @@ import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -25,13 +28,15 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * The side-effecting file operations behind the project tree's context menu and keyboard
- * shortcuts: reveal-in-OS, create, rename, delete, and copy-path (full / relative / trailhead).
+ * The side-effecting file operations behind the project tree's context menu, keyboard
+ * shortcuts and drag-and-drop: reveal-in-OS, open-terminal, create, rename, duplicate, delete,
+ * move and copy into a folder (from the tree or the operating system), copy-path (full /
+ * relative / trailhead), zip, and unzip.
  *
  * <p>Kept separate from {@link ProjectTree} so the tree component stays focused on view, model,
- * and event wiring. Operations are selection-aware where it makes sense (copy and delete accept
- * a list); the tree's filesystem watcher reflects create/rename/delete back into the model, so
- * none of these methods touch the tree model directly.
+ * and event wiring. Operations are selection-aware where it makes sense (most take a list);
+ * the tree's filesystem watcher reflects create/rename/delete back into the model, so none of
+ * these methods touch the tree model directly.
  *
  * <p>All methods are invoked on the EDT (from menu/key handlers). Prompts and confirmations
  * happen synchronously there, but the bulk file I/O — recursive copy/delete/move, zip, unzip —
@@ -233,7 +238,7 @@ class TreeFileOperations {
      * Generates a default duplicate name using the pattern "name (1).ext". If that name already
      * exists, tries "name (2).ext", "name (3).ext", etc., until finding an available name.
      */
-    private String generateDuplicateName(File file) {
+    private static String generateDuplicateName(File file) {
         String fileName = file.getName();
         if (!file.exists()) { return fileName; }
         File parentDir = file.getParentFile();
@@ -320,14 +325,26 @@ class TreeFileOperations {
             // Delete depth-first (children before parents). Files.delete throws on
             // failure, so a locked/read-only entry surfaces as an error rather than a
             // silently half-deleted folder.
-            try (Stream<Path> walk = Files.walk(file.toPath())) {
-                List<Path> paths = walk.sorted(Comparator.reverseOrder()).collect(Collectors.toList());
-                for (Path path : paths) {
-                    Files.delete(path);
-                }
+            List<Path> paths = walk(file.toPath());
+            paths.sort(Comparator.reverseOrder());
+            for (Path path : paths) {
+                Files.delete(path);
             }
         } else {
             Files.delete(file.toPath());
+        }
+    }
+
+    /**
+     * Every path under {@code start}, parents before children. A traversal failure (an
+     * unreadable subfolder, say) comes out of {@code Files.walk} unchecked; here it is the
+     * {@code IOException} it is, so a caller's per-entry handling sees it.
+     */
+    private static List<Path> walk(Path start, FileVisitOption... options) throws IOException {
+        try (Stream<Path> stream = Files.walk(start, options)) {
+            return stream.collect(Collectors.toCollection(ArrayList::new));
+        } catch (UncheckedIOException ex) {
+            throw ex.getCause();
         }
     }
 
@@ -390,13 +407,7 @@ class TreeFileOperations {
                 }
                 try {
                     if (copy) {
-                        if (dest.exists()) {
-                            String targetName = generateDuplicateName(dest);
-                            File duplicateDestination = new File(dest.getParentFile(), targetName.trim());
-                            copyRecursively(source.toPath(), duplicateDestination.toPath());
-                        } else {
-                            copyRecursively(source.toPath(), dest.toPath());
-                        }
+                        copyInto(source, targetDir, Collision.KEEP_BOTH);
                     } else {
                         Files.move(source.toPath(), dest.toPath());
                         moved.add(new File[] {source, dest});
@@ -430,12 +441,13 @@ class TreeFileOperations {
         return choice == JOptionPane.YES_OPTION;
     }
 
-    /** Recursively copies {@code source} to {@code dest} (file or directory tree). */
+    /**
+     * Recursively copies {@code source} to {@code dest} (file or directory tree). Symlinks are
+     * followed, so the copy holds what the user sees: a link to a folder used to come across as
+     * an empty folder. A link cycle fails the copy with {@code FileSystemLoopException}.
+     */
     private static void copyRecursively(Path source, Path dest) throws IOException {
-        List<Path> paths;
-        try (Stream<Path> walk = Files.walk(source)) {
-            paths = walk.collect(Collectors.toList());
-        }
+        List<Path> paths = walk(source, FileVisitOption.FOLLOW_LINKS);
         // Files.walk yields parents before children, so directories are created before their
         // contents are copied into them.
         for (Path p : paths) {
@@ -447,6 +459,132 @@ class TreeFileOperations {
                 Files.copy(p, target);
             }
         }
+    }
+
+    // --- Copy in from outside the tree (drag-and-drop from the operating system) ---
+
+    /** What to do with a dropped entry whose name is already taken in the target folder. */
+    enum Collision { REPLACE, KEEP_BOTH, CANCEL }
+
+    /**
+     * Copies files dropped from outside the IDE into {@code targetDir}. Always a copy: the
+     * originals are never touched. Names already taken in the target are put to the user once,
+     * for all of them: replace what is there, keep both (the copy gets a "name (1)" style name),
+     * or cancel the whole drop. The copy runs off the EDT and the watcher adds the rows.
+     *
+     * @return true if the copy was started, false if cancelled or there was nothing to do
+     */
+    boolean copyIn(List<File> files, File targetDir) {
+        List<File> sources = withoutDescendants(files);
+        if (sources.isEmpty()) {
+            return false;
+        }
+        List<String> taken = sources.stream()
+            .map(File::getName)
+            .filter(name -> new File(targetDir, name).exists())
+            .toList();
+        Collision policy = taken.isEmpty() ? Collision.KEEP_BOTH : askCollision(taken, targetDir);
+        if (policy == Collision.CANCEL) {
+            return false;
+        }
+        List<String> failures = new ArrayList<>();
+        offEdt(() -> {
+            for (File source : sources) {
+                try {
+                    copyInto(source, targetDir, policy);
+                } catch (IOException ex) {
+                    failures.add(source.getName() + " (" + ex.getMessage() + ")");
+                }
+            }
+        }, error -> {
+            if (!failures.isEmpty()) {
+                JOptionPane.showMessageDialog(parent,
+                    "Some items could not be copied:\n\n" + String.join("\n", failures),
+                    "Copy", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+        return true;
+    }
+
+    private Collision askCollision(List<String> taken, File targetDir) {
+        // Folders are marked, and the message says a folder is replaced in full: Explorer merges
+        // folders and Finder replaces them, so half the users would otherwise guess wrong.
+        List<String> shown = taken.stream()
+            .map(name -> new File(targetDir, name).isDirectory() ? name + "/" : name)
+            .toList();
+        boolean anyFolder = shown.stream().anyMatch(name -> name.endsWith("/"));
+        String message = (shown.size() == 1
+            ? "\"" + shown.get(0) + "\" already exists in \"" + targetDir.getName() + "\"."
+            : shown.size() + " items already exist in \"" + targetDir.getName() + "\":\n\n"
+                + String.join("\n", shown.subList(0, Math.min(shown.size(), 10)))
+                + (shown.size() > 10 ? "\n..." : ""))
+            + (anyFolder ? "\n\nA folder is replaced in full, not merged." : "")
+            + (shown.size() == 1 ? "\n\nReplace it, or keep both?" : "\n\nReplace them, or keep both?");
+        Object[] options = {"Replace", "Keep both", "Cancel"};
+        int choice = JOptionPane.showOptionDialog(parent, message, "Copy",
+            JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[1]);
+        return switch (choice) {
+            case 0 -> Collision.REPLACE;
+            case 1 -> Collision.KEEP_BOTH;
+            default -> Collision.CANCEL;
+        };
+    }
+
+    /**
+     * Copies one entry into {@code targetDir}. A taken name is resolved by {@code policy}:
+     * KEEP_BOTH picks a free name; REPLACE puts the copy in place of what is there, a folder
+     * in full. A replace is copied first, into a staging folder beside the target, and swapped
+     * in only once the copy has succeeded, so a source that cannot be read leaves the existing
+     * entry untouched. The source and the entry it would replace are compared by real path, so
+     * the same file reached through a symlink is never deleted to make room for itself, and
+     * a folder that contains the source is never replaced.
+     */
+    static void copyInto(File source, File targetDir, Collision policy) throws IOException {
+        Path src = source.toPath();
+        Path dest = targetDir.toPath().resolve(source.getName());
+        if (!Files.exists(dest)) {
+            copyRecursively(src, dest);
+            return;
+        }
+        if (policy == Collision.KEEP_BOTH) {
+            copyRecursively(src, targetDir.toPath().resolve(generateDuplicateName(dest.toFile())));
+            return;
+        }
+        Path realSrc = src.toRealPath();
+        Path realDest = dest.toRealPath();
+        if (realSrc.equals(realDest)) {
+            throw new IOException("it is the same file");
+        }
+        if (realSrc.startsWith(realDest)) {
+            throw new IOException("the folder it would replace contains it");
+        }
+        // Staged in a folder nothing else can be using, so a second drop of the same name,
+        // or a user's own "name (1)", cannot collide with a copy in progress.
+        Path stagingDir = Files.createTempDirectory(targetDir.toPath(), source.getName() + ".copying.");
+        Path staged = stagingDir.resolve(source.getName());
+        try {
+            copyRecursively(src, staged);
+        } catch (IOException ex) {
+            try {
+                deleteOne(stagingDir.toFile());
+            } catch (IOException ignored) {
+                // The copy failure is what gets reported; if this clean-up fails too, the
+                // leftover shows in the tree.
+            }
+            throw ex;
+        }
+        try {
+            if (Files.isDirectory(dest) || Files.isDirectory(staged)) {
+                deleteOne(dest.toFile());
+                Files.move(staged, dest);
+            } else {
+                Files.move(staged, dest, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException ex) {
+            throw new IOException("could not be put in place: " + ex.getMessage()
+                + "; the complete copy is in \"" + stagingDir.getFileName() + "\"", ex);
+        }
+        Files.delete(stagingDir);
     }
 
     // --- Copy path ---
