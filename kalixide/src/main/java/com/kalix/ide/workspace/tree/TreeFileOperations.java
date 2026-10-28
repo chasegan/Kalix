@@ -233,7 +233,7 @@ class TreeFileOperations {
      * Generates a default duplicate name using the pattern "name (1).ext". If that name already
      * exists, tries "name (2).ext", "name (3).ext", etc., until finding an available name.
      */
-    private String generateDuplicateName(File file) {
+    private static String generateDuplicateName(File file) {
         String fileName = file.getName();
         if (!file.exists()) { return fileName; }
         File parentDir = file.getParentFile();
@@ -447,6 +447,88 @@ class TreeFileOperations {
                 Files.copy(p, target);
             }
         }
+    }
+
+    // --- Copy in from outside the tree (drag-and-drop from the operating system) ---
+
+    /** What to do with a dropped entry whose name is already taken in the target folder. */
+    enum Collision { REPLACE, KEEP_BOTH, CANCEL }
+
+    /**
+     * Copies files dropped from outside the IDE into {@code targetDir}. Always a copy: the
+     * originals are never touched. Names already taken in the target are put to the user once,
+     * for all of them: replace what is there, keep both (the copy gets a "name (1)" style name),
+     * or cancel the whole drop. The copy runs off the EDT and the watcher adds the rows.
+     *
+     * @return true if the copy was started, false if cancelled or there was nothing to do
+     */
+    boolean copyIn(List<File> files, File targetDir) {
+        List<File> sources = withoutDescendants(files);
+        if (sources.isEmpty()) {
+            return false;
+        }
+        List<String> taken = sources.stream()
+            .map(File::getName)
+            .filter(name -> new File(targetDir, name).exists())
+            .toList();
+        Collision policy = taken.isEmpty() ? Collision.KEEP_BOTH : askCollision(taken, targetDir);
+        if (policy == Collision.CANCEL) {
+            return false;
+        }
+        List<String> failures = new ArrayList<>();
+        offEdt(() -> {
+            for (File source : sources) {
+                try {
+                    copyInto(source, targetDir, policy);
+                } catch (IOException ex) {
+                    failures.add(source.getName() + " (" + ex.getMessage() + ")");
+                }
+            }
+        }, error -> {
+            if (!failures.isEmpty()) {
+                JOptionPane.showMessageDialog(parent,
+                    "Some items could not be copied:\n\n" + String.join("\n", failures),
+                    "Copy", JOptionPane.WARNING_MESSAGE);
+            }
+        });
+        return true;
+    }
+
+    private Collision askCollision(List<String> taken, File targetDir) {
+        String message = (taken.size() == 1
+            ? "\"" + taken.get(0) + "\" already exists in \"" + targetDir.getName() + "\"."
+            : taken.size() + " items already exist in \"" + targetDir.getName() + "\":\n\n"
+                + String.join("\n", taken.subList(0, Math.min(taken.size(), 10)))
+                + (taken.size() > 10 ? "\n..." : ""))
+            + "\n\nReplace the existing items, or keep both?";
+        Object[] options = {"Replace", "Keep both", "Cancel"};
+        int choice = JOptionPane.showOptionDialog(parent, message, "Copy",
+            JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[1]);
+        return switch (choice) {
+            case 0 -> Collision.REPLACE;
+            case 1 -> Collision.KEEP_BOTH;
+            default -> Collision.CANCEL;
+        };
+    }
+
+    /**
+     * Copies one entry into {@code targetDir}. A taken name is resolved by {@code policy}:
+     * REPLACE deletes what is there first (a folder in full), KEEP_BOTH picks a free name.
+     */
+    static void copyInto(File source, File targetDir, Collision policy) throws IOException {
+        File dest = new File(targetDir, source.getName());
+        if (dest.exists()) {
+            if (policy == Collision.REPLACE) {
+                if (source.toPath().toAbsolutePath().normalize()
+                        .startsWith(dest.toPath().toAbsolutePath().normalize())) {
+                    throw new IOException("the folder it would replace contains it");
+                }
+                deleteOne(dest);
+            } else {
+                dest = new File(targetDir, generateDuplicateName(dest));
+            }
+        }
+        copyRecursively(source.toPath(), dest.toPath());
     }
 
     // --- Copy path ---
