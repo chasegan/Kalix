@@ -81,10 +81,11 @@ class TreeTransferHandler extends TransferHandler {
         }
         List<File> dragged = draggedFiles(support, internal);
         if (dragged == null) {
-            // The file list is not readable before the drop is accepted: the canImport Swing
-            // runs at drop time, before acceptDrop, always lands here, and so does every
-            // dragOver on Linux (XDnD). Accept provisionally; importData re-runs canImport
-            // after acceptDrop, with the list, and that decides.
+            // An OS file list is not readable before the drop is accepted: the canImport that
+            // Swing runs at drop time, before acceptDrop, lands here for every OS drag, and so
+            // may a dragOver on Linux, where an XDnD source need not serve the data until the
+            // drop. Accept provisionally; importData re-runs canImport after acceptDrop, with
+            // the list, and that decides.
             return !internal;
         }
         boolean duplicateInPlace = internal && (support.getDropAction() & COPY) == COPY;

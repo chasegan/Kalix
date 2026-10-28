@@ -30,13 +30,13 @@ import java.util.stream.Stream;
 /**
  * The side-effecting file operations behind the project tree's context menu, keyboard
  * shortcuts and drag-and-drop: reveal-in-OS, open-terminal, create, rename, duplicate, delete,
- * move and copy into a folder (from the tree or the operating system), zip, unzip, and
- * copy-path (full / relative / trailhead).
+ * move and copy into a folder (from the tree or the operating system), copy-path (full /
+ * relative / trailhead), zip, and unzip.
  *
  * <p>Kept separate from {@link ProjectTree} so the tree component stays focused on view, model,
- * and event wiring. Operations are selection-aware where it makes sense (copy and delete accept
- * a list); the tree's filesystem watcher reflects create/rename/delete back into the model, so
- * none of these methods touch the tree model directly.
+ * and event wiring. Operations are selection-aware where it makes sense (most take a list);
+ * the tree's filesystem watcher reflects create/rename/delete back into the model, so none of
+ * these methods touch the tree model directly.
  *
  * <p>All methods are invoked on the EDT (from menu/key handlers). Prompts and confirmations
  * happen synchronously there, but the bulk file I/O — recursive copy/delete/move, zip, unzip —
@@ -507,7 +507,7 @@ class TreeFileOperations {
     }
 
     private Collision askCollision(List<String> taken, File targetDir) {
-        // Folders are marked, and the message says a folder is replaced whole: Explorer merges
+        // Folders are marked, and the message says a folder is replaced in full: Explorer merges
         // folders and Finder replaces them, so half the users would otherwise guess wrong.
         List<String> shown = taken.stream()
             .map(name -> new File(targetDir, name).isDirectory() ? name + "/" : name)
@@ -518,7 +518,7 @@ class TreeFileOperations {
             : shown.size() + " items already exist in \"" + targetDir.getName() + "\":\n\n"
                 + String.join("\n", shown.subList(0, Math.min(shown.size(), 10)))
                 + (shown.size() > 10 ? "\n..." : ""))
-            + (anyFolder ? "\nA folder is replaced in full, not merged." : "")
+            + (anyFolder ? "\n\nA folder is replaced in full, not merged." : "")
             + (shown.size() == 1 ? "\n\nReplace it, or keep both?" : "\n\nReplace them, or keep both?");
         Object[] options = {"Replace", "Keep both", "Cancel"};
         int choice = JOptionPane.showOptionDialog(parent, message, "Copy",
