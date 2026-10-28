@@ -29,6 +29,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -52,9 +53,9 @@ public final class DataVizPanel extends JPanel {
     private boolean shown;
     private boolean dirty = true;
     // What the current grid was built from: an unchanged display set and headers keep
-    // the grid, so the table's selection and a running Find survive refreshes that
-    // change nothing. Headers are compared, not assumed: a rename changes the labels
-    // under an unchanged display set.
+    // the grid, so a running Find survives refreshes that change nothing (new data
+    // restarts it; the selection and column widths are carried over). Headers are
+    // compared, not assumed: a rename changes the labels under an unchanged display set.
     private DataSet gridDisplay;
     private PlotType gridPlotType;
     private List<String> gridHeaders;
@@ -213,7 +214,41 @@ public final class DataVizPanel extends JPanel {
         gridDisplay = display;
         gridPlotType = plotType;
         gridHeaders = headers;
+        List<int[]> rows = intervals(table.getSelectionModel());
+        List<int[]> columns = intervals(table.getColumnModel().getSelectionModel());
         tableModel.setGrid(DataGrid.of(display, plotType, labelResolver));
+        // New data clears the table's selection; put back what still exists.
+        restore(table.getSelectionModel(), rows, table.getRowCount());
+        restore(table.getColumnModel().getSelectionModel(), columns, table.getColumnCount());
+    }
+
+    private static List<int[]> intervals(ListSelectionModel selection) {
+        List<int[]> intervals = new ArrayList<>();
+        int min = selection.getMinSelectionIndex();
+        int max = selection.getMaxSelectionIndex();
+        for (int i = min; min >= 0 && i <= max; i++) {
+            if (selection.isSelectedIndex(i)) {
+                int start = i;
+                while (i < max && selection.isSelectedIndex(i + 1)) {
+                    i++;
+                }
+                intervals.add(new int[] {start, i});
+            }
+        }
+        return intervals;
+    }
+
+    private static void restore(ListSelectionModel selection, List<int[]> intervals, int count) {
+        selection.setValueIsAdjusting(true);
+        try {
+            for (int[] interval : intervals) {
+                if (interval[0] < count) {
+                    selection.addSelectionInterval(interval[0], Math.min(interval[1], count - 1));
+                }
+            }
+        } finally {
+            selection.setValueIsAdjusting(false);
+        }
     }
 
     /** The snapshot currently shown — package-private, for tests. */

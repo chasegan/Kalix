@@ -15,9 +15,27 @@ final class DataGridTableModel extends AbstractTableModel {
         return grid;
     }
 
+    /** Swaps in {@code grid}; the columns are rebuilt only when the headers change, so their widths survive new data. */
     void setGrid(DataGrid grid) {
+        DataGrid old = this.grid;
         this.grid = grid != null ? grid : DataGrid.EMPTY;
-        fireTableStructureChanged();
+        if (sameColumns(old, this.grid)) {
+            fireTableDataChanged();
+        } else {
+            fireTableStructureChanged();
+        }
+    }
+
+    private static boolean sameColumns(DataGrid a, DataGrid b) {
+        if (a.seriesCount() != b.seriesCount() || !a.indexHeader().equals(b.indexHeader())) {
+            return false;
+        }
+        for (int s = 0; s < a.seriesCount(); s++) {
+            if (!a.seriesHeader(s).equals(b.seriesHeader(s))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
