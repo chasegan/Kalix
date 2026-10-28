@@ -1,6 +1,8 @@
 package com.kalix.ide.managers;
 
+import com.kalix.ide.cli.JsonMessage;
 import com.kalix.ide.cli.JsonStdioProtocol;
+import com.kalix.ide.cli.JsonStdioTypes;
 import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.io.compression.gorilla.GorillaCompressor;
@@ -349,29 +351,37 @@ public class TimeSeriesRequestManager {
     }
 
     /**
-     * Handle a JSON response from kalixcli and parse timeseries data if it's a get_result response
-     * Call this method when you receive JSON responses from the session
+     * Handles a reply to a get_result command: the {@code res} carrying the series, or the
+     * {@code err} naming the command. Either is matched to its pending request by the
+     * series name it carries ({@code r.series_name} or {@code p.series_name}), never by
+     * arrival order: requests are sent ahead and the engine answers them in its own
+     * order. The message arrives already parsed by SessionManager - these responses
+     * carry multi-MB base64 payloads, so no re-serialize/re-parse happens on this path.
      */
-    public void handleResultMessage(com.kalix.ide.cli.JsonMessage.SystemMessage message) {
-        // The message arrives already parsed by SessionManager - these responses carry
-        // multi-MB base64 payloads, so no re-serialize/re-parse happens on this path.
+    public void handleGetResultReply(JsonMessage.SystemMessage message) {
         if (!"get_result".equals(message.getCommand())) {
+            return;
+        }
+        String kalixcliUid = message.getSessionId() != null ? message.getSessionId() : "";
+
+        if (message.systemMessageType() == JsonStdioTypes.SystemMessageType.ERROR) {
+            JsonNode params = message.getParameters();
+            String seriesName = params != null ? params.path("series_name").asText() : "";
+            String errMsg = message.getErrorMessage() != null
+                ? message.getErrorMessage() : "get_result failed";
+            logger.warn("get_result failed for '{}': {}", seriesName, errMsg);
+            // Without p (an engine predating the echo) the request cannot be identified;
+            // its 60 s backstop still fails it.
+            if (!seriesName.isEmpty()) {
+                failPendingFuture(kalixcliUid + ":" + seriesName,
+                    new RuntimeException("get_result failed: " + errMsg));
+            }
             return;
         }
 
         JsonNode result = message.getResult();
         String seriesName = result != null ? result.path("series_name").asText() : "";
-        String kalixcliUid = message.getSessionId() != null ? message.getSessionId() : "";
         String cacheKey = kalixcliUid + ":" + seriesName;
-
-        if (!Boolean.TRUE.equals(message.getSuccess())) {
-            String errMsg = message.getErrorMessage() != null
-                ? message.getErrorMessage() : "get_result command failed";
-            logger.warn("get_result failed for '{}': {}", seriesName, errMsg);
-            failPendingFuture(cacheKey, new RuntimeException("get_result failed: " + errMsg));
-            return;
-        }
-
         String dataString = result != null ? result.path("data").asText() : "";
         // Format defaults to "pixie" if the field is absent (older responses or defensive fallback).
         String format = result != null ? result.path("format").asText("pixie") : "pixie";
