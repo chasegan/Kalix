@@ -52,8 +52,8 @@ the pipe; the engine already queues and orders what it reads; and every reply
 can say what it is for.
 
 1. **One message is one write.** The whole line, `\n` included, goes to the
-   pipe in a single call under a single lock. The protocol is line-framed,
-   and a frame written in parts is not a frame.
+   writer in one call, under one lock. The protocol is line-framed, and a
+   frame written in parts is not a frame.
 2. **The IDE sends ahead; the engine's stdin queue is the serialisation
    point.** The engine reads stdin into a queue and runs one command at a
    time. Commands that cannot be interrupted (`get_result`, `load_model_*`)
@@ -65,11 +65,11 @@ can say what it is for.
    command, and a `get_result` result names its series (`r.series_name`).
    An `err` that answers a command carries `cmd` and the request's
    parameters as `p`, whether the command failed, was unknown, or was
-   rejected while busy. An error that answers no command, a malformed line
-   or a bad query, carries neither. Send order across IDE threads is not
-   guaranteed, so nothing else could identify the request. The rule binds
-   the receiver too: a program driving a run on a session claims only the
-   errors that name its own commands.
+   rejected while busy. An error that answers no command (a malformed line
+   or a bad query, for instance) carries neither. Send order across IDE
+   threads is not guaranteed, so nothing else could identify the request.
+   The rule binds the receiver too: a program driving a run on a session
+   claims only the errors that name commands it has sent.
 
 Option 2 adds a thread per session with its own lifecycle, for a FIFO order
 no caller depends on. Option 3 turns a burst of *n* fetches into *n* round
@@ -90,14 +90,11 @@ that only `err` had; `res` already names its content.
 - ❌ Replies from a burst may not arrive in the order the IDE's threads
   sent. Accepted: §3 is what makes that safe, and the session log shows
   the engine's order, which is the one that happened.
-- ❌ Content identifies the series, not the request. Two requests for one
-  series must share one future, and a reply that arrives after its
-  request timed out is taken by any retry under the same key. Accepted
-  because today's requests are idempotent fetches of a run's results and
-  the timeout is a minute. If a reply ever has to be told from a retry of
-  the same request, the known next step is option 4: a request id on each
-  `cmd`, echoed on every reply. Record it as a new ADR rather than by
-  overloading `p`.
+- ❌ Content identifies the series, not the request: two requests for one
+  series share one future, and a reply arriving after its request timed
+  out is taken by a retry under the same key. Accepted: today's fetches
+  are idempotent and the backstop is a minute. If a reply ever has to be
+  told from a retry, that is option 4, in its own ADR.
 
 ## Worked example
 
@@ -122,15 +119,19 @@ The IDE fails the pending future for `uid:node.x.dsflow` at once.
 
 - **Structural**: §1 — `ProcessExecutor.RunningProcess.sendInput` is
   `synchronized` and writes one string; `RunningProcessSendInputTest` fires
-  concurrent sends and asserts every line arrives whole. §2 — `non_interruptible_command_runs_inline`
+  concurrent sends and asserts every line arrives whole. §2 — the
+  inline-or-worker split is pinned by `non_interruptible_command_runs_inline`
   and `interruptible_command_runs_on_worker` in `src/apis/stdio/handlers.rs`.
   §3 — `create_error_message` in `src/apis/stdio/messages.rs` takes the
   request it answers, with its own tests; `JsonMessageErrorReplyTest` pins
-  the IDE's reading of `p`.
-- **Advisory**: that `sendInput` stays the only writer to the engine's
-  stdin (`getProcess()` exposes the raw stream, and nothing uses it); that
-  the IDE keeps matching by content and no caller comes to depend on send
-  order.
+  the IDE's reading of `p`; `AbstractSessionProgram` records every command
+  a program sends and declines an `err` naming any other, pinned by
+  `SessionProgramErrorOwnershipTest`.
+- **Advisory**: that the session loop's busy branch echoes the command it
+  rejects (the loop reads real stdin, so this is checked by hand against
+  the binary, not by a unit test); that `sendInput` stays the only writer
+  to the engine's stdin (`getProcess()` exposes the raw stream, and nothing
+  uses it); that no caller comes to depend on send order.
 
 ## Links and references
 

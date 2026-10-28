@@ -286,7 +286,7 @@ End the session and exit.
 ### 6.2 Error Handling
 - Malformed JSON triggers error response
 - Unknown commands trigger error response
-- Commands sent while busy are rejected (except stop/query)
+- Commands sent while busy are rejected (except stop, query and term)
 - Every `err` that answers a well-formed command names it in `cmd` and
   echoes its parameters in `p`; the frontend matches replies by content,
   never by the order they arrive in
@@ -310,9 +310,9 @@ End the session and exit.
 ### 7.1 Message Parsing
 - Each message is a complete JSON object on a single line, terminated by `\n`
 - One message is one write: a sender writes the whole line, terminator
-  included, in a single operation. Writing the text and the terminator
-  separately lets concurrent senders interleave into `{A}{B}\n\n`, two lines
-  kalixcli rejects as malformed
+  included, in one call to its writer, under one lock. Writing the text and
+  the terminator separately lets concurrent senders interleave into
+  `{A}{B}\n\n`, two lines kalixcli rejects as malformed
 - Messages must be parsed as they arrive (line-buffered)
 - Invalid JSON should be logged but not crash the session
 - Flattened structure eliminates nested data parsing
