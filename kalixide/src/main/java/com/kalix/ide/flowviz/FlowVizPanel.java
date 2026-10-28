@@ -39,9 +39,7 @@ import java.awt.event.MouseAdapter;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Predicate;
 import java.util.function.Supplier;
-import com.kalix.ide.preferences.PreferenceKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -401,50 +399,48 @@ public class FlowVizPanel extends JPanel {
     }
     
     private void zoomToFitData() {
-        if (displayDataSet == null || displayDataSet.isEmpty()) {
+        long[] timeRange = fittedTimeRange();
+        if (timeRange == null) {
             createDefaultViewport();
             return;
         }
 
+        // Each axis fits its own series over the whole span, exactly as auto-Y would. An axis
+        // with nothing showable takes the other's range; the default view only when neither
+        // has anything (on LOG, data that is all zero or negative, say).
+        double[] yRange = plotInteractionManager.fittedRangeForAxis(false, timeRange[0], timeRange[1], yAxisScale);
+        double[] y2Range = isRightAxisInUse()
+            ? plotInteractionManager.fittedRangeForAxis(true, timeRange[0], timeRange[1], yAxisScale) : null;
+        if (yRange == null && y2Range == null) {
+            createDefaultViewport();
+            return;
+        }
+        if (yRange == null) {
+            yRange = y2Range;
+        }
+        if (isRightAxisInUse() && y2Range == null) {
+            y2Range = yRange;
+        }
+
+        Rectangle plotArea = getPlotArea();
+        XAxisType xAxisType = determineXAxisType();
+        currentViewport = new ViewPort(timeRange[0], timeRange[1], yRange[0], yRange[1],
+                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale, xAxisType);
+        if (y2Range != null) {
+            currentViewport = currentViewport.withY2Bounds(y2Range[0], y2Range[1]);
+        }
+    }
+
+    /**
+     * The time axis zoom to fit gives the displayed data: its full span plus 5% each side,
+     * and at least a second wide. Null when nothing is displayed.
+     */
+    long[] fittedTimeRange() {
+        if (displayDataSet == null || displayDataSet.isEmpty()) {
+            return null;
+        }
         long startTime = displayDataSet.getGlobalMinTime();
         long endTime = displayDataSet.getGlobalMaxTime();
-        double[] yRange;
-        double[] y2Range = null;
-
-        if (isRightAxisInUse()) {
-            // Each axis fits its own series; an axis with nothing showable gets the auto-Y
-            // default, and the default view only when neither has anything.
-            double[] y1 = fitValueRange(showableExtent(ref -> !isOnRightAxis(ref)));
-            double[] y2 = fitValueRange(showableExtent(this::isOnRightAxis));
-            if (y1 == null && y2 == null) {
-                createDefaultViewport();
-                return;
-            }
-            yRange = y1 != null ? y1 : new double[]{-1.0, 1.0};
-            y2Range = y2 != null ? y2 : new double[]{-1.0, 1.0};
-        } else {
-            Double minValue = displayDataSet.getGlobalMinValue();
-            Double maxValue = displayDataSet.getGlobalMaxValue();
-
-            if (minValue == null || maxValue == null) {
-                createDefaultViewport();
-                return;
-            }
-
-            // The cached global minimum ignores the scale's domain: on LOG it may be zero or
-            // negative, and padding from that gives NaN bounds and a blank view. Fit to the
-            // smallest showable value instead, as auto-Y does, or to the default view when
-            // nothing is showable.
-            double domainFloor = yAxisScale.domainFloor();
-            if (minValue <= domainFloor) {
-                minValue = smallestAbove(displayDataSet, domainFloor);
-                if (minValue == null) {
-                    createDefaultViewport();
-                    return;
-                }
-            }
-            yRange = fitValueRange(new double[]{minValue, maxValue});
-        }
 
         // Add 5% padding
         long timePadding = (long) ((endTime - startTime) * 0.05);
@@ -458,73 +454,7 @@ public class FlowVizPanel extends JPanel {
             startTime = center - 500;
             endTime = center + 500;
         }
-
-        Rectangle plotArea = getPlotArea();
-        XAxisType xAxisType = determineXAxisType();
-        currentViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
-                                     plotArea.x, plotArea.y, plotArea.width, plotArea.height, yAxisScale, xAxisType);
-        if (y2Range != null) {
-            currentViewport = currentViewport.withY2Bounds(y2Range[0], y2Range[1]);
-        }
-    }
-
-    /**
-     * Turns a showable value extent into a fitted axis range: the LOG floor clamp, then 5%
-     * padding in the scale's own space. Null in, null out.
-     */
-    private double[] fitValueRange(double[] extent) {
-        if (extent == null) {
-            return null;
-        }
-        double minValue = extent[0];
-        double maxValue = extent[1];
-
-        // Clamp minimum value for log scale to prevent zooming too far out
-        // Hydrological models often produce tiny values (e.g., 1e-12) that are meaningless
-        // This only affects auto-zoom; manual zoom/pan can still access the full range
-        double logScaleMin = PreferenceKeys.PLOT_LOG_SCALE_MIN_THRESHOLD.get();
-        if (yAxisScale == YAxisScale.LOG && minValue < logScaleMin && logScaleMin < maxValue) {
-            minValue = logScaleMin;
-        }
-
-        // Apply padding to Y values in appropriate space (linear or log)
-        return applyYAxisPadding(minValue, maxValue, yAxisScale, 0.05);
-    }
-
-    /**
-     * The smallest and largest showable values (valid, above the scale's domain floor) of
-     * the displayed series {@code include} accepts, or null if there are none.
-     */
-    private double[] showableExtent(Predicate<SeriesRef> include) {
-        double domainFloor = yAxisScale.domainFloor();
-        double smallest = Double.POSITIVE_INFINITY;
-        double largest = Double.NEGATIVE_INFINITY;
-        for (SeriesRef ref : displayDataSet.getSeriesRefs()) {
-            if (!include.test(ref)) continue;
-            TimeSeriesData series = displayDataSet.getSeries(ref);
-            double[] values = series.getValues();
-            boolean[] validPoints = series.getValidPoints();
-            for (int i = 0; i < series.getPointCount(); i++) {
-                double value = values[i];
-                if (!validPoints[i] || Double.isNaN(value) || value <= domainFloor) continue;
-                smallest = Math.min(smallest, value);
-                largest = Math.max(largest, value);
-            }
-        }
-        return smallest == Double.POSITIVE_INFINITY ? null : new double[]{smallest, largest};
-    }
-
-    /** The smallest valid value above {@code floor} across every series, or null if none. */
-    private static Double smallestAbove(DataSet dataSet, double floor) {
-        double smallest = Double.POSITIVE_INFINITY;
-        for (TimeSeriesData series : dataSet.getAllSeries()) {
-            double[] values = series.getValues();
-            boolean[] validPoints = series.getValidPoints();
-            for (int i = 0; i < series.getPointCount(); i++) {
-                if (validPoints[i] && values[i] > floor && values[i] < smallest) smallest = values[i];
-            }
-        }
-        return smallest == Double.POSITIVE_INFINITY ? null : smallest;
+        return new long[]{startTime, endTime};
     }
 
     private void createDefaultViewport() {
@@ -540,44 +470,6 @@ public class FlowVizPanel extends JPanel {
         if (isRightAxisInUse()) {
             currentViewport = currentViewport.withY2Bounds(-10.0, 10.0);
         }
-    }
-
-    /**
-     * Applies padding to Y-axis range in the appropriate transformed space.
-     * Works for every scale in {@link YAxisScale} by applying padding in transformed
-     * space and then inverse transforming back to data space. This ensures consistent
-     * visual spacing regardless of scale type.
-     *
-     * @param minValue The minimum Y value before padding
-     * @param maxValue The maximum Y value before padding
-     * @param yAxisScale The Y-axis scale to pad in
-     * @param paddingFraction The fraction of range to use as padding (e.g., 0.05 for 5%)
-     * @return Array of [paddedMin, paddedMax]
-     */
-    private static double[] applyYAxisPadding(double minValue, double maxValue, YAxisScale yAxisScale, double paddingFraction) {
-        double valueRange = maxValue - minValue;
-
-        // Handle constant data (all values identical) - use relative padding based on magnitude
-        if (valueRange < 1e-15) {
-            double center = (minValue + maxValue) / 2;
-            double halfRange = Math.max(Math.abs(center) * 0.1, 1e-6);
-            return new double[]{center - halfRange, center + halfRange};
-        }
-
-        // Apply padding in transformed space for correct visual spacing
-        double transformedMin = yAxisScale.transform(minValue);
-        double transformedMax = yAxisScale.transform(maxValue);
-        double transformedRange = transformedMax - transformedMin;
-
-        double padding = transformedRange * paddingFraction;
-        transformedMin -= padding;
-        transformedMax += padding;
-
-        // Inverse transform back to data space
-        double paddedMin = yAxisScale.inverseTransform(transformedMin);
-        double paddedMax = yAxisScale.inverseTransform(transformedMax);
-
-        return new double[]{paddedMin, paddedMax};
     }
 
     /**

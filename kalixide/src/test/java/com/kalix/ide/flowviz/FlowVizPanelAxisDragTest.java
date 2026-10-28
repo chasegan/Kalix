@@ -88,6 +88,13 @@ class FlowVizPanelAxisDragTest {
         return new MouseEvent(panel, id, 0, InputEvent.BUTTON1_DOWN_MASK, x, y, 1, false, MouseEvent.BUTTON1);
     }
 
+    private void doubleClick(int x, int y) {
+        drag(x, y, x, y);
+        MouseEvent click = new MouseEvent(panel, MouseEvent.MOUSE_CLICKED, 0, InputEvent.BUTTON1_DOWN_MASK,
+            x, y, 2, false, MouseEvent.BUTTON1);
+        for (MouseListener l : panel.getMouseListeners()) l.mouseClicked(click);
+    }
+
     private ViewPort view() {
         return panel.viewportForTests();
     }
@@ -114,6 +121,49 @@ class FlowVizPanelAxisDragTest {
 
         assertTrue(panel.isAutoYMode(), "an X drag is an X-only change");
         assertTrue(view().getMaxValue() < max, "Y refits to the narrower window: " + view());
+    }
+
+    @Test
+    void doubleClickingTheYAxisFitsItAloneAndLeavesAutoYOff() {
+        ViewPort fitted = view();
+        drag(Y_AXIS_X, 450, Y_AXIS_X, 500);
+        drag(500, X_AXIS_Y, 700, X_AXIS_Y);
+        long start = view().getStartTimeMs();
+        long end = view().getEndTimeMs();
+
+        doubleClick(Y_AXIS_X, 300);
+
+        assertFalse(panel.isAutoYMode(), "a one-off fit, not a mode change");
+        assertEquals(start, view().getStartTimeMs(), "X is left alone");
+        assertEquals(end, view().getEndTimeMs());
+        assertTrue(view().getMaxValue() < fitted.getMaxValue(), "Y fits the narrower window shown: " + view());
+    }
+
+    @Test
+    void doubleClickingTheXAxisFitsTheWholeTimeSpan() {
+        ViewPort fitted = view();
+        drag(500, X_AXIS_Y, 700, X_AXIS_Y);
+
+        doubleClick(300, X_AXIS_Y);
+
+        assertEquals(fitted.getStartTimeMs(), view().getStartTimeMs());
+        assertEquals(fitted.getEndTimeMs(), view().getEndTimeMs());
+    }
+
+    @Test
+    void doubleClickingTheRightAxisFitsItAlone() {
+        useBothAxes();
+        ViewPort fitted = view();
+
+        drag(Y2_AXIS_X, 450, Y2_AXIS_X, 500);
+        assertNotEquals(fitted.getY2MinValue(), view().getY2MinValue(), "the drag moved y2");
+        double y1Min = view().getMinValue();
+
+        doubleClick(Y2_AXIS_X, 300);
+
+        assertEquals(fitted.getY2MinValue(), view().getY2MinValue(), 1e-9);
+        assertEquals(fitted.getY2MaxValue(), view().getY2MaxValue(), 1e-9);
+        assertEquals(y1Min, view().getMinValue(), "y1 is left alone");
     }
 
     @Test
