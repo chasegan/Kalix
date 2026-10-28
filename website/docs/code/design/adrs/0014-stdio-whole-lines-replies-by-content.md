@@ -90,6 +90,14 @@ that only `err` had; `res` already names its content.
 - ❌ Replies from a burst may not arrive in the order the IDE's threads
   sent. Accepted: §3 is what makes that safe, and the session log shows
   the engine's order, which is the one that happened.
+- ❌ Content identifies the series, not the request. Two requests for one
+  series must share one future, and a reply that arrives after its
+  request timed out is taken by any retry under the same key. Accepted
+  because today's requests are idempotent fetches of a run's results and
+  the timeout is a minute. If a reply ever has to be told from a retry of
+  the same request, the known next step is option 4: a request id on each
+  `cmd`, echoed on every reply. Record it as a new ADR rather than by
+  overloading `p`.
 
 ## Worked example
 
