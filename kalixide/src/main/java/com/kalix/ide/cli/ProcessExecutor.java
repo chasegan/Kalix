@@ -238,10 +238,8 @@ public class ProcessExecutor {
          * interleave as {@code {A}{B}\n\n}, which the engine rejected as two malformed
          * lines and the requests behind them were silently lost.
          *
-         * <p>The terminator is {@code \n} on every platform: that is what the protocol
-         * specifies, and the engine accepts nothing else. {@link #cancel} is
-         * deliberately not under this lock, so a write stuck on a dead process can
-         * still be broken by closing the pipe.
+         * <p>The terminator is {@code \n} on every platform, because that is what the
+         * protocol specifies.
          *
          * @param input the line to send; a trailing newline is added if absent
          * @throws IOException if the process is not interactive or writing fails
