@@ -13,6 +13,7 @@ import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -324,14 +325,26 @@ class TreeFileOperations {
             // Delete depth-first (children before parents). Files.delete throws on
             // failure, so a locked/read-only entry surfaces as an error rather than a
             // silently half-deleted folder.
-            try (Stream<Path> walk = Files.walk(file.toPath())) {
-                List<Path> paths = walk.sorted(Comparator.reverseOrder()).collect(Collectors.toList());
-                for (Path path : paths) {
-                    Files.delete(path);
-                }
+            List<Path> paths = walk(file.toPath());
+            paths.sort(Comparator.reverseOrder());
+            for (Path path : paths) {
+                Files.delete(path);
             }
         } else {
             Files.delete(file.toPath());
+        }
+    }
+
+    /**
+     * Every path under {@code start}, parents before children. A traversal failure (an
+     * unreadable subfolder, say) comes out of {@code Files.walk} unchecked; here it is the
+     * {@code IOException} it is, so a caller's per-entry handling sees it.
+     */
+    private static List<Path> walk(Path start, FileVisitOption... options) throws IOException {
+        try (Stream<Path> stream = Files.walk(start, options)) {
+            return stream.collect(Collectors.toCollection(ArrayList::new));
+        } catch (UncheckedIOException ex) {
+            throw ex.getCause();
         }
     }
 
@@ -434,10 +447,7 @@ class TreeFileOperations {
      * an empty folder. A link cycle fails the copy with {@code FileSystemLoopException}.
      */
     private static void copyRecursively(Path source, Path dest) throws IOException {
-        List<Path> paths;
-        try (Stream<Path> walk = Files.walk(source, FileVisitOption.FOLLOW_LINKS)) {
-            paths = walk.collect(Collectors.toList());
-        }
+        List<Path> paths = walk(source, FileVisitOption.FOLLOW_LINKS);
         // Files.walk yields parents before children, so directories are created before their
         // contents are copied into them.
         for (Path p : paths) {
