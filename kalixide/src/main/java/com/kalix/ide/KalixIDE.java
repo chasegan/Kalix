@@ -24,6 +24,7 @@ import com.kalix.ide.logging.Logging;
 import com.kalix.ide.managers.ThemeManager;
 import com.kalix.ide.managers.RecentFilesManager;
 import com.kalix.ide.managers.FileOperationsManager;
+import com.kalix.ide.managers.MassBalanceActions;
 import com.kalix.ide.managers.VersionChecker;
 import com.kalix.ide.managers.TitleBarManager;
 import com.kalix.ide.managers.StdioTaskManager;
@@ -387,10 +388,15 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
         // Suppliers for auxiliary windows always reflect the active document.
         RunManager.setBaseDirectorySupplier(fileOperations::getCurrentWorkingDirectory);
-        RunManager.setEditorTextSupplier(() -> {
+        RunManager.setModelTextSupplier(() -> {
             // Only model documents are runnable; a text tab supplies nothing.
             KalixDocument doc = documentManager.getActiveDocument();
             return doc != null && doc.isModel() ? doc.getText() : null;
+        });
+        RunManager.setEditorTextSupplier(() -> {
+            // The active tab's text whatever its kind, e.g. a mass balance report.
+            KalixDocument doc = documentManager.getActiveDocument();
+            return doc != null ? doc.getText() : null;
         });
         MinimalEditorWindow.setBaseDirectorySupplier(fileOperations::getCurrentWorkingDirectory);
 
@@ -821,6 +827,17 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             @Override
             public void compareFiles(File left, File right) {
                 KalixIDE.this.compareFiles(left, right);
+            }
+
+            @Override
+            public void showMassBalanceReport(File model) {
+                new MassBalanceActions(KalixIDE.this, stdioTaskManager, statusReporter).showReport(model);
+            }
+
+            @Override
+            public void validateMassBalance(File model, File reference) {
+                new MassBalanceActions(KalixIDE.this, stdioTaskManager, statusReporter)
+                    .validate(model, reference);
             }
 
             @Override
