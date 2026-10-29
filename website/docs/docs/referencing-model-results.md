@@ -129,12 +129,8 @@ the recorded series simply repeats the declared value at every timestep.
 
 ### Name Handling
 
-Node names follow the same sanitisation rules as data references:
+Node references are **case-insensitive**: `node.My_Catchment.dsflow` and `node.my_catchment.dsflow` are equivalent.
 
-- Names are **case-insensitive**
+Node names are not sanitised. A name may only contain letters, digits and underscores (see [Node Names](conventions.md#node-names)), so every node can be referenced as written.
 
-- Special characters are replaced with underscores
-
-- References are converted to lowercase internally
-
-So `node.My_Catchment.dsflow` and `node.my_catchment.dsflow` are equivalent.
+A reference to a node, output or var that doesn't exist is an error when the model loads, with or without an offset. A typo such as `node.catchment.dsflw[-1, 0.0]` stops the model loading, naming the reference, rather than reading the default value for the whole run.
