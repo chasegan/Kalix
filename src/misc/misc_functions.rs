@@ -121,6 +121,17 @@ pub fn is_valid_bare_name(s: &str) -> bool {
 }
 
 
+/// The rule for node names and for each segment of a dotted reference: ASCII
+/// letters (either case), digits and underscores, non-empty. Weaker than
+/// [`is_valid_bare_name`] on purpose (ADR-0006 amendment 2026-10-29): node IDs
+/// from converted models often start with a digit, and matching is
+/// case-insensitive. Expressions can reach every such name; the tokenizer also
+/// accepts non-ASCII letters, which are deliberately not allowed here.
+pub fn is_valid_name_segment(s: &str) -> bool {
+    !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+
 pub fn is_valid_variable_name(s: &str) -> bool {
     if let Some(b) = s.bytes().next() {
         // First char must be lowercase alphabetic
