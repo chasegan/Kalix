@@ -16,6 +16,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.kalix.ide.editor.KalixIniFoldParser.ranges;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -26,10 +27,6 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  * last line of code, nested region ⊃ section ⊃ value, never overlapping.
  */
 class KalixIniFoldParserTest {
-
-    private static List<Range> ranges(String text) {
-        return KalixIniFoldParser.ranges(text);
-    }
 
     private static Range region(int first, int last) {
         return new Range(Kind.REGION, first, last);

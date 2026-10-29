@@ -18,7 +18,8 @@ class KalixIniFoldParserTextAreaTest {
     @Test
     void modelTextAreaFoldsRegionsSectionsAndValuesNested() {
         KalixIniTextArea textArea = new KalixIniTextArea();
-        assertTrue(textArea.isCodeFoldingEnabled(), "a fold parser is registered for the Kalix INI style");
+        assertTrue(textArea.getFoldManager().isCodeFoldingSupportedAndEnabled(),
+            "a fold parser is registered for the Kalix INI style");
 
         textArea.setText("#@region = A\n[node.a]\nkc = 1,\n   2\n\n[node.b]\ntype = gauge\n");
         FoldManager folds = textArea.getFoldManager();
