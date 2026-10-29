@@ -184,7 +184,17 @@ the map draws per node (names / aka only / hidden, with the hover rule) and the 
 toolbar button cycles it; `MapRenderer` draws the lines it is given. The editor
 tokenises annotation lines as `Token.ANNOTATION`.
 
-Key files: `IniSyntax.java`, `ModelParser.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`
+Folding (#494): `KalixIniFoldParser` is the one fold grammar, registered for the Kalix
+INI style beside the token maker. Its `ranges()` is a pure function of the text and
+is what the tests pin: a region (`#@region`), a section, or a multi-line value folds
+from its first line to its last line of code, nested in that order and never
+overlapping. A section's fold ends where `NodeSectionLocator.contentEnd` does, and an
+agreement test over every `.ini` in the repository holds the two together. Fold state
+is view state: never written to the file, never persisted. The Edit menu's four fold
+items run RSyntaxTextArea's own editor-kit actions.
+
+Key files: `IniSyntax.java`, `ModelParser.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`,
+`KalixIniFoldParser.java`
 
 ### Code Quality Improvements
 Systematic refactoring addressing code smells:

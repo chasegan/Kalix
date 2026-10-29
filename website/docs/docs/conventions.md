@@ -84,6 +84,17 @@ type = storage
 ```
 
 - **`aka`** gives a node a readable name for the schematic. [Node names](#node-names) are restricted to letters, digits and underscores; an `aka` is any text. The map's node-label button cycles through names, akas only, and hidden, so a large model can label just the nodes that matter.
+- **`region`** titles a stretch of the file that the editor can fold away. A region runs from its line to the next `#@region` line or the end of the file, so regions do not nest, and it changes nothing about the model: node order is still execution order. The title is any text.
+
+```ini
+#@region = Catchment
+[node.upper]
+...
+
+#@region = Outputs
+[outputs]
+...
+```
 
 Anything else in front of the `#@`, such as a second `#` or a space, makes the line an ordinary comment, which is how to switch an annotation off. The value runs to the end of the line and is kept as written, so `#` and `=` inside it are just text.
 
