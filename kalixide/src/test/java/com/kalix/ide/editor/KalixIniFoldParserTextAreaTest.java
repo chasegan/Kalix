@@ -19,11 +19,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class KalixIniFoldParserTextAreaTest {
 
     @Test
+    void foldParserIsRegisteredForTheKalixIniStyle() {
+        assertTrue(new KalixIniTextArea().getFoldManager().isCodeFoldingSupportedAndEnabled());
+    }
+
+    @Test
     void modelTextAreaFoldsRegionsSectionsAndValuesNested() {
         KalixIniTextArea textArea = new KalixIniTextArea();
-        assertTrue(textArea.getFoldManager().isCodeFoldingSupportedAndEnabled(),
-            "a fold parser is registered for the Kalix INI style");
-
         textArea.setText("#@region = A\n[node.a]\nkc = 1,\n   2\n\n[node.b]\ntype = gauge\n");
         FoldManager folds = textArea.getFoldManager();
 

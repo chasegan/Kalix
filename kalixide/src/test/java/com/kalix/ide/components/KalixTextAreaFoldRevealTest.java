@@ -38,17 +38,13 @@ class KalixTextAreaFoldRevealTest {
         return textArea;
     }
 
-    private static int lineStart(KalixIniTextArea textArea, int line) throws BadLocationException {
-        return textArea.getLineStartOffset(line);
-    }
-
     @Test
     void movingTheCaretIntoACollapsedRegionOpensItAndLandsThere() throws BadLocationException {
         KalixIniTextArea textArea = textArea();
         Fold region = textArea.getFoldManager().getFold(0);
         region.setCollapsed(true);
 
-        int target = lineStart(textArea, 7);
+        int target = textArea.getLineStartOffset(7);
         textArea.setCaretPosition(target);
 
         assertFalse(region.isCollapsed());
@@ -66,7 +62,7 @@ class KalixTextAreaFoldRevealTest {
         sectionA.setCollapsed(true);
         region.setCollapsed(true);
 
-        int start = lineStart(textArea, 3);
+        int start = textArea.getLineStartOffset(3);
         textArea.select(start, start + 4);
 
         assertFalse(region.isCollapsed());
@@ -84,7 +80,7 @@ class KalixTextAreaFoldRevealTest {
         sectionB.setCollapsed(true);
         region.setCollapsed(true);
 
-        textArea.setCaretPosition(lineStart(textArea, 6));
+        textArea.setCaretPosition(textArea.getLineStartOffset(6));
 
         assertFalse(region.isCollapsed());
         assertTrue(sectionB.isCollapsed(), "the header line is visible once the region is open");
@@ -109,7 +105,7 @@ class KalixTextAreaFoldRevealTest {
     void collapsingAFoldAroundTheCaretStillCollapsesIt() throws BadLocationException {
         KalixIniTextArea textArea = textArea();
         Fold region = textArea.getFoldManager().getFold(0);
-        textArea.setCaretPosition(lineStart(textArea, 4));
+        textArea.setCaretPosition(textArea.getLineStartOffset(4));
 
         region.setCollapsed(true);
 
