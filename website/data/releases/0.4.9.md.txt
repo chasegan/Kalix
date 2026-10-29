@@ -18,3 +18,6 @@ pip: "pip install kalix==0.4.9"
     - Python: `read_pixie()` returns an empty series as a column of NaN on the other series' timestamps. Series with values on different timesteps are still refused.
     - Python: `set_input()` now raises `ModelValidationError` for data with no rows or one row. Previously it assumed a daily timestep for a single row, and raised `ValueError` for no rows.
 - IDE: files dragged from Finder or Explorer onto the project tree are copied into the folder they land on. If a name is already taken, you're asked to replace it or keep both (#469).
+- IDE: New! Move a plotted series to a secondary Y axis (#196). Ctrl+click a series in the key (Cmd+click on macOS), or right-click it and choose **Move to secondary Y axis**, to plot it against its own axis on the right. The key groups series by axis, and the plot menu gains **Copy secondary Y axis**, **Paste secondary Y axis** and a secondary Y row in **Set axis limits**.
+- IDE plots: drag an axis to set its range. The bottom or top half of a y axis moves its minimum or maximum, the left or right half of the time axis its start or end. Double-click an axis to fit just that axis.
+- IDE plots: with **Auto-scale Y axis** on, an axis with no data in view now keeps its range, where it used to jump to -1 to 1.

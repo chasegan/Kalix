@@ -65,6 +65,10 @@ Use the **Navigate Back** and **Navigate Forward** buttons to flick back and for
 
 ![](../assets/docs-using-ide/image_9.png)
 
+**Plot on a secondary Y axis** to compare series of very different sizes. Ctrl+click a series in the plot's key (Cmd+click on macOS), or right-click it and choose **Move to secondary Y axis**, and it is drawn against its own axis on the right of the plot. The key then lists series under **Y axis** and **Secondary Y axis**; move the last one back and the secondary axis goes away. **Auto-scale Y axis** fits each axis to its own series, and while the secondary axis is shown the context menu gains **Copy secondary Y axis** and **Paste secondary Y axis**, and **Set axis limits…** gains a row for it.
+
+**Drag an axis to set its range.** Grab the bottom half of a y axis to move its minimum, or the top half to move its maximum; on the time axis, the left half moves the start and the right half the end. The value you grabbed follows the mouse while the other end stays put. Dragging a y axis turns off **Auto-scale Y axis**. Double-click an axis to fit just that axis to the data.
+
 The **Parameter Sheet** shows node properties in a table. Filter by node type and name. Great for model review or bulk edits. Find it in the Tools menu.
 
 ![](../assets/docs-using-ide/image_10.png)
