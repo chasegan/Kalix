@@ -1174,7 +1174,11 @@
     },
     "unique_node_names": {
       "severity": "error",
-      "description": "Node names must be unique"
+      "description": "Node names must be unique, ignoring case"
+    },
+    "node_name_format": {
+      "severity": "error",
+      "description": "Node names may contain only letters, digits and underscores"
     },
     "unique_properties": {
       "severity": "warning",
