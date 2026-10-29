@@ -4,9 +4,8 @@ import com.kalix.ide.managers.FontManager;
 import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.utils.WeakRegistry;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
-import org.fife.ui.rsyntaxtextarea.RSyntaxUtilities;
 import org.fife.ui.rsyntaxtextarea.TokenTypes;
-import org.fife.ui.rsyntaxtextarea.folding.Fold;
+import org.fife.ui.rsyntaxtextarea.folding.FoldManager;
 
 import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
@@ -79,14 +78,15 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     }
 
     /**
-     * A programmatic move of the caret into a collapsed fold opens the fold, as
-     * the library's own search does, so that going to a node, a line, a lint
-     * issue or a find result shows what was asked for. Left to itself the
-     * library's caret filter would push the caret to the next visible line and
-     * say nothing. Keyboard and mouse moves go through the caret, not here, and
-     * cannot reach a hidden line. A fold that has just been collapsed parks the
-     * caret at the end of its own first line, which is not a hidden line, so
-     * this does not reopen it.
+     * A programmatic move of the caret into a collapsed fold opens the fold, with
+     * the call the library's own search makes, so that going to a node, a line, a
+     * lint issue or a find result shows what was asked for. Left to itself the
+     * library's caret filter ({@code ConfigurableCaret}'s fold-aware navigation
+     * filter) would push the caret to the next visible line and say nothing.
+     * Keyboard and mouse moves go through the caret, not here, and cannot reach a
+     * hidden line. A fold that has just been collapsed parks the caret at the end
+     * of its own first line, which is not a hidden line, so this does not reopen
+     * it.
      */
     @Override
     public void setCaretPosition(int offset) {
@@ -152,16 +152,10 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     }
 
     private void openFoldsHiding(int offset) {
+        FoldManager folds = getFoldManager();
         int line = getDocument().getDefaultRootElement().getElementIndex(offset);
-        boolean opened = false;
-        for (Fold fold = getFoldManager().getDeepestFoldContaining(offset); fold != null; fold = fold.getParent()) {
-            if (fold.isCollapsed() && fold.containsLine(line)) {
-                fold.setCollapsed(false);
-                opened = true;
-            }
-        }
-        if (opened) {
-            RSyntaxUtilities.possiblyRepaintGutter(this);
+        if (folds.isLineHidden(line)) {
+            folds.ensureOffsetNotInClosedFold(offset);
         }
     }
 
