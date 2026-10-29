@@ -143,10 +143,13 @@ RSyntaxTextArea (library)
   `VirtualTextArea`): `updateAllFontSizes` and `updateAllForThemeChange` reach every editor,
   and `forEachInstance(Class, Consumer)` lets a subclass sweep its own kind. Windows do
   not keep registries of their editors.
+- A caret that opens the collapsed fold it is moved into, by a programmatic move or by
+  undo/redo (see Folding below)
 
 **KalixIniTextArea** adds:
 - Kalix INI syntax highlighting
 - Syntax theme support, applied to every instance via `updateAllSyntaxThemes`
+- Folding by `KalixIniFoldParser`, rebuilt as soon as text is set
 
 **KalixPlainTextArea** adds:
 - No syntax highlighting (SYNTAX_STYLE_NONE)
@@ -194,11 +197,12 @@ nested in that order and never overlapping. A section or value ends at its last 
 code, so a comment block keeps introducing the header below it; a region ends at its
 last non-blank line, comments included. A section's fold ends where
 `NodeSectionLocator.contentEnd` does, and an agreement test over every `.ini` in the
-repository holds the two together. Fold state is view state: never
-written to the file, never persisted. The Edit menu's four fold items are
-RSyntaxTextArea's own editor-kit actions, wired like Cut/Copy/Paste. The library does
-not open a fold for a programmatic caret move, so `KalixTextArea.setCaretPosition`
-does: every go-to, find and lint jump lands on a visible line.
+repository holds the two together. Fold state is view state: never written to the file,
+never persisted. The Edit menu's four fold items are RSyntaxTextArea's own editor-kit
+actions, wired like Cut/Copy/Paste. The library opens a fold only for its own search, so
+`KalixTextArea` does it for every programmatic caret move and for undo/redo: every
+go-to, find, lint jump and undone edit lands on a visible line. A collapsed fold does not
+grow over the line the caret is on, so typing below a collapsed section stays visible.
 
 Key files: `KalixIniFoldParser.java`, `KalixTextArea.java`
 

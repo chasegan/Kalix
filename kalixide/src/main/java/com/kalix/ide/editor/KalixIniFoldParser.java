@@ -24,7 +24,7 @@ import org.fife.ui.rsyntaxtextarea.folding.FoldType;
  * trailing a fold stay outside it, so the gap between folds keeps showing. A section
  * or value also leaves its trailing comments outside, since a comment block above a
  * header conventionally introduces what sits below it, the reading
- * {@code NodeSectionLocator} takes for insertion; a region's own line is that
+ * {@link com.kalix.ide.model.NodeSectionLocator} takes for insertion; a region's own line is that
  * introduction, so a region takes its comments with it. A fold of one line is not a
  * fold.</p>
  * <ul>
@@ -39,7 +39,7 @@ import org.fife.ui.rsyntaxtextarea.folding.FoldType;
  *       {@link IniContinuation}'s rule.</li>
  * </ul>
  * <p>The parser is lenient where the linter is strict: a region line inside a
- * section still folds, it simply ends that section's fold, so folds never
+ * section still folds; it simply ends that section's fold, so folds never
  * overlap.</p>
  */
 public final class KalixIniFoldParser implements FoldParser {
