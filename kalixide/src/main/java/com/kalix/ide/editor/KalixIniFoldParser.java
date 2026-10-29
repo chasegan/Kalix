@@ -10,6 +10,7 @@ import java.util.List;
 import javax.swing.text.BadLocationException;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.folding.Fold;
+import org.fife.ui.rsyntaxtextarea.folding.FoldManager;
 import org.fife.ui.rsyntaxtextarea.folding.FoldParser;
 import org.fife.ui.rsyntaxtextarea.folding.FoldType;
 
@@ -146,6 +147,8 @@ public final class KalixIniFoldParser implements FoldParser {
 
     @Override
     public List<Fold> getFolds(RSyntaxTextArea textArea) {
+        FoldManager before = textArea.getFoldManager();
+        int caretLine = textArea.getCaretLineNumber();
         List<Fold> folds = new ArrayList<>();
         Fold parent = null;
         try {
@@ -153,10 +156,17 @@ public final class KalixIniFoldParser implements FoldParser {
                 while (parent != null && parent.getEndLine() < range.firstLine()) {
                     parent = parent.getParent();
                 }
+                int lastLine = lastLine(range, before, caretLine);
+                if (parent != null) {
+                    lastLine = Math.min(lastLine, parent.getEndLine());
+                }
+                if (lastLine <= range.firstLine()) {
+                    continue;
+                }
                 int type = range.kind().foldType();
                 int start = textArea.getLineStartOffset(range.firstLine());
                 Fold fold = parent == null ? new Fold(type, textArea, start) : parent.createChild(type, start);
-                fold.setEndOffset(textArea.getLineStartOffset(range.lastLine()));
+                fold.setEndOffset(textArea.getLineStartOffset(lastLine));
                 if (parent == null) {
                     folds.add(fold);
                 }
@@ -167,5 +177,21 @@ public final class KalixIniFoldParser implements FoldParser {
             throw new IllegalStateException("fold range outside the document", e);
         }
         return folds;
+    }
+
+    /**
+     * The last line of the fold built for {@code range}. A collapsed fold keeps its
+     * old end while the caret sits on a line it would newly take, so the line a
+     * modeller is typing below a collapsed section stays visible; the fold takes it
+     * once the caret has left. The library decides a rebuilt fold is the old one by
+     * its first line and keeps it collapsed, which would otherwise hide the new
+     * line and park the caret on the header.
+     */
+    private static int lastLine(Range range, FoldManager before, int caretLine) {
+        Fold old = before.getFoldForLine(range.firstLine());
+        if (old != null && old.isCollapsed() && caretLine > old.getEndLine() && caretLine <= range.lastLine()) {
+            return old.getEndLine();
+        }
+        return range.lastLine();
     }
 }

@@ -6,7 +6,10 @@ import org.fife.ui.rsyntaxtextarea.folding.FoldManager;
 import org.fife.ui.rsyntaxtextarea.folding.FoldType;
 import org.junit.jupiter.api.Test;
 
+import javax.swing.text.BadLocationException;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -48,6 +51,49 @@ class KalixIniFoldParserTextAreaTest {
         textArea.setText("# nothing to fold\n");
         textArea.getFoldManager().reparse();
         assertEquals(0, textArea.getFoldManager().getFoldCount());
+    }
+
+    @Test
+    void collapsedFoldKeepsItsEndWhileTheCaretTypesBelowIt() throws BadLocationException {
+        KalixIniTextArea textArea = new KalixIniTextArea();
+        textArea.setText("[node.a]\ntype = inflow\n\n[node.b]\ntype = gauge\n");
+        FoldManager folds = textArea.getFoldManager();
+        folds.reparse();
+        folds.getFold(0).setCollapsed(true);
+
+        textArea.setCaretPosition(textArea.getLineStartOffset(2));
+        textArea.replaceSelection("loc = 1, 2");
+        folds.reparse();
+
+        Fold a = folds.getFold(0);
+        assertTrue(a.isCollapsed());
+        assertLines(a, 0, 1);
+        assertFalse(folds.isLineHidden(2));
+        assertEquals(2, textArea.getCaretLineNumber());
+
+        textArea.setCaretPosition(textArea.getLineStartOffset(3));
+        folds.reparse();
+        assertTrue(folds.getFold(0).isCollapsed());
+        assertLines(folds.getFold(0), 0, 2);
+    }
+
+    @Test
+    void sectionTypedBelowACollapsedRegionFoldsBesideIt() throws BadLocationException {
+        KalixIniTextArea textArea = new KalixIniTextArea();
+        textArea.setText("#@region = A\n[node.a]\ntype = inflow\n\n");
+        FoldManager folds = textArea.getFoldManager();
+        folds.reparse();
+        folds.getFold(0).setCollapsed(true);
+
+        textArea.setCaretPosition(textArea.getLineStartOffset(4));
+        textArea.replaceSelection("[node.b]\ntype = gauge");
+        folds.reparse();
+
+        assertEquals(2, folds.getFoldCount());
+        assertTrue(folds.getFold(0).isCollapsed());
+        assertLines(folds.getFold(0), 0, 2);
+        assertFalse(folds.getFold(1).isCollapsed());
+        assertLines(folds.getFold(1), 4, 5);
     }
 
     private static void assertLines(Fold fold, int first, int last) {
