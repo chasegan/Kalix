@@ -4,7 +4,9 @@ import org.fife.ui.rsyntaxtextarea.folding.Fold;
 import org.fife.ui.rsyntaxtextarea.folding.FoldManager;
 import org.junit.jupiter.api.Test;
 
+import javax.swing.SwingUtilities;
 import javax.swing.text.BadLocationException;
+import java.lang.reflect.InvocationTargetException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -87,6 +89,21 @@ class KalixTextAreaFoldRevealTest {
 
         assertFalse(region.isCollapsed());
         assertTrue(sectionB.isCollapsed(), "the header line is visible once the region is open");
+    }
+
+    @Test
+    void undoOpensTheFoldHidingTheUndoneEdit() throws BadLocationException, InterruptedException, InvocationTargetException {
+        KalixIniTextArea textArea = textArea();
+        Fold region = textArea.getFoldManager().getFold(0);
+        textArea.setCaretPosition(textArea.getLineEndOffset(4) - 1);
+        textArea.replaceSelection(" # note");
+        region.setCollapsed(true);
+
+        // On the event thread, as in the application: off it, the caret defers its move.
+        SwingUtilities.invokeAndWait(textArea::undoLastAction);
+
+        assertFalse(region.isCollapsed());
+        assertEquals(4, textArea.getCaretLineNumber());
     }
 
     @Test

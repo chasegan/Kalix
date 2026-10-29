@@ -9,6 +9,8 @@ import org.fife.ui.rsyntaxtextarea.TokenTypes;
 import org.fife.ui.rsyntaxtextarea.folding.Fold;
 
 import javax.swing.UIManager;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -25,7 +27,7 @@ import java.util.function.Consumer;
  *   <li>Font metrics that follow the screen the editor is shown on</li>
  *   <li>Common editor settings (anti-aliasing, tab handling, etc.)</li>
  *   <li>A registry of live instances, so a preference change reaches every editor</li>
- *   <li>A caret that opens any collapsed fold it is moved into</li>
+ *   <li>A caret that opens any collapsed fold it is moved into, by a move or by undo</li>
  * </ul>
  *
  * Subclasses should extend this class rather than RSyntaxTextArea directly to
@@ -37,6 +39,9 @@ import java.util.function.Consumer;
 public abstract class KalixTextArea extends RSyntaxTextArea {
 
     private static final WeakRegistry<KalixTextArea> instances = new WeakRegistry<>();
+
+    /** True while {@link #undoLastAction()} or {@link #redoLastAction()} runs. */
+    private boolean undoingOrRedoing;
 
     /**
      * Creates a KalixTextArea with default dimensions.
@@ -54,6 +59,7 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     protected KalixTextArea(int rows, int cols) {
         super(rows, cols);
         initializeBase();
+        getDocument().addDocumentListener(new RevealUndoneEdits());
         instances.add(this);
     }
 
@@ -93,6 +99,56 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     public void moveCaretPosition(int offset) {
         openFoldsHiding(offset);
         super.moveCaretPosition(offset);
+    }
+
+    /**
+     * Undo and redo move the caret through the caret's own document listener, not
+     * {@link #setCaretPosition}, so the fold hiding an undone edit is opened from a
+     * document listener of ours while the undo runs. Ours was added after the
+     * caret's, so the document notifies it first and the caret then lands on a
+     * visible line.
+     */
+    @Override
+    public void undoLastAction() {
+        undoingOrRedoing = true;
+        try {
+            super.undoLastAction();
+        } finally {
+            undoingOrRedoing = false;
+        }
+    }
+
+    /** See {@link #undoLastAction()}. */
+    @Override
+    public void redoLastAction() {
+        undoingOrRedoing = true;
+        try {
+            super.redoLastAction();
+        } finally {
+            undoingOrRedoing = false;
+        }
+    }
+
+    private final class RevealUndoneEdits implements DocumentListener {
+        @Override
+        public void insertUpdate(DocumentEvent e) {
+            reveal(e);
+        }
+
+        @Override
+        public void removeUpdate(DocumentEvent e) {
+            reveal(e);
+        }
+
+        @Override
+        public void changedUpdate(DocumentEvent e) {
+        }
+
+        private void reveal(DocumentEvent e) {
+            if (undoingOrRedoing) {
+                openFoldsHiding(e.getOffset());
+            }
+        }
     }
 
     private void openFoldsHiding(int offset) {
