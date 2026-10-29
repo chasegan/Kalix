@@ -65,7 +65,7 @@ impl IniDocument {
     /// `key = value`, continuation, and bare list item. `;` is never a
     /// comment marker (it terminates statements inside expression blocks).
     pub fn parse(content: &str) -> Result<Self, String> {
-        let mut sections = IndexMap::new();
+        let mut sections: IndexMap<String, IniSection> = IndexMap::new();
         let mut trailing_comments = Vec::new();
         let mut state = ParseState::BetweenSections;
         let mut pending_comments = Vec::new();
@@ -103,6 +103,11 @@ impl IniDocument {
                     return Err(format!("Malformed section header at line {}: {}", line_number, trimmed));
                 }
                 let section_name = code[1..code.len()-1].to_string();
+                // A repeat would replace the earlier section and drop its properties.
+                if let Some(earlier) = sections.get(&section_name) {
+                    return Err(format!("Duplicate section header at line {}: [{}] (also defined on line {})",
+                        line_number, section_name, earlier.line_number));
+                }
 
                 // Keep the gap between ']' and '#' so the header round-trips verbatim.
                 let header_comment = inline_comment.map(|c| {
@@ -551,6 +556,20 @@ key3 = value3
 
         let section2 = &doc.sections["section2"];
         assert_eq!(section2.properties["key3"].value, "value3");
+    }
+
+    #[test]
+    fn test_repeated_section_header_is_refused() {
+        let content = "[node.a]\ninflow = 1\n\n[node.b]\ninflow = 2\n\n[node.a] # again\ninflow = 7\n";
+        let err = IniDocument::parse(content).unwrap_err();
+        assert_eq!(err, "Duplicate section header at line 7: [node.a] (also defined on line 1)");
+    }
+
+    #[test]
+    fn test_section_headers_differing_in_case_are_distinct() {
+        // Case-insensitive duplicates are a model-level rule (node names), not the parser's.
+        let doc = IniDocument::parse("[node.a]\n[node.A]\n").unwrap();
+        assert_eq!(doc.sections.len(), 2);
     }
 
     #[test]

@@ -74,6 +74,13 @@ fn test_node_names_differing_only_in_case_are_refused() {
 }
 
 #[test]
+fn test_repeated_node_section_is_refused() {
+    let extra = "[node.src]\nloc = 0, 10\ntype = inflow\ninflow = 7\nds_1 = sink\n";
+    let err = expect_err(&model_ini("src", "1", extra, "node.sink.usflow"));
+    assert!(err.contains("Duplicate section header at line 11: [node.src] (also defined on line 5)"), "{}", err);
+}
+
+#[test]
 fn test_reference_matches_node_name_case_insensitively() {
     let extra = "[node.reader]\nloc = 0, 10\ntype = inflow\ninflow = node.mygr4j.dsflow[-1, 0.0]\nds_1 = sink\n";
     load_and_run(&model_ini("MyGr4j", "1", extra, "node.reader.dsflow")).unwrap();
