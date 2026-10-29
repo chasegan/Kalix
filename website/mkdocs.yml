@@ -222,6 +222,7 @@ nav:
               - "0012 Inputs in step with the simulation": code/design/adrs/0012-inputs-in-step-with-the-simulation.md
               - "0013 Package the IDE with jpackage": code/design/adrs/0013-package-the-ide-with-jpackage.md
               - "0014 STDIO: whole lines, replies by content": code/design/adrs/0014-stdio-whole-lines-replies-by-content.md
+              - "0015 Resolve references at load": code/design/adrs/0015-resolve-references-at-load.md
           - Website:
               - code/design/website/index.md
               - Todo: code/design/website/todo.md
