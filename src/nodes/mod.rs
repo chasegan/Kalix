@@ -33,10 +33,13 @@ use crate::data_management::data_cache::DataCache;
 /// (`node.<name>.<output>`). Returns None when the series isn't registered
 /// (i.e. nobody asked to record it). Replaces the
 /// `get_series_idx(make_result_name(...))` incantation each node repeated
-/// for every recorder.
+/// for every recorder. Claims the series as written, which is how
+/// `Model::validate_computed_references` knows the output exists.
 pub(crate) fn recorder(data_cache: &mut DataCache, node_name: &str, output: &str) -> Option<usize> {
     let series_name = crate::misc::misc_functions::make_result_name(node_name, output);
-    data_cache.get_series_idx(series_name.as_str(), false)
+    let idx = data_cache.get_series_idx(series_name.as_str(), false)?;
+    data_cache.mark_written(idx);
+    Some(idx)
 }
 
 /// The four Node methods that are identical for every node with a single

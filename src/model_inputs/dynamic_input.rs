@@ -1625,6 +1625,10 @@ impl DynamicInput {
                     && !lower_name.starts_with("var.")
                     && !lower_name.starts_with("acc.");
                 let idx = data_cache.get_or_add_new_series(&lower_name, is_critical);
+                if ["node.", "var.", "acc.", "ras."].iter().any(|p| lower_name.starts_with(p))
+                    && data_cache.static_properties.get_idx(&lower_name).is_none() {
+                    data_cache.mark_expression_reference(idx);
+                }
                 data_indices.push(idx);
             }
 
@@ -1687,6 +1691,7 @@ impl DynamicInput {
                     // var values, account state and RAS series are computed during
                     // the run, not loaded)
                     let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
+                    data_cache.mark_expression_reference(idx);
                     data_variable_map.insert(lower_name, idx);
                 }
             } else {
@@ -1942,6 +1947,7 @@ impl DynamicInput {
                 } else {
                     // Computed during the run, not loaded: never critical.
                     let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
+                    data_cache.mark_expression_reference(idx);
                     data_variable_map.insert(lower_name, idx);
                 }
             } else {
