@@ -198,7 +198,7 @@ code, so a comment block keeps introducing the header below it; a region ends at
 last non-blank line, comments included. A section's fold ends where
 `NodeSectionLocator.contentEnd` does, and an agreement test over every `.ini` in the
 repository holds the two together. Fold state is view state: never written to the file,
-never persisted. The Edit menu's four fold items are RSyntaxTextArea's own editor-kit
+never persisted (ADR-0015). The Edit menu's four fold items are RSyntaxTextArea's own editor-kit
 actions, wired like Cut/Copy/Paste. The library opens a fold only for its own search, so
 `KalixTextArea` does it for every programmatic caret move and for undo/redo: every
 go-to, find, lint jump and undone edit lands on a visible line. A collapsed fold does not
