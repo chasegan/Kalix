@@ -4,10 +4,8 @@ import com.kalix.ide.linter.parsing.AnnotationKey;
 import com.kalix.ide.linter.parsing.IniContinuation;
 import com.kalix.ide.linter.parsing.IniSyntax;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Deque;
 import java.util.List;
 import javax.swing.text.BadLocationException;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
@@ -141,30 +139,25 @@ public final class KalixIniFoldParser implements FoldParser {
     @Override
     public List<Fold> getFolds(RSyntaxTextArea textArea) {
         List<Fold> folds = new ArrayList<>();
-        Deque<Nested> open = new ArrayDeque<>();
+        Fold parent = null;
         try {
             for (Range range : ranges(textArea.getText())) {
-                while (!open.isEmpty() && open.peek().range().lastLine() < range.firstLine()) {
-                    open.pop();
+                while (parent != null && parent.getEndLine() < range.firstLine()) {
+                    parent = parent.getParent();
                 }
-                Nested parent = open.peek();
+                int type = range.kind().foldType();
                 int start = textArea.getLineStartOffset(range.firstLine());
-                Fold fold = parent == null
-                    ? new Fold(range.kind().foldType(), textArea, start)
-                    : parent.fold().createChild(range.kind().foldType(), start);
+                Fold fold = parent == null ? new Fold(type, textArea, start) : parent.createChild(type, start);
                 fold.setEndOffset(textArea.getLineStartOffset(range.lastLine()));
                 if (parent == null) {
                     folds.add(fold);
                 }
-                open.push(new Nested(range, fold));
+                parent = fold;
             }
         } catch (BadLocationException e) {
             // ranges() and the line offsets come from the same text, on the EDT.
             throw new IllegalStateException("fold range outside the document", e);
         }
         return folds;
-    }
-
-    private record Nested(Range range, Fold fold) {
     }
 }
