@@ -37,7 +37,7 @@ public enum AppShortcut {
     COPY("Copy", KeyEvent.VK_C),
     PASTE("Paste", KeyEvent.VK_V),
     TOGGLE_COMMENT("Toggle Comment", KeyEvent.VK_SLASH),
-    /** Folding on minus and equals (plus unshifted), the IntelliJ convention. */
+    /** Fold on minus, unfold on equals (the unshifted plus key), and with Shift every fold: IntelliJ's convention. */
     FOLD("Fold", KeyEvent.VK_MINUS),
     UNFOLD("Unfold", KeyEvent.VK_EQUALS),
     FOLD_ALL("Fold All", KeyEvent.VK_MINUS, InputEvent.SHIFT_DOWN_MASK),

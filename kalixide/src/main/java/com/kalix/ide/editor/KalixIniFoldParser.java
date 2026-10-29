@@ -42,7 +42,7 @@ public final class KalixIniFoldParser implements FoldParser {
     /** The fold type of a region, above the library's own so "collapse all comments" leaves regions alone. */
     public static final int REGION_FOLD_TYPE = FoldType.FOLD_TYPE_USER_DEFINED_MIN;
 
-    /** What a fold is. */
+    /** The three kinds of fold, outermost first. */
     public enum Kind {
         REGION, SECTION, VALUE;
 
