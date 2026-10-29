@@ -74,43 +74,39 @@ public final class KalixIniFoldParser implements FoldParser {
         OpenFold region = new OpenFold(Kind.REGION);
         OpenFold section = new OpenFold(Kind.SECTION);
         OpenFold value = new OpenFold(Kind.VALUE);
+        int lastCode = -1;
 
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
-            boolean code = !IniSyntax.stripComment(line).isBlank();
+            boolean code = !IniSyntax.isBlankOrComment(line);
             if (IniSyntax.isSectionHeaderLine(line)) {
-                value.close(ranges);
-                section.close(ranges);
+                value.close(ranges, lastCode);
+                section.close(ranges, lastCode);
                 section.open(i);
-                region.extend(i);
             } else if (isRegionLine(line)) {
-                value.close(ranges);
-                section.close(ranges);
-                region.close(ranges);
+                value.close(ranges, lastCode);
+                section.close(ranges, lastCode);
+                region.close(ranges, lastCode);
                 region.open(i);
             } else if (IniContinuation.isContinuationLine(line)) {
-                // A continuation line with code extends everything open; one
-                // without (whitespace, or an indented comment) is skipped, as the
-                // engine skips it.
-                if (code) {
-                    value.extend(i);
-                    section.extend(i);
-                    region.extend(i);
-                }
+                // Continues whatever is open; one without code (whitespace, or an
+                // indented comment) is skipped, as the engine skips it.
             } else if (code) {
-                value.close(ranges);
+                value.close(ranges, lastCode);
                 value.open(i);
-                section.extend(i);
-                region.extend(i);
             } else {
                 // A blank line or a flush-left comment ends a value and nothing else.
-                value.close(ranges);
+                value.close(ranges, lastCode);
+            }
+            if (code) {
+                lastCode = i;
             }
         }
-        value.close(ranges);
-        section.close(ranges);
-        region.close(ranges);
+        value.close(ranges, lastCode);
+        section.close(ranges, lastCode);
+        region.close(ranges, lastCode);
 
+        // Folds close inner first; the reader wants them outer first.
         ranges.sort(Comparator.comparingInt(Range::firstLine));
         return ranges;
     }
@@ -120,11 +116,10 @@ public final class KalixIniFoldParser implements FoldParser {
         return annotation != null && AnnotationKey.of(annotation.key()) == AnnotationKey.REGION;
     }
 
-    /** A fold being scanned: its first line, and the last line of code seen since. */
+    /** A fold being scanned: where it opened, if it is open. */
     private static final class OpenFold {
         private final Kind kind;
         private int first = -1;
-        private int last = -1;
 
         OpenFold(Kind kind) {
             this.kind = kind;
@@ -132,19 +127,12 @@ public final class KalixIniFoldParser implements FoldParser {
 
         void open(int line) {
             first = line;
-            last = line;
         }
 
-        void extend(int line) {
-            if (first >= 0) {
-                last = line;
-            }
-        }
-
-        /** Emits the fold if it is open and spans more than its first line, then forgets it. */
-        void close(List<Range> into) {
-            if (first >= 0 && last > first) {
-                into.add(new Range(kind, first, last));
+        /** Emits the fold, ending at {@code lastCode}, if it is open and that is past its first line; then forgets it. */
+        void close(List<Range> into, int lastCode) {
+            if (first >= 0 && lastCode > first) {
+                into.add(new Range(kind, first, lastCode));
             }
             first = -1;
         }
