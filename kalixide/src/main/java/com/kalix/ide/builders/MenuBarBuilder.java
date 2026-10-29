@@ -47,6 +47,10 @@ public class MenuBarBuilder {
         boolean canRedo();
         void toggleCommentAction();
         void normalizeLineEndings();
+        void fold();
+        void unfold();
+        void foldAll();
+        void unfoldAll();
         void zoomIn();
         void zoomOut();
         void resetZoom();
@@ -277,6 +281,11 @@ public class MenuBarBuilder {
         editMenu.add(createMenuItem("Find Next", AppShortcut.FIND_NEXT, e -> callbacks.findNext()));
         editMenu.add(createMenuItem("Find Previous", AppShortcut.FIND_PREVIOUS, e -> callbacks.findPrevious()));
         editMenu.add(createMenuItem("Find on Map...", e -> callbacks.findNodeOnMap()));
+        editMenu.addSeparator();
+        editMenu.add(createMenuItem("Fold", AppShortcut.FOLD, e -> callbacks.fold()));
+        editMenu.add(createMenuItem("Unfold", AppShortcut.UNFOLD, e -> callbacks.unfold()));
+        editMenu.add(createMenuItem("Fold All", AppShortcut.FOLD_ALL, e -> callbacks.foldAll()));
+        editMenu.add(createMenuItem("Unfold All", AppShortcut.UNFOLD_ALL, e -> callbacks.unfoldAll()));
 
         return editMenu;
     }

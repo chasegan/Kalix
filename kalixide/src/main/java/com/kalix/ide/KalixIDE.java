@@ -1518,6 +1518,26 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
+    public void fold() {
+        textEditor.fold();
+    }
+
+    @Override
+    public void unfold() {
+        textEditor.unfold();
+    }
+
+    @Override
+    public void foldAll() {
+        textEditor.foldAll();
+    }
+
+    @Override
+    public void unfoldAll() {
+        textEditor.unfoldAll();
+    }
+
+    @Override
     public void zoomIn() {
         if (mapPanel == null) return;
         mapPanel.zoomIn();

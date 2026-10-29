@@ -32,6 +32,7 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextAreaEditorKit;
 import org.fife.ui.rtextarea.RTextScrollPane;
 
 import com.kalix.ide.components.KalixIniTextArea;
@@ -1008,6 +1009,37 @@ public class EnhancedTextEditor extends JPanel {
      * works in one consistent coordinate space regardless of how many lines are
      * selected (the old per-line re-read drifted for selections spanning 3+ lines).
      */
+    /** Collapses the fold at the caret: the one starting on its line, else the innermost open one around it. */
+    public void fold() {
+        runEditorKitAction(RSyntaxTextAreaEditorKit.rstaCollapseFoldAction);
+    }
+
+    /** Expands the fold at the caret. */
+    public void unfold() {
+        runEditorKitAction(RSyntaxTextAreaEditorKit.rstaExpandFoldAction);
+    }
+
+    /** Collapses every fold in the document. */
+    public void foldAll() {
+        runEditorKitAction(RSyntaxTextAreaEditorKit.rstaCollapseAllFoldsAction);
+    }
+
+    /** Expands every fold in the document. */
+    public void unfoldAll() {
+        runEditorKitAction(RSyntaxTextAreaEditorKit.rstaExpandAllFoldsAction);
+    }
+
+    /**
+     * Runs one of RSyntaxTextArea's own editor-kit actions on this editor's text
+     * area, so a menu item does exactly what the library's key binding would.
+     */
+    private void runEditorKitAction(String actionName) {
+        Action action = textArea.getActionMap().get(actionName);
+        if (action != null) {
+            action.actionPerformed(new ActionEvent(textArea, ActionEvent.ACTION_PERFORMED, actionName));
+        }
+    }
+
     public void toggleComment() {
         try {
             int selectionStart = textArea.getSelectionStart();
