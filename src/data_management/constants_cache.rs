@@ -99,7 +99,8 @@ impl ConstantsCache {
     pub fn assert_all_constants_have_assigned_values(&self) -> Result<(), String> {
         for i in 0..self.len() {
             if !self.is_assigned[i] {
-                return Err(format!("Constant '{}' has not been assigned a value.", self.names[i]));
+                return Err(format!(
+                    "Unknown constant '{}'. Constants are declared in the [const] section.", self.names[i]));
             }
         }
         Ok(())

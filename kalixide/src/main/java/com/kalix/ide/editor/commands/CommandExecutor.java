@@ -60,7 +60,15 @@ public class CommandExecutor {
                 if (trimmed.isEmpty()) {
                     return "New name cannot be empty";
                 }
-                if (parsedModel.getSections().containsKey("node." + trimmed)) {
+                if (!EngineNames.isValidNodeName(trimmed)) {
+                    return EngineNames.NODE_NAME_RULE;
+                }
+                // A change of case alone is a rename of the same node, not a clash.
+                String newKey = EngineNames.nodeKey(trimmed);
+                boolean taken = parsedModel.getAllNodeSections().stream()
+                    .map(node -> EngineNames.nodeKey(node.getNodeName()))
+                    .anyMatch(key -> key.equals(newKey) && !key.equals(EngineNames.nodeKey(oldName)));
+                if (taken) {
                     return "A node named '" + trimmed + "' already exists";
                 }
                 return null;
@@ -716,11 +724,11 @@ public class CommandExecutor {
     static String uniqueNodeName(String templateId, String text) {
         Set<String> taken = new HashSet<>();
         for (NodeSectionLocator.NodeSection section : NodeSectionLocator.findAll(text)) {
-            taken.add(section.nodeName());
+            taken.add(EngineNames.nodeKey(section.nodeName()));
         }
         int suffix = 1;
         String candidate = templateId + "_" + suffix;
-        while (taken.contains(candidate)) {
+        while (taken.contains(EngineNames.nodeKey(candidate))) {
             suffix++;
             candidate = templateId + "_" + suffix;
         }

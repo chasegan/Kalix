@@ -32,7 +32,8 @@ demand = const.demand_factor * data.raw_demand
 ```
 
 Constants are resolved at load, wherever they sit in the file, so a `[const]`
-section may appear before or after the nodes that use it.
+section may appear before or after the nodes that use it. A reference to a
+constant that isn't declared stops the model loading, naming the constant.
 
 ## Optimisable
 

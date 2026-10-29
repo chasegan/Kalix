@@ -4,17 +4,19 @@ title: "Conventions"
 
 # Conventions
 
+## Sections
+
+Each section header may appear only once in a model. A repeated header, such as two `[node.dam]` sections, is refused when the model loads, with an error naming both lines.
+
 ## Node Names
 
 Node names are defined as part of the node declaration. Node naming follows the conventions below:
 
-- Node names are not case sensitive.
-
-- They must start with an alphabetical character.
+- Node names are not case sensitive, so `Dam` and `dam` are the same node and cannot both be declared.
 
 - They may only contain
-  - alphabetical characters ‘a’-’z’
-  - numerical characters ‘0’-’9’
+  - alphabetical characters ‘a’-’z’ and ‘A’-’Z’
+  - numerical characters ‘0’-’9’ (including as the first character, e.g. `0001_inflow`)
   - underscores ‘\_’
 
 - They must not contain
@@ -23,6 +25,8 @@ Node names are defined as part of the node declaration. Node naming follows the 
   - symbols including ‘#’, ‘$’, ‘%’,
   - mathematical symbols ‘+’, ‘-’, ‘\*’, ‘^’, ‘=’, ‘/’
   - brackets.
+
+A model with a node name that breaks these rules is refused when it loads, with an error naming the line.
 
 ## Tables
 

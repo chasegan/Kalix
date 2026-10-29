@@ -3,9 +3,11 @@ package com.kalix.ide.utils;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
- * Java mirror of the name-sanitisation rule owned by the Rust engine.
+ * Java mirror of the name rules owned by the Rust engine: name sanitisation,
+ * and the node-name rule.
  *
  * <p>The point of truth is {@code fn sanitize_name} in
  * {@code src/misc/misc_functions.rs}: <em>lowercase first</em>, then map every
@@ -60,5 +62,33 @@ public final class EngineNames {
     public static String sanitizeFileName(String filePath) {
         Path fileName = Paths.get(filePath).getFileName();
         return sanitize(fileName != null ? fileName.toString() : filePath);
+    }
+
+    private static final Pattern NODE_NAME = Pattern.compile("[A-Za-z0-9_]+");
+
+    /** The message shown wherever a node name fails {@link #isValidNodeName}. */
+    public static final String NODE_NAME_RULE = "Node names may contain only letters, digits and underscores";
+
+    /**
+     * Whether {@code name} is a legal node name. Mirrors {@code fn is_valid_name_segment}
+     * in {@code src/misc/misc_functions.rs}: ASCII letters (either case), digits and
+     * underscores, non-empty.
+     *
+     * @param name the node name, without the {@code node.} prefix
+     * @return true if the engine accepts it
+     */
+    public static boolean isValidNodeName(String name) {
+        return name != null && NODE_NAME.matcher(name).matches();
+    }
+
+    /**
+     * The key node names are compared by. Node names are not case sensitive in the
+     * engine, so {@code Dam} and {@code dam} are the same node.
+     *
+     * @param name the node name
+     * @return the name lowercased
+     */
+    public static String nodeKey(String name) {
+        return name.toLowerCase(Locale.ROOT);
     }
 }

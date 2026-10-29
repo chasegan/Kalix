@@ -4,17 +4,30 @@ import com.kalix.ide.linter.parsing.INIModelParser;
 import com.kalix.ide.linter.LinterSchema;
 import com.kalix.ide.linter.model.ValidationResult;
 import com.kalix.ide.linter.model.ValidationRule;
+import com.kalix.ide.utils.EngineNames;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * Validates that node names are unique throughout the model.
+ * Validates node names: each follows the engine's name rule, and none is repeated
+ * (ignoring case).
  */
 public class UniqueNameValidator implements ValidationStrategy {
 
     @Override
     public void validate(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result, java.io.File baseDirectory) {
+        ValidationRule formatRule = schema.getValidationRule("node_name_format");
+        if (formatRule != null && formatRule.isEnabled()) {
+            for (INIModelParser.NodeSection node : model.getAllNodeSections()) {
+                if (!EngineNames.isValidNodeName(node.getNodeName())) {
+                    result.addIssue(node.getStartLine(),
+                                  EngineNames.NODE_NAME_RULE + ": " + node.getNodeName(),
+                                  formatRule.getSeverity(), "node_name_format");
+                }
+            }
+        }
+
         ValidationRule rule = schema.getValidationRule("unique_node_names");
         if (rule == null || !rule.isEnabled()) return;
 

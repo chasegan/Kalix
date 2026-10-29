@@ -8,6 +8,8 @@ Model outputs listed in the [outputs] section are recorded during the simulation
 
 Refer to the node documentation ([Nodes](nodes.md)) to see the available outputs.
 
+Each entry is dot-separated names of letters, digits and underscores, such as `node.dam.volume`, and is not case sensitive. An entry with any other shape (a space, a symbol, an empty part) stops the model loading. An entry that names an output nothing produces is not an error: the IDE shows it as an empty series, and the CLI leaves its column out of the CSV.
+
 Values published by [`[var.*]` blocks](vars.md) are recordable the same way —
 one bare line per series:
 

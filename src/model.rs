@@ -426,6 +426,14 @@ impl Model {
         //2) Nodes ask data_cache for idx of relevant data series for input
         self.initialize_nodes()?;
 
+        //   Every node.* / var.* series an expression reads must now have a
+        //   writer, since nodes claimed theirs in initialise.
+        self.validate_computed_references()?;
+
+        //   An expression's const.* reference registers the constant; only
+        //   [const] (or the optimiser, before configure) assigns it.
+        self.data_cache.constants.assert_all_constants_have_assigned_values()?;
+
         //3) Validate link ordering (structural only, no input data required).
         //   Also re-checked in initialize_network() before every run(), since
         //   that call additionally resets per-run node/ordering state -- but
@@ -435,6 +443,41 @@ impl Model {
         //   from_file/from_model_string) and never call run().
         self.check_execution_order()?;
 
+        Ok(())
+    }
+
+    /// Every `node.*` / `var.*` series read by an expression must be written by
+    /// a node recorder or var block. Without this a reference to a missing
+    /// node, output or var reads its lag default for the whole run, or panics
+    /// as "computed later in the timestep" (#442). `acc.*` / `ras.*` references
+    /// are checked at load, in the reader.
+    fn validate_computed_references(&self) -> Result<(), String> {
+        let cache = &self.data_cache;
+        for idx in 0..cache.series.len() {
+            if !cache.referenced_by_expression[idx] || cache.has_writer[idx] {
+                continue;
+            }
+            let name = &cache.series_name[idx];
+            let name_lower = name.to_lowercase();
+            if let Some(rest) = name_lower.strip_prefix("node.") {
+                let Some((node_name, output)) = rest.split_once('.') else {
+                    return Err(format!(
+                        "Invalid node reference '{}': expected 'node.<name>.<output>'.", name));
+                };
+                return Err(match self.get_node_idx(node_name) {
+                    None => format!(
+                        "Unknown node '{}' in reference '{}'. Nodes are declared in [node.*] sections.",
+                        node_name, name),
+                    Some(i) => format!(
+                        "Node '{}' has no output '{}' (in reference '{}').",
+                        self.nodes[i].get_name(), output, name),
+                });
+            }
+            if name_lower.starts_with("var.") {
+                return Err(format!(
+                    "Unknown var '{}'. Vars are declared in [var.*] sections.", name));
+            }
+        }
         Ok(())
     }
 
