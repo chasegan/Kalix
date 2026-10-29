@@ -1,8 +1,10 @@
 package com.kalix.ide.components;
 
+import com.kalix.ide.editor.KalixIniFoldParser;
 import com.kalix.ide.themes.SyntaxTheme;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
+import org.fife.ui.rsyntaxtextarea.folding.FoldParserManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +17,8 @@ import org.slf4j.LoggerFactory;
  *   <li>Custom Kalix INI syntax highlighting with line continuation support</li>
  *   <li>Syntax theme from user preferences</li>
  *   <li>Theme-aware current line highlighting</li>
- *   <li>Code folding, mark occurrences, and other editing features</li>
+ *   <li>Code folding of regions, sections and multi-line values
+ *       ({@link KalixIniFoldParser}), mark occurrences, and other editing features</li>
  *   <li>Syntax theme updates for every live instance via static methods</li>
  * </ul>
  *
@@ -31,6 +34,7 @@ public class KalixIniTextArea extends KalixTextArea {
 
     static {
         registerCustomTokenMaker();
+        FoldParserManager.get().addFoldParserMapping(SYNTAX_STYLE_KALIX_INI, new KalixIniFoldParser());
     }
 
     /**
