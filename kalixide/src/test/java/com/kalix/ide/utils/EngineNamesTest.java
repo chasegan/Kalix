@@ -3,6 +3,8 @@ package com.kalix.ide.utils;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Pins {@link EngineNames} to the Rust engine's sanitisation rule
@@ -50,5 +52,22 @@ class EngineNamesTest {
         assertEquals("mydata_csv", EngineNames.sanitizeFileName("./inputs/MyData.csv"));
         assertEquals("my_data_csv", EngineNames.sanitizeFileName("^/inputs/my.data.csv"));
         assertEquals("flow_data_csv", EngineNames.sanitizeFileName("flow_data.csv"));
+    }
+
+    @Test
+    void nodeNameRuleMatchesTheEngine() {
+        assertTrue(EngineNames.isValidNodeName("my_gr4j"));
+        assertTrue(EngineNames.isValidNodeName("MyGr4j"));
+        assertTrue(EngineNames.isValidNodeName("0001_in"));
+        assertFalse(EngineNames.isValidNodeName(""));
+        assertFalse(EngineNames.isValidNodeName("my gr4j"));
+        assertFalse(EngineNames.isValidNodeName("my.gr4j"));
+        assertFalse(EngineNames.isValidNodeName("gr4j*2"));
+        assertFalse(EngineNames.isValidNodeName("déjà"));
+    }
+
+    @Test
+    void nodeKeyIgnoresCase() {
+        assertEquals(EngineNames.nodeKey("dam"), EngineNames.nodeKey("Dam"));
     }
 }
