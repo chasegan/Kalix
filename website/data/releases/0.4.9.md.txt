@@ -18,3 +18,10 @@ pip: "pip install kalix==0.4.9"
     - Python: `read_pixie()` returns an empty series as a column of NaN on the other series' timestamps. Series with values on different timesteps are still refused.
     - Python: `set_input()` now raises `ModelValidationError` for data with no rows or one row. Previously it assumed a daily timestep for a single row, and raised `ValueError` for no rows.
 - IDE: files dragged from Finder or Explorer onto the project tree are copied into the folder they land on. If a name is already taken, you're asked to replace it or keep both (#469).
+- Name and reference checks (#442). **Breaking:** models that break these rules no longer load.
+    - Node names may contain only letters, digits and underscores. Names that differ only in case (`Dam`, `dam`) are duplicates and rejected. A name like `[node.my gr4j]` used to load, but no expression could reach it.
+    - A section header that appears twice in a model (e.g. two `[node.a]` sections) is an error naming both lines. The later section used to replace the earlier one without warning, dropping all of its properties.
+    - An expression that refers to a node, node output or var that **doesn't exist is an error**, with or without an offset. `node.nosuch.dsflow[-1, 0.0]` used to read 0 for the whole run, and `node.nosuch.dsflow` was reported as "computed later in the timestep".
+    - So is a reference to a constant that isn't declared in `[const]`. `const.nosuch` used to read 0 for the whole run. A constant an optimisation calibrates should be declared too, or the model won't run on its own.
+    - `[outputs]` entries must be dot-separated names (no spaces or symbols). An entry naming something that doesn't exist is still accepted and records nothing.
+    - IDE: the linter flags invalid and case-duplicate node names, and Rename refuses them.
