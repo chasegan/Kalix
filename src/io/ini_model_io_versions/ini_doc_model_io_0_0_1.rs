@@ -1318,8 +1318,16 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // -------------------------------------------------------------------------------------
             // Parsing outputs
             // -------------------------------------------------------------------------------------
-            for (name, _ini_property) in ini_section.properties {
-                // Each property is a model result we want to record
+            for (name, ini_property) in ini_section.properties {
+                // Each property is a model result we want to record. Only its
+                // layout is checked: an output nothing writes is not an error.
+                let mut segments = name.split('.');
+                let well_formed = segments.clone().count() >= 2 && segments.all(is_valid_name_segment);
+                if !well_formed {
+                    return Err(KalixIoError::Parse(format!(
+                        "Error on line {}: Invalid output '{}'. Expected dot-separated names of letters, digits and underscores, e.g. node.<name>.<output>.",
+                        ini_property.line_number, name)));
+                }
                 model.outputs.push(name);
             }
         } else if section_name.starts_with("var.") {

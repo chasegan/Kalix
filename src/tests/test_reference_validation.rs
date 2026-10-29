@@ -78,3 +78,27 @@ fn test_reference_matches_node_name_case_insensitively() {
     let extra = "[node.reader]\nloc = 0, 10\ntype = inflow\ninflow = node.mygr4j.dsflow[-1, 0.0]\nds_1 = sink\n";
     load_and_run(&model_ini("MyGr4j", "1", extra, "node.reader.dsflow")).unwrap();
 }
+
+// -----------------------------------------------------------------------------
+// [outputs] layout: checked for shape, never for existence
+// -----------------------------------------------------------------------------
+
+#[test]
+fn test_malformed_outputs_are_refused() {
+    for bad in ["node.my gr4j.dsflow", "node..dsflow", "node.src.", "dsflow", "node.src*2.dsflow"] {
+        let err = expect_err(&model_ini("src", "1", "", bad));
+        assert!(err.contains(&format!("Invalid output '{}'", bad)), "{}: {}", bad, err);
+    }
+}
+
+#[test]
+fn test_outputs_are_not_case_sensitive() {
+    let model = load_and_run(&model_ini("MyGr4j", "1", "", "NODE.mygr4j.DSFLOW")).unwrap();
+    let series = model.get_output_series(Some(vec!["node.MyGr4j.dsflow".to_string()]), false).unwrap();
+    assert_eq!(series[0].values, vec![1.0; 10]);
+}
+
+#[test]
+fn test_output_for_missing_node_is_not_an_error() {
+    load_and_run(&model_ini("src", "1", "", "node.nosuch.dsflow")).unwrap();
+}
