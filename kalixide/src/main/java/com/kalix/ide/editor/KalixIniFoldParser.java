@@ -19,19 +19,23 @@ import org.fife.ui.rsyntaxtextarea.folding.FoldType;
  * function of the text; {@link #getFolds} only turns its line ranges into the
  * library's {@link Fold}s.
  *
- * <p>A fold starts at the line that stays visible when it is collapsed and ends at
- * its last line of code. Blank lines and comments trailing a fold stay outside it,
- * so the gap between sections keeps showing and a comment block keeps introducing
- * whatever sits below it, the reading {@code NodeSectionLocator} takes for
- * insertion. A fold of one line is not a fold.</p>
+ * <p>A fold starts at the line that stays visible when it is collapsed. Blank lines
+ * trailing a fold stay outside it, so the gap between folds keeps showing. A section
+ * or value also leaves its trailing comments outside, since a comment block above a
+ * header conventionally introduces what sits below it, the reading
+ * {@code NodeSectionLocator} takes for insertion; a region's own line is that
+ * introduction, so a region takes its comments with it. A fold of one line is not a
+ * fold.</p>
  * <ul>
  *   <li>A <em>region</em> starts at a {@code #@region = Title} line (ADR-0010 §6.3)
- *       and runs to the next region line or the end of the file.</li>
- *   <li>A <em>section</em> starts at a {@code [header]} line and runs to the next
- *       header or region line.</li>
+ *       and runs to the last non-blank line before the next region line or the end
+ *       of the file.</li>
+ *   <li>A <em>section</em> starts at a {@code [header]} line and runs to its last
+ *       line of code before the next header or region line.</li>
  *   <li>A <em>value</em> starts at a flush-left line of code (a property, or a bare
- *       entry in {@code [data]} or {@code [outputs]}) and runs over the continuation
- *       lines that follow it, by {@link IniContinuation}'s rule.</li>
+ *       entry in {@code [data]} or {@code [outputs]}) and runs to its last line of
+ *       code among the continuation lines that follow it, by
+ *       {@link IniContinuation}'s rule.</li>
  * </ul>
  * <p>The parser is lenient where the linter is strict: a region line inside a
  * section still folds, it simply ends that section's fold, so folds never
@@ -73,6 +77,7 @@ public final class KalixIniFoldParser implements FoldParser {
         OpenFold section = new OpenFold(Kind.SECTION);
         OpenFold value = new OpenFold(Kind.VALUE);
         int lastCode = -1;
+        int lastNonBlank = -1;
 
         for (int i = 0; i < lines.length; i++) {
             String line = lines[i];
@@ -84,7 +89,7 @@ public final class KalixIniFoldParser implements FoldParser {
             } else if (isRegionLine(line)) {
                 value.close(ranges, lastCode);
                 section.close(ranges, lastCode);
-                region.close(ranges, lastCode);
+                region.close(ranges, lastNonBlank);
                 region.open(i);
             } else if (IniContinuation.isContinuationLine(line)) {
                 // Continues whatever is open; one without code (whitespace, or an
@@ -99,10 +104,13 @@ public final class KalixIniFoldParser implements FoldParser {
             if (code) {
                 lastCode = i;
             }
+            if (!line.isBlank()) {
+                lastNonBlank = i;
+            }
         }
         value.close(ranges, lastCode);
         section.close(ranges, lastCode);
-        region.close(ranges, lastCode);
+        region.close(ranges, lastNonBlank);
 
         // Folds close inner first; the reader wants them outer first.
         ranges.sort(Comparator.comparingInt(Range::firstLine));
@@ -127,10 +135,10 @@ public final class KalixIniFoldParser implements FoldParser {
             first = line;
         }
 
-        /** Emits the fold, ending at {@code lastCode}, if it is open and that is past its first line; then forgets it. */
-        void close(List<Range> into, int lastCode) {
-            if (first >= 0 && lastCode > first) {
-                into.add(new Range(kind, first, lastCode));
+        /** Emits the fold, ending at {@code last}, if it is open and that is past its first line; then forgets it. */
+        void close(List<Range> into, int last) {
+            if (first >= 0 && last > first) {
+                into.add(new Range(kind, first, last));
             }
             first = -1;
         }

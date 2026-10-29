@@ -189,10 +189,12 @@ Key files: `IniSyntax.java`, `ModelParser.java`, `NodeLabelMode.java`, `ToolBarB
 ### Folding (#494)
 `KalixIniFoldParser` is the one fold grammar, registered for the Kalix INI style beside
 the token maker. Its `ranges()` is a pure function of the text and is what the tests
-pin: a region (`#@region`), a section, or a multi-line value folds from its first line
-to its last line of code, nested in that order and never overlapping. A section's fold
-ends where `NodeSectionLocator.contentEnd` does, and an agreement test over every
-`.ini` in the repository holds the two together. Fold state is view state: never
+pin: a region (`#@region`), a section, or a multi-line value folds from its first line,
+nested in that order and never overlapping. A section or value ends at its last line of
+code, so a comment block keeps introducing the header below it; a region ends at its
+last non-blank line, comments included. A section's fold ends where
+`NodeSectionLocator.contentEnd` does, and an agreement test over every `.ini` in the
+repository holds the two together. Fold state is view state: never
 written to the file, never persisted. The Edit menu's four fold items are
 RSyntaxTextArea's own editor-kit actions, wired like Cut/Copy/Paste. The library does
 not open a fold for a programmatic caret move, so `KalixTextArea.setCaretPosition`

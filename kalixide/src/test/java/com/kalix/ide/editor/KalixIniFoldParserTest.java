@@ -23,8 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * The fold grammar: regions, sections and multi-line values, each ending at its
- * last line of code, nested region ⊃ section ⊃ value, never overlapping.
+ * The fold grammar: regions, sections and multi-line values, nested
+ * region ⊃ section ⊃ value, never overlapping. A section or value ends at its last
+ * line of code; a region ends at its last non-blank line, comments included.
  */
 class KalixIniFoldParserTest {
 
@@ -132,16 +133,30 @@ class KalixIniFoldParserTest {
     }
 
     @Test
-    void lastRegionRunsToTheLastLineOfCodeInTheFile() {
+    void regionTakesItsCommentsAndLeavesTrailingBlankLines() {
         String text = "#@region = All\n[node.a]\nloc = 1, 2\n\n# trailing note\n\n";
-        assertEquals(List.of(region(0, 2), section(1, 2)), ranges(text));
+        assertEquals(List.of(region(0, 4), section(1, 2)), ranges(text));
     }
 
     @Test
-    void regionWithNoCodeDoesNotFold() {
+    void regionOfNothingButCommentsFolds() {
+        String text = """
+                #@region = Notes
+                # how this model came to be
+                # and who to ask
+
+                #@region = Nodes
+                [node.a]
+                type = inflow
+                """;
+        assertEquals(List.of(region(0, 2), region(4, 6), section(5, 6)), ranges(text));
+        assertEquals(List.of(section(0, 1), region(2, 3)), ranges("[x]\ny = 1\n#@region = Notes\n# only notes\n"));
+    }
+
+    @Test
+    void regionWithOnlyBlankLinesDoesNotFold() {
         assertEquals(List.of(region(2, 4), section(3, 4)), ranges("#@region = A\n\n#@region = B\n[x]\ny = 1\n"));
-        assertEquals(List.of(section(0, 1)), ranges("[x]\ny = 1\n#@region = Empty\n"));
-        assertEquals(List.of(section(0, 1)), ranges("[x]\ny = 1\n#@region = Notes\n# only notes\n"));
+        assertEquals(List.of(section(0, 1)), ranges("[x]\ny = 1\n#@region = Empty\n\n"));
     }
 
     @Test
