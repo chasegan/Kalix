@@ -89,7 +89,6 @@ public class AutoCompleteManager {
                 KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, InputEvent.CTRL_DOWN_MASK));
 
         autoCompletion.install(textArea);
-        logger.info("Auto-complete installed");
     }
 
     /**

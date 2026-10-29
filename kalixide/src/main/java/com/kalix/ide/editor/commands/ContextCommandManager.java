@@ -69,7 +69,6 @@ public class ContextCommandManager {
      */
     public void initialize() {
         registerCommands();
-        logger.info("Context command system initialized with {} commands", registry.getAllCommands().size());
     }
 
     /**
