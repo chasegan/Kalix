@@ -5,6 +5,7 @@ import com.kalix.ide.editor.KalixIniFoldParser.Range;
 import com.kalix.ide.linter.parsing.IniSyntax;
 import com.kalix.ide.model.NodeSectionLocator;
 import com.kalix.ide.model.NodeSectionLocator.NodeSection;
+import com.kalix.ide.model.RepositoryModels;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -14,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.kalix.ide.editor.KalixIniFoldParser.ranges;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -217,26 +217,13 @@ class KalixIniFoldParserTest {
 
     // --- agreement with the map's view of a section ---
 
-    /** Every .ini under the repository, excluding build output. */
-    private static List<Path> repositoryModels() throws IOException {
-        Path repo = Path.of("..").toAbsolutePath().normalize();
-        try (Stream<Path> paths = Files.walk(repo)) {
-            return paths.filter(p -> p.toString().endsWith(".ini"))
-                        .filter(p -> !p.toString().contains("/target/")
-                                  && !p.toString().contains("/build/")
-                                  && !p.toString().contains("/site/"))
-                        .sorted()
-                        .toList();
-        }
-    }
-
     /**
      * A node section's fold ends where {@code NodeSectionLocator} says its content
      * ends, so the editor and the map share one view of a section.
      */
     @Test
     void sectionFoldsEndWhereTheLocatorSaysContentEndsInEveryRepositoryModel() throws IOException {
-        List<Path> models = repositoryModels();
+        List<Path> models = RepositoryModels.all();
         assertFalse(models.isEmpty(), "no model files found under the repository");
 
         for (Path model : models) {
