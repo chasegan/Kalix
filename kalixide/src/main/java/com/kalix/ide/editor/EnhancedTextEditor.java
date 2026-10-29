@@ -1234,6 +1234,9 @@ public class EnhancedTextEditor extends JPanel {
         programmaticUpdate = true;
         try {
             textArea.setText(text);
+            // The library rebuilds folds from a timer after each edit; a model
+            // just opened should fold at once.
+            textArea.getFoldManager().reparse();
             textArea.setCaretPosition(0);
             setDirty(false);
             textArea.discardAllEdits();
