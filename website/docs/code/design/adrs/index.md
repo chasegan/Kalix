@@ -90,6 +90,7 @@ repository has the complete record.
 
 Newest first.
 
+- [ADR-0015 — Resolve every expression reference at load; check output entries for layout only](0015-resolve-references-at-load.md)
 - [ADR-0014 — Write whole lines to the engine, and match its replies by content](0014-stdio-whole-lines-replies-by-content.md)
 - [ADR-0013 — Package the IDE with the JDK's jpackage, not a plugin](0013-package-the-ide-with-jpackage.md)
 - [ADR-0012 — Inputs must be in step with the simulation; Kalix does not realign them](0012-inputs-in-step-with-the-simulation.md)
