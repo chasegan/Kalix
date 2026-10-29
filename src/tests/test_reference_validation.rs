@@ -102,3 +102,57 @@ fn test_outputs_are_not_case_sensitive() {
 fn test_output_for_missing_node_is_not_an_error() {
     load_and_run(&model_ini("src", "1", "", "node.nosuch.dsflow")).unwrap();
 }
+
+// -----------------------------------------------------------------------------
+// Expression references must exist, lagged or not
+// -----------------------------------------------------------------------------
+
+#[test]
+fn test_lagged_reference_to_missing_node_is_refused() {
+    let err = expect_err(&model_ini("src", "node.nosuch.dsflow[-1, 0.0]", "", "node.src.dsflow"));
+    assert!(err.contains("Unknown node 'nosuch' in reference 'node.nosuch.dsflow'"), "{}", err);
+}
+
+#[test]
+fn test_unlagged_reference_to_missing_node_says_unknown_not_later() {
+    let err = expect_err(&model_ini("src", "node.nosuch.dsflow", "", "node.src.dsflow"));
+    assert!(err.contains("Unknown node 'nosuch'"), "{}", err);
+    assert!(!err.contains("later in the timestep"), "{}", err);
+}
+
+#[test]
+fn test_reference_to_missing_output_of_real_node_is_refused() {
+    let extra = "[node.reader]\nloc = 0, 10\ntype = inflow\ninflow = node.src.dsflw[-1, 0.0]\nds_1 = sink\n";
+    let err = expect_err(&model_ini("src", "1", extra, "node.reader.dsflow"));
+    assert!(err.contains("Node 'src' has no output 'dsflw'"), "{}", err);
+}
+
+#[test]
+fn test_reference_to_missing_var_is_refused() {
+    let err = expect_err(&model_ini("src", "var.nosuch.x[-1, 0.0]", "", "node.src.dsflow"));
+    assert!(err.contains("Unknown var 'var.nosuch.x'"), "{}", err);
+}
+
+#[test]
+fn test_missing_reference_is_caught_even_when_also_an_output() {
+    let err = expect_err(&model_ini("src", "node.nosuch.dsflow[-1, 0.0]", "", "node.nosuch.dsflow"));
+    assert!(err.contains("Unknown node 'nosuch'"), "{}", err);
+}
+
+#[test]
+fn test_missing_reference_in_linear_combination_is_refused() {
+    let err = expect_err(&model_ini("src", "0.5 * node.nosuch.dsflow", "", "node.src.dsflow"));
+    assert!(err.contains("Unknown node 'nosuch'"), "{}", err);
+}
+
+#[test]
+fn test_lagged_forward_reference_to_real_node_and_earlier_var_are_accepted() {
+    let extra = concat!(
+        "[var.calc]\ny = 2\n\n",
+        "[node.reader]\nloc = 0, 10\ntype = inflow\ninflow = node.later.dsflow[-1, 0.0] + var.calc.y\nds_1 = sink\n\n",
+        "[node.later]\nloc = 0, 15\ntype = inflow\ninflow = 3\nds_1 = sink\n");
+    let model = load_and_run(&model_ini("src", "1", extra, "node.reader.dsflow")).unwrap();
+    let series = model.get_output_series(Some(vec!["node.reader.dsflow".to_string()]), false).unwrap();
+    assert_eq!(series[0].values[0], 2.0);
+    assert_eq!(series[0].values[1], 5.0);
+}

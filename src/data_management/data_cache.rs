@@ -109,6 +109,13 @@ pub struct DataCache {
     pub series_name: Vec<String>,
     pub is_critical: Vec<bool>,
 
+    /// Read by an expression as a series computed during the run
+    /// (`node.*`, `var.*`, `acc.*`, `ras.*`).
+    pub referenced_by_expression: Vec<bool>,
+
+    /// Claimed by the node recorder or var block that writes it.
+    pub has_writer: Vec<bool>,
+
     /// Case-insensitive name -> index lookup (keys lowercased). Mirrors
     /// series_name so that series resolution - which nodes do for every
     /// recorder on every initialise, and the optimiser once per evaluation -
@@ -189,6 +196,8 @@ impl DataCache {
         self.series = vec![];
         self.series_name = vec![];
         self.is_critical = vec![];
+        self.referenced_by_expression = vec![];
+        self.has_writer = vec![];
         self.name_lookup.clear();
         self.expr_state.clear();
 
@@ -405,9 +414,24 @@ impl DataCache {
             self.series.push(answer);
             self.series_name.push(name.to_string());
             self.is_critical.push(flag_as_critical);
+            self.referenced_by_expression.push(false);
+            self.has_writer.push(false);
             self.name_lookup.insert(name.to_lowercase(), idx);
             idx
         }
+    }
+
+
+    /// Records that an expression reads series `idx` as a computed value, so
+    /// `Model::validate_computed_references` can check something writes it.
+    pub fn mark_expression_reference(&mut self, idx: usize) {
+        self.referenced_by_expression[idx] = true;
+    }
+
+
+    /// Records that a node recorder or var block writes series `idx`.
+    pub fn mark_written(&mut self, idx: usize) {
+        self.has_writer[idx] = true;
     }
 
 
@@ -429,6 +453,8 @@ impl DataCache {
         self.series.push(series);
         self.series_name.push(name.to_string());
         self.is_critical.push(false);
+        self.referenced_by_expression.push(false);
+        self.has_writer.push(false);
         // First-registered name wins on lookup, matching the old linear scan.
         self.name_lookup.entry(name.to_lowercase()).or_insert(idx);
     }

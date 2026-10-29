@@ -1402,6 +1402,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 // the expression, so a self-reference with a [-1, default]
                 // offset resolves to the same series.
                 let series_idx = model.data_cache.get_or_add_new_series(&series_name, false);
+                model.data_cache.mark_written(series_idx);
 
                 // `this[-1, 0]` is the var's own series (ADR-0006
                 // §2.8): expanded textually in the definition's own text, so
