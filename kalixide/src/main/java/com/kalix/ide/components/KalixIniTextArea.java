@@ -90,6 +90,19 @@ public class KalixIniTextArea extends KalixTextArea {
     }
 
     /**
+     * Sets the text and folds it at once. The library rebuilds folds from a timer
+     * after each edit, which would leave a document just opened unfolded for a
+     * second. The old document's folds are dropped first so none of their state
+     * carries over by a coincidence of position.
+     */
+    @Override
+    public void setText(String text) {
+        getFoldManager().clear();
+        super.setText(text);
+        getFoldManager().reparse();
+    }
+
+    /**
      * Applies the syntax theme from user preferences (an explicit choice, or
      * the application theme's linked palette when in follow mode).
      */

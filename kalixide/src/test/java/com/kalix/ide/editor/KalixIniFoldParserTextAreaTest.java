@@ -26,9 +26,8 @@ class KalixIniFoldParserTextAreaTest {
 
         textArea.setText("#@region = A\n[node.a]\nkc = 1,\n   2\n\n[node.b]\ntype = gauge\n");
         FoldManager folds = textArea.getFoldManager();
-        folds.reparse();
 
-        assertEquals(1, folds.getFoldCount());
+        assertEquals(1, folds.getFoldCount(), "folds are built as soon as the text is set");
         Fold region = folds.getFold(0);
         assertEquals(KalixIniFoldParser.REGION_FOLD_TYPE, region.getFoldType());
         assertLines(region, 0, 6);
@@ -49,7 +48,6 @@ class KalixIniFoldParserTextAreaTest {
     void textWithoutCodeHasNoFolds() {
         KalixIniTextArea textArea = new KalixIniTextArea();
         textArea.setText("# nothing to fold\n");
-        textArea.getFoldManager().reparse();
         assertEquals(0, textArea.getFoldManager().getFoldCount());
     }
 
@@ -58,7 +56,6 @@ class KalixIniFoldParserTextAreaTest {
         KalixIniTextArea textArea = new KalixIniTextArea();
         textArea.setText("[node.a]\ntype = inflow\n\n[node.b]\ntype = gauge\n");
         FoldManager folds = textArea.getFoldManager();
-        folds.reparse();
         folds.getFold(0).setCollapsed(true);
 
         textArea.setCaretPosition(textArea.getLineStartOffset(2));
@@ -82,7 +79,6 @@ class KalixIniFoldParserTextAreaTest {
         KalixIniTextArea textArea = new KalixIniTextArea();
         textArea.setText("#@region = A\n[node.a]\ntype = inflow\n\n");
         FoldManager folds = textArea.getFoldManager();
-        folds.reparse();
         folds.getFold(0).setCollapsed(true);
 
         textArea.setCaretPosition(textArea.getLineStartOffset(4));

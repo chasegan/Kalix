@@ -35,7 +35,6 @@ class KalixTextAreaFoldRevealTest {
     private static KalixIniTextArea textArea() {
         KalixIniTextArea textArea = new KalixIniTextArea();
         textArea.setText(MODEL);
-        textArea.getFoldManager().reparse();
         return textArea;
     }
 
