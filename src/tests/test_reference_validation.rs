@@ -156,3 +156,21 @@ fn test_lagged_forward_reference_to_real_node_and_earlier_var_are_accepted() {
     assert_eq!(series[0].values[0], 2.0);
     assert_eq!(series[0].values[1], 5.0);
 }
+
+// -----------------------------------------------------------------------------
+// Constants: a reference must name a declared constant
+// -----------------------------------------------------------------------------
+
+#[test]
+fn test_reference_to_undeclared_constant_is_refused() {
+    let err = expect_err(&model_ini("src", "1 + const.nosuch", "", "node.src.dsflow"));
+    assert!(err.contains("Unknown constant 'const.nosuch'"), "{}", err);
+}
+
+#[test]
+fn test_reference_to_constant_declared_after_use_is_accepted() {
+    let extra = "[const]\nconst.k = 2\n";
+    let model = load_and_run(&model_ini("src", "1 + const.K", extra, "node.src.dsflow")).unwrap();
+    let series = model.get_output_series(Some(vec!["node.src.dsflow".to_string()]), false).unwrap();
+    assert_eq!(series[0].values[0], 3.0);
+}

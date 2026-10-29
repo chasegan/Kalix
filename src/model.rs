@@ -430,6 +430,10 @@ impl Model {
         //   writer, since nodes claimed theirs in initialise.
         self.validate_computed_references()?;
 
+        //   An expression's const.* reference registers the constant; only
+        //   [const] (or the optimiser, before configure) assigns it.
+        self.data_cache.constants.assert_all_constants_have_assigned_values()?;
+
         //3) Validate link ordering (structural only, no input data required).
         //   Also re-checked in initialize_network() before every run(), since
         //   that call additionally resets per-run node/ordering state -- but
