@@ -37,6 +37,8 @@ The link is written as `ds_N = <downstream>` at the first free outlet. If every 
 
 Ctrl+f in the model editor for **find**, or Ctrl+h for **find-and-replace**
 
+**Folding** collapses part of the model text to its first line. Every section folds from its `[header]`, every multi-line value folds from its first line, and a `#@region = Title` annotation folds everything down to the next region (see [Annotations](conventions.md#annotations)). Click the markers in the editor's margin, or use **Fold**, **Unfold**, **Fold All** and **Unfold All** on the Edit menu (Ctrl+minus, Ctrl+equals, and the same with Shift). Going to a node, a line, a find result or a lint issue inside a fold opens it, as does undoing an edit made there. Folds are not saved with the file.
+
 ![](../assets/docs-using-ide/image_3.png)
 
 **Navigate Back** and **Navigate Forward** allow you to move between locations you have visited in the model text. Keyboard shortcuts make this faster.
