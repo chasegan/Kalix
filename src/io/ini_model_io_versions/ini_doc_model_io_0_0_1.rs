@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::hydrology::accounts::account::Account;
 use crate::hydrology::accounts::account_manager::{AccountGroup, ACCOUNT_SERIES_FIELDS, GROUP_SERIES_FIELDS};
 use crate::hydrology::allocation_systems::ras::RasSystem;
@@ -12,7 +13,7 @@ use crate::numerical::table::Table;
 use crate::model::Model;
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
-use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
+use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, is_valid_name_segment,parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
 use crate::nodes::{NodeEnum, blackhole_node::BlackholeNode, confluence_node::ConfluenceNode, gauge_node::GaugeNode, loss_node::LossNode, splitter_node::SplitterNode, regulated_user_node::RegulatedUserNode, field_node::{FieldNode, CropSlot, crop_slot_property, MAX_CROPS}, unregulated_user_node::UnregulatedUserNode, gr4j_node::Gr4jNode, inflow_node::InflowNode, routing_node::{RoutingNode, RoutingSpec}, sacramento_node::SacramentoNode, storage_node::StorageNode, order_control_node::OrderControlNode, awbm_node::AwbmNode, surm_node::SurmNode, gr4jsg_node::Gr4jsgNode, Node};
 use crate::hydrology::rainfall_runoff::gr4j::Gr4Variant;
 use crate::hydrology::rainfall_runoff::awbm::AwbmVariant;
@@ -289,8 +290,20 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // Malformed values are left alone here (silently skipped) rather than
     // reported - the main loop's existing per-property validation reports
     // them properly, with its usual line-numbered error, once it gets there.
+    // Node names are checked here, the first pass over every [node.*] section.
+    let mut node_name_lines: HashMap<String, usize> = HashMap::new();
     for (section_name, ini_section) in &ini_doc.sections {
         let Some(node_name) = section_name.strip_prefix("node.") else { continue };
+        if !is_valid_name_segment(node_name) {
+            return Err(KalixIoError::Parse(format!(
+                "Error on line {}: Invalid node name '{}'. Node names may contain only letters, digits and underscores.",
+                ini_section.line_number, node_name)));
+        }
+        if let Some(first_line) = node_name_lines.insert(node_name.to_lowercase(), ini_section.line_number) {
+            return Err(KalixIoError::Validate(format!(
+                "Error on line {}: Duplicate node name '{}' (also defined on line {}). Node names are not case sensitive.",
+                ini_section.line_number, node_name, first_line)));
+        }
         let Some(node_type) = ini_section.properties.get("type").map(|p| p.value.trim().to_lowercase()) else { continue };
         for (key, ini_property) in &ini_section.properties {
             let key_lower = key.to_lowercase();

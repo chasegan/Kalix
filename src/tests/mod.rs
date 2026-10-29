@@ -198,3 +198,6 @@ mod test_loss_rate;
 
 // Inputs must share the simulation grid's time of day
 mod test_input_phase;
+
+// Node names, [outputs] layout and expression references (#442)
+mod test_reference_validation;
