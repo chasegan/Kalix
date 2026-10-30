@@ -185,6 +185,19 @@ fn crossing(a: f64, b: f64, e_a: f64, e_b: f64) -> Option<f64> {
     Some(a + (b - a) * (e_a / d))
 }
 
+/// How a storage orders upstream, resolved from its configuration at
+/// initialise. `order_through` overrides a target.
+#[derive(Default, Clone, Copy)]
+enum StorageOrdering {
+    /// Orders nothing upstream.
+    #[default]
+    None,
+    /// Passes downstream orders upstream verbatim (`order_through`).
+    Through,
+    /// Orders to reach `target_level`, converted to a volume each step.
+    TargetLevel,
+}
+
 #[derive(Default, Clone)]
 pub struct StorageNode {
     pub name: String,
@@ -228,8 +241,8 @@ pub struct StorageNode {
     pub ds_orders: [f64; MAX_DS_LINKS],
     pub ds_orders_due: [f64; MAX_DS_LINKS],
     pub us_orders: f64,
-    pub has_target_level: bool,
-    pub target_level_order_buffer: FifoBuffer,
+    ordering: StorageOrdering,
+    pub target_order_buffer: FifoBuffer,
     pub ds_order_buffers: [FifoBuffer; MAX_DS_LINKS],
 
     // Outlet definitions (MOL, capacity) - parsed from INI
@@ -1079,6 +1092,36 @@ impl StorageNode {
 }
 
 impl StorageNode {
+    /// Whether this storage orders upstream to reach a target. Valid after initialise.
+    pub fn has_target(&self) -> bool {
+        matches!(self.ordering, StorageOrdering::TargetLevel)
+    }
+
+    /// Order what is needed to reach `target_volume`. The forecast assumes:
+    /// - all previous orders will arrive. (Previous orders are stored in the
+    ///   target_order_buffer so we can work out what is en route. A buffer of zero
+    ///   length means there is no travel time. The order we place today will arrive
+    ///   today and nothing is ever en route.)
+    /// - no rainfall, evap, or seepage
+    /// - no additional inflows will arrive
+    /// - today's downstream orders will be released
+    /// - no subsequent releases will be made
+    #[inline]
+    fn order_to_target(&mut self, data_cache: &mut DataCache, target_volume: f64) {
+        //TODO: it could be possible to keep a running forecast inflow here, add new orders
+        // to it and subtract orders as they pop out of the buffer (rather than summing the
+        // order buffer every time). It may be noticeable for long travel times.
+        let inflows = self.target_order_buffer.sum();
+        let known_usage: f64 = self.ds_orders_due.iter().sum();
+        let forecast_volume = self.volume + inflows - known_usage;
+        self.us_orders = (target_volume - forecast_volume).max(0.0);
+        // push hands back the order leaving the buffer - the one arriving today - so
+        // what is on its way at the end of the step, today's order included, is the
+        // sum already taken, plus today's, less that, with no second pass.
+        let arriving = self.target_order_buffer.push(self.us_orders);
+        self.record_orders(data_cache, inflows + self.us_orders - arriving);
+    }
+
     /// Record the order this storage places upstream and what is on its way to it. Out of
     /// line and cold, so that run_order_phase stays the size it was (ADR-0004 §3.4).
     #[cold]
@@ -1254,8 +1297,14 @@ impl Node for StorageNode {
         self.cap_breakpoints.sort_by(|a, b| a.partial_cmp(b).unwrap());
         self.cap_breakpoints.dedup();
 
-        // Check if the storage is targeting a level
-        self.has_target_level = !matches!(&self.target_level, DynamicInput::None { .. });
+        // Resolve how the storage orders upstream: order_through overrides a target
+        self.ordering = if self.order_through {
+            StorageOrdering::Through
+        } else if !matches!(&self.target_level, DynamicInput::None { .. }) {
+            StorageOrdering::TargetLevel
+        } else {
+            StorageOrdering::None
+        };
 
         // Check once whether an "exists" input was configured (default: storage always exists)
         self.exists_configured = !matches!(&self.exists, DynamicInput::None { .. });
@@ -1313,51 +1362,27 @@ impl Node for StorageNode {
         }
 
         // Calculate orders. Note `exists` plays no part here: see `check_if_exists`.
-        if self.order_through {
-            //
-            // 'Order through' means (1) the ordering system does not consider this storage
-            // to be a supply, (2) total orders are propagated upstream without adjustment.
-            self.us_orders = self.ds_orders.iter().sum();
-            // Nothing is en route to a storage that orders through: it is not the supply
-            self.record_orders(data_cache, 0.0);
-            //
-        } else if self.has_target_level {
-            //
-            // 'Target level' works like this:
-            // 1) calculate the target volume
-            // 2) forecast our future volume assuming:
-            //    - all previous orders will arrive. (Previous orders are stored in the
-            //        target_level_order_buffer so we can work out what is en route. A buffer of
-            //        zero length means there is no travel time. The order we place today will
-            //        arrive today and nothing is ever en route.)
-            //    - no rainfall, evap, or seepage
-            //    - no additional inflows will arrive
-            //    - today's downstream orders will be released
-            //    - no subsequent releases will be made
-            // 3) order what is required to reach our target volume
-            let target_level = self.target_level.get_value(data_cache);
-            if let Some(idx) = self.recorder_idx_target_level {
-                data_cache.add_value_at_index(idx, target_level);
+        match self.ordering {
+            StorageOrdering::Through => {
+                // 'Order through' means (1) the ordering system does not consider this storage
+                // to be a supply, (2) total orders are propagated upstream without adjustment.
+                self.us_orders = self.ds_orders.iter().sum();
+                // Nothing is en route to a storage that orders through: it is not the supply
+                self.record_orders(data_cache, 0.0);
             }
-            // The level is below the target level. We need convert this to a volume and
-            // compare it with our forecast volume.
-            let target_volume = self.dimensions.interpolate_or_extrapolate(LEVL, VOLU, target_level);
-            //TODO: it could be possible to keep a running forecast inflow here, add new orders
-            // to it and subtract orders as they pop out of the buffer (rather than summing the
-            // order buffer every time). It may be noticeable for long travel times.
-            let inflows = self.target_level_order_buffer.sum();
-            let known_usage: f64 = self.ds_orders_due.iter().sum();
-            let forecast_volume = self.volume + inflows - known_usage;
-            self.us_orders = (target_volume - forecast_volume).max(0.0);
-            // push hands back the order leaving the buffer - the one arriving today - so
-            // what is on its way at the end of the step, today's order included, is the
-            // sum already taken, plus today's, less that, with no second pass.
-            let arriving = self.target_level_order_buffer.push(self.us_orders);
-            self.record_orders(data_cache, inflows + self.us_orders - arriving);
-        } else {
-            // Storage does not order upstream, and writes neither order result: recording
-            // zeros here, on the branch every supply storage takes every step, measured
-            // +1.6% and +4.7% on speed tests 4 and 5 (see the commit that added them)
+            StorageOrdering::TargetLevel => {
+                let target_level = self.target_level.get_value(data_cache);
+                if let Some(idx) = self.recorder_idx_target_level {
+                    data_cache.add_value_at_index(idx, target_level);
+                }
+                let target_volume = self.dimensions.interpolate_or_extrapolate(LEVL, VOLU, target_level);
+                self.order_to_target(data_cache, target_volume);
+            }
+            StorageOrdering::None => {
+                // Storage does not order upstream, and writes neither order result: recording
+                // zeros here, on the branch every supply storage takes every step, measured
+                // +1.6% and +4.7% on speed tests 4 and 5 (see the commit that added them)
+            }
         }
     }
 
