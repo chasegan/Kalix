@@ -136,13 +136,13 @@ impl SimpleNodewiseOrderingSystem {
                     if node.order_through {
                         // Delay releases, so that they are made as the ordered water arrives
                         node.ds_order_buffers = std::array::from_fn(|_| FifoBuffer::new(travel_time));
-                        node.target_level_order_buffer = FifoBuffer::new(0);
+                        node.target_order_buffer = FifoBuffer::new(0);
                     } else {
                         // A supply releases immediately: zero-length ds_x_order buffers
                         node.ds_order_buffers = std::array::from_fn(|_| FifoBuffer::new(0));
-                        // The buffer that remembers upstream orders placed to meet a target
-                        // level, which are en route for the travel time
-                        node.target_level_order_buffer = if node.has_target_level {
+                        // The buffer that remembers upstream orders placed to meet a target,
+                        // which are en route for the travel time
+                        node.target_order_buffer = if node.has_target() {
                             FifoBuffer::new(travel_time)
                         } else {
                             FifoBuffer::new(0)
