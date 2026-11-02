@@ -234,13 +234,14 @@ Sent when command execution completes successfully.
 Sent when command execution fails.
 
 ```json
-{"m":"err","uid":"X2vB3yCbrVqw","cmd":"load_model_file","msg":"File not found: /path/to/model.ini"}
+{"m":"err","uid":"X2vB3yCbrVqw","cmd":"load_model_file","p":{"model_path":"/path/to/model.ini"},"msg":"File not found: /path/to/model.ini"}
 ```
 
 **Fields:**
 - `m`: Message type ("err")
 - `uid`: Session identifier
 - `cmd`: Command that failed (optional)
+- `p`: The failed command's parameters, as sent (present whenever `cmd` is)
 - `msg`: Error message
 
 #### 6. Stopped Message (`stp`)

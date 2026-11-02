@@ -5,6 +5,7 @@ import com.kalix.ide.windows.RunManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -68,7 +69,7 @@ public class RunModelProgram extends AbstractSessionProgram {
     @Override
     public synchronized boolean handleMessage(JsonMessage.SystemMessage message) {
         JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
-        if (msgType == null) {
+        if (msgType == null || answersAnotherCommand(message)) {
             return false;
         }
 
@@ -91,8 +92,7 @@ public class RunModelProgram extends AbstractSessionProgram {
             return;
         }
         currentState = ProgramState.MODEL_LOADING;
-        String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelText);
-        sessionManager.sendCommand(sessionKey, loadCommand)
+        send("load_model_string", Map.of("model_ini", modelText))
             .exceptionally(throwable -> {
                 currentState = ProgramState.FAILED;
                 statusUpdater.error("Failed to send model to " + getDisplayName() + ": " + throwable.getMessage());
@@ -155,8 +155,7 @@ public class RunModelProgram extends AbstractSessionProgram {
         switch (msgType) {
             case READY:
                 currentState = ProgramState.SIMULATION_RUNNING;
-                String runCommand = JsonStdioProtocol.Commands.runSimulation();
-                sessionManager.sendCommand(sessionKey, runCommand)
+                send("run_simulation", Map.of())
                     .exceptionally(throwable -> {
                         currentState = ProgramState.FAILED;
                         statusUpdater.error("Failed to start simulation in " + getDisplayName() + ": " + throwable.getMessage());

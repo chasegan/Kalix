@@ -17,7 +17,7 @@ The `get_result` command retrieves timeseries results from a loaded and executed
 
 ### Error Response (Series Not Found):
 ```json
-{"m":"err","uid":"X2vB3yCbrVqw","cmd":"get_result","msg":"Timeseries 'invalid_series_name' not found in model results"}
+{"m":"err","uid":"X2vB3yCbrVqw","cmd":"get_result","p":{"series_name":"invalid_series_name","format":"csv"},"msg":"Command execution error: Result not found: Timeseries 'invalid_series_name' not found in model results"}
 ```
 
 ## Implementation Notes

@@ -71,7 +71,7 @@ Command completion:
 
 ### Errors
 ```json
-{"m":"err","uid":"X2vB3yCbrVqw","cmd":"get_result","msg":"Timeseries 'invalid_name' not found in model results"}
+{"m":"err","uid":"X2vB3yCbrVqw","cmd":"get_result","p":{"series_name":"invalid_name","format":"csv"},"msg":"Command execution error: Result not found: Timeseries 'invalid_name' not found in model results"}
 ```
 
 ## Model Format (INI)

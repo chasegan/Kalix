@@ -96,8 +96,9 @@ public class ProjectTree extends JTree {
         this.fileOps = new TreeFileOperations(this, host::activeFile, host::pathMoved);
         this.contextMenu = new TreeContextMenu(this, fileOps, host);
 
-        // Drag selected entries out; accept drops onto a folder node (move, or copy with a
-        // modifier held). The DnD subsystem renders the move/copy/no-drop cursor itself.
+        // Drag selected entries out; accept drops onto a folder node: from the tree a move (or
+        // a copy with a modifier held), from the operating system always a copy. The DnD
+        // subsystem renders the move/copy/no-drop cursor itself.
         setDragEnabled(true);
         setDropMode(DropMode.ON);
         setTransferHandler(new TreeTransferHandler(this, fileOps));

@@ -2,6 +2,7 @@ package com.kalix.ide.cli;
 
 import com.kalix.ide.utils.StatusReporter;
 
+import java.util.Map;
 import java.util.function.Consumer;
 
 /**
@@ -81,10 +82,8 @@ public class OptimisationProgram extends AbstractSessionProgram {
 
         // Send run_optimisation command
         currentState = ProgramState.OPTIMISING;
-        String optCommand = JsonStdioProtocol.createCommandMessage("run_optimisation",
-            java.util.Map.of("config", configText));
-
-        sendCommand(optCommand, "Optimisation started", "Failed to start optimisation");
+        sendCommand("run_optimisation", Map.of("config", configText),
+            "Optimisation started", "Failed to start optimisation");
     }
 
     @Override
@@ -95,7 +94,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
     @Override
     public synchronized boolean handleMessage(JsonMessage.SystemMessage message) {
         JsonStdioTypes.SystemMessageType msgType = message.systemMessageType();
-        if (msgType == null) {
+        if (msgType == null || answersAnotherCommand(message)) {
             return false;
         }
 
@@ -174,8 +173,7 @@ public class OptimisationProgram extends AbstractSessionProgram {
             return;
         }
         currentState = ProgramState.STARTING;
-        String loadCommand = JsonStdioProtocol.Commands.loadModelString(modelIni);
-        sessionManager.sendCommand(sessionKey, loadCommand)
+        send("load_model_string", Map.of("model_ini", modelIni))
             .thenRun(() -> {
                 statusUpdater.accept("Loading model for optimisation");
             })
@@ -234,9 +232,8 @@ public class OptimisationProgram extends AbstractSessionProgram {
             case READY:
                 // CLI is ready, now fetch optimisable parameters
                 currentState = ProgramState.FETCHING_PARAMS;
-                String paramsCommand = JsonStdioProtocol.createCommandMessage("get_optimisable_params",
-                    java.util.Map.of());
-                sendCommand(paramsCommand, "Fetching optimisable parameters", "Failed to fetch parameters");
+                sendCommand("get_optimisable_params", Map.of(),
+                    "Fetching optimisable parameters", "Failed to fetch parameters");
                 return true;
 
             case ERROR:
