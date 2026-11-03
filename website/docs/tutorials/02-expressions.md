@@ -102,7 +102,7 @@ Note the weights don't need to sum to 1 — they're whatever you decide reflects
 
 The rest of the file is unchanged from Tutorial 1. Putting it all together:
 
-```ini
+```ini title="stringybark_expressions.ini"
 [kalix]
 start = 1980-01-01
 end = 2009-12-31

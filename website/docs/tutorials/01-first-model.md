@@ -164,7 +164,7 @@ The Sacramento `dsflow` is the sum of the three runoff components (`flosf` + `fl
 
 Putting it all together, `stringybark_sacramento.ini` should look like this:
 
-```ini
+```ini title="stringybark_sacramento.ini"
 [kalix]
 start = 1980-01-01
 end = 2009-12-31
