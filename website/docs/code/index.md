@@ -21,7 +21,7 @@ Kalix is open source under the MPL 2.0. The engine is Rust, the IDE is Java, and
 Regression **models** checked in CI against pinned mass-balance baselines every release.
 </div>
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![Simulation time per test across benchmark runs](../assets/speed-plot.png)
 <figcaption>Model network simulation time (ms) as the engine improves — one line per dev machine.</figcaption>
 </figure>

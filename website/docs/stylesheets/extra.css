@@ -150,6 +150,28 @@
   font-size: var(--kx-text-caption);
   color: var(--kx-text-subtle);
 }
+/* Corner zoom badge on framed screenshots; the glightbox link does the zoom.
+   Charts, diagrams and small crops opt out with <figure class="kx-figure--plain">. */
+.md-typeset figure a.glightbox {
+  position: relative;
+  display: inline-block;
+  border-radius: var(--kx-radius-lg); /* so the focus ring follows the frame */
+  cursor: zoom-in;
+}
+.md-typeset figure:not(.kx-figure--plain) a.glightbox::after {
+  content: "\2922  zoom"; /* the first space ends the escape */
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-family: var(--kx-font-mono);
+  font-size: 11px;
+  color: var(--kx-primary-700);
+  background: rgba(255, 255, 255, 0.92);
+  border: var(--kx-border-line-strong);
+  border-radius: var(--kx-radius-xs);
+  padding: 3px 9px;
+  pointer-events: none;
+}
 
 /* ---- Buttons (Material .md-button) styled as the design's primary/outline - */
 .md-typeset .md-button {
