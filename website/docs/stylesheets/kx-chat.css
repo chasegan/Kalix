@@ -1,4 +1,5 @@
-/* Kalix help assistant. Consumes --kx-* tokens; fallbacks are only for standalone testing. */
+/* Kalix help assistant. Consumes --kx-* tokens (tokens.css); its buttons' focus ring
+   comes from focus.css. Fallbacks are only for standalone testing. */
 
 .kx-chat {
   display: flex;
@@ -159,11 +160,17 @@
   color: #fff;
   font: inherit;
   font-weight: var(--kx-weight-semibold, 600);
-  box-shadow: 0 6px 20px rgba(15, 23, 32, 0.2);
+  --kx-chat-fab-shadow: 0 6px 20px rgba(15, 23, 32, 0.2);
+  box-shadow: var(--kx-chat-fab-shadow);
   cursor: pointer;
   z-index: 51;
 }
 .kx-chat-fab--open { background: var(--kx-text, #0f1720); }
+
+/* focus.css rings the chat's buttons; the fab keeps its drop shadow under the ring. */
+.kx-chat-fab:focus-visible {
+  box-shadow: var(--kx-focus-ring), var(--kx-chat-fab-shadow);
+}
 
 /* The Help page hosts the chat inline; no floating button there. */
 #kx-chat-page ~ .kx-chat-fab { display: none; }

@@ -1,0 +1,39 @@
+/* ============================================================================
+   Kalix — keyboard focus ring
+   ----------------------------------------------------------------------------
+   One focus style for the whole site, per the Component Sheet. Its own file so
+   the MkDocs pages (mkdocs.yml extra_css) and the bespoke landing page
+   (index.html) load the same rule; consumes --kx-* tokens from tokens.css.
+   ========================================================================== */
+
+/* Every link, button and summary, so new components get the ring without being
+   listed. The transparent outline is what forced-colors mode draws, since it
+   drops box-shadow. The class selectors match Material's own focus rules, which
+   outrank a bare a:focus-visible. Not covered: Material's content-tab labels and
+   option toggles (focus sits on a hidden input; neither is used on the site yet). */
+a:focus-visible,
+button:focus-visible,
+summary:focus-visible,
+.md-typeset a:focus-visible,
+.md-typeset summary:focus-visible,
+.md-nav__link:focus-visible,
+.md-pagination__link:focus-visible {
+  outline: 2px solid transparent;
+  outline-offset: 0;
+  box-shadow: var(--kx-focus-ring);
+}
+
+/* Soften the ring's corners on links with no radius of their own (header text
+   links, inline links); :where() keeps this below any component's own radius. */
+:where(a:focus-visible) { border-radius: var(--kx-radius-xs); }
+
+/* Timeline rows: ring the whole row, including the step dot outside the link box. */
+.md-typeset a.kx-tl-item:focus-visible { box-shadow: none; }
+.md-typeset a.kx-tl-item:focus-visible::before {
+  content: "";
+  position: absolute;
+  inset: 2px -10px 2px -52px;
+  border-radius: var(--kx-radius-md);
+  box-shadow: var(--kx-focus-ring);
+  pointer-events: none;
+}

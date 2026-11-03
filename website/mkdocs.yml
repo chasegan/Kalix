@@ -97,6 +97,7 @@ markdown_extensions:
 extra_css:
   - stylesheets/tokens.css
   - stylesheets/extra.css
+  - stylesheets/focus.css
   - stylesheets/kx-chat.css
 
 extra_javascript:
