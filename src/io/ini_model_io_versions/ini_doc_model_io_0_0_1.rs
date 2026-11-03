@@ -1096,6 +1096,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "target_level" {
                             n.target_level = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
+                        } else if name_lower == "target_volume" {
+                            n.target_volume = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "dimensions" {
                             n.dimensions = Table::from_csv_string(v, 4, false)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse dimensions table for node '{}': {}",
@@ -1877,6 +1880,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "seep", &n.seep_mm_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pond_demand", &n.pond_demand_input.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "target_level", &n.target_level.to_string());
+                set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "target_volume", &n.target_volume.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "exists", &n.exists.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "forced_level", &n.forced_level_input.to_string());
                 for (i, ds_force_release) in n.ds_force_release_input.iter().enumerate() {

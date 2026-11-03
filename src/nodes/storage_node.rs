@@ -198,6 +198,8 @@ enum StorageOrdering {
     TargetLevel,
     /// Orders to reach a constant `target_level`, converted once at initialise.
     TargetLevelFixed { level: f64, volume: f64 },
+    /// Orders to reach `target_volume`.
+    TargetVolume,
 }
 
 #[derive(Default, Clone)]
@@ -214,6 +216,7 @@ pub struct StorageNode {
     pub seep_mm_input: DynamicInput,
     pub pond_demand_input: DynamicInput,
     pub target_level: DynamicInput,
+    pub target_volume: DynamicInput,
     pub exists: DynamicInput,
     pub forced_level_input: DynamicInput,
     pub ds_force_release_input: [DynamicInput; MAX_DS_LINKS],
@@ -272,6 +275,7 @@ pub struct StorageNode {
     recorder_idx_volume: Option<usize>,
     recorder_idx_level: Option<usize>,
     recorder_idx_target_level: Option<usize>,
+    recorder_idx_target_volume: Option<usize>,
     // Declared here, and recorded through an out-of-line helper, on measurement
     // (ADR-0004 §3.4): see the commit that added them.
     recorder_idx_order: Option<usize>,
@@ -1096,7 +1100,13 @@ impl StorageNode {
 impl StorageNode {
     /// Whether this storage orders upstream to reach a target. Valid after initialise.
     pub fn has_target(&self) -> bool {
-        matches!(self.ordering, StorageOrdering::TargetLevel | StorageOrdering::TargetLevelFixed { .. })
+        // An explicit match ensures compiler checked exhaustiveness.
+        match self.ordering {
+            StorageOrdering::TargetLevel | StorageOrdering::TargetLevelFixed { .. } => true,
+            StorageOrdering::TargetVolume => true,
+            StorageOrdering::Through => false,
+            StorageOrdering::None => false,
+        }
     }
 
     /// Order what is needed to reach `target_volume`. The forecast assumes:
@@ -1122,6 +1132,17 @@ impl StorageNode {
         // sum already taken, plus today's, less that, with no second pass.
         let arriving = self.target_order_buffer.push(self.us_orders);
         self.record_orders(data_cache, inflows + self.us_orders - arriving);
+    }
+
+    /// Record a level target and the volume it converts to.
+    #[inline]
+    fn record_target(&self, data_cache: &mut DataCache, target_level: f64, target_volume: f64) {
+        if let Some(idx) = self.recorder_idx_target_level {
+            data_cache.add_value_at_index(idx, target_level);
+        }
+        if let Some(idx) = self.recorder_idx_target_volume {
+            data_cache.add_value_at_index(idx, target_volume);
+        }
     }
 
     /// Record the order this storage places upstream and what is on its way to it. Out of
@@ -1300,10 +1321,16 @@ impl Node for StorageNode {
         self.cap_breakpoints.dedup();
 
         // Resolve how the storage orders upstream: order_through overrides a target
+        let has_target_volume = !matches!(&self.target_volume, DynamicInput::None { .. });
+        if has_target_volume && !matches!(&self.target_level, DynamicInput::None { .. }) {
+            let message = format!("Error in node '{}'. Storage cannot have both target_level and target_volume.", self.name);
+            return Err(message);
+        }
         self.ordering = if self.order_through {
             StorageOrdering::Through
         } else {
             match &self.target_level {
+                DynamicInput::None { .. } if has_target_volume => StorageOrdering::TargetVolume,
                 DynamicInput::None { .. } => StorageOrdering::None,
                 // Constant for the whole run (nodes re-initialise each run), so convert once
                 DynamicInput::Constant { .. } | DynamicInput::DirectConstantReference { .. } => {
@@ -1325,6 +1352,7 @@ impl Node for StorageNode {
         self.recorder_idx_volume = recorder(data_cache, &self.name, "volume");
         self.recorder_idx_level = recorder(data_cache, &self.name, "level");
         self.recorder_idx_target_level = recorder(data_cache, &self.name, "target_level");
+        self.recorder_idx_target_volume = recorder(data_cache, &self.name, "target_volume");
         self.recorder_idx_area = recorder(data_cache, &self.name, "area");
         self.recorder_idx_seep_megs = recorder(data_cache, &self.name, "seep_vol");
         self.recorder_idx_rain_megs = recorder(data_cache, &self.name, "rain_vol");
@@ -1381,17 +1409,25 @@ impl Node for StorageNode {
             }
             StorageOrdering::TargetLevel => {
                 let target_level = self.target_level.get_value(data_cache);
-                if let Some(idx) = self.recorder_idx_target_level {
-                    data_cache.add_value_at_index(idx, target_level);
-                }
                 let target_volume = self.dimensions.interpolate_or_extrapolate(LEVL, VOLU, target_level);
+                self.record_target(data_cache, target_level, target_volume);
                 self.order_to_target(data_cache, target_volume);
             }
             StorageOrdering::TargetLevelFixed { level, volume } => {
-                if let Some(idx) = self.recorder_idx_target_level {
-                    data_cache.add_value_at_index(idx, level);
-                }
+                self.record_target(data_cache, level, volume);
                 self.order_to_target(data_cache, volume);
+            }
+            StorageOrdering::TargetVolume => {
+                let target_volume = self.target_volume.get_value(data_cache);
+                if let Some(idx) = self.recorder_idx_target_volume {
+                    data_cache.add_value_at_index(idx, target_volume);
+                }
+                // The level is derived only when it is recorded
+                if let Some(idx) = self.recorder_idx_target_level {
+                    let target_level = self.dimensions.interpolate_or_extrapolate(VOLU, LEVL, target_volume);
+                    data_cache.add_value_at_index(idx, target_level);
+                }
+                self.order_to_target(data_cache, target_volume);
             }
             StorageOrdering::None => {
                 // Storage does not order upstream, and writes neither order result: recording

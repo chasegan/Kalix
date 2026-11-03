@@ -693,6 +693,7 @@
         "area",
         "pond_diversion",
         "target_level",
+        "target_volume",
         "order",
         "orders_en_route",
         "rain_vol",
@@ -725,6 +726,7 @@
         "ds_3_force_release",
         "ds_4_force_release",
         "target_level",
+        "target_volume",
         "order_through",
         "exists",
         "forced_level"
@@ -804,7 +806,11 @@
         },
         "target_level": {
           "type": "function_expression",
-          "description": "Target storage level (data reference, constant, or expression)"
+          "description": "Target storage level; not with target_volume (data reference, constant, or expression)"
+        },
+        "target_volume": {
+          "type": "function_expression",
+          "description": "Target storage volume; not with target_level (data reference, constant, or expression)"
         },
         "order_through": {
           "type": "boolean",
