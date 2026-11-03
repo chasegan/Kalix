@@ -10,7 +10,10 @@ title: "Tutorial 2 — Expressions"
 
 The same Stringybark Creek catchment from Tutorial 1, but with the rainfall input rebuilt from three rain gauge stations instead of a single areal-rainfall series. The new rain is constructed inside the model file using a Kalix **expression** — a piece of arithmetic that combines data references and literal numbers.
 
+<figure markdown>
 ![](../assets/tutorials-02-expressions/image.png)
+<figcaption>The finished model: rainfall built from three weighted station series.</figcaption>
+</figure>
 
 ## Prerequisites
 
@@ -96,7 +99,10 @@ What's happening:
 
 Note the weights don't need to sum to 1 — they're whatever you decide reflects each station's contribution. Here the sum (~1.25) means the combined rainfall is a bit heavier than any individual station, which is what you'd expect when stations cover overlapping parts of the catchment.
 
+<figure markdown>
 ![](../assets/tutorials-02-expressions/image_1.png)
+<figcaption>The new rain line, a weighted sum of the north, central and south station series.</figcaption>
+</figure>
 
 ### The finished model file
 
@@ -150,7 +156,15 @@ Save the file. Hit the **Run** button in Kalix IDE.
 
 Run both the Tutorial 1 and Tutorial 2 models in Kalix IDE, and open the **Run Manager**. Select both runs and use the Run Manager's plotting tool to overlay `node.0002_ga_widebridge.ds_1` from each. You should see two streamflow series that are visibly similar but not identical — the new rainfall (a weighted blend of three station series) produces a slightly different streamflow than the single areal-rainfall series in Tutorial 1.
 
-![](../assets/tutorials-02-expressions/image_2.png)![](../assets/tutorials-02-expressions/image_3.png)
+<figure markdown>
+![](../assets/tutorials-02-expressions/image_2.png)
+<figcaption>Catchment outflow, Tutorial 1 (Run_1, blue) and Tutorial 2 (Run_2, orange), 1980 to 2009: Run_2 peaks run higher.</figcaption>
+</figure>
+
+<figure markdown>
+![](../assets/tutorials-02-expressions/image_3.png)
+<figcaption>The same two runs, December 1990 to June 1991: Run_2 (orange) peaks higher; recessions converge.</figcaption>
+</figure>
 
 Look at the overlay carefully. You'll likely see:
 
@@ -170,9 +184,15 @@ You can also inspect the model-file changes that drove this difference. Right-cl
 
 The overlay above shows you *how* the simulated flow changed; "Show Model Changes" shows you *what changed in the model file* to make that happen.
 
+<figure markdown>
 ![](../assets/tutorials-02-expressions/image_4.png)
+<figcaption>Show Model Changes in the Run Manager's run context menu.</figcaption>
+</figure>
 
+<figure markdown>
 ![](../assets/tutorials-02-expressions/image_5.png)
+<figcaption>The model diff: the extra station files and the new rain expression are the only changes.</figcaption>
+</figure>
 
 ## What to try next
 

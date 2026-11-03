@@ -10,14 +10,27 @@ title: "Tutorial 1 — Your first model"
 
 A daily rainfall-runoff model for the (fictional) Stringybark Creek catchment — a Sacramento catchment node feeding a downstream gauge node, driven by ~30 years of daily rainfall and PET data. By the end you'll have a working model file, a simulation, and a chart of simulated vs. observed streamflow.
 
+<figure markdown>
 ![](../assets/tutorials-01-first-model/image.png)
+<figcaption>The finished model in Kalix IDE: the model file on the left, the network schematic on the right.</figcaption>
+</figure>
 
 ## Prerequisites
 
 - **Kalix software** and the **Tutorial files** —
   1. Download Kalix from the [Downloads](../downloads.md) page. Unzip the bundled software to a suitable place on your computer and double click “KalixIDE.exe” to launch it.
   2. You may want to check/set the kalix engine by following the instructions on this page: [Specifying the Kalix binary path in KalixIDE](../docs/kalix-binary-path.md).
-  3. Next you will need the tutorial files. Go to the KalixTutorials repository on GitHub: <https://github.com/chasegan/KalixTutorials>. Click the green “Code” button and find the option that says “Download ZIP”. Unzip the tutorial material somewhere suitable. Open this folder in KalixIDE by clicking “File” > “Open Folder…”.![](../assets/tutorials-01-first-model/image_1.png)![](../assets/tutorials-01-first-model/image_2.png)
+  3. Next you will need the tutorial files. Go to the KalixTutorials repository on GitHub: <https://github.com/chasegan/KalixTutorials>. Click the green “Code” button and find the option that says “Download ZIP”. Unzip the tutorial material somewhere suitable. Open this folder in KalixIDE by clicking “File” > “Open Folder…”.
+
+     <figure markdown>
+     ![](../assets/tutorials-01-first-model/image_1.png)
+     <figcaption>The KalixTutorials repository on GitHub, with Download ZIP under the Code button.</figcaption>
+     </figure>
+
+     <figure markdown>
+     ![](../assets/tutorials-01-first-model/image_2.png)
+     <figcaption>The tutorial folder open in Kalix IDE, with the file tree on the left.</figcaption>
+     </figure>
 
 - For this tutorial you will need the `001/` folder. You'll need:
   - `climate_data.csv` — daily rainfall and potential evaporation (mm/day)
@@ -56,7 +69,10 @@ observed.csv
 
 A single CSV can hold any number of value columns, so the count of files you list here doesn't dictate how many inputs your model can wire up. Here `climate_data.csv` carries both the rainfall and PET series; we'll wire each column up to the right input on the node in the next step.
 
+<figure markdown>
 ![](../assets/tutorials-01-first-model/image_3.png)
+<figcaption>The model file with its first two sections: the simulation period and the input files.</figcaption>
+</figure>
 
 ### Step 3 — A Sacramento catchment node
 
@@ -128,7 +144,10 @@ Line by line:
 
 - `loc = 0, 40` — positions the node below the Sacramento node on the IDE's canvas.
 
+<figure markdown>
 ![](../assets/tutorials-01-first-model/image_4.png)
+<figcaption>Both nodes defined: the Sacramento catchment drains to the Widebridge gauge on the schematic.</figcaption>
+</figure>
 
 ### Step 5 — The `[outputs]` section
 
@@ -203,7 +222,10 @@ node.0002_ga_widebridge.dsflow
 
 Save the file. Hit the **Run** button in Kalix IDE (or use the Run menu).
 
+<figure markdown class="kx-figure--plain">
 ![](../assets/tutorials-01-first-model/image_5.png)
+<figcaption>The Run button in the Kalix IDE toolbar.</figcaption>
+</figure>
 
 The simulation should finish in a fraction of a second.
 
@@ -211,15 +233,24 @@ The simulation should finish in a fraction of a second.
 
 The Run Manager window should open to a blank chart view. In order to plot `node.0002_ga_widebridge.dsflow` against the `obs` column of `observed.csv`, we must first load the data into the Run Manager. To load `observed.csv`, click and drag it from either your system file explorer or the KalixIDE file tree into the run manager window:
 
+<figure markdown>
 ![](../assets/tutorials-01-first-model/image_6.png)
+<figcaption>Dragging observed.csv from the file tree into the Run Manager.</figcaption>
+</figure>
 
 Once loaded, verify that it appears in the “Loaded datasets” dropdown menu. Next, click the “Last” run icon, hold Ctrl/Cmd to select multiple data sources, and then click `observed.csv` under “Loaded datasets”. Your Kalix and Timeseries panes should look like this:
 
+<figure markdown>
 ![](../assets/tutorials-01-first-model/image_7.png)
+<figcaption>The last run and observed.csv selected, with their time series listed below.</figcaption>
+</figure>
 
 You can now click the outputs (hold Ctrl/Cmd to select multiple timeseries) to plot `node.0002_ga_widebridge.dsflow` against the `obs` column of `observed.csv`. The Widebridge gauge sits at the catchment outlet, so its flow record is what you'd compare against the observed gauge data.
 
+<figure markdown>
 ![](../assets/tutorials-01-first-model/image_8.png)
+<figcaption>Simulated flow at the Widebridge gauge (blue) against the observed record (orange), 1980 to 2009.</figcaption>
+</figure>
 
 Try zooming and manipulating the plot window. A few specific interactions to try:
 
@@ -237,7 +268,10 @@ Try also plotting the three Sacramento flow components (`flosf`, `flobf`, `floin
 
 - interflow (`floin`) sits in between, draining off after wet periods
 
+<figure markdown>
 ![](../assets/tutorials-01-first-model/image_9.png)
+<figcaption>The Sacramento node's outflow and its baseflow, interflow and surface-flow components, early 1999.</figcaption>
+</figure>
 
 ## What to try next
 

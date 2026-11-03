@@ -20,7 +20,10 @@ A Jupyter notebook that sits next to your model file and:
 
 This is the foundation for any analysis, scripting, or notebook-driven workflow built on top of Kalix.
 
+<figure markdown>
 ![](../assets/tutorials-05-python/image.png)
+<figcaption>The tutorial notebook in JupyterLab: import kalix, run the model, read the results.</figcaption>
+</figure>
 
 ## Prerequisites
 
@@ -116,7 +119,10 @@ ax.set_title("Stringybark Creek — simulated vs observed (1989–1990)")
 ax.legend();
 ```
 
+<figure markdown>
 ![](../assets/tutorials-05-python/image_1.png)
+<figcaption>Simulated (blue) against observed (orange) flow at Widebridge, 1989 to 1990.</figcaption>
+</figure>
 
 ## Step 5 (bonus) — Pixie format
 
@@ -137,7 +143,10 @@ sim_pxb.head()
 
 The DataFrame has the same shape as the CSV version, but the index is now a **tz-aware UTC** `DatetimeIndex`, named `"date"` or `"datetime"` as the CSV column is. From there all the standard pandas + matplotlib tools work the same way.
 
+<figure markdown>
 ![](../assets/tutorials-05-python/image_2.png)
+<figcaption>Results read from results.pxb, indexed by UTC timestamps.</figcaption>
+</figure>
 
 ## What to try next
 

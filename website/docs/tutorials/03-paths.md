@@ -10,9 +10,15 @@ title: "Tutorial 3 — Relative paths and trailhead paths"
 
 A small project with shared input data in one place and two model variants — a `baseline` and a `wetter` scenario — at different depths under a `models/` folder. Along the way you'll experience how relative paths break, and you’ll fix it once-and-for-all using Kalix's trailhead paths.
 
+<figure markdown>
 ![](../assets/tutorials-03-paths/image.png)
+<figcaption>The 003 project: shared data at the top, a baseline model and two scenarios under models/.</figcaption>
+</figure>
 
+<figure markdown>
 ![](../assets/tutorials-03-paths/image_1.png)
+<figcaption>The finished input list: every path starts with the ^/ trailhead.</figcaption>
+</figure>
 
 ## Prerequisites
 
@@ -62,7 +68,10 @@ Open `models/baseline/stringybark.ini` in Kalix IDE. The `[data]` section uses *
 
 Run the model. It works — the relative paths resolve correctly because `../../data/...` does in fact point at the data folder from where this model sits.
 
+<figure markdown>
 ![](../assets/tutorials-03-paths/image_2.png)
+<figcaption>The baseline model with ../../data/ paths, and its run in the Run Manager.</figcaption>
+</figure>
 
 ## Step 2 — Add a wetter-climate scenario
 
@@ -96,7 +105,10 @@ Try to run the wetter model.
 
 It fails. Kalix tells you it can't find the input files. Why? The new file lives at `models/scenarios/wetter/`, which is *three* levels above `data/`, not two. The relative paths still say `../../data/...`, which from this deeper location now points to `models/data/` — a folder that doesn't exist.
 
+<figure markdown>
 ![](../assets/tutorials-03-paths/image_3.png)
+<figcaption>The wetter model: all five ../../data/ paths flagged "Input file does not exist".</figcaption>
+</figure>
 
 ## Step 4 — Two ways to fix it
 
@@ -142,7 +154,10 @@ Run the baseline. Run the wetter scenario. Both work, from any depth.
 
 Open the **Run Manager** and overlay `node.0002_ga_widebridge.ds_1` from each run. You should see the wetter scenario's simulated flow sitting noticeably above the baseline's — the 1.2× rainfall multiplier you wrote into the wetter rain expression flows straight through to streamflow.
 
+<figure markdown>
 ![](../assets/tutorials-03-paths/image_4.png)
+<figcaption>Catchment outflow, baseline (Run_2, orange) and wetter scenario (Run_4, green), December 1990 to June 1991: the wetter peaks run higher.</figcaption>
+</figure>
 
 ## What to try next
 

@@ -4,21 +4,33 @@ title: "Kalix IDE"
 
 # Kalix IDE
 
+<figure markdown>
 ![](../assets/docs-using-ide/Screenshot_2025-10-10_at_12.16.40_pm.png)
+<figcaption>Kalix IDE: the model text on the left, the schematic on the right.</figcaption>
+</figure>
 
 ## Interactions
 
 **Rename node** from the schematic map context menu
 
+<figure markdown>
 ![](../assets/docs-using-ide/image.png)
+<figcaption>Rename in the schematic's context menu.</figcaption>
+</figure>
 
 Model editor context menu item **Show on Map** will select and centre the node you’re working on in the schematic map
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_1.png)
+<figcaption>Show on Map in the editor's context menu.</figcaption>
+</figure>
 
 Click and drag to select nodes on the schematic map. Then drag to move or ctrl+drag to rotate.
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_2.png)
+<figcaption>A rectangle selection on the schematic.</figcaption>
+</figure>
 
 **Select nodes** in the schematic map context menu grows the selection from the nodes already selected. With no nodes selected, a selected link counts as the nodes at its two ends. Once a node is selected, selected links are ignored. Nodes are added to the selection, never removed; links are never added.
 
@@ -37,33 +49,54 @@ The link is written as `ds_N = <downstream>` at the first free outlet. If every 
 
 Ctrl+f in the model editor for **find**, or Ctrl+h for **find-and-replace**
 
-**Folding** collapses part of the model text to its first line. Every section folds from its `[header]`, every multi-line value folds from its first line, and a `#@region = Title` annotation folds everything down to the next region (see [Annotations](conventions.md#annotations)). Click the markers in the editor's margin, or use **Fold**, **Unfold**, **Fold All** and **Unfold All** on the Edit menu (Ctrl+minus, Ctrl+equals, and the same with Shift). Going to a node, a line, a find result or a lint issue inside a fold opens it, as does undoing an edit made there. Folds are not saved with the file.
-
+<figure markdown>
 ![](../assets/docs-using-ide/image_3.png)
+<figcaption>The Find and Replace dialog.</figcaption>
+</figure>
+
+**Folding** collapses part of the model text to its first line. Every section folds from its `[header]`, every multi-line value folds from its first line, and a `#@region = Title` annotation folds everything down to the next region (see [Annotations](conventions.md#annotations)). Click the markers in the editor's margin, or use **Fold**, **Unfold**, **Fold All** and **Unfold All** on the Edit menu (Ctrl+minus, Ctrl+equals, and the same with Shift). Going to a node, a line, a find result or a lint issue inside a fold opens it, as does undoing an edit made there. Folds are not saved with the file.
 
 **Navigate Back** and **Navigate Forward** allow you to move between locations you have visited in the model text. Keyboard shortcuts make this faster.
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_4.png)
+<figcaption>The Navigate Back button and its shortcut.</figcaption>
+</figure>
 
 **Table View** for node parameters that accept tabular values. Find this in the editor’s context menu, or by using the shortcut Ctrl+t.
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_5.png)
+<figcaption>Table View editing a storage node's level-volume-area-spill table.</figcaption>
+</figure>
 
 **Copy Location** by right-clicking your desired location on the map and using the context menu item.
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_6.png)
+<figcaption>Copy Location in the schematic's context menu.</figcaption>
+</figure>
 
 Use the **Navigate Back** and **Navigate Forward** buttons to flick back and forth between locations you have visited in the model file.
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_7.png)
+<figcaption>The Navigate Back and Navigate Forward arrows in the toolbar; the tooltip gives the keyboard shortcut.</figcaption>
+</figure>
 
 **Undo/redo in plots**! Buttons in the Run Manager’s plotting toolbar allow you to undo and redo your plotting actions (data selection, zoom, plot type).
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_8.png)
+<figcaption>Undo and redo in the Run Manager's plot toolbar.</figcaption>
+</figure>
 
 **Shift + click + drag to zoom** into a specific part of the plot using the mouse. This rectangular lasso zoom is handy for focusing in specific events in the hydrograph.
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_9.png)
+<figcaption>A shift-drag zoom rectangle across part of a hydrograph.</figcaption>
+</figure>
 
 **Plot on a second Y axis** to compare series of very different sizes. Ctrl+click a series in the plot's key (Cmd+click on macOS), or right-click it and choose **Move to right Y axis**, and it is drawn against its own axis on the right of the plot. The key then lists series under **Y axis (left)** and **Y axis (right)**; move the last one back and the right axis goes away.
 
@@ -73,57 +106,104 @@ Use the **Navigate Back** and **Navigate Forward** buttons to flick back and for
 
 The **Parameter Sheet** shows node properties in a table. Filter by node type and name. Great for model review or bulk edits. Find it in the Tools menu.
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_10.png)
+<figcaption>The Parameter Sheet, filtered to unregulated_user nodes.</figcaption>
+</figure>
 
 **Auto-complete** is accessible from the context menu, or the ctrl+space keyboard shortcut. Suggestions include data references and model result references. The list filters as you type and is context aware.
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_11.png)
+<figcaption>Auto-complete suggesting data references for an inflow node.</figcaption>
+</figure>
 
 **Cut/copy/paste** nodes in the schematic map using the context menu or keyboard shortcuts. Paste will paste nodes onto the schematic at the coordinates where you opened the context menu. These will appear in the text-based model representation immediately below the section where the cursor currently is. (If you want to paste below a specific node, click on that node to place the cursor there before pasting).
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_12.png)
+<figcaption>The schematic's context menu on a selection of nodes: Cut, Copy and Paste.</figcaption>
+</figure>
 
 Ctrl+f to **Find node** on map. This is also available from a button in the toolbar.
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_13.png)
+<figcaption>The Find Node dialog.</figcaption>
+</figure>
 
 **Linting** warnings and errors highlight issues with the model file before runtime
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_14.png)
+<figcaption>A lint error: a link to a node that does not exist.</figcaption>
+</figure>
 
 **Undo and redo**, right out of the box ;)
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_15.png)
+<figcaption>Undo and Redo in the Edit menu.</figcaption>
+</figure>
 
 Right-click on a downstream link and use **Go to Node Definition** to navigate there with one click.
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_16.png)
+<figcaption>Go to Node Definition on a ds_1 line.</figcaption>
+</figure>
 
 If you’re inside a terminal and want to edit a model, you can **launch the IDE from the terminal** and pass in the name of the model file.
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_17.png)
+<figcaption>The IDE opened from a terminal by passing it a model file: kalixide model.ini.</figcaption>
+</figure>
 
 Look for the **Plot Palettes** button in the plotting tool to create custom colour palettes. And click the line sample in the key to change the colour and style of a given line. The key grows as wide as the plot to fit a long series name; hover a name it still had to cut short to read it in full.
 
-![](../assets/docs-using-ide/image_18.png)![](../assets/docs-using-ide/92a32e80-6483-4366-ad2c-563768393bbd.png)
+<figure markdown>
+![](../assets/docs-using-ide/image_18.png)
+<figcaption>The Plot Palettes dialog: a palette is a numbered list of colours and strokes.</figcaption>
+</figure>
+
+<figure markdown>
+![](../assets/docs-using-ide/92a32e80-6483-4366-ad2c-563768393bbd.png)
+<figcaption>Picking a line colour from the plot key.</figcaption>
+</figure>
 
 ## Themes
 
 Themes can be independently set for the Editor Syntax, Node Palate and the Application Window.
 
+<figure markdown>
 ![](../assets/docs-using-ide/Screenshot_2025-10-10_at_12.16.40_pm.png)
+<figcaption>The Light theme, the default.</figcaption>
+</figure>
 
+<figure markdown>
 ![](../assets/docs-using-ide/Screenshot_2025-10-10_at_12.15.30_pm.png)
+<figcaption>The Keylime application theme with the Nemo syntax theme.</figcaption>
+</figure>
 
+<figure markdown>
 ![](../assets/docs-using-ide/Screenshot_2025-10-10_at_12.18.17_pm.png)
+<figcaption>The Nemo theme: a warm editor and map in a blue application window.</figcaption>
+</figure>
 
+<figure markdown>
 ![](../assets/docs-using-ide/Screenshot_2025-10-10_at_12.17.05_pm.png)
+<figcaption>The Dracula theme: a dark editor and map with its own node colours.</figcaption>
+</figure>
 
 ## Run Manager
 
 It is a run manager. Yes.
 
+<figure markdown>
 ![](../assets/docs-using-ide/image_19.png)
+<figcaption>The Run Manager: runs and loaded datasets at top left, time series below, the plot on the right.</figcaption>
+</figure>
 
 ### Plot, Stats and Data views
 

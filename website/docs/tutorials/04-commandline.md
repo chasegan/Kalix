@@ -10,7 +10,10 @@ title: "Tutorial 4 — Running Kalix from the commandline"
 
 A working CLI workflow for the Stringybark catchment model: running simulations from a terminal, choosing output formats, producing mass-balance check, profiling performance, and finally chaining multiple runs in a single shell loop.
 
+<figure markdown>
 ![](../assets/tutorials-04-commandline/image.png)
+<figcaption>The version check and a model run in a terminal: kalix --version, then kalix sim.</figcaption>
+</figure>
 
 ## Prerequisites
 
@@ -159,7 +162,10 @@ After the usual "Done!" line you'll get a timing breakdown:
 
 For a 30-year daily simulation, the simulation itself is a few milliseconds — the bulk of the time is loading the model and writing outputs. As models scale up (more nodes, more inputs, longer periods), the simulation share grows. This is exactly the kind of breakdown you want when investigating slowness on a big model.
 
+<figure markdown>
 ![](../assets/tutorials-04-commandline/image_1.png)
+<figcaption>The execution profile from -p: 3.4 ms of the 53.7 ms total is simulation.</figcaption>
+</figure>
 
 ## Step 6 (bonus) — Batch runs with a `.bat` script
 

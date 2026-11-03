@@ -10,9 +10,15 @@ title: "Tutorial 12 — Optimisation from the commandline"
 
 A working command-line calibration of the Stringybark catchment model. You'll point `kalix optimise` at an optimisation **config file** and a **model file**, let the Differential Evolution optimiser tune 18 parameters against an observed flow record, watch it converge in the terminal, and write out a calibrated model file ready to simulate.
 
+<figure markdown>
 ![](../assets/tutorials-12-optimisation-cli/image.png)
+<figcaption>A calibration run in the terminal: progress bar, convergence plot and best objective so far.</figcaption>
+</figure>
 
+<figure markdown>
 ![](../assets/tutorials-12-optimisation-cli/image_1.png)
+<figcaption>The finished run: 60,000 evaluations in 34.5 s, best objective 21,441.6.</figcaption>
+</figure>
 
 ## Prerequisites
 
@@ -194,9 +200,15 @@ Term 'term1': loaded 10958 observed points from ../data/observed.csv
 
 As it runs, Kalix draws a live convergence plot right in the terminal — best objective value (vertical axis) against evaluations (horizontal axis), with a progress bar and a running best score. You'll watch the curve drop steeply at first, then flatten as the search homes in.
 
+<figure markdown>
 ![](../assets/tutorials-12-optimisation-cli/image.png)
+<figcaption>The optimiser mid-run: progress bar, convergence plot and best objective so far.</figcaption>
+</figure>
 
+<figure markdown>
 ![](../assets/tutorials-12-optimisation-cli/image_1.png)
+<figcaption>The finished run: 60,000 evaluations in 34.5 seconds.</figcaption>
+</figure>
 
 The whole 60,000-evaluation run finishes in roughly **30 seconds** on a 12-thread machine — each model run is only a few milliseconds, and `n_threads` evaluates many in parallel. Prefer a clean run with no plotting (e.g. for logging)? Add `-q`.
 
@@ -234,7 +246,10 @@ Open `stringybark_calibrated.ini`. It's a complete, runnable model — identical
 
 - The `rain = ...` line's leading multiplier has changed from the starting value to the calibrated `rf_bias`, e.g. `rain = 1.024898 * data.climate_data_csv.by_name.rain_mm`.
 
+<figure markdown>
 ![](../assets/tutorials-12-optimisation-cli/image_2.png)
+<figcaption>The model before and after optimisation: the rain multiplier and Sacramento parameters change; the loc lines differ only in spacing.</figcaption>
+</figure>
 
 ## Step 6 — Simulate the calibrated model
 
@@ -246,7 +261,10 @@ kalix sim stringybark_calibrated.ini -o calibrated_results.csv
 
 Load `calibrated_results.csv` and `../data/observed.csv` and overlay them (in the IDE, the Run Manager, or pandas as in Tutorial 5). The calibrated simulation should track the observed hydrograph noticeably better than the starting model did.
 
+<figure markdown>
 ![](../assets/tutorials-12-optimisation-cli/image_3.png)
+<figcaption>The calibrated simulation (blue) against the observed record (orange), 1999 to 2003, on a square-root axis.</figcaption>
+</figure>
 
 ## What to try next
 

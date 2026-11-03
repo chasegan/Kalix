@@ -105,7 +105,10 @@ Parameters for Runoff Routing
 
 - LagUH is a single-value reparameterisation of the five original unit hydrograph parameters UH1 - UH5. This represents the shape of the unit hydrograph which is used to route instantaneous runoff through the system allowing for delays in the runoff process.
 
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-nodes-sacramento/image.png)
+<figcaption>The 17 Sacramento parameters with lower and upper bounds, and RSERV, which Kalix fixes at 0.3; LZPK and SARVA are bounded relative to LZSK and PCTIM.</figcaption>
+</figure>
 
 ## LagUH
 
