@@ -41,7 +41,7 @@
    keep them at normal weight. Full path + href to outweigh the rule above. */
 .md-nav--primary > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item > .md-nav__link[href$="about-kalix/"],
 .md-nav--primary > .md-nav__list > .md-nav__item > .md-nav > .md-nav__list > .md-nav__item > .md-nav__link[href$="start-developing/"] {
-  font-weight: var(--kx-weight-normal);
+  font-weight: var(--kx-weight-regular);
 }
 
 /* ---- Custom light top-nav (overrides/main.html), matching the landing ----- */
@@ -272,7 +272,7 @@
 .md-typeset dl { margin: var(--kx-space-2) 0 var(--kx-space-5); }
 .md-typeset dl dt {
   margin-top: var(--kx-space-3);
-  font-weight: var(--kx-weight-normal);
+  font-weight: var(--kx-weight-regular);
 }
 .md-typeset dl dt > code { font-size: var(--kx-text-sm); }
 .md-typeset dl dd {
