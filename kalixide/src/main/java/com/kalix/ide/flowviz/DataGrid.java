@@ -4,6 +4,7 @@ import com.kalix.ide.dataview.DataFind;
 import com.kalix.ide.dataview.FindableData;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
+import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.io.TimeSeriesTable;
 
 /**
@@ -99,10 +100,7 @@ final class DataGrid implements FindableData {
     public DataFind.Scan scanForMatches(DataFind.Spec spec, long fromRow, int fromColumn) {
         DataFind.Collector collector = new DataFind.Collector(fromRow, fromColumn);
         String needle = DataFind.foldNeedle(spec);
-        boolean datedIndex = switch (table.plotType()) {
-            case EXCEEDANCE, DOUBLE_MASS -> false;
-            case VALUES, CUMULATIVE, DIFFERENCE, CUMULATIVE_DIFFERENCE, RESIDUAL_MASS -> true;
-        };
+        boolean datedIndex = table.plotType().xAxisType() == XAxisType.TIME;
         for (int row = 0; row < rowTimes.length; row++) {
             long timestamp = rowTimes[row];
             if (datedIndex && spec.dateMillis() != null && timestamp >= spec.dateMillis()) {

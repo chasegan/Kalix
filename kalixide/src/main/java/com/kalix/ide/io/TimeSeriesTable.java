@@ -97,8 +97,10 @@ public final class TimeSeriesTable {
     public String firstHeader() {
         String header = firstHeader;
         if (header == null) {
-            header = plotType == PlotType.EXCEEDANCE ? "percentile"
-                : anyRowNeedsTime() ? "datetime" : "date";
+            header = switch (plotType.xAxisType()) {
+                case PERCENTILE -> "percentile";
+                case TIME, COUNT, NUMERIC -> anyRowNeedsTime() ? "datetime" : "date";
+            };
             firstHeader = header;
         }
         return header;
@@ -106,8 +108,10 @@ public final class TimeSeriesTable {
 
     /** The first column's cell for a row's timestamp: the percentile, else the date or datetime. */
     public String firstCell(long timestamp) {
-        return plotType == PlotType.EXCEEDANCE ? formatPercentile(timestamp)
-            : TimeFormatUtil.formatForStepSize(timestamp, stepSeconds);
+        return switch (plotType.xAxisType()) {
+            case PERCENTILE -> formatPercentile(timestamp);
+            case TIME, COUNT, NUMERIC -> TimeFormatUtil.formatForStepSize(timestamp, stepSeconds);
+        };
     }
 
     /** A value cell: empty for NaN (missing or stored), else Java's double spelling. */

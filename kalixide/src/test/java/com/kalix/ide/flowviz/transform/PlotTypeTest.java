@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz.transform;
 
+import com.kalix.ide.flowviz.rendering.XAxisType;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -7,9 +8,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins {@link PlotType#isDataMaskDefault()} to the mapping issue #369 specifies:
- * overlapping-data masking defaults ON for the cumulative/derived plot types and
- * OFF for the direct-value types.
+ * Pins each plot type's declared properties: the mask default issue #369 specifies
+ * (ON for the cumulative/derived plot types, OFF for the direct-value types) and the
+ * X-axis domain the transformer leaves in the timestamp slot.
  */
 class PlotTypeTest {
 
@@ -25,5 +26,16 @@ class PlotTypeTest {
 
         assertEquals(7, PlotType.values().length,
             "a new plot type must decide its mask default here too");
+    }
+
+    @Test
+    void xAxisTypeSaysWhatTheTransformerStores() {
+        assertEquals(XAxisType.PERCENTILE, PlotType.EXCEEDANCE.xAxisType());
+        assertEquals(XAxisType.NUMERIC, PlotType.DOUBLE_MASS.xAxisType());
+        for (PlotType type : PlotType.values()) {
+            if (type != PlotType.EXCEEDANCE && type != PlotType.DOUBLE_MASS) {
+                assertEquals(XAxisType.TIME, type.xAxisType(), type.name());
+            }
+        }
     }
 }

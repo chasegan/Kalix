@@ -491,7 +491,7 @@ public class FlowVizPanel extends JPanel {
         if (xAxisTypeOverride != null) {
             return xAxisTypeOverride;
         }
-        return xAxisTypeFor(state().getPlotType());
+        return state().getPlotType().xAxisType();
     }
 
     private void setupMouseListeners() {
@@ -932,19 +932,6 @@ public class FlowVizPanel extends JPanel {
         return state().getYAxisScale();
     }
 
-    /**
-     * Maps a plot type to the X-axis domain it plots against, so callers can tell whether
-     * switching between two plot types changes that domain (and therefore can't preserve the
-     * existing X zoom). Shared by {@link #setPlotType} and {@link #setPlotTypeAndMaskMode}.
-     */
-    private static XAxisType xAxisTypeFor(PlotType type) {
-        return switch (type) {
-            case EXCEEDANCE -> XAxisType.PERCENTILE;
-            case DOUBLE_MASS -> XAxisType.NUMERIC;
-            case VALUES, CUMULATIVE, DIFFERENCE, CUMULATIVE_DIFFERENCE, RESIDUAL_MASS -> XAxisType.TIME;
-        };
-    }
-
     /** The tab's current state: what the toolbar and the window trees resync from. */
     public FlowVizState currentState() {
         return state();
@@ -1037,7 +1024,7 @@ public class FlowVizPanel extends JPanel {
         pendingFit = Fit.NONE; // a whole new state: only its own fit counts
         lastReferenceSeries = null;
         rebuildOrDefer();
-        if (xAxisTypeFor(old.getPlotType()) != xAxisTypeFor(state().getPlotType())) {
+        if (old.getPlotType().xAxisType() != state().getPlotType().xAxisType()) {
             zoomToFit();
         } else if (state().isAutoYMode()) {
             fitYAxis();
@@ -1077,7 +1064,7 @@ public class FlowVizPanel extends JPanel {
         // If the X-axis domain changed, X zoom can't be preserved; otherwise auto-Y keeps
         // the X zoom and fits Y, and without it the user expects to see all the new data.
         if (shapeChanged) {
-            if (xAxisTypeFor(old.getPlotType()) != xAxisTypeFor(now.getPlotType())) {
+            if (old.getPlotType().xAxisType() != now.getPlotType().xAxisType()) {
                 zoomToFit();
             } else if (now.isAutoYMode()) {
                 fitYAxis();
