@@ -54,6 +54,7 @@ order = 10
 node.weir.order
 node.weir.orders_en_route
 node.weir.target_level
+node.weir.target_volume
 node.dam.ds_1_order
 node.weir.volume
 "#)
@@ -124,6 +125,50 @@ fn test_target_level_from_a_constant_follows_the_constant_between_runs() {
     model.run().expect("second run should succeed");
     assert_eq!(series(&mut model, "node.weir.order")[0], 1010.0);
     assert_eq!(series(&mut model, "node.weir.target_level")[0], 2.0);
+}
+
+#[test]
+fn test_target_volume_orders_as_the_target_level_it_corresponds_to() {
+    // 1.7 m is 1700 ML on the weir's table, so both storages order and fill identically.
+    let mut by_level = run(&rig(3, "target_level = 1.7"));
+    let mut by_volume = run(&rig(3, "target_volume = 1700"));
+    for name in ["node.weir.order", "node.weir.orders_en_route", "node.weir.volume"] {
+        assert_eq!(series(&mut by_level, name), series(&mut by_volume, name), "{}", name);
+    }
+    assert_eq!(series(&mut by_volume, "node.weir.order")[..2], [710.0, 10.0]);
+}
+
+#[test]
+fn test_target_level_and_target_volume_are_both_recorded_whichever_is_given() {
+    // The input is recorded as given and the other is derived from the dimension table.
+    for (property, given, derived) in [
+        ("target_level = 1.7", "node.weir.target_level", "node.weir.target_volume"),
+        ("target_volume = 1700", "node.weir.target_volume", "node.weir.target_level"),
+    ] {
+        let mut model = run(&rig(3, property));
+        let (g, d) = (series(&mut model, given), series(&mut model, derived));
+        let (expect_g, expect_d) = if given.ends_with("level") { (1.7, 1700.0) } else { (1700.0, 1.7) };
+        assert!(g.iter().all(|&v| v == expect_g), "{}: {} {:?}", property, given, g);
+        assert!(d.iter().all(|&v| (v - expect_d).abs() < 1e-9), "{}: {} {:?}", property, derived, d);
+    }
+}
+
+#[test]
+fn test_target_level_and_target_volume_together_are_refused() {
+    let mut model = IniModelIO::read_model_string(&rig(3, "target_level = 1.5\ntarget_volume = 1500"))
+        .expect("model should load");
+    let err = model.configure().expect_err("both targets must be refused");
+    assert!(err.contains("'weir'") && err.contains("target_volume"), "got: {}", err);
+}
+
+#[test]
+fn test_order_through_overrides_a_target_volume() {
+    let mut model = run(&rig(2, "order_through = true\ntarget_volume = 1700"));
+    assert_eq!(series(&mut model, "node.weir.order")[0], 10.0, "orders pass through unchanged");
+    for name in ["node.weir.target_level", "node.weir.target_volume"] {
+        let s = series(&mut model, name);
+        assert!(s.is_empty() || s.iter().all(|v| v.is_nan()), "{} got {:?}", name, s);
+    }
 }
 
 #[test]
