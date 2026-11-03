@@ -7,7 +7,7 @@ import com.kalix.ide.dataview.FindableData;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.transform.PlotType;
-import com.kalix.ide.io.TimeSeriesCsvExporter;
+import com.kalix.ide.io.TimeSeriesTable;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -207,16 +207,16 @@ public final class DataVizPanel extends JPanel {
         dirty = false;
         DataSet display = model.display();
         PlotType plotType = model.current().getPlotType();
-        List<String> headers = TimeSeriesCsvExporter.dataColumnHeaders(display, labelResolver);
-        if (display == gridDisplay && plotType == gridPlotType && headers.equals(gridHeaders)) {
+        TimeSeriesTable data = new TimeSeriesTable(display, plotType, labelResolver);
+        if (display == gridDisplay && plotType == gridPlotType && data.headers().equals(gridHeaders)) {
             return;
         }
         gridDisplay = display;
         gridPlotType = plotType;
-        gridHeaders = headers;
+        gridHeaders = data.headers();
         List<int[]> rows = intervals(table.getSelectionModel());
         List<int[]> columns = intervals(table.getColumnModel().getSelectionModel());
-        tableModel.setGrid(DataGrid.of(display, plotType, labelResolver));
+        tableModel.setGrid(DataGrid.of(data));
         // New data clears the table's selection; put back what still exists.
         restore(table.getSelectionModel(), rows, table.getRowCount());
         restore(table.getColumnModel().getSelectionModel(), columns, table.getColumnCount());

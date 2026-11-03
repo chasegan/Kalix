@@ -3,23 +3,11 @@ package com.kalix.ide.io;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
-import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.PlotType;
-import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
-import com.kalix.ide.utils.TimeFormatUtil;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.io.Writer;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.List;
-import java.util.Locale;
 
 /**
  * Utility class for exporting time series data to CSV format.
@@ -51,7 +39,7 @@ import java.util.Locale;
  *
  * @since 1.0
  * @see DataSet
- * @see TimeSeriesData
+ * @see TimeSeriesTable
  */
 public class TimeSeriesCsvExporter {
 
@@ -139,7 +127,8 @@ public class TimeSeriesCsvExporter {
     /**
      * Performs the actual CSV export operation.
      *
-     * <p>Rows are visited in chronological order by merging the series' sorted
+     * <p>The table's shape and spelling are {@link TimeSeriesTable}'s, shared with the
+     * Data page. Rows are visited in chronological order by merging the series' sorted
      * timestamp arrays; every data point is included even if series have different
      * timestamp sets (a series without a point at a row's timestamp gets an empty
      * cell).</p>
@@ -151,107 +140,14 @@ public class TimeSeriesCsvExporter {
      */
     private static void exportDataToCsv(DataSet dataSet, File file, PlotType plotType,
                                         LabelResolver labelResolver) throws IOException {
-        // One column per series, in pool insertion order, headed by the ref's projected
-        // label. Two series can share a label (the same derived-series name from two
-        // files of the same name, say); a second column with a header already used is
-        // headed "label (2)", never dropped.
-        List<String> headers = dataColumnHeaders(dataSet, labelResolver);
-        List<TimeSeriesData> allSeries = dataColumnSeries(dataSet);
-        if (headers.isEmpty()) {
+        TimeSeriesTable table = new TimeSeriesTable(dataSet, plotType, labelResolver);
+        if (table.isEmpty()) {
             return;
         }
-
-        long stepSeconds = dataStepSeconds(allSeries);
-        String firstHeader = dataFirstHeader(plotType, allSeries, stepSeconds);
-
         try (Writer writer = openWriter(file)) {
-            writeHeader(writer, firstHeader, headers);
-            writeDataRows(writer, allSeries, plotType, stepSeconds);
+            writeHeader(writer, table);
+            writeDataRows(writer, table);
         }
-    }
-
-    /**
-     * One header per series column, in pool order, headed by the ref's projected label.
-     * A label already used is headed "label (2)", never dropped. Shared so other
-     * tabular views cannot drift.
-     */
-    public static List<String> dataColumnHeaders(DataSet dataSet, LabelResolver labelResolver) {
-        List<String> headers = new ArrayList<>();
-        Map<String, Integer> usesOfLabel = new HashMap<>();
-        for (SeriesRef ref : dataSet.getSeriesRefs()) {
-            if (dataSet.getSeries(ref) == null) continue;
-            String label = labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
-            int uses = usesOfLabel.merge(label, 1, Integer::sum);
-            headers.add(uses == 1 ? label : label + " (" + uses + ")");
-        }
-        return headers;
-    }
-
-    /** The series behind {@link #dataColumnHeaders}, in the same order. */
-    public static List<TimeSeriesData> dataColumnSeries(DataSet dataSet) {
-        List<TimeSeriesData> allSeries = new ArrayList<>();
-        for (SeriesRef ref : dataSet.getSeriesRefs()) {
-            TimeSeriesData data = dataSet.getSeries(ref);
-            if (data != null) {
-                allSeries.add(data);
-            }
-        }
-        return allSeries;
-    }
-
-    /**
-     * The step driving the first column's date format: the first regular-interval
-     * series' step, else 0 (date-only). Shared so other tabular views cannot drift.
-     */
-    public static long dataStepSeconds(List<TimeSeriesData> allSeries) {
-        return CsvExportUtil.inferStepSeconds(allSeries);
-    }
-
-    /**
-     * Every row's timestamp, ascending, exactly as the export visits them (one per distinct
-     * timestamp across the series). Shared so other tabular views cannot drift.
-     */
-    public static long[] dataRowTimes(List<TimeSeriesData> allSeries) {
-        int total = 0;
-        for (TimeSeriesData series : allSeries) {
-            total += series.getPointCount();
-        }
-        long[] times = new long[total];
-        int[] count = {0};
-        try {
-            CsvExportUtil.forEachMergedRow(allSeries, (timestamp, values) -> times[count[0]++] = timestamp);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e); // unreachable: the consumer does no I/O
-        }
-        return Arrays.copyOf(times, count[0]);
-    }
-
-    /** A value cell: empty for NaN (missing or stored), else Java's double spelling. */
-    public static String dataValueCell(double value) {
-        return Double.isNaN(value) ? "" : Double.toString(value);
-    }
-
-    /**
-     * The first column's heading: "percentile" for exceedance, else "datetime" when any
-     * row carries a time of day, else "date". Shared so other tabular views cannot drift.
-     */
-    public static String dataFirstHeader(PlotType plotType, List<TimeSeriesData> allSeries, long stepSeconds) {
-        return plotType == PlotType.EXCEEDANCE ? "percentile"
-            : anyRowNeedsTime(allSeries, stepSeconds) ? "datetime" : "date";
-    }
-
-    /**
-     * The first column's cell for a row's timestamp: the percentile for exceedance, else the
-     * date or datetime. Shared so other tabular views cannot drift.
-     */
-    public static String dataFirstCell(PlotType plotType, long timestamp, long stepSeconds) {
-        return plotType == PlotType.EXCEEDANCE ? formatPercentile(timestamp)
-            : TimeFormatUtil.formatForStepSize(timestamp, stepSeconds);
-    }
-
-    /** An exceedance series' fake timestamp as its percentile text ("12.34"). */
-    private static String formatPercentile(long timestamp) {
-        return String.format(Locale.ROOT, "%.2f", (double) timestamp / PlotTypeTransformer.PERCENTILE_SCALE);
     }
 
     /**
@@ -265,30 +161,12 @@ public class TimeSeriesCsvExporter {
     }
 
     /**
-     * Whether any row {@link #writeDataRows} will write carries a time of day. Rows are
-     * formatted one by one, so series on different grids (midnight and 9am daily, say) mix
-     * bare dates and datetimes in one column; the heading then says "datetime". A sub-daily
-     * step answers on the first timestamp.
-     */
-    private static boolean anyRowNeedsTime(List<TimeSeriesData> allSeries, long stepSeconds) {
-        for (TimeSeriesData series : allSeries) {
-            for (long timestamp : series.getTimestamps()) {
-                if (TimeFormatUtil.needsTimeOfDay(timestamp, stepSeconds)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
      * Writes the CSV header row: the first column's heading ("date", "datetime" or
      * "percentile"), then each series name, escaped for CSV.
      */
-    private static void writeHeader(Writer writer, String firstHeader, List<String> headers)
-            throws IOException {
-        writer.write(firstHeader);
-        for (String header : headers) {
+    private static void writeHeader(Writer writer, TimeSeriesTable table) throws IOException {
+        writer.write(table.firstHeader());
+        for (String header : table.headers()) {
             writer.write(",");
             writer.write(CsvExportUtil.escapeCsvField(header));
         }
@@ -303,20 +181,17 @@ public class TimeSeriesCsvExporter {
      * timestamp gets an empty cell.</p>
      *
      * @param writer the file writer
-     * @param allSeries list of all time series data
-     * @param plotType the plot type (null for default behavior)
-     * @param stepSeconds resolution driving the timestamp format (0 = date-only)
+     * @param table the table to write
      * @throws IOException if writing fails
      */
-    private static void writeDataRows(Writer writer, List<TimeSeriesData> allSeries,
-                                      PlotType plotType, long stepSeconds) throws IOException {
+    private static void writeDataRows(Writer writer, TimeSeriesTable table) throws IOException {
         StringBuilder row = new StringBuilder(64);
-        CsvExportUtil.forEachMergedRow(allSeries, (timestamp, values) -> {
+        CsvExportUtil.forEachMergedRow(table.series(), (timestamp, values) -> {
             row.setLength(0);
-            row.append(dataFirstCell(plotType, timestamp, stepSeconds));
+            row.append(table.firstCell(timestamp));
 
             for (double value : values) {
-                row.append(',').append(dataValueCell(value));
+                row.append(',').append(TimeSeriesTable.valueCell(value));
             }
             writer.write(row.append('\n').toString());
         });

@@ -10,6 +10,7 @@ import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
 import com.kalix.ide.io.TimeSeriesCsvExporter;
+import com.kalix.ide.io.TimeSeriesTable;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -58,15 +59,19 @@ class DataGridTest {
         return ds;
     }
 
+    private static DataGrid grid(DataSet ds, PlotType plotType) {
+        return DataGrid.of(new TimeSeriesTable(ds, plotType, LABELS));
+    }
+
     private static Spec text(String query) {
         return new Spec(query, false, false, true, true, null, false);
     }
 
     @Test
     void mixedGridsMergeRowsWithBlankAbsentCells() {
-        DataGrid grid = DataGrid.of(dataSet(
+        DataGrid grid = grid(dataSet(
             "a", daily(day(2020, 1, 1), 1.0, 2.0),
-            "b", daily(day(2020, 1, 2), 3.0, 4.0)), PlotType.VALUES, LABELS);
+            "b", daily(day(2020, 1, 2), 3.0, 4.0)), PlotType.VALUES);
         assertEquals(3, grid.rowCount());
         assertEquals("date", grid.indexHeader());
         assertEquals("2020-01-01", grid.indexText(0));
@@ -78,8 +83,8 @@ class DataGridTest {
 
     @Test
     void storedNanRendersBlankAndNeverMatches() {
-        DataGrid grid = DataGrid.of(dataSet("a", daily(day(2020, 1, 1), Double.NaN, 5.0)),
-            PlotType.VALUES, LABELS);
+        DataGrid grid = grid(dataSet("a", daily(day(2020, 1, 1), Double.NaN, 5.0)),
+            PlotType.VALUES);
         assertEquals("", grid.valueText(0, 0));
         assertEquals(0, grid.scanForMatches(text("NaN"), -1, 0).total());
     }
@@ -88,24 +93,24 @@ class DataGridTest {
     void duplicateTimestampsShowTheFirstValidValue() {
         long t = day(2020, 1, 1);
         TimeSeriesData dup = new TimeSeriesData(new long[] {t, t, t}, new double[] {Double.NaN, 7.0, 8.0});
-        DataGrid grid = DataGrid.of(dataSet("a", dup), PlotType.VALUES, LABELS);
+        DataGrid grid = grid(dataSet("a", dup), PlotType.VALUES);
         assertEquals(1, grid.rowCount());
         assertEquals("7.0", grid.valueText(0, 0), "the export's rule: first valid among duplicates");
     }
 
     @Test
     void duplicateLabelsAreNumberedAsInTheExport() {
-        DataGrid grid = DataGrid.of(dataSet(
+        DataGrid grid = grid(dataSet(
             "x", daily(day(2020, 1, 1), 1.0),
-            "x", daily(day(2020, 1, 1), 2.0)), PlotType.VALUES, LABELS);
+            "x", daily(day(2020, 1, 1), 2.0)), PlotType.VALUES);
         assertEquals("x", grid.seriesHeader(0));
         assertEquals("x (2)", grid.seriesHeader(1));
     }
 
     @Test
     void textAndWholeCellMatching() {
-        DataGrid grid = DataGrid.of(dataSet("a", daily(day(2020, 1, 1), 1.5, 21.5)),
-            PlotType.VALUES, LABELS);
+        DataGrid grid = grid(dataSet("a", daily(day(2020, 1, 1), 1.5, 21.5)),
+            PlotType.VALUES);
         assertEquals(2, grid.scanForMatches(text("1.5"), -1, 0).total());
         Spec whole = new Spec("1.5", false, true, true, true, null, false);
         Scan scan = grid.scanForMatches(whole, -1, 0);
@@ -116,8 +121,8 @@ class DataGridTest {
 
     @Test
     void dateQueriesMatchByParsedDateAndFallBackToNearestLater() {
-        DataGrid grid = DataGrid.of(dataSet("a", daily(day(2020, 1, 1), 1, 2, 3)),
-            PlotType.VALUES, LABELS);
+        DataGrid grid = grid(dataSet("a", daily(day(2020, 1, 1), 1, 2, 3)),
+            PlotType.VALUES);
         Spec exact = new Spec("02/01/2020", false, false, true, true, day(2020, 1, 2), true);
         Scan scan = grid.scanForMatches(exact, -1, 0);
         assertEquals(1, scan.total());
@@ -134,7 +139,7 @@ class DataGridTest {
     void exceedanceIndexMatchesAsPercentileTextNotAsDates() {
         long p50 = 50 * PlotTypeTransformer.PERCENTILE_SCALE;
         TimeSeriesData exceedance = new TimeSeriesData(new long[] {p50}, new double[] {3.0});
-        DataGrid grid = DataGrid.of(dataSet("a", exceedance), PlotType.EXCEEDANCE, LABELS);
+        DataGrid grid = grid(dataSet("a", exceedance), PlotType.EXCEEDANCE);
         assertEquals("percentile", grid.indexHeader());
         assertEquals("50.00", grid.indexText(0));
         Scan scan = grid.scanForMatches(text("50.00"), -1, 0);
@@ -157,7 +162,7 @@ class DataGridTest {
         TimeSeriesCsvExporter.export(ds, out, PlotType.VALUES, LABELS);
         List<String> lines = Files.readAllLines(out.toPath(), StandardCharsets.UTF_8);
 
-        DataGrid grid = DataGrid.of(ds, PlotType.VALUES, LABELS);
+        DataGrid grid = grid(ds, PlotType.VALUES);
         List<String> rendered = new ArrayList<>();
         rendered.add(grid.indexHeader() + "," + grid.seriesHeader(0) + "," + grid.seriesHeader(1));
         for (int row = 0; row < grid.rowCount(); row++) {
