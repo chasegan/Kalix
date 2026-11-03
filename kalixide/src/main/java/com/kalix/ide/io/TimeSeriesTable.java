@@ -115,20 +115,32 @@ public final class TimeSeriesTable {
         return Double.isNaN(value) ? "" : Double.toString(value);
     }
 
-    /** Every row's timestamp, ascending: one per distinct timestamp across the series. */
+    /**
+     * Every row's timestamp, ascending: one per distinct timestamp across the series.
+     *
+     * <p>Sized to the longest series, which is the fewest rows there can be, and grown
+     * only when series on different grids add rows. Sizing to the sum of the series'
+     * points would allocate the table's whole area for aligned series: ten series of
+     * 3.65M points is 290 MB for 29 MB of rows.
+     */
     public long[] rowTimes() {
-        int total = 0;
+        int longest = 0;
         for (TimeSeriesData data : series) {
-            total += data.getPointCount();
+            longest = Math.max(longest, data.getPointCount());
         }
-        long[] times = new long[total];
+        long[][] times = {new long[longest]};
         int[] count = {0};
         try {
-            CsvExportUtil.forEachMergedRow(series, (timestamp, values) -> times[count[0]++] = timestamp);
+            CsvExportUtil.forEachMergedRow(series, (timestamp, values) -> {
+                if (count[0] == times[0].length) {
+                    times[0] = Arrays.copyOf(times[0], times[0].length + (times[0].length >> 1) + 1);
+                }
+                times[0][count[0]++] = timestamp;
+            });
         } catch (IOException e) {
             throw new UncheckedIOException(e); // unreachable: the consumer does no I/O
         }
-        return Arrays.copyOf(times, count[0]);
+        return count[0] == times[0].length ? times[0] : Arrays.copyOf(times[0], count[0]);
     }
 
     /** An exceedance series' fake timestamp as its percentile text ("12.34"). */
