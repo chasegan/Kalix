@@ -6,6 +6,8 @@
 
 use crate::io::ini_model_io::IniModelIO;
 use crate::model::Model;
+use crate::model_inputs::DynamicInput;
+use crate::nodes::NodeEnum;
 
 /// A supply dam, `lag` steps of routing, then a weir with `{WEIR}` properties
 /// and a regulated user below it ordering 10.
@@ -51,6 +53,7 @@ order = 10
 [outputs]
 node.weir.order
 node.weir.orders_en_route
+node.weir.target_level
 node.dam.ds_1_order
 node.weir.volume
 "#)
@@ -69,6 +72,13 @@ fn series(model: &mut Model, name: &str) -> Vec<f64> {
     model.data_cache.series[idx].values.clone()
 }
 
+fn weir_target_level(model: &Model) -> &DynamicInput {
+    model.nodes.iter().find_map(|n| match n {
+        NodeEnum::StorageNode(s) if s.name == "weir" => Some(&s.target_level),
+        _ => None,
+    }).expect("weir storage")
+}
+
 #[test]
 fn test_target_level_storage_reports_its_order_and_what_is_en_route() {
     // Held at 1.5 m (1500 ML) from 1000 ML, 3 steps below its supply, releasing 10 a day.
@@ -82,6 +92,38 @@ fn test_target_level_storage_reports_its_order_and_what_is_en_route() {
     assert_eq!(en_route[..4], [510.0, 520.0, 530.0, 30.0], "today's order in, today's arrival out");
     assert_eq!(series(&mut model, "node.dam.ds_1_order")[0], 510.0, "and that is what the dam sees");
     assert_eq!(series(&mut model, "node.weir.volume")[3], 1470.0);
+}
+
+#[test]
+fn test_constant_target_level_matches_the_same_level_evaluated_each_step() {
+    // A constant level is converted to a volume once at initialise; an expression is
+    // converted every step. 1.7 m falls between table rows, so this exercises the
+    // interpolation, and the two must agree to the bit.
+    let mut fixed = run(&rig(3, "target_level = 1.7"));
+    let mut per_step = run(&rig(3, "target_level = if(sim.step >= 0, 1.7, 0)"));
+    assert!(matches!(weir_target_level(&fixed), DynamicInput::Constant { .. }));
+    assert!(!matches!(weir_target_level(&per_step),
+        DynamicInput::Constant { .. } | DynamicInput::DirectConstantReference { .. }),
+        "the expression must not fold to a constant, or both runs take the same path");
+    for name in ["node.weir.order", "node.weir.orders_en_route", "node.weir.volume", "node.weir.target_level"] {
+        assert_eq!(series(&mut fixed, name), series(&mut per_step, name), "{}", name);
+    }
+    assert!(series(&mut fixed, "node.weir.target_level").iter().all(|&v| v == 1.7));
+}
+
+#[test]
+fn test_target_level_from_a_constant_follows_the_constant_between_runs() {
+    // A constant reference is converted once per run, so a constant changed between runs
+    // (as the optimiser does) must be picked up. 1.5 m orders 1500 - 990 = 510 on day 1;
+    // 2.0 m orders 2000 - 990 = 1010.
+    let ini = format!("{}\n[const]\nconst.target = 1.5\n", rig(3, "target_level = const.target"));
+    let mut model = run(&ini);
+    assert!(matches!(weir_target_level(&model), DynamicInput::DirectConstantReference { .. }));
+    assert_eq!(series(&mut model, "node.weir.order")[0], 510.0);
+    model.data_cache.constants.set_value("const.target", 2.0);
+    model.run().expect("second run should succeed");
+    assert_eq!(series(&mut model, "node.weir.order")[0], 1010.0);
+    assert_eq!(series(&mut model, "node.weir.target_level")[0], 2.0);
 }
 
 #[test]

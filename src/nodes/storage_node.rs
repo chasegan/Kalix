@@ -196,6 +196,8 @@ enum StorageOrdering {
     Through,
     /// Orders to reach `target_level`, converted to a volume each step.
     TargetLevel,
+    /// Orders to reach a constant `target_level`, converted once at initialise.
+    TargetLevelFixed { level: f64, volume: f64 },
 }
 
 #[derive(Default, Clone)]
@@ -1094,7 +1096,7 @@ impl StorageNode {
 impl StorageNode {
     /// Whether this storage orders upstream to reach a target. Valid after initialise.
     pub fn has_target(&self) -> bool {
-        matches!(self.ordering, StorageOrdering::TargetLevel)
+        matches!(self.ordering, StorageOrdering::TargetLevel | StorageOrdering::TargetLevelFixed { .. })
     }
 
     /// Order what is needed to reach `target_volume`. The forecast assumes:
@@ -1300,10 +1302,17 @@ impl Node for StorageNode {
         // Resolve how the storage orders upstream: order_through overrides a target
         self.ordering = if self.order_through {
             StorageOrdering::Through
-        } else if !matches!(&self.target_level, DynamicInput::None { .. }) {
-            StorageOrdering::TargetLevel
         } else {
-            StorageOrdering::None
+            match &self.target_level {
+                DynamicInput::None { .. } => StorageOrdering::None,
+                // Constant for the whole run (nodes re-initialise each run), so convert once
+                DynamicInput::Constant { .. } | DynamicInput::DirectConstantReference { .. } => {
+                    let level = self.target_level.get_value(data_cache);
+                    let volume = self.dimensions.interpolate_or_extrapolate(LEVL, VOLU, level);
+                    StorageOrdering::TargetLevelFixed { level, volume }
+                }
+                _ => StorageOrdering::TargetLevel,
+            }
         };
 
         // Check once whether an "exists" input was configured (default: storage always exists)
@@ -1377,6 +1386,12 @@ impl Node for StorageNode {
                 }
                 let target_volume = self.dimensions.interpolate_or_extrapolate(LEVL, VOLU, target_level);
                 self.order_to_target(data_cache, target_volume);
+            }
+            StorageOrdering::TargetLevelFixed { level, volume } => {
+                if let Some(idx) = self.recorder_idx_target_level {
+                    data_cache.add_value_at_index(idx, level);
+                }
+                self.order_to_target(data_cache, volume);
             }
             StorageOrdering::None => {
                 // Storage does not order upstream, and writes neither order result: recording
