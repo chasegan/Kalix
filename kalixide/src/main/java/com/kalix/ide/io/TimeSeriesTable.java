@@ -27,10 +27,13 @@ import java.util.Map;
  *
  * <p>Columns are the set's series in insertion order, headed by the ref's projected label;
  * a second column with a header already used is headed "label (2)", never dropped. Rows
- * are the distinct timestamps across the series, ascending. The first column is the
- * percentile for an exceedance plot, else the date, headed "datetime" when any row carries
- * a time of day and "date" otherwise. A value is written in Java's double spelling, and a
- * missing point or a stored NaN as an empty cell.
+ * are the distinct timestamps across the series, ascending. The first column is what the
+ * plot type's {@link PlotType#xAxisType() X-axis domain} says the timestamp slot holds: for
+ * a time axis the date, headed "datetime" when any row carries a time of day and "date"
+ * otherwise; for a percentile axis the percentile to two places; for a numeric axis the
+ * decoded number in the value cells' spelling. The non-time columns are headed by the plot
+ * type's {@link PlotType#xAxisLabel() X-axis label}. A value is written in Java's double
+ * spelling, and a missing point or a stored NaN as an empty cell.
  *
  * <p>Immutable, and safe to read from any thread.
  */
@@ -93,24 +96,26 @@ public final class TimeSeriesTable {
         return stepSeconds;
     }
 
-    /** The first column's heading: "percentile", "datetime" or "date". */
+    /** The first column's heading: "date" or "datetime" for a time axis, else the plot type's X-axis label. */
     public String firstHeader() {
         String header = firstHeader;
         if (header == null) {
             header = switch (plotType.xAxisType()) {
-                case PERCENTILE -> "percentile";
-                case TIME, COUNT, NUMERIC -> anyRowNeedsTime() ? "datetime" : "date";
+                case TIME -> anyRowNeedsTime() ? "datetime" : "date";
+                case PERCENTILE, COUNT, NUMERIC -> plotType.xAxisLabel();
             };
             firstHeader = header;
         }
         return header;
     }
 
-    /** The first column's cell for a row's timestamp: the percentile, else the date or datetime. */
+    /** The first column's cell for a row's timestamp: the date or datetime, percentile, count or number it encodes. */
     public String firstCell(long timestamp) {
         return switch (plotType.xAxisType()) {
+            case TIME -> TimeFormatUtil.formatForStepSize(timestamp, stepSeconds);
             case PERCENTILE -> formatPercentile(timestamp);
-            case TIME, COUNT, NUMERIC -> TimeFormatUtil.formatForStepSize(timestamp, stepSeconds);
+            case COUNT -> Long.toString(timestamp);
+            case NUMERIC -> valueCell((double) timestamp / PlotTypeTransformer.NUMERIC_SCALE);
         };
     }
 

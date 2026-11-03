@@ -93,8 +93,8 @@ final class DataGrid implements FindableData {
 
     /**
      * One pass over the grid matching cell text exactly as the table shows it.
-     * Parsed-date matching applies only when the index is a date: exceedance and
-     * double-mass timestamps are scaled numbers, so they match as text only.
+     * Parsed-date matching applies only when the index is a date: on a percentile or
+     * numeric X axis the index is a number, so it matches as text only.
      */
     @Override
     public DataFind.Scan scanForMatches(DataFind.Spec spec, long fromRow, int fromColumn) {

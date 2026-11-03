@@ -21,4 +21,5 @@ pip: "pip install kalix==0.4.9"
     - It shows the plotted values as a table, after the tab's aggregation, masks and plot type, exactly as `Save Data` writes them.
     - `Find…` (Ctrl+F, then F3 for the next match) and `Copy` work as in the data viewer.
 - Unticked series no longer stay in memory: untick a series in every plot tab to free it.
+- `Save Data` on a double-mass plot now writes the cumulative reference as the first column, headed `cumulative reference`. It used to write it as dates in 1970.
 - IDE: files dragged from Finder or Explorer onto the project tree are copied into the folder they land on. If a name is already taken, you're asked to replace it or keep both (#469).

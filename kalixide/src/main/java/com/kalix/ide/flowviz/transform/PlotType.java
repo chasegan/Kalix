@@ -8,41 +8,46 @@ import com.kalix.ide.flowviz.rendering.XAxisType;
  */
 public enum PlotType {
     /** Original values - no transformation. */
-    VALUES("Values", "Value", XAxisType.TIME, false),
+    VALUES("Values", "Value", XAxisType.TIME, null, false),
 
     /** Cumulative sum of values over time. */
-    CUMULATIVE("Cumulative Vals", "Cumulative Value", XAxisType.TIME, true),
+    CUMULATIVE("Cumulative Vals", "Cumulative Value", XAxisType.TIME, null, true),
 
     /** Difference from reference series (first selected series). */
-    DIFFERENCE("Difference", "Difference from Reference", XAxisType.TIME, false),
+    DIFFERENCE("Difference", "Difference from Reference", XAxisType.TIME, null, false),
 
     /** Cumulative difference from reference series. */
-    CUMULATIVE_DIFFERENCE("Cumulative Diff", "Cumulative Difference", XAxisType.TIME, true),
+    CUMULATIVE_DIFFERENCE("Cumulative Diff", "Cumulative Difference", XAxisType.TIME, null, true),
 
     /** Exceedance probability distribution. */
-    EXCEEDANCE("Exceedance", "Exceedance Probability (%)", XAxisType.PERCENTILE, true),
+    EXCEEDANCE("Exceedance", "Exceedance Probability (%)", XAxisType.PERCENTILE, "percentile", true),
 
     /** Double mass curve: cumulative reference on X-axis vs cumulative series on Y-axis. */
-    DOUBLE_MASS("Double Mass", "Cumulative Value", XAxisType.NUMERIC, true),
+    DOUBLE_MASS("Double Mass", "Cumulative Value", XAxisType.NUMERIC, "cumulative reference", true),
 
     /** Residual mass curve: cumulative deviation from mean over time. */
-    RESIDUAL_MASS("Residual Mass", "Residual Mass", XAxisType.TIME, true);
+    RESIDUAL_MASS("Residual Mass", "Residual Mass", XAxisType.TIME, null, true);
 
     private final String displayName;
     private final String yAxisLabel;
     private final XAxisType xAxisType;
+    private final String xAxisLabel;
     private final boolean dataMaskDefault;
 
     /**
      * @param displayName UI label
      * @param yAxisLabel Y-axis label appropriate for this plot type
      * @param xAxisType what the transformed series' timestamp slot holds
+     * @param xAxisLabel the name of the X quantity, as the data table heads its first column;
+     *                   null when X is time (the table then says "date" or "datetime")
      * @param dataMaskDefault whether overlapping-data masking should start on for this plot type
      */
-    PlotType(String displayName, String yAxisLabel, XAxisType xAxisType, boolean dataMaskDefault) {
+    PlotType(String displayName, String yAxisLabel, XAxisType xAxisType, String xAxisLabel,
+             boolean dataMaskDefault) {
         this.displayName = displayName;
         this.yAxisLabel = yAxisLabel;
         this.xAxisType = xAxisType;
+        this.xAxisLabel = xAxisLabel;
         this.dataMaskDefault = dataMaskDefault;
     }
 
@@ -69,6 +74,14 @@ public enum PlotType {
      */
     public XAxisType xAxisType() {
         return xAxisType;
+    }
+
+    /**
+     * The name of the X quantity for a plot type whose X is not time, as the data table
+     * heads its first column ("percentile", "cumulative reference"); null when X is time.
+     */
+    public String xAxisLabel() {
+        return xAxisLabel;
     }
 
     /**

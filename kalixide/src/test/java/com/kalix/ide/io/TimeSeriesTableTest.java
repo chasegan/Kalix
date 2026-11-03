@@ -4,6 +4,7 @@ import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.PlotType;
+import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
 
 import org.junit.jupiter.api.Test;
 
@@ -26,11 +27,15 @@ class TimeSeriesTableTest {
     }
 
     private static TimeSeriesTable table(TimeSeriesData... series) {
+        return table(PlotType.VALUES, series);
+    }
+
+    private static TimeSeriesTable table(PlotType plotType, TimeSeriesData... series) {
         DataSet ds = new DataSet();
         for (int i = 0; i < series.length; i++) {
             ds.addSeries(new DatasetSeries("f", "s" + i), series[i]);
         }
-        return new TimeSeriesTable(ds, PlotType.VALUES, null);
+        return new TimeSeriesTable(ds, plotType, null);
     }
 
     @Test
@@ -47,6 +52,26 @@ class TimeSeriesTableTest {
         assertEquals(9, rows.length);
         assertEquals(0, rows[0]);
         assertEquals(22 * DAY, rows[8]);
+    }
+
+    @Test
+    void exceedanceFirstColumnIsThePercentile() {
+        long p12 = (long) (12.345 * PlotTypeTransformer.PERCENTILE_SCALE);
+        TimeSeriesTable table = table(PlotType.EXCEEDANCE,
+            new TimeSeriesData(new long[] {p12}, new double[] {3.0}));
+        assertEquals("percentile", table.firstHeader());
+        assertEquals("12.35", table.firstCell(p12));
+    }
+
+    @Test
+    void doubleMassFirstColumnIsTheCumulativeReference() {
+        // The transform stores the cumulative reference as a fake timestamp. Read as a
+        // date it would be 1970-01-15: the column decodes it back to the number plotted.
+        long cumRef = (long) (1234.5 * PlotTypeTransformer.NUMERIC_SCALE);
+        TimeSeriesTable table = table(PlotType.DOUBLE_MASS,
+            new TimeSeriesData(new long[] {cumRef}, new double[] {3.0}));
+        assertEquals("cumulative reference", table.firstHeader());
+        assertEquals("1234.5", table.firstCell(cumRef));
     }
 
     @Test

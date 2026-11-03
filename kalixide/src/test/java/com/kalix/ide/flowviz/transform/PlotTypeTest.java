@@ -38,4 +38,15 @@ class PlotTypeTest {
             }
         }
     }
+
+    @Test
+    void everyNonTimeAxisNamesItsXQuantity() {
+        for (PlotType type : PlotType.values()) {
+            boolean time = type.xAxisType() == XAxisType.TIME;
+            assertEquals(time, type.xAxisLabel() == null,
+                type.name() + ": a non-time axis heads the data table's first column");
+        }
+        assertEquals("percentile", PlotType.EXCEEDANCE.xAxisLabel());
+        assertEquals("cumulative reference", PlotType.DOUBLE_MASS.xAxisLabel());
+    }
 }

@@ -154,6 +154,24 @@ class DataGridTest {
     }
 
     @Test
+    void doubleMassIndexMatchesAsNumberTextNotAsDates() {
+        long cumRef = (long) (1234.5 * PlotTypeTransformer.NUMERIC_SCALE);
+        TimeSeriesData doubleMass = new TimeSeriesData(new long[] {cumRef}, new double[] {3.0});
+        DataGrid grid = grid(dataSet("a", doubleMass), PlotType.DOUBLE_MASS);
+        assertEquals("cumulative reference", grid.indexHeader());
+        assertEquals("1234.5", grid.indexText(0));
+        Scan scan = grid.scanForMatches(text("1234.5"), -1, 0);
+        assertEquals(1, scan.total());
+        assertEquals(0, scan.firstOverall().column());
+
+        // The fake timestamp is 1,234,500,000 ms after the epoch: Jan 15 1970.
+        Spec date = new Spec("1970-01-15", false, false, true, true, day(1970, 1, 15), true);
+        Scan dated = grid.scanForMatches(date, -1, 0);
+        assertEquals(0, dated.total(), "no parsed-date match on a numeric index");
+        assertEquals(-1, dated.nearestDateRow(), "and no nearest-date landing");
+    }
+
+    @Test
     void cellsSpellExactlyWhatTheCsvExportWrites() throws IOException {
         DataSet ds = dataSet(
             "a", daily(day(2020, 1, 1), 1.0, Double.NaN, 1e-7, 123456.789),

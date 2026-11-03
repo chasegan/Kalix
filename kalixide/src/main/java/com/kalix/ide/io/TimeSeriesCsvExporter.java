@@ -78,9 +78,9 @@ public class TimeSeriesCsvExporter {
     /**
      * Exports a dataset to a CSV file with plot type awareness.
      *
-     * <p>For EXCEEDANCE plot type, the first column is "percentile" with percentages.
-     * For other plot types it is the timestamps, headed "date" or "datetime" (see the class
-     * doc).</p>
+     * <p>The first column is what the plot type's X axis holds: the percentile for an
+     * exceedance plot, the cumulative reference for a double-mass plot, else the timestamps
+     * headed "date" or "datetime" (see {@link TimeSeriesTable}).</p>
      *
      * @param dataSet the dataset to export; must not be null
      * @param outputFile the target CSV file; will be created or overwritten
