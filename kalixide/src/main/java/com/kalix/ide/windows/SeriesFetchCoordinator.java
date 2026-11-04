@@ -278,12 +278,15 @@ class SeriesFetchCoordinator {
                 for (SeriesRef ref : refs) {
                     window.publishSeries(ref, cachedData);
                 }
-            } else if (!timeSeriesRequestManager.isRequestInProgress(sessionKey, seriesName)) {
+            } else {
                 for (SeriesRef ref : refs) {
                     tabManager.addLoadingSeriesInStatsTabs(ref);
                 }
 
                 final List<SeriesRef> capturedRefs = new ArrayList<>(refs);
+                // One request in flight per series: the manager hands a second caller the
+                // same future, so a ref asked for while another ref's request is still out
+                // (Last and its run, say) is published by that reply too, not left loading.
                 // Captured to detect whether "Last" has changed since this request was issued.
                 // Only applied to LastSeries refs; RunSeries / DatasetSeries refs are tied to
                 // their own immutable identity and are not generation-dependent.
@@ -323,10 +326,6 @@ class SeriesFetchCoordinator {
                         });
                         return null;
                     });
-            } else {
-                for (SeriesRef ref : refs) {
-                    tabManager.addLoadingSeriesInStatsTabs(ref);
-                }
             }
         }
 
