@@ -61,11 +61,15 @@ class FlowVizPanelShownTest {
         pool.addSeries(B, days(3));
         panel.setDataSet(pool);
         panel.model().update(st -> st.withVisibleSeries(List.of(A, B)));
+        // What a paint does: the coordinate readout takes the display set too.
+        CoordinateDisplayManager readout = panel.coordinateDisplayManagerForTests();
+        readout.updateCoordinateDisplay(panel.displayDataSetForTests(), panel.viewportForTests());
 
         panel.setShown(false);
         panel.model().update(st -> st.withVisibleSeries(List.of(B)));
         assertNull(panel.displayDataSetForTests(),
             "a hidden plot holds no display set with an unticked series in it");
+        assertNull(readout.dataSetForTests(), "and neither does its coordinate readout");
 
         panel.setShown(true);
         assertEquals(List.of(B), panel.displayDataSetForTests().getSeriesRefs(), "and rebuilds when shown");

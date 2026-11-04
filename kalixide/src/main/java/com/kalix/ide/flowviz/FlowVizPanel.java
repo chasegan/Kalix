@@ -253,6 +253,7 @@ public class FlowVizPanel extends JPanel {
         if (displayDataSet != null && !model.holdsDisplay(displayDataSet)) {
             displayDataSet = null;
             renderer.clearCache();
+            coordinateDisplayManager.updateCoordinateDisplay(null, currentViewport); // took it at the last paint
         }
     }
 
@@ -870,6 +871,11 @@ public class FlowVizPanel extends JPanel {
     /** The transformed dataset the renderer draws — package-private, for tests. */
     DataSet displayDataSetForTests() {
         return displayDataSet;
+    }
+
+    /** The coordinate readout — package-private, for tests. */
+    CoordinateDisplayManager coordinateDisplayManagerForTests() {
+        return coordinateDisplayManager;
     }
 
     /**

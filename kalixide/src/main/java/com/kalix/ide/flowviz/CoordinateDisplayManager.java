@@ -200,6 +200,11 @@ public class CoordinateDisplayManager {
         this.currentViewport = viewport;
     }
 
+    /** The data set the readout holds — package-private, for tests. */
+    DataSet dataSetForTests() {
+        return dataSet;
+    }
+
     /**
      * Releases resources held by this manager. Stops the throttling timer so it cannot keep
      * the manager (and its parent component) reachable after the owning panel is torn down.
