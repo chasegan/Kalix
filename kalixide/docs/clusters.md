@@ -1,7 +1,7 @@
 # Node Clusters
 
-Status: **design settled; V1a in progress: `#@cluster` is parsed and indexed, but nothing
-uses it yet** (stages below). Issue
+Status: **design settled; V1a in progress: `#@cluster` is parsed and indexed, and the edits
+exist, but nothing on the map or menu uses them yet** (stages below). Issue
 [#476](https://github.com/chasegan/Kalix/issues/476). The present
 tense below describes the design. A few choices are marked for checking at user
 testing (see Context menu).
@@ -189,8 +189,12 @@ order, so the order of first mention has to be kept from the parse. The index ho
 cluster's members in file order, and is replaced whole at every reparse, so it is a snapshot
 of the text. Only complete nodes count, as only they are on the map.
 
-**Edits** (`CommandExecutor` for the pattern). Each is a pure function from text to text
-edits, applied once inside `beginAtomicEdit()`/`endAtomicEdit()`. A cluster edit leaves a
+**Edits** (`ClusterEdits`, `CommandExecutor`). Each is a pure function from text to text
+edits; `CommandExecutor` is the one place that applies them, once inside
+`beginAtomicEdit()`/`endAtomicEdit()`. Create and Add are one function. They read the text
+through `NodeSectionLocator`, not the model, so Rename and Disband reach a section that
+isn't on the map. An invalid name is refused with an error stating the rule, and never
+corrected. A cluster edit leaves a
 node with at most one `#@cluster` line, so a node with two can't fall back to the earlier
 cluster: it rewrites the last line in place and deletes any others. Rewriting in place
 keeps a comment below the line inside the section, where a delete and re-insert would push

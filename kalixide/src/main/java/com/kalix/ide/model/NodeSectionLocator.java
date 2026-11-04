@@ -1,5 +1,6 @@
 package com.kalix.ide.model;
 
+import com.kalix.ide.linter.parsing.AnnotationKey;
 import com.kalix.ide.linter.parsing.IniSyntax;
 
 import java.util.ArrayList;
@@ -95,6 +96,43 @@ public final class NodeSectionLocator {
      * span {@code [lineStart, lineEnd)} including the trailing newline if present.
      */
     public record DsReference(String sourceNode, String target, int lineStart, int lineEnd) {
+    }
+
+    /**
+     * An annotation line above a header: its value, and offsets into the whole text.
+     * {@code [lineStart, contentEnd)} is the line without its terminator, and
+     * {@code [lineStart, lineEnd)} the line with it.
+     */
+    public record AnnotationLine(String value, int lineStart, int contentEnd, int lineEnd) {
+    }
+
+    /** Where a section's header line starts, and one key's annotation lines above it, in file order. */
+    public record HeaderBlock(int headerStart, List<AnnotationLine> lines) {
+    }
+
+    /**
+     * The header and {@code key}'s annotations of a located section. A malformed
+     * {@code #@} line is not an annotation, as in the parser.
+     *
+     * @param text    full model text, the text {@code section} was located in
+     * @param section the located section
+     * @param key     the annotation key to collect
+     */
+    public static HeaderBlock headerBlock(String text, NodeSection section, AnnotationKey key) {
+        List<AnnotationLine> lines = new ArrayList<>();
+        LineScanner scanner = new LineScanner(text);
+        scanner.nextLineStart = section.start();
+        while (scanner.next()) {
+            if (!IniSyntax.stripComment(scanner.trimmed()).isEmpty()) {
+                break; // A section's first code line is its header.
+            }
+            IniSyntax.Annotation annotation = IniSyntax.annotation(scanner.raw());
+            if (annotation != null && AnnotationKey.of(annotation.key()) == key) {
+                lines.add(new AnnotationLine(annotation.value(), scanner.lineStart, scanner.contentEnd,
+                    scanner.nextLineStart));
+            }
+        }
+        return new HeaderBlock(scanner.lineStart, lines);
     }
 
     /**

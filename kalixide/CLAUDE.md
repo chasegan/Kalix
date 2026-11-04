@@ -194,7 +194,8 @@ untouched. `ModelParser` attaches an `aka` above a `[node.*]` header to that nod
 way (`ModelNode.getCluster()`), the last line counting and an invalid name leaving the
 node loose, and `HydrologicalModel.getClusters()` holds a `ClusterIndex` rebuilt at each
 parse; the design is `docs/clusters.md`. `AnnotationKey` owns which values a key accepts,
-so the parser and linter can't disagree. `NodeLabelMode` owns what
+so the parser and linter can't disagree. `ClusterEdits` computes cluster edits as pure
+functions, and `CommandExecutor` applies them as one atomic edit. `NodeLabelMode` owns what
 the map draws per node (names / aka only / hidden, with the hover rule) and the one
 toolbar button cycles it; `MapRenderer` draws the lines it is given. The editor
 tokenises annotation lines as `Token.ANNOTATION`.

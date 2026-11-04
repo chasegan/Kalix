@@ -14,6 +14,8 @@ import org.slf4j.LoggerFactory;
 import javax.swing.JFrame;
 import javax.swing.SwingUtilities;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -679,6 +681,79 @@ public class CommandExecutor {
         } catch (Exception e) {
             logger.error("Error adding link", e);
             showError("Failed to add link: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Puts the nodes in a cluster, moving them from any they were in: Create and Add.
+     *
+     * @return false if the name is invalid (reported) or nothing needed changing
+     */
+    public boolean assignToCluster(Collection<String> nodes, String cluster) {
+        String name = cluster == null ? "" : cluster.trim();
+        return applyClusterEdit(ClusterEdits.nameError(name), () -> ClusterEdits.assign(editor.getText(), nodes, name));
+    }
+
+    /**
+     * Takes the nodes out of their clusters.
+     *
+     * @return false if nothing needed changing
+     */
+    public boolean removeFromCluster(Collection<String> nodes) {
+        return applyClusterEdit(null, () -> ClusterEdits.clear(editor.getText(), nodes));
+    }
+
+    /**
+     * Renames a cluster; renaming to an existing name merges the two.
+     *
+     * @return false if the name is invalid (reported) or nothing needed changing
+     */
+    public boolean renameCluster(String oldName, String newName) {
+        String name = newName == null ? "" : newName.trim();
+        return applyClusterEdit(ClusterEdits.nameError(name), () -> ClusterEdits.rename(editor.getText(), oldName, name));
+    }
+
+    /**
+     * Takes every member out of the named clusters; the nodes stay.
+     *
+     * @return false if nothing needed changing
+     */
+    public boolean disbandClusters(Collection<String> clusters) {
+        return applyClusterEdit(null, () -> ClusterEdits.disband(editor.getText(), clusters));
+    }
+
+    /**
+     * The one place cluster edits are applied: back to front, so earlier offsets stay
+     * valid, as one atomic edit, so one undo restores the text. An edit with nothing to
+     * do leaves no undo step.
+     *
+     * @param nameError what is wrong with the name to report and refuse, or {@code null}
+     * @param finder    computes the edits against the current text
+     */
+    private boolean applyClusterEdit(String nameError, Supplier<List<TextEdit>> finder) {
+        if (nameError != null) {
+            showError(nameError);
+            return false;
+        }
+        try {
+            List<TextEdit> edits = new ArrayList<>(finder.get());
+            if (edits.isEmpty()) {
+                return false;
+            }
+            edits.sort(Comparator.comparingInt(TextEdit::start).reversed());
+            editor.beginAtomicEdit();
+            try {
+                for (TextEdit edit : edits) {
+                    applyEdit(edit);
+                }
+            } finally {
+                editor.endAtomicEdit();
+            }
+            return true;
+        } catch (Exception e) {
+            logger.error("Error editing clusters", e);
+            showError("Failed to edit clusters: " + e.getMessage());
             return false;
         }
     }
