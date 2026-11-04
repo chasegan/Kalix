@@ -34,15 +34,16 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Builder for a unified tab's single toolbar: the Plot ⁄ Stats view toggle
+ * Builder for a unified tab's single toolbar: the Plot ⁄ Stats ⁄ Data view toggle
  * (leading), the always-visible shared controls (save, undo/redo, aggregation,
- * mask — one set of controls over the one shared state, so the two views can
- * never disagree), and the plot-only cluster (palette, plot type, y-scale,
- * auto-Y, coordinates, legend, line shape) shown only in the plot view.
+ * mask — one set of controls over the one shared state, so the views can never
+ * disagree), the plot type, shown in the Plot and Data views since it changes
+ * what both show, and the plot-only cluster (palette, y-scale, auto-Y,
+ * coordinates, legend, line shape).
  *
- * <p>All controls drive the tab's state-owning {@link FlowVizPanel}; the mask is
- * the ternary combo everywhere (the plot's old binary toggle is gone — EACH now
- * has a plot rendering too). Reflection back into the controls goes through
+ * <p>All controls change the tab's state through its {@link FlowVizModel}; the mask
+ * is the ternary combo everywhere (the plot's old binary toggle is gone — EACH now
+ * has a plot rendering too). The controls follow the model through
  * {@link FlowVizToolbarController} with listeners silenced.
  */
 class FlowVizToolbarBuilder {

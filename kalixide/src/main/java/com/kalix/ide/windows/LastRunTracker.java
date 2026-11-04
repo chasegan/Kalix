@@ -326,10 +326,10 @@ class LastRunTracker {
      * correct by construction — a {@code getSeries(LastSeries)} probe resolves to the
      * current run's data or to {@code null} (triggering a fetch).
      *
-     * <h3>Atomic swap (no empty-plot gap)</h3>
-     * Writing the new data via {@code addSeries} replaces the {@code RunSeries} entry in a
-     * single EDT operation. The previous Last's {@code RunSeries} entry has already left the
-     * pool unless a tab selects that run directly.
+     * <h3>What the previous Last's data does</h3>
+     * It stays in the pool under its own {@code RunSeries} key until the trim that follows
+     * the change of Last drops it, unless a tab selects that run directly. A tab showing
+     * Last draws nothing for the new run until its fetch lands.
      */
     private void refreshLastSeries() {
         if (lastRunInfo == null) {

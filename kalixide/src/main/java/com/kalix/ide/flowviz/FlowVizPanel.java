@@ -58,9 +58,11 @@ import org.slf4j.LoggerFactory;
  * will render the display set taken at the last refresh!
  *
  * <h2>Rendering Pipeline</h2>
+ * The tab's {@link FlowVizModel} derives the display set from the shared pool and
+ * caches it; this panel takes it at each refresh and draws it.
  * <pre>
- * originalDataSet (shared)
- *   → TimeSeriesAggregator.aggregate()   [seasonal mask THEN aggregation: daily, monthly, etc.]
+ * pool (shared)
+ *   → AggregationPipeline.aggregate()    [seasonal mask THEN aggregation; cached per series]
  *   → TimeSeriesMasker (if ALL mode)     [filter to common valid timestamps]
  *   → PlotTypeTransformer.transform()    [plot type: values, cumulative, difference]
  * </pre>
@@ -72,7 +74,8 @@ import org.slf4j.LoggerFactory;
  * January selected?" - inert if yes, empty plot if no (#235). Any further filter
  * dimension that is calendar-aware belongs there too, not here.
  * <pre>
- *   → displayDataSet (cached per-panel)
+ *   → FlowVizModel.display()             [one object, shared by the plot, stats and data pages]
+ *   → displayDataSet                     [taken at refresh; let go while hidden if the model drops it]
  *   → TimeSeriesRenderer.render()        [with LOD optimization for large datasets]
  * </pre>
  *

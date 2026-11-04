@@ -30,10 +30,9 @@ After construction, refs flow through these collections:
 | Storage | Type | Owner |
 |---|---|---|
 | `plotDataSet` (the shared pool) | `Map<SeriesRef, TimeSeriesData>` (via `DataSet.seriesByRef`) — `LastSeries` keys are redirected to `RunSeries` by the pool's `LastSeriesResolver`, so storage only ever holds `RunSeries` / `DatasetSeries` keys | `RunManager` |
-| `tab.selectedSeries` (per tab) | `Set<SeriesRef>` | `VisualizationTabManager.TabInfo` |
 | `sharedColorMap` | `Map<SeriesRef, Color>` | `SeriesColorManager` (reference shared with `VisualizationTabManager`, `FlowVizPanel`, `TimeSeriesRenderer`, `CoordinateDisplayManager`) |
 | `FlowVizPanel.visibleSeries` | `List<SeriesRef>` | `FlowVizPanel` (reference shared with `TimeSeriesRenderer`, `CoordinateDisplayManager`, `PlotInteractionManager` via supplier) |
-| `FlowVizState.visibleSeries` | `List<SeriesRef>` | `FlowVizModel` (undo/redo) |
+| `FlowVizState.visibleSeries` (per tab) | `List<SeriesRef>` | `FlowVizModel` — the tab's selection, in order; the pages project it, and undo/redo restore it |
 | `StatsTableModel.seriesData` (`SeriesStats.ref`) | row identity by ref | `StatsTableModel` |
 | `StatsTableModel.originalSeriesCache` | `Map<SeriesRef, TimeSeriesData>` | `StatsTableModel` |
 | `TimeSeriesRenderer.seriesRenderModes` | `Map<SeriesRef, SeriesRenderMode>` | `TimeSeriesRenderer` |
@@ -65,7 +64,7 @@ Rename consequences: a run's `runId` is stable, so the resolver returns a new di
 Consequences:
 
 - **Stale Last data is structurally impossible.** There is no `LastSeries` entry to go stale. When the Last run changes, a `LastSeries` ref simply resolves to a different `RunSeries`; old data remains valid under its own `RunSeries` key.
-- `RunManager.refreshLastSeries` still runs on each `updateLastRun` — its job is now only to *populate* the new `RunSeries(newLastId, baseName)` target if it isn't in the pool yet (fetch from `lastRunInfo`'s session). It no longer evicts or overwrites anything.
+- `LastRunTracker.refreshLastSeries` still runs on each `updateLastRun` — its job is only to *populate* the new `RunSeries(newLastId, baseName)` target if it isn't in the pool yet (fetch from `lastRunInfo`'s session). It overwrites nothing; the previous Last's `RunSeries` entry leaves the pool with the trim that follows, unless a tab selects that run directly.
 - The resolver returns `null` when no Last is set; the access then falls through to the bare `LastSeries` key (absent from storage — reads yield `null`, the intended "no Last" signal).
 
 When a new run becomes Last:
@@ -122,7 +121,7 @@ There is no longer any legacy string-keyed code path — the file-import bridge 
 | Data | `flowviz/data/DataSet.java` (ref-keyed), `TimeSeriesData.java` (nameless) |
 | Identity | `models/RunInfoImpl.java` (runId, withName) |
 | Producer | `windows/RunManager.java` (onOutputsTreeSelectionChanged, seriesRefForLeaf, refreshLastSeries, renameRun) |
-| Tabs | `flowviz/VisualizationTabManager.java` (TabInfo, tab.selectedSeries, sharedColorMap wiring) |
+| Tabs | `flowviz/VisualizationTabManager.java` (TabInfo, sharedColorMap wiring), `flowviz/FlowVizModel.java` (the tab's state and selection) |
 | Plot pipeline | `flowviz/FlowVizPanel.java`, `flowviz/rendering/TimeSeriesRenderer.java`, `LODManager.java` |
 | Legend | `flowviz/PlotLegendManager.java` (renders via LabelResolver) |
 | Stats | `flowviz/models/StatsTableModel.java` (ref-keyed; column 0 via LabelResolver) |
