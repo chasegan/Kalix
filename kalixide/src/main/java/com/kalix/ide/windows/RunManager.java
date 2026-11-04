@@ -185,7 +185,7 @@ public class RunManager extends JFrame {
 
     // === SELECTION STATE ===
     // Per-tab selected series live in each tab's FlowVizModel, managed by VisualizationTabManager.
-    // The shared plotDataSet is a data pool holding exactly what some tab selects: a series
+    // The shared plotDataSet is a data pool holding no more than some tab selects: a series
     // leaves it once no tab selects it (onSelectionsChanged), and a selection restored by
     // undo or redo fetches what it lacks (onTabChanged).
 

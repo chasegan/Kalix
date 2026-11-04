@@ -127,8 +127,8 @@ public final class TimeSeriesTable {
     /**
      * Every row's timestamp, ascending: one per distinct timestamp across the series.
      *
-     * <p>Sized to the longest series, which is the fewest rows there can be, and grown
-     * only when series on different grids add rows. Sizing to the sum of the series'
+     * <p>Sized to the longest series, which is the row count when the series are aligned,
+     * and grown only when series on different grids add rows. Sizing to the sum of the series'
      * points would allocate the table's whole area for aligned series: ten series of
      * 3.65M points is 290 MB for 29 MB of rows.
      */

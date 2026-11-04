@@ -329,7 +329,8 @@ class LastRunTracker {
      * <h3>What the previous Last's data does</h3>
      * It stays in the pool under its own {@code RunSeries} key until the trim that follows
      * the change of Last drops it, unless a tab selects that run directly. A tab showing
-     * Last draws nothing for the new run until its fetch lands.
+     * Last keeps drawing the previous run's data until the new run's fetch lands: the trim
+     * tells no tab model that the pool changed, so each holds its display set until then.
      */
     private void refreshLastSeries() {
         if (lastRunInfo == null) {

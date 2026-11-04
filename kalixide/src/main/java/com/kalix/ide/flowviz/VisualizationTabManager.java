@@ -49,9 +49,9 @@ import java.util.Set;
  * <h2>Data Architecture</h2>
  * All tabs share a {@link DataSet} ({@code sharedDataSet}) as a data pool and a color map.
  * Each tab's {@link FlowVizModel} holds its selection, which decides the series from the
- * pool its pages show. The pool holds exactly what some tab selects: every change of a
+ * pool its pages show. The pool holds no more than some tab selects: every change of a
  * selection, and every tab close, is announced through {@link VizHost#onSelectionsChanged},
- * and the host drops the rest.
+ * and the host drops the rest. It holds less while a fetch is out or refused.
  *
  * <h2>Unified Tabs</h2>
  * Every tab owns the full bundle: a {@link FlowVizModel} — the one state owner (selection,

@@ -94,7 +94,7 @@ public class FlowVizPanel extends JPanel {
 
 
     // === DATA FLOW ===
-    // originalDataSet → [model: transforms] → displayDataSet → [LOD] → screen
+    // pool → FlowVizModel.display() → displayDataSet → [LOD] → screen
 
     private DataSet originalDataSet;  // Reference to shared dataset (same for all plot tabs)
     private DataSet displayDataSet;   // The model's display set as of the last refresh

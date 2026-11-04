@@ -160,10 +160,7 @@ public class TimeSeriesCsvExporter {
         return CsvZipFormat.newUtf8Writer(file);
     }
 
-    /**
-     * Writes the CSV header row: the first column's heading ("date", "datetime" or
-     * "percentile"), then each series name, escaped for CSV.
-     */
+    /** Writes the CSV header row: the table's first heading, then each series header, escaped for CSV. */
     private static void writeHeader(Writer writer, TimeSeriesTable table) throws IOException {
         writer.write(table.firstHeader());
         for (String header : table.headers()) {
