@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Pins the Data page's snapshot: cells spelled exactly as Save Data writes them,
@@ -171,25 +172,40 @@ class DataGridTest {
         assertEquals(-1, dated.nearestDateRow(), "and no nearest-date landing");
     }
 
+    /** Two series on a non-time X axis, overlapping at one X, with a NaN: what a transform leaves. */
+    private static DataSet scaledDataSet(long scale) {
+        return dataSet(
+            "a", new TimeSeriesData(new long[] {(long) (12.5 * scale), 50 * scale}, new double[] {1.0, Double.NaN}),
+            "b", new TimeSeriesData(new long[] {50 * scale, (long) (99.99 * scale)}, new double[] {-2.5, 9.0}));
+    }
+
     @Test
     void cellsSpellExactlyWhatTheCsvExportWrites() throws IOException {
-        DataSet ds = dataSet(
-            "a", daily(day(2020, 1, 1), 1.0, Double.NaN, 1e-7, 123456.789),
-            "b", daily(day(2020, 1, 3), -2.5, 0.0, 9.0));
-        File out = tempDir.resolve("out.csv").toFile();
-        TimeSeriesCsvExporter.export(ds, out, PlotType.VALUES, LABELS);
-        List<String> lines = Files.readAllLines(out.toPath(), StandardCharsets.UTF_8);
+        for (PlotType plotType : PlotType.values()) {
+            DataSet ds = switch (plotType.xAxisType()) {
+                case TIME -> dataSet(
+                    "a", daily(day(2020, 1, 1), 1.0, Double.NaN, 1e-7, 123456.789),
+                    "b", daily(day(2020, 1, 3), -2.5, 0.0, 9.0));
+                case PERCENTILE -> scaledDataSet(PlotTypeTransformer.PERCENTILE_SCALE);
+                case NUMERIC -> scaledDataSet(PlotTypeTransformer.NUMERIC_SCALE);
+                case COUNT -> scaledDataSet(1);
+            };
+            File out = tempDir.resolve(plotType.name() + ".csv").toFile();
+            TimeSeriesCsvExporter.export(ds, out, plotType, LABELS);
+            List<String> lines = Files.readAllLines(out.toPath(), StandardCharsets.UTF_8);
 
-        DataGrid grid = grid(ds, PlotType.VALUES);
-        List<String> rendered = new ArrayList<>();
-        rendered.add(grid.indexHeader() + "," + grid.seriesHeader(0) + "," + grid.seriesHeader(1));
-        for (int row = 0; row < grid.rowCount(); row++) {
-            StringBuilder line = new StringBuilder(grid.indexText(row));
-            for (int s = 0; s < grid.seriesCount(); s++) {
-                line.append(',').append(grid.valueText(row, s));
+            DataGrid grid = grid(ds, plotType);
+            List<String> rendered = new ArrayList<>();
+            rendered.add(grid.indexHeader() + "," + grid.seriesHeader(0) + "," + grid.seriesHeader(1));
+            for (int row = 0; row < grid.rowCount(); row++) {
+                StringBuilder line = new StringBuilder(grid.indexText(row));
+                for (int s = 0; s < grid.seriesCount(); s++) {
+                    line.append(',').append(grid.valueText(row, s));
+                }
+                rendered.add(line.toString());
             }
-            rendered.add(line.toString());
+            assertEquals(lines, rendered, plotType.name());
+            assertTrue(lines.size() > 1, plotType.name() + " has rows");
         }
-        assertEquals(lines, rendered);
     }
 }
