@@ -30,7 +30,8 @@ import java.util.function.UnaryOperator;
  * folded in with {@link #amend}) is part of it, and undo returns to what the user saw.
  * Nothing is recorded until the model has a pool: setup is not history.
  *
- * <p>EDT only. The shape is ADR-0016: one owner per view, pages as projections.
+ * <p>EDT only. The shape is ADR-0016 §1, one owner per view with pages as projections;
+ * the derived data below is §5.
  */
 public class FlowVizModel {
 

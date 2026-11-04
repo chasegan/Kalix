@@ -53,9 +53,10 @@ synchronisation.
 2. **The state is a value.** It is immutable, changed by with-ers, and
    replaced whole. A listener receives the old and the new state and works
    out for itself what changed, so the owner carries no per-page flags.
-3. **Every change goes through the owner.** One update is one history entry,
-   tagged with its cause: a user gesture, a replacement, a restore, or new
-   data under an unchanged state. The toolbar and the pages follow the model;
+3. **Every change goes through the owner.** One update is one history entry
+   and one notification, which says why: a user gesture, a replacement, a
+   restore, or new data under an unchanged state. The toolbar and the pages
+   follow the model;
    none of them owns a setting.
 4. **Pages are projections.** A page holds no state beyond what it needs to
    draw. Shown, it redraws from the owner; hidden, it notes that it is out of
@@ -87,10 +88,11 @@ rebuilds once when shown, from the same aggregates the plot used.
 
 ## Enforcement
 
-- **Structural**: `FlowVizState` is immutable and reachable only through
-  `FlowVizModel`; the pages have no setters for state, so a second copy has
-  nowhere to live. `FlowVizModelReplaceTest` and `FlowVizModelReleaseTest`
-  pin the history and the release behaviour of §3 and §4.
+- **Structural**: `FlowVizState` is immutable, and a tab's current state is
+  held and reachable only through `FlowVizModel`; the pages have no setters
+  for it, so a second copy has nowhere to live. `FlowVizModelReplaceTest` and
+  `FlowVizModelReleaseTest` pin the history and the release behaviour of §3
+  and §4.
 - **Advisory**: §4's "holds no data the owner has let go" and the choice to
   apply this shape to a new view with more than one page are held by review.
   The Run Manager's own data side is not yet in this shape.
