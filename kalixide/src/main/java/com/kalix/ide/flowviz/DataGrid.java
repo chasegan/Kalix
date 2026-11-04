@@ -1,10 +1,10 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.flowviz.transform.XAxisType;
 import com.kalix.ide.dataview.DataFind;
 import com.kalix.ide.dataview.FindableData;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
-import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.io.TimeSeriesTable;
 
 /**

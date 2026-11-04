@@ -1,12 +1,12 @@
 package com.kalix.ide.managers.optimisation;
 
+import com.kalix.ide.flowviz.transform.XAxisType;
 import com.kalix.ide.flowviz.FlowVizPanel;
 import com.kalix.ide.flowviz.style.MapStyleResolver;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
-import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.rendering.SeriesRenderMode;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import org.slf4j.Logger;

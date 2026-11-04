@@ -1,11 +1,11 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.flowviz.transform.XAxisType;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.rendering.PlotColors;
 import com.kalix.ide.flowviz.rendering.ViewPort;
-import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.utils.TimeFormatUtil;
 import com.kalix.ide.utils.ValueFormatUtil;

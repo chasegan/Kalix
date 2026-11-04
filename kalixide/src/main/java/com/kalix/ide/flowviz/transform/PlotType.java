@@ -1,6 +1,5 @@
 package com.kalix.ide.flowviz.transform;
 
-import com.kalix.ide.flowviz.rendering.XAxisType;
 
 /**
  * Plot type transformations applied after aggregation.
