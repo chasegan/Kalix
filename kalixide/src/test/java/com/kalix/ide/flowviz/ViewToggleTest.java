@@ -141,7 +141,7 @@ class ViewToggleTest {
         assertSame(shown, tab.dataVizPanel.getGrid(), "an unchanged display keeps the grid (and any Find)");
 
         pool.addSeries(REF, daily(1, 2, 3, 4)); // new data arrives
-        mgr.updateSeriesInStatsTabsWithAggregation(REF, pool.getSeries(REF));
+        mgr.seriesPublished(REF);
         assertEquals(4, tab.dataVizPanel.getGrid().rowCount(), "the shown page follows new data");
     }
 

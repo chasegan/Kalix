@@ -953,14 +953,6 @@ public class FlowVizPanel extends JPanel {
     }
 
     /**
-     * The data as displayed (aggregated, masked, transformed) — what Save Data exports —
-     * current whether or not this page is showing.
-     */
-    public DataSet getDisplayDataSet() {
-        return model.display();
-    }
-
-    /**
      * Gets the seasonal (per-month) mask: which calendar months a view is restricted to.
      * Orthogonal to {@link #getMaskMode()}, which is the validity/overlap mask.
      */

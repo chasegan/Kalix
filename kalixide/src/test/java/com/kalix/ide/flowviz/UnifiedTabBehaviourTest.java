@@ -133,9 +133,7 @@ class UnifiedTabBehaviourTest {
         VisualizationTabManager mgr = manager(new DataSet());
         mgr.addPlotTab(emptySettings().withVisibleSeries(List.of(REF)));
 
-        long[] t = {1_577_836_800_000L, 1_577_836_800_000L + DAY_MS};
-        mgr.updateSeriesInStatsTabsWithAggregation(REF,
-            new com.kalix.ide.flowviz.data.TimeSeriesData(t, new double[] {1, 2}));
+        mgr.seriesPublished(REF);
 
         VisualizationTabManager.TabInfo tab = mgr.tabAt(0);
         assertTrue(tab.statsVizPanel.isDirty(), "the hidden projection is marked, not computed");

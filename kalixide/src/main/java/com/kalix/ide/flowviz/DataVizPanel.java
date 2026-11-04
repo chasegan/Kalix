@@ -261,13 +261,12 @@ public final class DataVizPanel extends JPanel {
         refresh();
     }
 
-    /** Opens the unified Find — public: the above-gate text side and menu routing share it. */
-    public void openFind() {
+    private void openFind() {
         findController.openFind();
     }
 
     /** Repeats the last find (F3 semantics), opening the dialog when there is none. */
-    public void repeatFind(boolean forward) {
+    private void repeatFind(boolean forward) {
         findController.repeatFind(forward);
     }
 

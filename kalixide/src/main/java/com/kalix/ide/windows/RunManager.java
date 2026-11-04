@@ -1150,7 +1150,7 @@ public class RunManager extends JFrame {
      */
     void publishSeries(SeriesRef ref, TimeSeriesData timeSeriesData) {
         plotDataSet.addSeries(ref, timeSeriesData);
-        tabManager.updateSeriesInStatsTabsWithAggregation(ref, timeSeriesData);
+        tabManager.seriesPublished(ref);
     }
 
     /**

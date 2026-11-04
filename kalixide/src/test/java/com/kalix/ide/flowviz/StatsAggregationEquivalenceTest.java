@@ -114,10 +114,10 @@ class StatsAggregationEquivalenceTest {
             async.addStatsTab(statsSettings(AggregationPeriod.DAILY, AggregationMethod.MEAN));
         TimeSeriesData first = daily(1, 2, 3, 4, 5, 6);
         asyncPool.addSeries(R1, first);
-        async.updateSeriesInStatsTabsWithAggregation(R1, first);
+        async.seriesPublished(R1);
         TimeSeriesData second = daily(2, 4, 6, 8, 10, 12);
         asyncPool.addSeries(R2, second);
-        async.updateSeriesInStatsTabsWithAggregation(R2, second);
+        async.seriesPublished(R2);
         assertEquals(expected, snapshot(asyncModel),
             "async per-series path must match the batch path");
 
@@ -258,13 +258,13 @@ class StatsAggregationEquivalenceTest {
         StatsTableModel model = mgr.addStatsTab(
             statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM).withVisibleSeries(List.of(R1)));
 
-        mgr.addLoadingSeriesInStatsTabs(R1);
+        mgr.seriesLoading(R1);
         assertEquals(1, model.getRowCount(), "a loading series has a placeholder row");
         assertEquals("", String.valueOf(model.getValueAt(0, 2)), "and the placeholder is blank");
 
         TimeSeriesData data = daily(1, 2, 3);
         pool.addSeries(R1, data);
-        mgr.updateSeriesInStatsTabsWithAggregation(R1, data);
+        mgr.seriesPublished(R1);
         assertEquals(3.0, stat(model, "Points"), 1e-9, "the published data replaces the placeholder");
     }
 
@@ -277,7 +277,7 @@ class StatsAggregationEquivalenceTest {
 
         // Marked loading, but the request in flight publishes under another ref: the
         // mark is never cleared, while the pool holds R1's data.
-        mgr.addLoadingSeriesInStatsTabs(R1);
+        mgr.seriesLoading(R1);
         assertEquals(6.0, stat(model, "Points"), 1e-9);
     }
 
@@ -288,12 +288,12 @@ class StatsAggregationEquivalenceTest {
         StatsTableModel model = mgr.addStatsTab(
             statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM).withVisibleSeries(List.of(R1)));
 
-        mgr.addErrorSeriesInStatsTabs(R1, "boom");
+        mgr.seriesFailed(R1, "boom");
         assertEquals("Error", model.getValueAt(0, 2));
 
         TimeSeriesData data = daily(1, 2);
         pool.addSeries(R1, data);
-        mgr.updateSeriesInStatsTabsWithAggregation(R1, data);
+        mgr.seriesPublished(R1);
         assertEquals(2.0, stat(model, "Points"), 1e-9);
     }
 
@@ -304,7 +304,7 @@ class StatsAggregationEquivalenceTest {
         StatsTableModel model = mgr.addStatsTab(
             statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM).withVisibleSeries(List.of()));
         mgr.setTargetTabSelectedSeries(new LinkedHashSet<>(List.of(R1)));
-        mgr.addErrorSeriesInStatsTabs(R1, "boom");
+        mgr.seriesFailed(R1, "boom");
         assertEquals("Error", model.getValueAt(0, 2));
 
         FlowVizModel tab = mgr.getTargetVizPanel().model();

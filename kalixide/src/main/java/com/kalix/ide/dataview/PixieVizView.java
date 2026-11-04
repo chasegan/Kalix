@@ -172,7 +172,7 @@ public final class PixieVizView extends JPanel {
             DatasetSeries r = ref(ns.name());
             fresh.add(r);
             dataSet.addSeries(r, ns.data()); // add-replaces: rewrites keep refs, zoom survives
-            vizManager.updateSeriesInStatsTabsWithAggregation(r, ns.data());
+            vizManager.seriesPublished(r);
         }
         List<SeriesRef> vanished = new ArrayList<>();
         for (SeriesRef r : dataSet.getSeriesRefs()) {

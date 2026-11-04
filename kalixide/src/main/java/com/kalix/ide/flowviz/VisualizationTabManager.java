@@ -1,13 +1,11 @@
 package com.kalix.ide.flowviz;
 
 import com.kalix.ide.components.TabDragReorderer;
-import com.kalix.ide.dataview.DataViewPanel;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.LastSource;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.SourceRef;
-import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.style.SeriesStyleResolver;
 import com.kalix.ide.flowviz.models.StatsTableModel;
 import com.kalix.ide.flowviz.stats.MaskMode;
@@ -1035,16 +1033,12 @@ public class VisualizationTabManager {
     }
 
     /**
-     * A series' data has arrived: its load state clears, and every tab that shows it
+     * A series' data is in the pool: its load state clears, and every tab that shows it
      * reprojects (hidden pages catch up when shown). Each page reads the aggregate from
-     * its tab's cache, which resolves the ref against the pool.
-     *
-     * <p>The caller publishes {@code data} to the pool first.
-     *
-     * @param ref The identity of the series
-     * @param data The original (unaggregated) time series data, already in the pool
+     * its tab's cache, which resolves the ref against the pool, so the data itself is
+     * not passed here.
      */
-    public void updateSeriesInStatsTabsWithAggregation(SeriesRef ref, TimeSeriesData data) {
+    public void seriesPublished(SeriesRef ref) {
         loadStates.remove(ref);
         for (TabInfo tab : tabs) {
             if (tab.selection().contains(ref)) {
@@ -1055,9 +1049,9 @@ public class VisualizationTabManager {
 
     /**
      * Marks a series as loading: every tab that shows it gets a blank placeholder row
-     * in its stats page until the data arrives.
+     * in its stats page until {@link #seriesPublished} or {@link #seriesFailed}.
      */
-    public void addLoadingSeriesInStatsTabs(SeriesRef ref) {
+    public void seriesLoading(SeriesRef ref) {
         setLoadState(ref, SeriesLoadState.LOADING);
     }
 
@@ -1065,7 +1059,7 @@ public class VisualizationTabManager {
      * Marks a series' fetch as failed: every tab that shows it gets an "Error" row in
      * its stats page.
      */
-    public void addErrorSeriesInStatsTabs(SeriesRef ref, String errorMessage) {
+    public void seriesFailed(SeriesRef ref, String errorMessage) {
         setLoadState(ref, new SeriesLoadState.Failed(errorMessage));
     }
 

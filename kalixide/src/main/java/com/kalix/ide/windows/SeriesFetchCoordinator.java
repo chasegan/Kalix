@@ -249,7 +249,7 @@ class SeriesFetchCoordinator {
                 if (values != null) {
                     window.publishSeries(ref, values);
                 } else {
-                    tabManager.addErrorSeriesInStatsTabs(ref, derived.unavailableReason());
+                    tabManager.seriesFailed(ref, derived.unavailableReason());
                 }
             } else {
                 RunInfoImpl runInfo = (RunInfoImpl) leaf.source;
@@ -280,7 +280,7 @@ class SeriesFetchCoordinator {
                 }
             } else {
                 for (SeriesRef ref : refs) {
-                    tabManager.addLoadingSeriesInStatsTabs(ref);
+                    tabManager.seriesLoading(ref);
                 }
 
                 final List<SeriesRef> capturedRefs = new ArrayList<>(refs);
@@ -320,7 +320,7 @@ class SeriesFetchCoordinator {
                             for (SeriesRef capturedRef : capturedRefs) {
                                 // Unticked meanwhile: no tab shows its row, so nothing to record.
                                 if (tabManager.isSeriesSelectedOnAnyTab(capturedRef)) {
-                                    tabManager.addErrorSeriesInStatsTabs(capturedRef, throwable.getMessage());
+                                    tabManager.seriesFailed(capturedRef, throwable.getMessage());
                                 }
                             }
                         });
@@ -350,7 +350,7 @@ class SeriesFetchCoordinator {
                 }
                 case DatasetSeriesSource.Pixie pixie -> {
                     if (pixieRefusal != null) {
-                        tabManager.addErrorSeriesInStatsTabs(ref, "Not loaded: too much Pixie data loaded");
+                        tabManager.seriesFailed(ref, "Not loaded: too much Pixie data loaded");
                         pixieRefused = true;
                     } else {
                         fetchPixieSeries(datasetRef, pixie, targetPanel, shouldResetZoom);
@@ -358,7 +358,7 @@ class SeriesFetchCoordinator {
                 }
                 case null -> {
                     logger.warn("Dataset series not found: {}", datasetRef);
-                    tabManager.addErrorSeriesInStatsTabs(ref, "Series not found");
+                    tabManager.seriesFailed(ref, "Series not found");
                 }
             }
         }
@@ -540,7 +540,7 @@ class SeriesFetchCoordinator {
      */
     private void fetchPixieSeries(DatasetSeries ref, DatasetSeriesSource.Pixie source,
                                   FlowVizPanel targetPanel, boolean shouldResetZoom) {
-        tabManager.addLoadingSeriesInStatsTabs(ref);
+        tabManager.seriesLoading(ref);
         PixieStore store = PixieStore.shared();
         try {
             pendingPixiePoints.put(ref, store.info(source.key()).pointCount);
@@ -562,7 +562,7 @@ class SeriesFetchCoordinator {
                     return; // unticked while decoding: neither its data nor its failure is kept
                 }
                 if (cause != null) {
-                    tabManager.addErrorSeriesInStatsTabs(ref, cause.getMessage());
+                    tabManager.seriesFailed(ref, cause.getMessage());
                     return;
                 }
                 // A re-tick while decoding fetches again; the first to settle publishes.

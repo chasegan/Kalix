@@ -545,7 +545,7 @@ public final class DataVizView extends JPanel {
                 for (int i = 0; i < found.size(); i++) {
                     TimeSeriesData data = new TimeSeriesData(timestamps, result.columns()[i]);
                     dataSet.addSeries(found.get(i), data); // add-replaces: rebuilds keep refs
-                    vizManager.updateSeriesInStatsTabsWithAggregation(found.get(i), data);
+                    vizManager.seriesPublished(found.get(i));
                 }
             }
             if (!vanished.isEmpty()) {
