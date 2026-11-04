@@ -39,8 +39,8 @@ import java.util.concurrent.LinkedBlockingQueue;
  * <h2>IMPORTANT: Cache Invalidation</h2>
  * Because {@code kalixcliUid} persists when a session runs multiple simulations, cached data
  * becomes stale when a new run completes. Callers MUST call {@link #clearCacheForSession}
- * when a run completes to invalidate stale data. This is done by
- * {@link com.kalix.ide.windows.RunManager#refreshLastSeries}.
+ * when a run completes to invalidate stale data. {@link com.kalix.ide.windows.LastRunTracker}
+ * does so when Last changes.
  *
  * <h2>Two-Level Cache</h2>
  * <ul>
@@ -56,7 +56,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  *   <li>Call {@link #clearCacheForSession} when run completes to invalidate</li>
  * </ol>
  *
- * @see com.kalix.ide.windows.RunManager#refreshLastSeries
+ * @see com.kalix.ide.windows.LastRunTracker
  */
 public class TimeSeriesRequestManager {
     private static final Logger logger = LoggerFactory.getLogger(TimeSeriesRequestManager.class);
@@ -221,20 +221,6 @@ public class TimeSeriesRequestManager {
         return completedCache.get(cacheKey);
     }
 
-    /**
-     * Check if a timeseries is currently being fetched
-     * @param sessionKey The session key (IDE identifier)
-     * @param seriesName The series name
-     * @return true if request is in progress
-     */
-    public boolean isRequestInProgress(String sessionKey, String seriesName) {
-        String kalixcliUid = getKalixcliUid(sessionKey);
-        if (kalixcliUid == null) return false;
-
-        String cacheKey = kalixcliUid + ":" + seriesName;
-        CompletableFuture<TimeSeriesData> future = cache.get(cacheKey);
-        return future != null && !future.isDone();
-    }
 
     /**
      * Clear all cached timeseries data for a session.
