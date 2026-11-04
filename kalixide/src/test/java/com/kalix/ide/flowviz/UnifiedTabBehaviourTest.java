@@ -34,7 +34,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class UnifiedTabBehaviourTest {
 
-    private static final long DAY_MS = 86_400_000L;
     private static final SeriesRef REF = new DatasetSeries("/t.csv", "one");
     private static final SourceRef SRC = new DatasetSource("/t.csv");
 

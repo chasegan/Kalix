@@ -275,8 +275,7 @@ class StatsAggregationEquivalenceTest {
         StatsTableModel model = mgr.addStatsTab(
             statsSettings(AggregationPeriod.ORIGINAL, AggregationMethod.SUM).withVisibleSeries(List.of(R1)));
 
-        // Marked loading, but the request in flight publishes under another ref: the
-        // mark is never cleared, while the pool holds R1's data.
+        // A loading mark left behind, by whatever path, must not hide data the pool holds.
         mgr.seriesLoading(R1);
         assertEquals(6.0, stat(model, "Points"), 1e-9);
     }

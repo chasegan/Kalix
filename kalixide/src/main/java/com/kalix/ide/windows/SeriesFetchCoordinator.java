@@ -284,14 +284,16 @@ class SeriesFetchCoordinator {
                 }
 
                 final List<SeriesRef> capturedRefs = new ArrayList<>(refs);
-                // One request in flight per series: the manager hands a second caller the
-                // same future, so a ref asked for while another ref's request is still out
-                // (Last and its run, say) is published by that reply too, not left loading.
                 // Captured to detect whether "Last" has changed since this request was issued.
                 // Only applied to LastSeries refs; RunSeries / DatasetSeries refs are tied to
                 // their own immutable identity and are not generation-dependent.
                 final long capturedGeneration = lastRunGeneration.getAsLong();
 
+                // One request in flight per series: the manager hands a second caller the
+                // same future, so a ref asked for while another ref's request is still out
+                // (Last and its run, say) is published by that reply too, not left loading.
+                // A ref unticked and re-ticked meanwhile is published twice with the same
+                // object, which the pool and the tabs' caches treat as no change.
                 timeSeriesRequestManager.requestTimeSeries(sessionKey, seriesName)
                     .thenAccept(timeSeriesData -> {
                         SwingUtilities.invokeLater(() -> {
