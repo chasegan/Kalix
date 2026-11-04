@@ -21,9 +21,9 @@ class HydrologicalModelSelectionSeedsTest {
     @BeforeEach
     void setUp() {
         model = new HydrologicalModel();
-        model.addNode(new ModelNode("a", "gr4j", 0, 0, null));
-        model.addNode(new ModelNode("s", "gr4j", 10, 0, null));
-        model.addNode(new ModelNode("j", "outlet", 20, 0, null));
+        model.addNode(new ModelNode("a", "gr4j", 0, 0, null, null));
+        model.addNode(new ModelNode("s", "gr4j", 10, 0, null, null));
+        model.addNode(new ModelNode("j", "outlet", 20, 0, null, null));
         aToS = new ModelLink("a", "s", true);
         sToJ = new ModelLink("s", "j", true);
         model.addLink(aToS);

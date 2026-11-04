@@ -190,12 +190,16 @@ A `#@key = value` line at column zero is an annotation: a comment the IDE reads 
 the engine never does. `IniSyntax.annotation()` is the only lexer for it, and to every
 other `IniSyntax` rule the line is still a comment, so parsers that strip comments are
 untouched. `ModelParser` attaches an `aka` above a `[node.*]` header to that node
-(`ModelNode.getAka()`); a code line in between orphans it. `NodeLabelMode` owns what
+(`ModelNode.getAka()`); a code line in between orphans it. A `cluster` attaches the same
+way (`ModelNode.getCluster()`), the last line counting and an invalid name leaving the
+node loose, and `HydrologicalModel.getClusters()` holds a `ClusterIndex` rebuilt at each
+parse; the design is `docs/clusters.md`. `AnnotationKey` owns which values a key accepts,
+so the parser and linter can't disagree. `NodeLabelMode` owns what
 the map draws per node (names / aka only / hidden, with the hover rule) and the one
 toolbar button cycles it; `MapRenderer` draws the lines it is given. The editor
 tokenises annotation lines as `Token.ANNOTATION`.
 
-Key files: `IniSyntax.java`, `ModelParser.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`
+Key files: `IniSyntax.java`, `AnnotationKey.java`, `ModelParser.java`, `ClusterIndex.java`, `NodeLabelMode.java`, `ToolBarBuilder.java`
 
 ### Folding (#494)
 `KalixIniFoldParser` is the one fold grammar, registered for the Kalix INI style beside

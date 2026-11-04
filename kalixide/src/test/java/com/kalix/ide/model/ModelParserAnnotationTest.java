@@ -122,7 +122,7 @@ class ModelParserAnnotationTest {
     @Test
     void otherKeysAndEmptyValuesAreIgnored() {
         ModelNode node = only("""
-                #@cluster = farm_3
+                #@region = Farm 3
                 #@aka =
                 #@AKA = Wrong case
                 [node.teemburra]

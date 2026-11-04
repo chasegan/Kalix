@@ -1,10 +1,12 @@
 package com.kalix.ide.linter.parsing;
 
+import com.kalix.ide.language.ExpressionLanguage;
+
 /**
  * The annotation keys Kalix owns (ADR-0010 §4, §6): the IDE's one registry. A
  * dotted key such as {@code pycalib.bounds} belongs to the tool its prefix names
- * and is never looked up here. Adding a key is one constant and one
- * {@link #appliesTo} answer.
+ * and is never looked up here. Adding a key is one constant, one
+ * {@link #appliesTo} answer and one {@link #isValidValue} answer.
  */
 public enum AnnotationKey {
 
@@ -50,6 +52,17 @@ public enum AnnotationKey {
         return switch (this) {
             case AKA, CLUSTER, LOC -> sectionName.startsWith(NODE_SECTION_PREFIX);
             case REGION -> true;
+        };
+    }
+
+    /**
+     * True if {@code value} is one this key accepts (ADR-0010 §4). Only a cluster
+     * constrains its value today; nothing checks a {@code loc} yet.
+     */
+    public boolean isValidValue(String value) {
+        return switch (this) {
+            case CLUSTER -> ExpressionLanguage.isBareName(value);
+            case AKA, REGION, LOC -> true;
         };
     }
 }
