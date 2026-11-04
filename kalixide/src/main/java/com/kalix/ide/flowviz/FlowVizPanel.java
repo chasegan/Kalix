@@ -236,12 +236,20 @@ public class FlowVizPanel extends JPanel {
         model.amendRecorded(s -> s.withViewport(currentViewport));
     }
 
-    /** Rebuilds now when shown; a hidden page rebuilds when shown. */
+    /**
+     * Rebuilds now when shown; a hidden page rebuilds when shown, and meanwhile lets go
+     * of a display set the model has released (a series unticked, data replaced), so a
+     * tab not showing its plot holds nothing the pool has let go.
+     */
     private void rebuildOrDefer() {
         if (shown) {
             rebuildDisplayDataSet();
-        } else {
-            stale = true;
+            return;
+        }
+        stale = true;
+        if (displayDataSet != null && !model.holdsDisplay(displayDataSet)) {
+            displayDataSet = null;
+            renderer.clearCache();
         }
     }
 
@@ -1004,12 +1012,7 @@ public class FlowVizPanel extends JPanel {
                 if (shown) {
                     refreshData(false);
                 } else {
-                    stale = true;
-                    // Let go of a display set the model has released; rebuilt when shown.
-                    if (displayDataSet != null && !model.holdsDisplay(displayDataSet)) {
-                        displayDataSet = null;
-                        renderer.clearCache();
-                    }
+                    rebuildOrDefer();
                 }
             }
             case USER -> applyUserChange(old, now);

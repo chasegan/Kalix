@@ -54,8 +54,11 @@ public final class AggregatedSeriesCache {
         entries.put(ref, new Entry(Objects.requireNonNull(source), Objects.requireNonNull(aggregated)));
     }
 
-    /** Ends a pass: only the series it produced stay cached. */
-    void retainOnly(Set<SeriesRef> refs) {
+    /**
+     * Keeps only the entries for {@code refs}: the end of a pass, and a change of the
+     * selection, so a series the tab no longer shows is let go before any page asks.
+     */
+    public void retainOnly(Set<SeriesRef> refs) {
         entries.keySet().retainAll(refs);
     }
 
@@ -69,8 +72,8 @@ public final class AggregatedSeriesCache {
         return entries.entrySet().removeIf(e -> pool == null || pool.getSeries(e.getKey()) != e.getValue().source());
     }
 
-    /** Entries held — package-private, for tests. */
-    int size() {
+    /** Entries held. */
+    public int size() {
         return entries.size();
     }
 }

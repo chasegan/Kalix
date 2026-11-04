@@ -11,7 +11,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -22,6 +21,7 @@ class FlowVizPanelShownTest {
 
     private static final long DAY = 86_400_000L;
     private static final DatasetSeries A = new DatasetSeries("/tmp/x.csv", "a");
+    private static final DatasetSeries B = new DatasetSeries("/tmp/x.csv", "b");
 
     private static TimeSeriesData days(int count) {
         long[] times = new long[count];
@@ -54,17 +54,35 @@ class FlowVizPanelShownTest {
     }
 
     @Test
+    void untickWhileHiddenLetsGoOfTheDisplaySet() {
+        FlowVizPanel panel = new FlowVizPanel();
+        DataSet pool = new DataSet();
+        pool.addSeries(A, days(3));
+        pool.addSeries(B, days(3));
+        panel.setDataSet(pool);
+        panel.model().update(st -> st.withVisibleSeries(List.of(A, B)));
+
+        panel.setShown(false);
+        panel.model().update(st -> st.withVisibleSeries(List.of(B)));
+        assertNull(panel.displayDataSetForTests(),
+            "a hidden plot holds no display set with an unticked series in it");
+
+        panel.setShown(true);
+        assertEquals(List.of(B), panel.displayDataSetForTests().getSeriesRefs(), "and rebuilds when shown");
+    }
+
+    @Test
     void changeWhileHiddenFitsWhenShownIntoItsHistoryEntry() {
         FlowVizPanel panel = new FlowVizPanel();
         DataSet pool = new DataSet();
         pool.addSeries(A, days(3)); // values 0, 1, 2
         panel.setDataSet(pool);
         panel.model().update(st -> st.withVisibleSeries(List.of(A)).withAutoYMode(false));
-        DataSet values = panel.displayDataSetForTests();
 
         panel.setShown(false);
         panel.model().update(st -> st.withPlotType(PlotType.CUMULATIVE)); // 0, 1, 3
-        assertSame(values, panel.displayDataSetForTests(), "a hidden plot defers the rebuild");
+        assertNull(panel.displayDataSetForTests(),
+            "a hidden plot defers the rebuild, and lets go of the set the old plot type made");
 
         panel.setShown(true);
         FlowVizState shown = panel.model().current();

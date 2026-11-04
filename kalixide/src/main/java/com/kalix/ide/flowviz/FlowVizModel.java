@@ -14,6 +14,7 @@ import com.kalix.ide.flowviz.transform.PlotType;
 import com.kalix.ide.flowviz.transform.PlotTypeTransformer;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.function.UnaryOperator;
@@ -75,6 +76,11 @@ public class FlowVizModel {
     private List<TimeSeriesData> displaySources = List.of();
     private DataSet display;
 
+    private DisplayKey keyFor(FlowVizState s) {
+        return new DisplayKey(s.getAggregationPeriod(), s.getAggregationMethod(), s.getPlotType(),
+            s.getMaskMode(), s.getSeasonalMaskMode(), s.getVisibleSeries());
+    }
+
     /** The current state, never null. */
     public FlowVizState current() {
         return state;
@@ -107,8 +113,7 @@ public class FlowVizModel {
      */
     public DataSet display() {
         LinkedHashMap<SeriesRef, TimeSeriesData> aggregated = aggregated();
-        DisplayKey key = new DisplayKey(state.getAggregationPeriod(), state.getAggregationMethod(),
-            state.getPlotType(), state.getMaskMode(), state.getSeasonalMaskMode(), state.getVisibleSeries());
+        DisplayKey key = keyFor(state);
         List<TimeSeriesData> sources = List.copyOf(aggregated.values());
         if (display != null && key.equals(displayKey) && sameObjects(sources, displaySources)) {
             return display;
@@ -142,6 +147,7 @@ public class FlowVizModel {
         }
         FlowVizState old = state;
         state = next;
+        releaseStale();
         fire(old, next, Cause.USER);
         recordIfReady();
     }
@@ -153,6 +159,7 @@ public class FlowVizModel {
     public void replace(FlowVizState next) {
         FlowVizState old = state;
         state = next;
+        releaseStale();
         fire(old, next, Cause.REPLACE);
         recordIfReady();
     }
@@ -203,9 +210,29 @@ public class FlowVizModel {
         fire(state, state, Cause.DATA);
     }
 
+    /**
+     * Lets go of derived data the state no longer describes, before listeners hear of
+     * the change: the display set when any setting it was built under differs, and the
+     * aggregates of series no longer shown. A page would get the same answer by asking
+     * again, but a hidden page does not ask, and the pool may be about to drop a series
+     * no tab selects: nothing here may keep it alive.
+     */
+    private void releaseStale() {
+        if (display != null && !keyFor(state).equals(displayKey)) {
+            display = null;
+            displaySources = List.of();
+        }
+        aggregateCache.retainOnly(new HashSet<>(state.getVisibleSeries()));
+    }
+
     /** Whether {@code set} is the display set this model still holds, i.e. not out of date. */
     public boolean holdsDisplay(DataSet set) {
         return set != null && set == display;
+    }
+
+    /** Aggregates held — package-private, for tests. */
+    int cachedAggregates() {
+        return aggregateCache.size();
     }
 
     /**
@@ -290,6 +317,7 @@ public class FlowVizModel {
     private void restore(FlowVizState snapshot) {
         FlowVizState old = state;
         state = snapshot;
+        releaseStale();
         fire(old, snapshot, Cause.RESTORE);
         historyChanged();
     }

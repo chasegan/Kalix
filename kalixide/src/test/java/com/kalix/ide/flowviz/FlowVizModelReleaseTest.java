@@ -8,14 +8,17 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins {@link FlowVizModel#dataChanged}: derived data built from series the pool has
- * replaced is released at once, while a change to series the tab does not show keeps it.
+ * Pins the model's release of derived data before any page asks: on
+ * {@link FlowVizModel#dataChanged}, what was built from series the pool has replaced,
+ * while a change to series the tab does not show keeps it; and on a change of state,
+ * what the new state no longer describes.
  */
 class FlowVizModelReleaseTest {
 
@@ -49,5 +52,39 @@ class FlowVizModelReleaseTest {
         model.dataChanged();
         assertFalse(model.holdsDisplay(shown), "the old run's display set is let go before any page asks");
         assertNotSame(shown, model.display());
+    }
+
+    @Test
+    void untickedSeriesIsReleasedBeforeAnyPageAsks() {
+        DataSet pool = new DataSet();
+        pool.addSeries(A, series(1, 2, 3));
+        pool.addSeries(B, series(9, 9));
+        FlowVizModel model = new FlowVizModel();
+        model.setPool(pool);
+        model.replace(FlowVizState.INITIAL.withVisibleSeries(List.of(A, B)));
+        DataSet shown = model.display();
+        assertEquals(2, model.cachedAggregates());
+
+        // The tab's pages are hidden: nothing calls display() after the untick, and the
+        // pool is about to drop A. The model must not be what keeps A alive.
+        model.update(s -> s.withVisibleSeries(List.of(B)));
+        assertFalse(model.holdsDisplay(shown), "the display set with A in it is let go");
+        assertEquals(1, model.cachedAggregates(), "and so is A's aggregate");
+
+        model.undo();
+        assertEquals(2, model.display().getSeriesRefs().size(), "re-selected, A is aggregated afresh");
+    }
+
+    @Test
+    void aChangeTheDisplaySetWasNotBuiltUnderKeepsIt() {
+        DataSet pool = new DataSet();
+        pool.addSeries(A, series(1, 2, 3));
+        FlowVizModel model = new FlowVizModel();
+        model.setPool(pool);
+        model.replace(FlowVizState.INITIAL.withVisibleSeries(List.of(A)));
+        DataSet shown = model.display();
+
+        model.update(s -> s.withAutoYMode(!s.isAutoYMode()));
+        assertTrue(model.holdsDisplay(shown), "auto-Y is not part of what the set was built under");
     }
 }
