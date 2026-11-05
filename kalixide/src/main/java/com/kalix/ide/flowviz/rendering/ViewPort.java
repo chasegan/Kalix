@@ -114,6 +114,9 @@ public class ViewPort {
      */
     private static final double FALLBACK_DECADES = 6.0;
 
+    /** Share of the axis always kept between the cursor and the fixed end while dragging one end. */
+    private static final double END_DRAG_MIN_GAP = 0.05;
+
     /**
      * Gets the transformed min value, clamping to valid range if needed.
      * Public helper for axis rendering.
@@ -211,9 +214,6 @@ public class ViewPort {
         // The right axis zooms about the same screen row; each axis refuses its own bad step.
         return hasY2() ? zoomed.withY2From(forY2().zoomValueAxis(factor, ratio)) : zoomed;
     }
-
-    /** Share of the axis always kept between the cursor and the fixed end while dragging one end. */
-    private static final double END_DRAG_MIN_GAP = 0.05;
 
     /**
      * This view with one end of the y1 value axis dragged: the value that was under
@@ -391,8 +391,8 @@ public class ViewPort {
     }
 
     /** This view with a right axis showing {@code [minValue, maxValue]}. */
-    public ViewPort withY2Bounds(double minValue, double maxValue) {
-        return new ViewPort(startTimeMs, endTimeMs, this.minValue, this.maxValue, minValue, maxValue,
+    public ViewPort withY2Bounds(double y2MinValue, double y2MaxValue) {
+        return new ViewPort(startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue,
                           plotX, plotY, plotWidth, plotHeight, yAxisScale, xAxisType);
     }
 

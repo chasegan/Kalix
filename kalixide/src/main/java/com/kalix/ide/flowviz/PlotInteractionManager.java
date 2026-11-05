@@ -78,6 +78,10 @@ public class PlotInteractionManager {
 
     // Zoom and pan constants
     private static final double ZOOM_FACTOR = UIConstants.Zoom.ZOOM_FACTOR;
+    /** How far out from the plot edge an axis can be grabbed, in pixels. */
+    private static final int AXIS_GRAB_DEPTH = 50;
+    /** Pixels a press must move before it is an axis drag rather than a click (as the Key's). */
+    private static final int AXIS_DRAG_THRESHOLD = 5;
 
     private final JComponent parentComponent;
     private final CoordinateDisplayManager coordinateDisplayManager;
@@ -100,6 +104,12 @@ public class PlotInteractionManager {
     private boolean isZoomSelecting = false;
     private Point zoomRectStartPoint;
     private Point zoomRectCurrentPoint;
+
+    // The axis end being dragged, from where, and the view it started from (null when none)
+    private AxisHandle axisDrag;
+    private Point axisDragPress;
+    private ViewPort axisDragStart;
+    private boolean axisDragMoved;
 
     // Data access callbacks
     private Supplier<DataSet> dataSetSupplier;
@@ -323,11 +333,6 @@ public class PlotInteractionManager {
         };
     }
 
-    /** How far out from the plot edge an axis can be grabbed, in pixels. */
-    private static final int AXIS_GRAB_DEPTH = 50;
-    /** Pixels a press must move before it is an axis drag rather than a click (as the Key's). */
-    private static final int AXIS_DRAG_THRESHOLD = 5;
-
     /** The plot's axes: time, the Y axis, and the secondary (right, y2) Y axis. */
     enum Axis { X, Y, Y2 }
 
@@ -353,12 +358,6 @@ public class PlotInteractionManager {
             return Cursor.getPredefinedCursor(cursorType);
         }
     }
-
-    // The axis end being dragged, from where, and the view it started from (null when none)
-    private AxisHandle axisDrag;
-    private Point axisDragPress;
-    private ViewPort axisDragStart;
-    private boolean axisDragMoved;
 
     /**
      * The axis end under {@code point}, or null. Each axis is the band just outside its plot
