@@ -57,7 +57,8 @@ impl IniDocument {
         }
     }
 
-    /// Parses Kalix INI text.
+    /// Parses Kalix INI text. A section header may appear only once; a repeat
+    /// is refused, naming both lines.
     ///
     /// The comment grammar, shared with the IDE's parsers (see the website's
     /// Conventions page, "Comments"): `#` starts a comment anywhere outside

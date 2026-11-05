@@ -274,7 +274,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     }
 
     // -------------------------------------------------------------------------------------
-    // Pre-parsing node static properties - register to data cache
+    // Pre-pass over the [node.*] sections: check the names, register the static properties
     // -------------------------------------------------------------------------------------
     // A node's static scalar properties must be visible to every expression
     // regardless of file order, the same guarantee the [acc.*] pre-pass above
@@ -287,10 +287,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // which (node type, property) pairs are static lives here; the main loop
     // no longer registers them itself, so there is nothing to keep in sync.
     //
+    // Node names are checked here, the first pass over every [node.*] section:
+    // the characters allowed, and duplicates ignoring case.
+    //
     // Malformed values are left alone here (silently skipped) rather than
     // reported - the main loop's existing per-property validation reports
     // them properly, with its usual line-numbered error, once it gets there.
-    // Node names are checked here, the first pass over every [node.*] section.
     let mut node_name_lines: HashMap<String, usize> = HashMap::new();
     for (section_name, ini_section) in &ini_doc.sections {
         let Some(node_name) = section_name.strip_prefix("node.") else { continue };
@@ -1321,8 +1323,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             for (name, ini_property) in ini_section.properties {
                 // Each property is a model result we want to record. Only its
                 // layout is checked: an output nothing writes is not an error.
-                let mut segments = name.split('.');
-                let well_formed = segments.clone().count() >= 2 && segments.all(is_valid_name_segment);
+                let well_formed = name.contains('.') && name.split('.').all(is_valid_name_segment);
                 if !well_formed {
                     return Err(KalixIoError::Parse(format!(
                         "Error on line {}: Invalid output '{}'. Expected dot-separated names of letters, digits and underscores, e.g. node.<name>.<output>.",
@@ -1577,10 +1578,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // -------------------------------------------------------------------------------------
     // Validate acc.* series references
     // -------------------------------------------------------------------------------------
-    // Every acc.* series in the data cache came from an [outputs] entry or an
-    // expression reference. Each must name a real account (or group) and a real
-    // field — otherwise a typo would sit there as a series nothing ever writes,
-    // reading as a silent NaN instead of an error.
+    // Every acc.* series in the data cache at this point came from an expression
+    // reference ([outputs] entries are registered later, at configure, and are
+    // checked for layout only). Each must name a real account (or group) and a
+    // real field — otherwise a typo would sit there as a series nothing ever
+    // writes, reading as a silent NaN instead of an error.
     // ras.<name>.<field> references get the same strictness (only fired and
     // pct exist; anything else would sit as a silently unwritten series).
     for name in model.data_cache.series_name.clone() {

@@ -121,7 +121,7 @@ pub fn is_valid_bare_name(s: &str) -> bool {
 }
 
 
-/// The rule for node names and for each segment of a dotted reference: ASCII
+/// The rule for node names and for each segment of an `[outputs]` entry: ASCII
 /// letters (either case), digits and underscores, non-empty. Weaker than
 /// [`is_valid_bare_name`] on purpose (ADR-0006 amendment 2026-10-29): node IDs
 /// from converted models often start with a digit, and matching is
