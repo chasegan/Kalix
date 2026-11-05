@@ -276,6 +276,7 @@ pub struct StorageNode {
     recorder_idx_level: Option<usize>,
     recorder_idx_target_level: Option<usize>,
     recorder_idx_target_volume: Option<usize>,
+    recorder_idx_forecast_volume: Option<usize>,
     // Declared here, and recorded through an out-of-line helper, on measurement
     // (ADR-0004 §3.4): see the commit that added them.
     recorder_idx_order: Option<usize>,
@@ -1126,6 +1127,7 @@ impl StorageNode {
         let inflows = self.target_order_buffer.sum();
         let known_usage: f64 = self.ds_orders_due.iter().sum();
         let forecast_volume = self.volume + inflows - known_usage;
+        self.record_forecast(data_cache, forecast_volume);
         self.us_orders = (target_volume - forecast_volume).max(0.0);
         // push hands back the order leaving the buffer - the one arriving today - so
         // what is on its way at the end of the step, today's order included, is the
@@ -1142,6 +1144,14 @@ impl StorageNode {
         }
         if let Some(idx) = self.recorder_idx_target_volume {
             data_cache.add_value_at_index(idx, target_volume);
+        }
+    }
+
+    /// Record the forecast volume a target order is based on.
+    #[inline]
+    fn record_forecast(&self, data_cache: &mut DataCache, forecast_volume: f64) {
+        if let Some(idx) = self.recorder_idx_forecast_volume {
+            data_cache.add_value_at_index(idx, forecast_volume);
         }
     }
 
@@ -1353,6 +1363,7 @@ impl Node for StorageNode {
         self.recorder_idx_level = recorder(data_cache, &self.name, "level");
         self.recorder_idx_target_level = recorder(data_cache, &self.name, "target_level");
         self.recorder_idx_target_volume = recorder(data_cache, &self.name, "target_volume");
+        self.recorder_idx_forecast_volume = recorder(data_cache, &self.name, "forecast_volume");
         self.recorder_idx_area = recorder(data_cache, &self.name, "area");
         self.recorder_idx_seep_megs = recorder(data_cache, &self.name, "seep_vol");
         self.recorder_idx_rain_megs = recorder(data_cache, &self.name, "rain_vol");

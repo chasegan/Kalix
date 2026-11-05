@@ -55,6 +55,7 @@ node.weir.order
 node.weir.orders_en_route
 node.weir.target_level
 node.weir.target_volume
+node.weir.forecast_volume
 node.dam.ds_1_order
 node.weir.volume
 "#)
@@ -162,10 +163,24 @@ fn test_target_level_and_target_volume_together_are_refused() {
 }
 
 #[test]
+fn test_forecast_volume_is_what_each_target_order_is_based_on() {
+    // Day 1: 1000 now, nothing en route, 10 released today: 990, so 510 is ordered. Day 2:
+    // 990 now plus the 510 en route, less 10: 1490, so 10 is ordered.
+    let mut model = run(&rig(3, "target_level = 1.5"));
+    let forecast = series(&mut model, "node.weir.forecast_volume");
+    let order = series(&mut model, "node.weir.order");
+    let target = series(&mut model, "node.weir.target_volume");
+    assert_eq!(forecast[..2], [990.0, 1490.0]);
+    for i in 0..order.len() {
+        assert_eq!(order[i], (target[i] - forecast[i]).max(0.0), "step {}", i);
+    }
+}
+
+#[test]
 fn test_order_through_overrides_a_target_volume() {
     let mut model = run(&rig(2, "order_through = true\ntarget_volume = 1700"));
     assert_eq!(series(&mut model, "node.weir.order")[0], 10.0, "orders pass through unchanged");
-    for name in ["node.weir.target_level", "node.weir.target_volume"] {
+    for name in ["node.weir.target_level", "node.weir.target_volume", "node.weir.forecast_volume"] {
         let s = series(&mut model, name);
         assert!(s.is_empty() || s.iter().all(|v| v.is_nan()), "{} got {:?}", name, s);
     }
