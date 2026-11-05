@@ -54,7 +54,6 @@ import java.io.IOException;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -83,7 +82,7 @@ public class PlotInteractionManager {
     /** Pixels a press must move before it is an axis drag rather than a click (as the Key's). */
     private static final int AXIS_DRAG_THRESHOLD = 5;
 
-    private final JComponent parentComponent;
+    private final FlowVizPanel panel;
     private final CoordinateDisplayManager coordinateDisplayManager;
 
     // State management
@@ -119,9 +118,7 @@ public class PlotInteractionManager {
     private Supplier<Rectangle> plotAreaSupplier;
     private Supplier<Boolean> precision64Supplier;
     private Supplier<java.io.File> baseDirectorySupplier;
-    private Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier;
     private Supplier<com.kalix.ide.flowviz.data.LabelResolver> labelResolverSupplier;
-    private BooleanSupplier autoYModeSupplier;
     // Which series are drawn against the right axis; consulted only when the view has one
     private Predicate<SeriesRef> onRightAxis = ref -> false;
 
@@ -143,23 +140,19 @@ public class PlotInteractionManager {
      * <li>Auto-Y mode support for intelligent Y-axis scaling</li>
      * </ul>
      *
-     * @param parentComponent The Swing component to handle interactions for and attach mouse listeners to
+     * @param panel The plot this manager serves: it draws the view, follows the model, and takes the mouse listeners
      * @param coordinateDisplayManager The coordinate display manager for integrated mouse position tracking
      */
-    public PlotInteractionManager(JComponent parentComponent, CoordinateDisplayManager coordinateDisplayManager) {
-        this.parentComponent = parentComponent;
+    public PlotInteractionManager(FlowVizPanel panel, CoordinateDisplayManager coordinateDisplayManager) {
+        this.panel = panel;
         this.coordinateDisplayManager = coordinateDisplayManager;
 
         setupContextMenu();
     }
 
     /**
-     * Sets up the data access callbacks for the manager to communicate with the parent plot component.
-     *
-     * <p>This method establishes the communication bridge between the interaction manager and
-     * the parent plot panel by providing callback functions for accessing plot data, viewport
-     * state, and plot area dimensions. This design allows the manager to operate independently
-     * while still accessing necessary plot information.
+     * Supplies what the panel keeps private: its display set, its viewport and the one way
+     * to set it as a user gesture, its visible series, and its plot area.
      *
      * @param dataSetSupplier Supplier function to access the current dataset for auto-Y calculations
      * @param viewportSupplier Supplier function to access the current viewport state
@@ -195,16 +188,6 @@ public class PlotInteractionManager {
      */
     public void setBaseDirectorySupplier(Supplier<java.io.File> baseDirectorySupplier) {
         this.baseDirectorySupplier = baseDirectorySupplier;
-    }
-
-    /**
-     * Sets the plot type supplier for format-aware data export.
-     * This allows the exporter to format data appropriately based on the plot type.
-     *
-     * @param plotTypeSupplier Supplier that returns the current plot type
-     */
-    public void setPlotTypeSupplier(Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier) {
-        this.plotTypeSupplier = plotTypeSupplier;
     }
 
     /**
@@ -252,18 +235,18 @@ public class PlotInteractionManager {
                     isZoomSelecting = true;
                     zoomRectStartPoint = new Point(e.getPoint());
                     zoomRectCurrentPoint = new Point(e.getPoint());
-                    parentComponent.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                    panel.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
                 } else if (SwingUtilities.isLeftMouseButton(e) && handle != null) {
                     // A press on an axis grabs the end nearest it (the half it landed in)
                     axisDrag = handle;
                     axisDragPress = e.getPoint();
                     axisDragStart = viewportSupplier.get();
                     axisDragMoved = false;
-                    parentComponent.setCursor(axisDrag.cursor());
+                    panel.setCursor(axisDrag.cursor());
                 } else if (SwingUtilities.isLeftMouseButton(e)) {
                     lastMousePos = e.getPoint();
                     isDragging = true;
-                    parentComponent.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                    panel.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                 }
             }
 
@@ -299,10 +282,10 @@ public class PlotInteractionManager {
                     isZoomSelecting = false;
                     zoomRectStartPoint = null;
                     zoomRectCurrentPoint = null;
-                    parentComponent.setCursor(Cursor.getDefaultCursor());
+                    panel.setCursor(Cursor.getDefaultCursor());
                 } else if (SwingUtilities.isLeftMouseButton(e)) {
                     isDragging = false;
-                    parentComponent.setCursor(Cursor.getDefaultCursor());
+                    panel.setCursor(Cursor.getDefaultCursor());
                 }
             }
 
@@ -312,7 +295,7 @@ public class PlotInteractionManager {
                     handleAxisDrag(e.getPoint());
                 } else if (isZoomSelecting && zoomRectStartPoint != null) {
                     zoomRectCurrentPoint = new Point(e.getPoint());
-                    parentComponent.repaint();
+                    panel.repaint();
                 } else if (isDragging && lastMousePos != null) {
                     handlePan(e);
                 }
@@ -439,7 +422,7 @@ public class PlotInteractionManager {
                 acceptY2Bounds(dragged.getY2MinValue(), dragged.getY2MaxValue());
             }
         }
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -450,14 +433,14 @@ public class PlotInteractionManager {
      */
     private void finishAxisDrag(Point point) {
         boolean valueAxis = axisDrag.axis() != Axis.X;
-        if (axisDragMoved && valueAxis && parentComponent instanceof FlowVizPanel vizPanel) {
-            vizPanel.model().update(st -> st.withAutoYMode(false));
+        if (axisDragMoved && valueAxis) {
+            panel.model().update(st -> st.withAutoYMode(false));
         }
         axisDrag = null;
         axisDragPress = null;
         axisDragStart = null;
         Cursor cursor = axisCursorAt(point);
-        parentComponent.setCursor(cursor != null ? cursor : Cursor.getDefaultCursor());
+        panel.setCursor(cursor != null ? cursor : Cursor.getDefaultCursor());
     }
 
     /**
@@ -473,7 +456,7 @@ public class PlotInteractionManager {
         }
         switch (handle.axis()) {
             case X -> {
-                long[] timeRange = parentComponent instanceof FlowVizPanel vizPanel ? vizPanel.fittedTimeRange() : null;
+                long[] timeRange = panel.fittedTimeRange();
                 if (timeRange != null) {
                     applyXLimits(timeRange[0], timeRange[1]);
                 }
@@ -494,16 +477,12 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Supplies the panel's auto-Y mode, which decides whether X-only navigation refits
-     * Y. Read on every use rather than mirrored, so undo/redo and every other path that
-     * changes the mode on the panel are seen here without any synchronisation.
+     * The panel's auto-Y mode, which decides whether X-only navigation refits Y. Read on
+     * every use rather than mirrored, so undo/redo and every other path that changes the
+     * mode are seen here without any synchronisation.
      */
-    public void setAutoYModeSupplier(BooleanSupplier autoYModeSupplier) {
-        this.autoYModeSupplier = autoYModeSupplier;
-    }
-
     private boolean isAutoYMode() {
-        return autoYModeSupplier.getAsBoolean();
+        return panel.isAutoYMode();
     }
 
     /** Sets the lookup from a point to the Key entry under it, for the axis menu item. */
@@ -548,7 +527,7 @@ public class PlotInteractionManager {
         long startTime = currentViewport.getStartTimeMs();
         long endTime = currentViewport.getEndTimeMs();
         updateViewportWithFittedY(startTime, endTime);
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -601,7 +580,7 @@ public class PlotInteractionManager {
             // Standard zoom: both axes about the plot centre
             viewportUpdater.accept(currentViewport.zoom(ZOOM_FACTOR));
         }
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -625,18 +604,14 @@ public class PlotInteractionManager {
             // Standard zoom: both axes about the plot centre
             viewportUpdater.accept(currentViewport.zoom(1.0 / ZOOM_FACTOR));
         }
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
      * Zooms to fit all data in the plot area.
      */
     public void zoomToFit() {
-        // This will be implemented by calling back to the parent component
-        // as it requires access to the full data fitting logic
-        if (parentComponent instanceof FlowVizPanel) {
-            ((FlowVizPanel) parentComponent).zoomToFit();
-        }
+        panel.zoomToFit();
     }
 
     /**
@@ -696,7 +671,7 @@ public class PlotInteractionManager {
                 .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height));
         }
 
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -725,7 +700,7 @@ public class PlotInteractionManager {
         }
 
         lastMousePos = e.getPoint();
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -768,7 +743,7 @@ public class PlotInteractionManager {
         }
         viewportUpdater.accept(newViewport);
 
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -915,7 +890,7 @@ public class PlotInteractionManager {
         if (menuSeries != null) {
             moveAxisItem.setText(onRightAxis.test(menuSeries) ? "Move to Y axis" : "Move to secondary Y axis");
         }
-        contextMenu.show(parentComponent, e.getX(), e.getY());
+        contextMenu.show(panel, e.getX(), e.getY());
     }
 
     /**
@@ -1004,7 +979,7 @@ public class PlotInteractionManager {
                 x = AxisLimitCodec.parseXLimits(text, currentViewport.getXAxisType());
                 ViewPort.validateBounds(x[0], x[1], currentViewport.getMinValue(), currentViewport.getMaxValue());
             } catch (IllegalArgumentException ex) {
-                showInvalidInput(parentComponent, ex.getMessage());
+                showInvalidInput(panel, ex.getMessage());
                 return;
             }
             applyXLimits(x[0], x[1]);
@@ -1031,7 +1006,7 @@ public class PlotInteractionManager {
                 y = AxisLimitCodec.parseYLimits(text);
                 ViewPort.validateBounds(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
             } catch (IllegalArgumentException ex) {
-                showInvalidInput(parentComponent, ex.getMessage());
+                showInvalidInput(panel, ex.getMessage());
                 return;
             }
             applyExplicitLimits(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
@@ -1058,13 +1033,11 @@ public class PlotInteractionManager {
             try {
                 y2 = parseY2Limits(text, currentViewport);
             } catch (IllegalArgumentException ex) {
-                showInvalidInput(parentComponent, ex.getMessage());
+                showInvalidInput(panel, ex.getMessage());
                 return;
             }
             acceptY2Bounds(y2[0], y2[1]);
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.model().update(st -> st.withAutoYMode(false)); // an explicit range, as for Paste Y axis
-            }
+            panel.model().update(st -> st.withAutoYMode(false)); // an explicit range, as for Paste Y axis
         });
         contextMenu.add(pasteY2AxisItem);
 
@@ -1079,9 +1052,7 @@ public class PlotInteractionManager {
 
         autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
         autoYMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.model().update(st -> st.withAutoYMode(autoYMenuItem.isSelected()));
-            }
+            panel.model().update(st -> st.withAutoYMode(autoYMenuItem.isSelected()));
         });
         contextMenu.add(autoYMenuItem);
 
@@ -1091,9 +1062,7 @@ public class PlotInteractionManager {
         for (YAxisScale scale : YAxisScale.values()) {
             JRadioButtonMenuItem scaleItem = new JRadioButtonMenuItem(scale.getDisplayName());
             scaleItem.addActionListener(e -> {
-                if (parentComponent instanceof FlowVizPanel) {
-                    ((FlowVizPanel) parentComponent).model().update(st -> st.withYAxisScale(scale));
-                }
+                panel.model().update(st -> st.withYAxisScale(scale));
             });
             yAxisScaleGroup.add(scaleItem);
             yAxisScaleMenu.add(scaleItem);
@@ -1105,9 +1074,7 @@ public class PlotInteractionManager {
         // never reads identity back out of label text (ADR-0003 §2.2).
         JMenu lineShapeMenu = new JMenu("Line shape");
         lineShapeMenuItems.putAll(LineShapeMenu.addItems(lineShapeMenu, shape -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.model().update(st -> st.withLineShape(shape));
-            }
+            panel.model().update(st -> st.withLineShape(shape));
         }));
         contextMenu.add(lineShapeMenu);
 
@@ -1119,17 +1086,13 @@ public class PlotInteractionManager {
 
         connectGapsMenuItem = new JCheckBoxMenuItem("Draw across gaps");
         connectGapsMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setConnectAcrossGaps(connectGapsMenuItem.isSelected());
-            }
+            panel.setConnectAcrossGaps(connectGapsMenuItem.isSelected());
         });
         missingDataMenu.add(connectGapsMenuItem);
 
         orphanMarkersMenuItem = new JCheckBoxMenuItem("Mark orphan points");
         orphanMarkersMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setShowOrphanMarkers(orphanMarkersMenuItem.isSelected());
-            }
+            panel.setShowOrphanMarkers(orphanMarkersMenuItem.isSelected());
         });
         missingDataMenu.add(orphanMarkersMenuItem);
 
@@ -1141,8 +1104,8 @@ public class PlotInteractionManager {
         // settings above. The axis move is shown only over a Key entry (4).
         moveAxisItem = new JMenuItem("Move to secondary Y axis");
         moveAxisItem.addActionListener(e -> {
-            if (menuSeries != null && parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.model().update(st -> st.withSeriesOnRightAxis(menuSeries, !st.isOnRightAxis(menuSeries)));
+            if (menuSeries != null) {
+                panel.model().update(st -> st.withSeriesOnRightAxis(menuSeries, !st.isOnRightAxis(menuSeries)));
             }
         });
         contextMenu.add(moveAxisItem);
@@ -1150,9 +1113,7 @@ public class PlotInteractionManager {
         // says "Key" too (2.2: one name per concept).
         JMenuItem resetKeyItem = new JMenuItem("Reset key");
         resetKeyItem.addActionListener(e -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.resetLegend();
-            }
+            panel.resetLegend();
         });
         contextMenu.add(resetKeyItem);
 
@@ -1169,25 +1130,16 @@ public class PlotInteractionManager {
                 pasteY2AxisItem.setVisible(hasY2);
                 pasteY2AxisItem.setEnabled(clipboardHasText);
 
-                // Sync the checkbox state with the current FlowVizPanel state
-                if (parentComponent instanceof FlowVizPanel vizPanel) {
-                    // Get the current auto-Y state from the FlowVizPanel
-                    autoYMenuItem.setSelected(vizPanel.isAutoYMode());
-
-                    // Sync line shape
-                    lineShapeMenuItems.get(vizPanel.getLineShape()).setSelected(true);
-
-                    // Sync gap-handling toggles
-                    connectGapsMenuItem.setSelected(vizPanel.isConnectAcrossGaps());
-                    orphanMarkersMenuItem.setSelected(vizPanel.isShowOrphanMarkers());
-
-                    // Get the current Y-axis scale and select the corresponding radio button
-                    YAxisScale currentScale = vizPanel.getYAxisScale();
-                    for (int i = 0; i < yAxisScaleMenu.getItemCount(); i++) {
-                        JMenuItem item = yAxisScaleMenu.getItem(i);
-                        if (item instanceof JRadioButtonMenuItem radioItem) {
-                            radioItem.setSelected(radioItem.getText().equals(currentScale.getDisplayName()));
-                        }
+                // Sync the menu with the plot's current state
+                autoYMenuItem.setSelected(isAutoYMode());
+                lineShapeMenuItems.get(panel.getLineShape()).setSelected(true);
+                connectGapsMenuItem.setSelected(panel.isConnectAcrossGaps());
+                orphanMarkersMenuItem.setSelected(panel.isShowOrphanMarkers());
+                YAxisScale currentScale = panel.getYAxisScale();
+                for (int i = 0; i < yAxisScaleMenu.getItemCount(); i++) {
+                    JMenuItem item = yAxisScaleMenu.getItem(i);
+                    if (item instanceof JRadioButtonMenuItem radioItem) {
+                        radioItem.setSelected(radioItem.getText().equals(currentScale.getDisplayName()));
                     }
                 }
             }
@@ -1232,7 +1184,7 @@ public class PlotInteractionManager {
 
     /** A clipboard transport failure: nothing the user typed was wrong. */
     private void showClipboardError(String message) {
-        DialogUtils.showError(parentComponent, message, "Clipboard");
+        DialogUtils.showError(panel, message, "Clipboard");
     }
 
     /** One error dialog for every rejected axis limit, whichever path it arrived by. */
@@ -1251,7 +1203,7 @@ public class PlotInteractionManager {
         }
         if (isAutoYMode()) {
             updateViewportWithFittedY(startTime, endTime);
-            parentComponent.repaint();
+            panel.repaint();
         } else {
             acceptNewAxes(startTime, endTime, currentViewport.getMinValue(), currentViewport.getMaxValue());
         }
@@ -1266,9 +1218,7 @@ public class PlotInteractionManager {
      */
     private void applyExplicitLimits(long startTime, long endTime, double minValue, double maxValue) {
         acceptNewAxes(startTime, endTime, minValue, maxValue);
-        if (parentComponent instanceof FlowVizPanel vizPanel) {
-            vizPanel.model().update(st -> st.withAutoYMode(false));
-        }
+        panel.model().update(st -> st.withAutoYMode(false));
     }
 
     /**
@@ -1301,7 +1251,7 @@ public class PlotInteractionManager {
             addAxisFieldRow(form, gbc, 2, "Secondary Y limits:", y2Field);
         }
 
-        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(parentComponent),
+        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(panel),
             "Set axis limits", Dialog.ModalityType.APPLICATION_MODAL);  // sentence case (2.1)
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.setLayout(new BorderLayout());
@@ -1326,9 +1276,7 @@ public class PlotInteractionManager {
                     if (y2Edited) {
                         acceptY2Bounds(y2[0], y2[1]);
                     }
-                    if (parentComponent instanceof FlowVizPanel vizPanel) {
-                        vizPanel.model().update(st -> st.withAutoYMode(false));
-                    }
+                    panel.model().update(st -> st.withAutoYMode(false));
                 } else {
                     applyXLimits(x[0], x[1]);
                 }
@@ -1358,7 +1306,7 @@ public class PlotInteractionManager {
         });
 
         dialog.pack();
-        dialog.setLocationRelativeTo(parentComponent);
+        dialog.setLocationRelativeTo(panel);
         dialog.setVisible(true);
     }
 
@@ -1383,7 +1331,7 @@ public class PlotInteractionManager {
             return;
         }
         viewportUpdater.accept(currentViewport.withY2Bounds(minValue, maxValue));
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -1417,7 +1365,7 @@ public class PlotInteractionManager {
         ViewPort newViewport = currentViewport.withTimeRange(startTime, endTime).withValueBounds(minValue, maxValue)
             .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
         viewportUpdater.accept(newViewport);
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -1426,13 +1374,13 @@ public class PlotInteractionManager {
     public void saveData() {
         DataSet dataSet = dataSetSupplier.get();
         if (dataSet == null || dataSet.isEmpty()) {
-            JOptionPane.showMessageDialog(parentComponent, "No data to save.", "Save Data", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(panel, "No data to save.", "Save Data", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
         // The suggested name carries the default format's extension; whatever the user
         // settles on is taken verbatim, and saveAs*Format normalises it from there.
-        java.util.Optional<File> chosen = KalixFileDialog.saveFile(parentComponent)
+        java.util.Optional<File> chosen = KalixFileDialog.saveFile(panel)
             .title("Save Data")
             .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
             .suggestedName("timeseries_data.csv")
@@ -1468,22 +1416,21 @@ public class PlotInteractionManager {
     private void saveAsCsvFormat(File file) {
         try {
             DataSet dataSet = dataSetSupplier.get();
-            com.kalix.ide.flowviz.transform.PlotType plotType =
-                (plotTypeSupplier != null) ? plotTypeSupplier.get() : null;
+            com.kalix.ide.flowviz.transform.PlotType plotType = panel.getPlotType();
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
             // .csv.zip counts as CSV (the exporter zips by name); anything else gains .csv.
             file = SeriesFileWriter.write(dataSet, file, plotType, labelResolver, false);
-            JOptionPane.showMessageDialog(parentComponent,
+            JOptionPane.showMessageDialog(panel,
                 "Data saved successfully to " + file.getName(),
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Error saving data: " + e.getMessage(),
                 "Save Error");
         } catch (IllegalArgumentException e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Invalid data: " + e.getMessage(),
                 "Save Error");
         }
@@ -1503,16 +1450,16 @@ public class PlotInteractionManager {
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
             SourceResCsvExporter.export(dataSet, file, labelResolver);
-            JOptionPane.showMessageDialog(parentComponent,
+            JOptionPane.showMessageDialog(panel,
                 "Data saved successfully to " + file.getName(),
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Error saving data: " + e.getMessage(),
                 "Save Error");
         } catch (IllegalArgumentException e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Invalid data: " + e.getMessage(),
                 "Save Error");
         }
@@ -1531,13 +1478,13 @@ public class PlotInteractionManager {
             File pxtFile = SeriesFileWriter.write(dataSet, file, null, labelResolver, use64BitPrecision);
             String pxtName = pxtFile.getName();
 
-            JOptionPane.showMessageDialog(parentComponent,
+            JOptionPane.showMessageDialog(panel,
                 "Data saved successfully to " + pxtName + " and "
                     + pxtName.substring(0, pxtName.length() - ".pxt".length()) + ".pxb",
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Error saving data: " + e.getMessage(),
                 "Save Error");
         }
