@@ -22,6 +22,10 @@ public class NodeTypeDefinition {
     public Set<String> allowedOutputs = new HashSet<>();
     // Groups of parameters of which at most one may be given
     public List<List<String>> exclusiveParams = new ArrayList<>();
+    public List<OverriddenParams> overriddenParams = new ArrayList<>();
+
+    /** Parameters that have no effect while the boolean parameter {@code whenTrue} is true. */
+    public record OverriddenParams(String whenTrue, List<String> params) {}
     public Map<String, ParameterDefinition> parameterDefinitions = new HashMap<>();
 
     // Union of required/optional/dsnode params, computed once after the schema

@@ -734,6 +734,9 @@
       "exclusive_params": [
         ["target_level", "target_volume"]
       ],
+      "overridden_params": [
+        { "when_true": "order_through", "params": ["target_level", "target_volume"] }
+      ],
       "dsnode_params": [
         "ds_1",
         "ds_2",
@@ -1200,6 +1203,10 @@
     "exclusive_params": {
       "severity": "error",
       "description": "A node cannot have more than one parameter of an exclusive group (e.g. target_level and target_volume)"
+    },
+    "overridden_params": {
+      "severity": "warning",
+      "description": "A parameter has no effect while another parameter overrides it (e.g. a target under order_through = true)"
     },
     "coordinate_format": {
       "severity": "error",

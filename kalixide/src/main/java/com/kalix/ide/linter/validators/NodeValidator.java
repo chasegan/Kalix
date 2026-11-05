@@ -63,6 +63,9 @@ public class NodeValidator implements ValidationStrategy {
         for (List<String> group : typeDef.exclusiveParams) {
             validateExclusiveParams(node, group, schema, result);
         }
+        for (NodeTypeDefinition.OverriddenParams overridden : typeDef.overriddenParams) {
+            validateOverriddenParams(node, overridden, schema, result);
+        }
 
         // Validate parameter types and formats
         for (INIModelParser.Property prop : node.getProperties().values()) {
@@ -93,6 +96,29 @@ public class NodeValidator implements ValidationStrategy {
         result.addIssue(given.get(given.size() - 1).getLineNumber(),
                       "Node '" + node.getNodeName() + "' cannot have both " + String.join(" and ", names),
                       severity, "exclusive_params");
+    }
+
+    /** Report each given parameter that a true boolean parameter makes ineffective, on its own line. */
+    private void validateOverriddenParams(INIModelParser.NodeSection node, NodeTypeDefinition.OverriddenParams overridden,
+                                          LinterSchema schema, ValidationResult result) {
+        ValidationRule rule = schema.getValidationRule("overridden_params");
+        if (rule != null && !rule.isEnabled()) {
+            return;
+        }
+        INIModelParser.Property flag = node.getProperties().get(overridden.whenTrue());
+        if (flag == null || !"true".equalsIgnoreCase(flag.getValue().trim())) {
+            return;
+        }
+        ValidationRule.Severity severity = (rule != null) ? rule.getSeverity() : ValidationRule.Severity.WARNING;
+        for (String param : overridden.params()) {
+            INIModelParser.Property prop = node.getProperties().get(param);
+            if (prop != null) {
+                result.addIssue(prop.getLineNumber(),
+                              "Node '" + node.getNodeName() + "': " + param + " has no effect because "
+                                      + overridden.whenTrue() + " = true",
+                              severity, "overridden_params");
+            }
+        }
     }
 
     private void validateNodeProperty(INIModelParser.NodeSection node, INIModelParser.Property prop,
