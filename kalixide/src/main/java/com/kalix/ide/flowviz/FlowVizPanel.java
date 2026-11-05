@@ -172,7 +172,7 @@ public class FlowVizPanel extends JPanel {
         coordinateDisplayManager.setRightAxisTest(this::isOnRightAxis);
         plotInteractionManager.setRightAxisTest(this::isOnRightAxis);
         legendManager.setRightAxisTest(this::isOnRightAxis);
-        legendManager.setOnAxisToggle(ref -> model.update(s -> s.withSeriesOnRightAxis(ref, !isOnRightAxis(ref))));
+        legendManager.setOnAxisToggle(ref -> model.update(s -> s.withSeriesOnRightAxis(ref, !s.isOnRightAxis(ref))));
         plotInteractionManager.setKeyEntryLookup(point -> legendManager.entryAt(point.x, point.y));
 
         // Default to the global palette with a private slot assignment. An owner
@@ -380,7 +380,7 @@ public class FlowVizPanel extends JPanel {
 
     /** True when {@code ref} is drawn against the right (y2) axis. */
     public boolean isOnRightAxis(SeriesRef ref) {
-        return state().getRightAxisSeries().contains(ref);
+        return state().isOnRightAxis(ref);
     }
 
     /** True when at least one visible series is on the right axis, so the plot shows one. */

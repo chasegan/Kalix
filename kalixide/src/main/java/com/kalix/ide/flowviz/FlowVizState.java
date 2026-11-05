@@ -223,6 +223,8 @@ public final class FlowVizState {
     public SeasonalMaskMode getSeasonalMaskMode() { return seasonalMaskMode; }
     public boolean isAutoYMode() { return autoYMode; }
     public Set<SeriesRef> getRightAxisSeries() { return rightAxisSeries; }
+    /** True when {@code ref} is drawn against the right axis. */
+    public boolean isOnRightAxis(SeriesRef ref) { return rightAxisSeries.contains(ref); }
     /** True when some visible series is drawn against the right axis, so the plot shows one. */
     public boolean isRightAxisInUse() { return !rightAxisSeries.isEmpty(); }
     public long getStartTimeMs() { return startTimeMs; }
