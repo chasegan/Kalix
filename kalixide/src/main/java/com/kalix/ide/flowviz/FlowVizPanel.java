@@ -404,7 +404,7 @@ public class FlowVizPanel extends JPanel {
             // Sized to its series; with nothing showable yet, to the left axis' range. A
             // hidden plot has no display set to size from, but it owes a fit when shown,
             // which replaces this placeholder before anything is drawn or recorded.
-            double[] y2Range = plotInteractionManager.fittedRangeForAxis(true);
+            double[] y2Range = plotInteractionManager.fittedRangeForAxis(PlotInteractionManager.Axis.Y2);
             if (y2Range == null) {
                 y2Range = new double[]{currentViewport.getMinValue(), currentViewport.getMaxValue()};
             }
@@ -425,9 +425,9 @@ public class FlowVizPanel extends JPanel {
         // with nothing showable takes the other's range; the default view only when neither
         // has anything (on LOG, data that is all zero or negative, say).
         YAxisScale yAxisScale = state().getYAxisScale();
-        double[] yRange = plotInteractionManager.fittedRangeForAxis(false, timeRange[0], timeRange[1], yAxisScale);
+        double[] yRange = plotInteractionManager.fittedRangeForAxis(PlotInteractionManager.Axis.Y, timeRange[0], timeRange[1], yAxisScale);
         double[] y2Range = isRightAxisInUse()
-            ? plotInteractionManager.fittedRangeForAxis(true, timeRange[0], timeRange[1], yAxisScale) : null;
+            ? plotInteractionManager.fittedRangeForAxis(PlotInteractionManager.Axis.Y2, timeRange[0], timeRange[1], yAxisScale) : null;
         if (yRange == null && y2Range == null) {
             createDefaultViewport();
             return;

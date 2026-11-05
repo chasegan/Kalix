@@ -230,6 +230,7 @@ public class PlotInteractionManager {
                 axisDrag = null;
                 axisDragPress = null;
                 axisDragStart = null;
+                AxisHandle handle = axisHandleAt(e.getPoint());
                 // isPopupTrigger, checked on BOTH press and release: the trigger fires
                 // on press on macOS/Linux but on release on Windows, and macOS
                 // Ctrl+click is a popup gesture without being the right button.
@@ -241,9 +242,9 @@ public class PlotInteractionManager {
                     zoomRectStartPoint = new Point(e.getPoint());
                     zoomRectCurrentPoint = new Point(e.getPoint());
                     parentComponent.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
-                } else if (SwingUtilities.isLeftMouseButton(e) && axisHandleAt(e.getPoint()) != null) {
+                } else if (SwingUtilities.isLeftMouseButton(e) && handle != null) {
                     // A press on an axis grabs the end nearest it (the half it landed in)
-                    axisDrag = axisHandleAt(e.getPoint());
+                    axisDrag = handle;
                     axisDragPress = e.getPoint();
                     axisDragStart = viewportSupplier.get();
                     axisDragMoved = false;
@@ -327,16 +328,25 @@ public class PlotInteractionManager {
     /** Pixels a press must move before it is an axis drag rather than a click (as the Key's). */
     private static final int AXIS_DRAG_THRESHOLD = 5;
 
+    /** The plot's axes: time, the Y axis, and the secondary (right, y2) Y axis. */
+    enum Axis { X, Y, Y2 }
+
     /** An axis end a press can grab: which axis, and which end moves. */
     private enum AxisHandle {
-        X_START(Cursor.W_RESIZE_CURSOR), X_END(Cursor.E_RESIZE_CURSOR),
-        Y_MIN(Cursor.S_RESIZE_CURSOR), Y_MAX(Cursor.N_RESIZE_CURSOR),
-        Y2_MIN(Cursor.S_RESIZE_CURSOR), Y2_MAX(Cursor.N_RESIZE_CURSOR);
+        X_START(Axis.X, Cursor.W_RESIZE_CURSOR), X_END(Axis.X, Cursor.E_RESIZE_CURSOR),
+        Y_MIN(Axis.Y, Cursor.S_RESIZE_CURSOR), Y_MAX(Axis.Y, Cursor.N_RESIZE_CURSOR),
+        Y2_MIN(Axis.Y2, Cursor.S_RESIZE_CURSOR), Y2_MAX(Axis.Y2, Cursor.N_RESIZE_CURSOR);
 
+        private final Axis axis;
         private final int cursorType;
 
-        AxisHandle(int cursorType) {
+        AxisHandle(Axis axis, int cursorType) {
+            this.axis = axis;
             this.cursorType = cursorType;
+        }
+
+        Axis axis() {
+            return axis;
         }
 
         Cursor cursor() {
@@ -400,8 +410,7 @@ public class PlotInteractionManager {
         }
         // A view the start can no longer stand for ends the drag: the right axis went away,
         // or the scale or X axis type changed, so its values would land on the wrong axis
-        boolean y2Handle = axisDrag == AxisHandle.Y2_MIN || axisDrag == AxisHandle.Y2_MAX;
-        if ((y2Handle && !current.hasY2()) || current.getYAxisScale() != axisDragStart.getYAxisScale()
+        if ((axisDrag.axis() == Axis.Y2 && !current.hasY2()) || current.getYAxisScale() != axisDragStart.getYAxisScale()
                 || current.getXAxisType() != axisDragStart.getXAxisType()) {
             finishAxisDrag(point);
             return;
@@ -440,7 +449,7 @@ public class PlotInteractionManager {
      * goes back to whatever {@code point} is over, so a grabbable axis keeps its resize cursor.
      */
     private void finishAxisDrag(Point point) {
-        boolean valueAxis = axisDrag != AxisHandle.X_START && axisDrag != AxisHandle.X_END;
+        boolean valueAxis = axisDrag.axis() != Axis.X;
         if (axisDragMoved && valueAxis && parentComponent instanceof FlowVizPanel vizPanel) {
             vizPanel.model().update(st -> st.withAutoYMode(false));
         }
@@ -462,21 +471,21 @@ public class PlotInteractionManager {
         if (currentViewport == null) {
             return;
         }
-        switch (handle) {
-            case X_START, X_END -> {
+        switch (handle.axis()) {
+            case X -> {
                 long[] timeRange = parentComponent instanceof FlowVizPanel vizPanel ? vizPanel.fittedTimeRange() : null;
                 if (timeRange != null) {
                     applyXLimits(timeRange[0], timeRange[1]);
                 }
             }
-            case Y_MIN, Y_MAX -> {
-                double[] y = fittedRangeForAxis(false);
+            case Y -> {
+                double[] y = fittedRangeForAxis(Axis.Y);
                 if (y != null) {
                     acceptNewAxes(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
                 }
             }
-            case Y2_MIN, Y2_MAX -> {
-                double[] y2 = fittedRangeForAxis(true);
+            case Y2 -> {
+                double[] y2 = fittedRangeForAxis(Axis.Y2);
                 if (y2 != null) {
                     acceptY2Bounds(y2[0], y2[1]);
                 }
@@ -508,18 +517,20 @@ public class PlotInteractionManager {
     }
 
     /**
-     * The padded value range of one axis' series over the current time window: the range
-     * auto-Y would give that axis. Null when the axis has nothing showable there.
+     * The padded value range of one value axis' ({@link Axis#Y} or {@link Axis#Y2}) series
+     * over the current time window: the range auto-Y would give that axis. Null when the
+     * axis has nothing showable there.
      */
-    double[] fittedRangeForAxis(boolean rightAxis) {
+    double[] fittedRangeForAxis(Axis axis) {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return null;
-        return fittedRangeForAxis(rightAxis, currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(),
+        return fittedRangeForAxis(axis, currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(),
             currentViewport.getYAxisScale());
     }
 
-    /** As {@link #fittedRangeForAxis(boolean)}, over {@code [startTime, endTime]} on {@code scale}. */
-    double[] fittedRangeForAxis(boolean rightAxis, long startTime, long endTime, YAxisScale scale) {
+    /** As {@link #fittedRangeForAxis(Axis)}, over {@code [startTime, endTime]} on {@code scale}. */
+    double[] fittedRangeForAxis(Axis axis, long startTime, long endTime, YAxisScale scale) {
+        boolean rightAxis = axis == Axis.Y2;
         return calculateVisibleYRange(startTime, endTime, scale, ref -> onRightAxis.test(ref) == rightAxis);
     }
 
@@ -548,7 +559,7 @@ public class PlotInteractionManager {
         // Fit each axis to its own series in the time range. An axis with nothing showable
         // there keeps its range: a stock default can be off the scale (-1 on LOG).
         YAxisScale scale = currentViewport.getYAxisScale();
-        double[] yRange = fittedRangeForAxis(false, startTime, endTime, scale);
+        double[] yRange = fittedRangeForAxis(Axis.Y, startTime, endTime, scale);
         if (yRange == null) {
             yRange = new double[]{currentViewport.getMinValue(), currentViewport.getMaxValue()};
         }
@@ -558,7 +569,7 @@ public class PlotInteractionManager {
         ViewPort newViewport = currentViewport.withTimeRange(startTime, endTime).withValueBounds(yRange[0], yRange[1])
             .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
         if (currentViewport.hasY2()) {
-            double[] y2Range = fittedRangeForAxis(true, startTime, endTime, scale);
+            double[] y2Range = fittedRangeForAxis(Axis.Y2, startTime, endTime, scale);
             if (y2Range != null) {
                 newViewport = newViewport.withY2Bounds(y2Range[0], y2Range[1]);
             }
