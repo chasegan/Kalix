@@ -213,6 +213,19 @@ public class LinterSchema {
                 }
             }
 
+            // Parse parameters overridden by a boolean parameter
+            JsonNode overriddenNode = typeNode.path("overridden_params");
+            if (overriddenNode.isArray()) {
+                for (JsonNode entryNode : overriddenNode) {
+                    List<String> params = new ArrayList<>();
+                    for (JsonNode param : entryNode.path("params")) {
+                        params.add(param.asText());
+                    }
+                    nodeType.overriddenParams.add(new NodeTypeDefinition.OverriddenParams(
+                            entryNode.path("when_true").asText(), params));
+                }
+            }
+
             // Parse allowed outputs
             JsonNode allowedOutputsNode = typeNode.path("allowed_outputs");
             if (allowedOutputsNode.isArray()) {
