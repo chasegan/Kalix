@@ -128,7 +128,7 @@ The plot below shows the order (solid green), the storage downstream flow (dotte
 
 - The storage volume reduces from an initial value of 2000 ML to a final volume of 200 ML.
 
-- The flow at the bottom is zero (yellow line) because the flow released from the dam is diverted at the user node.
+- The flow at the bottom is zero (orange line) because the flow released from the dam is diverted at the user node.
 
 <figure markdown>
 ![](../assets/docs-concepts-ordering/image_1.png)
@@ -179,7 +179,7 @@ The presence of the loss node changes the results:
 
 - Orders for 300 ML/d are increased to 450 ML/d as they propagate through the loss node because an upstream flow of 450 ML/d would be required in order to deliver 300 ML/d below the loss node (450 - 150 = 300 ML/d). The storage release (dashed blue line) is now higher than the original order (green line), and this extra flow is exactly enough to cover the losses (the purple line).
 
-- In this example the order adjustment can be perfectly calculated, and the flow at the bottom of the system is still zero (yellow line).
+- In this example the order adjustment can be perfectly calculated, and the flow at the bottom of the system is still zero (orange line).
 
 - The storage volume drops more quickly now, and actually becomes empty on Jan 11 meaning there is no water to release on Jan 12.
 

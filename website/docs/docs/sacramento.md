@@ -77,7 +77,7 @@ Parameters for soil moisture and Stores
 
 - LZFPM (Lower Zone Free Water Maximum for Percolation): Maximum capacity of the lower zone's free water that influences percolation.
 
-- RSERV (RSERV parameter): Not always optimised due to its low sensitivity, this parameter is generally the amount of water in the lower zone's free water stores that isn't available for transpiration.
+- RSERV: The fraction of the lower zone's free water stores that isn't available for transpiration. Kalix fixes it at 0.3, so it is not one of the node's `params` and cannot be optimised.
 
 Parameters for Flow Rates and Percolation
 

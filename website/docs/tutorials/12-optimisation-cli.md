@@ -210,7 +210,7 @@ As it runs, Kalix draws a live convergence plot right in the terminal — best o
 <figcaption>The finished run: 60,000 evaluations in 34.5 seconds.</figcaption>
 </figure>
 
-The whole 60,000-evaluation run finishes in roughly **30 seconds** on a 12-thread machine — each model run is only a few milliseconds, and `n_threads` evaluates many in parallel. Prefer a clean run with no plotting (e.g. for logging)? Add `-q`.
+The whole 60,000-evaluation run finishes in about **35 seconds** on a 12-thread machine — each model run is only a few milliseconds, and `n_threads` evaluates many in parallel. Prefer a clean run with no plotting (e.g. for logging)? Add `-q`.
 
 ## Step 4 — Read the results summary
 

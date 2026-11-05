@@ -152,7 +152,7 @@ Update the `[data]` section in **both** `models/baseline/stringybark.ini` *and* 
 
 Run the baseline. Run the wetter scenario. Both work, from any depth.
 
-Open the **Run Manager** and overlay `node.0002_ga_widebridge.ds_1` from each run. You should see the wetter scenario's simulated flow sitting noticeably above the baseline's — the 1.2× rainfall multiplier you wrote into the wetter rain expression flows straight through to streamflow.
+Open the **Run Manager** and overlay `node.0001_sc_stringybark.ds_1` from each run. You should see the wetter scenario's simulated flow sitting noticeably above the baseline's — the 1.2× rainfall multiplier you wrote into the wetter rain expression flows straight through to streamflow.
 
 <figure markdown>
 ![](../assets/tutorials-03-paths/image_4.png)

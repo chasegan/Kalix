@@ -56,13 +56,6 @@ Ctrl+f in the model editor for **find**, or Ctrl+h for **find-and-replace**
 
 **Folding** collapses part of the model text to its first line. Every section folds from its `[header]`, every multi-line value folds from its first line, and a `#@region = Title` annotation folds everything down to the next region (see [Annotations](conventions.md#annotations)). Click the markers in the editor's margin, or use **Fold**, **Unfold**, **Fold All** and **Unfold All** on the Edit menu (Ctrl+minus, Ctrl+equals, and the same with Shift). Going to a node, a line, a find result or a lint issue inside a fold opens it, as does undoing an edit made there. Folds are not saved with the file.
 
-**Navigate Back** and **Navigate Forward** allow you to move between locations you have visited in the model text. Keyboard shortcuts make this faster.
-
-<figure markdown>
-![](../assets/docs-using-ide/image_4.png)
-<figcaption>The Navigate Back button and its shortcut.</figcaption>
-</figure>
-
 **Table View** for node parameters that accept tabular values. Find this in the editor’s context menu, or by using the shortcut Ctrl+t.
 
 <figure markdown>
@@ -174,7 +167,7 @@ Look for the **Plot Palettes** button in the plotting tool to create custom colo
 
 ## Themes
 
-Themes can be independently set for the Editor Syntax, Node Palate and the Application Window.
+Themes can be independently set for the Editor Syntax, Node Palette and the Application Window.
 
 <figure markdown>
 ![](../assets/docs-using-ide/Screenshot_2025-10-10_at_12.16.40_pm.png)

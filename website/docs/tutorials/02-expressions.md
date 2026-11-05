@@ -154,7 +154,7 @@ Save the file. Hit the **Run** button in Kalix IDE.
 
 ## Compare with Tutorial 1 in the Run Manager
 
-Run both the Tutorial 1 and Tutorial 2 models in Kalix IDE, and open the **Run Manager**. Select both runs and use the Run Manager's plotting tool to overlay `node.0002_ga_widebridge.ds_1` from each. You should see two streamflow series that are visibly similar but not identical — the new rainfall (a weighted blend of three station series) produces a slightly different streamflow than the single areal-rainfall series in Tutorial 1.
+Run both the Tutorial 1 and Tutorial 2 models in Kalix IDE, and open the **Run Manager**. Select both runs and use the Run Manager's plotting tool to overlay `node.0001_sc_stringybark.ds_1` from each. You should see two streamflow series that are visibly similar but not identical — the new rainfall (a weighted blend of three station series) produces a slightly different streamflow than the single areal-rainfall series in Tutorial 1.
 
 <figure markdown>
 ![](../assets/tutorials-02-expressions/image_2.png)
