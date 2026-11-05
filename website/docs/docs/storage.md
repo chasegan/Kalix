@@ -35,8 +35,9 @@ ds_1 = my_other_node
 | seep (optional) | Seepage rate [mm]. Default is zero. Example: `seep = 0.82` |
 | initial\_volume (optional) | Initial volume [ML]. Default is zero. Example: `initial_volume = 14000` |
 | order\_through (optional) | Optional boolean flag changing the ordering behaviour of the node such that downstream orders are propagated upstream verbatim. This functionality is explained in detail further down this page. Default is false. Example: `order_through = true` |
-| target\_level (optional) | Optional target level [m] which causes this storage node to generate orders to operate the storage near the target level. This functionality is explained in detail below. Cannot be given together with `target_volume`, and is ignored when `order_through = true`.  Example: `target_level = if(sim.month>8, 8.0, 9.5)` |
-| target\_volume (optional) | Optional target volume [ML], an alternative to `target_level` for when the target is a volume rather than a level. It orders exactly as the equivalent `target_level` would. Cannot be given together with `target_level`, and is ignored when `order_through = true`.  Example: `target_volume = 12000` |
+| target\_level (optional) | Optional target level [m] which causes this storage node to generate orders to operate the storage near the target level. This functionality is explained in detail below. Cannot be given together with `target_volume`, and has no effect when `order_through = true` (the linter warns).  Example: `target_level = if(sim.month>8, 8.0, 9.5)` |
+| target\_volume (optional) | Optional target volume [ML], an alternative to `target_level` for when the target is a volume rather than a level. It orders exactly as the equivalent `target_level` would. Cannot be given together with `target_level`, and has no effect when `order_through = true` (the linter warns).  Example: `target_volume = 12000` |
+| forecast\_adjustment (optional) | Optional adjustment [ML] to the forecast a target storage orders against: water you expect to reach (positive) or leave (negative) the storage over the order travel time, beyond the orders already en route and today's downstream orders, e.g. a known inflow or diversion. Applies to either kind of target and requires one (`target_level` or `target_volume`). Default is zero.  Example: `forecast_adjustment = 0.8 * data.fc_csv.by_name.inflow` |
 | pond\_demand (optional) | Optional on-pond demand [ML]. Example: `pond_demand = 15.0 * data.patterns_csv.by_name.amenities` |
 | dimensions (compulsory) | A tabulated list of values: level (m), volume (ML), area (km2), spill (ML/timestep). See [Table parameters](parameter-types.md) to find out more about how table parameter types work in Kalix. Example: `dimensions = 90, 0, 0, 0, 91, 100, 1, 0, 91.1, 101, 1, 1e8, 92, 102, 1, 1e8` |
 | ds\_1\_outlet, ds\_2\_outlet, ds\_3\_outlet, ds\_4\_outlet (optional) | The outlet capacity on the corresponding link (ds\_1, ds\_2, etc) as a function of level. Three forms. A minimum operating level (MOL) alone: `ds_1_outlet = 81.1` — capacity is zero at or below 81.1 m and unlimited above it. A MOL and a capacity [ML/timestep]: `ds_1_outlet = 81.1, 120` — zero at or below, 120 above. A rating table of level, capacity pairs: `ds_2_outlet = 80, 0, 81, 0, 81.5, 100, 82, 100` — capacity interpolates linearly in level between points and holds flat beyond the ends; a repeated level is a step. Levels must lie within the dimensions table's level range, and capacities must be non-decreasing. Notes: (1) Orders on ds\_1 may be partly or fully met by unregulated spills. (2) There are no spills on the other links. (3) An undefined outlet is unlimited. |
@@ -68,6 +69,8 @@ ds_1 = my_other_node
 | ds\_1\_outlet | Flow through the outlet to ds\_1 [ML] (also available for other links) |
 | target\_level | Target level [m], for a storage ordering to a target: the evaluated `target_level`, or the level `target_volume` corresponds to on the dimensions table. Available whichever of the two is given |
 | target\_volume | Target volume [ML], for a storage ordering to a target: the evaluated `target_volume`, or the volume `target_level` corresponds to on the dimensions table. Available whichever of the two is given |
+| forecast\_volume | For a storage with a target: the forecast volume [ML] its order is based on, `Vestimated future` below, `forecast_adjustment` included. The order is `max(0, target_volume − forecast_volume)` |
+| forecast\_adjustment | Evaluated `forecast_adjustment` [ML], for a storage with a target |
 | order | The order this storage places upstream [ML]: to reach its target, or the downstream orders it passes on with `order_through`. Not written for a storage that does not order |
 | orders\_en\_route | For a storage with a target: water on its way to it at the end of the step [ML], today's order included and the order arriving today not. The `O_upstream_enroute` term of the forecast below. 0 for a storage with `order_through`, to which nothing is en route; not written for a storage that does not order |
 | exists | Evaluated `exists` input; 1 when not configured |
@@ -109,7 +112,7 @@ Mass balance over the timestep:
 
 ### Storages ordering upstream
 
-The default behaviour of storages is to NOT propagate any orders upstream. However, storages can be configured to order upstream in either of two ways: (1) using a target, given as `target_level` or `target_volume`, or (2) using the `order_through` property. If a storage has both a target and `order_through = true`, `order_through` applies and the target is ignored.
+The default behaviour of storages is to NOT propagate any orders upstream. However, storages can be configured to order upstream in either of two ways: (1) using a target, given as `target_level` or `target_volume`, or (2) using the `order_through` property. If a storage has both a target and `order_through = true`, `order_through` takes priority and the target has no effect; the linter warns about it.
 
 **Target level or volume**
 
@@ -136,7 +139,9 @@ Storages with a target calculate orders as follows:
 
 The term `Vtarget` is the `target_volume`, or the volume the `target_level` corresponds to on the dimensions table. It is evaluated each timestep and is what we are trying to achieve by sending the current order. This is the target we are hoping to achieve when our order arrives, i.e. after n\_timesteps = upstream order travel time. The term `Vestimated future` is an estimate of the future storage volume after n\_timesteps if there were no inflows. Kalix uses a simple and conservative estimate of this:
 
-`Vestimated future=Vnow−qout known+qin expected=Vnow−Ods today+Oupstream enroute`
+`Vestimated future=Vnow−qout known+qin expected=Vnow−Ods today+Oupstream enroute+A`
+
+The term `A` is the `forecast_adjustment`, zero unless given. Use it for water you already expect that the estimate cannot see, such as a forecast unregulated inflow or a planned diversion, rather than adjusting the target itself: with a `target_level` there is no other way to adjust the volume, short of re-encoding the dimensions table. The `forecast_volume` result records `Vestimated future` each timestep, so every order can be traced to the figures it was based on.
 
 **Order through**
 
