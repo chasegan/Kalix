@@ -7,9 +7,11 @@ import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.utils.EngineNames;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Validates what must be unique, as the engine refuses it: node names (ignoring case),
@@ -91,7 +93,18 @@ public class UniqueNameValidator implements ValidationStrategy {
             }
         }
         checkEntries(model.getOutputReferenceEntries(), "outputs", rule, result);
-        checkEntries(model.getInputFileEntries(), "data", rule, result);
+        // An aliased [data] line is keyed by its alias, so one file may be listed under
+        // two aliases; only the bare paths are entries in the engine's sense.
+        Set<Integer> aliasLines = new HashSet<>();
+        for (INIModelParser.Section section : model.getAllSections()) {
+            if (!section.getName().equals("data")) continue;
+            for (INIModelParser.Property property : section.getAllProperties()) {
+                aliasLines.add(property.getLineNumber());
+            }
+        }
+        List<INIModelParser.ListEntry> barePaths = model.getInputFileEntries().stream()
+            .filter(entry -> !aliasLines.contains(entry.lineNumber())).toList();
+        checkEntries(barePaths, "data", rule, result);
     }
 
     private static void checkEntries(List<INIModelParser.ListEntry> entries, String section,

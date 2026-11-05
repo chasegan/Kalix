@@ -95,8 +95,8 @@ pub struct Model {
     ///
     /// Populated: constructed empty at `Model::new()`. Output series are
     /// registered and node input references resolved during `configure()`
-    /// (`configure_model_structure()`), which also loads and fills in input
-    /// data; per-step values are then written during `run()`.
+    /// (`configure_model_structure()`); `configure()` then loads and fills in
+    /// input data, and per-step values are written during `run()`.
     pub data_cache: DataCache,
 
     /// Hot path: start/record, read in run_timestep().

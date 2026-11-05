@@ -43,6 +43,37 @@ class DuplicateEntryLintTest {
         assertEquals("c.csv", parsed.getInputFileAliases().get("rain"));
     }
 
+    /** The engine keys an aliased line by its alias, so one file under two aliases is fine. */
+    @Test
+    void oneFileUnderTwoAliasesIsNotADuplicate() {
+        String model = """
+                [data]
+                rain = a.csv
+                evap = a.csv
+                a.csv
+                """;
+        INIModelParser.ParsedModel parsed = INIModelParser.parse(model);
+        ValidationResult result = new ValidationResult();
+        new UniqueNameValidator().validate(parsed, LinterSchema.loadDefault(), result, null);
+
+        assertEquals(List.of(), linesOf(result, "duplicate_key"));
+    }
+
+    @Test
+    void duplicateBarePathIsADuplicateKey() {
+        String model = """
+                [data]
+                a.csv
+                b.csv
+                a.csv
+                """;
+        INIModelParser.ParsedModel parsed = INIModelParser.parse(model);
+        ValidationResult result = new ValidationResult();
+        new UniqueNameValidator().validate(parsed, LinterSchema.loadDefault(), result, null);
+
+        assertEquals(List.of(4), linesOf(result, "duplicate_key"));
+    }
+
     @Test
     void duplicateOutputEntryIsADuplicateKey() {
         String model = """

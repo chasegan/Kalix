@@ -32,5 +32,5 @@ pip: "pip install kalix==0.4.9"
     - An expression that refers to a node, node output or var that doesn't exist is an error, with or without an offset. `node.nosuch.dsflow[-1, 0.0]` used to read 0 for the whole run, and `node.nosuch.dsflow` was reported as "computed later in the timestep".
     - So is a reference to a constant that isn't declared in `[const]`. `const.nosuch` used to read 0 for the whole run. A constant an optimisation calibrates must be declared too; the optimisation sets its value, and a model that calibrates an undeclared one is refused.
     - `[outputs]` entries must be dot-separated names (no spaces or symbols). An entry naming something that doesn't exist is still accepted and records nothing.
-    - IDE: the linter flags invalid and case-duplicate node names, and Rename refuses them. It also flags a repeated section header or key.
+    - IDE: the linter flags invalid and case-duplicate node names, and Rename refuses them. It also flags a repeated section header, key or entry.
     - IDE: a model with a bad name or reference is refused when it is sent to the engine, before the run starts.

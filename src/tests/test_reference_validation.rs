@@ -221,7 +221,8 @@ fn test_a_validated_model_is_not_yet_configured() {
 /// balance of a model with every node type is the same either way.
 #[test]
 fn test_validating_before_configuring_changes_no_result() {
-    let path = "./regression_tests/simulations/5_model_with_every_node/model_with_every_node_type.ini";
+    let path = concat!(env!("CARGO_MANIFEST_DIR"),
+        "/regression_tests/simulations/5_model_with_every_node/model_with_every_node_type.ini");
     let mut once = IniModelIO::read_model_file(path).unwrap();
     once.configure().unwrap();
     once.run().unwrap();
