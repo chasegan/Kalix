@@ -262,16 +262,17 @@ public class CommandExecutor {
             for (INIModelParser.Property prop : section.getProperties().values()) {
                 // Check ds_1, ds_2, ds_3, etc.
                 if (prop.getKey().matches("ds_\\d+")) {
-                    if (prop.getValue().trim().equals(oldName)) {
+                    if (prop.getValue().trim().equalsIgnoreCase(oldName)) {
                         addValueSpanReplacement(replacements, lines, prop.getLineNumber(), oldName, newName);
                     }
                 }
             }
         }
 
-        // 3. Find output references: node.NodeName.property
+        // 3. Find output references: node.NodeName.property. Names match ignoring case,
+        // as the engine resolves them, so a reference written in another case is renamed too.
         // Output references are stored separately in the parsed model (not as section properties)
-        Pattern nodeRefPattern = Pattern.compile("\\bnode\\." + Pattern.quote(oldName) + "\\.");
+        Pattern nodeRefPattern = Pattern.compile("\\bnode\\." + Pattern.quote(oldName) + "\\.", Pattern.CASE_INSENSITIVE);
         String nodeRefReplacement = "node." + newName + ".";
         for (INIModelParser.ListEntry outputRef : parsedModel.getOutputReferenceEntries()) {
             // Match: node.OldName.anything (every occurrence, each on its own line)
@@ -444,7 +445,7 @@ public class CommandExecutor {
 
     /**
      * Adds a replacement for a property whose entire (trimmed) value is the old name
-     * (e.g. {@code ds_1 = oldName}), anchored to the value span: after the first
+     * in any case (e.g. {@code ds_1 = oldName}), anchored to the value span: after the first
      * {@code =}, before any inline comment, whitespace-trimmed. The key and any
      * comment on the same line are untouchable by construction.
      */
@@ -467,8 +468,9 @@ public class CommandExecutor {
         while (valueEnd > valueStart && Character.isWhitespace(line.charAt(valueEnd - 1))) {
             valueEnd--;
         }
-        if (line.substring(valueStart, valueEnd).equals(oldName)) {
-            replacements.add(new TextReplacement(lineNumber, valueStart, oldName, newName));
+        String value = line.substring(valueStart, valueEnd);
+        if (value.equalsIgnoreCase(oldName)) {
+            replacements.add(new TextReplacement(lineNumber, valueStart, value, newName));
         }
     }
 

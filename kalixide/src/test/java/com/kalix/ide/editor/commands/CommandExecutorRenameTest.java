@@ -232,6 +232,44 @@ class CommandExecutorRenameTest {
         return ok ? text : null;
     }
 
+    /** The engine matches names ignoring case, so a rename must follow every spelling of the name. */
+    @Test
+    void referencesWrittenInAnotherCaseAreRenamedToo() {
+        String model = """
+            [node.Dam]
+            type = storage
+            loc = 0, 0
+
+            [node.down]
+            type = user
+            ds_1 = dam
+            inflow = node.DAM.dsflow[-1, 0.0]
+
+            [outputs]
+            node.dam.volume
+            """;
+        INIModelParser.ParsedModel parsed = INIModelParser.parse(model);
+
+        List<CommandExecutor.TextReplacement> reps =
+            detector().findNodeReferences(model, "Dam", "res", parsed);
+        String result = apply(model, reps);
+
+        String expected = """
+            [node.res]
+            type = storage
+            loc = 0, 0
+
+            [node.down]
+            type = user
+            ds_1 = res
+            inflow = node.res.dsflow[-1, 0.0]
+
+            [outputs]
+            node.res.volume
+            """;
+        assertEquals(expected, result);
+    }
+
     @Test
     void renameToAnInvalidNameIsRefused() {
         assertNull(renameS("a b"));
