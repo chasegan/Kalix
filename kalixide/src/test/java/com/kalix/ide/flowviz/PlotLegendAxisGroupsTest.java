@@ -33,8 +33,6 @@ class PlotLegendAxisGroupsTest {
 
     private static final int WIDTH = 800;
     private static final int HEIGHT = 600;
-    // Inside every row: the Key sits DEFAULT_OFFSET (20) in from the plot's top-right corner
-    private static final int PROBE_X = WIDTH - 30;
 
     private final SeriesRef a = new DatasetSeries("/tmp/x.csv", "a");
     private final SeriesRef b = new DatasetSeries("/tmp/x.csv", "b");
@@ -64,12 +62,28 @@ class PlotLegendAxisGroupsTest {
         g.dispose();
     }
 
+    /**
+     * A column inside every row of the Key as last painted: a little in from its left edge.
+     * Found from the Key itself, since the user's preferences may place it anywhere.
+     */
+    private int probeX() {
+        for (int y = 0; y < HEIGHT; y++) {
+            for (int x = 0; x < WIDTH; x++) {
+                if (legend.contains(x, y)) {
+                    return x + 10;
+                }
+            }
+        }
+        throw new AssertionError("the Key was not painted");
+    }
+
     /** The series met walking down the Key, with the screen row where each is first met. */
     private List<int[]> rowsTopToBottom(List<SeriesRef> order) {
         List<int[]> tops = new ArrayList<>();
+        int probeX = probeX();
         SeriesRef last = null;
         for (int y = 0; y < HEIGHT; y++) {
-            SeriesRef here = legend.entryAt(PROBE_X, y);
+            SeriesRef here = legend.entryAt(probeX, y);
             if (here != null && !here.equals(last)) {
                 order.add(here);
                 tops.add(new int[] {y});
@@ -114,7 +128,7 @@ class PlotLegendAxisGroupsTest {
         List<SeriesRef> order = new ArrayList<>();
         int aTop = rowsTopToBottom(order).get(2)[0];
 
-        legend.handleMousePress(PROBE_X, aTop + 2, true);
+        legend.handleMousePress(probeX(), aTop + 2, true);
         legend.handleMouseRelease();
 
         assertEquals(List.of(a), toggled);
@@ -127,7 +141,7 @@ class PlotLegendAxisGroupsTest {
         List<SeriesRef> order = new ArrayList<>();
         int bTop = rowsTopToBottom(order).get(1)[0];
 
-        legend.handleMousePress(PROBE_X, bTop + 2, false);
+        legend.handleMousePress(probeX(), bTop + 2, false);
         legend.handleMouseRelease();
 
         assertTrue(toggled.isEmpty());
