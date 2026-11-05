@@ -10,8 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Node names are linted with the engine's rule (#442): letters, digits and underscores,
- * unique ignoring case.
+ * What the engine refuses is linted the same way (#442): node names of letters, digits
+ * and underscores, unique ignoring case; and a section header or key that appears once.
  */
 class NodeNameLintTest {
 
@@ -72,6 +72,20 @@ class NodeNameLintTest {
         assertEquals(1, found.size());
         assertEquals(4, found.get(0).getLineNumber());
         assertTrue(found.get(0).getMessage().contains("'loc'"));
+    }
+
+    @Test
+    void aRepeatedKeyDifferingInCaseIsAnError() {
+        List<ValidationIssue> found = issues("duplicate_key",
+            "[node.a]\ntype = gauge\nloc = 0, 0\nInflow = 1\ninflow = 2\n");
+        assertEquals(1, found.size());
+        assertEquals(5, found.get(0).getLineNumber());
+    }
+
+    @Test
+    void aContinuedValueIsNotARepeatedKey() {
+        assertTrue(issues("duplicate_key",
+            "[node.a]\ntype = gauge\nloc = 0, 0\ninflow = 1,\n    2\n").isEmpty());
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.kalix.ide.utils.EngineNames;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -69,7 +70,11 @@ public class UniqueNameValidator implements ValidationStrategy {
         }
     }
 
-    /** A key may appear only once in a section; the engine refuses a repeat, which would otherwise replace the earlier value. */
+    /**
+     * A key may appear only once in a section, and a bare entry once in {@code [outputs]}
+     * or {@code [data]}, in any case, since the engine matches keys ignoring case; the
+     * engine refuses a repeat, which would otherwise replace the earlier value or be kept once.
+     */
     private static void checkKeys(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
         ValidationRule rule = schema.getValidationRule("unique_keys");
         if (rule == null || !rule.isEnabled()) return;
@@ -77,12 +82,27 @@ public class UniqueNameValidator implements ValidationStrategy {
         for (INIModelParser.Section section : model.getAllSections()) {
             Map<String, Integer> firstLine = new HashMap<>();
             for (INIModelParser.Property property : section.getAllProperties()) {
-                Integer earlier = firstLine.putIfAbsent(property.getKey(), property.getLineNumber());
+                Integer earlier = firstLine.putIfAbsent(property.getKey().toLowerCase(Locale.ROOT), property.getLineNumber());
                 if (earlier != null) {
                     result.addIssue(property.getLineNumber(),
                                   "Duplicate key '" + property.getKey() + "' in [" + section.getName() + "] (also defined on line " + earlier + ")",
                                   rule.getSeverity(), "duplicate_key");
                 }
+            }
+        }
+        checkEntries(model.getOutputReferenceEntries(), "outputs", rule, result);
+        checkEntries(model.getInputFileEntries(), "data", rule, result);
+    }
+
+    private static void checkEntries(List<INIModelParser.ListEntry> entries, String section,
+                                     ValidationRule rule, ValidationResult result) {
+        Map<String, Integer> firstLine = new HashMap<>();
+        for (INIModelParser.ListEntry entry : entries) {
+            Integer earlier = firstLine.putIfAbsent(entry.text().toLowerCase(Locale.ROOT), entry.lineNumber());
+            if (earlier != null) {
+                result.addIssue(entry.lineNumber(),
+                              "Duplicate entry '" + entry.text() + "' in [" + section + "] (also listed on line " + earlier + ")",
+                              rule.getSeverity(), "duplicate_key");
             }
         }
     }

@@ -3,7 +3,6 @@ package com.kalix.ide.linter;
 import com.kalix.ide.linter.model.ValidationResult;
 import com.kalix.ide.linter.model.ValidationRule;
 import com.kalix.ide.linter.parsing.INIModelParser;
-import com.kalix.ide.linter.validators.DuplicatePropertyValidator;
 import com.kalix.ide.linter.validators.FileValidator;
 import com.kalix.ide.linter.validators.FnSectionValidator;
 import com.kalix.ide.linter.validators.NodeOrderingValidator;
@@ -43,8 +42,7 @@ public class ModelLinter {
             new ReferenceValidator(),
             new NodeOrderingValidator(),
             new NodeValidator(),
-            new UniqueNameValidator(),
-            new DuplicatePropertyValidator()
+            new UniqueNameValidator()
         );
     }
 

@@ -239,7 +239,7 @@ End the session and exit.
 - Parameters: `model_path` (string, required)
 
 **load_model_string**
-- Description: Load a hydrological model from an INI string
+- Description: Load a hydrological model from an INI string. The model's shape and references are checked at once, so a bad name or reference is an ERROR on this command, and no model is kept
 - Parameters: `model_ini` (string, required)
 
 **run_simulation**
