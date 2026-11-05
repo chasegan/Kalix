@@ -225,3 +225,5 @@ above; per §2.8.
     case are duplicates.
   - **No accented letters.** Accented and other non-ASCII letters are not
     supported.
+  - **Enforcement.** `misc_functions::is_valid_name_segment` (engine) and
+    `EngineNames.isValidNodeName` (IDE).
