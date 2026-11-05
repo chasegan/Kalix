@@ -374,7 +374,7 @@ node.dam.volume
 
 #[test]
 fn test_field_validation() {
-    assert!(load_err(&rig(0, "available_water = 0")).contains("available_water must be a positive number"));
+    assert!(load_err(&rig(0, "").replace("available_water = 100", "available_water = 0")).contains("available_water must be a positive number"));
     assert!(load_err(&rig(0, "efficiency = 0")).contains("efficiency must be greater than 0"));
     assert!(load_err(&rig(0, "efficiency = 1.2")).contains("efficiency must be greater than 0 and at most 1"));
     let bad_p = IniModelIO::read_model_string(&rig(0, "p = 1")).err().expect("should not load").to_string();

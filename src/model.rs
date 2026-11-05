@@ -95,8 +95,8 @@ pub struct Model {
     ///
     /// Populated: constructed empty at `Model::new()`. Output series are
     /// registered and node input references resolved during `configure()`
-    /// (`configure_model_structure()`), which also loads and fills in input
-    /// data; per-step values are then written during `run()`.
+    /// (`configure_model_structure()`); `configure()` then loads and fills in
+    /// input data, and per-step values are written during `run()`.
     pub data_cache: DataCache,
 
     /// Hot path: start/record, read in run_timestep().
@@ -194,6 +194,10 @@ pub struct Model {
     /// Populated: computed by `check_execution_order()`, called from both
     /// `configure()` and `initialize_network()` (start of every `run()`).
     pub execution_order: Vec<usize>,
+    /// Set by [`configure`](Self::configure) once the inputs are loaded and the
+    /// period is fixed. The structural step alone (load, patch) does not set it:
+    /// it fills the execution order, which is not the same thing.
+    pub(crate) configured: bool,
 
     /// Hot path: order phase, read in run_timestep().
     ///
@@ -299,10 +303,9 @@ impl Model {
     /// skipped when the model is already configured - their data lives in the
     /// data_cache by then.
     pub fn clone_for_run(&self) -> Model {
-        let configured = !self.execution_order.is_empty();
         Model {
             configuration: self.configuration.clone(),
-            input_sources: if configured {
+            input_sources: if self.configured {
                 vec![]
             } else {
                 self.input_sources.clone()
@@ -323,6 +326,7 @@ impl Model {
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
             execution_order: self.execution_order.clone(),
+            configured: self.configured,
             simple_ordering_system: self.simple_ordering_system.clone(),
             node_lookup: self.node_lookup.clone(),
             ini_document: None,
@@ -352,6 +356,7 @@ impl Model {
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
             execution_order: vec![],
+            configured: false,
             simple_ordering_system: SimpleNodewiseOrderingSystem::new(),
             node_lookup: self.node_lookup.clone(),
             ini_document: self.ini_document.clone(),
@@ -431,7 +436,8 @@ impl Model {
         self.validate_computed_references()?;
 
         //   An expression's const.* reference registers the constant; only
-        //   [const] (or the optimiser, before configure) assigns it.
+        //   [const] assigns it. The optimiser sets the value of a declared
+        //   constant; it does not stand in for the declaration.
         self.data_cache.constants.assert_all_constants_have_assigned_values()?;
 
         //3) Validate link ordering (structural only, no input data required).
@@ -717,7 +723,7 @@ impl Model {
         //   not that it has values - non-critical data is allowed to have missing values.
         self.validate_data_references(false)?;
 
-        // Return
+        self.configured = true;
         Ok(())
     }
 

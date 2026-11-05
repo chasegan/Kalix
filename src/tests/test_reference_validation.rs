@@ -180,10 +180,57 @@ fn test_reference_to_undeclared_constant_is_refused() {
     assert!(err.contains("Unknown constant 'const.nosuch'"), "{}", err);
 }
 
+/// The optimiser sets a declared constant's value; it is no substitute for the
+/// declaration, so the structural check every load path runs refuses it.
+#[test]
+fn test_undeclared_constant_is_refused_by_the_structural_check() {
+    let mut model = IniModelIO::read_model_string(&model_ini("src", "1 + const.k", "", "node.src.dsflow")).unwrap();
+    let err = model.validate_model_structure().unwrap_err();
+    assert!(err.contains("Unknown constant 'const.k'"), "{}", err);
+}
+
 #[test]
 fn test_reference_to_constant_declared_after_use_is_accepted() {
     let extra = "[const]\nconst.k = 2\n";
     let model = load_and_run(&model_ini("src", "1 + const.K", extra, "node.src.dsflow")).unwrap();
     let series = model.get_output_series(Some(vec!["node.src.dsflow".to_string()]), false).unwrap();
     assert_eq!(series[0].values[0], 3.0);
+}
+
+// -----------------------------------------------------------------------------
+// Validating at load is not configuring
+// -----------------------------------------------------------------------------
+
+/// The optimiser once took a filled execution order to mean "configured" and
+/// skipped loading the inputs for a model that had only been validated.
+#[test]
+fn test_a_validated_model_is_not_yet_configured() {
+    let mut model = IniModelIO::read_model_string(&model_ini("src", "1", "", "node.src.dsflow")).unwrap();
+    model.validate_model_structure().unwrap();
+    assert!(!model.execution_order.is_empty(), "validation works out the execution order");
+    assert!(!model.configured, "but only configure() loads the inputs and fixes the period");
+
+    model.configure().unwrap();
+    assert!(model.configured);
+    assert!(model.clone_for_run().configured, "a worker clone starts configured");
+    model.run().unwrap();
+}
+
+/// The IDE's engine session now validates at load and configures at run, so the
+/// structural step runs twice on one model. It must change nothing: the mass
+/// balance of a model with every node type is the same either way.
+#[test]
+fn test_validating_before_configuring_changes_no_result() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"),
+        "/regression_tests/simulations/5_model_with_every_node/model_with_every_node_type.ini");
+    let mut once = IniModelIO::read_model_file(path).unwrap();
+    once.configure().unwrap();
+    once.run().unwrap();
+
+    let mut twice = IniModelIO::read_model_file(path).unwrap();
+    twice.validate_model_structure().unwrap();
+    twice.configure().unwrap();
+    twice.run().unwrap();
+
+    assert_eq!(once.generate_mass_balance_report(), twice.generate_mass_balance_report());
 }

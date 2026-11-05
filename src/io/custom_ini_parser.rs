@@ -57,8 +57,10 @@ impl IniDocument {
         }
     }
 
-    /// Parses Kalix INI text. A section header may appear only once; a repeat
-    /// is refused, naming both lines.
+    /// Parses Kalix INI text. A section header may appear only once in a
+    /// document, and a key or bare entry once in its section, in any case,
+    /// since the readers match keys ignoring case; a repeat is refused, naming
+    /// both lines.
     ///
     /// The comment grammar, shared with the IDE's parsers (see the website's
     /// Conventions page, "Comments"): `#` starts a comment anywhere outside
@@ -67,6 +69,9 @@ impl IniDocument {
     /// comment marker (it terminates statements inside expression blocks).
     pub fn parse(content: &str) -> Result<Self, String> {
         let mut sections: IndexMap<String, IniSection> = IndexMap::new();
+        // The current section's keys, lowercased, with the line each first appeared on:
+        // the readers match keys ignoring case, so a repeat in any case is refused.
+        let mut seen_keys: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         let mut trailing_comments = Vec::new();
         let mut state = ParseState::BetweenSections;
         let mut pending_comments = Vec::new();
@@ -116,6 +121,7 @@ impl IniDocument {
                     format!("{}{}", gap, c)
                 });
 
+                seen_keys.clear();
                 sections.insert(section_name.clone(), IniSection {
                     properties: IndexMap::new(),
                     leading_lines: pending_comments.clone(),
@@ -193,10 +199,15 @@ impl IniDocument {
                     valid: true,
                 };
 
-                // Add to current section
+                // Add to current section. A repeated key would replace the
+                // earlier value, so it is refused, as a repeated header is.
                 match &state {
                     ParseState::InSection(section_name) => {
                         if let Some(section) = sections.get_mut(section_name) {
+                            if let Some(earlier) = seen_keys.insert(key.to_ascii_lowercase(), line_number) {
+                                return Err(format!("Duplicate key '{}' at line {} in [{}] (also defined on line {})",
+                                    key, line_number, section_name, earlier));
+                            }
                             section.properties.insert(key, property);
                         }
                     }
@@ -216,6 +227,10 @@ impl IniDocument {
                         // The inline comment is kept (slot 0, as for a property's first
                         // line) so a canonical rewrite of the item can carry it along.
                         let section = sections.get_mut(section_name).unwrap();
+                        if let Some(earlier) = seen_keys.insert(code.to_ascii_lowercase(), line_number) {
+                            return Err(format!("Duplicate entry '{}' at line {} in [{}] (also listed on line {})",
+                                code, line_number, section_name, earlier));
+                        }
 
                         let property = IniProperty {
                             value: String::new(),  // Empty value for list items
@@ -564,6 +579,27 @@ key3 = value3
         let content = "[node.a]\ninflow = 1\n\n[node.b]\ninflow = 2\n\n[node.a] # again\ninflow = 7\n";
         let err = IniDocument::parse(content).unwrap_err();
         assert_eq!(err, "Duplicate section header at line 7: [node.a] (also defined on line 1)");
+    }
+
+    #[test]
+    fn test_repeated_key_in_a_section_is_refused() {
+        let content = "[node.a]\ninflow = 1\nloc = 0, 0\ninflow = 2\n";
+        let err = IniDocument::parse(content).unwrap_err();
+        assert_eq!(err, "Duplicate key 'inflow' at line 4 in [node.a] (also defined on line 2)");
+    }
+
+    #[test]
+    fn test_repeated_key_differing_in_case_is_refused() {
+        // The readers match keys ignoring case, so these would be one key with one value kept.
+        let err = IniDocument::parse("[node.a]\nInflow = 1\ninflow = 2\n").unwrap_err();
+        assert_eq!(err, "Duplicate key 'inflow' at line 3 in [node.a] (also defined on line 2)");
+    }
+
+    #[test]
+    fn test_repeated_list_item_in_a_section_is_refused() {
+        let content = "[outputs]\nnode.a.dsflow\nnode.b.dsflow\nnode.a.dsflow\n";
+        let err = IniDocument::parse(content).unwrap_err();
+        assert_eq!(err, "Duplicate entry 'node.a.dsflow' at line 4 in [outputs] (also listed on line 2)");
     }
 
     #[test]

@@ -10,8 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Node names are linted with the engine's rule (#442): letters, digits and underscores,
- * unique ignoring case.
+ * What the engine refuses is linted the same way (#442): node names of letters, digits
+ * and underscores, unique ignoring case; and a section header or key that appears once.
  */
 class NodeNameLintTest {
 
@@ -48,6 +48,44 @@ class NodeNameLintTest {
     void mixedCaseAndDigitLeadingNamesAreAccepted() {
         assertTrue(issues("node_name_format",
             "[node.MyGauge]\ntype = gauge\nloc = 0, 0\n\n[node.0001_in]\ntype = gauge\nloc = 0, 1\n").isEmpty());
+    }
+
+    @Test
+    void aRepeatedNonNodeSectionIsAnError() {
+        List<ValidationIssue> found = issues("duplicate_section",
+            "[var.x]\ny = 1\n\n[node.a]\ntype = gauge\nloc = 0, 0\n\n[var.x]\ny = 2\n");
+        assertEquals(1, found.size());
+        assertEquals(8, found.get(0).getLineNumber());
+        assertTrue(found.get(0).getMessage().contains("also defined on line 1"));
+    }
+
+    @Test
+    void aRepeatedNodeSectionIsLeftToTheNodeRule() {
+        assertTrue(issues("duplicate_section",
+            "[node.a]\ntype = gauge\nloc = 0, 0\n\n[node.a]\ntype = gauge\nloc = 0, 1\n").isEmpty());
+    }
+
+    @Test
+    void aRepeatedKeyInASectionIsAnError() {
+        List<ValidationIssue> found = issues("duplicate_key",
+            "[node.a]\ntype = gauge\nloc = 0, 0\nloc = 1, 1\n");
+        assertEquals(1, found.size());
+        assertEquals(4, found.get(0).getLineNumber());
+        assertTrue(found.get(0).getMessage().contains("'loc'"));
+    }
+
+    @Test
+    void aRepeatedKeyDifferingInCaseIsAnError() {
+        List<ValidationIssue> found = issues("duplicate_key",
+            "[node.a]\ntype = gauge\nloc = 0, 0\nInflow = 1\ninflow = 2\n");
+        assertEquals(1, found.size());
+        assertEquals(5, found.get(0).getLineNumber());
+    }
+
+    @Test
+    void aContinuedValueIsNotARepeatedKey() {
+        assertTrue(issues("duplicate_key",
+            "[node.a]\ntype = gauge\nloc = 0, 0\ninflow = 1,\n    2\n").isEmpty());
     }
 
     @Test

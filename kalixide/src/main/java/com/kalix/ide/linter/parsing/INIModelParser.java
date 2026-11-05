@@ -68,6 +68,7 @@ public class INIModelParser {
         private final Map<String, Integer> inputFileAliasLineNumbers = new LinkedHashMap<>();  // Track line numbers for aliases
         private final Map<String, NodeSection> nodes = new LinkedHashMap<>();
         private final List<NodeSection> allNodeSections = new ArrayList<>(); // Track all nodes including duplicates
+        private final List<Section> allSections = new ArrayList<>(); // Every section header in document order, repeats included
 
         public List<SyntaxIssue> getSyntaxIssues() { return syntaxIssues; }
         public Map<String, Section> getSections() { return sections; }
@@ -85,6 +86,8 @@ public class INIModelParser {
         public Map<String, Integer> getInputFileAliasLineNumbers() { return inputFileAliasLineNumbers; }
         public Map<String, NodeSection> getNodes() { return nodes; }
         public List<NodeSection> getAllNodeSections() { return allNodeSections; }
+        /** Every section in document order, repeated headers included; {@link #getSections()} keeps the last of a repeat. */
+        public List<Section> getAllSections() { return allSections; }
     }
 
     public static class Section {
@@ -264,8 +267,8 @@ public class INIModelParser {
      * One {@code [data]} entry, which takes one of two forms:
      * <ol>
      *   <li>{@code alias = ./path/to/file.csv} — recorded as an alias, an input file,
-     *       and a section property (so a repeated alias is a duplicate property
-     *       like any other, per {@code DuplicatePropertyValidator});</li>
+     *       and a section property (so a repeated alias is a duplicate key like
+     *       any other, per {@code UniqueNameValidator});</li>
      *   <li>{@code ./path/to/file.csv} — a direct file path.</li>
      * </ol>
      * Either form may continue onto indented lines; the {@code =} is looked for in
@@ -411,6 +414,7 @@ public class INIModelParser {
         }
 
         model.getSections().put(sectionName, section);
+        model.getAllSections().add(section);
         return section;
     }
 
@@ -430,27 +434,6 @@ public class INIModelParser {
         }
 
         return references;
-    }
-
-    /**
-     * Find duplicate properties within a section.
-     * Returns a map of property key to list of line numbers where it appears (only keys with 2+ occurrences).
-     */
-    public static Map<String, List<Integer>> findDuplicateProperties(Section section) {
-        Map<String, List<Integer>> propertyLines = new HashMap<>();
-
-        for (Property prop : section.getAllProperties()) {
-            propertyLines.computeIfAbsent(prop.getKey(), k -> new ArrayList<>()).add(prop.getLineNumber());
-        }
-
-        Map<String, List<Integer>> duplicates = new HashMap<>();
-        for (Map.Entry<String, List<Integer>> entry : propertyLines.entrySet()) {
-            if (entry.getValue().size() > 1) {
-                duplicates.put(entry.getKey(), entry.getValue());
-            }
-        }
-
-        return duplicates;
     }
 
     /**

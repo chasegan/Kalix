@@ -101,7 +101,8 @@ pub fn optimise_from_file(
         })?,
     };
 
-    let model = IniModelIO::read_model_file(model_file_path).map_err(|e| e.to_string())?;
+    let mut model = IniModelIO::read_model_file(model_file_path).map_err(|e| e.to_string())?;
+    model.validate_model_structure().map_err(|e| format!("Failed to validate model: {}", e))?;
 
     // Build comparison pairs from terms (load each observed series).
     let mut comparisons: Vec<ComparisonPair> = Vec::with_capacity(config.terms.len());

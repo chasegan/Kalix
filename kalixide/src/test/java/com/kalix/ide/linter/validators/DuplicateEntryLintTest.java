@@ -11,10 +11,10 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Entries that appear twice are wrong twice. Before this, a duplicated {@code [data]}
- * alias was logged and never linted, and a duplicated bad {@code [outputs]} reference
- * or missing input file was reported on its last line only, because the line lookup
- * was keyed by the entry's text.
+ * Entries that appear twice are wrong twice. A repeated key or bare entry is reported
+ * on the line that repeats it, pointing back to the first, as the engine's refusal
+ * does; a duplicated bad {@code [outputs]} reference or missing input file is reported
+ * on every line, since each line is wrong in its own right.
  */
 class DuplicateEntryLintTest {
 
@@ -27,7 +27,7 @@ class DuplicateEntryLintTest {
     }
 
     @Test
-    void duplicateDataAliasIsADuplicateProperty() {
+    void duplicateDataAliasIsADuplicateKey() {
         String model = """
                 [data]
                 rain = a.csv
@@ -36,11 +36,57 @@ class DuplicateEntryLintTest {
                 """;
         INIModelParser.ParsedModel parsed = INIModelParser.parse(model);
         ValidationResult result = new ValidationResult();
-        new DuplicatePropertyValidator().validate(parsed, LinterSchema.loadDefault(), result, null);
+        new UniqueNameValidator().validate(parsed, LinterSchema.loadDefault(), result, null);
 
-        assertEquals(List.of(2, 4), linesOf(result, "duplicate_property"));
-        // The alias map itself still resolves last-wins, as the engine does.
+        assertEquals(List.of(4), linesOf(result, "duplicate_key"), "the repeat, pointing back to the first");
+        // The alias map itself still resolves last-wins, as the IDE's own parser does.
         assertEquals("c.csv", parsed.getInputFileAliases().get("rain"));
+    }
+
+    /** The engine keys an aliased line by its alias, so one file under two aliases is fine. */
+    @Test
+    void oneFileUnderTwoAliasesIsNotADuplicate() {
+        String model = """
+                [data]
+                rain = a.csv
+                evap = a.csv
+                a.csv
+                """;
+        INIModelParser.ParsedModel parsed = INIModelParser.parse(model);
+        ValidationResult result = new ValidationResult();
+        new UniqueNameValidator().validate(parsed, LinterSchema.loadDefault(), result, null);
+
+        assertEquals(List.of(), linesOf(result, "duplicate_key"));
+    }
+
+    @Test
+    void duplicateBarePathIsADuplicateKey() {
+        String model = """
+                [data]
+                a.csv
+                b.csv
+                a.csv
+                """;
+        INIModelParser.ParsedModel parsed = INIModelParser.parse(model);
+        ValidationResult result = new ValidationResult();
+        new UniqueNameValidator().validate(parsed, LinterSchema.loadDefault(), result, null);
+
+        assertEquals(List.of(4), linesOf(result, "duplicate_key"));
+    }
+
+    @Test
+    void duplicateOutputEntryIsADuplicateKey() {
+        String model = """
+                [outputs]
+                node.a.dsflow
+                node.b.dsflow
+                node.a.dsflow
+                """;
+        INIModelParser.ParsedModel parsed = INIModelParser.parse(model);
+        ValidationResult result = new ValidationResult();
+        new UniqueNameValidator().validate(parsed, LinterSchema.loadDefault(), result, null);
+
+        assertEquals(List.of(4), linesOf(result, "duplicate_key"));
     }
 
     @Test

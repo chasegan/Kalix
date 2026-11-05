@@ -86,7 +86,9 @@ place:
 
 The IDE's parsers are advisory (visualization, linting). The authoritative
 parse happens in the engine when the model is loaded over STDIO:
-`load_model_string` → `IniModelIO::read_model_string`
+`load_model_string` → `IniModelIO::read_model_string`, then
+`Model::validate_model_structure`, so a bad name or reference is an error on the
+load command rather than on the run
 (`src/apis/stdio/commands.rs`, `src/io/ini_model_io.rs`). The optimised model
 returned by a calibration is serialized by the same Rust class
 (`model_to_string`), so engine-emitted INI is engine-canonical by construction.
