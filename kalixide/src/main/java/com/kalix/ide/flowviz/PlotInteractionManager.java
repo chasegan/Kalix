@@ -1241,9 +1241,9 @@ public class PlotInteractionManager {
     /**
      * Applies limits that include an explicit Y range: the user has opted out of auto-Y,
      * otherwise the next wheel tick or drag would silently refit Y and discard them. The
-     * viewport lands first and the mode second, because {@code setAutoYMode} pushes a
-     * history entry immediately while the viewport update is coalesced -- this order
-     * records the two together, so undo restores both in one step.
+     * viewport lands first and the mode second: the viewport update only restarts the
+     * coalesce timer, while the model update records an entry at once with the viewport
+     * as it then is, so undo restores both in one step.
      */
     private void applyExplicitLimits(long startTime, long endTime, double minValue, double maxValue) {
         acceptNewAxes(startTime, endTime, minValue, maxValue);
