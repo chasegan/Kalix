@@ -1,8 +1,8 @@
 ---
-title: "ADR-0015: Resolve every expression reference at load; check output entries for layout only"
+title: "ADR-0017: Resolve every expression reference at load; check output entries for layout only"
 ---
 
-# ADR-0015: Resolve every expression reference at load; check output entries for layout only
+# ADR-0017: Resolve every expression reference at load; check output entries for layout only
 
 - **Status**: Proposed
 - **Date**: 2026-10-29 (§1 was already the engine's behaviour for every
