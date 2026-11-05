@@ -292,6 +292,9 @@ class LastRunTracker {
         // Expand the Last run node to show the new child
         timeseriesSourceTree.expandPath(new TreePath(lastRunNode.getPath()));
 
+        // The previous Last run's data leaves the pool unless a tab selects that run directly.
+        window.trimPool();
+
         // Refresh any plotted "[Last]" series to use the new Last run's data
         refreshLastSeries();
         lastChangeListeners.forEach(Runnable::run);
@@ -323,10 +326,11 @@ class LastRunTracker {
      * correct by construction — a {@code getSeries(LastSeries)} probe resolves to the
      * current run's data or to {@code null} (triggering a fetch).
      *
-     * <h3>Atomic swap (no empty-plot gap)</h3>
-     * Writing the new data via {@code addSeries} replaces the {@code RunSeries} entry in a
-     * single EDT operation; the previous Last's {@code RunSeries} entry is left untouched
-     * (it remains valid data for that specific run).
+     * <h3>What the previous Last's data does</h3>
+     * It stays in the pool under its own {@code RunSeries} key until the trim that follows
+     * the change of Last drops it, unless a tab selects that run directly. A tab showing
+     * Last keeps drawing the previous run's data until the new run's fetch lands: the trim
+     * tells no tab model that the pool changed, so each holds its display set until then.
      */
     private void refreshLastSeries() {
         if (lastRunInfo == null) {
@@ -380,12 +384,12 @@ class LastRunTracker {
                             if (capturedGeneration != lastRunGeneration) {
                                 return;
                             }
-                            window.publishSeries(ref, timeSeriesData);
-
-                            // Only refresh tabs if something on screen needs to redraw.
-                            if (tabManager.isSeriesSelectedOnAnyTab(ref)) {
-                                tabManager.updateAllTabs(false);
+                            // Unticked meanwhile: the pool keeps only what some tab selects.
+                            if (!tabManager.isSeriesSelectedOnAnyTab(ref)) {
+                                return;
                             }
+                            window.publishSeries(ref, timeSeriesData);
+                            tabManager.updateAllTabs(false);
                         });
                     })
                     .exceptionally(throwable -> {

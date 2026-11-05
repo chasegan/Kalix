@@ -639,7 +639,7 @@ class DerivedSeriesController {
         } else {
             target.setUnavailable(reason);
             plotDataSet.removeSeries(ref);
-            tabManager.addErrorSeriesInStatsTabs(ref, reason);
+            tabManager.seriesFailed(ref, reason);
         }
     }
 

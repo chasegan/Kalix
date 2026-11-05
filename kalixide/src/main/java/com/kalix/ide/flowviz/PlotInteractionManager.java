@@ -1,11 +1,11 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.flowviz.transform.XAxisType;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.rendering.AxisLimitCodec;
 import com.kalix.ide.flowviz.rendering.LineShape;
 import com.kalix.ide.flowviz.rendering.ViewPort;
-import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.io.SeriesFileWriter;
 import com.kalix.ide.io.SourceResCsvExporter;
@@ -54,8 +54,9 @@ import java.io.IOException;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -76,8 +77,12 @@ public class PlotInteractionManager {
 
     // Zoom and pan constants
     private static final double ZOOM_FACTOR = UIConstants.Zoom.ZOOM_FACTOR;
+    /** How far out from the plot edge an axis can be grabbed, in pixels. */
+    private static final int AXIS_GRAB_DEPTH = 50;
+    /** Pixels a press must move before it is an axis drag rather than a click (as the Key's). */
+    private static final int AXIS_DRAG_THRESHOLD = 5;
 
-    private final JComponent parentComponent;
+    private final FlowVizPanel panel;
     private final CoordinateDisplayManager coordinateDisplayManager;
 
     // State management
@@ -87,6 +92,8 @@ public class PlotInteractionManager {
     private JCheckBoxMenuItem autoYMenuItem;
     private JMenuItem pasteXAxisItem;
     private JMenuItem pasteYAxisItem;
+    private JMenuItem copyY2AxisItem;
+    private JMenuItem pasteY2AxisItem;
     private JCheckBoxMenuItem connectGapsMenuItem;
     private JCheckBoxMenuItem orphanMarkersMenuItem;
     private final Map<LineShape, JRadioButtonMenuItem> lineShapeMenuItems = new EnumMap<>(LineShape.class);
@@ -97,6 +104,12 @@ public class PlotInteractionManager {
     private Point zoomRectStartPoint;
     private Point zoomRectCurrentPoint;
 
+    // The axis end being dragged, from where, and the view it started from (null when none)
+    private AxisHandle axisDrag;
+    private Point axisDragPress;
+    private ViewPort axisDragStart;
+    private boolean axisDragMoved;
+
     // Data access callbacks
     private Supplier<DataSet> dataSetSupplier;
     private Supplier<ViewPort> viewportSupplier;
@@ -105,9 +118,14 @@ public class PlotInteractionManager {
     private Supplier<Rectangle> plotAreaSupplier;
     private Supplier<Boolean> precision64Supplier;
     private Supplier<java.io.File> baseDirectorySupplier;
-    private Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier;
     private Supplier<com.kalix.ide.flowviz.data.LabelResolver> labelResolverSupplier;
-    private BooleanSupplier autoYModeSupplier;
+    // Which series are drawn against the right axis; consulted only when the view has one
+    private Predicate<SeriesRef> onRightAxis = ref -> false;
+
+    // The Key entry under a point (null if none), and the one the open context menu is for
+    private Function<Point, SeriesRef> keyEntryLookup = point -> null;
+    private SeriesRef menuSeries;
+    private JMenuItem moveAxisItem;
 
 
     /**
@@ -122,23 +140,19 @@ public class PlotInteractionManager {
      * <li>Auto-Y mode support for intelligent Y-axis scaling</li>
      * </ul>
      *
-     * @param parentComponent The Swing component to handle interactions for and attach mouse listeners to
+     * @param panel The plot this manager serves: it draws the view, follows the model, and takes the mouse listeners
      * @param coordinateDisplayManager The coordinate display manager for integrated mouse position tracking
      */
-    public PlotInteractionManager(JComponent parentComponent, CoordinateDisplayManager coordinateDisplayManager) {
-        this.parentComponent = parentComponent;
+    public PlotInteractionManager(FlowVizPanel panel, CoordinateDisplayManager coordinateDisplayManager) {
+        this.panel = panel;
         this.coordinateDisplayManager = coordinateDisplayManager;
 
         setupContextMenu();
     }
 
     /**
-     * Sets up the data access callbacks for the manager to communicate with the parent plot component.
-     *
-     * <p>This method establishes the communication bridge between the interaction manager and
-     * the parent plot panel by providing callback functions for accessing plot data, viewport
-     * state, and plot area dimensions. This design allows the manager to operate independently
-     * while still accessing necessary plot information.
+     * Supplies what the panel keeps private: its display set, its viewport and the one way
+     * to set it as a user gesture, its visible series, and its plot area.
      *
      * @param dataSetSupplier Supplier function to access the current dataset for auto-Y calculations
      * @param viewportSupplier Supplier function to access the current viewport state
@@ -177,16 +191,6 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Sets the plot type supplier for format-aware data export.
-     * This allows the exporter to format data appropriately based on the plot type.
-     *
-     * @param plotTypeSupplier Supplier that returns the current plot type
-     */
-    public void setPlotTypeSupplier(Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier) {
-        this.plotTypeSupplier = plotTypeSupplier;
-    }
-
-    /**
      * Supplies the {@link com.kalix.ide.flowviz.data.LabelResolver} used to project
      * ref-keyed series to column headers when exporting CSV. May supply {@code null};
      * the exporter falls back to {@code ref.toString()} in that case.
@@ -214,6 +218,13 @@ public class PlotInteractionManager {
             @Override
             public void mousePressed(MouseEvent e) {
                 Rectangle plotArea = plotAreaSupplier.get();
+                // A new press is a new gesture: a release lost to a focus change, or a
+                // second button, must not leave an axis drag running into it. Finishing
+                // the drag also turns auto-Y off if the axis had already moved.
+                if (axisDrag != null) {
+                    finishAxisDrag(e.getPoint());
+                }
+                AxisHandle handle = axisHandleAt(e.getPoint());
                 // isPopupTrigger, checked on BOTH press and release: the trigger fires
                 // on press on macOS/Linux but on release on Windows, and macOS
                 // Ctrl+click is a popup gesture without being the right button.
@@ -224,21 +235,33 @@ public class PlotInteractionManager {
                     isZoomSelecting = true;
                     zoomRectStartPoint = new Point(e.getPoint());
                     zoomRectCurrentPoint = new Point(e.getPoint());
-                    parentComponent.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                    panel.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                } else if (SwingUtilities.isLeftMouseButton(e) && handle != null) {
+                    // A press on an axis grabs the end nearest it (the half it landed in)
+                    axisDrag = handle;
+                    axisDragPress = e.getPoint();
+                    axisDragStart = viewportSupplier.get();
+                    axisDragMoved = false;
+                    panel.setCursor(axisDrag.cursor());
                 } else if (SwingUtilities.isLeftMouseButton(e)) {
                     lastMousePos = e.getPoint();
                     isDragging = true;
-                    parentComponent.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                    panel.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                 }
             }
 
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (SwingUtilities.isLeftMouseButton(e) && e.getClickCount() == 2) {
-                    // Double-click: reset zoom to fit all data
+                    // Double-click: reset zoom to fit all data, or on an axis fit just that axis
                     Rectangle plotArea = plotAreaSupplier.get();
                     if (plotArea.contains(e.getPoint())) {
                         zoomToFit();
+                    } else {
+                        AxisHandle handle = axisHandleAt(e.getPoint());
+                        if (handle != null) {
+                            fitAxis(handle);
+                        }
                     }
                 }
             }
@@ -252,23 +275,27 @@ public class PlotInteractionManager {
                     showContextMenuIfPlotted(e);
                     return;
                 }
-                if (SwingUtilities.isLeftMouseButton(e) && isZoomSelecting) {
+                if (SwingUtilities.isLeftMouseButton(e) && axisDrag != null) {
+                    finishAxisDrag(e.getPoint());
+                } else if (SwingUtilities.isLeftMouseButton(e) && isZoomSelecting) {
                     completeZoomRectSelection();
                     isZoomSelecting = false;
                     zoomRectStartPoint = null;
                     zoomRectCurrentPoint = null;
-                    parentComponent.setCursor(Cursor.getDefaultCursor());
+                    panel.setCursor(Cursor.getDefaultCursor());
                 } else if (SwingUtilities.isLeftMouseButton(e)) {
                     isDragging = false;
-                    parentComponent.setCursor(Cursor.getDefaultCursor());
+                    panel.setCursor(Cursor.getDefaultCursor());
                 }
             }
 
             @Override
             public void mouseDragged(MouseEvent e) {
-                if (isZoomSelecting && zoomRectStartPoint != null) {
+                if (axisDrag != null) {
+                    handleAxisDrag(e.getPoint());
+                } else if (isZoomSelecting && zoomRectStartPoint != null) {
                     zoomRectCurrentPoint = new Point(e.getPoint());
-                    parentComponent.repaint();
+                    panel.repaint();
                 } else if (isDragging && lastMousePos != null) {
                     handlePan(e);
                 }
@@ -290,17 +317,203 @@ public class PlotInteractionManager {
         };
     }
 
-    /**
-     * Supplies the panel's auto-Y mode, which decides whether X-only navigation refits
-     * Y. Read on every use rather than mirrored, so undo/redo and every other path that
-     * changes the mode on the panel are seen here without any synchronisation.
-     */
-    public void setAutoYModeSupplier(BooleanSupplier autoYModeSupplier) {
-        this.autoYModeSupplier = autoYModeSupplier;
+    /** The plot's axes: time, the Y axis, and the secondary (right, y2) Y axis. */
+    enum Axis { X, Y, Y2 }
+
+    /** An axis end a press can grab: which axis, and which end moves. */
+    private enum AxisHandle {
+        X_START(Axis.X, Cursor.W_RESIZE_CURSOR), X_END(Axis.X, Cursor.E_RESIZE_CURSOR),
+        Y_MIN(Axis.Y, Cursor.S_RESIZE_CURSOR), Y_MAX(Axis.Y, Cursor.N_RESIZE_CURSOR),
+        Y2_MIN(Axis.Y2, Cursor.S_RESIZE_CURSOR), Y2_MAX(Axis.Y2, Cursor.N_RESIZE_CURSOR);
+
+        private final Axis axis;
+        private final int cursorType;
+
+        AxisHandle(Axis axis, int cursorType) {
+            this.axis = axis;
+            this.cursorType = cursorType;
+        }
+
+        Axis axis() {
+            return axis;
+        }
+
+        Cursor cursor() {
+            return Cursor.getPredefinedCursor(cursorType);
+        }
     }
 
+    /**
+     * The axis end under {@code point}, or null. Each axis is the band just outside its plot
+     * edge: below for X, left for Y, right for Y2 (only while there is one). The half of the
+     * axis the point is in picks the end -- bottom half the minimum, top half the maximum;
+     * left half the start, right half the end.
+     */
+    private AxisHandle axisHandleAt(Point point) {
+        ViewPort viewport = viewportSupplier.get();
+        if (viewport == null || !hasPlot()) {
+            return null;
+        }
+        Rectangle plot = plotAreaSupplier.get();
+        int right = plot.x + plot.width;
+        int bottom = plot.y + plot.height;
+        boolean besidePlot = point.y >= plot.y && point.y <= bottom;
+        boolean upperHalf = point.y < plot.y + plot.height / 2;
+        if (point.x >= plot.x && point.x <= right && point.y > bottom && point.y <= bottom + AXIS_GRAB_DEPTH) {
+            return point.x < plot.x + plot.width / 2 ? AxisHandle.X_START : AxisHandle.X_END;
+        }
+        if (besidePlot && point.x < plot.x && point.x >= plot.x - AXIS_GRAB_DEPTH) {
+            return upperHalf ? AxisHandle.Y_MAX : AxisHandle.Y_MIN;
+        }
+        if (besidePlot && viewport.hasY2() && point.x > right && point.x <= right + AXIS_GRAB_DEPTH) {
+            return upperHalf ? AxisHandle.Y2_MAX : AxisHandle.Y2_MIN;
+        }
+        return null;
+    }
+
+    /** The resize cursor for the axis end under {@code point}, or null when it is not over one. */
+    public Cursor axisCursorAt(Point point) {
+        AxisHandle handle = axisDrag != null ? axisDrag : axisHandleAt(point);
+        return handle != null ? handle.cursor() : null;
+    }
+
+    /**
+     * Moves the grabbed axis end so the value (or time) first grabbed follows the cursor,
+     * once the press has moved {@link #AXIS_DRAG_THRESHOLD} pixels, always computed from the
+     * view at the start of the drag. Only the grabbed axis comes
+     * from that view; the rest is the view as it is now, so a change made meanwhile (a data
+     * refresh, a series leaving the plot) is not undone. Dragging X obeys auto-Y like any
+     * other X-only change; dragging a value axis is an explicit range, so auto-Y goes off
+     * when the drag ends ({@link #finishAxisDrag}).
+     */
+    private void handleAxisDrag(Point point) {
+        ViewPort current = viewportSupplier.get();
+        if (axisDragStart == null || current == null) {
+            return;
+        }
+        // A view the start can no longer stand for ends the drag: the right axis went away,
+        // or the scale or X axis type changed, so its values would land on the wrong axis
+        if ((axisDrag.axis() == Axis.Y2 && !current.hasY2()) || current.getYAxisScale() != axisDragStart.getYAxisScale()
+                || current.getXAxisType() != axisDragStart.getXAxisType()) {
+            finishAxisDrag(point);
+            return;
+        }
+        if (!axisDragMoved && axisDragPress.distance(point) < AXIS_DRAG_THRESHOLD) {
+            return; // a click with a little jitter, as when double-clicking to fit
+        }
+        axisDragMoved = true;
+        ViewPort start = axisDragStart;
+        switch (axisDrag) {
+            case X_START, X_END -> {
+                ViewPort dragged = start.dragTimeEnd(axisDrag == AxisHandle.X_END, axisDragPress.x, point.x);
+                if (isAutoYMode()) {
+                    updateViewportWithFittedY(dragged.getStartTimeMs(), dragged.getEndTimeMs());
+                } else {
+                    viewportUpdater.accept(current.withTimeRange(dragged.getStartTimeMs(), dragged.getEndTimeMs()));
+                }
+            }
+            case Y_MIN, Y_MAX -> {
+                ViewPort dragged = start.dragValueEnd(axisDrag == AxisHandle.Y_MAX, axisDragPress.y, point.y);
+                acceptNewAxes(current.getStartTimeMs(), current.getEndTimeMs(),
+                    dragged.getMinValue(), dragged.getMaxValue());
+            }
+            case Y2_MIN, Y2_MAX -> {
+                ViewPort dragged = start.dragY2End(axisDrag == AxisHandle.Y2_MAX, axisDragPress.y, point.y);
+                acceptY2Bounds(dragged.getY2MinValue(), dragged.getY2MaxValue());
+            }
+        }
+        panel.repaint();
+    }
+
+    /**
+     * Ends an axis drag. A value axis that actually moved switches auto-Y off (shared by both
+     * axes), after the viewport, so undo records the two as one step (see
+     * {@link #applyExplicitLimits}). A press without movement changes nothing. The cursor
+     * goes back to whatever {@code point} is over, so a grabbable axis keeps its resize cursor.
+     */
+    private void finishAxisDrag(Point point) {
+        boolean valueAxis = axisDrag.axis() != Axis.X;
+        if (axisDragMoved && valueAxis) {
+            panel.model().update(st -> st.withAutoYMode(false));
+        }
+        axisDrag = null;
+        axisDragPress = null;
+        axisDragStart = null;
+        Cursor cursor = axisCursorAt(point);
+        panel.setCursor(cursor != null ? cursor : Cursor.getDefaultCursor());
+    }
+
+    /**
+     * Fits one axis to its data, leaving the others and the auto-Y mode alone: a one-off
+     * fit, as auto-Y would give that axis now. X fits the whole time span and then obeys
+     * auto-Y like any other X-only change; Y and Y2 fit their own series over the time
+     * window shown.
+     */
+    private void fitAxis(AxisHandle handle) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) {
+            return;
+        }
+        switch (handle.axis()) {
+            case X -> {
+                long[] timeRange = panel.fittedTimeRange();
+                if (timeRange != null) {
+                    applyXLimits(timeRange[0], timeRange[1]);
+                }
+            }
+            case Y -> {
+                double[] y = fittedRangeForAxis(Axis.Y);
+                if (y != null) {
+                    acceptNewAxes(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
+                }
+            }
+            case Y2 -> {
+                double[] y2 = fittedRangeForAxis(Axis.Y2);
+                if (y2 != null) {
+                    acceptY2Bounds(y2[0], y2[1]);
+                }
+            }
+        }
+    }
+
+    /**
+     * The panel's auto-Y mode, which decides whether X-only navigation refits Y. Read on
+     * every use rather than mirrored, so undo/redo and every other path that changes the
+     * mode are seen here without any synchronisation.
+     */
     private boolean isAutoYMode() {
-        return autoYModeSupplier.getAsBoolean();
+        return panel.isAutoYMode();
+    }
+
+    /** Sets the lookup from a point to the Key entry under it, for the axis menu item. */
+    public void setKeyEntryLookup(Function<Point, SeriesRef> keyEntryLookup) {
+        this.keyEntryLookup = keyEntryLookup;
+    }
+
+    /** Sets the test for which series are drawn against the right (y2) axis. */
+    public void setRightAxisTest(Predicate<SeriesRef> onRightAxis) {
+        this.onRightAxis = onRightAxis;
+    }
+
+    /**
+     * The padded value range of one value axis' ({@link Axis#Y} or {@link Axis#Y2}) series
+     * over the current time window: the range auto-Y would give that axis. Null when the
+     * axis has nothing showable there.
+     */
+    double[] fittedRangeForAxis(Axis axis) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) return null;
+        return fittedRangeForAxis(axis, currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(),
+            currentViewport.getYAxisScale());
+    }
+
+    /** As {@link #fittedRangeForAxis(Axis)}, over {@code [startTime, endTime]} on {@code scale}. */
+    double[] fittedRangeForAxis(Axis axis, long startTime, long endTime, YAxisScale scale) {
+        if (axis == Axis.X) {
+            throw new IllegalArgumentException("A value axis, Y or Y2, not X.");
+        }
+        boolean rightAxis = axis == Axis.Y2;
+        return calculateVisibleYRange(startTime, endTime, scale, ref -> onRightAxis.test(ref) == rightAxis);
     }
 
     /**
@@ -314,7 +527,7 @@ public class PlotInteractionManager {
         long startTime = currentViewport.getStartTimeMs();
         long endTime = currentViewport.getEndTimeMs();
         updateViewportWithFittedY(startTime, endTime);
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -325,14 +538,24 @@ public class PlotInteractionManager {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
 
-        // Calculate Y range for visible data in the time range
-        double[] yRange = calculateVisibleYRange(startTime, endTime);
+        // Fit each axis to its own series in the time range. An axis with nothing showable
+        // there keeps its range: a stock default can be off the scale (-1 on LOG).
+        YAxisScale scale = currentViewport.getYAxisScale();
+        double[] yRange = fittedRangeForAxis(Axis.Y, startTime, endTime, scale);
+        if (yRange == null) {
+            yRange = new double[]{currentViewport.getMinValue(), currentViewport.getMaxValue()};
+        }
 
-        // Create new viewport (preserve XAxisType for exceedance plots)
+        // Built from the current view: the X axis type (exceedance plots) and y2 carry over
         Rectangle plotArea = plotAreaSupplier.get();
-        ViewPort newViewport = new ViewPort(startTime, endTime, yRange[0], yRange[1],
-                                          plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                          currentViewport.getYAxisScale(), currentViewport.getXAxisType());
+        ViewPort newViewport = currentViewport.withTimeRange(startTime, endTime).withValueBounds(yRange[0], yRange[1])
+            .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+        if (currentViewport.hasY2()) {
+            double[] y2Range = fittedRangeForAxis(Axis.Y2, startTime, endTime, scale);
+            if (y2Range != null) {
+                newViewport = newViewport.withY2Bounds(y2Range[0], y2Range[1]);
+            }
+        }
         viewportUpdater.accept(newViewport);
     }
 
@@ -357,7 +580,7 @@ public class PlotInteractionManager {
             // Standard zoom: both axes about the plot centre
             viewportUpdater.accept(currentViewport.zoom(ZOOM_FACTOR));
         }
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -381,18 +604,14 @@ public class PlotInteractionManager {
             // Standard zoom: both axes about the plot centre
             viewportUpdater.accept(currentViewport.zoom(1.0 / ZOOM_FACTOR));
         }
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
      * Zooms to fit all data in the plot area.
      */
     public void zoomToFit() {
-        // This will be implemented by calling back to the parent component
-        // as it requires access to the full data fitting logic
-        if (parentComponent instanceof FlowVizPanel) {
-            ((FlowVizPanel) parentComponent).zoomToFit();
-        }
+        panel.zoomToFit();
     }
 
     /**
@@ -452,7 +671,7 @@ public class PlotInteractionManager {
                 .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height));
         }
 
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -481,7 +700,7 @@ public class PlotInteractionManager {
         }
 
         lastMousePos = e.getPoint();
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -516,12 +735,15 @@ public class PlotInteractionManager {
         double minValue = currentViewport.screenYToValue(bottomY); // bottom of screen = min value
 
         Rectangle plotArea = plotAreaSupplier.get();
-        ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
-                plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                currentViewport.getYAxisScale(), currentViewport.getXAxisType());
+        ViewPort newViewport = currentViewport.withTimeRange(startTime, endTime).withValueBounds(minValue, maxValue)
+            .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
+        if (currentViewport.hasY2()) {
+            ViewPort y2View = currentViewport.forY2();
+            newViewport = newViewport.withY2Bounds(y2View.screenYToValue(bottomY), y2View.screenYToValue(topY));
+        }
         viewportUpdater.accept(newViewport);
 
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -552,19 +774,18 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Calculates the visible Y range for a given time range (used in auto-Y mode).
+     * Calculates the visible Y range on {@code yAxisScale} of the series {@code include}
+     * accepts, for a given time range (used in auto-Y mode and zoom to fit). Null when none
+     * of them has a showable value there.
      */
-    private double[] calculateVisibleYRange(long startTime, long endTime) {
+    private double[] calculateVisibleYRange(long startTime, long endTime, YAxisScale yAxisScale,
+                                            Predicate<SeriesRef> include) {
         DataSet dataSet = dataSetSupplier.get();
         List<com.kalix.ide.flowviz.data.SeriesRef> visibleSeries = visibleSeriesSupplier.get();
 
         if (dataSet == null || dataSet.isEmpty() || visibleSeries.isEmpty()) {
-            return new double[]{-1.0, 1.0}; // Default range
+            return null;
         }
-
-        // Get current scale to filter invalid values
-        ViewPort currentViewport = viewportSupplier.get();
-        YAxisScale yAxisScale = currentViewport != null ? currentViewport.getYAxisScale() : YAxisScale.LINEAR;
 
         // Values at or below the scale's domain floor have no position on the axis (LOG:
         // y <= 0). The scale owns the rule; resolved once here so the per-point check in
@@ -581,12 +802,26 @@ public class PlotInteractionManager {
         // A full-array scan here made pan cost proportional to TOTAL points, which is
         // exactly where the "millions of points smoothly" promise died.
         for (com.kalix.ide.flowviz.data.SeriesRef ref : visibleSeries) {
+            if (!include.test(ref)) continue;
             var series = dataSet.getSeries(ref);
             if (series == null) continue;
 
             double[] values = series.getValues();
             boolean[] validPoints = series.getValidPoints();
             var range = series.getIndexRange(startTime, endTime);
+
+            // The whole series in range (zoom to fit, a zoomed-out view): its cached extent
+            // is the answer when all of it is showable, so no scan
+            Double seriesMin = series.getMinValue();
+            Double seriesMax = series.getMaxValue();
+            if (range.startIndex == 0 && range.endIndex == series.getPointCount()
+                    && seriesMin != null && seriesMax != null && seriesMin > domainFloor
+                    && !Double.isNaN(seriesMax)) {
+                minValue = Math.min(minValue, seriesMin);
+                maxValue = Math.max(maxValue, seriesMax);
+                hasValidData = true;
+                continue;
+            }
 
             for (int i = range.startIndex; i < range.endIndex; i++) {
                 if (!validPoints[i]) continue;
@@ -603,7 +838,7 @@ public class PlotInteractionManager {
         }
 
         if (!hasValidData) {
-            return new double[]{-1.0, 1.0}; // Default range when no data
+            return null;
         }
 
         // Clamp minimum value for log scale to prevent zooming too far out
@@ -648,7 +883,14 @@ public class PlotInteractionManager {
         if (!hasPlot()) {
             return;
         }
-        contextMenu.show(parentComponent, e.getX(), e.getY());
+        // Over a Key entry the menu can move that series between axes; elsewhere the
+        // item is hidden (ADR-0002 §4).
+        menuSeries = keyEntryLookup.apply(e.getPoint());
+        moveAxisItem.setVisible(menuSeries != null);
+        if (menuSeries != null) {
+            moveAxisItem.setText(onRightAxis.test(menuSeries) ? "Move to Y axis" : "Move to secondary Y axis");
+        }
+        contextMenu.show(panel, e.getX(), e.getY());
     }
 
     /**
@@ -697,7 +939,7 @@ public class PlotInteractionManager {
 
         // Primary block (ADR-0002 §1, block 1): the default action, which on a plot
         // is what double-click does (see the mouse listener). The skeleton's table lists
-        // "Zoom to fit" under block 7 for panels where it is merely a view command; here
+        // "Zoom to fit" under block 8 for panels where it is merely a view command; here
         // it is the primary one, so it leads.
         JMenuItem zoomToFitItem = new JMenuItem("Zoom to fit");
         zoomToFitItem.addActionListener(e -> zoomToFit());
@@ -737,7 +979,7 @@ public class PlotInteractionManager {
                 x = AxisLimitCodec.parseXLimits(text, currentViewport.getXAxisType());
                 ViewPort.validateBounds(x[0], x[1], currentViewport.getMinValue(), currentViewport.getMaxValue());
             } catch (IllegalArgumentException ex) {
-                showInvalidInput(parentComponent, ex.getMessage());
+                showInvalidInput(panel, ex.getMessage());
                 return;
             }
             applyXLimits(x[0], x[1]);
@@ -764,16 +1006,44 @@ public class PlotInteractionManager {
                 y = AxisLimitCodec.parseYLimits(text);
                 ViewPort.validateBounds(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
             } catch (IllegalArgumentException ex) {
-                showInvalidInput(parentComponent, ex.getMessage());
+                showInvalidInput(panel, ex.getMessage());
                 return;
             }
             applyExplicitLimits(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
         });
         contextMenu.add(pasteYAxisItem);
 
+        // The right axis' pair, shown only while the plot has one (4). Same codec as Y.
+        copyY2AxisItem = new JMenuItem("Copy secondary Y axis");
+        copyY2AxisItem.addActionListener(e -> {
+            ViewPort currentViewport = viewportSupplier.get();
+            if (currentViewport != null && currentViewport.hasY2()) {
+                copyStringToClipboard(AxisLimitCodec.formatYLimits(currentViewport.forY2()));
+            }
+        });
+        contextMenu.add(copyY2AxisItem);
+        pasteY2AxisItem = new JMenuItem("Paste secondary Y axis");
+        pasteY2AxisItem.addActionListener(e -> {
+            ViewPort currentViewport = viewportSupplier.get();
+            String text = readClipboardText();
+            if (currentViewport == null || !currentViewport.hasY2() || text == null) {
+                return;
+            }
+            double[] y2;
+            try {
+                y2 = parseY2Limits(text, currentViewport);
+            } catch (IllegalArgumentException ex) {
+                showInvalidInput(panel, ex.getMessage());
+                return;
+            }
+            acceptY2Bounds(y2[0], y2[1]);
+            panel.model().update(st -> st.withAutoYMode(false)); // an explicit range, as for Paste Y axis
+        });
+        contextMenu.add(pasteY2AxisItem);
+
         contextMenu.addSeparator();
 
-        // View/state block (block 7): everything that changes how the data is shown, never
+        // View/state block (block 8): everything that changes how the data is shown, never
         // the data. "Set axis limits…" carries an ellipsis because it opens a dialog (2.4);
         // the submenus are category nouns with value children (6).
         JMenuItem setAxes = new JMenuItem("Set axis limits…");
@@ -782,9 +1052,7 @@ public class PlotInteractionManager {
 
         autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
         autoYMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setAutoYMode(autoYMenuItem.isSelected());
-            }
+            panel.model().update(st -> st.withAutoYMode(autoYMenuItem.isSelected()));
         });
         contextMenu.add(autoYMenuItem);
 
@@ -794,9 +1062,7 @@ public class PlotInteractionManager {
         for (YAxisScale scale : YAxisScale.values()) {
             JRadioButtonMenuItem scaleItem = new JRadioButtonMenuItem(scale.getDisplayName());
             scaleItem.addActionListener(e -> {
-                if (parentComponent instanceof FlowVizPanel) {
-                    ((FlowVizPanel) parentComponent).setYAxisScale(scale);
-                }
+                panel.model().update(st -> st.withYAxisScale(scale));
             });
             yAxisScaleGroup.add(scaleItem);
             yAxisScaleMenu.add(scaleItem);
@@ -808,9 +1074,7 @@ public class PlotInteractionManager {
         // never reads identity back out of label text (ADR-0003 §2.2).
         JMenu lineShapeMenu = new JMenu("Line shape");
         lineShapeMenuItems.putAll(LineShapeMenu.addItems(lineShapeMenu, shape -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setLineShape(shape);
-            }
+            panel.model().update(st -> st.withLineShape(shape));
         }));
         contextMenu.add(lineShapeMenu);
 
@@ -822,17 +1086,13 @@ public class PlotInteractionManager {
 
         connectGapsMenuItem = new JCheckBoxMenuItem("Draw across gaps");
         connectGapsMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setConnectAcrossGaps(connectGapsMenuItem.isSelected());
-            }
+            panel.setConnectAcrossGaps(connectGapsMenuItem.isSelected());
         });
         missingDataMenu.add(connectGapsMenuItem);
 
         orphanMarkersMenuItem = new JCheckBoxMenuItem("Mark orphan points");
         orphanMarkersMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setShowOrphanMarkers(orphanMarkersMenuItem.isSelected());
-            }
+            panel.setShowOrphanMarkers(orphanMarkersMenuItem.isSelected());
         });
         missingDataMenu.add(orphanMarkersMenuItem);
 
@@ -840,14 +1100,20 @@ public class PlotInteractionManager {
 
         contextMenu.addSeparator();
 
-        // Still block 7, but a command rather than a setting (6), so it sits apart from the
-        // settings above. "Key" is what the legend calls itself on screen and on the
-        // toolbar, so the item says "Key" too (2.2: one name per concept).
+        // Still block 8, but commands rather than settings (6), so they sit apart from the
+        // settings above. The axis move is shown only over a Key entry (4).
+        moveAxisItem = new JMenuItem("Move to secondary Y axis");
+        moveAxisItem.addActionListener(e -> {
+            if (menuSeries != null) {
+                panel.model().update(st -> st.withSeriesOnRightAxis(menuSeries, !st.isOnRightAxis(menuSeries)));
+            }
+        });
+        contextMenu.add(moveAxisItem);
+        // "Key" is what the legend calls itself on screen and on the toolbar, so the item
+        // says "Key" too (2.2: one name per concept).
         JMenuItem resetKeyItem = new JMenuItem("Reset key");
         resetKeyItem.addActionListener(e -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.resetLegend();
-            }
+            panel.resetLegend();
         });
         contextMenu.add(resetKeyItem);
 
@@ -858,26 +1124,22 @@ public class PlotInteractionManager {
                 boolean clipboardHasText = hasClipboardText();
                 pasteXAxisItem.setEnabled(clipboardHasText);
                 pasteYAxisItem.setEnabled(clipboardHasText);
+                ViewPort currentViewport = viewportSupplier.get();
+                boolean hasY2 = currentViewport != null && currentViewport.hasY2();
+                copyY2AxisItem.setVisible(hasY2);
+                pasteY2AxisItem.setVisible(hasY2);
+                pasteY2AxisItem.setEnabled(clipboardHasText);
 
-                // Sync the checkbox state with the current FlowVizPanel state
-                if (parentComponent instanceof FlowVizPanel vizPanel) {
-                    // Get the current auto-Y state from the FlowVizPanel
-                    autoYMenuItem.setSelected(vizPanel.isAutoYMode());
-
-                    // Sync line shape
-                    lineShapeMenuItems.get(vizPanel.getLineShape()).setSelected(true);
-
-                    // Sync gap-handling toggles
-                    connectGapsMenuItem.setSelected(vizPanel.isConnectAcrossGaps());
-                    orphanMarkersMenuItem.setSelected(vizPanel.isShowOrphanMarkers());
-
-                    // Get the current Y-axis scale and select the corresponding radio button
-                    YAxisScale currentScale = vizPanel.getYAxisScale();
-                    for (int i = 0; i < yAxisScaleMenu.getItemCount(); i++) {
-                        JMenuItem item = yAxisScaleMenu.getItem(i);
-                        if (item instanceof JRadioButtonMenuItem radioItem) {
-                            radioItem.setSelected(radioItem.getText().equals(currentScale.getDisplayName()));
-                        }
+                // Sync the menu with the plot's current state
+                autoYMenuItem.setSelected(isAutoYMode());
+                lineShapeMenuItems.get(panel.getLineShape()).setSelected(true);
+                connectGapsMenuItem.setSelected(panel.isConnectAcrossGaps());
+                orphanMarkersMenuItem.setSelected(panel.isShowOrphanMarkers());
+                YAxisScale currentScale = panel.getYAxisScale();
+                for (int i = 0; i < yAxisScaleMenu.getItemCount(); i++) {
+                    JMenuItem item = yAxisScaleMenu.getItem(i);
+                    if (item instanceof JRadioButtonMenuItem radioItem) {
+                        radioItem.setSelected(radioItem.getText().equals(currentScale.getDisplayName()));
                     }
                 }
             }
@@ -922,7 +1184,7 @@ public class PlotInteractionManager {
 
     /** A clipboard transport failure: nothing the user typed was wrong. */
     private void showClipboardError(String message) {
-        DialogUtils.showError(parentComponent, message, "Clipboard");
+        DialogUtils.showError(panel, message, "Clipboard");
     }
 
     /** One error dialog for every rejected axis limit, whichever path it arrived by. */
@@ -941,7 +1203,7 @@ public class PlotInteractionManager {
         }
         if (isAutoYMode()) {
             updateViewportWithFittedY(startTime, endTime);
-            parentComponent.repaint();
+            panel.repaint();
         } else {
             acceptNewAxes(startTime, endTime, currentViewport.getMinValue(), currentViewport.getMaxValue());
         }
@@ -950,15 +1212,13 @@ public class PlotInteractionManager {
     /**
      * Applies limits that include an explicit Y range: the user has opted out of auto-Y,
      * otherwise the next wheel tick or drag would silently refit Y and discard them. The
-     * viewport lands first and the mode second, because {@code setAutoYMode} pushes a
-     * history entry immediately while the viewport update is coalesced -- this order
-     * records the two together, so undo restores both in one step.
+     * viewport lands first and the mode second: the viewport update only restarts the
+     * coalesce timer, while the model update records an entry at once with the viewport
+     * as it then is, so undo restores both in one step.
      */
     private void applyExplicitLimits(long startTime, long endTime, double minValue, double maxValue) {
         acceptNewAxes(startTime, endTime, minValue, maxValue);
-        if (parentComponent instanceof FlowVizPanel vizPanel) {
-            vizPanel.setAutoYMode(false);
-        }
+        panel.model().update(st -> st.withAutoYMode(false));
     }
 
     /**
@@ -977,6 +1237,9 @@ public class PlotInteractionManager {
 
         JTextField xField = new JTextField(AxisLimitCodec.formatXLimits(currentViewport), 32);
         JTextField yField = new JTextField(AxisLimitCodec.formatYLimits(currentViewport), 32);
+        // A secondary Y row only while the plot has one
+        JTextField y2Field = currentViewport.hasY2()
+            ? new JTextField(AxisLimitCodec.formatYLimits(currentViewport.forY2()), 32) : null;
 
         JPanel form = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
@@ -984,8 +1247,11 @@ public class PlotInteractionManager {
         gbc.anchor = GridBagConstraints.WEST;
         addAxisFieldRow(form, gbc, 0, "X limits:", xField);
         addAxisFieldRow(form, gbc, 1, "Y limits:", yField);
+        if (y2Field != null) {
+            addAxisFieldRow(form, gbc, 2, "Secondary Y limits:", y2Field);
+        }
 
-        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(parentComponent),
+        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(panel),
             "Set axis limits", Dialog.ModalityType.APPLICATION_MODAL);  // sentence case (2.1)
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.setLayout(new BorderLayout());
@@ -997,12 +1263,20 @@ public class PlotInteractionManager {
                 long[] x = AxisLimitCodec.parseXLimits(xField.getText(), xAxisType);
                 double[] y = AxisLimitCodec.parseYLimits(yField.getText());
                 ViewPort.validateBounds(x[0], x[1], y[0], y[1]);
-                // An edited Y field is an explicit Y range; an untouched one (the codec's
-                // formatting round-trips exactly) means the user only wanted X, which obeys
-                // auto-Y like any other X-only change.
+                double[] y2 = y2Field != null ? parseY2Limits(y2Field.getText(), currentViewport) : null;
+                // An edited Y or Y2 field is an explicit value range; untouched ones (the
+                // codec's formatting round-trips exactly) mean the user only wanted X, which
+                // obeys auto-Y like any other X-only change. Auto-Y is shared, so either
+                // edit turns it off for both axes.
                 boolean yEdited = y[0] != currentViewport.getMinValue() || y[1] != currentViewport.getMaxValue();
-                if (yEdited) {
-                    applyExplicitLimits(x[0], x[1], y[0], y[1]);
+                boolean y2Edited = y2 != null
+                    && (y2[0] != currentViewport.getY2MinValue() || y2[1] != currentViewport.getY2MaxValue());
+                if (yEdited || y2Edited) {
+                    acceptNewAxes(x[0], x[1], y[0], y[1]);
+                    if (y2Edited) {
+                        acceptY2Bounds(y2[0], y2[1]);
+                    }
+                    panel.model().update(st -> st.withAutoYMode(false));
                 } else {
                     applyXLimits(x[0], x[1]);
                 }
@@ -1032,8 +1306,32 @@ public class PlotInteractionManager {
         });
 
         dialog.pack();
-        dialog.setLocationRelativeTo(parentComponent);
+        dialog.setLocationRelativeTo(panel);
         dialog.setVisible(true);
+    }
+
+    /**
+     * Parses and checks right-axis limits, naming Y2 in the message so it cannot be taken
+     * for the Y row.
+     */
+    private static double[] parseY2Limits(String text, ViewPort currentViewport) {
+        try {
+            double[] y2 = AxisLimitCodec.parseYLimits(text);
+            ViewPort.validateBounds(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y2[0], y2[1]);
+            return y2;
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException("Secondary Y limits: " + ex.getMessage(), ex);
+        }
+    }
+
+    /** Sets the right axis' range, leaving everything else as it is. */
+    private void acceptY2Bounds(double minValue, double maxValue) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null || !currentViewport.hasY2()) {
+            return;
+        }
+        viewportUpdater.accept(currentViewport.withY2Bounds(minValue, maxValue));
+        panel.repaint();
     }
 
     /**
@@ -1062,13 +1360,12 @@ public class PlotInteractionManager {
         if (currentViewport == null) {
             return;
         }
+        // Built from the current view: the window's scale, X axis type and y2 carry over
         Rectangle plotArea = plotAreaSupplier.get();
-        ViewPort newViewport = new ViewPort(startTime, endTime, minValue, maxValue,
-                                            // vvv Window itself does not move or change scale/type vvv
-                                            plotArea.x, plotArea.y, plotArea.width, plotArea.height,
-                                            currentViewport.getYAxisScale(), currentViewport.getXAxisType());
+        ViewPort newViewport = currentViewport.withTimeRange(startTime, endTime).withValueBounds(minValue, maxValue)
+            .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
         viewportUpdater.accept(newViewport);
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -1077,13 +1374,13 @@ public class PlotInteractionManager {
     public void saveData() {
         DataSet dataSet = dataSetSupplier.get();
         if (dataSet == null || dataSet.isEmpty()) {
-            JOptionPane.showMessageDialog(parentComponent, "No data to save.", "Save Data", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(panel, "No data to save.", "Save Data", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
         // The suggested name carries the default format's extension; whatever the user
         // settles on is taken verbatim, and saveAs*Format normalises it from there.
-        java.util.Optional<File> chosen = KalixFileDialog.saveFile(parentComponent)
+        java.util.Optional<File> chosen = KalixFileDialog.saveFile(panel)
             .title("Save Data")
             .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
             .suggestedName("timeseries_data.csv")
@@ -1119,22 +1416,21 @@ public class PlotInteractionManager {
     private void saveAsCsvFormat(File file) {
         try {
             DataSet dataSet = dataSetSupplier.get();
-            com.kalix.ide.flowviz.transform.PlotType plotType =
-                (plotTypeSupplier != null) ? plotTypeSupplier.get() : null;
+            com.kalix.ide.flowviz.transform.PlotType plotType = panel.getPlotType();
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
             // .csv.zip counts as CSV (the exporter zips by name); anything else gains .csv.
             file = SeriesFileWriter.write(dataSet, file, plotType, labelResolver, false);
-            JOptionPane.showMessageDialog(parentComponent,
+            JOptionPane.showMessageDialog(panel,
                 "Data saved successfully to " + file.getName(),
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Error saving data: " + e.getMessage(),
                 "Save Error");
         } catch (IllegalArgumentException e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Invalid data: " + e.getMessage(),
                 "Save Error");
         }
@@ -1154,16 +1450,16 @@ public class PlotInteractionManager {
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
             SourceResCsvExporter.export(dataSet, file, labelResolver);
-            JOptionPane.showMessageDialog(parentComponent,
+            JOptionPane.showMessageDialog(panel,
                 "Data saved successfully to " + file.getName(),
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Error saving data: " + e.getMessage(),
                 "Save Error");
         } catch (IllegalArgumentException e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Invalid data: " + e.getMessage(),
                 "Save Error");
         }
@@ -1182,13 +1478,13 @@ public class PlotInteractionManager {
             File pxtFile = SeriesFileWriter.write(dataSet, file, null, labelResolver, use64BitPrecision);
             String pxtName = pxtFile.getName();
 
-            JOptionPane.showMessageDialog(parentComponent,
+            JOptionPane.showMessageDialog(panel,
                 "Data saved successfully to " + pxtName + " and "
                     + pxtName.substring(0, pxtName.length() - ".pxt".length()) + ".pxb",
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Error saving data: " + e.getMessage(),
                 "Save Error");
         }
