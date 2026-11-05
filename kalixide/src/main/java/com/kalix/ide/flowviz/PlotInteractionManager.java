@@ -82,7 +82,7 @@ public class PlotInteractionManager {
     /** Pixels a press must move before it is an axis drag rather than a click (as the Key's). */
     private static final int AXIS_DRAG_THRESHOLD = 5;
 
-    private final FlowVizPanel parentComponent;
+    private final FlowVizPanel panel;
     private final CoordinateDisplayManager coordinateDisplayManager;
 
     // State management
@@ -140,11 +140,11 @@ public class PlotInteractionManager {
      * <li>Auto-Y mode support for intelligent Y-axis scaling</li>
      * </ul>
      *
-     * @param parentComponent The plot this manager serves: it draws the view, follows the model, and takes the mouse listeners
+     * @param panel The plot this manager serves: it draws the view, follows the model, and takes the mouse listeners
      * @param coordinateDisplayManager The coordinate display manager for integrated mouse position tracking
      */
-    public PlotInteractionManager(FlowVizPanel parentComponent, CoordinateDisplayManager coordinateDisplayManager) {
-        this.parentComponent = parentComponent;
+    public PlotInteractionManager(FlowVizPanel panel, CoordinateDisplayManager coordinateDisplayManager) {
+        this.panel = panel;
         this.coordinateDisplayManager = coordinateDisplayManager;
 
         setupContextMenu();
@@ -235,18 +235,18 @@ public class PlotInteractionManager {
                     isZoomSelecting = true;
                     zoomRectStartPoint = new Point(e.getPoint());
                     zoomRectCurrentPoint = new Point(e.getPoint());
-                    parentComponent.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+                    panel.setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
                 } else if (SwingUtilities.isLeftMouseButton(e) && handle != null) {
                     // A press on an axis grabs the end nearest it (the half it landed in)
                     axisDrag = handle;
                     axisDragPress = e.getPoint();
                     axisDragStart = viewportSupplier.get();
                     axisDragMoved = false;
-                    parentComponent.setCursor(axisDrag.cursor());
+                    panel.setCursor(axisDrag.cursor());
                 } else if (SwingUtilities.isLeftMouseButton(e)) {
                     lastMousePos = e.getPoint();
                     isDragging = true;
-                    parentComponent.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                    panel.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
                 }
             }
 
@@ -282,10 +282,10 @@ public class PlotInteractionManager {
                     isZoomSelecting = false;
                     zoomRectStartPoint = null;
                     zoomRectCurrentPoint = null;
-                    parentComponent.setCursor(Cursor.getDefaultCursor());
+                    panel.setCursor(Cursor.getDefaultCursor());
                 } else if (SwingUtilities.isLeftMouseButton(e)) {
                     isDragging = false;
-                    parentComponent.setCursor(Cursor.getDefaultCursor());
+                    panel.setCursor(Cursor.getDefaultCursor());
                 }
             }
 
@@ -295,7 +295,7 @@ public class PlotInteractionManager {
                     handleAxisDrag(e.getPoint());
                 } else if (isZoomSelecting && zoomRectStartPoint != null) {
                     zoomRectCurrentPoint = new Point(e.getPoint());
-                    parentComponent.repaint();
+                    panel.repaint();
                 } else if (isDragging && lastMousePos != null) {
                     handlePan(e);
                 }
@@ -422,7 +422,7 @@ public class PlotInteractionManager {
                 acceptY2Bounds(dragged.getY2MinValue(), dragged.getY2MaxValue());
             }
         }
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -434,13 +434,13 @@ public class PlotInteractionManager {
     private void finishAxisDrag(Point point) {
         boolean valueAxis = axisDrag.axis() != Axis.X;
         if (axisDragMoved && valueAxis) {
-            parentComponent.model().update(st -> st.withAutoYMode(false));
+            panel.model().update(st -> st.withAutoYMode(false));
         }
         axisDrag = null;
         axisDragPress = null;
         axisDragStart = null;
         Cursor cursor = axisCursorAt(point);
-        parentComponent.setCursor(cursor != null ? cursor : Cursor.getDefaultCursor());
+        panel.setCursor(cursor != null ? cursor : Cursor.getDefaultCursor());
     }
 
     /**
@@ -456,7 +456,7 @@ public class PlotInteractionManager {
         }
         switch (handle.axis()) {
             case X -> {
-                long[] timeRange = parentComponent.fittedTimeRange();
+                long[] timeRange = panel.fittedTimeRange();
                 if (timeRange != null) {
                     applyXLimits(timeRange[0], timeRange[1]);
                 }
@@ -482,7 +482,7 @@ public class PlotInteractionManager {
      * mode are seen here without any synchronisation.
      */
     private boolean isAutoYMode() {
-        return parentComponent.isAutoYMode();
+        return panel.isAutoYMode();
     }
 
     /** Sets the lookup from a point to the Key entry under it, for the axis menu item. */
@@ -527,7 +527,7 @@ public class PlotInteractionManager {
         long startTime = currentViewport.getStartTimeMs();
         long endTime = currentViewport.getEndTimeMs();
         updateViewportWithFittedY(startTime, endTime);
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -580,7 +580,7 @@ public class PlotInteractionManager {
             // Standard zoom: both axes about the plot centre
             viewportUpdater.accept(currentViewport.zoom(ZOOM_FACTOR));
         }
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -604,14 +604,14 @@ public class PlotInteractionManager {
             // Standard zoom: both axes about the plot centre
             viewportUpdater.accept(currentViewport.zoom(1.0 / ZOOM_FACTOR));
         }
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
      * Zooms to fit all data in the plot area.
      */
     public void zoomToFit() {
-        parentComponent.zoomToFit();
+        panel.zoomToFit();
     }
 
     /**
@@ -671,7 +671,7 @@ public class PlotInteractionManager {
                 .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height));
         }
 
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -700,7 +700,7 @@ public class PlotInteractionManager {
         }
 
         lastMousePos = e.getPoint();
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -743,7 +743,7 @@ public class PlotInteractionManager {
         }
         viewportUpdater.accept(newViewport);
 
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -890,7 +890,7 @@ public class PlotInteractionManager {
         if (menuSeries != null) {
             moveAxisItem.setText(onRightAxis.test(menuSeries) ? "Move to Y axis" : "Move to secondary Y axis");
         }
-        contextMenu.show(parentComponent, e.getX(), e.getY());
+        contextMenu.show(panel, e.getX(), e.getY());
     }
 
     /**
@@ -979,7 +979,7 @@ public class PlotInteractionManager {
                 x = AxisLimitCodec.parseXLimits(text, currentViewport.getXAxisType());
                 ViewPort.validateBounds(x[0], x[1], currentViewport.getMinValue(), currentViewport.getMaxValue());
             } catch (IllegalArgumentException ex) {
-                showInvalidInput(parentComponent, ex.getMessage());
+                showInvalidInput(panel, ex.getMessage());
                 return;
             }
             applyXLimits(x[0], x[1]);
@@ -1006,7 +1006,7 @@ public class PlotInteractionManager {
                 y = AxisLimitCodec.parseYLimits(text);
                 ViewPort.validateBounds(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
             } catch (IllegalArgumentException ex) {
-                showInvalidInput(parentComponent, ex.getMessage());
+                showInvalidInput(panel, ex.getMessage());
                 return;
             }
             applyExplicitLimits(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
@@ -1033,11 +1033,11 @@ public class PlotInteractionManager {
             try {
                 y2 = parseY2Limits(text, currentViewport);
             } catch (IllegalArgumentException ex) {
-                showInvalidInput(parentComponent, ex.getMessage());
+                showInvalidInput(panel, ex.getMessage());
                 return;
             }
             acceptY2Bounds(y2[0], y2[1]);
-            parentComponent.model().update(st -> st.withAutoYMode(false)); // an explicit range, as for Paste Y axis
+            panel.model().update(st -> st.withAutoYMode(false)); // an explicit range, as for Paste Y axis
         });
         contextMenu.add(pasteY2AxisItem);
 
@@ -1052,7 +1052,7 @@ public class PlotInteractionManager {
 
         autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
         autoYMenuItem.addActionListener(e -> {
-            parentComponent.model().update(st -> st.withAutoYMode(autoYMenuItem.isSelected()));
+            panel.model().update(st -> st.withAutoYMode(autoYMenuItem.isSelected()));
         });
         contextMenu.add(autoYMenuItem);
 
@@ -1062,7 +1062,7 @@ public class PlotInteractionManager {
         for (YAxisScale scale : YAxisScale.values()) {
             JRadioButtonMenuItem scaleItem = new JRadioButtonMenuItem(scale.getDisplayName());
             scaleItem.addActionListener(e -> {
-                parentComponent.model().update(st -> st.withYAxisScale(scale));
+                panel.model().update(st -> st.withYAxisScale(scale));
             });
             yAxisScaleGroup.add(scaleItem);
             yAxisScaleMenu.add(scaleItem);
@@ -1074,7 +1074,7 @@ public class PlotInteractionManager {
         // never reads identity back out of label text (ADR-0003 §2.2).
         JMenu lineShapeMenu = new JMenu("Line shape");
         lineShapeMenuItems.putAll(LineShapeMenu.addItems(lineShapeMenu, shape -> {
-            parentComponent.model().update(st -> st.withLineShape(shape));
+            panel.model().update(st -> st.withLineShape(shape));
         }));
         contextMenu.add(lineShapeMenu);
 
@@ -1086,13 +1086,13 @@ public class PlotInteractionManager {
 
         connectGapsMenuItem = new JCheckBoxMenuItem("Draw across gaps");
         connectGapsMenuItem.addActionListener(e -> {
-            parentComponent.setConnectAcrossGaps(connectGapsMenuItem.isSelected());
+            panel.setConnectAcrossGaps(connectGapsMenuItem.isSelected());
         });
         missingDataMenu.add(connectGapsMenuItem);
 
         orphanMarkersMenuItem = new JCheckBoxMenuItem("Mark orphan points");
         orphanMarkersMenuItem.addActionListener(e -> {
-            parentComponent.setShowOrphanMarkers(orphanMarkersMenuItem.isSelected());
+            panel.setShowOrphanMarkers(orphanMarkersMenuItem.isSelected());
         });
         missingDataMenu.add(orphanMarkersMenuItem);
 
@@ -1105,7 +1105,7 @@ public class PlotInteractionManager {
         moveAxisItem = new JMenuItem("Move to secondary Y axis");
         moveAxisItem.addActionListener(e -> {
             if (menuSeries != null) {
-                parentComponent.model().update(st -> st.withSeriesOnRightAxis(menuSeries, !st.isOnRightAxis(menuSeries)));
+                panel.model().update(st -> st.withSeriesOnRightAxis(menuSeries, !st.isOnRightAxis(menuSeries)));
             }
         });
         contextMenu.add(moveAxisItem);
@@ -1113,7 +1113,7 @@ public class PlotInteractionManager {
         // says "Key" too (2.2: one name per concept).
         JMenuItem resetKeyItem = new JMenuItem("Reset key");
         resetKeyItem.addActionListener(e -> {
-            parentComponent.resetLegend();
+            panel.resetLegend();
         });
         contextMenu.add(resetKeyItem);
 
@@ -1132,10 +1132,10 @@ public class PlotInteractionManager {
 
                 // Sync the menu with the plot's current state
                 autoYMenuItem.setSelected(isAutoYMode());
-                lineShapeMenuItems.get(parentComponent.getLineShape()).setSelected(true);
-                connectGapsMenuItem.setSelected(parentComponent.isConnectAcrossGaps());
-                orphanMarkersMenuItem.setSelected(parentComponent.isShowOrphanMarkers());
-                YAxisScale currentScale = parentComponent.getYAxisScale();
+                lineShapeMenuItems.get(panel.getLineShape()).setSelected(true);
+                connectGapsMenuItem.setSelected(panel.isConnectAcrossGaps());
+                orphanMarkersMenuItem.setSelected(panel.isShowOrphanMarkers());
+                YAxisScale currentScale = panel.getYAxisScale();
                 for (int i = 0; i < yAxisScaleMenu.getItemCount(); i++) {
                     JMenuItem item = yAxisScaleMenu.getItem(i);
                     if (item instanceof JRadioButtonMenuItem radioItem) {
@@ -1184,7 +1184,7 @@ public class PlotInteractionManager {
 
     /** A clipboard transport failure: nothing the user typed was wrong. */
     private void showClipboardError(String message) {
-        DialogUtils.showError(parentComponent, message, "Clipboard");
+        DialogUtils.showError(panel, message, "Clipboard");
     }
 
     /** One error dialog for every rejected axis limit, whichever path it arrived by. */
@@ -1203,7 +1203,7 @@ public class PlotInteractionManager {
         }
         if (isAutoYMode()) {
             updateViewportWithFittedY(startTime, endTime);
-            parentComponent.repaint();
+            panel.repaint();
         } else {
             acceptNewAxes(startTime, endTime, currentViewport.getMinValue(), currentViewport.getMaxValue());
         }
@@ -1218,7 +1218,7 @@ public class PlotInteractionManager {
      */
     private void applyExplicitLimits(long startTime, long endTime, double minValue, double maxValue) {
         acceptNewAxes(startTime, endTime, minValue, maxValue);
-        parentComponent.model().update(st -> st.withAutoYMode(false));
+        panel.model().update(st -> st.withAutoYMode(false));
     }
 
     /**
@@ -1251,7 +1251,7 @@ public class PlotInteractionManager {
             addAxisFieldRow(form, gbc, 2, "Secondary Y limits:", y2Field);
         }
 
-        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(parentComponent),
+        JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(panel),
             "Set axis limits", Dialog.ModalityType.APPLICATION_MODAL);  // sentence case (2.1)
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.setLayout(new BorderLayout());
@@ -1276,7 +1276,7 @@ public class PlotInteractionManager {
                     if (y2Edited) {
                         acceptY2Bounds(y2[0], y2[1]);
                     }
-                    parentComponent.model().update(st -> st.withAutoYMode(false));
+                    panel.model().update(st -> st.withAutoYMode(false));
                 } else {
                     applyXLimits(x[0], x[1]);
                 }
@@ -1306,7 +1306,7 @@ public class PlotInteractionManager {
         });
 
         dialog.pack();
-        dialog.setLocationRelativeTo(parentComponent);
+        dialog.setLocationRelativeTo(panel);
         dialog.setVisible(true);
     }
 
@@ -1331,7 +1331,7 @@ public class PlotInteractionManager {
             return;
         }
         viewportUpdater.accept(currentViewport.withY2Bounds(minValue, maxValue));
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -1365,7 +1365,7 @@ public class PlotInteractionManager {
         ViewPort newViewport = currentViewport.withTimeRange(startTime, endTime).withValueBounds(minValue, maxValue)
             .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
         viewportUpdater.accept(newViewport);
-        parentComponent.repaint();
+        panel.repaint();
     }
 
     /**
@@ -1374,13 +1374,13 @@ public class PlotInteractionManager {
     public void saveData() {
         DataSet dataSet = dataSetSupplier.get();
         if (dataSet == null || dataSet.isEmpty()) {
-            JOptionPane.showMessageDialog(parentComponent, "No data to save.", "Save Data", JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(panel, "No data to save.", "Save Data", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
         // The suggested name carries the default format's extension; whatever the user
         // settles on is taken verbatim, and saveAs*Format normalises it from there.
-        java.util.Optional<File> chosen = KalixFileDialog.saveFile(parentComponent)
+        java.util.Optional<File> chosen = KalixFileDialog.saveFile(panel)
             .title("Save Data")
             .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
             .suggestedName("timeseries_data.csv")
@@ -1416,21 +1416,21 @@ public class PlotInteractionManager {
     private void saveAsCsvFormat(File file) {
         try {
             DataSet dataSet = dataSetSupplier.get();
-            com.kalix.ide.flowviz.transform.PlotType plotType = parentComponent.getPlotType();
+            com.kalix.ide.flowviz.transform.PlotType plotType = panel.getPlotType();
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
             // .csv.zip counts as CSV (the exporter zips by name); anything else gains .csv.
             file = SeriesFileWriter.write(dataSet, file, plotType, labelResolver, false);
-            JOptionPane.showMessageDialog(parentComponent,
+            JOptionPane.showMessageDialog(panel,
                 "Data saved successfully to " + file.getName(),
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Error saving data: " + e.getMessage(),
                 "Save Error");
         } catch (IllegalArgumentException e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Invalid data: " + e.getMessage(),
                 "Save Error");
         }
@@ -1450,16 +1450,16 @@ public class PlotInteractionManager {
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
             SourceResCsvExporter.export(dataSet, file, labelResolver);
-            JOptionPane.showMessageDialog(parentComponent,
+            JOptionPane.showMessageDialog(panel,
                 "Data saved successfully to " + file.getName(),
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (IOException e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Error saving data: " + e.getMessage(),
                 "Save Error");
         } catch (IllegalArgumentException e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Invalid data: " + e.getMessage(),
                 "Save Error");
         }
@@ -1478,13 +1478,13 @@ public class PlotInteractionManager {
             File pxtFile = SeriesFileWriter.write(dataSet, file, null, labelResolver, use64BitPrecision);
             String pxtName = pxtFile.getName();
 
-            JOptionPane.showMessageDialog(parentComponent,
+            JOptionPane.showMessageDialog(panel,
                 "Data saved successfully to " + pxtName + " and "
                     + pxtName.substring(0, pxtName.length() - ".pxt".length()) + ".pxb",
                 "Save Data",
                 JOptionPane.INFORMATION_MESSAGE);
         } catch (Exception e) {
-            DialogUtils.showError(parentComponent,
+            DialogUtils.showError(panel,
                 "Error saving data: " + e.getMessage(),
                 "Save Error");
         }
