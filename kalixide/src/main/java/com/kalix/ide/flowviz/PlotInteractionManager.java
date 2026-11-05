@@ -54,7 +54,6 @@ import java.io.IOException;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -83,7 +82,7 @@ public class PlotInteractionManager {
     /** Pixels a press must move before it is an axis drag rather than a click (as the Key's). */
     private static final int AXIS_DRAG_THRESHOLD = 5;
 
-    private final JComponent parentComponent;
+    private final FlowVizPanel parentComponent;
     private final CoordinateDisplayManager coordinateDisplayManager;
 
     // State management
@@ -121,7 +120,6 @@ public class PlotInteractionManager {
     private Supplier<java.io.File> baseDirectorySupplier;
     private Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier;
     private Supplier<com.kalix.ide.flowviz.data.LabelResolver> labelResolverSupplier;
-    private BooleanSupplier autoYModeSupplier;
     // Which series are drawn against the right axis; consulted only when the view has one
     private Predicate<SeriesRef> onRightAxis = ref -> false;
 
@@ -143,10 +141,10 @@ public class PlotInteractionManager {
      * <li>Auto-Y mode support for intelligent Y-axis scaling</li>
      * </ul>
      *
-     * @param parentComponent The Swing component to handle interactions for and attach mouse listeners to
+     * @param parentComponent The plot this manager serves: it draws the view, owns the model, and takes the mouse listeners
      * @param coordinateDisplayManager The coordinate display manager for integrated mouse position tracking
      */
-    public PlotInteractionManager(JComponent parentComponent, CoordinateDisplayManager coordinateDisplayManager) {
+    public PlotInteractionManager(FlowVizPanel parentComponent, CoordinateDisplayManager coordinateDisplayManager) {
         this.parentComponent = parentComponent;
         this.coordinateDisplayManager = coordinateDisplayManager;
 
@@ -450,8 +448,8 @@ public class PlotInteractionManager {
      */
     private void finishAxisDrag(Point point) {
         boolean valueAxis = axisDrag.axis() != Axis.X;
-        if (axisDragMoved && valueAxis && parentComponent instanceof FlowVizPanel vizPanel) {
-            vizPanel.model().update(st -> st.withAutoYMode(false));
+        if (axisDragMoved && valueAxis) {
+            parentComponent.model().update(st -> st.withAutoYMode(false));
         }
         axisDrag = null;
         axisDragPress = null;
@@ -473,7 +471,7 @@ public class PlotInteractionManager {
         }
         switch (handle.axis()) {
             case X -> {
-                long[] timeRange = parentComponent instanceof FlowVizPanel vizPanel ? vizPanel.fittedTimeRange() : null;
+                long[] timeRange = parentComponent.fittedTimeRange();
                 if (timeRange != null) {
                     applyXLimits(timeRange[0], timeRange[1]);
                 }
@@ -494,16 +492,12 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Supplies the panel's auto-Y mode, which decides whether X-only navigation refits
-     * Y. Read on every use rather than mirrored, so undo/redo and every other path that
-     * changes the mode on the panel are seen here without any synchronisation.
+     * The panel's auto-Y mode, which decides whether X-only navigation refits Y. Read on
+     * every use rather than mirrored, so undo/redo and every other path that changes the
+     * mode are seen here without any synchronisation.
      */
-    public void setAutoYModeSupplier(BooleanSupplier autoYModeSupplier) {
-        this.autoYModeSupplier = autoYModeSupplier;
-    }
-
     private boolean isAutoYMode() {
-        return autoYModeSupplier.getAsBoolean();
+        return parentComponent.isAutoYMode();
     }
 
     /** Sets the lookup from a point to the Key entry under it, for the axis menu item. */
@@ -632,11 +626,7 @@ public class PlotInteractionManager {
      * Zooms to fit all data in the plot area.
      */
     public void zoomToFit() {
-        // This will be implemented by calling back to the parent component
-        // as it requires access to the full data fitting logic
-        if (parentComponent instanceof FlowVizPanel) {
-            ((FlowVizPanel) parentComponent).zoomToFit();
-        }
+        parentComponent.zoomToFit();
     }
 
     /**
@@ -1062,9 +1052,7 @@ public class PlotInteractionManager {
                 return;
             }
             acceptY2Bounds(y2[0], y2[1]);
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.model().update(st -> st.withAutoYMode(false)); // an explicit range, as for Paste Y axis
-            }
+            parentComponent.model().update(st -> st.withAutoYMode(false)); // an explicit range, as for Paste Y axis
         });
         contextMenu.add(pasteY2AxisItem);
 
@@ -1079,9 +1067,7 @@ public class PlotInteractionManager {
 
         autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
         autoYMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.model().update(st -> st.withAutoYMode(autoYMenuItem.isSelected()));
-            }
+            parentComponent.model().update(st -> st.withAutoYMode(autoYMenuItem.isSelected()));
         });
         contextMenu.add(autoYMenuItem);
 
@@ -1091,9 +1077,7 @@ public class PlotInteractionManager {
         for (YAxisScale scale : YAxisScale.values()) {
             JRadioButtonMenuItem scaleItem = new JRadioButtonMenuItem(scale.getDisplayName());
             scaleItem.addActionListener(e -> {
-                if (parentComponent instanceof FlowVizPanel) {
-                    ((FlowVizPanel) parentComponent).model().update(st -> st.withYAxisScale(scale));
-                }
+                parentComponent.model().update(st -> st.withYAxisScale(scale));
             });
             yAxisScaleGroup.add(scaleItem);
             yAxisScaleMenu.add(scaleItem);
@@ -1105,9 +1089,7 @@ public class PlotInteractionManager {
         // never reads identity back out of label text (ADR-0003 §2.2).
         JMenu lineShapeMenu = new JMenu("Line shape");
         lineShapeMenuItems.putAll(LineShapeMenu.addItems(lineShapeMenu, shape -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.model().update(st -> st.withLineShape(shape));
-            }
+            parentComponent.model().update(st -> st.withLineShape(shape));
         }));
         contextMenu.add(lineShapeMenu);
 
@@ -1119,17 +1101,13 @@ public class PlotInteractionManager {
 
         connectGapsMenuItem = new JCheckBoxMenuItem("Draw across gaps");
         connectGapsMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setConnectAcrossGaps(connectGapsMenuItem.isSelected());
-            }
+            parentComponent.setConnectAcrossGaps(connectGapsMenuItem.isSelected());
         });
         missingDataMenu.add(connectGapsMenuItem);
 
         orphanMarkersMenuItem = new JCheckBoxMenuItem("Mark orphan points");
         orphanMarkersMenuItem.addActionListener(e -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setShowOrphanMarkers(orphanMarkersMenuItem.isSelected());
-            }
+            parentComponent.setShowOrphanMarkers(orphanMarkersMenuItem.isSelected());
         });
         missingDataMenu.add(orphanMarkersMenuItem);
 
@@ -1141,8 +1119,8 @@ public class PlotInteractionManager {
         // settings above. The axis move is shown only over a Key entry (4).
         moveAxisItem = new JMenuItem("Move to secondary Y axis");
         moveAxisItem.addActionListener(e -> {
-            if (menuSeries != null && parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.model().update(st -> st.withSeriesOnRightAxis(menuSeries, !st.isOnRightAxis(menuSeries)));
+            if (menuSeries != null) {
+                parentComponent.model().update(st -> st.withSeriesOnRightAxis(menuSeries, !st.isOnRightAxis(menuSeries)));
             }
         });
         contextMenu.add(moveAxisItem);
@@ -1150,9 +1128,7 @@ public class PlotInteractionManager {
         // says "Key" too (2.2: one name per concept).
         JMenuItem resetKeyItem = new JMenuItem("Reset key");
         resetKeyItem.addActionListener(e -> {
-            if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.resetLegend();
-            }
+            parentComponent.resetLegend();
         });
         contextMenu.add(resetKeyItem);
 
@@ -1169,25 +1145,16 @@ public class PlotInteractionManager {
                 pasteY2AxisItem.setVisible(hasY2);
                 pasteY2AxisItem.setEnabled(clipboardHasText);
 
-                // Sync the checkbox state with the current FlowVizPanel state
-                if (parentComponent instanceof FlowVizPanel vizPanel) {
-                    // Get the current auto-Y state from the FlowVizPanel
-                    autoYMenuItem.setSelected(vizPanel.isAutoYMode());
-
-                    // Sync line shape
-                    lineShapeMenuItems.get(vizPanel.getLineShape()).setSelected(true);
-
-                    // Sync gap-handling toggles
-                    connectGapsMenuItem.setSelected(vizPanel.isConnectAcrossGaps());
-                    orphanMarkersMenuItem.setSelected(vizPanel.isShowOrphanMarkers());
-
-                    // Get the current Y-axis scale and select the corresponding radio button
-                    YAxisScale currentScale = vizPanel.getYAxisScale();
-                    for (int i = 0; i < yAxisScaleMenu.getItemCount(); i++) {
-                        JMenuItem item = yAxisScaleMenu.getItem(i);
-                        if (item instanceof JRadioButtonMenuItem radioItem) {
-                            radioItem.setSelected(radioItem.getText().equals(currentScale.getDisplayName()));
-                        }
+                // Sync the menu with the plot's current state
+                autoYMenuItem.setSelected(parentComponent.isAutoYMode());
+                lineShapeMenuItems.get(parentComponent.getLineShape()).setSelected(true);
+                connectGapsMenuItem.setSelected(parentComponent.isConnectAcrossGaps());
+                orphanMarkersMenuItem.setSelected(parentComponent.isShowOrphanMarkers());
+                YAxisScale currentScale = parentComponent.getYAxisScale();
+                for (int i = 0; i < yAxisScaleMenu.getItemCount(); i++) {
+                    JMenuItem item = yAxisScaleMenu.getItem(i);
+                    if (item instanceof JRadioButtonMenuItem radioItem) {
+                        radioItem.setSelected(radioItem.getText().equals(currentScale.getDisplayName()));
                     }
                 }
             }
@@ -1266,9 +1233,7 @@ public class PlotInteractionManager {
      */
     private void applyExplicitLimits(long startTime, long endTime, double minValue, double maxValue) {
         acceptNewAxes(startTime, endTime, minValue, maxValue);
-        if (parentComponent instanceof FlowVizPanel vizPanel) {
-            vizPanel.model().update(st -> st.withAutoYMode(false));
-        }
+        parentComponent.model().update(st -> st.withAutoYMode(false));
     }
 
     /**
@@ -1326,9 +1291,7 @@ public class PlotInteractionManager {
                     if (y2Edited) {
                         acceptY2Bounds(y2[0], y2[1]);
                     }
-                    if (parentComponent instanceof FlowVizPanel vizPanel) {
-                        vizPanel.model().update(st -> st.withAutoYMode(false));
-                    }
+                    parentComponent.model().update(st -> st.withAutoYMode(false));
                 } else {
                     applyXLimits(x[0], x[1]);
                 }
