@@ -217,6 +217,7 @@ pub struct StorageNode {
     pub pond_demand_input: DynamicInput,
     pub target_level: DynamicInput,
     pub target_volume: DynamicInput,
+    pub forecast_adjustment: DynamicInput,
     pub exists: DynamicInput,
     pub forced_level_input: DynamicInput,
     pub ds_force_release_input: [DynamicInput; MAX_DS_LINKS],
@@ -277,6 +278,7 @@ pub struct StorageNode {
     recorder_idx_target_level: Option<usize>,
     recorder_idx_target_volume: Option<usize>,
     recorder_idx_forecast_volume: Option<usize>,
+    recorder_idx_forecast_adjustment: Option<usize>,
     // Declared here, and recorded through an out-of-line helper, on measurement
     // (ADR-0004 §3.4): see the commit that added them.
     recorder_idx_order: Option<usize>,
@@ -1126,8 +1128,9 @@ impl StorageNode {
         // order buffer every time). It may be noticeable for long travel times.
         let inflows = self.target_order_buffer.sum();
         let known_usage: f64 = self.ds_orders_due.iter().sum();
-        let forecast_volume = self.volume + inflows - known_usage;
-        self.record_forecast(data_cache, forecast_volume);
+        let adjustment = self.forecast_adjustment.get_value(data_cache);
+        let forecast_volume = self.volume + inflows - known_usage + adjustment;
+        self.record_forecast(data_cache, forecast_volume, adjustment);
         self.us_orders = (target_volume - forecast_volume).max(0.0);
         // push hands back the order leaving the buffer - the one arriving today - so
         // what is on its way at the end of the step, today's order included, is the
@@ -1147,11 +1150,14 @@ impl StorageNode {
         }
     }
 
-    /// Record the forecast volume a target order is based on.
+    /// Record the forecast volume a target order is based on, and its adjustment.
     #[inline]
-    fn record_forecast(&self, data_cache: &mut DataCache, forecast_volume: f64) {
+    fn record_forecast(&self, data_cache: &mut DataCache, forecast_volume: f64, adjustment: f64) {
         if let Some(idx) = self.recorder_idx_forecast_volume {
             data_cache.add_value_at_index(idx, forecast_volume);
+        }
+        if let Some(idx) = self.recorder_idx_forecast_adjustment {
+            data_cache.add_value_at_index(idx, adjustment);
         }
     }
 
@@ -1332,8 +1338,14 @@ impl Node for StorageNode {
 
         // Resolve how the storage orders upstream: order_through overrides a target
         let has_target_volume = !matches!(&self.target_volume, DynamicInput::None { .. });
-        if has_target_volume && !matches!(&self.target_level, DynamicInput::None { .. }) {
+        let has_target_level = !matches!(&self.target_level, DynamicInput::None { .. });
+        if has_target_volume && has_target_level {
             let message = format!("Error in node '{}'. Storage cannot have both target_level and target_volume.", self.name);
+            return Err(message);
+        }
+        if !has_target_volume && !has_target_level
+            && !matches!(&self.forecast_adjustment, DynamicInput::None { .. }) {
+            let message = format!("Error in node '{}'. forecast_adjustment needs a target_level or target_volume.", self.name);
             return Err(message);
         }
         self.ordering = if self.order_through {
@@ -1364,6 +1376,7 @@ impl Node for StorageNode {
         self.recorder_idx_target_level = recorder(data_cache, &self.name, "target_level");
         self.recorder_idx_target_volume = recorder(data_cache, &self.name, "target_volume");
         self.recorder_idx_forecast_volume = recorder(data_cache, &self.name, "forecast_volume");
+        self.recorder_idx_forecast_adjustment = recorder(data_cache, &self.name, "forecast_adjustment");
         self.recorder_idx_area = recorder(data_cache, &self.name, "area");
         self.recorder_idx_seep_megs = recorder(data_cache, &self.name, "seep_vol");
         self.recorder_idx_rain_megs = recorder(data_cache, &self.name, "rain_vol");

@@ -695,6 +695,7 @@
         "target_level",
         "target_volume",
         "forecast_volume",
+        "forecast_adjustment",
         "order",
         "orders_en_route",
         "rain_vol",
@@ -728,6 +729,7 @@
         "ds_4_force_release",
         "target_level",
         "target_volume",
+        "forecast_adjustment",
         "order_through",
         "exists",
         "forced_level"
@@ -736,7 +738,7 @@
         ["target_level", "target_volume"]
       ],
       "overridden_params": [
-        { "when_true": "order_through", "params": ["target_level", "target_volume"] }
+        { "when_true": "order_through", "params": ["target_level", "target_volume", "forecast_adjustment"] }
       ],
       "dsnode_params": [
         "ds_1",
@@ -818,6 +820,10 @@
         "target_volume": {
           "type": "function_expression",
           "description": "Target storage volume; not with target_level (data reference, constant, or expression)"
+        },
+        "forecast_adjustment": {
+          "type": "function_expression",
+          "description": "Expected net inflow (+) or outflow (-) in ML over the order travel time, added to the forecast a target orders against; needs a target (data reference, constant, or expression)"
         },
         "order_through": {
           "type": "boolean",

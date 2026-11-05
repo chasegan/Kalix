@@ -56,6 +56,7 @@ node.weir.orders_en_route
 node.weir.target_level
 node.weir.target_volume
 node.weir.forecast_volume
+node.weir.forecast_adjustment
 node.dam.ds_1_order
 node.weir.volume
 "#)
@@ -177,10 +178,69 @@ fn test_forecast_volume_is_what_each_target_order_is_based_on() {
 }
 
 #[test]
+fn test_forecast_adjustment_adds_to_the_forecast() {
+    // Day 1 forecast without adjustment is 990 against a 1500 target. Expected inflow
+    // lowers the order, expected outflow raises it, and enough inflow orders nothing.
+    for (adjustment, order) in [("200", 310.0), ("-200", 710.0), ("600", 0.0)] {
+        let mut model = run(&rig(3, &format!("target_volume = 1500\nforecast_adjustment = {}", adjustment)));
+        let a: f64 = adjustment.parse().unwrap();
+        assert_eq!(series(&mut model, "node.weir.order")[0], order, "adjustment {}", adjustment);
+        assert_eq!(series(&mut model, "node.weir.forecast_volume")[0], 990.0 + a);
+        assert_eq!(series(&mut model, "node.weir.forecast_adjustment")[0], a);
+    }
+}
+
+#[test]
+fn test_forecast_adjustment_applies_to_a_level_target_alike() {
+    let mut by_level = run(&rig(3, "target_level = 1.5\nforecast_adjustment = 200"));
+    let mut by_volume = run(&rig(3, "target_volume = 1500\nforecast_adjustment = 200"));
+    for name in ["node.weir.order", "node.weir.forecast_volume", "node.weir.volume"] {
+        assert_eq!(series(&mut by_level, name), series(&mut by_volume, name), "{}", name);
+    }
+}
+
+#[test]
+fn test_forecast_adjustment_is_not_a_critical_input() {
+    // A forecast series may be shorter than the driving data and must not set the run period.
+    let model = IniModelIO::read_model_string(
+        &rig(3, "target_volume = 1500\nforecast_adjustment = data.fc_csv.by_name.inflow"))
+        .expect("model should load");
+    let critical = model.data_cache.get_critical_input_names();
+    assert!(!critical.contains(&"data.fc_csv.by_name.inflow"), "got {:?}", critical);
+}
+
+#[test]
+fn test_forecast_adjustment_that_changes_is_applied_on_the_step_it_is_evaluated() {
+    // Each step's forecast is the volume and orders en route left by the step before, less
+    // the 10 released today, plus that step's adjustment.
+    let mut model = run(&rig(3, "target_volume = 1500\nforecast_adjustment = if(sim.step >= 2, 200, 0)"));
+    let adjustment = series(&mut model, "node.weir.forecast_adjustment");
+    let forecast = series(&mut model, "node.weir.forecast_volume");
+    let order = series(&mut model, "node.weir.order");
+    let volume = series(&mut model, "node.weir.volume");
+    let en_route = series(&mut model, "node.weir.orders_en_route");
+    assert_eq!((adjustment[0], adjustment[adjustment.len() - 1]), (0.0, 200.0));
+    for i in 0..order.len() {
+        let (v, e) = if i == 0 { (1000.0, 0.0) } else { (volume[i - 1], en_route[i - 1]) };
+        assert_eq!(forecast[i], v + e - 10.0 + adjustment[i], "forecast, step {}", i);
+        assert_eq!(order[i], (1500.0 - forecast[i]).max(0.0), "order, step {}", i);
+    }
+}
+
+#[test]
+fn test_forecast_adjustment_without_a_target_is_refused() {
+    let mut model = IniModelIO::read_model_string(&rig(3, "forecast_adjustment = 200"))
+        .expect("model should load");
+    let err = model.configure().expect_err("an adjustment with nothing to adjust must be refused");
+    assert!(err.contains("'weir'") && err.contains("forecast_adjustment"), "got: {}", err);
+}
+
+#[test]
 fn test_order_through_overrides_a_target_volume() {
-    let mut model = run(&rig(2, "order_through = true\ntarget_volume = 1700"));
+    let mut model = run(&rig(2, "order_through = true\ntarget_volume = 1700\nforecast_adjustment = 200"));
     assert_eq!(series(&mut model, "node.weir.order")[0], 10.0, "orders pass through unchanged");
-    for name in ["node.weir.target_level", "node.weir.target_volume", "node.weir.forecast_volume"] {
+    for name in ["node.weir.target_level", "node.weir.target_volume", "node.weir.forecast_volume",
+                 "node.weir.forecast_adjustment"] {
         let s = series(&mut model, name);
         assert!(s.is_empty() || s.iter().all(|v| v.is_nan()), "{} got {:?}", name, s);
     }
