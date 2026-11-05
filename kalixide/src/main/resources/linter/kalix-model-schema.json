@@ -731,6 +731,9 @@
         "exists",
         "forced_level"
       ],
+      "exclusive_params": [
+        ["target_level", "target_volume"]
+      ],
       "dsnode_params": [
         "ds_1",
         "ds_2",
@@ -1193,6 +1196,10 @@
     "node_name_format": {
       "severity": "error",
       "description": "Node names may contain only letters, digits and underscores"
+    },
+    "exclusive_params": {
+      "severity": "error",
+      "description": "A node cannot have more than one parameter of an exclusive group (e.g. target_level and target_volume)"
     },
     "coordinate_format": {
       "severity": "error",

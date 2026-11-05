@@ -1,8 +1,10 @@
 package com.kalix.ide.linter.schema;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -18,6 +20,8 @@ public class NodeTypeDefinition {
     public Set<String> optionalParams = new HashSet<>();
     public Set<String> dsnodeParams = new HashSet<>();
     public Set<String> allowedOutputs = new HashSet<>();
+    // Groups of parameters of which at most one may be given
+    public List<List<String>> exclusiveParams = new ArrayList<>();
     public Map<String, ParameterDefinition> parameterDefinitions = new HashMap<>();
 
     // Union of required/optional/dsnode params, computed once after the schema
