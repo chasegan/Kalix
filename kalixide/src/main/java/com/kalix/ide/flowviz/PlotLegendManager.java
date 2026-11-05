@@ -22,6 +22,7 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.geom.RoundRectangle2D;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -212,27 +213,14 @@ public class PlotLegendManager {
     }
 
     /**
-     * Adds a series to the legend. The swatch colour is resolved at render time
-     * via the {@link SeriesStyleResolver}, so no colour is supplied here.
+     * Shows exactly these series, in this order. The swatch colour is resolved at render
+     * time via the {@link SeriesStyleResolver}, so no colour is supplied here.
      */
-    public void addSeries(SeriesRef ref) {
-        // Remove existing entry with same ref if present
-        entries.removeIf(e -> e.ref.equals(ref));
-        entries.add(new LegendEntry(ref));
-    }
-
-    /**
-     * Removes a series from the legend.
-     */
-    public void removeSeries(SeriesRef ref) {
-        entries.removeIf(e -> e.ref.equals(ref));
-    }
-
-    /**
-     * Clears all series from the legend.
-     */
-    public void clear() {
+    public void setSeries(List<SeriesRef> refs) {
         entries.clear();
+        for (SeriesRef ref : new LinkedHashSet<>(refs)) {
+            entries.add(new LegendEntry(ref));
+        }
     }
 
     /**

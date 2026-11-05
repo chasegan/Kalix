@@ -134,7 +134,7 @@ public class FlowVizActionManager {
      */
     public void toggleAutoYMode() {
         autoYMode = !autoYMode;
-        vizPanel.setAutoYMode(autoYMode);
+        vizPanel.model().update(st -> st.withAutoYMode(autoYMode));
 
         // Save preference
         PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(autoYMode);
@@ -241,7 +241,7 @@ public class FlowVizActionManager {
 
         // Load auto-Y mode preference (default: true)
         autoYMode = PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get();
-        vizPanel.setAutoYMode(autoYMode);
+        vizPanel.model().update(st -> st.withAutoYMode(autoYMode));
     }
 
     /**

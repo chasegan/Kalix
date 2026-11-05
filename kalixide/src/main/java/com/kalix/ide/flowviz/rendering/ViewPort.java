@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz.rendering;
 
+import com.kalix.ide.flowviz.transform.XAxisType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 
 public class ViewPort {

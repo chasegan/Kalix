@@ -119,6 +119,18 @@ It is a run manager. Yes.
 
 ![](../assets/docs-using-ide/image_19.png)
 
+### Plot, Stats and Data views
+
+Each plot tab has three views. Switch between them with the toggles at the left of the tab's toolbar:
+
+- **Plot** (the default) draws the ticked series.
+- **Stats** gives one row of statistics per series.
+- **Data** shows the plotted values as a table in export format, i.e., one row per timestamp and one column per series.
+
+The views are three ways of looking at the same tab. They share its ticked series, aggregation, masks and plot type, so switching view never changes what you are looking at, and undo and redo cover changes made in any of them.
+
+In the Data view the first column is the row's date, or its percentile for an exceedance plot and its cumulative reference for a double-mass plot. A cell is blank where a series has no value on that row, as `Save Data` writes it. Right-click the table for **Find…** (Ctrl+f, then F3 or Shift+F3 for the next or previous match) and **Copy**, which copies the selected cells tab-separated for pasting into a spreadsheet. `Save Data` here saves what the table shows, in the same formats as from the Plot view.
+
 ### Filtering the Timeseries tree
 
 Type in the box above the **Timeseries** tree to show only the series you want. Each series is matched on its full name (such as `node.inflow_3.ds_1`) and on its source (such as `Run_2` or `flows.csv`). Case is ignored.
