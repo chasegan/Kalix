@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
@@ -9,11 +10,19 @@ import com.kalix.ide.flowviz.transform.YAxisScale;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.event.InputEvent;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.image.BufferedImage;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Pins how series move between the left and right (y2) axes: the viewport has a y2 range
@@ -169,6 +178,50 @@ class FlowVizPanelRightAxisTest {
         panel.redo();
         assertTrue(panel.isOnRightAxis(large));
         assertEquals(y2Min, view().getY2MinValue());
+    }
+
+    /**
+     * Through the panel's own listeners: the menu-shortcut modifier (Ctrl, or Cmd on macOS)
+     * on a Key row moves that series, and a plain click there does not. Skips, saying why,
+     * when the user's preferences hide or collapse the Key.
+     */
+    @Test
+    void ctrlClickOnAKeyRowMovesThatSeriesAndAPlainClickDoesNot() {
+        PlotLegendManager key = panel.getLegendManager();
+        assumeTrue(key.isEnabled() && !key.isCollapsed(),
+            "skipped: the Key is hidden or collapsed in this user's preferences");
+        panel.setSize(800, 600);
+        BufferedImage image = new BufferedImage(800, 600, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = image.createGraphics();
+        panel.paint(g);
+        g.dispose();
+        // The row's name part, in from its right end: its line sample at the left opens
+        // the style picker on a plain click instead.
+        Point row = null;
+        for (int y = 0; y < 600 && row == null; y++) {
+            for (int x = 799; x >= 0; x--) {
+                if (large.equals(key.entryAt(x, y))) {
+                    row = new Point(x - 10, y + 2);
+                    break;
+                }
+            }
+        }
+        assertNotNull(row, "the Key lists large");
+
+        click(row, InputEvent.BUTTON1_DOWN_MASK);
+        assertFalse(panel.isOnRightAxis(large), "a plain click leaves the axis alone");
+
+        click(row, InputEvent.BUTTON1_DOWN_MASK | AppShortcut.menuMask());
+        assertTrue(panel.isOnRightAxis(large), "the modifier moves it");
+    }
+
+    private void click(Point at, int modifiers) {
+        for (MouseListener l : panel.getMouseListeners()) {
+            l.mousePressed(new MouseEvent(panel, MouseEvent.MOUSE_PRESSED, 0, modifiers, at.x, at.y, 1, false, MouseEvent.BUTTON1));
+        }
+        for (MouseListener l : panel.getMouseListeners()) {
+            l.mouseReleased(new MouseEvent(panel, MouseEvent.MOUSE_RELEASED, 0, modifiers, at.x, at.y, 1, false, MouseEvent.BUTTON1));
+        }
     }
 
     @Test
