@@ -115,17 +115,16 @@ class FlowVizPanelAxisDragTest {
     @Test
     void panningPastTheDataUnderAutoYKeepsTheYRange() {
         panel.model().update(st -> st.withAutoYMode(true));
-        for (int i = 0; i < 3; i++) {
-            drag(700, 300, 100, 300); // a left drag inside the plot pans forward in time
-        }
-        ViewPort past = view();
-        assertTrue(past.getStartTimeMs() > 3 * DAY, "the window is past the data: " + past);
+        drag(700, 300, 100, 300); // a left drag inside the plot pans forward in time
+        ViewPort lastWithData = view();
+        assertTrue(lastWithData.getStartTimeMs() < 3 * DAY, "the last point is still in view: " + lastWithData);
 
         drag(700, 300, 100, 300);
+        drag(700, 300, 100, 300);
 
-        assertEquals(past.getMinValue(), view().getMinValue(), "no data in view: Y keeps its range, not -1..1");
-        assertEquals(past.getMaxValue(), view().getMaxValue());
-        assertNotEquals(-1.0, view().getMinValue());
+        assertTrue(view().getStartTimeMs() > 3 * DAY, "the window is past the data: " + view());
+        assertEquals(lastWithData.getMinValue(), view().getMinValue(), "no data in view: Y keeps the range it had");
+        assertEquals(lastWithData.getMaxValue(), view().getMaxValue());
     }
 
     @Test
