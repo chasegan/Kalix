@@ -235,11 +235,12 @@ public class PlotInteractionManager {
             @Override
             public void mousePressed(MouseEvent e) {
                 Rectangle plotArea = plotAreaSupplier.get();
-                // A new press is a new gesture: a release lost to a focus change must not
-                // leave an axis drag running into the next press.
-                axisDrag = null;
-                axisDragPress = null;
-                axisDragStart = null;
+                // A new press is a new gesture: a release lost to a focus change, or a
+                // second button, must not leave an axis drag running into it. Finishing
+                // the drag also turns auto-Y off if the axis had already moved.
+                if (axisDrag != null) {
+                    finishAxisDrag(e.getPoint());
+                }
                 AxisHandle handle = axisHandleAt(e.getPoint());
                 // isPopupTrigger, checked on BOTH press and release: the trigger fires
                 // on press on macOS/Linux but on release on Windows, and macOS
@@ -529,6 +530,9 @@ public class PlotInteractionManager {
 
     /** As {@link #fittedRangeForAxis(Axis)}, over {@code [startTime, endTime]} on {@code scale}. */
     double[] fittedRangeForAxis(Axis axis, long startTime, long endTime, YAxisScale scale) {
+        if (axis == Axis.X) {
+            throw new IllegalArgumentException("A value axis, Y or Y2, not X.");
+        }
         boolean rightAxis = axis == Axis.Y2;
         return calculateVisibleYRange(startTime, endTime, scale, ref -> onRightAxis.test(ref) == rightAxis);
     }
