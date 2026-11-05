@@ -38,7 +38,7 @@ public class UniqueNameValidator implements ValidationStrategy {
 
             for (Integer lineNumber : lineNumbers) {
                 result.addIssue(lineNumber,
-                              "Duplicate node name: " + nodeName,
+                              "Duplicate node name: " + nodeName + " (node names are not case sensitive)",
                               rule.getSeverity(), "duplicate_node_name");
             }
         }
