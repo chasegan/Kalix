@@ -61,8 +61,11 @@ fn test_node_name_with_dot_is_refused() {
 
 #[test]
 fn test_mixed_case_and_digit_leading_node_names_are_accepted() {
-    load_and_run(&model_ini("MyGr4j", "1", "", "node.MyGr4j.dsflow")).unwrap();
-    load_and_run(&model_ini("0001_in", "1", "", "node.0001_in.dsflow")).unwrap();
+    for name in ["MyGr4j", "0001_in"] {
+        let model = load_and_run(&model_ini(name, "1", "", &format!("node.{name}.dsflow"))).unwrap();
+        let series = model.get_output_series(Some(vec![format!("node.{name}.dsflow")]), false).unwrap();
+        assert_eq!(series[0].values, vec![1.0; 10], "{name}");
+    }
 }
 
 #[test]
@@ -83,7 +86,10 @@ fn test_repeated_node_section_is_refused() {
 #[test]
 fn test_reference_matches_node_name_case_insensitively() {
     let extra = "[node.reader]\nloc = 0, 10\ntype = inflow\ninflow = node.mygr4j.dsflow[-1, 0.0]\nds_1 = sink\n";
-    load_and_run(&model_ini("MyGr4j", "1", extra, "node.reader.dsflow")).unwrap();
+    let model = load_and_run(&model_ini("MyGr4j", "1", extra, "node.reader.dsflow")).unwrap();
+    let series = model.get_output_series(Some(vec!["node.reader.dsflow".to_string()]), false).unwrap();
+    assert_eq!(series[0].values[0], 0.0, "the lag default on the first step");
+    assert_eq!(series[0].values[1], 1.0, "then the referenced node's value");
 }
 
 // -----------------------------------------------------------------------------
