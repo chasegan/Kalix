@@ -26,6 +26,11 @@ public class NodeTypeDefinition {
 
     /** Parameters that have no effect while the boolean parameter {@code whenTrue} is true. */
     public record OverriddenParams(String whenTrue, List<String> params) {}
+
+    public List<RequiresOneOf> requiresOneOf = new ArrayList<>();
+
+    /** A parameter that may only be given alongside at least one of {@code oneOf}. */
+    public record RequiresOneOf(String param, List<String> oneOf) {}
     public Map<String, ParameterDefinition> parameterDefinitions = new HashMap<>();
 
     // Union of required/optional/dsnode params, computed once after the schema

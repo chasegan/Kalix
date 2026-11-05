@@ -66,6 +66,9 @@ public class NodeValidator implements ValidationStrategy {
         for (NodeTypeDefinition.OverriddenParams overridden : typeDef.overriddenParams) {
             validateOverriddenParams(node, overridden, schema, result);
         }
+        for (NodeTypeDefinition.RequiresOneOf requires : typeDef.requiresOneOf) {
+            validateRequiresOneOf(node, requires, schema, result);
+        }
 
         // Validate parameter types and formats
         for (INIModelParser.Property prop : node.getProperties().values()) {
@@ -119,6 +122,24 @@ public class NodeValidator implements ValidationStrategy {
                               severity, "overridden_params");
             }
         }
+    }
+
+    /** Report a parameter given without any of the parameters it needs, on its own line. */
+    private void validateRequiresOneOf(INIModelParser.NodeSection node, NodeTypeDefinition.RequiresOneOf requires,
+                                       LinterSchema schema, ValidationResult result) {
+        ValidationRule rule = schema.getValidationRule("requires_one_of");
+        if (rule != null && !rule.isEnabled()) {
+            return;
+        }
+        INIModelParser.Property prop = node.getProperties().get(requires.param());
+        if (prop == null || requires.oneOf().stream().anyMatch(node.getProperties()::containsKey)) {
+            return;
+        }
+        ValidationRule.Severity severity = (rule != null) ? rule.getSeverity() : ValidationRule.Severity.ERROR;
+        result.addIssue(prop.getLineNumber(),
+                      "Node '" + node.getNodeName() + "': " + requires.param() + " needs "
+                              + String.join(" or ", requires.oneOf()),
+                      severity, "requires_one_of");
     }
 
     private void validateNodeProperty(INIModelParser.NodeSection node, INIModelParser.Property prop,
