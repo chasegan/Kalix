@@ -26,7 +26,7 @@ Node names are defined as part of the node declaration. Node naming follows the 
   - mathematical symbols ‘+’, ‘-’, ‘\*’, ‘^’, ‘=’, ‘/’
   - brackets.
 
-A model with a node name that breaks these rules is refused when it loads, with an error naming the line.
+A model with a node name that breaks these rules is refused when the engine loads it, with an error naming the line.
 
 ## Tables
 

@@ -75,7 +75,8 @@ a request for nothing changes no result.
    made of ASCII letters, digits and underscores**, matched
    case-insensitively ([ADR-0006](0006-expression-naming.md) §2.6 and its
    2026-10-29 amendment). A malformed entry is refused at load, naming the
-   line. Expression references get the same shape from the grammar.
+   line. Expression references take their shape from the grammar, which is no
+   narrower.
 4. **An `[outputs]` entry for a computed series (`node.*`, `var.*`, `acc.*`,
    `ras.*`) is not checked for existence.** An entry that nothing writes stays
    empty; each output path decides how to present an empty series. A `data.*`
