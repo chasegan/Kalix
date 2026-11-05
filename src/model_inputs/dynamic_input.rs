@@ -1624,13 +1624,8 @@ impl DynamicInput {
             // Resolve variable names to data cache indices
             for var_name in &linear_info.variables {
                 let lower_name = var_name.to_lowercase();
-                // node.*, var.* and acc.* references are not critical inputs (they
-                // are computed during the run, not loaded)
-                let is_critical = flag_as_critical
-                    && !lower_name.starts_with("node.")
-                    && !lower_name.starts_with("var.")
-                    && !lower_name.starts_with("acc.");
-                let idx = data_cache.get_or_add_new_series(&lower_name, is_critical);
+                // Only data.* names reach here: detect_linear_combination accepts no other.
+                let idx = data_cache.get_or_add_new_series(&lower_name, flag_as_critical);
                 data_indices.push(idx);
             }
 

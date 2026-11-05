@@ -153,7 +153,7 @@ fn test_missing_reference_is_caught_even_when_also_an_output() {
 }
 
 #[test]
-fn test_missing_reference_in_linear_combination_is_refused() {
+fn test_missing_reference_in_a_scaled_term_is_refused() {
     let err = expect_err(&model_ini("src", "0.5 * node.nosuch.dsflow", "", "node.src.dsflow"));
     assert!(err.contains("Unknown node 'nosuch'"), "{}", err);
 }
