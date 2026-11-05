@@ -79,7 +79,7 @@ class FlowVizPanelAxisDragTest {
         dataSet.addSeries(large, new TimeSeriesData(times, new double[] {5000, 6000, 7000, 8000}));
         panel.setDataSet(dataSet);
         panel.model().update(st -> st.withVisibleSeries(List.of(flow, large)));
-        panel.setSeriesOnRightAxis(large, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         panel.zoomToFit();
         return large;
     }
@@ -184,11 +184,11 @@ class FlowVizPanelAxisDragTest {
     @Test
     void aYDragKeepsARightAxisAddedDuringIt() {
         DatasetSeries large = useBothAxes();
-        panel.setSeriesOnRightAxis(large, false);
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, false));
         press(Y_AXIS_X, 450);
         dragTo(Y_AXIS_X, 480);
 
-        panel.setSeriesOnRightAxis(large, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         dragTo(Y_AXIS_X, 500);
         release(Y_AXIS_X, 500);
 

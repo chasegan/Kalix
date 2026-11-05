@@ -171,14 +171,13 @@ public final class FlowVizState {
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 
-    /** The visible series drawn against the right axis; refs not visible are dropped. */
-    public FlowVizState withRightAxisSeries(Set<SeriesRef> series) {
+    private FlowVizState withRightAxisSeries(Set<SeriesRef> series) {
         return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
             yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, series,
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 
-    /** {@code ref} moved to the right axis or back to the left. */
+    /** {@code ref} moved to the right axis or back to the left; a ref not visible is dropped, so nothing changes. */
     public FlowVizState withSeriesOnRightAxis(SeriesRef ref, boolean onRight) {
         Set<SeriesRef> series = new LinkedHashSet<>(rightAxisSeries);
         if (onRight) {

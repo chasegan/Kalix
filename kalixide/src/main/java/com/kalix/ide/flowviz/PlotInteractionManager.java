@@ -1123,7 +1123,7 @@ public class PlotInteractionManager {
         moveAxisItem = new JMenuItem("Move to secondary Y axis");
         moveAxisItem.addActionListener(e -> {
             if (menuSeries != null && parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setSeriesOnRightAxis(menuSeries, !vizPanel.isOnRightAxis(menuSeries));
+                vizPanel.model().update(st -> st.withSeriesOnRightAxis(menuSeries, !vizPanel.isOnRightAxis(menuSeries)));
             }
         });
         contextMenu.add(moveAxisItem);

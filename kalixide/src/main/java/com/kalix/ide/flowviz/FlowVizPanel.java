@@ -172,7 +172,7 @@ public class FlowVizPanel extends JPanel {
         coordinateDisplayManager.setRightAxisTest(this::isOnRightAxis);
         plotInteractionManager.setRightAxisTest(this::isOnRightAxis);
         legendManager.setRightAxisTest(this::isOnRightAxis);
-        legendManager.setOnAxisToggle(ref -> setSeriesOnRightAxis(ref, !isOnRightAxis(ref)));
+        legendManager.setOnAxisToggle(ref -> model.update(s -> s.withSeriesOnRightAxis(ref, !isOnRightAxis(ref))));
         plotInteractionManager.setKeyEntryLookup(point -> legendManager.entryAt(point.x, point.y));
 
         // Default to the global palette with a private slot assignment. An owner
@@ -389,26 +389,21 @@ public class FlowVizPanel extends JPanel {
     }
 
     /**
-     * Moves a visible series to the right (y2) or left axis: one undoable step through the
-     * model, which the plot follows in {@link #applyUserChange}. Neither axis' range is
-     * reset; only the right axis' first appearance sizes it, to its series over the current
-     * time window. Auto-Y refits both axes as usual. A series that is not visible (removed
-     * since the gesture began) is ignored: the state drops it, so nothing changes.
-     */
-    public void setSeriesOnRightAxis(SeriesRef ref, boolean onRight) {
-        model.update(s -> s.withSeriesOnRightAxis(ref, onRight));
-    }
-
-    /**
-     * Gives the viewport a y2 range exactly while the right axis is in use: a new right
-     * axis is fitted to its series over the current time window, an unused one dropped.
+     * Gives the viewport a y2 range exactly while the right axis is in use. The rules for a
+     * series moved between axes ({@link FlowVizState#withSeriesOnRightAxis}, one undoable
+     * step like any other change): neither axis' range is reset; only the right axis'
+     * first appearance sizes it, to its series over the current time window; an axis left
+     * with no series goes; and under auto-Y both axes are then refitted, as
+     * {@link #applyUserChange} does for every change that calls for it.
      */
     private void syncRightAxisRange() {
         if (currentViewport == null) {
             return;
         }
         if (isRightAxisInUse() && !currentViewport.hasY2()) {
-            // Sized to its series; with nothing showable yet, to the left axis' range
+            // Sized to its series; with nothing showable yet, to the left axis' range. A
+            // hidden plot has no display set to size from, but it owes a fit when shown,
+            // which replaces this placeholder before anything is drawn or recorded.
             double[] y2Range = plotInteractionManager.fittedRangeForAxis(true);
             if (y2Range == null) {
                 y2Range = new double[]{currentViewport.getMinValue(), currentViewport.getMaxValue()};

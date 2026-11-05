@@ -52,7 +52,7 @@ class FlowVizPanelRightAxisTest {
         double y1Min = view().getMinValue();
         double y1Max = view().getMaxValue();
 
-        panel.setSeriesOnRightAxis(large, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
 
         assertTrue(panel.isRightAxisInUse());
         assertTrue(view().hasY2());
@@ -66,12 +66,12 @@ class FlowVizPanelRightAxisTest {
     void onLogAnAutoYLeftAxisWithNoSeriesKeepsItsRange() {
         panel.model().update(st -> st.withYAxisScale(YAxisScale.LOG));
         panel.model().update(st -> st.withAutoYMode(true));
-        panel.setSeriesOnRightAxis(small, true);
-        panel.setSeriesOnRightAxis(large, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(small, true));
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         double y1Min = view().getMinValue(); // fitted to larger alone
         double y1Max = view().getMaxValue();
 
-        panel.setSeriesOnRightAxis(larger, true); // the left axis' last series
+        panel.model().update(st -> st.withSeriesOnRightAxis(larger, true)); // the left axis' last series
 
         assertEquals(y1Min, view().getMinValue(), "not the -1..1 default, which LOG cannot show");
         assertEquals(y1Max, view().getMaxValue());
@@ -80,9 +80,9 @@ class FlowVizPanelRightAxisTest {
 
     @Test
     void zoomToFitGivesALeftAxisWithNoSeriesTheRightAxisRange() {
-        panel.setSeriesOnRightAxis(small, true);
-        panel.setSeriesOnRightAxis(large, true);
-        panel.setSeriesOnRightAxis(larger, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(small, true));
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
+        panel.model().update(st -> st.withSeriesOnRightAxis(larger, true));
 
         panel.zoomToFit();
 
@@ -92,11 +92,11 @@ class FlowVizPanelRightAxisTest {
 
     @Test
     void laterMovesDoNotResetTheRightAxis() {
-        panel.setSeriesOnRightAxis(large, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         double y2Min = view().getY2MinValue();
         double y2Max = view().getY2MaxValue();
 
-        panel.setSeriesOnRightAxis(larger, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(larger, true));
 
         assertEquals(y2Min, view().getY2MinValue(), "y2 is sized only when it first appears");
         assertEquals(y2Max, view().getY2MaxValue());
@@ -104,8 +104,8 @@ class FlowVizPanelRightAxisTest {
 
     @Test
     void movingTheLastSeriesBackDropsTheRightAxis() {
-        panel.setSeriesOnRightAxis(large, true);
-        panel.setSeriesOnRightAxis(large, false);
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, false));
 
         assertFalse(panel.isRightAxisInUse());
         assertFalse(view().hasY2());
@@ -114,8 +114,8 @@ class FlowVizPanelRightAxisTest {
     @Test
     void autoYFitsEachAxisToItsOwnSeries() {
         panel.model().update(st -> st.withAutoYMode(true));
-        panel.setSeriesOnRightAxis(large, true);
-        panel.setSeriesOnRightAxis(larger, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
+        panel.model().update(st -> st.withSeriesOnRightAxis(larger, true));
 
         assertTrue(view().getMaxValue() < 20, "y1 holds only small: " + view());
         assertTrue(view().getY2MinValue() < 1000 && view().getY2MaxValue() > 6000, "y2 holds both: " + view());
@@ -123,7 +123,7 @@ class FlowVizPanelRightAxisTest {
 
     @Test
     void zoomToFitFitsEachAxisToItsOwnSeries() {
-        panel.setSeriesOnRightAxis(larger, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(larger, true));
         panel.zoomToFit();
 
         assertTrue(view().getMaxValue() > 2000 && view().getMaxValue() < 2200, "y1 holds small and large: " + view());
@@ -132,7 +132,7 @@ class FlowVizPanelRightAxisTest {
 
     @Test
     void aSeriesThatLeavesThePlotLeavesTheRightAxisAndReturnsOnTheLeft() {
-        panel.setSeriesOnRightAxis(large, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
 
         panel.model().update(st -> st.withVisibleSeries(List.of(small)));
         assertFalse(panel.isRightAxisInUse());
@@ -145,7 +145,7 @@ class FlowVizPanelRightAxisTest {
     @Test
     void movingASeriesThatIsNotVisibleIsIgnored() {
         panel.model().update(st -> st.withVisibleSeries(List.of(small)));
-        panel.setSeriesOnRightAxis(large, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
 
         assertFalse(panel.isRightAxisInUse());
         assertFalse(view().hasY2());
@@ -153,9 +153,9 @@ class FlowVizPanelRightAxisTest {
 
     @Test
     void undoRestoresTheAxisAssignmentAndRange() {
-        panel.setSeriesOnRightAxis(large, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         double y2Min = view().getY2MinValue();
-        panel.setSeriesOnRightAxis(larger, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(larger, true));
 
         panel.undo();
         assertTrue(panel.isOnRightAxis(large));
@@ -173,7 +173,7 @@ class FlowVizPanelRightAxisTest {
 
     @Test
     void aDuplicatedTabKeepsTheAxisAssignment() {
-        panel.setSeriesOnRightAxis(large, true);
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
 
         FlowVizPanel copy = new FlowVizPanel();
         copy.setDataSet(new DataSet());
