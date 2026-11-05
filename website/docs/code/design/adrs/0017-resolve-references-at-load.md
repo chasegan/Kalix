@@ -5,9 +5,8 @@ title: "ADR-0017: Resolve every expression reference at load; check output entri
 # ADR-0017: Resolve every expression reference at load; check output entries for layout only
 
 - **Status**: Proposed
-- **Date**: 2026-10-29 (§1 was already the engine's behaviour for every
-  namespace except `node.*`, `var.*` and `const.*`; recorded here)
-- **Deciders**: Proposed by Ciaran (@Eldred777)
+- **Date**: 2026-10-29
+- **Deciders**: Chas Egan (@chasegan); proposed by Ciaran (@Eldred777)
 - **Tags**: engine, io, language
 
 ## Context and problem statement
@@ -29,12 +28,9 @@ nothing on the load path called it.
 
 `[outputs]` entries were never checked for layout, so an entry that no
 expression could reference was accepted, for example `node.my gr4j.dsflow`.
-Existence is checked for `data.*`, `acc.*` and `ras.*` entries, but not for
-`node.*` and `var.*` entries. An unchecked entry naming nothing is handled
-differently on each output path: the IDE receives an empty series, the CLI
-leaves the column out of its CSV, and Python raises an error for a series
-requested by name unless `missing_ok=True`, which returns a zero-filled
-series.
+A `data.*` entry must name an input column, because the column is loaded;
+no other entry is checked for existence, and one that names nothing records
+an empty series.
 
 The question: which references must resolve, and when is that checked?
 
@@ -68,23 +64,23 @@ Chosen option: **1**. An expression computes a result, so a reference to
 nothing changes the result; an `[outputs]` entry is a request to record, so
 a request for nothing changes no result.
 
-1. **Every reference an expression reads must resolve when the model loads,
-   in every namespace, with or without an offset.** A reference that names
+1. **Every reference an expression reads must resolve when the engine loads
+   the model, in every namespace, with or without an offset.** A reference that names
    nothing is an error naming it, never a default, NaN or zero. A namespace
    added later comes with its check.
 2. **A reference resolves when the model defines or writes what it names**:
-   an input column, a constant, an output the node's type records, a var, an
+   an input column, a constant, an output the node records, a var, an
    account or group field, a RAS field, a table, or a `sim.*` field.
 3. **An `[outputs]` entry must be dot-separated segments, at least two, each
    made of ASCII letters, digits and underscores**, matched
    case-insensitively ([ADR-0006](0006-expression-naming.md) §2.6 and its
    2026-10-29 amendment). A malformed entry is refused at load, naming the
    line. Expression references get the same shape from the grammar.
-4. **A `node.*` or `var.*` entry in `[outputs]` is not checked for
-   existence.** An entry that nothing writes stays empty; each output path
-   decides how to present an empty series. `data.*`, `acc.*` and `ras.*`
-   entries keep the existence checks they already had, and are outside this
-   decision.
+4. **An `[outputs]` entry for a computed series (`node.*`, `var.*`, `acc.*`,
+   `ras.*`) is not checked for existence.** An entry that nothing writes stays
+   empty; each output path decides how to present an empty series. A `data.*`
+   entry must name an input column, as every `data.*` reference must: the
+   column is loaded, not computed, and a missing one is a missing input.
 
 Option 2 lets one stale entry stop the whole run, and an output list could
 no longer be shared between model variants. Option 3 is how #442 happened:
@@ -99,8 +95,8 @@ the cost is visible in the results and limited to that one series.
 
 ## Worked example
 
-A lagged read of an output the node's type doesn't record, in a model that
-has a `[node.catchment]`:
+A lagged read of an output the node doesn't record, in a model that has a
+`[node.catchment]`:
 
 ```ini
 inflow = node.catchment.dsflw[-1, 0.0]
@@ -156,7 +152,8 @@ are held by review.
 - Related: [ADR-0005](0005-node-definition-order.md),
   [ADR-0006](0006-expression-naming.md),
   [ADR-0012](0012-inputs-in-step-with-the-simulation.md)
-- Issue: [#442](https://github.com/chasegan/Kalix/issues/442)
+- Issue: [#442](https://github.com/chasegan/Kalix/issues/442); pull request
+  [#498](https://github.com/chasegan/Kalix/pull/498)
 
 ## Amendments
 
