@@ -180,6 +180,15 @@ fn test_reference_to_undeclared_constant_is_refused() {
     assert!(err.contains("Unknown constant 'const.nosuch'"), "{}", err);
 }
 
+/// The optimiser sets a declared constant's value; it is no substitute for the
+/// declaration, so the structural check every load path runs refuses it.
+#[test]
+fn test_undeclared_constant_is_refused_by_the_structural_check() {
+    let mut model = IniModelIO::read_model_string(&model_ini("src", "1 + const.k", "", "node.src.dsflow")).unwrap();
+    let err = model.validate_model_structure().unwrap_err();
+    assert!(err.contains("Unknown constant 'const.k'"), "{}", err);
+}
+
 #[test]
 fn test_reference_to_constant_declared_after_use_is_accepted() {
     let extra = "[const]\nconst.k = 2\n";

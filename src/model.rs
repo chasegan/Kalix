@@ -435,6 +435,11 @@ impl Model {
         //   writer, since nodes claimed theirs in initialise.
         self.validate_computed_references()?;
 
+        //   An expression's const.* reference registers the constant; only
+        //   [const] assigns it. The optimiser sets the value of a declared
+        //   constant; it does not stand in for the declaration.
+        self.data_cache.constants.assert_all_constants_have_assigned_values()?;
+
         //3) Validate link ordering (structural only, no input data required).
         //   Also re-checked in initialize_network() before every run(), since
         //   that call additionally resets per-run node/ordering state -- but
@@ -556,12 +561,6 @@ impl Model {
         //2) Nodes ask data_cache for idx of relevant data series for input
         //   (both delegated to configure_model_structure)
         self.configure_model_structure()?;
-
-        //1b) An expression's const.* reference registers the constant; [const]
-        //   or the optimiser, which assigns between load and configure, gives it
-        //   a value. So this is a configure-time check, not part of the
-        //   structural one that load and patch run.
-        self.data_cache.constants.assert_all_constants_have_assigned_values()?;
 
         //2b) Reject any input that was declared but never supplied. Nothing in
         //   the engine can supply a bare declaration, so an empty-valued

@@ -143,9 +143,10 @@ Error on line 4: Invalid output 'node.my dam.volume'. Expected dot-separated nam
 - `table.*`, `sim.*` and functions: resolved when the expression is lowered,
   which fails on an unknown name.
 - `const.*`: `ConstantsCache::assert_all_constants_have_assigned_values`
-  (`src/data_management/constants_cache.rs`), called from `Model::configure`
-  (`src/model.rs`), before the first timestep rather than at load: the
-  optimiser assigns its constants between the two. Tests:
+  (`src/data_management/constants_cache.rs`), called from
+  `Model::configure_model_structure` (`src/model.rs`). The optimiser sets
+  the value of a declared constant; an undeclared one is refused at load on
+  every path, the optimiser's included. Tests:
   `src/tests/test_reference_validation.rs`.
 
 §3: the `[outputs]` branch of the model reader refuses an entry unless every

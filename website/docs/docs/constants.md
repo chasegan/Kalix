@@ -33,7 +33,9 @@ demand = const.demand_factor * data.raw_demand
 
 Constants are resolved at load, wherever they sit in the file, so a `[const]`
 section may appear before or after the nodes that use it. A reference to a
-constant that isn't declared is refused before the model runs, naming the constant.
+constant that isn't declared is refused when the engine loads the model, naming the
+constant. That includes a constant an optimisation calibrates: the optimisation sets
+its value, but the `[const]` section must declare it.
 
 ## Optimisable
 
