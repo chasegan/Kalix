@@ -6,7 +6,7 @@ title: "Conventions"
 
 ## Sections
 
-Each section header may appear only once in a model. A repeated header, such as two `[node.dam]` sections, is refused when the engine loads the model, with an error naming both lines.
+Each section header may appear only once in a model, and each key only once in its section. A repeated header, such as two `[node.dam]` sections, or a repeated key, such as two `inflow =` lines in one node, is refused when the engine loads the model, with an error naming both lines.
 
 ## Node Names
 
