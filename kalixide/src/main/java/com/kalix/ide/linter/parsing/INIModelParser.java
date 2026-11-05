@@ -68,6 +68,7 @@ public class INIModelParser {
         private final Map<String, Integer> inputFileAliasLineNumbers = new LinkedHashMap<>();  // Track line numbers for aliases
         private final Map<String, NodeSection> nodes = new LinkedHashMap<>();
         private final List<NodeSection> allNodeSections = new ArrayList<>(); // Track all nodes including duplicates
+        private final List<Section> allSections = new ArrayList<>(); // Every section header in document order, repeats included
 
         public List<SyntaxIssue> getSyntaxIssues() { return syntaxIssues; }
         public Map<String, Section> getSections() { return sections; }
@@ -85,6 +86,8 @@ public class INIModelParser {
         public Map<String, Integer> getInputFileAliasLineNumbers() { return inputFileAliasLineNumbers; }
         public Map<String, NodeSection> getNodes() { return nodes; }
         public List<NodeSection> getAllNodeSections() { return allNodeSections; }
+        /** Every section in document order, repeated headers included; {@link #getSections()} keeps the last of a repeat. */
+        public List<Section> getAllSections() { return allSections; }
     }
 
     public static class Section {
@@ -394,6 +397,12 @@ public class INIModelParser {
     }
 
     private static Section createSection(String sectionName, int lineNumber, ParsedModel model) {
+        Section section = newSection(sectionName, lineNumber, model);
+        model.getAllSections().add(section);
+        return section;
+    }
+
+    private static Section newSection(String sectionName, int lineNumber, ParsedModel model) {
         Section section;
 
         // Check if this is a node section: "node.<name>" with a non-empty name

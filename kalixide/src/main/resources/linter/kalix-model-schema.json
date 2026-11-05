@@ -1176,6 +1176,14 @@
       "severity": "error",
       "description": "Node names must be unique, ignoring case"
     },
+    "unique_section_headers": {
+      "severity": "error",
+      "description": "A section header may appear only once"
+    },
+    "unique_keys": {
+      "severity": "error",
+      "description": "A key may appear only once in a section"
+    },
     "node_name_format": {
       "severity": "error",
       "description": "Node names may contain only letters, digits and underscores"

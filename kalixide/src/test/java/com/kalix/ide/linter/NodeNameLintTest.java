@@ -51,6 +51,30 @@ class NodeNameLintTest {
     }
 
     @Test
+    void aRepeatedNonNodeSectionIsAnError() {
+        List<ValidationIssue> found = issues("duplicate_section",
+            "[var.x]\ny = 1\n\n[node.a]\ntype = gauge\nloc = 0, 0\n\n[var.x]\ny = 2\n");
+        assertEquals(1, found.size());
+        assertEquals(8, found.get(0).getLineNumber());
+        assertTrue(found.get(0).getMessage().contains("also defined on line 1"));
+    }
+
+    @Test
+    void aRepeatedNodeSectionIsLeftToTheNodeRule() {
+        assertTrue(issues("duplicate_section",
+            "[node.a]\ntype = gauge\nloc = 0, 0\n\n[node.a]\ntype = gauge\nloc = 0, 1\n").isEmpty());
+    }
+
+    @Test
+    void aRepeatedKeyInASectionIsAnError() {
+        List<ValidationIssue> found = issues("duplicate_key",
+            "[node.a]\ntype = gauge\nloc = 0, 0\nloc = 1, 1\n");
+        assertEquals(1, found.size());
+        assertEquals(4, found.get(0).getLineNumber());
+        assertTrue(found.get(0).getMessage().contains("'loc'"));
+    }
+
+    @Test
     void namesDifferingOnlyInCaseAreDuplicates() {
         List<ValidationIssue> found = issues("duplicate_node_name",
             "[node.Dam]\ntype = gauge\nloc = 0, 0\n\n[node.dam]\ntype = gauge\nloc = 0, 1\n");
