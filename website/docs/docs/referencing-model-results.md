@@ -133,4 +133,4 @@ Node references are **case-insensitive**: `node.My_Catchment.dsflow` and `node.m
 
 Node names are not sanitised. A name may only contain letters, digits and underscores (see [Node Names](conventions.md#node-names)), so every node can be referenced as written.
 
-A reference to a node, output or var that doesn't exist is an error when the model loads, with or without an offset. A typo such as `node.catchment.dsflw[-1, 0.0]` stops the model loading, naming the reference, rather than reading the default value for the whole run.
+A reference to a node, output or var that doesn't exist is an error when the engine loads the model, with or without an offset. A typo such as `node.catchment.dsflw[-1, 0.0]` is refused, naming the reference, rather than reading the default value for the whole run.
