@@ -226,6 +226,19 @@ public class LinterSchema {
                 }
             }
 
+            // Parse parameters that need one of a set of others
+            JsonNode requiresNode = typeNode.path("requires_one_of");
+            if (requiresNode.isArray()) {
+                for (JsonNode entryNode : requiresNode) {
+                    List<String> oneOf = new ArrayList<>();
+                    for (JsonNode param : entryNode.path("one_of")) {
+                        oneOf.add(param.asText());
+                    }
+                    nodeType.requiresOneOf.add(new NodeTypeDefinition.RequiresOneOf(
+                            entryNode.path("param").asText(), oneOf));
+                }
+            }
+
             // Parse allowed outputs
             JsonNode allowedOutputsNode = typeNode.path("allowed_outputs");
             if (allowedOutputsNode.isArray()) {

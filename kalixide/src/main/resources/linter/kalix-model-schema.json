@@ -740,6 +740,9 @@
       "overridden_params": [
         { "when_true": "order_through", "params": ["target_level", "target_volume", "forecast_adjustment"] }
       ],
+      "requires_one_of": [
+        { "param": "forecast_adjustment", "one_of": ["target_level", "target_volume"] }
+      ],
       "dsnode_params": [
         "ds_1",
         "ds_2",
@@ -1214,6 +1217,10 @@
     "overridden_params": {
       "severity": "warning",
       "description": "A parameter has no effect while another parameter overrides it (e.g. a target under order_through = true)"
+    },
+    "requires_one_of": {
+      "severity": "error",
+      "description": "A parameter needs at least one of another set (e.g. forecast_adjustment needs a target)"
     },
     "coordinate_format": {
       "severity": "error",
