@@ -58,16 +58,16 @@ The GR4J node simply adds inflows from a GR4J model (Perrin et al., 2003) to the
 The GR4J model uses four parameters:
 
 - X1 (Production Storage Capacity): This parameter represents the maximum capacity of the production store in millimetres (mm).
-  - Bounds: A common range for X1 is from 0 mm to 6000 mm.
+    - Bounds: A common range for X1 is from 0 mm to 6000 mm.
 
 - X2 (Groundwater Exchange Coefficient): This parameter controls the exchange of water between the groundwater and the routing store, with units of mm/day.
-  - Bounds: The typical range for X2 is -20 mm/day to 10 mm/day. Negative values indicate groundwater infiltration, and positive values indicate water leaving the aquifer.
+    - Bounds: The typical range for X2 is -20 mm/day to 10 mm/day. Negative values indicate groundwater infiltration, and positive values indicate water leaving the aquifer.
 
 - X3 (Routing Storage Capacity): This parameter refers to the 1-day-ahead maximum capacity of the routing store in mm.
-  - Bounds: A common range for X3 is 0 mm to 4000 mm.
+    - Bounds: A common range for X3 is 0 mm to 4000 mm.
 
 - X4 (Unit Hydrograph Base Time): This parameter is the time base of the unit hydrograph in days.
-  - Bounds: A typical range for X4 is 0.04 days to 20 days.
+    - Bounds: A typical range for X4 is 0.04 days to 20 days.
 
 Considerations:
 
