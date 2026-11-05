@@ -154,8 +154,7 @@ public class PlotLegendManager {
 
     /**
      * The entries in listed order -- left-axis series, then right-axis ones -- with the
-     * index of the first right-axis entry. Built per paint and per hit-test from the
-     * current axis assignment, so it never goes stale.
+     * index of the first right-axis entry.
      */
     private record Listing(List<LegendEntry> entries, int rightStart) {
         boolean hasDivider() {
