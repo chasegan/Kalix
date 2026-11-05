@@ -13,9 +13,11 @@ import org.slf4j.LoggerFactory;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -196,6 +198,18 @@ public class LinterSchema {
             if (dsnodeNode.isArray()) {
                 for (JsonNode param : dsnodeNode) {
                     nodeType.dsnodeParams.add(param.asText());
+                }
+            }
+
+            // Parse groups of mutually exclusive parameters
+            JsonNode exclusiveNode = typeNode.path("exclusive_params");
+            if (exclusiveNode.isArray()) {
+                for (JsonNode group : exclusiveNode) {
+                    List<String> params = new ArrayList<>();
+                    for (JsonNode param : group) {
+                        params.add(param.asText());
+                    }
+                    nodeType.exclusiveParams.add(params);
                 }
             }
 

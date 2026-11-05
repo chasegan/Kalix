@@ -9,6 +9,8 @@ import com.kalix.ide.linter.schema.DataType;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.schema.ParameterDefinition;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -58,10 +60,39 @@ public class NodeValidator implements ValidationStrategy {
             }
         }
 
+        for (List<String> group : typeDef.exclusiveParams) {
+            validateExclusiveParams(node, group, schema, result);
+        }
+
         // Validate parameter types and formats
         for (INIModelParser.Property prop : node.getProperties().values()) {
             validateNodeProperty(node, prop, typeDef, model, schema, result);
         }
+    }
+
+    /** Report a node that gives more than one parameter of an exclusive group, on the last one given. */
+    private void validateExclusiveParams(INIModelParser.NodeSection node, List<String> group,
+                                         LinterSchema schema, ValidationResult result) {
+        ValidationRule rule = schema.getValidationRule("exclusive_params");
+        if (rule != null && !rule.isEnabled()) {
+            return;
+        }
+        List<INIModelParser.Property> given = new ArrayList<>();
+        for (String param : group) {
+            INIModelParser.Property prop = node.getProperties().get(param);
+            if (prop != null) {
+                given.add(prop);
+            }
+        }
+        if (given.size() < 2) {
+            return;
+        }
+        given.sort(Comparator.comparingInt(INIModelParser.Property::getLineNumber));
+        ValidationRule.Severity severity = (rule != null) ? rule.getSeverity() : ValidationRule.Severity.ERROR;
+        List<String> names = given.stream().map(INIModelParser.Property::getKey).toList();
+        result.addIssue(given.get(given.size() - 1).getLineNumber(),
+                      "Node '" + node.getNodeName() + "' cannot have both " + String.join(" and ", names),
+                      severity, "exclusive_params");
     }
 
     private void validateNodeProperty(INIModelParser.NodeSection node, INIModelParser.Property prop,
