@@ -225,6 +225,11 @@ public class PlotInteractionManager {
             @Override
             public void mousePressed(MouseEvent e) {
                 Rectangle plotArea = plotAreaSupplier.get();
+                // A new press is a new gesture: a release lost to a focus change must not
+                // leave an axis drag running into the next press.
+                axisDrag = null;
+                axisDragPress = null;
+                axisDragStart = null;
                 // isPopupTrigger, checked on BOTH press and release: the trigger fires
                 // on press on macOS/Linux but on release on Windows, and macOS
                 // Ctrl+click is a popup gesture without being the right button.
