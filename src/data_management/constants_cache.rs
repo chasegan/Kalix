@@ -100,7 +100,7 @@ impl ConstantsCache {
         for i in 0..self.len() {
             if !self.is_assigned[i] {
                 return Err(format!(
-                    "Unknown constant '{}'. Constants are declared in the [const] section.", self.names[i]));
+                    "Unknown constant '{0}'. Declare it in [const] as '{0} = <number>'.", self.names[i]));
             }
         }
         Ok(())
