@@ -187,3 +187,22 @@ fn test_reference_to_constant_declared_after_use_is_accepted() {
     let series = model.get_output_series(Some(vec!["node.src.dsflow".to_string()]), false).unwrap();
     assert_eq!(series[0].values[0], 3.0);
 }
+
+// -----------------------------------------------------------------------------
+// Validating at load is not configuring
+// -----------------------------------------------------------------------------
+
+/// The optimiser once took a filled execution order to mean "configured" and
+/// skipped loading the inputs for a model that had only been validated.
+#[test]
+fn test_a_validated_model_is_not_yet_configured() {
+    let mut model = IniModelIO::read_model_string(&model_ini("src", "1", "", "node.src.dsflow")).unwrap();
+    model.validate_model_structure().unwrap();
+    assert!(!model.execution_order.is_empty(), "validation works out the execution order");
+    assert!(!model.configured, "but only configure() loads the inputs and fixes the period");
+
+    model.configure().unwrap();
+    assert!(model.configured);
+    assert!(model.clone_for_run().configured, "a worker clone starts configured");
+    model.run().unwrap();
+}

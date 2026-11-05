@@ -278,9 +278,12 @@ impl Command for LoadModelFileCommand {
             .and_then(|v| v.as_str())
             .ok_or_else(|| CommandError::InvalidParameters("model_path is required".to_string()))?;
 
-        // Load the model
-        let model = IniModelIO::read_model_file(model_path)
+        // Load the model, and check its shape and references now rather than
+        // when it is run, so a bad reference is reported as soon as it is sent.
+        let mut model = IniModelIO::read_model_file(model_path)
             .map_err(|e| CommandError::ExecutionError(format!("Failed to load model: {}", e)))?;
+        model.validate_model_structure()
+            .map_err(|e| CommandError::ExecutionError(format!("Failed to validate model: {}", e)))?;
 
         // Store the model in the session
         session.set_model(model);
@@ -338,9 +341,13 @@ impl Command for LoadModelStringCommand {
             .and_then(|v| v.as_str())
             .ok_or_else(|| CommandError::InvalidParameters("model_ini is required".to_string()))?;
 
-        // Load the model from string
-        let model = IniModelIO::read_model_string(model_ini)
+        // Load the model from string, and check its shape and references now
+        // rather than when it is run, so a bad reference is reported as soon as
+        // it is sent.
+        let mut model = IniModelIO::read_model_string(model_ini)
             .map_err(|e| CommandError::ExecutionError(format!("Failed to parse model: {}", e)))?;
+        model.validate_model_structure()
+            .map_err(|e| CommandError::ExecutionError(format!("Failed to validate model: {}", e)))?;
 
         // Store the model in the session
         session.set_model(model);
@@ -1154,5 +1161,20 @@ mod tests {
         ).unwrap();
         
         assert_eq!(result["version"], env!("KALIX_VERSION"));
+    }
+
+    /// The session checks a model's shape and references when it loads it, as the
+    /// Python package does, so the IDE hears of a bad reference before it runs.
+    #[test]
+    fn load_model_string_refuses_a_bad_reference_at_load() {
+        let cmd = LoadModelStringCommand;
+        let mut session = Session::new();
+        let ini = "[kalix]\nstart = 2020-01-01\nend = 2020-01-10\n\n[node.src]\nloc = 0, 0\ntype = inflow\n\
+                   inflow = node.nosuch.dsflow[-1, 0.0]\nds_1 = sink\n\n[node.sink]\nloc = 0, 20\ntype = blackhole\n";
+        let err = cmd.execute(&mut session, serde_json::json!({"model_ini": ini}), Box::new(|_| {}))
+            .err().expect("a bad reference is refused at load");
+        let text = format!("{:?}", err);
+        assert!(text.contains("Unknown node 'nosuch'"), "{}", text);
+        assert!(session.get_model().is_none(), "nothing is kept from a refused load");
     }
 }

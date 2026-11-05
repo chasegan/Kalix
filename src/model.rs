@@ -194,6 +194,10 @@ pub struct Model {
     /// Populated: computed by `check_execution_order()`, called from both
     /// `configure()` and `initialize_network()` (start of every `run()`).
     pub execution_order: Vec<usize>,
+    /// Set by [`configure`](Self::configure) once the inputs are loaded and the
+    /// period is fixed. The structural step alone (load, patch) does not set it:
+    /// it fills the execution order, which is not the same thing.
+    pub(crate) configured: bool,
 
     /// Hot path: order phase, read in run_timestep().
     ///
@@ -299,10 +303,9 @@ impl Model {
     /// skipped when the model is already configured - their data lives in the
     /// data_cache by then.
     pub fn clone_for_run(&self) -> Model {
-        let configured = !self.execution_order.is_empty();
         Model {
             configuration: self.configuration.clone(),
-            input_sources: if configured {
+            input_sources: if self.configured {
                 vec![]
             } else {
                 self.input_sources.clone()
@@ -323,6 +326,7 @@ impl Model {
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
             execution_order: self.execution_order.clone(),
+            configured: self.configured,
             simple_ordering_system: self.simple_ordering_system.clone(),
             node_lookup: self.node_lookup.clone(),
             ini_document: None,
@@ -352,6 +356,7 @@ impl Model {
             outgoing_links: self.outgoing_links.clone(),
             incoming_links: self.incoming_links.clone(),
             execution_order: vec![],
+            configured: false,
             simple_ordering_system: SimpleNodewiseOrderingSystem::new(),
             node_lookup: self.node_lookup.clone(),
             ini_document: self.ini_document.clone(),
@@ -429,10 +434,6 @@ impl Model {
         //   Every node.* / var.* series an expression reads must now have a
         //   writer, since nodes claimed theirs in initialise.
         self.validate_computed_references()?;
-
-        //   An expression's const.* reference registers the constant; only
-        //   [const] (or the optimiser, before configure) assigns it.
-        self.data_cache.constants.assert_all_constants_have_assigned_values()?;
 
         //3) Validate link ordering (structural only, no input data required).
         //   Also re-checked in initialize_network() before every run(), since
@@ -555,6 +556,12 @@ impl Model {
         //2) Nodes ask data_cache for idx of relevant data series for input
         //   (both delegated to configure_model_structure)
         self.configure_model_structure()?;
+
+        //1b) An expression's const.* reference registers the constant; [const]
+        //   or the optimiser, which assigns between load and configure, gives it
+        //   a value. So this is a run-time check, not part of the structural one
+        //   that load and patch run.
+        self.data_cache.constants.assert_all_constants_have_assigned_values()?;
 
         //2b) Reject any input that was declared but never supplied. Nothing in
         //   the engine can supply a bare declaration, so an empty-valued
@@ -717,7 +724,7 @@ impl Model {
         //   not that it has values - non-critical data is allowed to have missing values.
         self.validate_data_references(false)?;
 
-        // Return
+        self.configured = true;
         Ok(())
     }
 

@@ -395,8 +395,9 @@ impl Optimisable for OptimisationProblem {
     }
 
     fn evaluate(&mut self) -> Result<f64, String> {
-        // Configure model if needed (first time)
-        if self.model.execution_order.is_empty() {
+        // Configure the model the first time. A model validated at load has
+        // its execution order already, so that is no proxy for configured.
+        if !self.model.configured {
             self.model.configure()?;
         }
 
