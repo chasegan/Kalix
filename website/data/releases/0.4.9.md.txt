@@ -17,7 +17,15 @@ pip: "pip install kalix==0.4.9"
     - A Pixie file holding an empty series can now be read back in the engine and the IDE; its `.pxt` used to hold an invalid start and end.
     - Python: `read_pixie()` returns an empty series as a column of NaN on the other series' timestamps. Series with values on different timesteps are still refused.
     - Python: `set_input()` now raises `ModelValidationError` for data with no rows or one row. Previously it assumed a daily timestep for a single row, and raised `ValueError` for no rows.
+- New! View the plotted data as a table in the Run Manager! A `Data` view in the Run Manager's plot tabs, beside `Plot` and `Stats` (#456).
+    - It shows the plotted values as a table, after the tab's aggregation, masks and plot type, exactly as `Save Data` writes them.
+    - `Find…` (Ctrl+f, then F3 for the next match) and `Copy` work as in the data viewer.
+- Unticked series no longer stay in memory: untick a series in every plot tab to free it.
+- `Save Data` on a double-mass plot now writes the cumulative reference as the first column, headed `cumulative reference`. It used to write it as dates in 1970.
 - IDE: files dragged from Finder or Explorer onto the project tree are copied into the folder they land on. If a name is already taken, you're asked to replace it or keep both (#469).
+- IDE: New! Move a plotted series to a secondary Y axis (#196). Ctrl+click a series in the key (Cmd+click on macOS), or right-click it and choose **Move to secondary Y axis**, to plot it against its own axis on the right. The key groups series by axis, and the plot menu gains **Copy secondary Y axis**, **Paste secondary Y axis** and a secondary Y row in **Set axis limits…**.
+- IDE plots: drag an axis to set its range. The bottom or top half of a Y axis moves its minimum or maximum, the left or right half of the time axis its start or end. Double-click a Y axis to fit it to the data in view, or the time axis to show the whole record.
+- IDE plots: with **Auto-scale Y axis** on, an axis with no data in view now keeps its range, where it used to jump to -1 to 1.
 - Name and reference checks (#442). **Breaking:** models that break these rules no longer load.
     - Node names may contain only letters, digits and underscores. Names that differ only in case (`Dam`, `dam`) are duplicates and rejected. A name like `[node.my gr4j]` used to load, but no expression could reach it.
     - A section header that appears twice in a model (e.g. two `[node.a]` sections) is an error naming both lines. The later section used to replace the earlier one without warning, dropping all of its properties.

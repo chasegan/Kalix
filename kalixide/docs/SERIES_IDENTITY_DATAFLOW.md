@@ -17,7 +17,7 @@ This replaces the previous design in which the string `"node.x.ds_1 [Run_3]"` wa
 
 Refs are minted at the *producer* boundary:
 
-- `OutputsTreeBuilder` — refs are minted when the outputs tree is built: each `SeriesLeafNode` carries a `public final SeriesRef ref` computed at construction (`RunSeries` / `LastSeries` / `DatasetSeries`). `RunManager.seriesRefForLeaf(SeriesLeafNode)` is now a trivial accessor (`return leaf.ref`) used by `onOutputsTreeSelectionChanged`, `searchAndCollectPaths`, and `getVisibleSeriesKeys` so all read the one ref the leaf was built with.
+- `OutputsTreeBuilder` — refs are minted when the outputs tree is built: each `SeriesLeafNode` carries a `public final SeriesRef ref` computed at construction (`RunSeries` / `LastSeries` / `DatasetSeries`). `RunManager.seriesRefForLeaf(SeriesLeafNode)` is now a trivial accessor (`return leaf.ref`) used by `onOutputsTreeCheckedChanged` (through `SeriesFetchCoordinator`), `searchAndCollectPaths`, and `getVisibleSeriesKeys` so all read the one ref the leaf was built with.
 - `RunInfoImpl` carries a stable `runId` (final, `AtomicLong`-assigned at construction). `RunInfoImpl.withName` preserves the runId across rename — this is the load-bearing fact that makes the whole scheme work.
 - `OptimisationPlotManager` uses two static `DatasetSeries("(optimisation)", ...)` constants for its synthetic series.
 - `FlowVizDataManager` (the file-based viewer's loader) mints `DatasetSeries(file.absolutePath, "filename: column")` refs via `uniqueRefFor` when a CSV/Pixie file is loaded, and inserts them into the window's `DataSet` through the ref API. `FlowVizWindow` receives the refs via the `DataSetListener` callbacks — it never constructs refs itself.
@@ -30,12 +30,11 @@ After construction, refs flow through these collections:
 | Storage | Type | Owner |
 |---|---|---|
 | `plotDataSet` (the shared pool) | `Map<SeriesRef, TimeSeriesData>` (via `DataSet.seriesByRef`) — `LastSeries` keys are redirected to `RunSeries` by the pool's `LastSeriesResolver`, so storage only ever holds `RunSeries` / `DatasetSeries` keys | `RunManager` |
-| `tab.selectedSeries` (per tab) | `Set<SeriesRef>` | `VisualizationTabManager.TabInfo` |
 | `sharedColorMap` | `Map<SeriesRef, Color>` | `SeriesColorManager` (reference shared with `VisualizationTabManager`, `FlowVizPanel`, `TimeSeriesRenderer`, `CoordinateDisplayManager`) |
 | `FlowVizPanel.visibleSeries` | `List<SeriesRef>` | `FlowVizPanel` (reference shared with `TimeSeriesRenderer`, `CoordinateDisplayManager`, `PlotInteractionManager` via supplier) |
-| `FlowVizState.visibleSeries` | `List<SeriesRef>` | `FlowVizStateHistory` (undo/redo) |
+| `FlowVizState.visibleSeries` (per tab) | `List<SeriesRef>` | `FlowVizModel` — the tab's selection, in order; the pages project it, and undo/redo restore it |
+| `FlowVizState.rightAxisSeries` (per tab) | `Set<SeriesRef>` | `FlowVizModel` — the visible series drawn against the secondary Y axis; kept a subset of `visibleSeries` by the state's constructor |
 | `StatsTableModel.seriesData` (`SeriesStats.ref`) | row identity by ref | `StatsTableModel` |
-| `StatsTableModel.originalSeriesCache` | `Map<SeriesRef, TimeSeriesData>` | `StatsTableModel` |
 | `TimeSeriesRenderer.seriesRenderModes` | `Map<SeriesRef, SeriesRenderMode>` | `TimeSeriesRenderer` |
 | `LODManager.lodCache` | string key built from `ref.toString() + viewport` | `LODManager` |
 
@@ -65,7 +64,7 @@ Rename consequences: a run's `runId` is stable, so the resolver returns a new di
 Consequences:
 
 - **Stale Last data is structurally impossible.** There is no `LastSeries` entry to go stale. When the Last run changes, a `LastSeries` ref simply resolves to a different `RunSeries`; old data remains valid under its own `RunSeries` key.
-- `RunManager.refreshLastSeries` still runs on each `updateLastRun` — its job is now only to *populate* the new `RunSeries(newLastId, baseName)` target if it isn't in the pool yet (fetch from `lastRunInfo`'s session). It no longer evicts or overwrites anything.
+- `LastRunTracker.refreshLastSeries` still runs on each `updateLastRun` — its job is only to *populate* the new `RunSeries(newLastId, baseName)` target if it isn't in the pool yet (fetch from `lastRunInfo`'s session). It overwrites nothing; the previous Last's `RunSeries` entry leaves the pool with the trim that follows, unless a tab selects that run directly.
 - The resolver returns `null` when no Last is set; the access then falls through to the bare `LastSeries` key (absent from storage — reads yield `null`, the intended "no Last" signal).
 
 When a new run becomes Last:
@@ -73,7 +72,7 @@ When a new run becomes Last:
 1. `updateLastRun` increments `lastRunGeneration` (volatile long).
 2. `refreshLastSeries` iterates `tabManager.getAllSelectedSeriesAcrossTabs()`, filters for `instanceof LastSeries`, captures `lastRunGeneration`, and fetches data for each into the pool (which lands under the new `RunSeries` via the resolver).
 3. Async responses check `capturedGeneration == lastRunGeneration` before writing — a stale response would otherwise be written under the *new* Last's `RunSeries` key, so the guard is still required.
-4. `onOutputsTreeSelectionChanged`'s async callback applies the same guard, but only to `instanceof LastSeries` entries in the captured batch.
+4. The fetch coordinator's async callback (`SeriesFetchCoordinator`, from `onOutputsTreeCheckedChanged`) applies the same guard, but only to `instanceof LastSeries` entries in the captured batch.
 
 ## Run rename — what now happens
 
@@ -121,8 +120,8 @@ There is no longer any legacy string-keyed code path — the file-import bridge 
 | Types | `flowviz/data/SeriesRef.java`, `RunSeries.java`, `LastSeries.java`, `DatasetSeries.java`, `LabelResolver.java`, `DefaultLabelResolver.java` |
 | Data | `flowviz/data/DataSet.java` (ref-keyed), `TimeSeriesData.java` (nameless) |
 | Identity | `models/RunInfoImpl.java` (runId, withName) |
-| Producer | `windows/RunManager.java` (onOutputsTreeSelectionChanged, seriesRefForLeaf, refreshLastSeries, renameRun) |
-| Tabs | `flowviz/VisualizationTabManager.java` (TabInfo, tab.selectedSeries, sharedColorMap wiring) |
+| Producer | `windows/RunManager.java` (onOutputsTreeCheckedChanged, seriesRefForLeaf), `windows/SeriesFetchCoordinator.java` (the fetches), `windows/LastRunTracker.java` (refreshLastSeries), `windows/RunContextMenuManager.java` (renameRun) |
+| Tabs | `flowviz/VisualizationTabManager.java` (TabInfo, sharedColorMap wiring), `flowviz/FlowVizModel.java` (the tab's state and selection) |
 | Plot pipeline | `flowviz/FlowVizPanel.java`, `flowviz/rendering/TimeSeriesRenderer.java`, `LODManager.java` |
 | Legend | `flowviz/PlotLegendManager.java` (renders via LabelResolver) |
 | Stats | `flowviz/models/StatsTableModel.java` (ref-keyed; column 0 via LabelResolver) |

@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz.rendering;
 
+import com.kalix.ide.flowviz.transform.XAxisType;
 import com.kalix.ide.flowviz.style.DashStyle;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.utils.TimeFormatUtil;
@@ -540,6 +541,37 @@ public class AxisRenderer {
         drawTimeAxis(g2d, viewport, axisInfo, colors);
         drawValueAxis(g2d, viewport, axisInfo, colors);
         drawAxisTitles(g2d, viewport, axisInfo, colors);
+    }
+
+    /**
+     * Draws the right (y2) value axis: ticks on the plot's right edge, labels to their right.
+     * No grid and no title -- the grid follows the left axis.
+     *
+     * @param g2d Graphics context
+     * @param y2View The right axis as a single-axis view ({@link ViewPort#forY2})
+     * @param colors The current theme's plot colours (resolved once per paint)
+     */
+    public void drawRightValueAxis(Graphics2D g2d, ViewPort y2View, PlotColors colors) {
+        g2d.setStroke(new BasicStroke(AXIS_STROKE_WIDTH));
+        g2d.setFont(new Font("Arial", Font.PLAIN, 10));
+        FontMetrics fm = g2d.getFontMetrics();
+
+        int rightX = y2View.getPlotX() + y2View.getPlotWidth();
+        int plotY = y2View.getPlotY();
+        int plotHeight = y2View.getPlotHeight();
+        List<Double> ticks = calculateValueTicks(y2View);
+        int decimalPlaces = decimalPlacesForTicks(ticks);
+
+        for (Double tickValue : ticks) {
+            int screenY = y2View.valueToScreenY(tickValue);
+            if (screenY >= plotY && screenY <= plotY + plotHeight) {
+                g2d.setColor(colors.axis);
+                g2d.drawLine(rightX, screenY, rightX + TICK_MARK_LENGTH, screenY);
+                g2d.setColor(colors.label);
+                g2d.drawString(formatValue(tickValue, decimalPlaces), rightX + VALUE_LABEL_OFFSET,
+                             screenY + fm.getAscent() / 2);
+            }
+        }
     }
 
     /**

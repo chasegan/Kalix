@@ -10,8 +10,9 @@ import java.io.File;
  * <p>The tab manager is host-agnostic: it owns tabs, panels, and their shared
  * state, and asks its host only for the things that genuinely belong to the
  * window around it — how series refs project to labels, where save dialogs
- * should start, and who wants to know when the active tab's context changes
- * (the Run Manager reprojects its trees; a plainer host ignores it).</p>
+ * should start, and who wants to know when the active tab's context or any tab's
+ * selection changes (the Run Manager reprojects its trees and trims its pool; a
+ * plainer host ignores both).</p>
  *
  * <p>Every method has a working default, so the no-frills host is
  * {@code new VizHost() { }}: plain tabs, default labels, no source context.
@@ -46,5 +47,12 @@ public interface VizHost {
      * for the host to reproject any views that mirror the active tab.
      */
     default void onActiveTabChanged() {
+    }
+
+    /**
+     * Called when any tab's selected series change, or a tab closes: the moment for a
+     * host that owns the shared pool to drop what no tab selects any more.
+     */
+    default void onSelectionsChanged() {
     }
 }

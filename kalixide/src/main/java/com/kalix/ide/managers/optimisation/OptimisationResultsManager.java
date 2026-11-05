@@ -48,6 +48,8 @@ public class OptimisationResultsManager {
         // Create read-only text editor for results
         this.optimisedModelEditor = new KalixIniTextArea(TEXT_AREA_ROWS, TEXT_AREA_COLUMNS);
         this.optimisedModelEditor.setEditable(false);
+        // Shown in a plain scroll pane with no gutter, so there is nothing to fold with.
+        this.optimisedModelEditor.setCodeFoldingEnabled(false);
         this.optimisedModelEditor.setText(MSG_READY);
     }
 

@@ -3,19 +3,11 @@ package com.kalix.ide.io;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
-import com.kalix.ide.flowviz.data.TimeSeriesData;
 import com.kalix.ide.flowviz.transform.PlotType;
-import com.kalix.ide.utils.TimeFormatUtil;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.List;
 
 /**
  * Utility class for exporting time series data to CSV format.
@@ -47,7 +39,7 @@ import java.util.List;
  *
  * @since 1.0
  * @see DataSet
- * @see TimeSeriesData
+ * @see TimeSeriesTable
  */
 public class TimeSeriesCsvExporter {
 
@@ -86,9 +78,9 @@ public class TimeSeriesCsvExporter {
     /**
      * Exports a dataset to a CSV file with plot type awareness.
      *
-     * <p>For EXCEEDANCE plot type, the first column is "percentile" with percentages.
-     * For other plot types it is the timestamps, headed "date" or "datetime" (see the class
-     * doc).</p>
+     * <p>The first column is what the plot type's X axis holds: the percentile for an
+     * exceedance plot, the cumulative reference for a double-mass plot, else the timestamps
+     * headed "date" or "datetime" (see {@link TimeSeriesTable}).</p>
      *
      * @param dataSet the dataset to export; must not be null
      * @param outputFile the target CSV file; will be created or overwritten
@@ -135,7 +127,8 @@ public class TimeSeriesCsvExporter {
     /**
      * Performs the actual CSV export operation.
      *
-     * <p>Rows are visited in chronological order by merging the series' sorted
+     * <p>The table's shape and spelling are {@link TimeSeriesTable}'s, shared with the
+     * Data page. Rows are visited in chronological order by merging the series' sorted
      * timestamp arrays; every data point is included even if series have different
      * timestamp sets (a series without a point at a row's timestamp gets an empty
      * cell).</p>
@@ -147,37 +140,13 @@ public class TimeSeriesCsvExporter {
      */
     private static void exportDataToCsv(DataSet dataSet, File file, PlotType plotType,
                                         LabelResolver labelResolver) throws IOException {
-        // One column per series, in pool insertion order, headed by the ref's projected
-        // label. Two series can share a label (the same derived-series name from two
-        // files of the same name, say); a second column with a header already used is
-        // headed "label (2)", never dropped.
-        List<String> headers = new ArrayList<>();
-        List<TimeSeriesData> allSeries = new ArrayList<>();
-        Map<String, Integer> usesOfLabel = new HashMap<>();
-        for (SeriesRef ref : dataSet.getSeriesRefs()) {
-            TimeSeriesData data = dataSet.getSeries(ref);
-            if (data == null) continue;
-            String label = labelResolver != null ? labelResolver.labelFor(ref) : String.valueOf(ref);
-            int uses = usesOfLabel.merge(label, 1, Integer::sum);
-            headers.add(uses == 1 ? label : label + " (" + uses + ")");
-            allSeries.add(data);
-        }
-        if (headers.isEmpty()) {
+        TimeSeriesTable table = new TimeSeriesTable(dataSet, plotType, labelResolver);
+        if (table.isEmpty()) {
             return;
         }
-
-        boolean isExceedance = (plotType == PlotType.EXCEEDANCE);
-
-        // Pick a single date format for the whole file based on the resolution of the data.
-        // Sub-daily series get ISO datetime; daily-or-coarser get date-only. Inferred from the
-        // first regular-interval series; falls back to date-only if none is regular.
-        long stepSeconds = CsvExportUtil.inferStepSeconds(allSeries);
-        String firstHeader = isExceedance ? "percentile"
-            : anyRowNeedsTime(allSeries, stepSeconds) ? "datetime" : "date";
-
         try (Writer writer = openWriter(file)) {
-            writeHeader(writer, firstHeader, headers);
-            writeDataRows(writer, allSeries, isExceedance, stepSeconds);
+            writeHeader(writer, table);
+            writeDataRows(writer, table);
         }
     }
 
@@ -191,31 +160,10 @@ public class TimeSeriesCsvExporter {
         return CsvZipFormat.newUtf8Writer(file);
     }
 
-    /**
-     * Whether any row {@link #writeDataRows} will write carries a time of day. Rows are
-     * formatted one by one, so series on different grids (midnight and 9am daily, say) mix
-     * bare dates and datetimes in one column; the heading then says "datetime". A sub-daily
-     * step answers on the first timestamp.
-     */
-    private static boolean anyRowNeedsTime(List<TimeSeriesData> allSeries, long stepSeconds) {
-        for (TimeSeriesData series : allSeries) {
-            for (long timestamp : series.getTimestamps()) {
-                if (TimeFormatUtil.needsTimeOfDay(timestamp, stepSeconds)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Writes the CSV header row: the first column's heading ("date", "datetime" or
-     * "percentile"), then each series name, escaped for CSV.
-     */
-    private static void writeHeader(Writer writer, String firstHeader, List<String> headers)
-            throws IOException {
-        writer.write(firstHeader);
-        for (String header : headers) {
+    /** Writes the CSV header row: the table's first heading, then each series header, escaped for CSV. */
+    private static void writeHeader(Writer writer, TimeSeriesTable table) throws IOException {
+        writer.write(table.firstHeader());
+        for (String header : table.headers()) {
             writer.write(",");
             writer.write(CsvExportUtil.escapeCsvField(header));
         }
@@ -230,31 +178,17 @@ public class TimeSeriesCsvExporter {
      * timestamp gets an empty cell.</p>
      *
      * @param writer the file writer
-     * @param allSeries list of all time series data
-     * @param isExceedance true if this is exceedance data (format first column as percentile)
-     * @param stepSeconds resolution driving the timestamp format (0 = date-only)
+     * @param table the table to write
      * @throws IOException if writing fails
      */
-    private static void writeDataRows(Writer writer, List<TimeSeriesData> allSeries,
-                                      boolean isExceedance, long stepSeconds) throws IOException {
+    private static void writeDataRows(Writer writer, TimeSeriesTable table) throws IOException {
         StringBuilder row = new StringBuilder(64);
-        CsvExportUtil.forEachMergedRow(allSeries, (timestamp, values) -> {
+        CsvExportUtil.forEachMergedRow(table.series(), (timestamp, values) -> {
             row.setLength(0);
-            // Format first column based on plot type
-            if (isExceedance) {
-                // Convert fake timestamp to percentile
-                double percentile = (double) timestamp / com.kalix.ide.flowviz.transform.PlotTypeTransformer.PERCENTILE_SCALE;
-                row.append(String.format(java.util.Locale.ROOT, "%.2f", percentile));
-            } else {
-                row.append(TimeFormatUtil.formatForStepSize(timestamp, stepSeconds));
-            }
+            row.append(table.firstCell(timestamp));
 
-            // Write values for each series; NaN/missing → empty cell
             for (double value : values) {
-                row.append(',');
-                if (!Double.isNaN(value)) {
-                    row.append(value);
-                }
+                row.append(',').append(TimeSeriesTable.valueCell(value));
             }
             writer.write(row.append('\n').toString());
         });

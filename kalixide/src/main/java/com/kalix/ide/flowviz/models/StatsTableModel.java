@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz.models;
 
+import com.kalix.ide.flowviz.SeriesLoadState;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
@@ -20,17 +21,15 @@ import java.util.Map;
  * Table model for displaying statistics of multiple time series.
  * Shows series name and dynamically computed statistics based on StatisticsRegistry.
  * Supports masking modes for bivariate statistics.
+ *
+ * <p>It holds no settings of its own: {@link #project} replaces the whole table from the
+ * tab's aggregates, selection, mask and load states.
  */
 public class StatsTableModel extends AbstractTableModel {
     private final List<SeriesStats> seriesData = new ArrayList<>();
 
-    // Masking configuration
+    // The mask the current rows were computed under.
     private MaskMode maskMode = MaskMode.ALL;
-    private SeriesRef referenceSeries = null;  // First series, used for bivariate stats
-
-    // Cache of original (unmasked) series data, keyed by ref. LinkedHashMap preserves
-    // insertion order so the table rows stay in the order the user added them.
-    private final Map<SeriesRef, TimeSeriesData> originalSeriesCache = new LinkedHashMap<>();
 
     // Label resolver — projects SeriesRef → display string for column 0. Set by the
     // owner (typically VisualizationTabManager wiring from RunManager).
@@ -140,168 +139,97 @@ public class StatsTableModel extends AbstractTableModel {
     }
 
     /**
-     * Sets the mask mode and recomputes all statistics.
-     *
-     * @param mode The mask mode to apply
-     */
-    public void setMaskMode(MaskMode mode) {
-        this.maskMode = mode;
-        recomputeAllStatistics();
-    }
-
-    /**
-     * Gets the current mask mode.
+     * The mask the current rows were computed under.
      */
     public MaskMode getMaskMode() {
         return maskMode;
     }
 
     /**
-     * Adds a loading placeholder for a series being fetched.
+     * Replaces the table with one row per selected series, in selection order:
+     * <ul>
+     *   <li>a series whose fetch failed shows "Error" in every column;</li>
+     *   <li>otherwise a series with data shows its statistics, even while a load state
+     *       says it is loading: data in the pool is never hidden by a fetch that ended
+     *       without clearing its state;</li>
+     *   <li>a loading series without data shows a blank placeholder;</li>
+     *   <li>a series with neither has no row (say, one restored by undo after its run
+     *       was deleted).</li>
+     * </ul>
+     * The first series with statistics is the reference for the bivariate ones.
+     *
+     * @param aggregated the selection's aggregated series (already seasonally masked)
      */
-    public void addLoadingSeries(SeriesRef ref) {
-        // Remove existing entry if present
-        seriesData.removeIf(stats -> stats.ref.equals(ref));
-        seriesData.add(new SeriesStats(ref));
+    public void project(Map<SeriesRef, TimeSeriesData> aggregated, List<SeriesRef> selection,
+                        MaskMode mask, Map<SeriesRef, SeriesLoadState> loadStates) {
+        this.maskMode = mask;
+        LinkedHashMap<SeriesRef, TimeSeriesData> withData = new LinkedHashMap<>();
+        for (SeriesRef ref : selection) {
+            TimeSeriesData data = aggregated.get(ref);
+            if (data != null && !(loadStates.get(ref) instanceof SeriesLoadState.Failed)) {
+                withData.put(ref, data);
+            }
+        }
+        Map<SeriesRef, SeriesStats> computed = computeAll(withData);
+
+        List<SeriesStats> rows = new ArrayList<>();
+        for (SeriesRef ref : selection) {
+            SeriesLoadState load = loadStates.get(ref);
+            if (load instanceof SeriesLoadState.Failed) {
+                rows.add(errorRow(ref));
+            } else if (computed.containsKey(ref)) {
+                rows.add(computed.get(ref));
+            } else if (load instanceof SeriesLoadState.Loading) {
+                rows.add(new SeriesStats(ref));
+            }
+        }
+        seriesData.clear();
+        seriesData.addAll(rows);
         fireTableDataChanged();
     }
 
-    /**
-     * Adds or updates a series's stats. Identity comes from the {@link SeriesRef}; the
-     * {@link TimeSeriesData}'s legacy name field is ignored.
-     */
-    public void addOrUpdateSeries(SeriesRef ref, TimeSeriesData data) {
-        // Cache original data keyed by ref
-        originalSeriesCache.put(ref, data);
-
-        // Update reference series if this is the first series
-        if (referenceSeries == null) {
-            referenceSeries = ref;
-        }
-
-        // If mask mode is ALL, adding a new series changes the mask for all existing series
-        // So we need to recompute everything
-        if (maskMode == MaskMode.ALL) {
-            recomputeAllStatistics();
-        } else {
-            // For EACH or NONE modes, only this series needs updating (no shared ALL mask
-            // or shared reference sample — EACH masks per series, NONE skips bivariate).
-            TimeSeriesData referenceData = referenceSeries != null
-                ? originalSeriesCache.get(referenceSeries) : null;
-            Map<String, String> statisticValues =
-                computeStatistics(data, null, null, referenceData);
-
-            // Remove existing entry if present
-            seriesData.removeIf(stats -> stats.ref.equals(ref));
-            seriesData.add(new SeriesStats(ref, statisticValues));
-            fireTableDataChanged();
-        }
-    }
-
-    /**
-     * Replaces the entire table contents with the given series and recomputes statistics
-     * <em>once</em>. Use this instead of {@link #clear()} followed by repeated
-     * {@link #addOrUpdateSeries} when all series are known up front — the per-add path
-     * triggers a full recompute on every call, which is O(series²) for a batch.
-     *
-     * <p>Insertion order of {@code series} becomes the table row order; the first entry
-     * becomes the reference series for bivariate statistics.</p>
-     */
-    public void setSeries(LinkedHashMap<SeriesRef, TimeSeriesData> series) {
-        originalSeriesCache.clear();
-        originalSeriesCache.putAll(series);
-        referenceSeries = series.isEmpty() ? null : series.keySet().iterator().next();
-        recomputeAllStatistics();
-    }
-
-    /**
-     * Adds an error entry for a series that failed to load.
-     */
-    public void addErrorSeries(SeriesRef ref, String errorMessage) {
-        // Remove existing entry if present
-        seriesData.removeIf(stats -> stats.ref.equals(ref));
-
-        // Add error stats with "Error" in all columns
+    /** A row with "Error" in every statistic column, for a series that failed to load. */
+    private static SeriesStats errorRow(SeriesRef ref) {
         Map<String, String> errorValues = new HashMap<>();
         for (Statistic stat : StatisticsRegistry.getAll()) {
             errorValues.put(stat.getName(), "Error");
         }
-        seriesData.add(new SeriesStats(ref, errorValues));
-        fireTableDataChanged();
+        return new SeriesStats(ref, errorValues);
     }
 
     /**
-     * Removes a series from the table.
-     */
-    public void removeSeries(SeriesRef ref) {
-        seriesData.removeIf(stats -> stats.ref.equals(ref));
-        originalSeriesCache.remove(ref);
-
-        // Update reference if we removed it
-        if (ref.equals(referenceSeries)) {
-            referenceSeries = seriesData.isEmpty() ? null : seriesData.get(0).ref;
-        }
-
-        // If mask mode is ALL, removing a series changes the mask for all remaining series
-        if (maskMode == MaskMode.ALL && !seriesData.isEmpty()) {
-            recomputeAllStatistics();
-        } else {
-            fireTableDataChanged();
-        }
-    }
-
-    /**
-     * Clears all series from the table.
-     */
-    public void clear() {
-        seriesData.clear();
-        originalSeriesCache.clear();
-        referenceSeries = null;
-        fireTableDataChanged();
-    }
-
-    /**
-     * Recomputes all statistics with the current mask mode.
-     * Called when mask mode changes or when series are added/removed in ALL mask mode.
+     * Statistics for every series under the current mask mode; the first series is the
+     * bivariate reference.
      *
      * <p>In {@link MaskMode#ALL} the mask is identical for every series, so it is built
      * once here and reused — rather than rebuilt inside {@code computeStatistics} per
      * series.</p>
      */
-    private void recomputeAllStatistics() {
-        TimeSeriesData referenceData = referenceSeries != null
-            ? originalSeriesCache.get(referenceSeries) : null;
+    private Map<SeriesRef, SeriesStats> computeAll(LinkedHashMap<SeriesRef, TimeSeriesData> series) {
+        TimeSeriesData referenceData = series.isEmpty() ? null : series.values().iterator().next();
 
         // In ALL mode both the mask and the masked reference are shared across every
         // series — build each a single time, here, and reuse them for all rows.
         TimeSeriesMasker.Mask allMask = null;
         StatSample sharedReferenceSample = null;
         if (maskMode == MaskMode.ALL) {
-            allMask = TimeSeriesMasker.createAllMask(new ArrayList<>(originalSeriesCache.values()));
+            allMask = TimeSeriesMasker.createAllMask(new ArrayList<>(series.values()));
             if (referenceData != null) {
                 sharedReferenceSample = new StatSample(allMask.applyToValues(referenceData));
             }
         }
 
-        // Rebuild seriesData from scratch from the cache. The series held there are
-        // already aggregated AND already seasonally masked - TimeSeriesAggregator applies
-        // the mask while accumulating, the only point at which calendar months are still
-        // distinguishable. Masking again here would filter points stamped at their
-        // period's start and empty the table (#235).
-        List<SeriesStats> newSeriesData = new ArrayList<>();
-
-        for (Map.Entry<SeriesRef, TimeSeriesData> entry : originalSeriesCache.entrySet()) {
-            TimeSeriesData series = entry.getValue();
-            if (series != null) {
-                Map<String, String> newValues =
-                    computeStatistics(series, allMask, sharedReferenceSample, referenceData);
-                newSeriesData.add(new SeriesStats(entry.getKey(), newValues));
-            }
+        // The series are already aggregated AND already seasonally masked -
+        // TimeSeriesAggregator applies the mask while accumulating, the only point at
+        // which calendar months are still distinguishable. Masking again here would
+        // filter points stamped at their period's start and empty the table (#235).
+        Map<SeriesRef, SeriesStats> computed = new LinkedHashMap<>();
+        for (Map.Entry<SeriesRef, TimeSeriesData> entry : series.entrySet()) {
+            Map<String, String> values =
+                computeStatistics(entry.getValue(), allMask, sharedReferenceSample, referenceData);
+            computed.put(entry.getKey(), new SeriesStats(entry.getKey(), values));
         }
-
-        seriesData.clear();
-        seriesData.addAll(newSeriesData);
-        fireTableDataChanged();
+        return computed;
     }
 
     /**
@@ -330,7 +258,7 @@ public class StatsTableModel extends AbstractTableModel {
 
         switch (maskMode) {
             case ALL:
-                // Mask and reference sample both built once by recomputeAllStatistics().
+                // Mask and reference sample both built once by computeAll().
                 seriesSample = new StatSample(allMask.applyToValues(series));
                 referenceSample = allRefSample;
                 break;

@@ -14,6 +14,7 @@ import javax.swing.JMenuItem;
 import javax.swing.event.MenuEvent;
 import javax.swing.event.MenuListener;
 import javax.swing.text.DefaultEditorKit;
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextAreaEditorKit;
 import java.awt.event.ActionListener;
 import java.io.File;
 import java.util.List;
@@ -277,6 +278,15 @@ public class MenuBarBuilder {
         editMenu.add(createMenuItem("Find Next", AppShortcut.FIND_NEXT, e -> callbacks.findNext()));
         editMenu.add(createMenuItem("Find Previous", AppShortcut.FIND_PREVIOUS, e -> callbacks.findPrevious()));
         editMenu.add(createMenuItem("Find on Map...", e -> callbacks.findNodeOnMap()));
+        editMenu.addSeparator();
+        editMenu.add(createTextActionItem("Fold",
+                new RSyntaxTextAreaEditorKit.ChangeFoldStateAction(RSyntaxTextAreaEditorKit.rstaCollapseFoldAction, true),
+                AppShortcut.FOLD));
+        editMenu.add(createTextActionItem("Unfold",
+                new RSyntaxTextAreaEditorKit.ChangeFoldStateAction(RSyntaxTextAreaEditorKit.rstaExpandFoldAction, false),
+                AppShortcut.UNFOLD));
+        editMenu.add(createTextActionItem("Fold All", new RSyntaxTextAreaEditorKit.CollapseAllFoldsAction(), AppShortcut.FOLD_ALL));
+        editMenu.add(createTextActionItem("Unfold All", new RSyntaxTextAreaEditorKit.ExpandAllFoldsAction(), AppShortcut.UNFOLD_ALL));
 
         return editMenu;
     }
@@ -419,9 +429,10 @@ public class MenuBarBuilder {
 
     /**
      * Creates an Edit-menu item backed by a standard text-editing action
-     * ({@link DefaultEditorKit#cutAction} etc.). These actions act on whichever
-     * text component most recently held focus - the idiomatic Swing way to wire
-     * Cut/Copy/Paste menu items with no manual routing.
+     * ({@link DefaultEditorKit#cutAction} etc., or one of RSyntaxTextArea's fold
+     * actions). These actions act on whichever text component most recently held
+     * focus - the idiomatic Swing way to wire Cut/Copy/Paste menu items with no
+     * manual routing.
      */
     private JMenuItem createTextActionItem(String label, Action action, AppShortcut shortcut) {
         JMenuItem item = new JMenuItem(action);
