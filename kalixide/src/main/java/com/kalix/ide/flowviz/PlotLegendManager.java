@@ -160,6 +160,15 @@ public class PlotLegendManager {
         boolean hasDivider() {
             return rightStart < entries.size();
         }
+
+        /** Whether the same series sit in the same rows; setSeries makes new entry objects every time. */
+        boolean sameRowsAs(Listing other) {
+            return rightStart == other.rightStart && refs().equals(other.refs());
+        }
+
+        private List<SeriesRef> refs() {
+            return entries.stream().map(e -> e.ref).toList();
+        }
     }
 
     /**
@@ -376,7 +385,7 @@ public class PlotLegendManager {
     public void render(Graphics2D g2d, ViewPort viewport) {
         Listing shown = listing;
         listing = null; // the axis assignment may have changed since the last paint
-        if (shown != null && !shown.equals(listing())) {
+        if (shown != null && !shown.sameRowsAs(listing())) {
             hoveredEntryIndex = -1; // the rows moved; the next mouse move finds the hover again
         }
         if (!enabled || entries.isEmpty()) {
