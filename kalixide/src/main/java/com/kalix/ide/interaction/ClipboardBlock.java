@@ -1,13 +1,16 @@
 package com.kalix.ide.interaction;
 
 import com.kalix.ide.model.NodeSectionLocator;
+import com.kalix.ide.utils.EngineNames;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Builds the INI text that a paste inserts: the copied node sections, renamed if this
@@ -35,11 +38,15 @@ final class ClipboardBlock {
      * @param copiedNames   the names being pasted
      */
     static String copySuffix(Collection<String> existingNames, Collection<String> copiedNames) {
+        Set<String> taken = new HashSet<>();
+        for (String name : existingNames) {
+            taken.add(EngineNames.nodeKey(name));
+        }
         for (int n = 1; ; n++) {
             String suffix = "_copy" + n;
             boolean clash = false;
             for (String name : copiedNames) {
-                if (existingNames.contains(name + suffix)) {
+                if (taken.contains(EngineNames.nodeKey(name + suffix))) {
                     clash = true;
                     break;
                 }

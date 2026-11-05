@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -208,5 +209,80 @@ class CommandExecutorRenameTest {
             """;
         assertEquals(expected, editor.getText());
         editor.dispose();
+    }
+
+    private static final String TWO_NODES = """
+        [node.s]
+        type = user
+
+        [node.down]
+        type = user
+        ds_1 = s
+        """;
+
+    /** Renames {@code s} to {@code newName}; returns the resulting text, or null if refused. */
+    private static String renameS(String newName) {
+        EnhancedTextEditor editor = new EnhancedTextEditor();
+        editor.setText(TWO_NODES);
+        CommandExecutor executor =
+            new CommandExecutor(editor.getTextArea(), null, editor::applyAtomicReplacements);
+        boolean ok = executor.renameNode("s", newName, INIModelParser.parse(TWO_NODES));
+        String text = editor.getText();
+        editor.dispose();
+        return ok ? text : null;
+    }
+
+    /** The engine matches names ignoring case, so a rename must follow every spelling of the name. */
+    @Test
+    void referencesWrittenInAnotherCaseAreRenamedToo() {
+        String model = """
+            [node.Dam]
+            type = storage
+            loc = 0, 0
+
+            [node.down]
+            type = user
+            ds_1 = dam
+            inflow = node.DAM.dsflow[-1, 0.0]
+
+            [outputs]
+            node.dam.volume
+            """;
+        INIModelParser.ParsedModel parsed = INIModelParser.parse(model);
+
+        List<CommandExecutor.TextReplacement> reps =
+            detector().findNodeReferences(model, "Dam", "res", parsed);
+        String result = apply(model, reps);
+
+        String expected = """
+            [node.res]
+            type = storage
+            loc = 0, 0
+
+            [node.down]
+            type = user
+            ds_1 = res
+            inflow = node.res.dsflow[-1, 0.0]
+
+            [outputs]
+            node.res.volume
+            """;
+        assertEquals(expected, result);
+    }
+
+    @Test
+    void renameToAnInvalidNameIsRefused() {
+        assertNull(renameS("a b"));
+        assertNull(renameS("a.b"));
+    }
+
+    @Test
+    void renameOntoAnotherNodeInDifferentCaseIsRefused() {
+        assertNull(renameS("DOWN"));
+    }
+
+    @Test
+    void renameThatOnlyChangesCaseIsAllowed() {
+        assertTrue(renameS("S").startsWith("[node.S]"));
     }
 }

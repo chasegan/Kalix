@@ -42,6 +42,12 @@ class ClipboardBlockTest {
             ClipboardBlock.copySuffix(Set.of("a", "b", "b_copy1"), List.of("a", "b")));
     }
 
+    /** Node names are not case sensitive, so {@code A_copy1} already takes {@code a_copy1}. */
+    @Test
+    void copySuffixCollisionIgnoresCase() {
+        assertEquals("_copy2", ClipboardBlock.copySuffix(Set.of("a", "A_copy1"), List.of("a")));
+    }
+
     // --- Renaming ---
 
     @Test

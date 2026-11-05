@@ -1,5 +1,7 @@
 package com.kalix.ide.linter.parsing;
 
+import com.kalix.ide.utils.EngineNames;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -452,22 +454,25 @@ public class INIModelParser {
     }
 
     /**
-     * Check for duplicate node names.
+     * Check for duplicate node names, ignoring case as the engine does. Each duplicate
+     * is reported under the spelling of its first definition.
      */
     public static Map<String, List<Integer>> findDuplicateNodes(ParsedModel model) {
         Map<String, List<Integer>> duplicates = new HashMap<>();
         Map<String, List<Integer>> nodeLines = new HashMap<>();
+        Map<String, String> firstSpelling = new HashMap<>();
 
         // Collect all node sections including duplicates
         for (NodeSection node : model.getAllNodeSections()) {
-            String nodeName = node.getNodeName();
-            nodeLines.computeIfAbsent(nodeName, k -> new ArrayList<>()).add(node.getStartLine());
+            String key = EngineNames.nodeKey(node.getNodeName());
+            firstSpelling.putIfAbsent(key, node.getNodeName());
+            nodeLines.computeIfAbsent(key, k -> new ArrayList<>()).add(node.getStartLine());
         }
 
         // Find nodes that appear more than once
         for (Map.Entry<String, List<Integer>> entry : nodeLines.entrySet()) {
             if (entry.getValue().size() > 1) {
-                duplicates.put(entry.getKey(), entry.getValue());
+                duplicates.put(firstSpelling.get(entry.getKey()), entry.getValue());
             }
         }
 

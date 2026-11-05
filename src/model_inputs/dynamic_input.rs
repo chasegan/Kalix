@@ -1455,6 +1455,12 @@ impl Default for DynamicInput {
     }
 }
 
+/// Whether a lowercased reference names a series computed during the run
+/// (`node.*`, `var.*`, `acc.*`, `ras.*`) rather than loaded or constant.
+fn is_computed_namespace(lower_name: &str) -> bool {
+    ["node.", "var.", "acc.", "ras."].iter().any(|p| lower_name.starts_with(p))
+}
+
 impl DynamicInput {
     /// Create a DynamicInput from a string expression
     ///
@@ -1618,13 +1624,8 @@ impl DynamicInput {
             // Resolve variable names to data cache indices
             for var_name in &linear_info.variables {
                 let lower_name = var_name.to_lowercase();
-                // node.*, var.* and acc.* references are not critical inputs (they
-                // are computed during the run, not loaded)
-                let is_critical = flag_as_critical
-                    && !lower_name.starts_with("node.")
-                    && !lower_name.starts_with("var.")
-                    && !lower_name.starts_with("acc.");
-                let idx = data_cache.get_or_add_new_series(&lower_name, is_critical);
+                // Only data.* names reach here: detect_linear_combination accepts no other.
+                let idx = data_cache.get_or_add_new_series(&lower_name, flag_as_critical);
                 data_indices.push(idx);
             }
 
@@ -1678,8 +1679,7 @@ impl DynamicInput {
                 // Resolve to constants cache
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name.clone(), idx);
-            } else if lower_name.starts_with("node.") || lower_name.starts_with("var.")
-                || lower_name.starts_with("acc.") || lower_name.starts_with("ras.") {
+            } else if is_computed_namespace(&lower_name) {
                 if let Some(idx) = data_cache.static_properties.get_idx(&lower_name) {
                     static_variable_map.insert(lower_name.clone(), idx);
                 } else {
@@ -1687,6 +1687,7 @@ impl DynamicInput {
                     // var values, account state and RAS series are computed during
                     // the run, not loaded)
                     let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
+                    data_cache.mark_expression_reference(idx);
                     data_variable_map.insert(lower_name, idx);
                 }
             } else {
@@ -1935,13 +1936,13 @@ impl DynamicInput {
             } else if lower_name.starts_with("const.") {
                 let idx = data_cache.constants.add_if_needed_and_get_idx(&lower_name);
                 constant_variable_map.insert(lower_name, idx);
-            } else if lower_name.starts_with("node.") || lower_name.starts_with("var.")
-                || lower_name.starts_with("acc.") || lower_name.starts_with("ras.") {
+            } else if is_computed_namespace(&lower_name) {
                 if let Some(idx) = data_cache.static_properties.get_idx(&lower_name) {
                     static_variable_map.insert(lower_name.clone(), idx);
                 } else {
                     // Computed during the run, not loaded: never critical.
                     let idx = data_cache.get_or_add_new_series(lower_name.as_str(), false);
+                    data_cache.mark_expression_reference(idx);
                     data_variable_map.insert(lower_name, idx);
                 }
             } else {
