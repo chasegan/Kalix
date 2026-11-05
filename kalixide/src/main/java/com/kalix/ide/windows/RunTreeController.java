@@ -19,6 +19,7 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -428,8 +429,12 @@ class RunTreeController {
         }
 
         long runId = runInfo.getRunId();
+        // The pool holds only what has loaded: a selected series still loading, failed, or
+        // restored by undo before its refetch is in a tab's selection alone.
+        Set<SeriesRef> candidates = new LinkedHashSet<>(plotDataSet.getSeriesRefs());
+        candidates.addAll(tabManager.getAllSelectedSeriesAcrossTabs());
         List<SeriesRef> refs = new ArrayList<>();
-        for (SeriesRef ref : plotDataSet.getSeriesRefs()) {
+        for (SeriesRef ref : candidates) {
             if (ref instanceof RunSeries runSeries
                     && runSeries.runId() == runId) {
                 refs.add(ref);

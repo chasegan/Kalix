@@ -4,9 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
 
@@ -114,6 +117,32 @@ public class DataSet {
         if (seriesByRef.remove(key) != null) {
             recomputeGlobalBounds();
             notifySeriesRemoved(key);
+        }
+    }
+
+    /**
+     * Keeps only the series that {@code wanted} names and removes the rest, notifying each
+     * removal. A {@link LastSeries} in {@code wanted} keeps the entry it is stored under (its
+     * current alias target), so a selection of "Last" holds on to the run it shows.
+     */
+    public void retainSeries(Collection<SeriesRef> wanted) {
+        Set<SeriesRef> keep = new HashSet<>();
+        for (SeriesRef ref : wanted) {
+            keep.add(storageKey(ref));
+        }
+        List<SeriesRef> removed = new ArrayList<>();
+        for (SeriesRef ref : seriesByRef.keySet()) {
+            if (!keep.contains(ref)) {
+                removed.add(ref);
+            }
+        }
+        if (removed.isEmpty()) {
+            return;
+        }
+        seriesByRef.keySet().removeAll(removed);
+        recomputeGlobalBounds();
+        for (SeriesRef ref : removed) {
+            notifySeriesRemoved(ref);
         }
     }
 

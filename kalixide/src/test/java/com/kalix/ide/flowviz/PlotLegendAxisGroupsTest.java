@@ -3,7 +3,7 @@ package com.kalix.ide.flowviz;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.rendering.ViewPort;
-import com.kalix.ide.flowviz.rendering.XAxisType;
+import com.kalix.ide.flowviz.transform.XAxisType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -48,9 +48,7 @@ class PlotLegendAxisGroupsTest {
         legend = new PlotLegendManager();
         legend.setRightAxisTest(right::contains);
         legend.setOnAxisToggle(toggled::add);
-        legend.addSeries(a);
-        legend.addSeries(b);
-        legend.addSeries(c);
+        legend.setSeries(List.of(a, b, c));
     }
 
     /** Gated per method: the Key's shown/collapsed state is the user's, not the test's. */

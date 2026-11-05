@@ -32,7 +32,7 @@ class FlowVizPanelCenterViewportTest {
         dataSet.addSeries(ref, new TimeSeriesData(
             new long[] {0, DAY, 2 * DAY}, new double[] {1, 2, 3}));
         panel.setDataSet(dataSet);
-        panel.setVisibleSeries(List.of(ref));
+        panel.model().update(st -> st.withVisibleSeries(List.of(ref)));
         panel.refreshData(true);
         return panel;
     }
@@ -72,7 +72,7 @@ class FlowVizPanelCenterViewportTest {
     @Test
     void centresTheValueAxisOnALogScaleKeepingTheDecadeSpan() {
         FlowVizPanel panel = panelWithThreeDays();
-        panel.setYAxisScale(YAxisScale.LOG);
+        panel.model().update(st -> st.withYAxisScale(YAxisScale.LOG));
         ViewPort before = panel.viewportForTests();
         double decades = Math.log10(before.getMaxValue() / before.getMinValue());
 

@@ -1,11 +1,11 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.flowviz.transform.XAxisType;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.rendering.AxisLimitCodec;
 import com.kalix.ide.flowviz.rendering.LineShape;
 import com.kalix.ide.flowviz.rendering.ViewPort;
-import com.kalix.ide.flowviz.rendering.XAxisType;
 import com.kalix.ide.flowviz.transform.YAxisScale;
 import com.kalix.ide.io.SeriesFileWriter;
 import com.kalix.ide.io.SourceResCsvExporter;
@@ -437,7 +437,7 @@ public class PlotInteractionManager {
     private void finishAxisDrag(Point point) {
         boolean valueAxis = axisDrag != AxisHandle.X_START && axisDrag != AxisHandle.X_END;
         if (axisDragMoved && valueAxis && parentComponent instanceof FlowVizPanel vizPanel) {
-            vizPanel.setAutoYMode(false);
+            vizPanel.model().update(st -> st.withAutoYMode(false));
         }
         axisDrag = null;
         axisDragPress = null;
@@ -1044,7 +1044,7 @@ public class PlotInteractionManager {
             }
             acceptY2Bounds(y2[0], y2[1]);
             if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setAutoYMode(false); // an explicit range, as for Paste Y axis
+                vizPanel.model().update(st -> st.withAutoYMode(false)); // an explicit range, as for Paste Y axis
             }
         });
         contextMenu.add(pasteY2AxisItem);
@@ -1061,7 +1061,7 @@ public class PlotInteractionManager {
         autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
         autoYMenuItem.addActionListener(e -> {
             if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setAutoYMode(autoYMenuItem.isSelected());
+                vizPanel.model().update(st -> st.withAutoYMode(autoYMenuItem.isSelected()));
             }
         });
         contextMenu.add(autoYMenuItem);
@@ -1073,7 +1073,7 @@ public class PlotInteractionManager {
             JRadioButtonMenuItem scaleItem = new JRadioButtonMenuItem(scale.getDisplayName());
             scaleItem.addActionListener(e -> {
                 if (parentComponent instanceof FlowVizPanel) {
-                    ((FlowVizPanel) parentComponent).setYAxisScale(scale);
+                    ((FlowVizPanel) parentComponent).model().update(st -> st.withYAxisScale(scale));
                 }
             });
             yAxisScaleGroup.add(scaleItem);
@@ -1087,7 +1087,7 @@ public class PlotInteractionManager {
         JMenu lineShapeMenu = new JMenu("Line shape");
         lineShapeMenuItems.putAll(LineShapeMenu.addItems(lineShapeMenu, shape -> {
             if (parentComponent instanceof FlowVizPanel vizPanel) {
-                vizPanel.setLineShape(shape);
+                vizPanel.model().update(st -> st.withLineShape(shape));
             }
         }));
         contextMenu.add(lineShapeMenu);
@@ -1248,7 +1248,7 @@ public class PlotInteractionManager {
     private void applyExplicitLimits(long startTime, long endTime, double minValue, double maxValue) {
         acceptNewAxes(startTime, endTime, minValue, maxValue);
         if (parentComponent instanceof FlowVizPanel vizPanel) {
-            vizPanel.setAutoYMode(false);
+            vizPanel.model().update(st -> st.withAutoYMode(false));
         }
     }
 
@@ -1308,7 +1308,7 @@ public class PlotInteractionManager {
                         acceptY2Bounds(y2[0], y2[1]);
                     }
                     if (parentComponent instanceof FlowVizPanel vizPanel) {
-                        vizPanel.setAutoYMode(false);
+                        vizPanel.model().update(st -> st.withAutoYMode(false));
                     }
                 } else {
                     applyXLimits(x[0], x[1]);

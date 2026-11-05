@@ -1,7 +1,8 @@
-package com.kalix.ide.flowviz.rendering;
+package com.kalix.ide.flowviz.transform;
 
 /**
- * Defines the type of X-axis domain for plotting.
+ * What a series' timestamp slot holds after the plot-type transform: the X-axis domain
+ * it is plotted against. Declared by {@link PlotType#xAxisType()}.
  */
 public enum XAxisType {
     /** Temporal X-axis with timestamps (default for most plot types). */

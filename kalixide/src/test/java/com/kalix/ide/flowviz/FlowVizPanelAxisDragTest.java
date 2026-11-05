@@ -46,7 +46,7 @@ class FlowVizPanelAxisDragTest {
         panel = new FlowVizPanel();
         panel.setSize(800, 600);
         panel.setDataSet(dataSet);
-        panel.setVisibleSeries(List.of(flow));
+        panel.model().update(st -> st.withVisibleSeries(List.of(flow)));
         panel.zoomToFit();
     }
 
@@ -78,7 +78,7 @@ class FlowVizPanelAxisDragTest {
         dataSet.addSeries(flow, new TimeSeriesData(times, new double[] {0, 10, 100, 1000}));
         dataSet.addSeries(large, new TimeSeriesData(times, new double[] {5000, 6000, 7000, 8000}));
         panel.setDataSet(dataSet);
-        panel.setVisibleSeries(List.of(flow, large));
+        panel.model().update(st -> st.withVisibleSeries(List.of(flow, large)));
         panel.setSeriesOnRightAxis(large, true);
         panel.zoomToFit();
         return large;
@@ -101,7 +101,7 @@ class FlowVizPanelAxisDragTest {
 
     @Test
     void draggingTheBottomOfTheYAxisMovesOnlyTheMinimumAndTurnsAutoYOff() {
-        panel.setAutoYMode(true);
+        panel.model().update(st -> st.withAutoYMode(true));
         double max = view().getMaxValue();
         double min = view().getMinValue();
 
@@ -114,7 +114,7 @@ class FlowVizPanelAxisDragTest {
 
     @Test
     void draggingTheTimeAxisUnderAutoYRefitsY() {
-        panel.setAutoYMode(true);
+        panel.model().update(st -> st.withAutoYMode(true));
         double max = view().getMaxValue();
 
         drag(500, X_AXIS_Y, 700, X_AXIS_Y); // grab in the right half: the end moves
@@ -169,11 +169,11 @@ class FlowVizPanelAxisDragTest {
     @Test
     void aRightAxisDragEndsWhenTheRightAxisGoesAway() {
         useBothAxes();
-        panel.setAutoYMode(true);
+        panel.model().update(st -> st.withAutoYMode(true));
         press(Y2_AXIS_X, 450);
         dragTo(Y2_AXIS_X, 480);
 
-        panel.setVisibleSeries(List.of(flow)); // the right axis' only series leaves the plot
+        panel.model().update(st -> st.withVisibleSeries(List.of(flow))); // the right axis' only series leaves the plot
         dragTo(Y2_AXIS_X, 500);
         release(Y2_AXIS_X, 500);
 
@@ -204,7 +204,7 @@ class FlowVizPanelAxisDragTest {
 
     @Test
     void aFewPixelsOfJitterOnAnAxisIsAClickNotADrag() {
-        panel.setAutoYMode(true);
+        panel.model().update(st -> st.withAutoYMode(true));
         ViewPort before = view();
 
         drag(Y_AXIS_X, 450, Y_AXIS_X + 1, 452);
@@ -218,7 +218,7 @@ class FlowVizPanelAxisDragTest {
         press(Y_AXIS_X, 450);
         dragTo(Y_AXIS_X, 480);
 
-        panel.setYAxisScale(YAxisScale.LOG);
+        panel.model().update(st -> st.withYAxisScale(YAxisScale.LOG));
         ViewPort rescaled = view();
         dragTo(Y_AXIS_X, 520);
         release(Y_AXIS_X, 520);
@@ -229,7 +229,7 @@ class FlowVizPanelAxisDragTest {
 
     @Test
     void aPressOnAnAxisWithoutMovingChangesNothing() {
-        panel.setAutoYMode(true);
+        panel.model().update(st -> st.withAutoYMode(true));
         ViewPort before = view();
 
         drag(Y_AXIS_X, 450, Y_AXIS_X, 450);

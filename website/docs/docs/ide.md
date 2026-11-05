@@ -37,6 +37,8 @@ The link is written as `ds_N = <downstream>` at the first free outlet. If every 
 
 Ctrl+f in the model editor for **find**, or Ctrl+h for **find-and-replace**
 
+**Folding** collapses part of the model text to its first line. Every section folds from its `[header]`, every multi-line value folds from its first line, and a `#@region = Title` annotation folds everything down to the next region (see [Annotations](conventions.md#annotations)). Click the markers in the editor's margin, or use **Fold**, **Unfold**, **Fold All** and **Unfold All** on the Edit menu (Ctrl+minus, Ctrl+equals, and the same with Shift). Going to a node, a line, a find result or a lint issue inside a fold opens it, as does undoing an edit made there. Folds are not saved with the file.
+
 ![](../assets/docs-using-ide/image_3.png)
 
 **Navigate Back** and **Navigate Forward** allow you to move between locations you have visited in the model text. Keyboard shortcuts make this faster.
@@ -120,6 +122,18 @@ Themes can be independently set for the Editor Syntax, Node Palate and the Appli
 It is a run manager. Yes.
 
 ![](../assets/docs-using-ide/image_19.png)
+
+### Plot, Stats and Data views
+
+Each plot tab has three views. Switch between them with the toggles at the left of the tab's toolbar:
+
+- **Plot** (the default) draws the ticked series.
+- **Stats** gives one row of statistics per series.
+- **Data** shows the plotted values as a table in export format, i.e., one row per timestamp and one column per series.
+
+The views are three ways of looking at the same tab. They share its ticked series, aggregation, masks and plot type, so switching view never changes what you are looking at, and undo and redo cover changes made in any of them.
+
+In the Data view the first column is the row's date, or its percentile for an exceedance plot and its cumulative reference for a double-mass plot. A cell is blank where a series has no value on that row, as `Save Data` writes it. Right-click the table for **Find…** (Ctrl+f, then F3 or Shift+F3 for the next or previous match) and **Copy**, which copies the selected cells tab-separated for pasting into a spreadsheet. `Save Data` here saves what the table shows, in the same formats as from the Plot view.
 
 ### Filtering the Timeseries tree
 

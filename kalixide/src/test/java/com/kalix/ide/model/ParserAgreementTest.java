@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -24,22 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  */
 class ParserAgreementTest {
 
-    /** Every .ini under the repository, excluding build output. */
-    private static List<Path> repositoryModels() throws IOException {
-        Path repo = Path.of("..").toAbsolutePath().normalize();
-        try (Stream<Path> paths = Files.walk(repo)) {
-            return paths.filter(p -> p.toString().endsWith(".ini"))
-                        .filter(p -> !p.toString().contains("/target/")
-                                  && !p.toString().contains("/build/")
-                                  && !p.toString().contains("/site/"))
-                        .sorted()
-                        .toList();
-        }
-    }
-
     @Test
     void mapAndLinterParsersAgreeOnEveryRepositoryModel() throws IOException {
-        List<Path> models = repositoryModels();
+        List<Path> models = RepositoryModels.all();
         assertFalse(models.isEmpty(), "no model files found under the repository");
 
         for (Path model : models) {

@@ -39,7 +39,7 @@ class FlowVizPanelRightAxisTest {
         dataSet.addSeries(larger, new TimeSeriesData(times, new double[] {5000, 5500, 6000}));
         panel = new FlowVizPanel();
         panel.setDataSet(dataSet);
-        panel.setVisibleSeries(List.of(small, large, larger));
+        panel.model().update(st -> st.withVisibleSeries(List.of(small, large, larger)));
         panel.zoomToFit();
     }
 
@@ -64,8 +64,8 @@ class FlowVizPanelRightAxisTest {
 
     @Test
     void onLogAnAutoYLeftAxisWithNoSeriesKeepsItsRange() {
-        panel.setYAxisScale(YAxisScale.LOG);
-        panel.setAutoYMode(true);
+        panel.model().update(st -> st.withYAxisScale(YAxisScale.LOG));
+        panel.model().update(st -> st.withAutoYMode(true));
         panel.setSeriesOnRightAxis(small, true);
         panel.setSeriesOnRightAxis(large, true);
         double y1Min = view().getMinValue(); // fitted to larger alone
@@ -113,7 +113,7 @@ class FlowVizPanelRightAxisTest {
 
     @Test
     void autoYFitsEachAxisToItsOwnSeries() {
-        panel.setAutoYMode(true);
+        panel.model().update(st -> st.withAutoYMode(true));
         panel.setSeriesOnRightAxis(large, true);
         panel.setSeriesOnRightAxis(larger, true);
 
@@ -134,17 +134,17 @@ class FlowVizPanelRightAxisTest {
     void aSeriesThatLeavesThePlotLeavesTheRightAxisAndReturnsOnTheLeft() {
         panel.setSeriesOnRightAxis(large, true);
 
-        panel.setVisibleSeries(List.of(small));
+        panel.model().update(st -> st.withVisibleSeries(List.of(small)));
         assertFalse(panel.isRightAxisInUse());
         assertFalse(view().hasY2());
 
-        panel.setVisibleSeries(List.of(small, large));
+        panel.model().update(st -> st.withVisibleSeries(List.of(small, large)));
         assertFalse(panel.isOnRightAxis(large));
     }
 
     @Test
     void movingASeriesThatIsNotVisibleIsIgnored() {
-        panel.setVisibleSeries(List.of(small));
+        panel.model().update(st -> st.withVisibleSeries(List.of(small)));
         panel.setSeriesOnRightAxis(large, true);
 
         assertFalse(panel.isRightAxisInUse());
