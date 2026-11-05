@@ -69,6 +69,9 @@ impl IniDocument {
     /// comment marker (it terminates statements inside expression blocks).
     pub fn parse(content: &str) -> Result<Self, String> {
         let mut sections: IndexMap<String, IniSection> = IndexMap::new();
+        // The current section's keys, lowercased, with the line each first appeared on:
+        // the readers match keys ignoring case, so a repeat in any case is refused.
+        let mut seen_keys: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
         let mut trailing_comments = Vec::new();
         let mut state = ParseState::BetweenSections;
         let mut pending_comments = Vec::new();
@@ -118,6 +121,7 @@ impl IniDocument {
                     format!("{}{}", gap, c)
                 });
 
+                seen_keys.clear();
                 sections.insert(section_name.clone(), IniSection {
                     properties: IndexMap::new(),
                     leading_lines: pending_comments.clone(),
@@ -200,9 +204,9 @@ impl IniDocument {
                 match &state {
                     ParseState::InSection(section_name) => {
                         if let Some(section) = sections.get_mut(section_name) {
-                            if let Some(earlier) = section.properties.iter().find(|(k, _)| k.eq_ignore_ascii_case(&key)) {
+                            if let Some(earlier) = seen_keys.insert(key.to_ascii_lowercase(), line_number) {
                                 return Err(format!("Duplicate key '{}' at line {} in [{}] (also defined on line {})",
-                                    key, line_number, section_name, earlier.1.line_number));
+                                    key, line_number, section_name, earlier));
                             }
                             section.properties.insert(key, property);
                         }
@@ -223,9 +227,9 @@ impl IniDocument {
                         // The inline comment is kept (slot 0, as for a property's first
                         // line) so a canonical rewrite of the item can carry it along.
                         let section = sections.get_mut(section_name).unwrap();
-                        if let Some(earlier) = section.properties.iter().find(|(k, _)| k.eq_ignore_ascii_case(code)) {
+                        if let Some(earlier) = seen_keys.insert(code.to_ascii_lowercase(), line_number) {
                             return Err(format!("Duplicate entry '{}' at line {} in [{}] (also listed on line {})",
-                                code, line_number, section_name, earlier.1.line_number));
+                                code, line_number, section_name, earlier));
                         }
 
                         let property = IniProperty {
