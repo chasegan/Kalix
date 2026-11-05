@@ -202,7 +202,6 @@ public class FlowVizPanel extends JPanel {
         );
 
         // Setup plot type supplier for format-aware export
-        plotInteractionManager.setPlotTypeSupplier(() -> state().getPlotType());
 
         // Resolver for projecting ref-keyed series to column headers on CSV export.
         plotInteractionManager.setLabelResolverSupplier(() -> labelResolver);

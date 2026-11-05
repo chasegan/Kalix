@@ -118,7 +118,6 @@ public class PlotInteractionManager {
     private Supplier<Rectangle> plotAreaSupplier;
     private Supplier<Boolean> precision64Supplier;
     private Supplier<java.io.File> baseDirectorySupplier;
-    private Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier;
     private Supplier<com.kalix.ide.flowviz.data.LabelResolver> labelResolverSupplier;
     // Which series are drawn against the right axis; consulted only when the view has one
     private Predicate<SeriesRef> onRightAxis = ref -> false;
@@ -141,7 +140,7 @@ public class PlotInteractionManager {
      * <li>Auto-Y mode support for intelligent Y-axis scaling</li>
      * </ul>
      *
-     * @param parentComponent The plot this manager serves: it draws the view, owns the model, and takes the mouse listeners
+     * @param parentComponent The plot this manager serves: it draws the view, follows the model, and takes the mouse listeners
      * @param coordinateDisplayManager The coordinate display manager for integrated mouse position tracking
      */
     public PlotInteractionManager(FlowVizPanel parentComponent, CoordinateDisplayManager coordinateDisplayManager) {
@@ -152,12 +151,8 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Sets up the data access callbacks for the manager to communicate with the parent plot component.
-     *
-     * <p>This method establishes the communication bridge between the interaction manager and
-     * the parent plot panel by providing callback functions for accessing plot data, viewport
-     * state, and plot area dimensions. This design allows the manager to operate independently
-     * while still accessing necessary plot information.
+     * Supplies what the panel keeps private: its display set, its viewport and the one way
+     * to set it as a user gesture, its visible series, and its plot area.
      *
      * @param dataSetSupplier Supplier function to access the current dataset for auto-Y calculations
      * @param viewportSupplier Supplier function to access the current viewport state
@@ -193,16 +188,6 @@ public class PlotInteractionManager {
      */
     public void setBaseDirectorySupplier(Supplier<java.io.File> baseDirectorySupplier) {
         this.baseDirectorySupplier = baseDirectorySupplier;
-    }
-
-    /**
-     * Sets the plot type supplier for format-aware data export.
-     * This allows the exporter to format data appropriately based on the plot type.
-     *
-     * @param plotTypeSupplier Supplier that returns the current plot type
-     */
-    public void setPlotTypeSupplier(Supplier<com.kalix.ide.flowviz.transform.PlotType> plotTypeSupplier) {
-        this.plotTypeSupplier = plotTypeSupplier;
     }
 
     /**
@@ -1146,7 +1131,7 @@ public class PlotInteractionManager {
                 pasteY2AxisItem.setEnabled(clipboardHasText);
 
                 // Sync the menu with the plot's current state
-                autoYMenuItem.setSelected(parentComponent.isAutoYMode());
+                autoYMenuItem.setSelected(isAutoYMode());
                 lineShapeMenuItems.get(parentComponent.getLineShape()).setSelected(true);
                 connectGapsMenuItem.setSelected(parentComponent.isConnectAcrossGaps());
                 orphanMarkersMenuItem.setSelected(parentComponent.isShowOrphanMarkers());
@@ -1431,8 +1416,7 @@ public class PlotInteractionManager {
     private void saveAsCsvFormat(File file) {
         try {
             DataSet dataSet = dataSetSupplier.get();
-            com.kalix.ide.flowviz.transform.PlotType plotType =
-                (plotTypeSupplier != null) ? plotTypeSupplier.get() : null;
+            com.kalix.ide.flowviz.transform.PlotType plotType = parentComponent.getPlotType();
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
             // .csv.zip counts as CSV (the exporter zips by name); anything else gains .csv.
