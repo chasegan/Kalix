@@ -392,8 +392,8 @@ public class FlowVizPanel extends JPanel {
      * Gives the viewport a y2 range exactly while the right axis is in use. The rules for a
      * series moved between axes ({@link FlowVizState#withSeriesOnRightAxis}, one undoable
      * step like any other change): neither axis' range is reset; only the right axis'
-     * first appearance sizes it, to its series over the current time window; an axis left
-     * with no series goes; and under auto-Y both axes are then refitted, as
+     * first appearance sizes it, to its series over the current time window; a right axis
+     * left with no series goes; and under auto-Y both axes are then refitted, as
      * {@link #applyUserChange} does for every change that calls for it.
      */
     private void syncRightAxisRange() {
@@ -402,8 +402,8 @@ public class FlowVizPanel extends JPanel {
         }
         if (isRightAxisInUse() && !currentViewport.hasY2()) {
             // Sized to its series; with nothing showable yet, to the left axis' range. A
-            // hidden plot has no display set to size from, but it owes a fit when shown,
-            // which replaces this placeholder before anything is drawn or recorded.
+            // hidden plot has no display set to size from; a whole new state owes a fit
+            // when shown, which rewrites its entry with the fitted range.
             double[] y2Range = plotInteractionManager.fittedRangeForAxis(PlotInteractionManager.Axis.Y2);
             if (y2Range == null) {
                 y2Range = new double[]{currentViewport.getMinValue(), currentViewport.getMaxValue()};
