@@ -732,16 +732,23 @@ impl Command for RunOptimisationCommand {
             .map_err(|e| CommandError::InvalidParameters(format!("Failed to parse optimisation config: {}", e)))?;
 
         // Load model with priority: inline model_ini > config model_file > session model
+        // A model read here is checked as the load commands check theirs, so a bad
+        // name or reference is refused before the observed data is read.
+        let validated = |mut model: crate::model::Model| -> Result<crate::model::Model, CommandError> {
+            model.validate_model_structure()
+                .map_err(|e| CommandError::ExecutionError(format!("Failed to validate model: {}", e)))?;
+            Ok(model)
+        };
         let model = if let Some(model_ini) = params.get("model_ini").and_then(|v| v.as_str()) {
             // Priority 1: Use inline model parameter
-            IniModelIO::read_model_string(model_ini)
-                .map_err(|e| CommandError::ExecutionError(format!("Failed to parse inline model: {}", e)))?
+            validated(IniModelIO::read_model_string(model_ini)
+                .map_err(|e| CommandError::ExecutionError(format!("Failed to parse inline model: {}", e)))?)?
         } else if let Some(model_file) = &config.model_file {
             // Priority 2: Use model_file from config
-            IniModelIO::read_model_file(model_file)
-                .map_err(|e| CommandError::ExecutionError(format!("Failed to load model from '{}': {}", model_file, e)))?
+            validated(IniModelIO::read_model_file(model_file)
+                .map_err(|e| CommandError::ExecutionError(format!("Failed to load model from '{}': {}", model_file, e)))?)?
         } else if let Some(session_model) = session.get_model() {
-            // Priority 3: Use session's loaded model
+            // Priority 3: Use session's loaded model, validated when it was loaded
             session_model.clone()
         } else {
             return Err(CommandError::ModelNotLoaded);

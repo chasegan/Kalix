@@ -352,13 +352,18 @@ fn main() {
             };
 
             println!("Loading model: {}", model_file_path);
-            let model = match IniModelIO::read_model_file(model_file_path) {
+            let mut model = match IniModelIO::read_model_file(model_file_path) {
                 Ok(m) => m,
                 Err(e) => {
                     eprintln!("Error loading model: {}", e);
                     std::process::exit(1);
                 }
             };
+            // A bad name or reference is refused here, before the observed data is read.
+            if let Err(e) = model.validate_model_structure() {
+                eprintln!("Error validating model: {}", e);
+                std::process::exit(1);
+            }
 
             // Build comparison pairs from terms
             let mut comparisons: Vec<ComparisonPair> = Vec::with_capacity(config.terms.len());
