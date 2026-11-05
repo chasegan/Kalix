@@ -57,8 +57,10 @@ impl IniDocument {
         }
     }
 
-    /// Parses Kalix INI text. A section header may appear only once; a repeat
-    /// is refused, naming both lines.
+    /// Parses Kalix INI text. A section header may appear only once in a
+    /// document, and a key or bare entry once in its section, in any case,
+    /// since the readers match keys ignoring case; a repeat is refused, naming
+    /// both lines.
     ///
     /// The comment grammar, shared with the IDE's parsers (see the website's
     /// Conventions page, "Comments"): `#` starts a comment anywhere outside
@@ -198,9 +200,9 @@ impl IniDocument {
                 match &state {
                     ParseState::InSection(section_name) => {
                         if let Some(section) = sections.get_mut(section_name) {
-                            if let Some(earlier) = section.properties.get(&key) {
+                            if let Some(earlier) = section.properties.iter().find(|(k, _)| k.eq_ignore_ascii_case(&key)) {
                                 return Err(format!("Duplicate key '{}' at line {} in [{}] (also defined on line {})",
-                                    key, line_number, section_name, earlier.line_number));
+                                    key, line_number, section_name, earlier.1.line_number));
                             }
                             section.properties.insert(key, property);
                         }
@@ -221,9 +223,9 @@ impl IniDocument {
                         // The inline comment is kept (slot 0, as for a property's first
                         // line) so a canonical rewrite of the item can carry it along.
                         let section = sections.get_mut(section_name).unwrap();
-                        if let Some(earlier) = section.properties.get(code) {
+                        if let Some(earlier) = section.properties.iter().find(|(k, _)| k.eq_ignore_ascii_case(code)) {
                             return Err(format!("Duplicate entry '{}' at line {} in [{}] (also listed on line {})",
-                                code, line_number, section_name, earlier.line_number));
+                                code, line_number, section_name, earlier.1.line_number));
                         }
 
                         let property = IniProperty {
@@ -580,6 +582,13 @@ key3 = value3
         let content = "[node.a]\ninflow = 1\nloc = 0, 0\ninflow = 2\n";
         let err = IniDocument::parse(content).unwrap_err();
         assert_eq!(err, "Duplicate key 'inflow' at line 4 in [node.a] (also defined on line 2)");
+    }
+
+    #[test]
+    fn test_repeated_key_differing_in_case_is_refused() {
+        // The readers match keys ignoring case, so these would be one key with one value kept.
+        let err = IniDocument::parse("[node.a]\nInflow = 1\ninflow = 2\n").unwrap_err();
+        assert_eq!(err, "Duplicate key 'inflow' at line 3 in [node.a] (also defined on line 2)");
     }
 
     #[test]
