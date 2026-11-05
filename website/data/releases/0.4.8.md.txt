@@ -1,0 +1,15 @@
+---
+version: "0.4.8"
+date: TBD
+prerelease: false
+assets:
+  Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.8/KalixIDE-Windows-0.4.8-Portable.zip"
+  macOS: "https://github.com/chasegan/Kalix/releases/download/v0.4.8/KalixIDE-macOS-0.4.8-Portable.zip"
+  Linux: "https://github.com/chasegan/Kalix/releases/download/v0.4.8/KalixIDE-Linux-0.4.8-Portable.zip"
+pip: "pip install kalix==0.4.8"
+---
+
+- New! View and validate mass balances in the Run Manager and the file tree.
+    - In the Run Manager, right-click a completed run and choose `Show mass balance report` to open its report in a read-only window, or `Validate mass balance` to compare it with the report open in the main editor.
+    - In the file tree, right-click a model file and choose `Show mass balance report` (this will execute a new run), or select a model file and report file together and choose `Validate mass balance` as per the Run Manager.
+- Improved: `kalix simulate -v` (`--verify-mass-balance`) ignores line endings, so a reference report with Windows line endings no longer fails the check.

@@ -1,5 +1,6 @@
 package com.kalix.ide.workspace.tree;
 
+import com.kalix.ide.document.DocumentKind;
 import com.kalix.ide.icons.MenuIcons;
 import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.utils.PlatformUtils;
@@ -117,6 +118,9 @@ public class TreeContextMenu {
                 if (entry.icon != null) {
                     item.setIcon(entry.icon.get());
                 }
+                if (entry.tooltip != null) {
+                    item.setToolTipText(entry.tooltip);
+                }
                 item.addActionListener(e -> entry.action.accept(selection));
                 menu.add(item);
             }
@@ -149,6 +153,17 @@ public class TreeContextMenu {
                     "Compare files", TreeContextMenu::isTwoFiles,
                     sel -> host.compareFiles(file(sel, 0), file(sel, 1))
                 ),
+                item(
+                    "Show mass balance report",
+                    sel -> isSingleModel(sel) && context == BuildContext.FileTree,
+                    sel -> host.showMassBalanceReport(file(sel))
+                ).withTooltip("Run this model as saved, then show its mass balance report."),
+                item(
+                    "Validate mass balance",
+                    sel -> isModelAndText(sel) && context == BuildContext.FileTree,
+                    sel -> host.validateMassBalance(modelOf(sel), otherThanModel(sel))
+                ).withTooltip("Run the selected model as saved, then compare its mass balance"
+                    + " with the selected file."),
                 item(
                     "Unzip", TreeContextMenu::isSingleZip,
                     sel -> fileOps.unzipFile(file(sel))
@@ -281,6 +296,31 @@ public class TreeContextMenu {
         return sel.size() == 1 && !sel.getFirst().isDirectory() && isNotPlainZip(sel);
     }
 
+    /** True for one model file (by extension, as {@link DocumentKind} decides). */
+    static boolean isSingleModel(List<FileTreeNode> sel) {
+        return sel.size() == 1 && isModelFile(sel.getFirst());
+    }
+
+    /**
+     * True for one model file and one text file, in either order: the text file is taken
+     * to be a mass balance report. A text file is anything {@link DocumentKind} would open
+     * as text, short of a zip archive.
+     */
+    static boolean isModelAndText(List<FileTreeNode> sel) {
+        if (sel.size() != 2 || hasDirectory(sel) || !isNotPlainZip(sel)) {
+            return false;
+        }
+        long models = sel.stream().filter(TreeContextMenu::isModelFile).count();
+        long texts = sel.stream()
+            .filter(x -> DocumentKind.forFile(x.getFile()) == DocumentKind.TEXT)
+            .count();
+        return models == 1 && texts == 1;
+    }
+
+    private static boolean isModelFile(FileTreeNode node) {
+        return !node.isDirectory() && DocumentKind.forFile(node.getFile()) == DocumentKind.MODEL;
+    }
+
     private static boolean isTwoFiles(List<FileTreeNode> sel) {
         return sel.size() == 2 && sel.stream().noneMatch(FileTreeNode::isDirectory) && isNotPlainZip(sel);
     }
@@ -330,6 +370,14 @@ public class TreeContextMenu {
         return sel.get(index).getFile();
     }
 
+    private static File modelOf(List<FileTreeNode> sel) {
+        return sel.stream().filter(TreeContextMenu::isModelFile).findFirst().orElseThrow().getFile();
+    }
+
+    private static File otherThanModel(List<FileTreeNode> sel) {
+        return sel.stream().filter(x -> !isModelFile(x)).findFirst().orElseThrow().getFile();
+    }
+
     private static List<File> files(List<FileTreeNode> sel) {
         return sel.stream().map(FileTreeNode::getFile).collect(Collectors.toList());
     }
@@ -340,7 +388,7 @@ public class TreeContextMenu {
 
     private static Entry item(String label, Predicate<List<FileTreeNode>> visible,
             Consumer<List<FileTreeNode>> action) {
-        return new Entry(sel -> label, visible, null, action, null);
+        return new Entry(sel -> label, visible, null, action, null, null);
     }
 
     /**
@@ -350,7 +398,7 @@ public class TreeContextMenu {
      */
     private static Entry item(String label, Predicate<List<FileTreeNode>> visible,
             Consumer<List<FileTreeNode>> action, Supplier<Icon> icon) {
-        return new Entry(sel -> label, visible, null, action, icon);
+        return new Entry(sel -> label, visible, null, action, icon, null);
     }
 
     /**
@@ -360,19 +408,25 @@ public class TreeContextMenu {
     private static Entry checkbox(String label, Predicate<List<FileTreeNode>> visible,
             Predicate<List<FileTreeNode>> checked,
             Consumer<List<FileTreeNode>> action) {
-        return new Entry(sel -> label, visible, checked, action, null);
+        return new Entry(sel -> label, visible, checked, action, null, null);
     }
 
     /**
      * A single menu item: its label (selection-dependent), applicability, optional
      * checkbox state
-     * ({@code checked}, null for a plain item), handler, and optional landmark icon
-     * supplier.
+     * ({@code checked}, null for a plain item), handler, optional landmark icon
+     * supplier, and optional tooltip.
      */
     private record Entry(Function<List<FileTreeNode>, String> label,
             Predicate<List<FileTreeNode>> visible,
             Predicate<List<FileTreeNode>> checked,
             Consumer<List<FileTreeNode>> action,
-            Supplier<Icon> icon) {
+            Supplier<Icon> icon,
+            String tooltip) {
+
+        /** This entry with a tooltip, worded per the 2026-10-04 amendment to ADR-0002. */
+        Entry withTooltip(String text) {
+            return new Entry(label, visible, checked, action, icon, text);
+        }
     }
 }

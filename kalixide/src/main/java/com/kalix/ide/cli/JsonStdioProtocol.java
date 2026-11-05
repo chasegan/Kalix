@@ -253,5 +253,9 @@ public class JsonStdioProtocol {
         public static String getVersion() {
             return createCommandMessage("get_version", Map.of());
         }
+
+        public static String getMassBalanceReport() {
+            return createCommandMessage("get_mass_balance_report", Map.of());
+        }
     }
 }
