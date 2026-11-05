@@ -30,11 +30,6 @@ fn rig(river_lag: usize, field: &str) -> String {
         }
     }
     if !crop.contains("kc ") { crop.push_str("kc = 1\n"); }
-    // A key may appear only once in a section, so a default the rig sets is dropped.
-    let set: Vec<&str> = props.lines().filter_map(|l| l.split('=').next()).map(str::trim).collect();
-    let defaults: String = ["area = 2", "available_water = 100", "interception = 0", "fallow = grass", "crop_1 = grass", "crop_1_plant = 2"]
-        .iter().filter(|d| !set.contains(&d.split('=').next().unwrap().trim()))
-        .map(|d| format!("{d}\n")).collect();
     format!(r#"
 [kalix]
 start = 2020-01-01
@@ -67,7 +62,13 @@ ds_1 = paddock
 [node.paddock]
 type = field
 loc = 0, 20
-{defaults}{props}
+area = 2
+available_water = 100
+interception = 0
+fallow = grass
+crop_1 = grass
+crop_1_plant = 2
+{props}
 ds_1 = outlet
 
 [node.outlet]
@@ -373,7 +374,7 @@ node.dam.volume
 
 #[test]
 fn test_field_validation() {
-    assert!(load_err(&rig(0, "available_water = 0")).contains("available_water must be a positive number"));
+    assert!(load_err(&rig(0, "").replace("available_water = 100", "available_water = 0")).contains("available_water must be a positive number"));
     assert!(load_err(&rig(0, "efficiency = 0")).contains("efficiency must be greater than 0"));
     assert!(load_err(&rig(0, "efficiency = 1.2")).contains("efficiency must be greater than 0 and at most 1"));
     let bad_p = IniModelIO::read_model_string(&rig(0, "p = 1")).err().expect("should not load").to_string();

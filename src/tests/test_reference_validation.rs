@@ -206,3 +206,21 @@ fn test_a_validated_model_is_not_yet_configured() {
     assert!(model.clone_for_run().configured, "a worker clone starts configured");
     model.run().unwrap();
 }
+
+/// The IDE's engine session now validates at load and configures at run, so the
+/// structural step runs twice on one model. It must change nothing: the mass
+/// balance of a model with every node type is the same either way.
+#[test]
+fn test_validating_before_configuring_changes_no_result() {
+    let path = "./regression_tests/simulations/5_model_with_every_node/model_with_every_node_type.ini";
+    let mut once = IniModelIO::read_model_file(path).unwrap();
+    once.configure().unwrap();
+    once.run().unwrap();
+
+    let mut twice = IniModelIO::read_model_file(path).unwrap();
+    twice.validate_model_structure().unwrap();
+    twice.configure().unwrap();
+    twice.run().unwrap();
+
+    assert_eq!(once.generate_mass_balance_report(), twice.generate_mass_balance_report());
+}

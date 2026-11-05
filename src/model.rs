@@ -559,8 +559,8 @@ impl Model {
 
         //1b) An expression's const.* reference registers the constant; [const]
         //   or the optimiser, which assigns between load and configure, gives it
-        //   a value. So this is a run-time check, not part of the structural one
-        //   that load and patch run.
+        //   a value. So this is a configure-time check, not part of the
+        //   structural one that load and patch run.
         self.data_cache.constants.assert_all_constants_have_assigned_values()?;
 
         //2b) Reject any input that was declared but never supplied. Nothing in
