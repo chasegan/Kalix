@@ -33,6 +33,7 @@ After construction, refs flow through these collections:
 | `sharedColorMap` | `Map<SeriesRef, Color>` | `SeriesColorManager` (reference shared with `VisualizationTabManager`, `FlowVizPanel`, `TimeSeriesRenderer`, `CoordinateDisplayManager`) |
 | `FlowVizPanel.visibleSeries` | `List<SeriesRef>` | `FlowVizPanel` (reference shared with `TimeSeriesRenderer`, `CoordinateDisplayManager`, `PlotInteractionManager` via supplier) |
 | `FlowVizState.visibleSeries` (per tab) | `List<SeriesRef>` | `FlowVizModel` — the tab's selection, in order; the pages project it, and undo/redo restore it |
+| `FlowVizState.rightAxisSeries` (per tab) | `Set<SeriesRef>` | `FlowVizModel` — the visible series drawn against the secondary Y axis; kept a subset of `visibleSeries` by the state's constructor |
 | `StatsTableModel.seriesData` (`SeriesStats.ref`) | row identity by ref | `StatsTableModel` |
 | `TimeSeriesRenderer.seriesRenderModes` | `Map<SeriesRef, SeriesRenderMode>` | `TimeSeriesRenderer` |
 | `LODManager.lodCache` | string key built from `ref.toString() + viewport` | `LODManager` |

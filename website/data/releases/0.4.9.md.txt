@@ -23,3 +23,6 @@ pip: "pip install kalix==0.4.9"
 - Unticked series no longer stay in memory: untick a series in every plot tab to free it.
 - `Save Data` on a double-mass plot now writes the cumulative reference as the first column, headed `cumulative reference`. It used to write it as dates in 1970.
 - IDE: files dragged from Finder or Explorer onto the project tree are copied into the folder they land on. If a name is already taken, you're asked to replace it or keep both (#469).
+- IDE: New! Move a plotted series to a secondary Y axis (#196). Ctrl+click a series in the key (Cmd+click on macOS), or right-click it and choose **Move to secondary Y axis**, to plot it against its own axis on the right. The key groups series by axis, and the plot menu gains **Copy secondary Y axis**, **Paste secondary Y axis** and a secondary Y row in **Set axis limits…**.
+- IDE plots: drag an axis to set its range. The bottom or top half of a Y axis moves its minimum or maximum, the left or right half of the time axis its start or end. Double-click a Y axis to fit it to the data in view, or the time axis to show the whole record.
+- IDE plots: with **Auto-scale Y axis** on, an axis with no data in view now keeps its range, where it used to jump to -1 to 1.
