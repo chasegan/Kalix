@@ -15,6 +15,12 @@ class UniqueNodeNameTest {
         assertEquals("storage_1", CommandExecutor.uniqueNodeName("storage", "[kalix]\n"));
     }
 
+    /** Names are taken ignoring case, as the engine takes them. */
+    @Test
+    void aNameTakenInAnotherCaseIsSkipped() {
+        assertEquals("storage_2", CommandExecutor.uniqueNodeName("storage", "[node.Storage_1]\nloc = 1, 1\n"));
+    }
+
     @Test
     void emptyDocumentStillNumbersFromOne() {
         assertEquals("gauge_1", CommandExecutor.uniqueNodeName("gauge", ""));
