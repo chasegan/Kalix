@@ -405,9 +405,11 @@ accounts = name,         size, initial,
            {user}_co,     800,  400,
            {user}_annual, 3000, 3000,"""
 
+# Four users at 3,800 each is 15,200, so the cap is sized well above it and never binds:
+# tests 10 and 11 then compute the same flows, and their gap is the tree's own cost.
 VALLEY_CAP = """[acc.{valley}_caps]
 accounts = name,          size,  initial,
-           {valley}_cap,  15000, 15000,"""
+           {valley}_cap,  20000, 20000,"""
 
 ANNUAL_REFILL = """[ras.refill]
 targets = {targets}
