@@ -2362,7 +2362,9 @@ fn read_accounts_property(v: &str, node_name: &str, manager: &crate::hydrology::
         parse_combination(v, manager)
             .map_err(|e| format!("Node '{}': in 'accounts = {}': {}", node_name, v.trim(), e))
     } else {
-        resolve_account_references(v, manager).map(AccountsProperty::List)
+        resolve_account_references(v, manager)
+            .map(AccountsProperty::List)
+            .map_err(|e| format!("Node '{}': {}", node_name, e))
     }
 }
 
