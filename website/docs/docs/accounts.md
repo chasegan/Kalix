@@ -160,7 +160,11 @@ so the policy stays in the RAS sections where it can be read:
     action  = set_empty
     ```
 
-- **A daily limit.** `& daily_limit`, refilled every step:
+- **A daily limit.** `& daily_limit`, refilled every step. A limit on what is
+  taken at flow time: an unregulated user, or a regulated user's opportunistic
+  take. A regulated user's *order* against it is committed until the order
+  falls due, and a refill does not release the commitment, so with travel
+  time the limit would also hold the user's orders to one every few days:
 
     ```ini
     [acc.limits]
