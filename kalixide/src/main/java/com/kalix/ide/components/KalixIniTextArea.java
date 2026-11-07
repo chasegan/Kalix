@@ -13,12 +13,10 @@ import org.slf4j.LoggerFactory;
  * Extends KalixTextArea to inherit monospace font configuration and
  * screen-aware font metrics, then adds INI-specific features:
  * <ul>
- *   <li>Custom Kalix INI syntax highlighting with line continuation support</li>
- *   <li>Syntax theme from user preferences</li>
- *   <li>Theme-aware current line highlighting</li>
+ *   <li>Custom Kalix INI syntax highlighting with line continuation support, coloured
+ *       from the effective syntax palette by the editor theme</li>
  *   <li>Code folding of regions, sections and multi-line values
  *       ({@link KalixIniFoldParser}), mark occurrences, and other editing features</li>
- *   <li>Syntax theme updates for every live instance via static methods</li>
  * </ul>
  *
  * @see KalixTextArea for base configuration

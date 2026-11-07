@@ -57,7 +57,6 @@ public final class EditorTheme {
         theme.bgColor = bg;
         theme.caretColor = color("TextArea.caretForeground", fg);
         theme.selectionBG = selection;
-        theme.selectionFG = color("TextArea.selectionForeground", theme.selectionFG);
         theme.currentLineHighlight = withAlpha(selection, 80);
         theme.marginLineColor = border;
         theme.tabLineColor = border;
