@@ -64,7 +64,7 @@ Install via [rustup](https://rustup.rs/); build with `cargo`.
 Temurin or equivalent; the IDE builds with the bundled `gradlew`.
 </div>
 <div class="kx-card-item" markdown>
-#### Python 3.12+
+#### Python 3.11+
 The package is built with `maturin` from `python/`.
 </div>
 </div>
