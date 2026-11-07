@@ -62,6 +62,9 @@ impl AccountTree {
     /// of what it is handed and what its sides can cover.
     #[inline]
     pub fn debit(&self, account_manager: &mut AccountManager, amount: f64) {
+        if amount <= 0.0 {
+            return;
+        }
         let (op, inner, _) = first_subtree(&self.terms);
         let leaf = &mut |account_manager: &mut AccountManager, idx: usize, remaining: f64| {
             let take = remaining.min(balance_of(account_manager, idx));
@@ -71,7 +74,7 @@ impl AccountTree {
             take
         };
         match op {
-            Term::All(_) => each_side(inner, amount, account_manager, &balance_of, leaf),
+            Term::All(_) => each_side(inner, amount, account_manager, &balance_of, leaf, &walk),
             _ => { walk(op, inner, amount, account_manager, &balance_of, leaf); }
         }
     }
@@ -238,7 +241,7 @@ where A: Fn(&AccountManager, usize) -> f64,
         Term::All(_) => {
             let capacity = fold(op, inner, &|idx| avail(account_manager, idx));
             let take = amount.min(capacity);
-            each_side(inner, take, account_manager, avail, leaf);
+            each_side(inner, take, account_manager, avail, leaf, subtree);
             take
         }
         Term::Account(_) => {
@@ -248,16 +251,18 @@ where A: Fn(&AccountManager, usize) -> f64,
     }
 }
 
-/// Hand `amount` to every side of an `&` whose sides are `inner`. The caller has made sure
-/// each side can cover it.
+/// Hand `amount` to every side of an `&` whose sides are `inner`, an operator side through
+/// `subtree`. The caller has made sure each side can cover it.
 #[inline(always)]
-fn each_side<A, L>(inner: &[Term], amount: f64, account_manager: &mut AccountManager, avail: &A, leaf: &mut L)
-where A: Fn(&AccountManager, usize) -> f64, L: FnMut(&mut AccountManager, usize, f64) -> f64 {
+fn each_side<A, L, S>(inner: &[Term], amount: f64, account_manager: &mut AccountManager, avail: &A, leaf: &mut L, subtree: &S)
+where A: Fn(&AccountManager, usize) -> f64,
+      L: FnMut(&mut AccountManager, usize, f64) -> f64,
+      S: Fn(Term, &[Term], f64, &mut AccountManager, &A, &mut L) -> f64 {
     let mut rest = inner;
     while let Some((&side, after)) = rest.split_first() {
         match side {
             Term::Account(idx) => { rest = after; leaf(account_manager, idx as usize, amount); }
-            _ => { let (inner, after) = after.split_at(subtree_len(side)); rest = after; walk_deeper(side, inner, amount, account_manager, avail, leaf); }
+            _ => { let (inner, after) = after.split_at(subtree_len(side)); rest = after; subtree(side, inner, amount, account_manager, avail, leaf); }
         }
     }
 }
@@ -426,6 +431,22 @@ impl Combination {
     }
 }
 
+/// The error for a name in an `accounts` line that is not an account. One wording for the
+/// plain list and the combination.
+pub fn unknown_account_message(name: &str, account_manager: &AccountManager) -> String {
+    if account_manager.get_group_idx(name).is_some() {
+        format!("'{}' is an account group; a node's 'accounts' takes account names \
+            (group targeting belongs in [ras.*] sections)", name)
+    } else {
+        format!("Unknown account '{}'. Accounts are declared in [acc.*] sections.", name)
+    }
+}
+
+/// The error for an account named twice in one `accounts` line.
+pub fn duplicate_account_message(name: &str) -> String {
+    format!("Account '{}' appears more than once; an account may appear once in a node's 'accounts'", name)
+}
+
 /// Whether an `accounts` line is a combination rather than a plain list.
 pub fn is_combination(line: &str) -> bool {
     line.contains(['(', ')', '|', '&'])
@@ -461,7 +482,7 @@ pub fn parse_combination(line: &str, account_manager: &AccountManager) -> Result
     for (i, idx) in seen.iter().enumerate() {
         if seen[..i].contains(idx) {
             let name = account_manager.get_account(*idx).map(|a| a.name.as_str()).unwrap_or("?");
-            return Err(format!("account '{}' appears more than once; an account may appear once in a node's accounts", name));
+            return Err(duplicate_account_message(name));
         }
     }
 
@@ -561,14 +582,8 @@ impl<'a> Parser<'a> {
         match self.tokens.get(self.pos) {
             Some(Token::Name(name)) => {
                 self.pos += 1;
-                let idx = self.account_manager.get_account_idx(name).ok_or_else(|| {
-                    if self.account_manager.get_group_idx(name).is_some() {
-                        format!("'{}' is an account group; a node's 'accounts' takes account names \
-                            (group targeting belongs in [ras.*] sections)", name)
-                    } else {
-                        format!("unknown account '{}'. Accounts are declared in [acc.*] sections.", name)
-                    }
-                })?;
+                let idx = self.account_manager.get_account_idx(name)
+                    .ok_or_else(|| unknown_account_message(name, self.account_manager))?;
                 Ok(Combination::Account(idx))
             }
             Some(Token::Open) => {
