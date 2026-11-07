@@ -23,6 +23,7 @@ import com.kalix.ide.flowviz.stats.MaskMode;
 
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
+import javax.swing.ToolTipManager;
 import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -31,6 +32,7 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
@@ -207,6 +209,9 @@ public class FlowVizPanel extends JPanel {
         plotInteractionManager.setLabelResolverSupplier(() -> labelResolver);
 
         setupMouseListeners();
+        // Swing asks getToolTipText for the tip under the pointer; the Key answers for a
+        // label it had to cut short (#508).
+        ToolTipManager.sharedInstance().registerComponent(this);
 
         visibleSeries.addAll(model.current().getVisibleSeries());
         legendManager.setSeries(model.current().getVisibleSeries());
@@ -496,6 +501,12 @@ public class FlowVizPanel extends JPanel {
             return xAxisTypeOverride;
         }
         return state().getPlotType().xAxisType();
+    }
+
+    /** A Key label the last paint cut short, in full; otherwise no tip. */
+    @Override
+    public String getToolTipText(MouseEvent e) {
+        return legendManager.tooltipAt(e.getX(), e.getY());
     }
 
     private void setupMouseListeners() {

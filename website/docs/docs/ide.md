@@ -101,7 +101,7 @@ If you’re inside a terminal and want to edit a model, you can **launch the IDE
 
 ![](../assets/docs-using-ide/image_17.png)
 
-Look for the **Plot Palettes** button in the plotting tool create custom colour palettes. And click the line sample in the key to change the colour and style of a given line.
+Look for the **Plot Palettes** button in the plotting tool to create custom colour palettes. And click the line sample in the key to change the colour and style of a given line. The key grows as wide as the plot to fit a long series name; hover a name it still had to cut short to read it in full.
 
 ![](../assets/docs-using-ide/image_18.png)![](../assets/docs-using-ide/92a32e80-6483-4366-ad2c-563768393bbd.png)
 
