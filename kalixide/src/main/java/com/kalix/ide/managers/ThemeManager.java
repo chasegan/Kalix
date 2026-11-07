@@ -72,6 +72,8 @@ public class ThemeManager {
         }
 
         this.currentTheme = theme;
+        // Stored before the walk below: every editor reads the effective syntax
+        // palette from the preferences in its updateUI.
         ThemePreferences.storeApplicationTheme(theme);
 
         try {

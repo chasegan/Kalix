@@ -32,20 +32,6 @@ public final class WeakRegistry<T> {
         sweep(action);
     }
 
-    /**
-     * Applies an action to every live instance of the given type, skipping the rest.
-     *
-     * @param type   the instances to visit
-     * @param action what to do with each one
-     * @param <S>    the visited type
-     */
-    public <S> void forEach(Class<S> type, Consumer<? super S> action) {
-        sweep(instance -> {
-            if (type.isInstance(instance)) {
-                action.accept(type.cast(instance));
-            }
-        });
-    }
 
     /** Visits every live instance, dropping the entries of collected ones on the way. */
     private void sweep(Consumer<? super T> action) {

@@ -7,11 +7,11 @@ import org.fife.ui.rsyntaxtextarea.Token;
 import org.fife.ui.rtextarea.Gutter;
 import org.fife.ui.rtextarea.RTextScrollPane;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import javax.swing.plaf.ColorUIResource;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics;
@@ -32,8 +32,6 @@ class EditorThemeTest {
     private static final Color LIGHT_BG = Color.WHITE;
     private static final Color LIGHT_FG = Color.BLACK;
 
-    private Object savedBg;
-    private Object savedFg;
 
     /** Headless stand-in: the library re-measures its font against the editor's graphics. */
     private static final class HeadlessEditor extends KalixIniTextArea {
@@ -47,21 +45,16 @@ class EditorThemeTest {
         }
     }
 
-    @BeforeEach
-    void rememberLookAndFeelColours() {
-        savedBg = UIManager.get("TextArea.background");
-        savedFg = UIManager.get("TextArea.foreground");
-    }
-
     @AfterEach
     void restoreLookAndFeelColours() {
-        UIManager.put("TextArea.background", savedBg);
-        UIManager.put("TextArea.foreground", savedFg);
+        UIManager.put("TextArea.background", null);
+        UIManager.put("TextArea.foreground", null);
     }
 
+    /** As the look-and-feel stores them: {@code UIResource}s, which a component's own defaults may replace. */
     private static void lookAndFeel(Color bg, Color fg) {
-        UIManager.put("TextArea.background", bg);
-        UIManager.put("TextArea.foreground", fg);
+        UIManager.put("TextArea.background", new ColorUIResource(bg));
+        UIManager.put("TextArea.foreground", new ColorUIResource(fg));
     }
 
     @Test
@@ -99,7 +92,16 @@ class EditorThemeTest {
 
         assertEquals(DARK_BG, editor.getBackground());
         assertEquals(DARK_FG, editor.getForeground());
-        assertEquals(DARK_BG, scrollPane.getGutter().getBackground());
+        assertEquals(DARK_BG, scrollPane.getGutter().getBackground(),
+            "the gutter's own update, later in the walk, must not replace the colour with the panel's");
+    }
+
+    @Test
+    void aPlainTextAreaPaintsInTheForegroundNotThePalette() {
+        lookAndFeel(DARK_BG, DARK_FG);
+        KalixPlainTextArea plain = new KalixPlainTextArea(5, 20);
+        assertEquals(null, plain.getSyntaxScheme().getStyle(Token.IDENTIFIER).foreground,
+            "no token colour, so the library paints plain text in the component foreground");
     }
 
     @Test

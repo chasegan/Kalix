@@ -20,16 +20,4 @@ class WeakRegistryTest {
 
         assertEquals(List.of("first", "second"), seen);
     }
-
-    @Test
-    void canVisitOneSubtypeOnly() {
-        WeakRegistry<CharSequence> registry = new WeakRegistry<>();
-        registry.add("a string");
-        registry.add(new StringBuilder("a builder"));
-
-        List<String> seen = new ArrayList<>();
-        registry.forEach(StringBuilder.class, builder -> seen.add(builder.toString()));
-
-        assertEquals(List.of("a builder"), seen);
-    }
 }

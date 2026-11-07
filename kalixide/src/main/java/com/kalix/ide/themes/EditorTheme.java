@@ -32,10 +32,11 @@ public final class EditorTheme {
 
     /**
      * Applies the current theme to a text area: every colour the library's theme
-     * carries, and the foreground, which it does not.
+     * carries, and the foreground, which it does not. The syntax palette is applied only
+     * where there is syntax to colour; a plain text area paints in the foreground.
      */
-    public static void apply(RSyntaxTextArea textArea) {
-        Theme theme = build(textArea);
+    public static void apply(RSyntaxTextArea textArea, boolean withSyntaxPalette) {
+        Theme theme = build(textArea, withSyntaxPalette);
         theme.apply(textArea);
         textArea.setForeground(foreground());
     }
@@ -44,12 +45,12 @@ public final class EditorTheme {
      * Builds the theme for a text area. Starts from the text area's current state so that
      * whatever this class does not decide is left as it is.
      */
-    static Theme build(RSyntaxTextArea textArea) {
+    private static Theme build(RSyntaxTextArea textArea, boolean withSyntaxPalette) {
         Color bg = background();
         Color fg = foreground();
         Color selection = color("TextArea.selectionBackground", new Color(51, 153, 255));
         Color accent = ThemeUtils.accentColor();
-        Color muted = color("Label.disabledForeground", ThemeUtils.isDark(bg) ? new Color(0x80, 0x80, 0x80) : Color.GRAY);
+        Color muted = color("Label.disabledForeground", Color.GRAY);
         Color border = color("Component.borderColor", muted);
 
         Theme theme = new Theme(textArea);
@@ -76,7 +77,9 @@ public final class EditorTheme {
         theme.foldIndicatorFG = muted;
         theme.foldIndicatorArmedFG = fg;
 
-        theme.scheme = scheme(textArea, ThemePreferences.effectiveSyntaxTheme());
+        if (withSyntaxPalette) {
+            theme.scheme = scheme(textArea, ThemePreferences.effectiveSyntaxTheme());
+        }
         return theme;
     }
 
@@ -106,9 +109,15 @@ public final class EditorTheme {
         return color("TextArea.foreground", Color.BLACK);
     }
 
+    /**
+     * A look-and-feel colour as a plain {@link Color}. The look-and-feel stores its colours
+     * as {@code UIResource}s, which a component's own {@code updateUI} is entitled to
+     * replace with its defaults; a gutter given one would be repainted in the panel colour
+     * by its own update later in the same walk.
+     */
     private static Color color(String key, Color fallback) {
         Color color = UIManager.getColor(key);
-        return color != null ? color : fallback;
+        return color != null ? new Color(color.getRGB(), true) : fallback;
     }
 
     private static Color withAlpha(Color color, int alpha) {

@@ -140,8 +140,11 @@ RSyntaxTextArea (library)
   `graphicsConfiguration` property.
 - Common settings (anti-aliasing, tab handling)
 - Theme colours from `themes/EditorTheme.java`, applied in `updateUI` and `addNotify`:
-  one RSyntaxTextArea `Theme` built from the look-and-feel's keys and the effective syntax
-  palette, gutter and folds included. A theme or syntax-palette change is therefore just
+  one RSyntaxTextArea `Theme` built from the look-and-feel's keys, gutter and folds
+  included, with the effective syntax palette for INI editors only (`hasSyntaxPalette`), so
+  logs paint in the plain foreground. Look-and-feel colours are copied to plain `Color`s:
+  a `UIResource` handed to the gutter is replaced by its own panel defaults later in the
+  same walk. A theme or syntax-palette change is therefore just
   `FlatLaf.updateUI()`, which walks every window; no window, manager or registry keeps a
   list of editors to re-theme (#509 was the optimiser window's editors missing such a
   list). The library writes its own white defaults in its constructor, so the theme is

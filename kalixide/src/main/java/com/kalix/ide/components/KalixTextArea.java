@@ -5,7 +5,9 @@ import com.kalix.ide.preferences.PreferenceKeys;
 import com.kalix.ide.themes.EditorTheme;
 import com.kalix.ide.utils.WeakRegistry;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rsyntaxtextarea.RSyntaxUtilities;
 import org.fife.ui.rsyntaxtextarea.TokenTypes;
+import org.fife.ui.rtextarea.Gutter;
 import org.fife.ui.rsyntaxtextarea.folding.FoldManager;
 
 import javax.swing.event.DocumentEvent;
@@ -47,6 +49,9 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
      */
     private boolean constructed;
 
+    /** The gutter the theme was last applied to, so that joining a window themes it once. */
+    private Gutter themedGutter;
+
     /**
      * Creates a KalixTextArea with default dimensions.
      */
@@ -85,7 +90,17 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
         // replace them now, and again on every look-and-feel change (updateUI) and when
         // the editor joins a window and gains its gutter (addNotify).
         constructed = true;
-        EditorTheme.apply(this);
+        applyEditorTheme();
+    }
+
+    /** Whether this editor colours tokens from the syntax palette. Plain text does not. */
+    protected boolean hasSyntaxPalette() {
+        return false;
+    }
+
+    private void applyEditorTheme() {
+        EditorTheme.apply(this, hasSyntaxPalette());
+        themedGutter = RSyntaxUtilities.getGutter(this);
     }
 
     /**
@@ -97,19 +112,24 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     public void updateUI() {
         super.updateUI();
         if (constructed) {
-            EditorTheme.apply(this);
+            applyEditorTheme();
         }
     }
 
     /**
      * The gutter only exists once the editor sits in its scroll pane, so the theme is
-     * applied again as the editor joins a window.
+     * applied again as the editor joins a window, once per gutter: applying it costs the
+     * library a re-measure of the document, and a reparent (a tab drag, say) fires this
+     * again with the same gutter.
      */
     @Override
     public void addNotify() {
         super.addNotify();
         if (constructed) {
-            EditorTheme.apply(this);
+            Gutter gutter = RSyntaxUtilities.getGutter(this);
+            if (gutter != null && gutter != themedGutter) {
+                applyEditorTheme();
+            }
         }
     }
 
