@@ -145,7 +145,7 @@ public class PlotLegendManager {
      */
     private static class LegendEntry {
         final SeriesRef ref;
-        /** The last paint cut this entry's label short; the tooltip then carries it whole. */
+        /** Whether the last paint cut this entry's label short. */
         boolean clipped;
 
         LegendEntry(SeriesRef ref) {
@@ -204,7 +204,7 @@ public class PlotLegendManager {
 
     /** The series whose row contains the point, or null. Null when hidden or collapsed. */
     public SeriesRef entryAt(int mouseX, int mouseY) {
-        LegendEntry entry = legendEntryAt(mouseX, mouseY);
+        LegendEntry entry = rowAt(mouseX, mouseY);
         return entry != null ? entry.ref : null;
     }
 
@@ -213,11 +213,11 @@ public class PlotLegendManager {
      * it short; otherwise null, so a tooltip never restates what is already readable.
      */
     public String tooltipAt(int mouseX, int mouseY) {
-        LegendEntry entry = legendEntryAt(mouseX, mouseY);
+        LegendEntry entry = rowAt(mouseX, mouseY);
         return entry != null && entry.clipped ? displayLabel(entry.ref) : null;
     }
 
-    private LegendEntry legendEntryAt(int mouseX, int mouseY) {
+    private LegendEntry rowAt(int mouseX, int mouseY) {
         if (!enabled || collapsed || !bounds.contains(mouseX, mouseY)) {
             return null;
         }
@@ -368,6 +368,11 @@ public class PlotLegendManager {
                 displayMode = DisplayMode.FULL_NAME;
                 break;
         }
+        // The labels change, so what the last paint cut short no longer holds; a hover
+        // before the next paint gets no tip rather than one for a label that now fits.
+        for (LegendEntry entry : entries) {
+            entry.clipped = false;
+        }
         savePreferences();
     }
 
@@ -412,7 +417,7 @@ public class PlotLegendManager {
         plotArea.setBounds(viewport.getPlotX(), viewport.getPlotY(),
                            viewport.getPlotWidth(), viewport.getPlotHeight());
 
-        // Calculate dimensions; the width may grow to the plot area's
+        // The plot area first: calculateWidth caps the Key at its width.
         int width = calculateWidth(g2d);
         int height = calculateHeight();
 
@@ -677,9 +682,9 @@ public class PlotLegendManager {
             maxWidth = Math.max(maxWidth, totalWidth);
         }
 
-        // The key may grow to the whole plot area to fit a long name (#508). Below the
+        // The Key may grow to the whole plot area to fit a long name (#508). Below the
         // minimum the title and collapse button would collide, so that floor wins even in a
-        // plot narrower than it; the clamp in render() then pins the key to the left edge.
+        // plot narrower than it; the clamp in render() then pins the Key to the left edge.
         return Math.max(MIN_WIDTH, Math.min(maxWidth, plotArea.width));
     }
 
