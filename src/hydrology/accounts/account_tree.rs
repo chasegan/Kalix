@@ -44,76 +44,139 @@ impl AccountTree {
     /// combined by the tree: `|` sums, `&` takes the minimum.
     #[inline]
     pub fn balance(&self, account_manager: &AccountManager) -> f64 {
-        fold(&self.terms, &|idx| account_manager.get_account_balance(idx).max(0.0))
+        let (op, inner, _) = first_subtree(&self.terms);
+        fold(op, inner, &|idx| balance_of(account_manager, idx))
     }
 
     /// As `balance`, over what each account can still cover: its balance less the orders
     /// already committed against it, floored at zero account by account.
     #[inline]
     pub fn uncommitted(&self, account_manager: &AccountManager) -> f64 {
-        fold(&self.terms, &|idx| account_manager.get_account_uncommitted_balance(idx))
+        let (op, inner, _) = first_subtree(&self.terms);
+        fold(op, inner, &|idx| uncommitted_of(account_manager, idx))
     }
 
     /// Debit a take: left to right through `|`, filling each account before the next, and in
-    /// full from every side of `&`. A take capped at `balance()` is absorbed exactly.
+    /// full from every side of `&`. The take must not exceed `balance()`, and is then absorbed
+    /// exactly: the root `&` hands every side the whole take, and a nested `&` takes the least
+    /// of what it is handed and what its sides can cover.
     #[inline]
     pub fn debit(&self, account_manager: &mut AccountManager, amount: f64) {
-        walk(&self.terms, amount, &mut |idx, remaining| {
-            let take = remaining.min(account_manager.get_account_balance(idx).max(0.0));
+        let (op, inner, _) = first_subtree(&self.terms);
+        let leaf = &mut |account_manager: &mut AccountManager, idx: usize, remaining: f64| {
+            let take = remaining.min(balance_of(account_manager, idx));
             if take > 0.0 {
                 account_manager.debit_account(idx, take);
             }
             take
-        });
+        };
+        match op {
+            Term::All(_) => each_side(inner, amount, account_manager, &balance_of, leaf),
+            _ => { walk(op, inner, amount, account_manager, &balance_of, leaf); }
+        }
     }
 
-    /// Commit an accepted order, as `debit` against the uncommitted balances. What the tree
-    /// cannot cover (an order the order_accounts authorised) goes on the first account of
-    /// each side that fell short, which is where its delivery will be debited first: the
-    /// plain list's rule, applied to every `&` side and to the whole.
+    /// Commit an accepted order, as `debit` against the uncommitted balances. The order may
+    /// exceed `uncommitted()` where order_accounts authorise the rest; what a side of the
+    /// root `&`, or the whole, cannot cover goes on its first account, which is where the
+    /// delivery will be debited first. That is the plain list's rule, applied per side.
     #[inline]
     pub fn commit(&self, account_manager: &mut AccountManager, amount: f64, due_in: usize) {
-        commit_full(&self.terms, amount, account_manager, due_in);
+        if amount <= 0.0 {
+            return;
+        }
+        let (op, inner, _) = first_subtree(&self.terms);
+        let leaf = &mut |account_manager: &mut AccountManager, idx: usize, remaining: f64| {
+            let commit = remaining.min(uncommitted_of(account_manager, idx));
+            if commit > 0.0 {
+                account_manager.commit_account(idx, commit, due_in);
+            }
+            commit
+        };
+        match op {
+            Term::All(_) => {
+                let mut rest = inner;
+                while let Some((&side, after)) = rest.split_first() {
+                    match side {
+                        Term::Account(idx) => {
+                            rest = after;
+                            account_manager.commit_account(idx as usize, amount, due_in);
+                        }
+                        _ => {
+                            let (side_inner, after) = after.split_at(subtree_len(side));
+                            rest = after;
+                            let taken = walk(side, side_inner, amount, account_manager, &uncommitted_of, leaf);
+                            if taken < amount {
+                                account_manager.commit_account(first_account(side_inner), amount - taken, due_in);
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {
+                let taken = walk(op, inner, amount, account_manager, &uncommitted_of, leaf);
+                if taken < amount {
+                    account_manager.commit_account(first_account(inner), amount - taken, due_in);
+                }
+            }
+        }
     }
 }
 
-/// A subtree is a slice: its operator first, then the `len` terms beneath it. `children`
-/// splits a subtree that starts at the head of `terms` from what follows it. That split is
-/// the one bounds check an operator costs; the leaves under it are then read without one.
 #[inline(always)]
-fn children(terms: &[Term]) -> (&[Term], &[Term]) {
-    let len = match terms[0] {
-        Term::Account(_) => 0,
-        Term::Any(len) | Term::All(len) => len as usize,
-    };
-    terms[1..].split_at(len)
+fn balance_of(account_manager: &AccountManager, idx: usize) -> f64 {
+    account_manager.get_account_balance(idx).max(0.0)
 }
 
-/// Post-order fold of the operator subtree `sub` (its operator first): leaves through `leaf`,
-/// `|` by sum, `&` by min. The root of a tree is always an operator (`from_combination`).
+#[inline(always)]
+fn uncommitted_of(account_manager: &AccountManager, idx: usize) -> f64 {
+    account_manager.get_account_uncommitted_balance(idx)
+}
+
+/// A subtree is its operator followed by the `len` terms beneath it, so the terms beneath an
+/// operator are read off the slice after it. The split is the one bounds check an operator
+/// costs; the leaves are then read without one.
+#[inline(always)]
+fn subtree_len(op: Term) -> usize {
+    match op {
+        Term::Account(_) => 0,
+        Term::Any(len) | Term::All(len) => len as usize,
+    }
+}
+
+/// The subtree at the head of `terms`: its operator, the terms beneath it, and what follows.
+#[inline(always)]
+fn first_subtree(terms: &[Term]) -> (Term, &[Term], &[Term]) {
+    let op = terms[0];
+    let (inner, after) = terms[1..].split_at(subtree_len(op));
+    (op, inner, after)
+}
+
+/// Post-order fold of the subtree `op` over `inner`: leaves through `leaf`, `|` by sum, `&` by
+/// min. The root of a tree is always an operator (`from_combination`).
 ///
 /// A leaf child is folded in the parent's loop, and the first two levels are inlined, so the
 /// usual `(a | b) & cap` is one loop with no call; a deeper tree recurses from the third
 /// level. Generic in the leaf operation so that each use inlines it.
 #[inline(always)]
-fn fold<F: Fn(usize) -> f64>(sub: &[Term], leaf: &F) -> f64 {
-    fold_level(sub, leaf, &|sub, leaf| fold_level(sub, leaf, &fold_deeper))
+fn fold<F: Fn(usize) -> f64>(op: Term, inner: &[Term], leaf: &F) -> f64 {
+    fold_level(op, inner, leaf, &|op, inner, leaf| fold_level(op, inner, leaf, &fold_deeper))
 }
 
-fn fold_deeper<F: Fn(usize) -> f64>(sub: &[Term], leaf: &F) -> f64 {
-    fold_level(sub, leaf, &fold_deeper)
+fn fold_deeper<F: Fn(usize) -> f64>(op: Term, inner: &[Term], leaf: &F) -> f64 {
+    fold_level(op, inner, leaf, &fold_deeper)
 }
 
 #[inline(always)]
-fn fold_level<F: Fn(usize) -> f64, S: Fn(&[Term], &F) -> f64>(sub: &[Term], leaf: &F, subtree: &S) -> f64 {
-    let (mut rest, _) = children(sub);
-    match sub[0] {
+fn fold_level<F: Fn(usize) -> f64, S: Fn(Term, &[Term], &F) -> f64>(op: Term, inner: &[Term], leaf: &F, subtree: &S) -> f64 {
+    let mut rest = inner;
+    match op {
         Term::Any(_) => {
             let mut total = 0.0;
             while let Some((&child, after)) = rest.split_first() {
                 total += match child {
                     Term::Account(idx) => { rest = after; leaf(idx as usize) }
-                    _ => { let (inner, after) = children(rest); let value = subtree(&rest[..inner.len() + 1], leaf); rest = after; value }
+                    _ => { let (inner, after) = after.split_at(subtree_len(child)); rest = after; subtree(child, inner, leaf) }
                 };
             }
             total
@@ -123,7 +186,7 @@ fn fold_level<F: Fn(usize) -> f64, S: Fn(&[Term], &F) -> f64>(sub: &[Term], leaf
             while let Some((&child, after)) = rest.split_first() {
                 least = least.min(match child {
                     Term::Account(idx) => { rest = after; leaf(idx as usize) }
-                    _ => { let (inner, after) = children(rest); let value = subtree(&rest[..inner.len() + 1], leaf); rest = after; value }
+                    _ => { let (inner, after) = after.split_at(subtree_len(child)); rest = after; subtree(child, inner, leaf) }
                 });
             }
             least
@@ -135,43 +198,48 @@ fn fold_level<F: Fn(usize) -> f64, S: Fn(&[Term], &F) -> f64>(sub: &[Term], leaf
     }
 }
 
-/// Top-down walk of the operator subtree `sub` with `amount`: `|` hands each child what the
-/// children before it left, `&` hands every child the whole amount. Returns what the subtree
-/// absorbed. Laid out as `fold`: leaves in the parent's loop, two levels inlined.
+/// Top-down walk of the subtree `op` over `inner` with `amount`. `|` hands each child what the
+/// children before it left. `&` takes the least of `amount` and what its sides can cover, by
+/// `avail`, and hands that to every side; so under a `|` it reports what it absorbed and the
+/// `|` carries the rest on. Returns what the subtree absorbed. Laid out as `fold`: leaves in
+/// the parent's loop, two levels inlined.
 #[inline(always)]
-fn walk<F: FnMut(usize, f64) -> f64>(sub: &[Term], amount: f64, leaf: &mut F) -> f64 {
-    walk_level(sub, amount, leaf, &|sub, amount, leaf| walk_level(sub, amount, leaf, &walk_deeper))
+fn walk<A, L>(op: Term, inner: &[Term], amount: f64, account_manager: &mut AccountManager, avail: &A, leaf: &mut L) -> f64
+where A: Fn(&AccountManager, usize) -> f64, L: FnMut(&mut AccountManager, usize, f64) -> f64 {
+    walk_level(op, inner, amount, account_manager, avail, leaf,
+        &|op, inner, amount, account_manager, avail, leaf| walk_level(op, inner, amount, account_manager, avail, leaf, &walk_deeper))
 }
 
-fn walk_deeper<F: FnMut(usize, f64) -> f64>(sub: &[Term], amount: f64, leaf: &mut F) -> f64 {
-    walk_level(sub, amount, leaf, &walk_deeper)
+fn walk_deeper<A, L>(op: Term, inner: &[Term], amount: f64, account_manager: &mut AccountManager, avail: &A, leaf: &mut L) -> f64
+where A: Fn(&AccountManager, usize) -> f64, L: FnMut(&mut AccountManager, usize, f64) -> f64 {
+    walk_level(op, inner, amount, account_manager, avail, leaf, &walk_deeper)
 }
 
 #[inline(always)]
-fn walk_level<F: FnMut(usize, f64) -> f64, S: Fn(&[Term], f64, &mut F) -> f64>(sub: &[Term], amount: f64, leaf: &mut F, subtree: &S) -> f64 {
-    let (mut rest, _) = children(sub);
-    match sub[0] {
+fn walk_level<A, L, S>(op: Term, inner: &[Term], amount: f64, account_manager: &mut AccountManager, avail: &A, leaf: &mut L, subtree: &S) -> f64
+where A: Fn(&AccountManager, usize) -> f64,
+      L: FnMut(&mut AccountManager, usize, f64) -> f64,
+      S: Fn(Term, &[Term], f64, &mut AccountManager, &A, &mut L) -> f64 {
+    match op {
         Term::Any(_) => {
+            let mut rest = inner;
             let mut remaining = amount;
             while let Some((&child, after)) = rest.split_first() {
                 if remaining <= 0.0 {
                     break;
                 }
                 remaining -= match child {
-                    Term::Account(idx) => { rest = after; leaf(idx as usize, remaining) }
-                    _ => { let (inner, after) = children(rest); let taken = subtree(&rest[..inner.len() + 1], remaining, leaf); rest = after; taken }
+                    Term::Account(idx) => { rest = after; leaf(account_manager, idx as usize, remaining) }
+                    _ => { let (inner, after) = after.split_at(subtree_len(child)); rest = after; subtree(child, inner, remaining, account_manager, avail, leaf) }
                 };
             }
             amount - remaining
         }
         Term::All(_) => {
-            while let Some((&child, after)) = rest.split_first() {
-                match child {
-                    Term::Account(idx) => { rest = after; leaf(idx as usize, amount); }
-                    _ => { let (inner, after) = children(rest); subtree(&rest[..inner.len() + 1], amount, leaf); rest = after; }
-                }
-            }
-            amount
+            let capacity = fold(op, inner, &|idx| avail(account_manager, idx));
+            let take = amount.min(capacity);
+            each_side(inner, take, account_manager, avail, leaf);
+            take
         }
         Term::Account(_) => {
             debug_assert!(false, "an account tree's root is an operator");
@@ -180,31 +248,17 @@ fn walk_level<F: FnMut(usize, f64) -> f64, S: Fn(&[Term], f64, &mut F) -> f64>(s
     }
 }
 
-/// Commit `amount` to the operator subtree `sub`, and whatever it could not cover to its first
-/// account. Under `&` each side is committed in full the same way; a side that is one account
-/// takes the whole amount.
-fn commit_full(sub: &[Term], amount: f64, account_manager: &mut AccountManager, due_in: usize) {
-    let taken = match sub[0] {
-        Term::All(_) => {
-            let (mut rest, _) = children(sub);
-            while let Some((&child, after)) = rest.split_first() {
-                match child {
-                    Term::Account(idx) => { rest = after; account_manager.commit_account(idx as usize, amount, due_in); }
-                    _ => { let (inner, after) = children(rest); commit_full(&rest[..inner.len() + 1], amount, account_manager, due_in); rest = after; }
-                }
-            }
-            amount
+/// Hand `amount` to every side of an `&` whose sides are `inner`. The caller has made sure
+/// each side can cover it.
+#[inline(always)]
+fn each_side<A, L>(inner: &[Term], amount: f64, account_manager: &mut AccountManager, avail: &A, leaf: &mut L)
+where A: Fn(&AccountManager, usize) -> f64, L: FnMut(&mut AccountManager, usize, f64) -> f64 {
+    let mut rest = inner;
+    while let Some((&side, after)) = rest.split_first() {
+        match side {
+            Term::Account(idx) => { rest = after; leaf(account_manager, idx as usize, amount); }
+            _ => { let (inner, after) = after.split_at(subtree_len(side)); rest = after; walk_deeper(side, inner, amount, account_manager, avail, leaf); }
         }
-        _ => walk(sub, amount, &mut |idx, remaining| {
-            let commit = remaining.min(account_manager.get_account_uncommitted_balance(idx));
-            if commit > 0.0 {
-                account_manager.commit_account(idx, commit, due_in);
-            }
-            commit
-        }),
-    };
-    if taken < amount {
-        account_manager.commit_account(first_account(sub), amount - taken, due_in);
     }
 }
 
@@ -333,28 +387,22 @@ impl Combination {
     /// that `a | (b | c)` is `a | b | c` and `(a)` is `a`. The result has no redundant
     /// structure, which is what makes the rendering canonical.
     pub fn canonical(self) -> Combination {
-        match self {
-            Combination::Account(idx) => Combination::Account(idx),
-            Combination::Any(children) => {
-                let mut flat = Vec::with_capacity(children.len());
-                for child in children {
-                    match child.canonical() {
-                        Combination::Any(grandchildren) => flat.extend(grandchildren),
-                        other => flat.push(other),
-                    }
-                }
-                if flat.len() == 1 { flat.pop().unwrap() } else { Combination::Any(flat) }
+        let (is_all, children) = match self {
+            Combination::Account(idx) => return Combination::Account(idx),
+            Combination::Any(children) => (false, children),
+            Combination::All(children) => (true, children),
+        };
+        let mut flat = Vec::with_capacity(children.len());
+        for child in children {
+            match (is_all, child.canonical()) {
+                (false, Combination::Any(grandchildren)) | (true, Combination::All(grandchildren)) => flat.extend(grandchildren),
+                (_, other) => flat.push(other),
             }
-            Combination::All(children) => {
-                let mut flat = Vec::with_capacity(children.len());
-                for child in children {
-                    match child.canonical() {
-                        Combination::All(grandchildren) => flat.extend(grandchildren),
-                        other => flat.push(other),
-                    }
-                }
-                if flat.len() == 1 { flat.pop().unwrap() } else { Combination::All(flat) }
-            }
+        }
+        match (flat.len(), is_all) {
+            (1, _) => flat.pop().unwrap(),
+            (_, true) => Combination::All(flat),
+            (_, false) => Combination::Any(flat),
         }
     }
 

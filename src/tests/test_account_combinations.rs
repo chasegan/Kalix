@@ -184,6 +184,38 @@ fn and_inside_pipe() {
     assert_eq!(balance(&model, "cap"), 7.0, "cap pays the 5 that came through b");
 }
 
+#[test]
+fn and_before_a_later_pipe_sibling_absorbs_only_its_capacity() {
+    // (b & cap) covers min(5, 12) = 5, so the | carries the rest on to a
+    let mut model = run(&unregulated_model(20.0, "accounts = (b & cap) | a"));
+    assert_eq!(series(&mut model, "node.user.diversion"), vec![15.0, 0.0]);
+    assert_eq!(balance(&model, "b"), 0.0);
+    assert_eq!(balance(&model, "cap"), 7.0, "cap pays the same 5 as b, not what was handed to the pair");
+    assert_eq!(balance(&model, "a"), 0.0, "a pays the 10 the pair could not");
+}
+
+#[test]
+fn two_ands_under_a_pipe() {
+    // (a & b) covers 5, then (cap & big) covers 12: 17 in all
+    let mut model = run(&unregulated_model(20.0, "accounts = (a & b) | (cap & big)"));
+    assert_eq!(series(&mut model, "node.user.diversion"), vec![17.0, 0.0]);
+    assert_eq!(balance(&model, "a"), 5.0);
+    assert_eq!(balance(&model, "b"), 0.0);
+    assert_eq!(balance(&model, "cap"), 0.0);
+    assert_eq!(balance(&model, "big"), 88.0);
+}
+
+#[test]
+fn pipe_carries_past_a_nested_and_to_the_account_after_it() {
+    // Demand 50 of inflow 50: a 10, then (b & cap) 5, then big 35; next day big alone
+    let mut model = run(&unregulated_model(50.0, "accounts = a | (b & cap) | big"));
+    assert_eq!(series(&mut model, "node.user.diversion"), vec![50.0, 50.0]);
+    assert_eq!(balance(&model, "a"), 0.0);
+    assert_eq!(balance(&model, "b"), 0.0);
+    assert_eq!(balance(&model, "cap"), 7.0);
+    assert_eq!(balance(&model, "big"), 15.0, "big pays 35 on day 1 and 50 on day 2");
+}
+
 // ------------------------------------------------------------------------------------------
 // Contract 4: the regulated user
 // ------------------------------------------------------------------------------------------
@@ -221,6 +253,55 @@ fn regulated_order_accounts_extend_the_cap_over_a_tree() {
     assert_eq!(balance(&model, "a"), 0.0);
     assert_eq!(balance(&model, "b"), 0.0);
     assert_eq!(balance(&model, "big"), 85.0, "big pays the whole 15");
+}
+
+#[test]
+fn regulated_and_before_a_later_pipe_sibling() {
+    // Uncommitted (b & cap) | a = min(5, 12) + 10 = 15; committed and then debited the same way
+    let mut model = run(&regulated_model(30.0, "accounts = (b & cap) | a"));
+    assert_eq!(series(&mut model, "node.user.order"), vec![15.0, 0.0]);
+    assert_eq!(series(&mut model, "node.user.diversion"), vec![15.0, 0.0]);
+    assert_eq!(balance(&model, "b"), 0.0);
+    assert_eq!(balance(&model, "cap"), 7.0);
+    assert_eq!(balance(&model, "a"), 0.0);
+}
+
+#[test]
+fn commit_overflow_under_a_pipe_root_goes_on_its_first_account() {
+    let mut model = IniModelIO::read_model_string(&regulated_model(1.0, "accounts = a | (b & cap)")).unwrap();
+    model.configure().unwrap();
+    let manager = &mut model.account_manager;
+    let (a, b, cap) = (manager.get_account_idx("a").unwrap(), manager.get_account_idx("b").unwrap(), manager.get_account_idx("cap").unwrap());
+    for idx in [a, b, cap] {
+        manager.set_commit_horizon(idx, 0);
+    }
+    let tree = match parse_combination("a | (b & cap)", manager).unwrap() {
+        AccountsProperty::Tree(tree) => tree,
+        other => panic!("expected a tree, got {:?}", other),
+    };
+    assert_eq!(tree.uncommitted(manager), 15.0);
+    tree.commit(manager, 40.0, 0);
+    let committed = |idx: usize| manager.get_account(idx).unwrap().committed;
+    assert_eq!(committed(b), 5.0, "the pair covers 5");
+    assert_eq!(committed(cap), 5.0, "the same 5 on each side of the &");
+    assert_eq!(committed(a), 35.0, "a's 10 plus the 25 the whole could not cover");
+    assert_eq!(tree.uncommitted(manager), 0.0);
+}
+
+#[test]
+fn commit_of_nothing_touches_nothing() {
+    let mut model = IniModelIO::read_model_string(&regulated_model(1.0, "accounts = (a | b) & big")).unwrap();
+    model.configure().unwrap();
+    let manager = &mut model.account_manager;
+    let tree = match parse_combination("(a | b) & big", manager).unwrap() {
+        AccountsProperty::Tree(tree) => tree,
+        other => panic!("expected a tree, got {:?}", other),
+    };
+    tree.commit(manager, 0.0, 0);
+    for name in ["a", "b", "big"] {
+        let idx = manager.get_account_idx(name).unwrap();
+        assert_eq!(manager.get_account(idx).unwrap().committed, 0.0);
+    }
 }
 
 #[test]
@@ -281,6 +362,13 @@ fn errors_name_the_node_and_the_fault() {
         assert!(message.contains("Node 'user'"), "'{}' should name the node, got: {}", line, message);
         assert!(message.contains(expected), "'{}' should say '{}', got: {}", line, expected, message);
     }
+}
+
+#[test]
+fn plain_list_errors_name_the_node_too() {
+    let message = load_error("accounts = nope");
+    assert!(message.contains("Node 'user'"), "got: {}", message);
+    assert!(message.contains("Unknown account 'nope'"), "got: {}", message);
 }
 
 #[test]
