@@ -225,6 +225,7 @@ nav:
               - "0015 View state is not persisted": code/design/adrs/0015-view-state-is-not-persisted.md
               - "0016 One owner, pages are projections": code/design/adrs/0016-one-owner-pages-are-projections.md
               - "0017 Resolve references at load": code/design/adrs/0017-resolve-references-at-load.md
+              - "0018 Account combinations name accounts, not values": code/design/adrs/0018-account-combinations-name-accounts-not-values.md
           - Website:
               - code/design/website/index.md
               - Todo: code/design/website/todo.md
