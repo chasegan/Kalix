@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use crate::hydrology::accounts::account::Account;
 use crate::hydrology::accounts::account_manager::{AccountGroup, ACCOUNT_SERIES_FIELDS, GROUP_SERIES_FIELDS};
-use crate::hydrology::accounts::account_tree::{is_combination, parse_combination, AccountsProperty};
+use crate::hydrology::accounts::account_tree::{duplicate_account_message, is_combination, parse_combination, unknown_account_message, AccountsProperty};
 use crate::hydrology::allocation_systems::ras::RasSystem;
 use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
 use crate::io::error::KalixIoError;
@@ -2379,16 +2379,9 @@ fn resolve_account_references(v: &str, manager: &crate::hydrology::accounts::acc
     let mut idxs = Vec::with_capacity(names.len());
     for name in &names {
         let lower = name.to_lowercase();
-        let idx = manager.get_account_idx(&lower).ok_or_else(|| {
-            if manager.get_group_idx(&lower).is_some() {
-                format!("'{}' is an account group; a node's 'accounts' list takes account names \
-                    (group targeting belongs in [ras.*] sections)", name)
-            } else {
-                format!("Unknown account '{}'. Accounts are declared in [acc.*] sections.", name)
-            }
-        })?;
+        let idx = manager.get_account_idx(&lower).ok_or_else(|| unknown_account_message(&lower, manager))?;
         if idxs.contains(&idx) {
-            return Err(format!("Account '{}' is listed more than once", name));
+            return Err(duplicate_account_message(&lower));
         }
         idxs.push(idx);
     }
