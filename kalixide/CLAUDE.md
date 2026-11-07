@@ -139,16 +139,24 @@ RSyntaxTextArea (library)
   with the screen; the Javadoc on `paintComponent` says why not `addNotify` or the
   `graphicsConfiguration` property.
 - Common settings (anti-aliasing, tab handling)
+- Theme colours from `themes/EditorTheme.java`, applied in `updateUI` and `addNotify`:
+  one RSyntaxTextArea `Theme` built from the look-and-feel's keys, gutter and folds
+  included, with the effective syntax palette for INI editors only (`hasSyntaxPalette`), so
+  logs paint in the plain foreground. Look-and-feel colours are copied to plain `Color`s:
+  a `UIResource` handed to the gutter is replaced by its own panel defaults later in the
+  same walk. A theme or syntax-palette change is therefore just
+  `FlatLaf.updateUI()`, which walks every window; no window, manager or registry keeps a
+  list of editors to re-theme (#509 was the optimiser window's editors missing such a
+  list). The library writes its own white defaults in its constructor, so the theme is
+  applied at the end of `initializeBase`, not only in `updateUI`.
 - One `WeakRegistry` of live instances (`utils/WeakRegistry.java`, shared with
-  `VirtualTextArea`): `updateAllFontSizes` and `updateAllForThemeChange` reach every editor,
-  and `forEachInstance(Class, Consumer)` lets a subclass sweep its own kind. Windows do
-  not keep registries of their editors.
+  `VirtualTextArea`): `updateAllFontSizes` reaches every editor. Windows do not keep
+  registries of their editors.
 - A caret that opens the collapsed fold it is moved into, by a programmatic move or by
   undo/redo (see Folding below)
 
 **KalixIniTextArea** adds:
 - Kalix INI syntax highlighting
-- Syntax theme support, applied to every instance via `updateAllSyntaxThemes`
 - Folding by `KalixIniFoldParser`, rebuilt as soon as text is set
 
 **KalixPlainTextArea** adds:
@@ -326,9 +334,9 @@ folder), registered with stable ids in `ThemeRegistry`:
 - **Properties-based**: colours are data (`resources/themes/*.properties`), loaded into `UnifiedThemeDefinition` and handed to FlatLaf via `ThemeCompatibilityAdapter`/`FlatPropertiesLaf`
 - **Snapshot-pinned**: `ThemePropertiesSnapshotTest` compares every generated theme byte-for-byte against `src/test/resources/themes/snapshots/`
 - **Platform-aware**: Cross-platform title bar handling with `Platform` enum (macOS, Windows, Linux)
-- **Custom properties**: MapPanel.background, MapPanel.gridlineColor, TitlePane.background, Kalix.plot.*, Kalix.tree.* (file-tree icon accents for model files, input data, and Source .res.csv exports; muted colours for unrecognised rows)
+- **Custom properties**: MapPanel.background, MapPanel.gridlineColor, TitlePane.background, Kalix.plot.*, Kalix.editor.currentLine (the dark themes' designed current line, from the mocks; light themes blend the selection), Kalix.tree.* (file-tree icon accents for model files, input data, and Source .res.csv exports; muted colours for unrecognised rows)
 
-Key files: `ThemeManager.java`, `ThemeRegistry.java`, `KalixTheme.java`, `ThemeCompatibilityAdapter.java`
+Key files: `ThemeManager.java`, `ThemeRegistry.java`, `KalixTheme.java`, `ThemeCompatibilityAdapter.java`, `EditorTheme.java` (the editors' colours)
 
 ## Interactive Map Features
 

@@ -250,14 +250,6 @@ public final class VirtualTextArea extends JComponent implements Scrollable {
         instances.forEach(area -> area.updateFontSize(fontSize));
     }
 
-    /** Pushes a syntax-theme preference change (colours re-resolve) to every live instance. */
-    public static void updateAllSyntaxThemes(SyntaxTheme.Theme theme) {
-        instances.forEach(area -> {
-            area.resolveColors();
-            area.repaint();
-        });
-    }
-
     private void registerSessionListener() {
         session.addListener(new DataViewSession.Listener() {
             @Override

@@ -1,7 +1,6 @@
 package com.kalix.ide.components;
 
 import com.kalix.ide.editor.KalixIniFoldParser;
-import com.kalix.ide.themes.SyntaxTheme;
 import org.fife.ui.rsyntaxtextarea.AbstractTokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.TokenMakerFactory;
 import org.fife.ui.rsyntaxtextarea.folding.FoldParserManager;
@@ -14,12 +13,10 @@ import org.slf4j.LoggerFactory;
  * Extends KalixTextArea to inherit monospace font configuration and
  * screen-aware font metrics, then adds INI-specific features:
  * <ul>
- *   <li>Custom Kalix INI syntax highlighting with line continuation support</li>
- *   <li>Syntax theme from user preferences</li>
- *   <li>Theme-aware current line highlighting</li>
+ *   <li>Custom Kalix INI syntax highlighting with line continuation support, coloured
+ *       from the effective syntax palette by the editor theme</li>
  *   <li>Code folding of regions, sections and multi-line values
  *       ({@link KalixIniFoldParser}), mark occurrences, and other editing features</li>
- *   <li>Syntax theme updates for every live instance via static methods</li>
  * </ul>
  *
  * @see KalixTextArea for base configuration
@@ -69,6 +66,11 @@ public class KalixIniTextArea extends KalixTextArea {
         return textArea;
     }
 
+    @Override
+    protected boolean hasSyntaxPalette() {
+        return true;
+    }
+
     /**
      * Initializes INI-specific settings.
      */
@@ -81,12 +83,6 @@ public class KalixIniTextArea extends KalixTextArea {
         setMarkOccurrencesDelay(300);
         setHighlightCurrentLine(true);
         setCodeFoldingEnabled(true);
-
-        // Apply saved syntax theme
-        applySavedSyntaxTheme();
-
-        // Set theme-aware line highlight
-        updateCurrentLineHighlight();
     }
 
     /**
@@ -103,44 +99,6 @@ public class KalixIniTextArea extends KalixTextArea {
     }
 
     /**
-     * Applies the syntax theme from user preferences (an explicit choice, or
-     * the application theme's linked palette when in follow mode).
-     */
-    private void applySavedSyntaxTheme() {
-        try {
-            updateSyntaxTheme(com.kalix.ide.themes.ThemePreferences.effectiveSyntaxTheme());
-        } catch (Exception e) {
-            updateSyntaxTheme(SyntaxTheme.Theme.LIGHT);
-        }
-    }
-
-    /**
-     * Updates the syntax highlighting colors.
-     *
-     * @param syntaxTheme the theme to apply
-     */
-    public void updateSyntaxTheme(SyntaxTheme.Theme syntaxTheme) {
-        org.fife.ui.rsyntaxtextarea.SyntaxScheme syntaxScheme = getSyntaxScheme();
-
-        if (syntaxScheme != null && syntaxTheme != null) {
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.IDENTIFIER).foreground = syntaxTheme.getIdentifierColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.OPERATOR).foreground = syntaxTheme.getOperatorColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.LITERAL_STRING_DOUBLE_QUOTE).foreground = syntaxTheme.getStringColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.RESERVED_WORD).foreground = syntaxTheme.getReservedWordColor();
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.COMMENT_EOL).foreground = syntaxTheme.getCommentColor();
-            // Annotations belong to the section header below them, so they take its
-            // colour, in italics to tell them from the header itself.
-            org.fife.ui.rsyntaxtextarea.Style annotation = syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.ANNOTATION);
-            annotation.foreground = syntaxTheme.getReservedWordColor();
-            annotation.font = getFont().deriveFont(java.awt.Font.ITALIC);
-            syntaxScheme.getStyle(org.fife.ui.rsyntaxtextarea.Token.WHITESPACE).foreground = syntaxTheme.getWhitespaceColor();
-
-            updateCurrentLineHighlight();
-            repaint();
-        }
-    }
-
-    /**
      * Registers the custom TokenMaker for Kalix INI syntax.
      */
     private static void registerCustomTokenMaker() {
@@ -150,14 +108,5 @@ public class KalixIniTextArea extends KalixTextArea {
         } catch (Exception e) {
             logger.error("Failed to register custom Kalix INI TokenMaker", e);
         }
-    }
-
-    /**
-     * Updates syntax theme for all KalixIniTextArea instances.
-     *
-     * @param theme the theme to apply
-     */
-    public static void updateAllSyntaxThemes(SyntaxTheme.Theme theme) {
-        forEachInstance(KalixIniTextArea.class, textArea -> textArea.updateSyntaxTheme(theme));
     }
 }

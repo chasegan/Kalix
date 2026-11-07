@@ -568,12 +568,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         mapPanel = document.getMapPanel();
         hydrologicalModel = document.getModel();
 
-        // Theme operations target the active editor. Maps need no per-activation
-        // catch-up any more: every open document's map is mounted inside its tab, so
-        // a theme switch reaches all of them via updateComponentTreeUI (MapPanel
-        // re-resolves its colours in updateUI()).
-        themeManager.registerThemeAwareComponents(textEditor);
-
         titleBarManager.updateTitle(document.isDirty(), document::getFile);
         documentTabPane.refreshTab(document);
         setupNavigationStateListener();

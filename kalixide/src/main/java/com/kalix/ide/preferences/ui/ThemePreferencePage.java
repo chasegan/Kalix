@@ -117,7 +117,7 @@ public class ThemePreferencePage extends AbstractPreferencePage {
                 ThemePreferences.storeSyntaxThemeFollow();
             }
             // Apply the now-effective syntax palette to all editors
-            themeManager.updateSyntaxTheme(ThemePreferences.effectiveSyntaxTheme());
+            themeManager.syntaxThemeChanged();
         });
         formPanel.add(syntaxThemeComboBox, gbc);
 
