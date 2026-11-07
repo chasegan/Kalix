@@ -57,7 +57,8 @@ public final class EditorTheme {
         theme.bgColor = bg;
         theme.caretColor = color("TextArea.caretForeground", fg);
         theme.selectionBG = selection;
-        theme.currentLineHighlight = withAlpha(selection, 80);
+        // The dark themes carry the line colour their mocks designed; the others blend the selection
+        theme.currentLineHighlight = color("Kalix.editor.currentLine", withAlpha(selection, 80));
         theme.marginLineColor = border;
         theme.tabLineColor = border;
         theme.markOccurrencesColor = withAlpha(selection, 70);

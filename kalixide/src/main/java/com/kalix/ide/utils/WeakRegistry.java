@@ -32,7 +32,6 @@ public final class WeakRegistry<T> {
         sweep(action);
     }
 
-
     /** Visits every live instance, dropping the entries of collected ones on the way. */
     private void sweep(Consumer<? super T> action) {
         synchronized (entries) {

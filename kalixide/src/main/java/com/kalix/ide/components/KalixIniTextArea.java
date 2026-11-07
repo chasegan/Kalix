@@ -66,14 +66,14 @@ public class KalixIniTextArea extends KalixTextArea {
         return textArea;
     }
 
-    /**
-     * Initializes INI-specific settings.
-     */
     @Override
     protected boolean hasSyntaxPalette() {
         return true;
     }
 
+    /**
+     * Initializes INI-specific settings.
+     */
     private void initializeIni() {
         // Set Kalix INI syntax highlighting
         setSyntaxEditingStyle(SYNTAX_STYLE_KALIX_INI);

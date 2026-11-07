@@ -7,8 +7,8 @@ import com.kalix.ide.utils.WeakRegistry;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.RSyntaxUtilities;
 import org.fife.ui.rsyntaxtextarea.TokenTypes;
-import org.fife.ui.rtextarea.Gutter;
 import org.fife.ui.rsyntaxtextarea.folding.FoldManager;
+import org.fife.ui.rtextarea.Gutter;
 
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
@@ -43,13 +43,19 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
     private boolean undoingOrRedoing;
 
     /**
-     * Set at the end of {@link #initializeBase}. {@code updateUI} runs from the library's
-     * constructor, before this object is set up and before the library has written its own
-     * default colours, so the theme is applied there only once construction is complete.
+     * Set at the end of {@link #initializeBase}. {@code updateUI} first runs from
+     * {@code JTextComponent}'s constructor, before this object is set up; and the library's
+     * own constructor then writes its white defaults over anything applied there. So the
+     * theme is applied in {@code updateUI} only once construction is complete, and once at
+     * the end of construction.
      */
     private boolean constructed;
 
-    /** The gutter the theme was last applied to, so that joining a window themes it once. */
+    /**
+     * The gutter the theme was last applied to, so that joining a window themes it once.
+     * An editor held outside every window while the theme changes, then put back in the
+     * same scroll pane, keeps the old colours; inside a window the walk re-themes it.
+     */
     private Gutter themedGutter;
 
     /**
@@ -93,7 +99,11 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
         applyEditorTheme();
     }
 
-    /** Whether this editor colours tokens from the syntax palette. Plain text does not. */
+    /**
+     * Whether this editor colours tokens from the syntax palette. Plain text does not.
+     * Called from this class's constructor, before a subclass's own constructor has run, so
+     * an override must answer from a constant and not from its fields.
+     */
     protected boolean hasSyntaxPalette() {
         return false;
     }

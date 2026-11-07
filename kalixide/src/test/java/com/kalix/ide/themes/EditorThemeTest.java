@@ -32,7 +32,6 @@ class EditorThemeTest {
     private static final Color LIGHT_BG = Color.WHITE;
     private static final Color LIGHT_FG = Color.BLACK;
 
-
     /** Headless stand-in: the library re-measures its font against the editor's graphics. */
     private static final class HeadlessEditor extends KalixIniTextArea {
         HeadlessEditor() {
@@ -73,7 +72,7 @@ class EditorThemeTest {
         lookAndFeel(DARK_BG, DARK_FG);
         KalixIniTextArea editor = new HeadlessEditor();
         RTextScrollPane scrollPane = new RTextScrollPane(editor);
-        editor.addNotify();
+        scrollPane.addNotify();
         Gutter gutter = scrollPane.getGutter();
         assertEquals(DARK_BG, gutter.getBackground());
         assertEquals(DARK_BG, gutter.getFoldBackground(), "fold boxes are not white on a dark gutter");
@@ -94,6 +93,10 @@ class EditorThemeTest {
         assertEquals(DARK_FG, editor.getForeground());
         assertEquals(DARK_BG, scrollPane.getGutter().getBackground(),
             "the gutter's own update, later in the walk, must not replace the colour with the panel's");
+        assertEquals(UIManager.getColor("Label.disabledForeground") == null ? Color.GRAY
+                : new Color(UIManager.getColor("Label.disabledForeground").getRGB(), true),
+            scrollPane.getGutter().getFoldIndicatorForeground(),
+            "nor the fold glyphs' colour with the panel's foreground");
     }
 
     @Test
