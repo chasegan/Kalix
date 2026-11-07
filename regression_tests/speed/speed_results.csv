@@ -298,3 +298,14 @@ test_date,commit_sha,commit_dirty,commit_date,kalix_version,user,hostname,os,cpu
 2026-11-08T01:44:14,6f62970c,true,2026-11-08T01:44:02+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),7_fields,7,57.2,58.2,1.43,3.9,1.0,62.2
 2026-11-08T01:44:14,6f62970c,true,2026-11-08T01:44:02+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),8_routing,7,81.6,82.1,3.12,4.4,8.8,94.9
 2026-11-08T01:44:14,6f62970c,true,2026-11-08T01:44:02+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),9_routing_reach_losses,7,65.9,70.6,18.84,5.2,9.6,80.8
+2026-11-08T02:14:07,95ecdac1,true,2026-11-08T02:13:37+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),10_regulated_system_accounts,7,40.0,40.8,0.48,5.2,17.9,63.2
+2026-11-08T02:14:07,95ecdac1,true,2026-11-08T02:13:37+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),11_regulated_system_account_combinations,7,47.6,48.8,0.63,5.3,19.2,72.7
+2026-11-08T02:14:07,95ecdac1,true,2026-11-08T02:13:37+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),1_sacramento_long,15,3.9,3.9,0.04,7.0,12.7,23.6
+2026-11-08T02:14:07,95ecdac1,true,2026-11-08T02:13:37+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),2_unregulated_users,7,20.6,20.7,0.17,5.2,9.1,34.9
+2026-11-08T02:14:07,95ecdac1,true,2026-11-08T02:13:37+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),3_unregulated_users_with_functions,7,50.3,50.6,0.38,5.3,10.5,66.4
+2026-11-08T02:14:07,95ecdac1,true,2026-11-08T02:13:37+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),4_regulated_system,7,34.2,34.8,0.81,5.1,16.2,55.7
+2026-11-08T02:14:07,95ecdac1,true,2026-11-08T02:13:37+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),5_ordering_confluences,5,50.2,51.0,0.83,10.3,14.4,75.4
+2026-11-08T02:14:07,95ecdac1,true,2026-11-08T02:13:37+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),6_unregulated_users_with_tables,7,63.7,64.0,0.90,5.4,12.3,81.7
+2026-11-08T02:14:07,95ecdac1,true,2026-11-08T02:13:37+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),7_fields,7,56.8,57.3,0.63,4.0,0.9,61.8
+2026-11-08T02:14:07,95ecdac1,true,2026-11-08T02:13:37+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),8_routing,7,81.2,81.4,0.24,4.4,8.6,94.4
+2026-11-08T02:14:07,95ecdac1,true,2026-11-08T02:13:37+10:00,0.4.8,Chas,DarkAir.local,Darwin 25.5.0 arm64,Apple M5,rustc 1.97.0 (2d8144b78 2026-07-07),9_routing_reach_losses,7,64.6,64.9,0.22,5.0,9.3,79.1
