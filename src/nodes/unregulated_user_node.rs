@@ -2,6 +2,7 @@ use super::{recorder, Node};
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
+use crate::hydrology::accounts::account_tree::AccountTree;
 use crate::misc::location::Location;
 
 const MAX_DS_LINKS: usize = 4;
@@ -31,6 +32,11 @@ pub struct UnregulatedUserNode {
     pub supply_outlets: Vec<SupplyOutlet>,
     has_supply_outlets: bool, // Set in initialise(): fixed for the run
     pub dsorders: [f64; MAX_DS_LINKS], // Orders arriving on ds_1 to ds_4, written by the ordering system
+
+    /// The accounts as a combination (`(a | b) & cap`), when the `accounts` line is one;
+    /// empty when it is the plain list in `account_idxs`. The two are never both set. Which
+    /// one the flow phase reads is chosen once per step in the dispatch, not inside it.
+    pub account_tree: AccountTree,
 
     // Properties - basic
     pub name: String,
@@ -99,6 +105,18 @@ impl UnregulatedUserNode {
     /// Register the ordered list of accounts this node draws on.
     pub fn register_accounts(&mut self, account_idxs: Vec<usize>) {
         self.account_idxs = account_idxs;
+        self.account_tree = AccountTree::default();
+    }
+
+    /// Register the accounts this node draws on as a combination.
+    pub fn register_account_tree(&mut self, account_tree: AccountTree) {
+        self.account_tree = account_tree;
+        self.account_idxs = Vec::new();
+    }
+
+    /// Every account this node draws on, whichever form the `accounts` line took.
+    pub fn accounts(&self) -> impl Iterator<Item = usize> + '_ {
+        self.account_idxs.iter().copied().chain(self.account_tree.accounts())
     }
 }
 
@@ -204,15 +222,20 @@ impl Node for UnregulatedUserNode {
         }
     }
 
-    // Whether the user has supply outlets is fixed for the run, so it is decided once per step
-    // here and not inside the phase. The `false` instantiation is the node as it was before
-    // supply outlets existed, and it is inlined here as that code always was, so a user
-    // without them pays for this one test and nothing else (ADR-0004 §3.1, and its 2026-09-14
-    // amendment). The `true` instantiation is kept out of line and marked cold, so that a
-    // second copy of the phase is not inlined into the step loop beside it.
+    // Whether the user has supply outlets, and whether its accounts are a combination, are
+    // fixed for the run, so they are decided once per step here and not inside the phase. The
+    // `<false, false>` instantiation is the node as it was before either existed, and it is
+    // inlined here as that code always was, so a user with neither pays for these two tests
+    // and nothing else (ADR-0004 §3.1, and its 2026-09-14 amendment). The other
+    // instantiations are kept out of line, so that no second copy of the phase is inlined
+    // into the step loop beside it.
     fn run_flow_phase(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
         if !self.has_supply_outlets {
-            self.flow_phase::<false>(data_cache, account_manager)
+            if self.account_tree.is_empty() {
+                self.flow_phase::<false, false>(data_cache, account_manager)
+            } else {
+                self.flow_phase_combined(data_cache, account_manager)
+            }
         } else {
             self.flow_phase_with_supply_outlets(data_cache, account_manager)
         }
@@ -238,11 +261,20 @@ impl UnregulatedUserNode {
     #[cold]
     #[inline(never)]
     fn flow_phase_with_supply_outlets(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
-        self.flow_phase::<true>(data_cache, account_manager)
+        if self.account_tree.is_empty() {
+            self.flow_phase::<true, false>(data_cache, account_manager)
+        } else {
+            self.flow_phase::<true, true>(data_cache, account_manager)
+        }
+    }
+
+    #[inline(never)]
+    fn flow_phase_combined(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
+        self.flow_phase::<false, true>(data_cache, account_manager)
     }
 
     #[inline(always)]
-    fn flow_phase<const SUPPLY_OUTLETS: bool>(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
+    fn flow_phase<const SUPPLY_OUTLETS: bool, const COMBINED: bool>(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
@@ -287,8 +319,11 @@ impl UnregulatedUserNode {
         }
 
         // Restrict take based on accounts if applicable: available volume is
-        // the sum across the ordered account list
-        if !self.account_idxs.is_empty() {
+        // the sum across the ordered account list, or what the combination
+        // makes available (`|` sums, `&` takes the least; account_tree.rs)
+        if COMBINED {
+            available = available.min(self.account_tree.balance(_account_manager));
+        } else if !self.account_idxs.is_empty() {
             let total_balance: f64 = self.account_idxs.iter()
                 .map(|&idx| _account_manager.get_account_balance(idx).max(0.0))
                 .sum();
@@ -348,14 +383,19 @@ impl UnregulatedUserNode {
         }
 
         // Debit the diversion across accounts in order of use: drain the first
-        // account before touching the second
-        let mut remaining = self.diversion;
-        for &account_idx in &self.account_idxs {
-            if remaining <= 0.0 { break; }
-            let take = remaining.min(_account_manager.get_account_balance(account_idx).max(0.0));
-            if take > 0.0 {
-                _account_manager.debit_account(account_idx, take);
-                remaining -= take;
+        // account before touching the second; through a combination, in full
+        // from every side of `&`
+        if COMBINED {
+            self.account_tree.debit(_account_manager, self.diversion);
+        } else {
+            let mut remaining = self.diversion;
+            for &account_idx in &self.account_idxs {
+                if remaining <= 0.0 { break; }
+                let take = remaining.min(_account_manager.get_account_balance(account_idx).max(0.0));
+                if take > 0.0 {
+                    _account_manager.debit_account(account_idx, take);
+                    remaining -= take;
+                }
             }
         }
 
