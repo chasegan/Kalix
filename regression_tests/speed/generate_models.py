@@ -400,8 +400,26 @@ def routing_props(rng, dest):
     return [f"lag = {rng.choice([0, 1, 1, 2])}"] + pwl.split("\n") + [f"ds_1 = {dest}"]
 
 
-def build_model_4():
-    folder = HERE / "4_regulated_system"
+ACCOUNT_GROUP = """[acc.{user}]
+accounts = name,         size, initial,
+           {user}_co,     800,  400,
+           {user}_annual, 3000, 3000,"""
+
+VALLEY_CAP = """[acc.{valley}_caps]
+accounts = name,          size,  initial,
+           {valley}_cap,  15000, 15000,"""
+
+ANNUAL_REFILL = """[ras.refill]
+targets = {targets}
+trigger = start_water_year(7)
+action = set_full"""
+
+
+def build_regulated_system(folder_name, title, accounts):
+    """Model 4's network. `accounts` is None (no accounts), "list" (every user on a plain
+    two-account list) or "combination" (the same list under a `&` with a cap shared by the
+    user's valley). The three share one random sequence, so the networks are identical."""
+    folder = HERE / folder_name
     folder.mkdir(exist_ok=True)
 
     rng = random.Random(303)
@@ -410,8 +428,19 @@ def build_model_4():
             for i in range(6)]
     write_csv(folder / "inflows.csv", dates, cols)
 
-    m = ModelBuilder("Speed test 4: storages in sequence and parallel, routing, regulated users")
+    m = ModelBuilder(title)
     m.inputs("inflows.csv")
+
+    users = []  # (user, valley), in definition order
+
+    def user_props(user, valley):
+        users.append((user, valley))
+        props = [seasonal_order(rng)]
+        if accounts == "list":
+            props.append(f"accounts = {user}_co, {user}_annual")
+        elif accounts == "combination":
+            props.append(f"accounts = ({user}_co | {user}_annual) & {valley}_cap")
+        return props
 
     valley_ends = []
     for v in range(3):
@@ -425,9 +454,9 @@ def build_model_4():
                storage_props(80_000) + [f"ds_1 = v{v}_route_a"])
         m.node(f"v{v}_route_a", "routing", x, 20, routing_props(rng, f"v{v}_user_a0"))
         m.node(f"v{v}_user_a0", "regulated_user", x, 30,
-               [seasonal_order(rng), f"ds_1 = v{v}_user_a1"])
+               user_props(f"v{v}_user_a0", f"v{v}") + [f"ds_1 = v{v}_user_a1"])
         m.node(f"v{v}_user_a1", "regulated_user", x, 40,
-               [seasonal_order(rng), f"ds_1 = v{v}_junction"])
+               user_props(f"v{v}_user_a1", f"v{v}") + [f"ds_1 = v{v}_junction"])
 
         # Parallel branch: inflow -> storage -> routing, joins main stem
         m.node(f"v{v}_inflow_b", "inflow", x + 20, 0, [
@@ -447,9 +476,9 @@ def build_model_4():
                storage_props(15_000, order_through=True) + [f"ds_1 = v{v}_route_c"])
         m.node(f"v{v}_route_c", "routing", x + 10, 70, routing_props(rng, f"v{v}_user_c0"))
         m.node(f"v{v}_user_c0", "regulated_user", x + 10, 80,
-               [seasonal_order(rng), f"ds_1 = v{v}_user_c1"])
+               user_props(f"v{v}_user_c0", f"v{v}") + [f"ds_1 = v{v}_user_c1"])
         m.node(f"v{v}_user_c1", "regulated_user", x + 10, 90,
-               [seasonal_order(rng), f"ds_1 = v{v}_gauge"])
+               user_props(f"v{v}_user_c1", f"v{v}") + [f"ds_1 = v{v}_gauge"])
         end = f"v{v}_gauge"
         valley_ends.append(end)
 
@@ -459,18 +488,18 @@ def build_model_4():
     m.node("trunk_conf_a", "confluence", 40, 110, [LEGACY_ALL_TO_SECOND_BRANCH, "ds_1 = trunk_route_a"])
     m.node("trunk_route_a", "routing", 40, 120, routing_props(rng, "trunk_user_a"))
     m.node("trunk_user_a", "regulated_user", 40, 130,
-           [seasonal_order(rng), "ds_1 = trunk_conf_b"])
+           user_props("trunk_user_a", "trunk") + ["ds_1 = trunk_conf_b"])
     m.node("v2_gauge", "gauge", 130, 100, ["ds_1 = trunk_conf_b"])
     m.node("trunk_conf_b", "confluence", 80, 140, [LEGACY_ALL_TO_SECOND_BRANCH, "ds_1 = trunk_dam"])
     m.node("trunk_dam", "storage", 80, 150,
            storage_props(120_000) + ["ds_1 = trunk_route_b"])
     m.node("trunk_route_b", "routing", 80, 160, routing_props(rng, "trunk_user_b0"))
     m.node("trunk_user_b0", "regulated_user", 80, 170,
-           [seasonal_order(rng), "ds_1 = trunk_user_b1"])
+           user_props("trunk_user_b0", "trunk") + ["ds_1 = trunk_user_b1"])
     m.node("trunk_user_b1", "regulated_user", 80, 180,
-           [seasonal_order(rng), "ds_1 = trunk_user_b2"])
+           user_props("trunk_user_b1", "trunk") + ["ds_1 = trunk_user_b2"])
     m.node("trunk_user_b2", "regulated_user", 80, 190,
-           [seasonal_order(rng), "ds_1 = outlet_gauge"])
+           user_props("trunk_user_b2", "trunk") + ["ds_1 = outlet_gauge"])
     m.node("outlet_gauge", "gauge", 80, 200, ["ds_1 = sink"])
     m.node("sink", "blackhole", 80, 210, [])
 
@@ -480,9 +509,48 @@ def build_model_4():
         m.output(f"node.v{v}_midstorage.volume")
         m.output(f"node.v{v}_user_c0.diversion")
     m.output("node.trunk_dam.volume")
+
+    # The accounts: one group per user, a cap per valley for the combination, and one rule
+    # refilling them all each water year, so the balances bind in the summer of a dry year
+    # and the walks through them do real work.
+    if accounts is not None:
+        groups = [f"acc.{user}" for user, _ in users]
+        valleys = []
+        for _, valley in users:
+            if valley not in valleys:
+                valleys.append(valley)
+        for user, _ in users:
+            m.section(ACCOUNT_GROUP.format(user=user))
+        if accounts == "combination":
+            for valley in valleys:
+                m.section(VALLEY_CAP.format(valley=valley))
+            groups += [f"acc.{valley}_caps" for valley in valleys]
+        m.section(ANNUAL_REFILL.format(targets=", ".join(groups)))
+        m.output("node.v0_user_a0.order")
+        m.output("acc.v0_user_a0_annual.closing_balance")
+        if accounts == "combination":
+            m.output("acc.v0_cap.closing_balance")
     m.write(folder / "kalix.ini")
 
     (folder / "bench.json").write_text('{"repeats": 7}\n')
+
+
+def build_model_4():
+    build_regulated_system("4_regulated_system",
+                           "Speed test 4: storages in sequence and parallel, routing, regulated users",
+                           accounts=None)
+
+
+def build_model_10():
+    build_regulated_system("10_regulated_system_accounts",
+                           "Speed test 10: the regulated system of test 4, every user on two accounts (control for test 11)",
+                           accounts="list")
+
+
+def build_model_11():
+    build_regulated_system("11_regulated_system_account_combinations",
+                           "Speed test 11: the regulated system of test 4, every user on (co | annual) & valley cap",
+                           accounts="combination")
 
 
 # ---------------------------------------------------------------------------
@@ -806,4 +874,6 @@ if __name__ == "__main__":
     build_model_7()
     build_model_8()
     build_model_9()
-    print("Generated speed test models 1-9.")
+    build_model_10()
+    build_model_11()
+    print("Generated speed test models 1-11.")
