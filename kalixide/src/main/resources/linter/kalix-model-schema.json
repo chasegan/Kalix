@@ -318,8 +318,8 @@
         },
         "accounts": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_]*(\\s*,\\s*[a-z][a-z0-9_]*)*$",
-          "description": "Ordered list of account names declared in [acc.*] sections; order is order-of-use"
+          "pattern": "^[a-z][a-z0-9_]*(\\s*,\\s*[a-z][a-z0-9_]*)*$|^[a-z0-9_()|&\\s]+$",
+          "description": "Account names declared in [acc.*] sections: a comma-separated list in order of use, or a combination with | (first, then: sum), & (both, in full: minimum) and parentheses, which are required to mix the two"
         }
       }
     },
@@ -391,8 +391,8 @@
         },
         "accounts": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_]*(\\s*,\\s*[a-z][a-z0-9_]*)*$",
-          "description": "Ordered list of account names declared in [acc.*] sections; order is order-of-use"
+          "pattern": "^[a-z][a-z0-9_]*(\\s*,\\s*[a-z][a-z0-9_]*)*$|^[a-z0-9_()|&\\s]+$",
+          "description": "Account names declared in [acc.*] sections: a comma-separated list in order of use, or a combination with | (first, then: sum), & (both, in full: minimum) and parentheses, which are required to mix the two"
         },
         "order_accounts": {
           "type": "string",
