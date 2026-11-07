@@ -84,6 +84,91 @@ the first account down before touching the second. The available volume is the
 sum, and debits cascade in order. See
 [regulated_user](regulated-user.md) / [unregulated_user](unregulated-user.md).
 
+## Combining accounts
+
+Some licences need more than a list: a take that must be debited from **both**
+of two accounts, and is limited by whichever is shorter. The `accounts` line
+can say so with `|`, `&` and parentheses:
+
+```ini
+[node.smith_pump]
+type = regulated_user
+accounts = (smith_co | smith_annual) & valley_cap
+```
+
+Draw on the carryover, then the annual account, and debit every megalitre from
+the valley cap as well.
+
+| Form | Meaning | Available volume | Debit |
+| --- | --- | --- | --- |
+| `a \| b` | `a` first, then `b`, filling partially | sum | left to right |
+| `a & b` | both, each in full | minimum | the whole take from each side |
+| `a, b, c` | the plain list; the same as `a \| b \| c` | sum | left to right |
+
+Rules:
+
+- **Parentheses are required to mix `|` and `&`.** `a | b & c` is a load
+  error; there is no precedence to remember.
+- **A line is either a plain list or a combination.** A comma mixed with `|`,
+  `&` or parentheses is a load error. Existing models are unchanged.
+- **`&&` and `||` are a load error.** They are the likely typo, and they mean
+  something else in [dynamic expressions](dynamic-expressions.md).
+- **An account appears at most once** in a node's `accounts`.
+- **No values.** The line names accounts and says how they combine. It holds
+  no numbers, no functions and no expressions, and is resolved when the model
+  loads.
+- **A combination without `&` is the plain list.** `a | b` is `a, b`, and
+  the canonical form writes it so. The canonical form has single spaces and
+  parentheses only where the operator changes; a save that preserves
+  formatting keeps the line as you wrote it.
+
+Where the user is a [regulated user](regulated-user.md#accounts), its order
+cap, the commitment of the accepted order and the debit of the delivery all
+follow the combination. Where it is an
+[unregulated user](unregulated-user.md#accounts), the availability cap and the
+debit do. `order_accounts` stays a plain list.
+
+### Why no expressions in the line
+
+The account line says *who pays*; expressions say *how much*. Anything dynamic
+is expressed as an account whose balance a [`[ras.*]`](ras.md) rule controls,
+so the policy stays in the RAS sections where it can be read:
+
+- **A gate.** `& oa_open`, an account set full while access is announced and
+  empty otherwise:
+
+    ```ini
+    [acc.gates]
+    accounts = name,    size,
+               oa_open, 1e9,
+
+    [ras.oa_opens]
+    targets = acc.gates
+    trigger = node.gauge1.dsflow[-1, 0] > 500
+    action  = set_full
+
+    [ras.oa_closes]
+    targets = acc.gates
+    trigger = node.gauge1.dsflow[-1, 0] <= 500
+    action  = set_empty
+    ```
+
+- **A daily limit.** `& daily_limit`, refilled every step:
+
+    ```ini
+    [acc.limits]
+    accounts = name,        size,
+               daily_limit, 25,
+
+    [ras.daily_limit]
+    targets = acc.limits
+    trigger = every_step
+    action  = set_full
+    ```
+
+- **An annual or rolling cap.** `& cap`, run by `roll_cap` at the water-year
+  boundary (see [`[ras.*]`](ras.md#actions)).
+
 ## Recordable series
 
 Account state is published as ordinary series — readable in any

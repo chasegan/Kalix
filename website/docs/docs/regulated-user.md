@@ -26,7 +26,7 @@ ds_1 = my_other_node
 | order (optional) | This property specifies how much the regulated user will order [ML] each timestep. In regulated systems with nonzero travel times, the demand will be lagged to give enough time for the water to arrive.  Example: `order = data.extendeddataset.by_name.urban_demand` |
 | pump (optional) | Use this to limit the amount of water the user can extract each timestep. Example: `pump = 86.4` |
 | opportunistic\_demand (optional) | Demand for water above the arriving order, evaluated at flow time — for access that is announced on conditions rather than ordered ahead, such as off-allocation. The opportunistic take is supplied from whatever availability the regulated delivery leaves behind, shares the pump limit, and is debited to the same accounts. Example: `opportunistic_demand = if(fn.oa_open(), 309.5, 0)` |
-| accounts (optional) | Names of the [accounts](accounts.md) this user draws on, comma-separated in order of use. Orders are capped by the accounts' combined balance less the orders already en route, and deliveries are debited from them, so an [allocation system](allocation-systems.md) can constrain the user. See [Accounts](#accounts). Example: `accounts = smith_carryover, smith_annual` |
+| accounts (optional) | Names of the [accounts](accounts.md) this user draws on, comma-separated in order of use, or a [combination](accounts.md#combining-accounts) of them with `|`, `&` and parentheses. Orders are capped by what the accounts make available less the orders already en route, and deliveries are debited from them, so an [allocation system](allocation-systems.md) can constrain the user. See [Accounts](#accounts). Examples: `accounts = smith_carryover, smith_annual`; `accounts = (smith_carryover | smith_annual) & valley_cap` |
 | order\_accounts (optional) | Names of order-authorisation accounts (debit-on-order), comma-separated in order of use. They extend the order cap beyond what the regular `accounts` can cover, and the excess portion of each approved order is debited from them immediately at order time. They are invisible to the flow phase. See "Order accounts" below. Example: `order_accounts = wy_bridge` |
 | order\_factor (optional) | Factor applied to this node's order as it is sent upstream. The network sees `order_factor × order`, while `order`, `order_due` and the delivery are unchanged. A number; default 1. See [Order factor](#order-factor). Example: `order_factor = 1.1` |
 | ds\_1 (optional) | Name of the downstream node on the river. This property defines a downstream link: what the user does not divert flows down it.  Example: `ds_1 = my_other_node` |
@@ -136,6 +136,14 @@ the delivery down it is planned at the order as it arrived, and `ds_2_order_due`
 is the part the user could order. One consequence: when users share an account,
 the one upstream diverts first and may take water released for an order placed
 downstream.
+
+When `accounts` is a [combination](accounts.md#combining-accounts), the same
+three moments follow it. The order cap is what the combination makes available
+of the uncommitted balances: `|` sums its sides and `&` takes the least. The
+accepted order is committed left to right through `|` and to every side of
+`&`. The delivery is capped by what the combination makes available of the
+balances of the day and debited the same way, the opportunistic take and the
+supply outlets' share included.
 
 #### Order accounts
 
