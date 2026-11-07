@@ -268,6 +268,8 @@ impl UnregulatedUserNode {
         }
     }
 
+    // Out of line like the supply-outlets instantiation, but not cold: a user on a combination
+    // runs this every step, and cold would have the compiler optimise it for size.
     #[inline(never)]
     fn flow_phase_combined(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
         self.flow_phase::<false, true>(data_cache, account_manager)
