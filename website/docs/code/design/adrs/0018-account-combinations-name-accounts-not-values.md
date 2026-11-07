@@ -56,7 +56,9 @@ Chosen option: **1**.
    exact tree walk and no solver is needed.
 5. **The plain list keeps its own field and code.** A combination is a second
    representation chosen at load, and the phases are instantiated on a const
-   for it, so a model on the plain list runs the instructions it ran before.
+   for it, so a model on the plain list runs the instructions it ran before,
+   plus one test per phase to choose. A node result for the combined
+   availability waits for a use case (Manifesto §2.7).
 
 Option 2 names something each node uses once. Option 3 moves policy out of
 `[ras.*]` into a second place. Option 4 reads as boolean, which the operators

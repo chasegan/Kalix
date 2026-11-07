@@ -146,7 +146,9 @@ cover, the part a side of the outermost `&`, or the whole line, could not cover
 is committed to its first account, as the plain list commits it to the first
 account listed. The delivery is capped by what the combination makes available
 of the balances of the day and debited the same way, the opportunistic take and
-the supply outlets' share included.
+the supply outlets' share included. A cap shared under `&` by several users
+carries every one of their commitments, so it can cap an order while its
+balance is still positive.
 
 #### Order accounts
 
