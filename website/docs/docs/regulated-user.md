@@ -141,9 +141,12 @@ When `accounts` is a [combination](accounts.md#combining-accounts), the same
 three moments follow it. The order cap is what the combination makes available
 of the uncommitted balances: `|` sums its sides and `&` takes the least. The
 accepted order is committed left to right through `|` and to every side of
-`&`. The delivery is capped by what the combination makes available of the
-balances of the day and debited the same way, the opportunistic take and the
-supply outlets' share included.
+`&`. Where `order_accounts` authorise an order beyond what the combination can
+cover, the part a side of the outermost `&`, or the whole line, could not cover
+is committed to its first account, as the plain list commits it to the first
+account listed. The delivery is capped by what the combination makes available
+of the balances of the day and debited the same way, the opportunistic take and
+the supply outlets' share included.
 
 #### Order accounts
 

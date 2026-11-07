@@ -40,7 +40,12 @@ Chosen option: **1**.
 1. **`a | b` is `a` then `b`: the sum is available and the debit fills left to
    right. `a & b` is both: the minimum is available and the whole take is
    debited from each side.** The plain list is `|`, and a combination without
-   `&` is lowered to it.
+   `&` is lowered to it. A `&` beneath a `|` absorbs the least of what it is
+   handed and what its sides can cover, and the `|` carries the rest on. A
+   regulated user's order beyond what the line can cover, authorised by
+   `order_accounts`, is committed to the first account of each side of the
+   outermost `&` that fell short, or of the whole: the plain list's rule, per
+   side.
 2. **Parentheses are required to mix `|` and `&`.** There is no precedence to
    remember, so there is none to get wrong.
 3. **The line holds no values.** It names accounts and says how they combine.
@@ -62,9 +67,15 @@ are not, and lets one spelling mean two things in one file.
 - ✅ A take limited by two ledgers is one line, and every balance that limits
   it is a recordable account.
 - ✅ Models on the plain list are unchanged in text and in speed.
-- ❌ A combination costs about ten nanoseconds per user-step beyond the
-  accounts it touches (`regression_tests/speed/`, 10 against 11). Accepted:
-  paid only by the user that writes one.
+- ❌ A combination costs about 20 ns per user-step over the plain list of
+  two accounts it replaces, of which about 3 ns is the third account it
+  touches and the rest the tree walk and the cap debited every step
+  (`regression_tests/speed/` 11 against 10, 16 users, 36,525 steps, 40.0 to
+  50.6 ms by minimum, 15 interleaved reps, Apple M5, one session). Accepted:
+  paid only by the user that writes one. Models on the plain list measured
+  flat against `main` in three sessions (tests 2, 4, 5 and 10, by minimum
+  −1.4% to +1.2%, sign inconsistent), with the plain-list instantiations of
+  the regulated phases instruction-identical to `main`'s.
 
 ## Worked example
 
