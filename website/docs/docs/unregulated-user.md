@@ -29,7 +29,7 @@ ds_1 = my_other_node
 | flow\_threshold (optional) | Use this to leave a certain amount of flow in the river (not extract it). This can be used to set flow conditions as may be associated with unregulated licence conditions. Example: `flow_threshold = 100.0` |
 | annual\_cap (optional) | Use this to set an annual diversion limit. Specify the cap volume (ML), and the month in which the annual cap resets.  Example:  `annual_cap = 2250, 7` |
 | demand\_carryover (optional) | Turn on/off demand carryover. This behaviour is off be default. Set this to “true” if you want the user to carryover unmet demands to the following timestep.  Example:  `demand_carryover = true` And if you want the carryover to reset each year, then also specify the month when that should happen. Example:  `demand_carryover = true, 7` |
-| accounts (optional) | Names of the [accounts](accounts.md) this user draws on, comma-separated in order of use. Availability is capped by the accounts' combined balance and diversions are debited from them in order, so an [allocation system](allocation-systems.md) can constrain the user. Example: `accounts = harvest_licence` |
+| accounts (optional) | Names of the [accounts](accounts.md) this user draws on, comma-separated in order of use, or a [combination](accounts.md#combining-accounts) of them with `|`, `&` and parentheses. Availability is capped by what the accounts make available and diversions are debited from them, so an [allocation system](allocation-systems.md) can constrain the user. Examples: `accounts = harvest_licence`; `accounts = harvest_licence & daily_limit` |
 | ds\_1 (optional) | Name of the downstream node on the river. This property defines a downstream link: what the user does not divert flows down it.  Example: `ds_1 = my_other_node` |
 | ds\_2, ds\_3, ds\_4 (optional) | Supply outlets. The node on a supply outlet places its orders with this user, and the user diverts that water and sends it down the outlet. See [Supply outlets](#supply-outlets). Example: `ds_2 = my_field` |
 
@@ -80,6 +80,12 @@ account balance, and each diversion is debited from the accounts in the order
 listed. This lets an [allocation system](allocation-systems.md) govern
 opportunistic take — for example an account credited only on flow events. See
 [`[acc.*]`](accounts.md).
+
+When `accounts` is a [combination](accounts.md#combining-accounts),
+availability is what the combination makes available of the balances: `|` sums
+its sides and `&` takes the least. The diversion is debited left to right
+through `|` and in full from every side of `&`, the supply outlets' share
+included.
 
 #### Diversion
 

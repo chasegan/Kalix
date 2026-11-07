@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use crate::hydrology::accounts::account::Account;
 use crate::hydrology::accounts::account_manager::{AccountGroup, ACCOUNT_SERIES_FIELDS, GROUP_SERIES_FIELDS};
+use crate::hydrology::accounts::account_tree::{duplicate_account_message, is_combination, parse_combination, unknown_account_message, AccountsProperty};
 use crate::hydrology::allocation_systems::ras::RasSystem;
 use crate::io::csv_io::{csv_string_to_f64_vec, csv_to_string_vec};
 use crate::io::error::KalixIoError;
@@ -1145,9 +1146,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.demand_input = DynamicInput::from_string(v, &mut model.data_cache, true, self_ctx)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                         } else if name_lower == "accounts" {
-                            let account_idxs = resolve_account_references(v, &model.account_manager)
-                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-                            n.register_accounts(account_idxs);
+                            match read_accounts_property(v, node_name, &model.account_manager)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))? {
+                                AccountsProperty::List(account_idxs) => n.register_accounts(account_idxs),
+                                AccountsProperty::Tree(account_tree) => n.register_account_tree(account_tree),
+                            }
                         } else if name_lower == "annual_cap" {
                             let params = csv_string_to_f64_vec(v)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
@@ -1208,10 +1211,16 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                             n.order_factor = v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: order_factor must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
                         } else if name_lower == "accounts" {
-                            let account_idxs = resolve_account_references(v, &model.account_manager)
-                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
-                            n.register_accounts(account_idxs);
+                            match read_accounts_property(v, node_name, &model.account_manager)
+                                .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))? {
+                                AccountsProperty::List(account_idxs) => n.register_accounts(account_idxs),
+                                AccountsProperty::Tree(account_tree) => n.register_account_tree(account_tree),
+                            }
                         } else if name_lower == "order_accounts" {
+                            if is_combination(v) {
+                                return Err(KalixIoError::Parse(format!("Error on line {}: Node '{}': 'order_accounts' is a plain list; \
+                                    '|', '&' and parentheses are accepted in 'accounts' only", ini_property.line_number, node_name)));
+                            }
                             let account_idxs = resolve_account_references(v, &model.account_manager)
                                 .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", ini_property.line_number, e)))?;
                             n.register_order_accounts(account_idxs);
@@ -1553,8 +1562,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         let mut drawn_on: Vec<usize> = Vec::new();
         for node in &model.nodes {
             match node {
-                NodeEnum::UnregulatedUserNode(n) => drawn_on.extend(&n.account_idxs),
-                NodeEnum::RegulatedUserNode(n) => drawn_on.extend(&n.account_idxs),
+                NodeEnum::UnregulatedUserNode(n) => drawn_on.extend(n.accounts()),
+                NodeEnum::RegulatedUserNode(n) => drawn_on.extend(n.accounts()),
                 _ => {}
             }
         }
@@ -1886,12 +1895,15 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "pump", &n.pump_capacity.to_string());
                 set_property_if_not_empty(&mut ini_doc, section_name.as_str(), "flow_threshold", &n.flow_threshold.to_string());
                 // Re-emit the ordered account references by name (order is
-                // meaning: deemed order-of-use)
+                // meaning: deemed order-of-use), or the combination in its
+                // canonical form
                 if !n.account_idxs.is_empty() {
                     let names: Vec<&str> = n.account_idxs.iter()
                         .filter_map(|&idx| model.account_manager.get_account(idx).map(|a| a.name.as_str()))
                         .collect();
                     ini_doc.set_property(section_name.as_str(), "accounts", names.join(", ").as_str());
+                } else if !n.account_tree.is_empty() {
+                    ini_doc.set_property(section_name.as_str(), "accounts", n.account_tree.render(&model.account_manager).as_str());
                 }
                 match n.annual_cap {
                     Some(cap) => {
@@ -1920,6 +1932,8 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                         .filter_map(|&idx| model.account_manager.get_account(idx).map(|a| a.name.as_str()))
                         .collect();
                     ini_doc.set_property(section_name.as_str(), "accounts", names.join(", ").as_str());
+                } else if !n.account_tree.is_empty() {
+                    ini_doc.set_property(section_name.as_str(), "accounts", n.account_tree.render(&model.account_manager).as_str());
                 }
                 if !n.order_account_idxs.is_empty() {
                     let names: Vec<&str> = n.order_account_idxs.iter()
@@ -2341,6 +2355,19 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<ParsedRas
     Ok(ParsedRasAction { action, self_slots: parsed_arg.self_slots, uses_pair: parsed_arg.uses_pair })
 }
 
+/// Read a node's `accounts` property: the plain list, or a combination with
+/// `|`, `&` and parentheses (account_tree.rs). Errors name the node.
+fn read_accounts_property(v: &str, node_name: &str, manager: &crate::hydrology::accounts::account_manager::AccountManager) -> Result<AccountsProperty, String> {
+    if is_combination(v) {
+        parse_combination(v, manager)
+            .map_err(|e| format!("Node '{}': in 'accounts = {}': {}", node_name, v.trim(), e))
+    } else {
+        resolve_account_references(v, manager)
+            .map(AccountsProperty::List)
+            .map_err(|e| format!("Node '{}': {}", node_name, e))
+    }
+}
+
 /// Resolve a node's `accounts` property — a comma-separated, *ordered* list of
 /// account names (order-of-use) — to account indices. Reference-only: names
 /// must already be declared in [acc.*] sections.
@@ -2352,16 +2379,9 @@ fn resolve_account_references(v: &str, manager: &crate::hydrology::accounts::acc
     let mut idxs = Vec::with_capacity(names.len());
     for name in &names {
         let lower = name.to_lowercase();
-        let idx = manager.get_account_idx(&lower).ok_or_else(|| {
-            if manager.get_group_idx(&lower).is_some() {
-                format!("'{}' is an account group; a node's 'accounts' list takes account names \
-                    (group targeting belongs in [ras.*] sections)", name)
-            } else {
-                format!("Unknown account '{}'. Accounts are declared in [acc.*] sections.", name)
-            }
-        })?;
+        let idx = manager.get_account_idx(&lower).ok_or_else(|| unknown_account_message(&lower, manager))?;
         if idxs.contains(&idx) {
-            return Err(format!("Account '{}' is listed more than once", name));
+            return Err(duplicate_account_message(&lower));
         }
         idxs.push(idx);
     }

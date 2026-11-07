@@ -2,6 +2,7 @@ use super::{recorder, Node};
 use crate::model_inputs::DynamicInput;
 use crate::data_management::data_cache::DataCache;
 use crate::hydrology::accounts::account_manager::AccountManager;
+use crate::hydrology::accounts::account_tree::AccountTree;
 use crate::misc::location::Location;
 use crate::numerical::fifo_buffer::FifoBuffer;
 
@@ -102,6 +103,11 @@ pub struct RegulatedUserNode {
     // speed note in the commit that added supply outlets (ADR-0004 §3.4).
     pub supply_outlets: Vec<SupplyOutlet>,
     pub dsorders: [f64; MAX_DS_LINKS], // Orders arriving on ds_1 to ds_4, written by the ordering system
+
+    /// The accounts as a combination (`(a | b) & cap`), when the `accounts` line is one;
+    /// empty when it is the plain list in `account_idxs`. The two are never both set. Which
+    /// one the phases read is chosen once per step in the dispatch, not inside them.
+    pub account_tree: AccountTree,
 }
 
 
@@ -140,6 +146,18 @@ impl RegulatedUserNode {
     /// Register the ordered list of accounts this node draws on.
     pub fn register_accounts(&mut self, account_idxs: Vec<usize>) {
         self.account_idxs = account_idxs;
+        self.account_tree = AccountTree::default();
+    }
+
+    /// Register the accounts this node draws on as a combination.
+    pub fn register_account_tree(&mut self, account_tree: AccountTree) {
+        self.account_tree = account_tree;
+        self.account_idxs = Vec::new();
+    }
+
+    /// Every account this node draws on, whichever form the `accounts` line took.
+    pub fn accounts(&self) -> impl Iterator<Item = usize> + '_ {
+        self.account_idxs.iter().copied().chain(self.account_tree.accounts())
     }
 
     /// Register the ordered list of order-authorisation accounts.
@@ -269,31 +287,59 @@ impl Node for RegulatedUserNode {
     fn get_name(&self) -> &str { &self.name }
 
 
-    // Whether the user has supply outlets is fixed for the run, so it is decided once per
-    // phase here and not at each step inside it. The `false` instantiations are the node as
-    // it was before supply outlets existed, so a user without them pays for this one test
-    // and nothing else (ADR-0004 §3.1, and its 2026-09-14 amendment). Kept out of line so
-    // that two copies of each phase are not inlined into the step loop.
+    // Whether the user has supply outlets, and whether its accounts are a combination, are
+    // fixed for the run, so they are decided once per phase here and not at each step inside
+    // it. The `<_, false>` instantiations are the node as it was before combinations existed,
+    // and the `<false, false>` ones the node before supply outlets existed, so a user on the
+    // plain list pays for these tests and nothing else (ADR-0004 §3.1, and its 2026-09-14
+    // amendment). Every instantiation is kept out of line so that no copy of a phase is
+    // inlined into the step loop.
     fn run_order_phase(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
-        if self.supply_outlets.is_empty() {
-            self.order_phase::<false>(data_cache, account_manager)
+        if self.account_tree.is_empty() {
+            if self.supply_outlets.is_empty() {
+                self.order_phase::<false, false>(data_cache, account_manager)
+            } else {
+                self.order_phase::<true, false>(data_cache, account_manager)
+            }
         } else {
-            self.order_phase::<true>(data_cache, account_manager)
+            self.order_phase_combined(data_cache, account_manager)
         }
     }
 
     fn run_flow_phase(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
-        if self.supply_outlets.is_empty() {
-            self.flow_phase::<false>(data_cache, account_manager)
+        if self.account_tree.is_empty() {
+            if self.supply_outlets.is_empty() {
+                self.flow_phase::<false, false>(data_cache, account_manager)
+            } else {
+                self.flow_phase::<true, false>(data_cache, account_manager)
+            }
         } else {
-            self.flow_phase::<true>(data_cache, account_manager)
+            self.flow_phase_combined(data_cache, account_manager)
         }
     }
 }
 
 impl RegulatedUserNode {
     #[inline(never)]
-    fn order_phase<const SUPPLY_OUTLETS: bool>(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
+    fn order_phase_combined(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
+        if self.supply_outlets.is_empty() {
+            self.order_phase::<false, true>(data_cache, account_manager)
+        } else {
+            self.order_phase::<true, true>(data_cache, account_manager)
+        }
+    }
+
+    #[inline(never)]
+    fn flow_phase_combined(&mut self, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
+        if self.supply_outlets.is_empty() {
+            self.flow_phase::<false, true>(data_cache, account_manager)
+        } else {
+            self.flow_phase::<true, true>(data_cache, account_manager)
+        }
+    }
+
+    #[inline(never)]
+    fn order_phase<const SUPPLY_OUTLETS: bool, const COMBINED: bool>(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
         // Record downstream orders
         if let Some(idx) = self.recorder_idx_ds_1_order {
@@ -302,7 +348,7 @@ impl RegulatedUserNode {
 
         // The orders arriving on the supply outlets. They become this user's order: they are
         // capped by its accounts and scaled by its order_factor along with its own.
-        let has_accounts = !self.account_idxs.is_empty();
+        let has_accounts = if COMBINED { true } else { !self.account_idxs.is_empty() };
         if SUPPLY_OUTLETS {
             for supply_outlet in &mut self.supply_outlets {
                 supply_outlet.order = self.dsorders[supply_outlet.outlet as usize].max(0.0);
@@ -337,8 +383,16 @@ impl RegulatedUserNode {
         //
         // Where the cap bites, the supply outlets are served first, in outlet order, and the
         // user's own order takes what is left - the same order of service as at flow time.
-        if !self.account_idxs.is_empty() || !self.order_account_idxs.is_empty() {
-            let regular_available = self.total_account_uncommitted(_account_manager);
+        //
+        // A combination (`COMBINED`) does the same through the tree: `|` sums what each side
+        // can cover and is committed left to right, `&` takes the least and is committed on
+        // every side (account_tree.rs).
+        if COMBINED || !self.account_idxs.is_empty() || !self.order_account_idxs.is_empty() {
+            let regular_available = if COMBINED {
+                self.account_tree.uncommitted(_account_manager)
+            } else {
+                self.total_account_uncommitted(_account_manager)
+            };
             let order_balance = self.total_order_account_balance(_account_manager);
             let mut remaining = regular_available + order_balance;
             let mut outlet_orders_accepted = 0.0;
@@ -356,7 +410,9 @@ impl RegulatedUserNode {
             // against what each can still cover. Any part beyond that (an order
             // the order_accounts authorised) goes on the first account, which is
             // where its delivery will be debited first.
-            if !self.account_idxs.is_empty() {
+            if COMBINED {
+                self.account_tree.commit(_account_manager, order_placed, self.order_travel_time);
+            } else if !self.account_idxs.is_empty() {
                 let mut to_commit = order_placed;
                 for &account_idx in &self.account_idxs {
                     if to_commit <= 0.0 { break; }
@@ -414,7 +470,7 @@ impl RegulatedUserNode {
     }
 
     #[inline(never)]
-    fn flow_phase<const SUPPLY_OUTLETS: bool>(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
+    fn flow_phase<const SUPPLY_OUTLETS: bool, const COMBINED: bool>(&mut self, data_cache: &mut DataCache, _account_manager: &mut AccountManager) {
 
         // Record results
         if let Some(idx) = self.recorder_idx_usflow {
@@ -466,8 +522,12 @@ impl RegulatedUserNode {
         // balance - the supply outlets first, then the user's own order; the
         // opportunistic take gets what remains. The whole take is debited, the
         // supply outlets' share included: it is the user's water.
-        if !self.account_idxs.is_empty() {
-            let balance = self.total_account_balance(_account_manager);
+        if COMBINED || !self.account_idxs.is_empty() {
+            let balance = if COMBINED {
+                self.account_tree.balance(_account_manager)
+            } else {
+                self.total_account_balance(_account_manager)
+            };
             if SUPPLY_OUTLETS {
                 let mut remaining_balance = balance;
                 outlet_take = 0.0;
@@ -483,12 +543,16 @@ impl RegulatedUserNode {
             }
             diversion_opportunistic = diversion_opportunistic.min(balance - diversion_regulated);
             let mut remaining = diversion_regulated + diversion_opportunistic;
-            for &account_idx in &self.account_idxs {
-                if remaining <= 0.0 { break; }
-                let take = remaining.min(_account_manager.get_account_balance(account_idx).max(0.0));
-                if take > 0.0 {
-                    _account_manager.debit_account(account_idx, take);
-                    remaining -= take;
+            if COMBINED {
+                self.account_tree.debit(_account_manager, remaining);
+            } else {
+                for &account_idx in &self.account_idxs {
+                    if remaining <= 0.0 { break; }
+                    let take = remaining.min(_account_manager.get_account_balance(account_idx).max(0.0));
+                    if take > 0.0 {
+                        _account_manager.debit_account(account_idx, take);
+                        remaining -= take;
+                    }
                 }
             }
         }

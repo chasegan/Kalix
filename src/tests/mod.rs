@@ -201,3 +201,6 @@ mod test_input_phase;
 
 // Node names, [outputs] layout and expression references (#442)
 mod test_reference_validation;
+
+// User nodes: `accounts` as a combination with `|`, `&` and parentheses (#507)
+mod test_account_combinations;

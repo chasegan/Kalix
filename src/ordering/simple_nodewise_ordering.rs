@@ -161,7 +161,7 @@ impl SimpleNodewiseOrderingSystem {
                         supply_outlet.demand_buffer = FifoBuffer::new(travel_time);
                     }
                     // The accounts it draws on must be able to hold a commitment this far ahead
-                    for &account_idx in &node.account_idxs {
+                    for account_idx in node.accounts() {
                         account_manager.set_commit_horizon(account_idx, travel_time);
                     }
                 }
