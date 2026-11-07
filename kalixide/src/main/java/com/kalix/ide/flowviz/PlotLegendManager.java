@@ -57,7 +57,6 @@ public class PlotLegendManager {
     /** Total width of a line sample (line + end dot); for components that mirror the Key. */
     static final int SAMPLE_WIDTH = LINE_SAMPLE_WIDTH + DOT_DIAMETER;
     private static final int MIN_WIDTH = 120;
-    private static final int MAX_WIDTH = 400;
     private static final int DEFAULT_OFFSET = 20;
     private static final int COLLAPSED_WIDTH = 30;  // Width when fully collapsed
     private static final int COLLAPSED_HEIGHT = 24; // Height when fully collapsed
@@ -146,6 +145,8 @@ public class PlotLegendManager {
      */
     private static class LegendEntry {
         final SeriesRef ref;
+        /** The last paint cut this entry's label short; the tooltip then carries it whole. */
+        boolean clipped;
 
         LegendEntry(SeriesRef ref) {
             this.ref = ref;
@@ -203,6 +204,20 @@ public class PlotLegendManager {
 
     /** The series whose row contains the point, or null. Null when hidden or collapsed. */
     public SeriesRef entryAt(int mouseX, int mouseY) {
+        LegendEntry entry = legendEntryAt(mouseX, mouseY);
+        return entry != null ? entry.ref : null;
+    }
+
+    /**
+     * The whole label of the series whose row contains the point, when the last paint cut
+     * it short; otherwise null, so a tooltip never restates what is already readable.
+     */
+    public String tooltipAt(int mouseX, int mouseY) {
+        LegendEntry entry = legendEntryAt(mouseX, mouseY);
+        return entry != null && entry.clipped ? displayLabel(entry.ref) : null;
+    }
+
+    private LegendEntry legendEntryAt(int mouseX, int mouseY) {
         if (!enabled || collapsed || !bounds.contains(mouseX, mouseY)) {
             return null;
         }
@@ -210,7 +225,7 @@ public class PlotLegendManager {
         for (int i = 0; i < listing.entries().size(); i++) {
             Rectangle row = new Rectangle(x + 2, entryTop(listing, i) - 2, bounds.width - 4, ENTRY_HEIGHT);
             if (row.contains(mouseX, mouseY)) {
-                return listing.entries().get(i).ref;
+                return listing.entries().get(i);
             }
         }
         return null;
@@ -394,12 +409,12 @@ public class PlotLegendManager {
 
         refreshColors();
 
-        // Calculate dimensions
-        int width = calculateWidth(g2d);
-        int height = calculateHeight();
-
         plotArea.setBounds(viewport.getPlotX(), viewport.getPlotY(),
                            viewport.getPlotWidth(), viewport.getPlotHeight());
+
+        // Calculate dimensions; the width may grow to the plot area's
+        int width = calculateWidth(g2d);
+        int height = calculateHeight();
 
         if (autoPosition) {
             x = plotArea.x + plotArea.width - width - DEFAULT_OFFSET;
@@ -591,6 +606,7 @@ public class PlotLegendManager {
             // Project ref → display label (display-mode aware) at render time, then truncate.
             String transformedName = displayLabel(entry.ref);
             String displayName = truncateText(g, transformedName, width - (PADDING * 2 + LINE_SAMPLE_WIDTH + 6));
+            entry.clipped = !displayName.equals(transformedName);
             g.drawString(displayName, nameX, entryY + 14);
         }
     }
@@ -661,7 +677,10 @@ public class PlotLegendManager {
             maxWidth = Math.max(maxWidth, totalWidth);
         }
 
-        return Math.min(maxWidth, MAX_WIDTH);
+        // The key may grow to the whole plot area to fit a long name (#508). Below the
+        // minimum the title and collapse button would collide, so that floor wins even in a
+        // plot narrower than it; the clamp in render() then pins the key to the left edge.
+        return Math.max(MIN_WIDTH, Math.min(maxWidth, plotArea.width));
     }
 
     private int calculateHeight() {
