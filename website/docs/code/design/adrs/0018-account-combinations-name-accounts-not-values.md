@@ -69,15 +69,19 @@ are not, and lets one spelling mean two things in one file.
 - ✅ A take limited by two ledgers is one line, and every balance that limits
   it is a recordable account.
 - ✅ Models on the plain list are unchanged in text and in speed.
-- ❌ A combination costs about 20 ns per user-step over the plain list of
+- ❌ A combination costs about 13 ns per user-step over the plain list of
   two accounts it replaces, of which about 3 ns is the third account it
-  touches and the rest the tree walk and the cap debited every step
-  (`regression_tests/speed/` 11 against 10, 16 users, 36,525 steps, 39.0 to
-  50.2 ms by minimum, 20 interleaved reps, Apple M5, one session). Accepted:
-  paid only by the user that writes one. Models on the plain list measured
-  flat against `main` in three sessions (tests 2, 4, 5 and 10, by minimum
-  −1.4% to +1.2%, sign inconsistent), with the plain-list instantiations of
-  the regulated phases instruction-identical to `main`'s.
+  touches and the rest the tree walk and the cap committed and debited
+  every step (`regression_tests/speed/` 11 against 10, 16 users, 36,525
+  steps, 40.3 to 47.9 ms by minimum, 20 interleaved reps, Apple M5, one
+  session; it was 19 ns before the two tree levels were made to inline, by
+  disassembly). Accepted: paid only by the user that writes one. Models on
+  the plain list measured at the noise floor against `main` across five
+  sessions (tests 2, 4, 5 and 10, by minimum −1.5% to +1.8%, sign
+  inconsistent), with the plain-list instantiations of the regulated phases
+  instruction-identical to `main`'s; what moves between builds whose
+  plain-list code is identical is placement, as the 2026-10-06 entry of
+  ADR-0004 describes.
 
 ## Worked example
 
