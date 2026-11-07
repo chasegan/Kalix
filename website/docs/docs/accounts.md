@@ -105,6 +105,13 @@ the valley cap as well.
 | `a & b` | both, each in full | minimum | the whole take from each side |
 | `a, b, c` | the plain list; the same as `a \| b \| c` | sum | left to right |
 
+An `&` inside a `|` takes the least of what reaches it and what its sides can
+cover, and the `|` carries the rest on: `a | (b & cap) | big` draws on `a`,
+then as much from both `b` and `cap` as the shorter allows, then `big`.
+Because `&` debits the whole take from every side, a group that holds both
+sides of an `&` counts that take once per side in its `debits` and `use`
+aggregates.
+
 Rules:
 
 - **Parentheses are required to mix `|` and `&`.** `a | b & c` is a load
