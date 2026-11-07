@@ -20,11 +20,9 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.KeyStroke;
-import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -41,7 +39,6 @@ import org.fife.ui.rsyntaxtextarea.TokenMaker;
 import com.kalix.ide.linter.LinterManager;
 import com.kalix.ide.linter.SchemaManager;
 import com.kalix.ide.linter.factories.LinterComponentFactory;
-import com.kalix.ide.themes.SyntaxTheme;
 import com.kalix.ide.utils.DialogUtils;
 
 /**
@@ -123,9 +120,6 @@ public class EnhancedTextEditor extends JPanel {
         // Hover tips (lint issues, property help) via Swing's ToolTipManager; the
         // sources are attached by initializeLinter / initializePropertyTooltips.
         hoverTips = com.kalix.ide.linter.ui.HoverTipSupplier.install(textArea);
-
-        // Apply theme-aware colors
-        updateThemeColors();
 
         scrollPane = new RTextScrollPane(textArea);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_ALWAYS);
@@ -1410,33 +1404,6 @@ public class EnhancedTextEditor extends JPanel {
         return searchManager;
     }
     
-    /**
-     * Updates the text editor colors based on the current UI theme.
-     * This method should be called when the theme changes.
-     */
-    public void updateThemeColors() {
-        if (textArea == null) {
-            return;
-        }
-
-        // Apply background and foreground colors from current theme
-        Color bgColor = UIManager.getColor("TextArea.background");
-        Color fgColor = UIManager.getColor("TextArea.foreground");
-
-        if (bgColor != null) {
-            textArea.setBackground(bgColor);
-        }
-
-        if (fgColor != null) {
-            textArea.setForeground(fgColor);
-        }
-
-        // Delegate line highlight color to KalixIniTextArea
-        textArea.updateCurrentLineHighlight();
-
-        textArea.repaint();
-    }
-
     // Linter integration methods
 
     /**
@@ -1485,18 +1452,6 @@ public class EnhancedTextEditor extends JPanel {
         if (searchManager != null) {
             searchManager.dispose();
             searchManager = null;
-        }
-    }
-
-    /**
-     * Updates the syntax highlighting theme for the text editor.
-     * Delegates to the underlying KalixIniTextArea.
-     *
-     * @param syntaxTheme The syntax theme to apply
-     */
-    public void updateSyntaxTheme(SyntaxTheme.Theme syntaxTheme) {
-        if (textArea != null) {
-            textArea.updateSyntaxTheme(syntaxTheme);
         }
     }
 }

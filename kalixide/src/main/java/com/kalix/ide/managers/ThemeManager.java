@@ -2,22 +2,19 @@ package com.kalix.ide.managers;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatPropertiesLaf;
 import com.kalix.ide.constants.AppConstants;
-import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.themes.KalixTheme;
-import com.kalix.ide.themes.SyntaxTheme;
 import com.kalix.ide.themes.ThemePreferences;
 import com.kalix.ide.utils.Platform;
 import com.kalix.ide.utils.PlatformUtils;
 import com.kalix.ide.themes.unified.ThemeCompatibilityAdapter;
 
-import javax.swing.JDialog;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
 import java.awt.Component;
-import java.awt.Window;
 
 /**
  * Manages theme switching functionality for the application.
@@ -29,9 +26,6 @@ public class ThemeManager {
     
     private KalixTheme currentTheme;
     private final Component parentComponent;
-
-    // Theme-aware components
-    private EnhancedTextEditor textEditor;
 
     /**
      * Creates a new ThemeManager instance.
@@ -105,17 +99,15 @@ public class ThemeManager {
     }
 
     /**
-     * Applies the theme's linked node and syntax palettes wherever the user has
-     * not made an explicit choice (follow mode, the default). Explicit choices
-     * are left untouched.
+     * Applies the theme's linked node palette wherever the user has not made an
+     * explicit choice (follow mode, the default). The syntax palette needs no step
+     * of its own: every editor resolves it from the preferences in {@code updateUI},
+     * which the look-and-feel walk has just run.
      */
     private void applyFollowedThemes(KalixTheme theme) {
         if (ThemePreferences.isNodeThemeFollowing()
                 && parentComponent instanceof com.kalix.ide.KalixIDE ide) {
             SwingUtilities.invokeLater(() -> ide.setNodeTheme(theme.nodeTheme()));
-        }
-        if (ThemePreferences.isSyntaxThemeFollowing()) {
-            updateSyntaxTheme(theme.syntaxTheme());
         }
     }
 
@@ -166,72 +158,19 @@ public class ThemeManager {
     }
     
     /**
-     * Registers theme-aware components that need custom theme updates. Maps are not
-     * registered: every document's map is mounted inside its tab, so a theme switch
-     * reaches all of them via {@code updateComponentTreeUI} (MapPanel re-resolves
-     * its colours in {@code updateUI()}). The active-editor registration remains
-     * because RSyntaxTextArea's theme updates go beyond a LaF walk; it could migrate
-     * to the same updateUI pattern later.
-     *
-     * @param textEditor The active EnhancedTextEditor instance to update
-     */
-    public void registerThemeAwareComponents(EnhancedTextEditor textEditor) {
-        this.textEditor = textEditor;
-    }
-    
-    /**
-     * Updates all open windows with the new theme.
+     * Updates every open window with the new theme. FlatLaf walks every window, frames
+     * and dialogs alike, and each component re-resolves its own colours in
+     * {@code updateUI}: the editors through {@code EditorTheme}, the map and the data
+     * view through their own. The toolbar's icons are recoloured here because they are
+     * built, not themed.
      */
     private void updateAllWindows() {
-        // Update the main application window
-        if (parentComponent != null) {
-            SwingUtilities.updateComponentTreeUI(parentComponent);
-        }
-
-        // Update custom theme-aware components
-        updateCustomComponents();
-
-        // Update all open FlowViz windows
-        for (com.kalix.ide.flowviz.FlowVizWindow window : com.kalix.ide.flowviz.FlowVizWindow.getOpenWindows()) {
-            SwingUtilities.updateComponentTreeUI(window);
-        }
-
-        // Update Run Manager if open
-        com.kalix.ide.windows.RunManager runManager = com.kalix.ide.windows.RunManager.getOpenInstance();
-        if (runManager != null) {
-            SwingUtilities.updateComponentTreeUI(runManager);
-        }
-
-        // Update all open dialogs (iterate through all windows to find dialogs)
-        for (Window window : Window.getWindows()) {
-            if (window instanceof JDialog && window.isDisplayable()) {
-                SwingUtilities.updateComponentTreeUI(window);
-            }
-        }
-
-        // Notify all text editor components about the application theme change
-        // This updates colors that aren't automatically handled by SwingUtilities.updateComponentTreeUI
-        notifyApplicationThemeChanged();
-    }
-    
-    /**
-     * Updates custom theme-aware components that need special handling.
-     */
-    private void updateCustomComponents() {
-        // Update EnhancedTextEditor theme colors
-        if (textEditor != null) {
-            SwingUtilities.invokeLater(() -> textEditor.updateThemeColors());
-        }
-        
-        // Update toolbar icon colors
-        if (parentComponent instanceof com.kalix.ide.KalixIDE) {
-            SwingUtilities.invokeLater(() -> {
-                com.kalix.ide.KalixIDE KalixIDE = (com.kalix.ide.KalixIDE) parentComponent;
-                KalixIDE.updateToolBar();
-            });
+        FlatLaf.updateUI();
+        if (parentComponent instanceof com.kalix.ide.KalixIDE ide) {
+            SwingUtilities.invokeLater(ide::updateToolBar);
         }
     }
-    
+
     /**
      * Configures system properties for better macOS integration.
      */
@@ -267,40 +206,12 @@ public class ThemeManager {
     }
 
     /**
-     * Updates the syntax theme for text editors.
-     * Called when the user changes the syntax theme in preferences.
-     *
-     * @param syntaxTheme The new syntax theme to apply
+     * Re-themes every editor after the syntax palette preference changes. The palette
+     * is read in each editor's {@code updateUI}, so the ordinary look-and-feel walk
+     * over every window is the whole update.
      */
-    public void updateSyntaxTheme(SyntaxTheme.Theme syntaxTheme) {
-        // Update EnhancedTextEditor with new syntax theme
-        if (textEditor != null) {
-            SwingUtilities.invokeLater(() -> textEditor.updateSyntaxTheme(syntaxTheme));
-        }
-
-        // Update all instances globally using static methods
-        notifySyntaxThemeChanged(syntaxTheme);
-    }
-
-    // ========== Static Global Update Methods ==========
-
-    /**
-     * Notifies all text editor components about an application theme change.
-     * This should be called after switching the FlatLaf theme.
-     * Components will update their UI to match the new theme colors.
-     */
-    public static void notifyApplicationThemeChanged() {
-        com.kalix.ide.components.KalixTextArea.updateAllForThemeChange();
-    }
-
-    /**
-     * Notifies all text editor components about a syntax theme change.
-     *
-     * @param syntaxTheme The new syntax theme to apply
-     */
-    public static void notifySyntaxThemeChanged(SyntaxTheme.Theme syntaxTheme) {
-        com.kalix.ide.components.KalixIniTextArea.updateAllSyntaxThemes(syntaxTheme);
-        com.kalix.ide.dataview.VirtualTextArea.updateAllSyntaxThemes(syntaxTheme);
+    public void syntaxThemeChanged() {
+        FlatLaf.updateUI();
     }
 
     /**

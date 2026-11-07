@@ -2,20 +2,18 @@ package com.kalix.ide.components;
 
 import com.kalix.ide.managers.FontManager;
 import com.kalix.ide.preferences.PreferenceKeys;
+import com.kalix.ide.themes.EditorTheme;
 import com.kalix.ide.utils.WeakRegistry;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
 import org.fife.ui.rsyntaxtextarea.TokenTypes;
 import org.fife.ui.rsyntaxtextarea.folding.FoldManager;
 
-import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
-import java.awt.Color;
 import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.GraphicsConfiguration;
-import java.util.function.Consumer;
 
 /**
  * Base class for all text editor components in Kalix IDE.
@@ -41,6 +39,13 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
 
     /** True while {@link #undoLastAction()} or {@link #redoLastAction()} runs. */
     private boolean undoingOrRedoing;
+
+    /**
+     * Set at the end of {@link #initializeBase}. {@code updateUI} runs from the library's
+     * constructor, before this object is set up and before the library has written its own
+     * default colours, so the theme is applied there only once construction is complete.
+     */
+    private boolean constructed;
 
     /**
      * Creates a KalixTextArea with default dimensions.
@@ -75,6 +80,37 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
 
         // Configure monospace font from preferences
         configureMonospaceFont();
+
+        // The library wrote its own default colours in its constructor; the theme's
+        // replace them now, and again on every look-and-feel change (updateUI) and when
+        // the editor joins a window and gains its gutter (addNotify).
+        constructed = true;
+        EditorTheme.apply(this);
+    }
+
+    /**
+     * Re-applies the editor theme on every look-and-feel change, so that a theme switch
+     * reaches this editor through the ordinary {@code updateComponentTreeUI} walk in
+     * whichever window holds it.
+     */
+    @Override
+    public void updateUI() {
+        super.updateUI();
+        if (constructed) {
+            EditorTheme.apply(this);
+        }
+    }
+
+    /**
+     * The gutter only exists once the editor sits in its scroll pane, so the theme is
+     * applied again as the editor joins a window.
+     */
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        if (constructed) {
+            EditorTheme.apply(this);
+        }
     }
 
     /**
@@ -242,62 +278,4 @@ public abstract class KalixTextArea extends RSyntaxTextArea {
         instances.forEach(textArea -> textArea.updateFontSize(fontSize));
     }
 
-    /**
-     * Re-resolves theme-dependent colours in every live Kalix text area.
-     * Called when the application theme changes.
-     */
-    public static void updateAllForThemeChange() {
-        instances.forEach(KalixTextArea::updateCurrentLineHighlight);
-    }
-
-    /**
-     * Applies an action to every live instance of the given subclass.
-     *
-     * @param type   the text area class to visit; other instances are skipped
-     * @param action what to do with each one
-     * @param <T>    the text area class
-     */
-    protected static <T extends KalixTextArea> void forEachInstance(Class<T> type, Consumer<? super T> action) {
-        instances.forEach(type, action);
-    }
-
-    /**
-     * Determines if the current application theme is dark.
-     * Useful for subclasses that need theme-aware styling.
-     *
-     * @return true if the current theme is dark, false otherwise
-     */
-    protected boolean isDarkTheme() {
-        Color bg = UIManager.getColor("Panel.background");
-        if (bg == null) {
-            return false;
-        }
-        // Consider theme dark if the sum of RGB values is less than 384 (128 * 3)
-        return (bg.getRed() + bg.getGreen() + bg.getBlue()) < 384;
-    }
-
-    /**
-     * Updates the current line highlight color based on the application theme.
-     * Subclasses can override this to provide custom highlighting behavior.
-     */
-    public void updateCurrentLineHighlight() {
-        Color selectionBgColor = UIManager.getColor("TextArea.selectionBackground");
-
-        if (selectionBgColor != null) {
-            int alpha = 80;
-            Color lineHighlightColor = new Color(
-                selectionBgColor.getRed(),
-                selectionBgColor.getGreen(),
-                selectionBgColor.getBlue(),
-                alpha
-            );
-            setCurrentLineHighlightColor(lineHighlightColor);
-        } else {
-            if (isDarkTheme()) {
-                setCurrentLineHighlightColor(new Color(255, 255, 255, 25));
-            } else {
-                setCurrentLineHighlightColor(new Color(0, 0, 0, 25));
-            }
-        }
-    }
 }
