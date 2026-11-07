@@ -14,7 +14,6 @@ import java.awt.image.BufferedImage;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -24,14 +23,19 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * before cutting a label short, and a row it did cut short offers the whole label as a
  * tooltip, while a row that fits offers none.
  *
- * <p>The Key loads its shown/collapsed state from the user's preferences, so each test
- * skips, saying so, rather than change them when the Key would not be drawn expanded.</p>
+ * <p>The Key loads its shown/collapsed state and its label display mode from the user's
+ * preferences. Each test skips, saying so, rather than change them when the Key would not
+ * be drawn expanded; and the long name has no dots and the resolver no source, so every
+ * display mode shows the same label.</p>
  */
 class PlotLegendLongNamesTest {
 
     private static final int HEIGHT = 600;
+    private static final int WIDE_PLOT = 1600;
+    private static final int NARROW_PLOT = 400;
     private static final String LONG_NAME =
-        "a_catchment_with_a_very_long_name.and_a_sub_area_with_a_longer_one.and_the_variable_at_the_end";
+        "a_catchment_with_a_very_long_name_and_a_sub_area_with_an_even_longer_one"
+            + "_and_the_variable_of_interest_at_the_very_end";
 
     private final SeriesRef longOne = new DatasetSeries("/tmp/x.csv", LONG_NAME);
     private final SeriesRef shortOne = new DatasetSeries("/tmp/x.csv", "short");
@@ -40,7 +44,12 @@ class PlotLegendLongNamesTest {
     @BeforeEach
     void setUp() {
         legend = new PlotLegendManager();
+        legend.setLabelResolver(SeriesRef::baseName);
         legend.setSeries(List.of(longOne, shortOne));
+    }
+
+    /** Gated per method: the Key's shown/collapsed state is the user's, not the test's. */
+    private void assumeKeyDrawnExpanded() {
         assumeTrue(legend.isEnabled() && !legend.isCollapsed(),
             "skipped: the Key is hidden or collapsed in this user's preferences");
     }
@@ -52,7 +61,7 @@ class PlotLegendLongNamesTest {
         g.dispose();
     }
 
-    /** The Key's left edge, right edge (exclusive) and a y inside its first row, as last painted. */
+    /** The Key's left edge, right edge (exclusive) and a y inside it, as last painted. */
     private int[] keyExtent(int plotWidth) {
         for (int y = 0; y < HEIGHT; y++) {
             for (int x = 0; x < plotWidth; x++) {
@@ -66,53 +75,58 @@ class PlotLegendLongNamesTest {
         throw new AssertionError("the Key was not painted");
     }
 
-    /** A y inside the first entry's row, found from the Key itself. */
-    private int firstRowY(int[] extent) {
+    /** A point inside the row of {@code series}, found from the Key itself. */
+    private int[] rowPoint(int[] extent, SeriesRef series) {
         int probeX = extent[0] + 10;
         for (int y = extent[2]; y < HEIGHT; y++) {
-            if (longOne.equals(legend.entryAt(probeX, y))) return y;
+            if (series.equals(legend.entryAt(probeX, y))) return new int[] {probeX, y};
         }
-        throw new AssertionError("the long name's row was not found");
+        throw new AssertionError("the row for " + series + " was not found");
     }
 
     @Test
     void theKeyGrowsPastItsOldCapToFitALongName() {
-        int plotWidth = 1600;
-        paint(plotWidth);
-        int[] extent = keyExtent(plotWidth);
+        assumeKeyDrawnExpanded();
+        paint(WIDE_PLOT);
+        int[] extent = keyExtent(WIDE_PLOT);
+        int width = extent[1] - extent[0];
 
-        assertTrue(extent[1] - extent[0] > 400, "wider than the old 400px cap: " + (extent[1] - extent[0]));
-        assertTrue(extent[1] - extent[0] < plotWidth, "but no wider than the name needs");
-        assertNull(legend.tooltipAt(extent[0] + 10, firstRowY(extent)), "a label that fits has no tooltip");
+        assertTrue(width > 400, "wider than the old 400px cap: " + width);
+        assertTrue(width < WIDE_PLOT, "but no wider than the name needs: " + width);
+        int[] row = rowPoint(extent, longOne);
+        assertNull(legend.tooltipAt(row[0], row[1]), "a label that fits has no tooltip");
     }
 
     @Test
     void inANarrowPlotTheKeyFillsItAndOffersTheCutLabelAsATooltip() {
-        int plotWidth = 500;
-        paint(plotWidth);
-        int[] extent = keyExtent(plotWidth);
-        int rowY = firstRowY(extent);
+        assumeKeyDrawnExpanded();
+        paint(NARROW_PLOT);
+        int[] extent = keyExtent(NARROW_PLOT);
 
         assertEquals(0, extent[0], "pinned to the plot's left edge");
-        assertEquals(plotWidth, extent[1], "as wide as the plot");
-        String tip = legend.tooltipAt(extent[0] + 10, rowY);
-        assertNotNull(tip, "the cut label is offered whole");
-        // Whatever the user's display mode drops from the front, the variable at the end stays.
-        assertTrue(tip.contains("and_the_variable_at_the_end"), tip);
+        assertEquals(NARROW_PLOT, extent[1], "as wide as the plot");
+        int[] row = rowPoint(extent, longOne);
+        assertEquals(LONG_NAME, legend.tooltipAt(row[0], row[1]), "the cut label is offered whole");
     }
 
     @Test
     void aRowThatFitsHasNoTooltipEvenWhenAnotherIsCut() {
-        int plotWidth = 500;
-        paint(plotWidth);
-        int[] extent = keyExtent(plotWidth);
-        int probeX = extent[0] + 10;
-        int shortRowY = -1;
-        for (int y = extent[2]; y < HEIGHT; y++) {
-            if (shortOne.equals(legend.entryAt(probeX, y))) { shortRowY = y; break; }
-        }
-        assertTrue(shortRowY >= 0, "the short name's row was not found");
+        assumeKeyDrawnExpanded();
+        paint(NARROW_PLOT);
+        int[] row = rowPoint(keyExtent(NARROW_PLOT), shortOne);
 
-        assertNull(legend.tooltipAt(probeX, shortRowY));
+        assertNull(legend.tooltipAt(row[0], row[1]));
+    }
+
+    @Test
+    void theTooltipGoesWhenAWiderPlotLetsTheLabelFit() {
+        assumeKeyDrawnExpanded();
+        paint(NARROW_PLOT);
+        int[] narrowRow = rowPoint(keyExtent(NARROW_PLOT), longOne);
+        assertEquals(LONG_NAME, legend.tooltipAt(narrowRow[0], narrowRow[1]));
+
+        paint(WIDE_PLOT);
+        int[] wideRow = rowPoint(keyExtent(WIDE_PLOT), longOne);
+        assertNull(legend.tooltipAt(wideRow[0], wideRow[1]), "clipping is decided afresh on every paint");
     }
 }
