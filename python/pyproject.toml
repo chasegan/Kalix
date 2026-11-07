@@ -7,7 +7,7 @@ name = "kalix"
 version = "0.4.8"
 description = "Python interface for Kalix: hydrological modelling and Pixie (Gorilla-compressed) timeseries I/O"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = "MPL-2.0"
 authors = [{ name = "Kalix contributors" }]
 classifiers = [
@@ -18,7 +18,7 @@ classifiers = [
     "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
 ]
 dependencies = [
-    "numpy>=1.22",
+    "numpy>=1.23.2",
     "pandas>=2.0",
 ]
 

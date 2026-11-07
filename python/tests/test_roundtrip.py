@@ -1,7 +1,6 @@
 """Round-trip tests for kalix.read_pixie / kalix.write_pixie."""
 from __future__ import annotations
 
-import sys
 import numpy as np
 import pandas as pd
 import pytest
@@ -9,10 +8,6 @@ import pytest
 import kalix
 
 # pylint: disable=import-outside-toplevel
-
-# pandas on Python < 3.11 normalises datetime64[s] to datetime64[ns] on read-back;
-# relax the index dtype check on those versions.
-_CHECK_INDEX_TYPE = sys.version_info >= (3, 11)
 
 
 def _make_df(n: int = 100,
@@ -44,8 +39,7 @@ def test_roundtrip_basic(tmp_path):
 
     df2 = kalix.read_pixie(path)
     pd.testing.assert_frame_equal(df, df2,
-                                  check_freq=False,
-                                  check_index_type=_CHECK_INDEX_TYPE)
+                                  check_freq=False)
 
 
 def test_read_accepts_pxt_extension(tmp_path):
@@ -55,8 +49,7 @@ def test_read_accepts_pxt_extension(tmp_path):
 
     df2 = kalix.read_pixie(str(base) + ".pxt")
     pd.testing.assert_frame_equal(df, df2,
-                                  check_freq=False,
-                                  check_index_type=_CHECK_INDEX_TYPE)
+                                  check_freq=False)
 
 
 def test_read_accepts_base_path(tmp_path):
@@ -66,8 +59,7 @@ def test_read_accepts_base_path(tmp_path):
 
     df2 = kalix.read_pixie(str(base))
     pd.testing.assert_frame_equal(df, df2,
-                                  check_freq=False,
-                                  check_index_type=_CHECK_INDEX_TYPE)
+                                  check_freq=False)
 
 
 def test_pre1970_timestamps(tmp_path):
@@ -84,8 +76,7 @@ def test_pre1970_timestamps(tmp_path):
     kalix.write_pixie(path, df)
     df2 = kalix.read_pixie(path)
     pd.testing.assert_frame_equal(df, df2,
-                                  check_freq=False,
-                                  check_index_type=_CHECK_INDEX_TYPE)
+                                  check_freq=False)
 
 
 def test_one_row_writes_no_timestep(tmp_path):

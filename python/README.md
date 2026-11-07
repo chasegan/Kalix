@@ -371,7 +371,7 @@ pytest python/tests
 
 ### Running tests with tox
 
-Tox is configured to test against multiple Python versions (3.9-3.14):
+Tox is configured to test against multiple Python versions (3.11-3.14):
 
 ```bash
 # Run tests in development environment (fast, uses current Python)

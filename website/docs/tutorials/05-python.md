@@ -28,7 +28,7 @@ This is the foundation for any analysis, scripting, or notebook-driven workflow 
 
 - **Tutorial 3 complete** (or its concepts) — see [Tutorial 3 — Relative paths and trailhead paths](03-paths.md). We start from a project laid out the same way: shared `data/` with a model in `models/baseline/`.
 
-- **Python 3.9 or newer** with Jupyter installed.
+- **Python 3.11 or newer** with Jupyter installed.
 
 - **Tutorial files** — download the `005/` folder from the [KalixTutorials repository](https://github.com/chasegan/KalixTutorials/tree/main/005). The repo also ships a fully-worked `analysis.ipynb` if you'd rather skim than type along.
 

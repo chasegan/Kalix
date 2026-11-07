@@ -7,9 +7,8 @@ go through `Model` (or the module-level convenience functions below)
 instead.
 """
 from __future__ import annotations
-from collections.abc import Mapping
-
-from typing import Callable, List, Literal, Optional, overload
+from collections.abc import Callable, Mapping
+from typing import Literal, overload
 import numpy as np
 import pandas as pd
 
@@ -35,7 +34,7 @@ class Model:
     """
     # pylint: disable=protected-access
 
-    def __init__(self, *, _inner: Optional[_Model] = None) -> None:
+    def __init__(self, *, _inner: _Model | None = None) -> None:
         if _inner is None:
             _inner = _Model()
         self._inner = _inner
@@ -172,7 +171,7 @@ class Model:
             raise OSError(f"Failed to load model referenced by model string: {e}") from e
         return self
 
-    def run(self, progress: Optional[Callable[[int, int], None]] = None) -> "Model":
+    def run(self, progress: Callable[[int, int], None] | None = None) -> "Model":
         """Configure and run the model's simulation.
 
         Safe to call more than once on the same `Model` -- each run resets
@@ -326,7 +325,7 @@ class Model:
 
     def get_outputs(
         self,
-        names: Optional[str | List[str]] = None,
+        names: str | list[str] | None = None,
         missing_ok: bool = False,
     ) -> pd.DataFrame:
         """Retrieve the model's output time series after a run.

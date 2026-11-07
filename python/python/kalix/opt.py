@@ -8,14 +8,15 @@ from __future__ import annotations
 
 import sys
 import time
-from typing import Any, Callable, Dict, Optional, Union
+from collections.abc import Callable
+from typing import Any
 
 from kalix._native import _optimise_from_file
 from kalix._util import PathLike
 
 __all__ = ["optimise"]
 
-Progress = Dict[str, Any]
+Progress = dict[str, Any]
 ProgressCallback = Callable[[Progress], Any]
 
 
@@ -29,7 +30,7 @@ def _in_notebook() -> bool:
     return ip is not None and ip.__class__.__name__ == "ZMQInteractiveShell"
 
 
-def _default_reporter() -> Optional[ProgressCallback]:
+def _default_reporter() -> ProgressCallback | None:
     """Build the built-in in-place progress reporter for the current environment.
 
     Returns a throttled callback that overwrites a single status line, or
@@ -71,7 +72,7 @@ def _throttle(callback: ProgressCallback, min_interval: float = 0.2) -> Progress
     optimiser reports (it calls back once per generation, which can be many
     times a second on a fast model).
     """
-    state: Dict[str, Optional[float]] = {"last": None}
+    state: dict[str, float | None] = {"last": None}
 
     def throttled(p: Progress) -> None:
         now = time.monotonic()
@@ -89,10 +90,10 @@ def _throttle(callback: ProgressCallback, min_interval: float = 0.2) -> Progress
 def optimise(
     config_file: PathLike,
     *,
-    model_file: Optional[PathLike] = None,
-    save_model: Optional[PathLike] = None,
-    progress: Union[None, bool, ProgressCallback] = None,
-) -> Dict[str, Any]:
+    model_file: PathLike | None = None,
+    save_model: PathLike | None = None,
+    progress: bool | ProgressCallback | None = None,
+) -> dict[str, Any]:
     """Run a parameter optimisation from a config INI file and return the result.
 
     The Python equivalent of ``kalix optimise <config_file> [model_file]

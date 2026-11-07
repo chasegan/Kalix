@@ -20,7 +20,7 @@ A Jupyter notebook that calibrates the Stringybark catchment model in one call, 
 
 - **Tutorial 5 complete** — see [Tutorial 5 — Running Kalix from Python](05-python.md). We build on the same `pip install kalix` package and the `simulate()` / pandas / matplotlib pattern you learned there.
 
-- **Python 3.9 or newer** with Jupyter installed.
+- **Python 3.11 or newer** with Jupyter installed.
 
 - **Tutorial files** — download the `013/` folder from the [KalixTutorials repository](https://github.com/chasegan/KalixTutorials/tree/main/013). It also ships a fully-worked `analysis.ipynb` if you'd rather skim than type along.
 
