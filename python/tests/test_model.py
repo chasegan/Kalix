@@ -711,7 +711,7 @@ def test_get_outputs_with_explicit_names_selects_subset():
 
 def test_get_outputs_accepts_bare_string_name():
     """A single name may be passed as a bare `str`, not just `[str]` --
-    the signature advertises `Optional[str | List[str]]`."""
+    the signature advertises `str | list[str] | None`."""
     model = kalix.load_file(str(_MODEL_INI)).run()
     df = model.get_outputs("node.node1.dsflow")
     assert list(df.columns) == ["node.node1.dsflow"]

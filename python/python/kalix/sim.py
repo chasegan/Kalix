@@ -6,8 +6,6 @@ is expected to remain at this layer indefinitely.
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from kalix._native import _simulate_from_file
 from kalix._util import PathLike
 
@@ -17,8 +15,8 @@ __all__ = ["simulate"]
 def simulate(
     model_file: PathLike,
     *,
-    output_file: Optional[PathLike] = None,
-    mass_balance: Optional[PathLike] = None,
+    output_file: PathLike | None = None,
+    mass_balance: PathLike | None = None,
 ) -> None:
     """Run a Kalix model from an INI file and write requested outputs to disk.
 

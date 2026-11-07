@@ -1,15 +1,15 @@
 """Shared helpers for the `kalix` package. Private -- not part of the public API."""
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable, Tuple, Union
 
 import numpy as np
 import pandas as pd
 
-PathLike = Union[str, Path]
+PathLike = str | Path
 
-TimeSeriesData = Union[Dict[str, np.ndarray], Iterable[Tuple[str, np.ndarray]]]
+TimeSeriesData = dict[str, np.ndarray] | Iterable[tuple[str, np.ndarray]]
 
 
 def index_name(index: pd.DatetimeIndex) -> str:

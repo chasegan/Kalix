@@ -172,7 +172,7 @@ jobs:
           if-no-files-found: error
 
   # ----------------------------------------------------------------------
-  # 3. Build Python wheels. abi3-py39 → one wheel per OS, no per-Python
+  # 3. Build Python wheels. abi3-py311 → one wheel per OS, no per-Python
   #    matrix. Apple Silicon only for macOS (no universal2).
   # ----------------------------------------------------------------------
   build-python-wheels:
