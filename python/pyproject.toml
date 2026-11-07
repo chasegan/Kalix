@@ -18,7 +18,7 @@ classifiers = [
     "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
 ]
 dependencies = [
-    "numpy>=1.22",
+    "numpy>=1.23.2",
     "pandas>=2.0",
 ]
 
