@@ -611,7 +611,7 @@ key3 = value3
     }
 
     #[test]
-    fn test_repeated_list_item_in_a_section_is_refused() {
+    fn test_repeated_data_entry_is_refused() {
         let content = "[data]\na.csv\nb.csv\na.csv\n";
         let err = IniDocument::parse(content).unwrap_err();
         assert_eq!(err, "Duplicate entry 'a.csv' at line 4 in [data] (also listed on line 2)");
