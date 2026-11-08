@@ -535,6 +535,14 @@ impl AccountManager {
     pub fn add_account_value_safely(&mut self, account_id: usize, amount: f64) {
         self.accounts[account_id].add_value_safely(amount);
     }
+
+    /// Set a balance without the `[0, size]` clamp. For the `distribute`
+    /// action, which keeps within the bounds itself and must not cut an
+    /// account above its size (an announcement over 100%) back to size when
+    /// it debits it (ADR-0019 §2).
+    pub fn set_account_balance_fast(&mut self, account_id: usize, balance: f64) {
+        self.accounts[account_id].set_balance_fast(balance);
+    }
 }
 
 

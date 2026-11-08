@@ -37,7 +37,8 @@ impl RasTrigger {
 /// independently; arguments are expression-valued, evaluated once per firing.
 /// Under a level-semantic expression trigger an action compounds per step —
 /// deliberate (`scale(0.95)` while spilling means ×0.95 per timestep).
-/// Distributive actions (allocate, apportion_loss, …) are phase 2/3.
+/// `allocate` and `distribute` are the group-wide actions: one value is
+/// evaluated for the firing and the targets share it (§3.4, ADR-0019).
 #[derive(Clone)]
 pub enum RasAction {
     SetFull,
@@ -65,6 +66,23 @@ pub enum RasAction {
 
     /// Start a new allocation period: allocation to date returns to zero.
     ResetAllocation,
+
+    /// Share one signed volume across the target accounts in proportion to
+    /// the stated weight (ADR-0019 §1). A positive amount credits, a
+    /// negative one debits; a balance never leaves `[0, size]` by this
+    /// action, and what an account cannot hold is shared among the others
+    /// by the same weights (§2). The amount is one volume for the whole
+    /// pool, so like `allocate` it never takes `self`.
+    Distribute(DynamicInput, DistributeBy),
+}
+
+/// The weight a `distribute` action shares by (ADR-0019 §1). Weights are
+/// read once at the firing: a balance-weighted share uses the balances as
+/// they stood before the action, not as they move under it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum DistributeBy {
+    Size,
+    Balance,
 }
 
 /// A resource allocation system ([ras.<name>] section): one trigger, one
@@ -96,6 +114,18 @@ pub struct RasSystem {
     /// recorder. Not policy state: the allocation itself lives in the accounts.
     pub last_pct: f64,
 
+    /// What the last `distribute` firing was asked to share, and the part of
+    /// it that found no room (ADR-0019 §3). For the `amount` and
+    /// `undistributed` recorders; both read as zero on steps the action does
+    /// not fire. Not policy state.
+    pub last_amount: f64,
+    pub last_undistributed: f64,
+
+    /// Scratch for `distribute`: one weight per target, frozen at the firing.
+    /// Sized at load for a Distribute action and empty otherwise, so a firing
+    /// never allocates.
+    pub distribute_weights: Vec<f64>,
+
     /// Recorder for the `ras.<name>.fired` series (0/1 per step), opt-in via
     /// [outputs] like every recorder.
     pub recorder_idx_fired: Option<usize>,
@@ -104,6 +134,12 @@ pub struct RasSystem {
     /// announced this step (carried forward on steps where it did not fire, so
     /// the series reads as the standing announcement).
     pub recorder_idx_pct: Option<usize>,
+
+    /// Recorders for `ras.<name>.amount` and `ras.<name>.undistributed` — what
+    /// a `distribute` action was asked to share this step and the part with no
+    /// room for it; zero on steps it did not fire.
+    pub recorder_idx_amount: Option<usize>,
+    pub recorder_idx_undistributed: Option<usize>,
 }
 
 impl RasSystem {
@@ -113,10 +149,16 @@ impl RasSystem {
     /// start of every run.
     pub fn initialize_recorders(&mut self, data_cache: &mut DataCache) {
         self.last_pct = 0.0;
+        self.last_amount = 0.0;
+        self.last_undistributed = 0.0;
         self.recorder_idx_fired = data_cache.get_series_idx(
             format!("ras.{}.fired", self.name).as_str(), false);
         self.recorder_idx_pct = data_cache.get_series_idx(
             format!("ras.{}.pct", self.name).as_str(), false);
+        self.recorder_idx_amount = data_cache.get_series_idx(
+            format!("ras.{}.amount", self.name).as_str(), false);
+        self.recorder_idx_undistributed = data_cache.get_series_idx(
+            format!("ras.{}.undistributed", self.name).as_str(), false);
     }
 
     /// Evaluate the trigger and, if it fires, apply the action to every target
@@ -128,6 +170,12 @@ impl RasSystem {
         }
         if let Some(idx) = self.recorder_idx_pct {
             data_cache.add_value_at_index(idx, self.last_pct);
+        }
+        if let Some(idx) = self.recorder_idx_amount {
+            data_cache.add_value_at_index(idx, if fired { self.last_amount } else { 0.0 });
+        }
+        if let Some(idx) = self.recorder_idx_undistributed {
+            data_cache.add_value_at_index(idx, if fired { self.last_undistributed } else { 0.0 });
         }
         fired
     }
@@ -208,8 +256,92 @@ impl RasSystem {
                     account_manager.reset_allocation(idx);
                 }
             }
+            RasAction::Distribute(input, by) => {
+                // One volume for the whole pool: evaluated once, like allocate.
+                let amount = input.get_value(data_cache);
+                let by = *by;
+                self.distribute(account_manager, amount, by);
+            }
         }
         true
+    }
+
+    /// Share `amount` across the targets by weight, capped and redistributed
+    /// (ADR-0019 §1–§2). A positive amount fills headroom, a negative one
+    /// draws balances down; neither moves a balance past `[0, size]`.
+    ///
+    /// Each pass hands every account that still has room its weighted share
+    /// of what remains, capped at that room; an account that reaches its room
+    /// leaves the pool and the next pass shares the rest among those left, by
+    /// the same frozen weights. A pass that fills nobody has placed the whole
+    /// remainder, so the loop ends in at most one pass per target, with no
+    /// dependence on target order. What is left when no account has room is
+    /// `last_undistributed`, for the recorder — never silently dropped.
+    ///
+    /// Balances are written through the unclamped setter: an account already
+    /// above its size (an announcement over 100%) has no room to credit and
+    /// is debited by its share like any other, which the clamped mutators
+    /// would wrongly cut back to size.
+    fn distribute(&mut self, account_manager: &mut AccountManager, amount: f64, by: DistributeBy) {
+        self.last_amount = amount;
+        let crediting = amount > 0.0;
+        let mut remaining = amount.abs();
+
+        for (k, &idx) in self.target_account_ids.iter().enumerate() {
+            self.distribute_weights[k] = match by {
+                DistributeBy::Size => account_manager.get_account_size(idx),
+                DistributeBy::Balance => account_manager.get_account_balance(idx),
+            };
+        }
+        let room = |am: &AccountManager, idx: usize| -> f64 {
+            if crediting {
+                am.get_account_size(idx) - am.get_account_balance(idx)
+            } else {
+                am.get_account_balance(idx)
+            }
+        };
+
+        while remaining > 0.0 {
+            let mut weight_sum = 0.0;
+            for (k, &idx) in self.target_account_ids.iter().enumerate() {
+                if room(account_manager, idx) > 0.0 && self.distribute_weights[k] > 0.0 {
+                    weight_sum += self.distribute_weights[k];
+                }
+            }
+            if weight_sum <= 0.0 {
+                break;
+            }
+            let per_weight = remaining / weight_sum;
+            let mut placed = 0.0;
+            let mut filled_any = false;
+            for (k, &idx) in self.target_account_ids.iter().enumerate() {
+                let room_k = room(account_manager, idx);
+                let weight = self.distribute_weights[k];
+                if room_k <= 0.0 || weight <= 0.0 {
+                    continue;
+                }
+                let want = per_weight * weight;
+                let balance = account_manager.get_account_balance(idx);
+                if want >= room_k {
+                    // Fill exactly, so the room reads as zero next pass.
+                    let full = if crediting { account_manager.get_account_size(idx) } else { 0.0 };
+                    account_manager.set_account_balance_fast(idx, full);
+                    placed += room_k;
+                    filled_any = true;
+                } else {
+                    let new_balance = if crediting { balance + want } else { balance - want };
+                    account_manager.set_account_balance_fast(idx, new_balance);
+                    placed += want;
+                }
+            }
+            if !filled_any {
+                // Every share landed in full: the remainder is rounding.
+                remaining = 0.0;
+                break;
+            }
+            remaining -= placed;
+        }
+        self.last_undistributed = if remaining.is_nan() { remaining } else { remaining.max(0.0) };
     }
 
     /// Evaluate the action argument and apply the verb to every target.
