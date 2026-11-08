@@ -1075,8 +1075,7 @@ public class PlotInteractionManager {
         try {
             switch (axis) {
                 case X -> {
-                    long[] x = AxisLimitCodec.parseXLimits(text, currentViewport.getXAxisType());
-                    ViewPort.validateBounds(x[0], x[1], currentViewport.getMinValue(), currentViewport.getMaxValue());
+                    long[] x = parseTimeRange(text, currentViewport.getXAxisType());
                     applyXLimits(x[0], x[1]);
                 }
                 case Y -> {
@@ -1201,8 +1200,7 @@ public class PlotInteractionManager {
         JButton okButton = new JButton("OK");
         okButton.addActionListener(ev -> {
             try {
-                long[] x = AxisLimitCodec.parseXLimits(xField.getText(), xAxisType);
-                ViewPort.validateBounds(x[0], x[1], currentViewport.getMinValue(), currentViewport.getMaxValue());
+                long[] x = parseTimeRange(xField.getText(), xAxisType);
                 double[] y = parseValueRange(yField.getText(), yLabel);
                 double[] y2 = y2Field != null ? parseValueRange(y2Field.getText(), y2Label) : null;
                 applyAxisRanges(x, y, y2);
@@ -1272,11 +1270,29 @@ public class PlotInteractionManager {
         }
     }
 
-    /** Parses and checks a value axis' range, naming the axis in any complaint. */
+    /** Parses a value axis' range, naming the axis in any complaint as its row or menu names it. */
     private static double[] parseValueRange(String text, String axisLabel) {
-        double[] range = AxisLimitCodec.parseYLimits(text);
-        ViewPort.validateValueRange(axisLabel, range[0], range[1]);
-        return range;
+        try {
+            return AxisLimitCodec.parseYLimits(text);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(aboutAxis(axisLabel, ex.getMessage()), ex);
+        }
+    }
+
+    /** Parses the X axis' range in its own units, naming the axis in any complaint. */
+    private static long[] parseTimeRange(String text, XAxisType xAxisType) {
+        try {
+            return AxisLimitCodec.parseXLimits(text, xAxisType);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(aboutAxis(axisLabel(Axis.X, false), ex.getMessage()), ex);
+        }
+    }
+
+    /** {@code "Right Y axis: min must be less than max."}: the row's own label, then the codec's complaint. */
+    private static String aboutAxis(String axisLabel, String message) {
+        String reason = message.length() > 1 && Character.isLowerCase(message.charAt(1))
+            ? Character.toLowerCase(message.charAt(0)) + message.substring(1) : message;
+        return axisLabel + ": " + reason;
     }
 
     /** Sets the right axis' range, leaving everything else as it is. */
@@ -1307,8 +1323,7 @@ public class PlotInteractionManager {
     /**
      * Moves the viewport to the given axis limits, keeping plot area, Y-axis scale, and
      * X-axis type unchanged. All four limits are required and are applied as given; callers
-     * are responsible for parsing and for checking them with
-     * {@link ViewPort#validateBounds} first.
+     * are responsible for parsing them, which checks them.
      */
     private void acceptNewAxes(long startTime, long endTime, double minValue, double maxValue) {
         var currentViewport = this.viewportSupplier.get();

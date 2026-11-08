@@ -8,8 +8,8 @@ import java.time.format.DateTimeParseException;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Text &lt;-&gt; value codec for axis limits, in the axis' own units: the pure half of the
- * "Copy/Paste X axis", "Copy/Paste Y axis" and "Set axis limits…" commands.
+ * Text &lt;-&gt; value codec for axis ranges, in the axis' own units: the pure half of the
+ * axis menus' "Copy range" and "Paste range" and of the "Set axis ranges…" dialog.
  *
  * <p>X bounds are viewport longs: real epoch millis on a {@link XAxisType#TIME} axis, and
  * fake-timestamp encodings on the others (percentile &times;
@@ -19,16 +19,17 @@ import java.util.concurrent.TimeUnit;
  * {@code format} here is the exact inverse of its {@code parse} for the given axis type,
  * and a copied pair pastes back unchanged. One documented exception: TIME bounds are
  * exchanged at second resolution, so two bounds within the same second collapse to one
- * instant and {@link ViewPort#validateBounds} rejects them on paste. A sub-second
- * viewport is not a hydrological concern.</p>
+ * instant and the pair is rejected on paste as not increasing. A sub-second viewport is
+ * not a hydrological concern.</p>
  *
  * <p>Every failure is an {@link IllegalArgumentException} carrying the message shown to
  * the user, so callers need a single catch. This is also the one gate against input the
  * encodings cannot hold: {@code Double.parseDouble} accepts {@code "NaN"} and
  * {@code "Infinity"}, and {@code Math.round} would silently turn those into {@code 0}
  * and {@code Long.MAX_VALUE}, as it would any finite value whose scaled form overflows
- * a long. {@link ViewPort#validateBounds} then only has to check the ordering of each
- * pair.</p>
+ * a long. A pair must also increase, so a parsed pair is always a range a viewport can
+ * show. The messages name no axis: the caller knows which row or menu the text came
+ * from and says so.</p>
  */
 public final class AxisLimitCodec {
 
@@ -51,25 +52,30 @@ public final class AxisLimitCodec {
     }
 
     /**
-     * Parses {@code "lower, upper"} into two viewport X values for {@code xAxisType}.
+     * Parses {@code "lower, upper"} into two increasing viewport X values for {@code xAxisType}.
      *
-     * @throws IllegalArgumentException if the text is not two comma-separated values, or
-     *                                  either value is not valid for the axis type
+     * @throws IllegalArgumentException if the text is not two comma-separated values, either
+     *                                  value is not valid for the axis type, or the pair does
+     *                                  not increase
      */
     public static long[] parseXLimits(String text, XAxisType xAxisType) {
         String[] parts = splitPair(text);
-        return new long[]{ parseX(parts[0], xAxisType), parseX(parts[1], xAxisType) };
+        long[] range = { parseX(parts[0], xAxisType), parseX(parts[1], xAxisType) };
+        requireIncreasing(range[0] < range[1]);
+        return range;
     }
 
     /**
-     * Parses {@code "lower, upper"} into two Y values.
+     * Parses {@code "lower, upper"} into two increasing Y values.
      *
-     * @throws IllegalArgumentException if the text is not two comma-separated values, or
-     *                                  either value is not a finite number
+     * @throws IllegalArgumentException if the text is not two comma-separated values, either
+     *                                  value is not a finite number, or the pair does not increase
      */
     public static double[] parseYLimits(String text) {
         String[] parts = splitPair(text);
-        return new double[]{ parseY(parts[0]), parseY(parts[1]) };
+        double[] range = { parseY(parts[0]), parseY(parts[1]) };
+        requireIncreasing(range[0] < range[1]);
+        return range;
     }
 
     /** Joins two formatted bounds the way {@link #splitPair} splits them. */
@@ -102,7 +108,7 @@ public final class AxisLimitCodec {
      * @throws IllegalArgumentException if the text is blank or not valid for the axis type
      */
     public static long parseX(String text, XAxisType xAxisType) {
-        String trimmed = requireText(text, "X");
+        String trimmed = requireText(text);
         return switch (xAxisType) {
             case PERCENTILE -> {
                 String number = trimmed.endsWith("%") ? trimmed.substring(0, trimmed.length() - 1).trim() : trimmed;
@@ -149,7 +155,7 @@ public final class AxisLimitCodec {
      * @throws IllegalArgumentException if the text is blank or not a finite number
      */
     public static double parseY(String text) {
-        String trimmed = requireText(text, "Y");
+        String trimmed = requireText(text);
         return parseFinite(trimmed, "Not a valid number: \"" + trimmed + "\"");
     }
 
@@ -160,11 +166,18 @@ public final class AxisLimitCodec {
 
     // ---- helpers ----
 
-    private static String requireText(String text, String axis) {
+    private static String requireText(String text) {
         if (text == null || text.isBlank()) {
-            throw new IllegalArgumentException(axis + " value cannot be blank.");
+            throw new IllegalArgumentException("Value cannot be blank.");
         }
         return text.trim();
+    }
+
+    /** An inverted or empty pair would feed a zero or negative span into the axis transforms. */
+    private static void requireIncreasing(boolean increasing) {
+        if (!increasing) {
+            throw new IllegalArgumentException("Min must be less than max.");
+        }
     }
 
     private static double parseFinite(String number, String errorMessage) {
