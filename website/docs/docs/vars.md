@@ -85,7 +85,7 @@ written.
   Ras-phase blocks must appear before the first node section (a load error
   otherwise), so the file reads exactly as the timestep runs: assessments
   and policy, then the network. They may read each other bare (earlier
-  blocks and keys), `ras.<name>.fired`/`.pct` of sections above, plus
+  blocks and keys), `ras.<name>.fired`, `.pct`, `.amount` and `.undistributed` of sections above, plus
   `acc.<x>.size` and anything at `[-1, 0]`; reading same-step flow or
   ordering output is the usual loud error. `phase = order` is designed but
   not yet implemented
