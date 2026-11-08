@@ -115,9 +115,10 @@ pub struct RasSystem {
     pub last_pct: f64,
 
     /// What the last `distribute` firing was asked to share, and the part of
-    /// it that found no room (ADR-0019 §3). For the `amount` and
-    /// `undistributed` recorders; both read as zero on steps the action does
-    /// not fire. Not policy state.
+    /// it that found no room, signed like the amount so that their difference
+    /// is what landed (ADR-0019 §3). For the `amount` and `undistributed`
+    /// recorders; both read as zero on steps the action does not fire. Not
+    /// policy state.
     pub last_amount: f64,
     pub last_undistributed: f64,
 
@@ -341,7 +342,9 @@ impl RasSystem {
             }
             remaining -= placed;
         }
-        self.last_undistributed = if remaining.is_nan() { remaining } else { remaining.max(0.0) };
+        // Signed like the amount, so amount − undistributed is what landed.
+        let undistributed = if remaining.is_nan() { remaining } else { remaining.max(0.0) };
+        self.last_undistributed = if crediting { undistributed } else { -undistributed };
     }
 
     /// Evaluate the action argument and apply the verb to every target.

@@ -1528,7 +1528,7 @@ fn test_distribute_by_balance_debit_beyond_pool_empties_all() {
     assert_eq!(balance(&model, "b"), 0.0);
     assert_eq!(balance(&model, "c"), 0.0);
     assert_eq!(series(&mut model, "ras.share.amount"), vec![-200.0, 0.0]);
-    assert_eq!(series(&mut model, "ras.share.undistributed"), vec![60.0, 0.0]);
+    assert_eq!(series(&mut model, "ras.share.undistributed"), vec![-60.0, 0.0], "carries the sign of the amount");
 }
 
 #[test]
