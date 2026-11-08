@@ -35,7 +35,7 @@ import java.util.Set;
  * (see {@link com.kalix.ide.flowviz.data.RunSource}), so nothing wrong can be resurrected under the same name.</p>
  *
  * <p>{@code rightAxisSeries} is the subset of the visible series drawn against the
- * secondary (right) Y axis, kept a subset by construction: a series that leaves the
+ * right (y2) Y axis, kept a subset by construction: a series that leaves the
  * plot leaves the right axis too, and comes back on the left. The plot shows a right
  * axis exactly while the set is non-empty, and the snapshot then carries its range.</p>
  *

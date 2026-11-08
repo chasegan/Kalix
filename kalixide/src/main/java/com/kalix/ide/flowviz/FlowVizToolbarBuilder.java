@@ -38,7 +38,7 @@ import java.util.function.Consumer;
  * (leading), the always-visible shared controls (save, undo/redo, aggregation,
  * mask — one set of controls over the one shared state, so the views can never
  * disagree), the plot type, shown in the Plot and Data views since it changes
- * what both show, and the plot-only cluster (palette, y-scale, auto-Y,
+ * what both show, and the plot-only cluster (palette, y-scale, auto-range,
  * coordinates, legend, line shape).
  *
  * <p>All controls change the tab's state through its {@link FlowVizModel}; the mask

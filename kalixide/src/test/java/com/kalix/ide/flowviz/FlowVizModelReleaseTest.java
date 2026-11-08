@@ -85,6 +85,6 @@ class FlowVizModelReleaseTest {
         DataSet shown = model.display();
 
         model.update(s -> s.withAutoRangeAll(!s.isAutoRangeAll()));
-        assertTrue(model.holdsDisplay(shown), "auto-Y is not part of what the set was built under");
+        assertTrue(model.holdsDisplay(shown), "auto-range is not part of what the set was built under");
     }
 }

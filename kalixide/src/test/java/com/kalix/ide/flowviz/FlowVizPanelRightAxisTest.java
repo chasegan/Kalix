@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /**
  * Pins how series move between the left and right (y2) axes: the viewport has a y2 range
  * exactly while some visible series is on the right, a new right axis fits its series, later
- * moves reset neither axis, auto-Y fits each axis to its own series, and the assignment rides
+ * moves reset neither axis, auto-range fits each axis to its own series, and the assignment rides
  * undo and tab duplication. Stale refs are dropped, never an error.
  */
 class FlowVizPanelRightAxisTest {
@@ -73,7 +73,7 @@ class FlowVizPanelRightAxisTest {
     }
 
     @Test
-    void onLogAnAutoYLeftAxisWithNoSeriesKeepsItsRange() {
+    void onLogAnAutoRangedLeftAxisWithNoSeriesKeepsItsRange() {
         panel.model().update(st -> st.withYAxisScale(YAxisScale.LOG));
         panel.model().update(st -> st.withAutoRangeAll(true));
         panel.model().update(st -> st.withSeriesOnRightAxis(small, true));

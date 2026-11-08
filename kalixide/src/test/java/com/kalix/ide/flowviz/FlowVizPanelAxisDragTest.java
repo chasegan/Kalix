@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Drives the axis-drag gesture through the panel's own mouse listeners: a drag on a value
- * axis moves the grabbed end and turns auto-Y off, a drag on the time axis obeys auto-Y,
+ * axis moves the grabbed end and turns auto-range off, a drag on the time axis obeys auto-range,
  * and a press that does not move changes nothing.
  */
 class FlowVizPanelAxisDragTest {
@@ -113,7 +113,7 @@ class FlowVizPanelAxisDragTest {
     }
 
     @Test
-    void panningPastTheDataUnderAutoYKeepsTheYRange() {
+    void panningPastTheDataUnderAutoRangeKeepsTheYRange() {
         panel.model().update(st -> st.withAutoRangeAll(true));
         drag(700, 300, 100, 300); // a left drag inside the plot pans forward in time
         ViewPort lastWithData = view();
@@ -128,7 +128,7 @@ class FlowVizPanelAxisDragTest {
     }
 
     @Test
-    void draggingTheTimeAxisUnderAutoYRefitsY() {
+    void draggingTheTimeAxisUnderAutoRangeRefitsY() {
         panel.model().update(st -> st.withAutoRangeAll(true));
         double max = view().getMaxValue();
 
@@ -139,7 +139,7 @@ class FlowVizPanelAxisDragTest {
     }
 
     @Test
-    void doubleClickingTheYAxisFitsItAloneAndLeavesAutoYOff() {
+    void doubleClickingTheYAxisFitsItAloneAndLeavesAutoRangeOff() {
         ViewPort fitted = view();
         drag(Y_AXIS_X, 450, Y_AXIS_X, 500);
         drag(500, X_AXIS_Y, 700, X_AXIS_Y);
@@ -247,7 +247,7 @@ class FlowVizPanelAxisDragTest {
 
         drag(Y_AXIS_X, 450, Y_AXIS_X + 1, 452);
 
-        assertTrue(panel.isAutoRange(Axis.Y), "a wobbly click, as in a double-click to fit, keeps auto-Y");
+        assertTrue(panel.isAutoRange(Axis.Y), "a wobbly click, as in a double-click to fit, keeps auto-range");
         assertEquals(before.getMinValue(), view().getMinValue());
     }
 

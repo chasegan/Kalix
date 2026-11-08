@@ -136,7 +136,7 @@ public class PlotInteractionManager {
      * <li>Click and drag panning with visual feedback</li>
      * <li>Right-click context menu with plot operations</li>
      * <li>Double-click zoom-to-fit functionality</li>
-     * <li>Auto-Y mode support for intelligent Y-axis scaling</li>
+     * <li>Auto-range per value axis</li>
      * </ul>
      *
      * @param panel The plot this manager serves: it draws the view, follows the model, and takes the mouse listeners
@@ -153,7 +153,7 @@ public class PlotInteractionManager {
      * Supplies what the panel keeps private: its display set, its viewport and the one way
      * to set it as a user gesture, its visible series, and its plot area.
      *
-     * @param dataSetSupplier Supplier function to access the current dataset for auto-Y calculations
+     * @param dataSetSupplier Supplier function to access the current dataset for the fitted ranges
      * @param viewportSupplier Supplier function to access the current viewport state
      * @param viewportUpdater Consumer function to update the viewport after zoom/pan operations
      * @param visibleSeriesSupplier Supplier function to access the list of currently visible series
@@ -219,7 +219,7 @@ public class PlotInteractionManager {
                 Rectangle plotArea = plotAreaSupplier.get();
                 // A new press is a new gesture: a release lost to a focus change, or a
                 // second button, must not leave an axis drag running into it. Finishing
-                // the drag also turns auto-Y off if the axis had already moved.
+                // the drag also turns that axis' auto-range off if the axis had already moved.
                 if (axisDrag != null) {
                     finishAxisDrag(e.getPoint());
                 }
@@ -702,7 +702,7 @@ public class PlotInteractionManager {
 
     /**
      * Calculates the visible Y range on {@code yAxisScale} of the series {@code include}
-     * accepts, for a given time range (used in auto-Y mode and zoom to fit). Null when none
+     * accepts, for a given time range (used by auto-range and zoom to fit). Null when none
      * of them has a showable value there.
      */
     private double[] calculateVisibleYRange(long startTime, long endTime, YAxisScale yAxisScale,
@@ -724,7 +724,7 @@ public class PlotInteractionManager {
         boolean hasValidData = false;
 
         // Check each visible series for data in the time range. This runs on EVERY
-        // mouse event while panning with auto-Y (the default mode), so the scan must
+        // mouse event while panning with an auto-ranged axis (the default), so the scan must
         // be bounded by getIndexRange - O(1) on regular grids, O(log n) otherwise.
         // A full-array scan here made pan cost proportional to TOTAL points, which is
         // exactly where the "millions of points smoothly" promise died.

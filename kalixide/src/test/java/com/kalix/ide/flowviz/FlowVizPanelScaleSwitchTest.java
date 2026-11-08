@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins that a scale switch with auto-Y off leaves the stored bounds equal to the bounds
+ * Pins that a scale switch with auto-range off leaves the stored bounds equal to the bounds
  * the axis draws: everything that reads them (copy-axis, set-limits, undo, saved state)
  * must agree with the plot.
  */
@@ -24,7 +24,7 @@ class FlowVizPanelScaleSwitchTest {
     private static final long DAY = 86_400_000L;
 
     @Test
-    void switchingToLogWithAutoYOffStoresThePositiveMinimumTheAxisDraws() {
+    void switchingToLogWithAutoRangeOffStoresThePositiveMinimumTheAxisDraws() {
         FlowVizPanel panel = new FlowVizPanel();
         DataSet dataSet = new DataSet();
         DatasetSeries ref = new DatasetSeries("/tmp/x.csv", "flow");
@@ -33,7 +33,7 @@ class FlowVizPanelScaleSwitchTest {
         panel.setDataSet(dataSet);
         panel.model().update(st -> st.withVisibleSeries(List.of(ref)));
         panel.refreshData(true);
-        assertFalse(panel.isAutoRange(Axis.Y), "auto-Y off is the mode under test");
+        assertFalse(panel.isAutoRange(Axis.Y), "auto-range off is the mode under test");
         assertTrue(panel.viewportForTests().getMinValue() < 0, "the linear fit reaches below zero");
 
         panel.model().update(st -> st.withYAxisScale(YAxisScale.LOG));

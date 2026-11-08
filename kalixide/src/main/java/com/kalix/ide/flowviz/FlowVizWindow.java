@@ -135,7 +135,7 @@ public class FlowVizWindow extends JFrame {
         vizPanel.setLabelResolver(ref -> ref instanceof com.kalix.ide.flowviz.data.DatasetSeries d
             ? d.baseName()
             : String.valueOf(ref));
-        // Auto-Y mode and precision will be initialized by action manager
+        // Auto-range and precision are set by the action manager's loadPreferences
         vizPanel.model().update(st -> st.withAutoRangeAll(true));  // Default value, will be updated by loadPreferences
         vizPanel.setPrecision64Supplier(() -> actionManager == null || actionManager.isPrecision64());
         dataPanel = new DataPanel();
