@@ -1164,10 +1164,13 @@ public class PlotInteractionManager {
         boolean hasY2 = currentViewport.hasY2();
         String yLabel = Axis.Y.label(hasY2);
         String y2Label = Axis.Y2.label(hasY2);
-        JTextField xField = new JTextField(AxisLimitCodec.formatXLimits(currentViewport), 32);
-        JTextField yField = new JTextField(AxisLimitCodec.formatYLimits(currentViewport), 32);
+        String xShown = AxisLimitCodec.formatXLimits(currentViewport);
+        String yShown = AxisLimitCodec.formatYLimits(currentViewport);
+        String y2Shown = hasY2 ? AxisLimitCodec.formatYLimits(currentViewport.forY2()) : null;
+        JTextField xField = new JTextField(xShown, 32);
+        JTextField yField = new JTextField(yShown, 32);
         // A right-axis row only while the plot has one
-        JTextField y2Field = hasY2 ? new JTextField(AxisLimitCodec.formatYLimits(currentViewport.forY2()), 32) : null;
+        JTextField y2Field = hasY2 ? new JTextField(y2Shown, 32) : null;
 
         JPanel form = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
@@ -1191,7 +1194,16 @@ public class PlotInteractionManager {
                 long[] x = parseTimeRange(xField.getText(), xAxisType);
                 double[] y = parseValueRange(yField.getText(), yLabel);
                 double[] y2 = y2Field != null ? parseValueRange(y2Field.getText(), y2Label) : null;
-                applyAxisRanges(x, y, y2);
+                // A row the user left as it was filled is untouched, whatever the plot has
+                // done underneath the dialog meanwhile (a refit on new data, say)
+                Set<Axis> edited = EnumSet.noneOf(Axis.class);
+                if (!yField.getText().equals(yShown)) {
+                    edited.add(Axis.Y);
+                }
+                if (y2Field != null && !y2Field.getText().equals(y2Shown)) {
+                    edited.add(Axis.Y2);
+                }
+                applyAxisRanges(x, y, y2, edited);
                 dialog.dispose();
             } catch (IllegalArgumentException ex) {
                 // The dialog stays open so the user can correct the field.
@@ -1223,25 +1235,24 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Applies the dialog's ranges, {@code y2} null when the plot has no right axis. An
-     * edited value range is explicit for its axis, whose auto-range goes off; an untouched
-     * one (the codec's formatting round-trips exactly) leaves its axis to follow the time
-     * change as navigation does. The viewport lands first and the flags second, so undo
-     * restores both in one step (see {@link #applyExplicitRange}).
+     * Applies the dialog's ranges, {@code y2} null when the plot has no right axis. The
+     * value axes in {@code edited} were typed: each is explicit, shows its range and has
+     * its auto-range switched off. An untouched axis follows the time change as navigation
+     * does. The viewport lands first and the flags second, so undo restores both in one
+     * step (see {@link #applyExplicitRange}).
      */
-    void applyAxisRanges(long[] x, double[] y, double[] y2) {
+    void applyAxisRanges(long[] x, double[] y, double[] y2, Set<Axis> edited) {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) {
             return;
         }
         Set<Axis> explicit = EnumSet.noneOf(Axis.class);
         ViewPort target = currentViewport.withTimeRange(x[0], x[1]);
-        if (y[0] != currentViewport.getMinValue() || y[1] != currentViewport.getMaxValue()) {
+        if (edited.contains(Axis.Y)) {
             target = target.withValueBounds(y[0], y[1]);
             explicit.add(Axis.Y);
         }
-        if (y2 != null && currentViewport.hasY2()
-                && (y2[0] != currentViewport.getY2MinValue() || y2[1] != currentViewport.getY2MaxValue())) {
+        if (edited.contains(Axis.Y2) && y2 != null && currentViewport.hasY2()) {
             target = target.withY2Bounds(y2[0], y2[1]);
             explicit.add(Axis.Y2);
         }

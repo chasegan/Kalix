@@ -7,7 +7,9 @@ import com.kalix.ide.flowviz.rendering.ViewPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -16,7 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * What the Set-axis-ranges dialog applies: a typed value range lands on its axis whether or
  * not that axis was auto-ranged, and switches only that axis' auto-range off; an untouched
- * row leaves its axis to follow the time change as any navigation does.
+ * row leaves its axis to follow the time change as any navigation does. The dialog decides
+ * which rows were typed by their text, so a row left as filled is untouched even when the
+ * plot has moved on underneath.
  */
 class SetAxisRangesTest {
 
@@ -51,7 +55,8 @@ class SetAxisRangesTest {
         panel.interactionsForTests().applyAxisRanges(
             new long[] {before.getStartTimeMs(), before.getEndTimeMs()},
             new double[] {-50, 50},
-            new double[] {before.getY2MinValue(), before.getY2MaxValue()});
+            new double[] {before.getY2MinValue(), before.getY2MaxValue()},
+            EnumSet.of(Axis.Y));
 
         assertEquals(-50, view().getMinValue(), "the typed range is shown, not refitted away");
         assertEquals(50, view().getMaxValue());
@@ -69,7 +74,8 @@ class SetAxisRangesTest {
         panel.interactionsForTests().applyAxisRanges(
             new long[] {start, end},
             new double[] {before.getMinValue(), before.getMaxValue()},
-            new double[] {900, 2600});
+            new double[] {900, 2600},
+            EnumSet.of(Axis.Y2));
 
         assertEquals(900, view().getY2MinValue());
         assertEquals(2600, view().getY2MaxValue());
@@ -86,10 +92,26 @@ class SetAxisRangesTest {
         panel.interactionsForTests().applyAxisRanges(
             new long[] {DAY, 2 * DAY},
             new double[] {before.getMinValue(), before.getMaxValue()},
-            new double[] {before.getY2MinValue(), before.getY2MaxValue()});
+            new double[] {before.getY2MinValue(), before.getY2MaxValue()},
+            Set.of());
 
         assertTrue(panel.model().current().isAutoRangeAll());
         assertTrue(view().getMaxValue() < before.getMaxValue(), "both axes refit: " + view());
         assertTrue(view().getY2MaxValue() < before.getY2MaxValue());
+    }
+
+    @Test
+    void aRowLeftAsFilledIsUntouchedEvenWhenThePlotMovedUnderTheDialog() {
+        ViewPort shown = view();
+        panel.zoomIn(); // the plot refits under the open dialog; the rows still show the old ranges
+
+        panel.interactionsForTests().applyAxisRanges(
+            new long[] {shown.getStartTimeMs(), shown.getEndTimeMs()},
+            new double[] {shown.getMinValue(), shown.getMaxValue()},
+            new double[] {shown.getY2MinValue(), shown.getY2MaxValue()},
+            Set.of());
+
+        assertTrue(panel.model().current().isAutoRangeAll(), "nothing was typed, so nothing is pinned");
+        assertEquals(shown.getMinValue(), view().getMinValue(), "the axes refit to the window the rows gave");
     }
 }
