@@ -458,8 +458,8 @@ public class PlotInteractionManager {
                 }
             }
             case Y2 -> {
-                double[] y2 = fittedRangeForAxis(Axis.Y2);
-                if (y2 != null && currentViewport.hasY2()) {
+                double[] y2 = currentViewport.hasY2() ? fittedRangeForAxis(Axis.Y2) : null;
+                if (y2 != null) {
                     show(currentViewport.withY2Bounds(y2[0], y2[1]));
                 }
             }
