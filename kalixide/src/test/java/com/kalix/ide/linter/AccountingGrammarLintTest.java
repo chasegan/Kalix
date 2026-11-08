@@ -68,6 +68,8 @@ class AccountingGrammarLintTest {
             acc.n0031.allocation_pct
             acc.avl.allocation_pct
             ras.avl_reset.fired
+            ras.avl_reset.amount
+            ras.avl_reset.undistributed
             """;
 
     /**

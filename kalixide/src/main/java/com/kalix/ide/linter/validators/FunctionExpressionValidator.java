@@ -381,8 +381,10 @@ public class FunctionExpressionValidator {
      *  the engine's GROUP_SERIES_FIELDS. */
     private static final java.util.Set<String> ACCOUNT_GROUP_FIELDS = ACCOUNT_FIELDS;
 
-    /** Fields published per resource allocation system (`ras.<name>.<field>`). */
-    private static final java.util.Set<String> RAS_FIELDS = java.util.Set.of("fired", "pct");
+    /** Fields published per resource allocation system (`ras.<name>.<field>`).
+     *  Mirrors the engine's RAS_SERIES_FIELDS. */
+    private static final java.util.Set<String> RAS_FIELDS =
+        java.util.Set.of("fired", "pct", "amount", "undistributed");
 
     static class Token {
         TokenType type;

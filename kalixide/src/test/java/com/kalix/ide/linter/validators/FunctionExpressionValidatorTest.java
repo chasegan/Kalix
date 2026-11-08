@@ -759,6 +759,8 @@ class FunctionExpressionValidatorTest {
         assertValid("acc.smith.closing_balance[-1, 0]");
         assertValid("ras.gs_rollover.fired");
         assertValid("ras.gs_rollover.fired[-1, 0]");
+        assertValid("ras.share.amount");
+        assertValid("ras.share.undistributed[-1, 0]");
     }
 
     @Test
