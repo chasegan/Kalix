@@ -60,7 +60,9 @@ impl IniDocument {
     /// Parses Kalix INI text. A section header may appear only once in a
     /// document, and a key or bare entry once in its section, in any case,
     /// since the readers match keys ignoring case; a repeat is refused, naming
-    /// both lines.
+    /// both lines. The one exception is a repeated `[outputs]` entry, which
+    /// is kept once: it names a result, and asking twice means the same thing.
+    /// The repeated line is not kept in the document, so a save drops it.
     ///
     /// The comment grammar, shared with the IDE's parsers (see the website's
     /// Conventions page, "Comments"): `#` starts a comment anywhere outside
@@ -227,10 +229,23 @@ impl IniDocument {
                         // The inline comment is kept (slot 0, as for a property's first
                         // line) so a canonical rewrite of the item can carry it along.
                         let section = sections.get_mut(section_name).unwrap();
-                        if let Some(earlier) = seen_keys.insert(code.to_ascii_lowercase(), line_number) {
-                            return Err(format!("Duplicate entry '{}' at line {} in [{}] (also listed on line {})",
-                                code, line_number, section_name, earlier));
+                        let lowered = code.to_ascii_lowercase();
+                        if let Some(&earlier) = seen_keys.get(&lowered) {
+                            // A repeated [outputs] entry asks for a result already
+                            // recorded: the first is kept and the repeat is dropped,
+                            // so a save lists the result once. The comments above it
+                            // stay pending and attach to whatever follows. The line
+                            // itself is not carried as a comment would be: it would
+                            // come back as a live entry if the first were removed.
+                            // Anywhere else a repeat is refused, as a repeated key is.
+                            if section_name != "outputs" {
+                                return Err(format!("Duplicate entry '{}' at line {} in [{}] (also listed on line {})",
+                                    code, line_number, section_name, earlier));
+                            }
+                            line_idx += 1;
+                            continue;
                         }
+                        seen_keys.insert(lowered, line_number);
 
                         let property = IniProperty {
                             value: String::new(),  // Empty value for list items
@@ -596,10 +611,32 @@ key3 = value3
     }
 
     #[test]
-    fn test_repeated_list_item_in_a_section_is_refused() {
-        let content = "[outputs]\nnode.a.dsflow\nnode.b.dsflow\nnode.a.dsflow\n";
+    fn test_repeated_data_entry_is_refused() {
+        let content = "[data]\na.csv\nb.csv\na.csv\n";
         let err = IniDocument::parse(content).unwrap_err();
-        assert_eq!(err, "Duplicate entry 'node.a.dsflow' at line 4 in [outputs] (also listed on line 2)");
+        assert_eq!(err, "Duplicate entry 'a.csv' at line 4 in [data] (also listed on line 2)");
+    }
+
+    #[test]
+    fn test_repeated_outputs_entry_is_kept_once() {
+        let content = "[outputs]\nnode.a.dsflow  # first\nnode.b.dsflow\nNode.A.dsflow\n";
+        let doc = IniDocument::parse(content).unwrap();
+        let keys: Vec<&String> = doc.sections["outputs"].properties.keys().collect();
+        assert_eq!(keys, vec!["node.a.dsflow", "node.b.dsflow"]);
+        assert_eq!(doc.sections["outputs"].properties["node.a.dsflow"].line_number, 2);
+    }
+
+    #[test]
+    fn test_repeated_outputs_entry_is_dropped_and_its_comments_kept() {
+        let content = "[outputs]\nnode.a.dsflow\n# recorded again, deliberately\nnode.a.dsflow  # see above\nnode.b.dsflow\n\n[node.a]\ntype = inflow\n";
+        let doc = IniDocument::parse(content).unwrap();
+        assert_eq!(doc.to_string(),
+            "[outputs]\nnode.a.dsflow\n# recorded again, deliberately\nnode.b.dsflow\n\n[node.a]\ntype = inflow\n");
+        // A repeat before a header, or last in the file, leaves nothing behind
+        let before_header = "[outputs]\nnode.a.dsflow\nnode.a.dsflow\n[node.a]\ntype = inflow\n";
+        assert_eq!(IniDocument::parse(before_header).unwrap().to_string(), "[outputs]\nnode.a.dsflow\n[node.a]\ntype = inflow\n");
+        let trailing = "[outputs]\nnode.a.dsflow\nnode.a.dsflow\n";
+        assert_eq!(IniDocument::parse(trailing).unwrap().to_string(), "[outputs]\nnode.a.dsflow\n");
     }
 
     #[test]

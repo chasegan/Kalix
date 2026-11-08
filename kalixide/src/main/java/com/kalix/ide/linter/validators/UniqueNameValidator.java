@@ -73,9 +73,10 @@ public class UniqueNameValidator implements ValidationStrategy {
     }
 
     /**
-     * A key may appear only once in a section, and a bare entry once in {@code [outputs]}
-     * or {@code [data]}, in any case, since the engine matches keys ignoring case; the
-     * engine refuses a repeat, which would otherwise replace the earlier value or be kept once.
+     * A key may appear only once in a section, and a bare entry once in {@code [data]}, in
+     * any case, since the engine matches keys ignoring case; the engine refuses a repeat,
+     * which would otherwise replace the earlier value. A repeated {@code [outputs]} entry
+     * is kept once by the engine and is not reported.
      */
     private static void checkKeys(INIModelParser.ParsedModel model, LinterSchema schema, ValidationResult result) {
         ValidationRule rule = schema.getValidationRule("unique_keys");
@@ -92,7 +93,6 @@ public class UniqueNameValidator implements ValidationStrategy {
                 }
             }
         }
-        checkEntries(model.getOutputReferenceEntries(), "outputs", rule, result);
         // An aliased [data] line is keyed by its alias, so one file may be listed under
         // two aliases; only the bare paths are entries in the engine's sense.
         Set<Integer> aliasLines = new HashSet<>();
