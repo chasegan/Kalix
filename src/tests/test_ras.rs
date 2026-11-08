@@ -1739,6 +1739,227 @@ action  = distribute(-node.src.dsflow[-1, 0] * 0.05, by_balance)
 }
 
 #[test]
+fn test_distribute_is_independent_of_target_order() {
+    // The worked example with the rows reversed lands the same balances.
+    let model = distribute_model(
+        "           c, 100, 0,\n           b, 100, 50,\n           a, 100, 90,",
+        "distribute(100, by_size)");
+    assert_eq!(balance(&model, "a"), 100.0);
+    assert!((balance(&model, "b") - 95.0).abs() < 1e-9);
+    assert!((balance(&model, "c") - 45.0).abs() < 1e-9);
+}
+
+#[test]
+fn test_distribute_cascades_over_several_passes() {
+    // Sizes 100 x 4, balances 99/90/50/0, credit 150 by size. Pass one
+    // offers 37.5 each: a fills (1), b fills (10), c and d take 37.5. Pass
+    // two shares the 64 left as 32 each: c fills with its 12.5, d takes 32.
+    // Pass three gives d the 19.5 left: 37.5 + 32 + 19.5 = 89.
+    let mut model = distribute_model(
+        "           a, 100, 99,\n           b, 100, 90,\n           c, 100, 50,\n           d, 100, 0,",
+        "distribute(150, by_size)");
+    assert_eq!(balance(&model, "a"), 100.0);
+    assert_eq!(balance(&model, "b"), 100.0);
+    assert_eq!(balance(&model, "c"), 100.0);
+    assert!((balance(&model, "d") - 89.0).abs() < 1e-9, "got {}", balance(&model, "d"));
+    assert_eq!(series(&mut model, "ras.share.undistributed"), vec![0.0, 0.0]);
+}
+
+#[test]
+fn test_distribute_exact_fill_leaves_nothing_undistributed() {
+    let mut model = distribute_model(
+        "           a, 100, 0,\n           b, 100, 0,",
+        "distribute(200, by_size)");
+    assert_eq!(balance(&model, "a"), 100.0);
+    assert_eq!(balance(&model, "b"), 100.0);
+    assert_eq!(series(&mut model, "ras.share.undistributed"), vec![0.0, 0.0]);
+}
+
+#[test]
+fn test_distribute_zero_size_account_takes_no_share() {
+    // A zero-size account has no weight by size and no room: the others
+    // absorb the whole amount.
+    let model = distribute_model(
+        "           a, 0, 0,\n           b, 100, 0,\n           c, 50, 0,",
+        "distribute(30, by_size)");
+    assert_eq!(balance(&model, "a"), 0.0);
+    assert!((balance(&model, "b") - 20.0).abs() < 1e-9);
+    assert!((balance(&model, "c") - 10.0).abs() < 1e-9);
+}
+
+#[test]
+fn test_distribute_by_size_debit_on_account_above_size() {
+    // a announced to 150% then a by-size debit of 40 over sizes 100/100:
+    // 20 each, a to 130 (not cut to its size), b to its floor of 0 with
+    // the 20 it could not give passed to a: a ends at 110.
+    let ini = format!(r#"{DISTRIBUTE_HEAD}
+[acc.g_a]
+accounts = name, size,
+           a, 100,
+
+[acc.g_b]
+accounts = name, size,
+           b, 100,
+
+[ras.announce_a]
+targets = acc.g_a
+trigger = start_month
+action  = allocate(150)
+
+[ras.loss]
+targets = acc.g_a, acc.g_b
+trigger = start_month
+action  = distribute(-40, by_size)
+{TAIL}"#);
+    let model = run(&ini);
+    assert!((balance(&model, "a") - 110.0).abs() < 1e-9, "got {}", balance(&model, "a"));
+    assert_eq!(balance(&model, "b"), 0.0);
+}
+
+#[test]
+fn test_distribute_nan_and_inf_amounts_are_visible() {
+    // NaN: nothing moves and both series read NaN. Inf: every account fills
+    // and the undistributed part is inf. Neither is silently dropped.
+    let mut model = distribute_model(
+        "           a, 100, 40,\n           b, 100, 20,",
+        "distribute(0 / 0, by_size)");
+    assert_eq!(balance(&model, "a"), 40.0);
+    assert_eq!(balance(&model, "b"), 20.0);
+    assert!(series(&mut model, "ras.share.amount")[0].is_nan());
+    assert!(series(&mut model, "ras.share.undistributed")[0].is_nan());
+
+    let mut model = distribute_model(
+        "           a, 100, 40,\n           b, 100, 20,",
+        "distribute(1 / 0, by_size)");
+    assert_eq!(balance(&model, "a"), 100.0);
+    assert_eq!(balance(&model, "b"), 100.0);
+    assert_eq!(series(&mut model, "ras.share.undistributed")[0], f64::INFINITY);
+}
+
+#[test]
+fn test_distribute_amount_may_be_a_program_block() {
+    // Braces nest like parentheses for the split at the last top-level comma.
+    let model = distribute_model(
+        "           a, 100, 0,\n           b, 100, 0,",
+        "distribute({ v = 10; v * 3 }, by_size)");
+    assert_eq!(balance(&model, "a"), 15.0);
+    assert_eq!(balance(&model, "b"), 15.0);
+}
+
+#[test]
+fn test_distribute_amount_reads_zero_between_firings() {
+    // An expression trigger that holds on alternate steps: amount is the
+    // value on firing steps and 0 on the others.
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-04
+
+[acc.g1]
+accounts = name, size,
+           a, 1000,
+
+[ras.share]
+targets = acc.g1
+trigger = sim.day % 2
+action  = distribute(10, by_size)
+{TAIL}
+ras.share.amount
+"#);
+    let mut model = run(&ini);
+    assert_eq!(series(&mut model, "ras.share.amount"), vec![10.0, 0.0, 10.0, 0.0]);
+    assert_eq!(balance(&model, "a"), 20.0);
+}
+
+#[test]
+fn test_distribute_standing_allocate_tops_a_loss_back_up() {
+    // The caveat in the docs: a distributed loss lowers the allocation, so a
+    // standing allocate that fires again restores it. Loss on day 1 only;
+    // the announcement every step.
+    let ini = format!(r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g1]
+accounts = name, size,
+           a, 100,
+
+[ras.announce]
+targets = acc.g1
+trigger = every_step
+action  = allocate(100)
+
+[ras.loss]
+targets = acc.g1
+trigger = start_month
+action  = distribute(-20, by_balance)
+{TAIL}
+acc.a.closing_balance
+"#);
+    let mut model = run(&ini);
+    assert_eq!(series(&mut model, "acc.a.closing_balance"), vec![80.0, 100.0]);
+}
+
+#[test]
+fn test_distribute_empty_amount_is_an_error() {
+    let ini = format!(r#"{DISTRIBUTE_HEAD}
+[acc.g1]
+accounts = name, size,
+           a, 100,
+
+[ras.share]
+targets = acc.g1
+trigger = start_month
+action  = distribute(, by_size)
+{TAIL}"#);
+    let e = load_err(&ini);
+    assert!(e.contains("needs an amount before the weight"), "{e}");
+}
+
+#[test]
+fn test_distribute_equal_share_and_room_fills_exactly() {
+    // want == room on both: sizes 100/100, balances 50/50, credit 100. Both
+    // fill in one pass and nothing is left over.
+    let mut model = distribute_model(
+        "           a, 100, 50,\n           b, 100, 50,",
+        "distribute(100, by_size)");
+    assert_eq!(balance(&model, "a"), 100.0);
+    assert_eq!(balance(&model, "b"), 100.0);
+    assert_eq!(series(&mut model, "ras.share.undistributed"), vec![0.0, 0.0]);
+}
+
+#[test]
+fn test_distribute_weight_keyword_needs_no_space() {
+    let model = distribute_model(
+        "           a, 100, 0,\n           b, 100, 0,",
+        "distribute(30,by_size)");
+    assert_eq!(balance(&model, "a"), 15.0);
+}
+
+#[test]
+fn test_distribute_series_on_another_action_read_zero() {
+    // amount and undistributed exist for every RAS, as pct does; on an
+    // action that never sets them they read 0, not NaN.
+    let ini = format!(r#"{DISTRIBUTE_HEAD}
+[acc.g1]
+accounts = name, size,
+           a, 100,
+
+[ras.fill]
+targets = acc.g1
+trigger = start_month
+action  = set_full
+{TAIL}
+ras.fill.amount
+ras.fill.undistributed
+"#);
+    let mut model = run(&ini);
+    assert_eq!(series(&mut model, "ras.fill.amount"), vec![0.0, 0.0]);
+    assert_eq!(series(&mut model, "ras.fill.undistributed"), vec![0.0, 0.0]);
+}
+
+#[test]
 fn test_ras_target_group_named_twice_is_an_error() {
     let ini = format!(r#"{DISTRIBUTE_HEAD}
 [acc.g1]
