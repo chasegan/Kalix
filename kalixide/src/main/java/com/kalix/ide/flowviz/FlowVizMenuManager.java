@@ -48,7 +48,7 @@ public class FlowVizMenuManager {
     private Runnable zoomOutAction;
     private Runnable zoomToFitAction;
     private Runnable resetViewAction;
-    private Runnable toggleAutoYModeAction;
+    private Runnable toggleAutoRangeAction;
     private Runnable showStatisticsAction;
     private Runnable showDataInfoAction;
     private Runnable showAboutAction;
@@ -57,7 +57,7 @@ public class FlowVizMenuManager {
 
     // State suppliers
     private Supplier<Boolean> dataVisibleSupplier;
-    private Supplier<Boolean> autoYModeSupplier;
+    private Supplier<Boolean> autoRangeSupplier;
     private Supplier<Boolean> coordinateDisplaySupplier;
     private Supplier<Boolean> precision64Supplier;
 
@@ -96,7 +96,7 @@ public class FlowVizMenuManager {
      * @param zoomOutAction Callback for zooming out from the plot
      * @param zoomToFitAction Callback for fitting all data in the view
      * @param resetViewAction Callback for resetting the view to default state
-     * @param toggleAutoYModeAction Callback for enabling/disabling automatic Y-axis scaling
+     * @param toggleAutoRangeAction Callback that sets every Y axis auto-ranged, or manual
      * @param showStatisticsAction Callback for displaying dataset statistics
      * @param showDataInfoAction Callback for showing detailed data information
      * @param showAboutAction Callback for displaying application information
@@ -112,7 +112,7 @@ public class FlowVizMenuManager {
                                    Runnable zoomOutAction,
                                    Runnable zoomToFitAction,
                                    Runnable resetViewAction,
-                                   Runnable toggleAutoYModeAction,
+                                   Runnable toggleAutoRangeAction,
                                    Runnable showStatisticsAction,
                                    Runnable showDataInfoAction,
                                    Runnable showAboutAction,
@@ -127,7 +127,7 @@ public class FlowVizMenuManager {
         this.zoomOutAction = zoomOutAction;
         this.zoomToFitAction = zoomToFitAction;
         this.resetViewAction = resetViewAction;
-        this.toggleAutoYModeAction = toggleAutoYModeAction;
+        this.toggleAutoRangeAction = toggleAutoRangeAction;
         this.showStatisticsAction = showStatisticsAction;
         this.showDataInfoAction = showDataInfoAction;
         this.showAboutAction = showAboutAction;
@@ -139,11 +139,11 @@ public class FlowVizMenuManager {
      * Sets up state suppliers for menu item state management.
      */
     public void setupStateSuppliers(Supplier<Boolean> dataVisibleSupplier,
-                                  Supplier<Boolean> autoYModeSupplier,
+                                  Supplier<Boolean> autoRangeSupplier,
                                   Supplier<Boolean> coordinateDisplaySupplier,
                                   Supplier<Boolean> precision64Supplier) {
         this.dataVisibleSupplier = dataVisibleSupplier;
-        this.autoYModeSupplier = autoYModeSupplier;
+        this.autoRangeSupplier = autoRangeSupplier;
         this.coordinateDisplaySupplier = coordinateDisplaySupplier;
         this.precision64Supplier = precision64Supplier;
     }
@@ -184,8 +184,8 @@ public class FlowVizMenuManager {
         zoomMenu.add(createMenuItem("Reset View", e -> resetViewAction.run()));
         zoomMenu.addSeparator();
 
-        autoYToggle = new JCheckBoxMenuItem("Auto-Y", autoYModeSupplier.get());
-        autoYToggle.addActionListener(e -> toggleAutoYModeAction.run());
+        autoYToggle = new JCheckBoxMenuItem("Auto-range", autoRangeSupplier.get());
+        autoYToggle.addActionListener(e -> toggleAutoRangeAction.run());
         zoomMenu.add(autoYToggle);
 
         // Tools menu
@@ -285,8 +285,8 @@ public class FlowVizMenuManager {
             dataToggle.setSelected(dataVisibleSupplier.get());
         }
 
-        if (autoYToggle != null && autoYModeSupplier != null) {
-            autoYToggle.setSelected(autoYModeSupplier.get());
+        if (autoYToggle != null && autoRangeSupplier != null) {
+            autoYToggle.setSelected(autoRangeSupplier.get());
         }
 
         if (coordinateToggle != null && coordinateDisplaySupplier != null) {

@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Drives the axis-drag gesture through the panel's own mouse listeners: a drag on a value
- * axis moves the grabbed end and turns auto-Y off, a drag on the time axis obeys auto-Y,
+ * axis moves the grabbed end and turns auto-range off, a drag on the time axis obeys auto-range,
  * and a press that does not move changes nothing.
  */
 class FlowVizPanelAxisDragTest {
@@ -100,21 +100,21 @@ class FlowVizPanelAxisDragTest {
     }
 
     @Test
-    void draggingTheBottomOfTheYAxisMovesOnlyTheMinimumAndTurnsAutoYOff() {
-        panel.model().update(st -> st.withAutoYMode(true));
+    void draggingTheBottomOfTheYAxisMovesOnlyTheMinimumAndTurnsItsAutoRangeOff() {
+        panel.model().update(st -> st.withAutoRangeAll(true));
         double max = view().getMaxValue();
         double min = view().getMinValue();
 
         drag(Y_AXIS_X, 450, Y_AXIS_X, 500);
 
-        assertFalse(panel.isAutoYMode(), "an explicit Y range opts out of auto-Y");
+        assertFalse(panel.isAutoRange(Axis.Y), "an explicit Y range opts that axis out of auto-range");
         assertEquals(max, view().getMaxValue());
         assertNotEquals(min, view().getMinValue());
     }
 
     @Test
-    void panningPastTheDataUnderAutoYKeepsTheYRange() {
-        panel.model().update(st -> st.withAutoYMode(true));
+    void panningPastTheDataUnderAutoRangeKeepsTheYRange() {
+        panel.model().update(st -> st.withAutoRangeAll(true));
         drag(700, 300, 100, 300); // a left drag inside the plot pans forward in time
         ViewPort lastWithData = view();
         assertTrue(lastWithData.getStartTimeMs() < 3 * DAY, "the last point is still in view: " + lastWithData);
@@ -128,18 +128,18 @@ class FlowVizPanelAxisDragTest {
     }
 
     @Test
-    void draggingTheTimeAxisUnderAutoYRefitsY() {
-        panel.model().update(st -> st.withAutoYMode(true));
+    void draggingTheTimeAxisUnderAutoRangeRefitsY() {
+        panel.model().update(st -> st.withAutoRangeAll(true));
         double max = view().getMaxValue();
 
         drag(500, X_AXIS_Y, 700, X_AXIS_Y); // grab in the right half: the end moves
 
-        assertTrue(panel.isAutoYMode(), "an X drag is an X-only change");
+        assertTrue(panel.isAutoRange(Axis.Y), "an X drag is an X-only change");
         assertTrue(view().getMaxValue() < max, "Y refits to the narrower window: " + view());
     }
 
     @Test
-    void doubleClickingTheYAxisFitsItAloneAndLeavesAutoYOff() {
+    void doubleClickingTheYAxisFitsItAloneAndLeavesAutoRangeOff() {
         ViewPort fitted = view();
         drag(Y_AXIS_X, 450, Y_AXIS_X, 500);
         drag(500, X_AXIS_Y, 700, X_AXIS_Y);
@@ -148,7 +148,7 @@ class FlowVizPanelAxisDragTest {
 
         doubleClick(Y_AXIS_X, 300);
 
-        assertFalse(panel.isAutoYMode(), "a one-off fit, not a mode change");
+        assertFalse(panel.isAutoRange(Axis.Y), "a one-off fit, not a mode change");
         assertEquals(start, view().getStartTimeMs(), "X is left alone");
         assertEquals(end, view().getEndTimeMs());
         assertTrue(view().getMaxValue() < fitted.getMaxValue(), "Y fits the narrower window shown: " + view());
@@ -184,7 +184,7 @@ class FlowVizPanelAxisDragTest {
     @Test
     void aRightAxisDragEndsWhenTheRightAxisGoesAway() {
         useBothAxes();
-        panel.model().update(st -> st.withAutoYMode(true));
+        panel.model().update(st -> st.withAutoRangeAll(true));
         press(Y2_AXIS_X, 450);
         dragTo(Y2_AXIS_X, 480);
 
@@ -193,7 +193,30 @@ class FlowVizPanelAxisDragTest {
         release(Y2_AXIS_X, 500);
 
         assertFalse(view().hasY2(), "the drag does not bring the right axis back: " + view());
-        assertFalse(panel.isAutoYMode(), "y2 did move before it went, so auto-Y is off");
+        assertTrue(panel.isAutoRange(Axis.Y), "the left axis was not dragged, so it keeps auto-range");
+        assertTrue(panel.isAutoRange(Axis.Y2), "a right axis that has gone is born auto-ranged next time");
+    }
+
+    @Test
+    void draggingTheRightAxisTurnsOffOnlyItsOwnAutoRange() {
+        useBothAxes();
+        panel.model().update(st -> st.withAutoRangeAll(true));
+
+        drag(Y2_AXIS_X, 450, Y2_AXIS_X, 500);
+
+        assertFalse(panel.isAutoRange(Axis.Y2), "an explicit right range opts that axis out");
+        assertTrue(panel.isAutoRange(Axis.Y), "and leaves the left axis auto-ranged");
+    }
+
+    @Test
+    void draggingTheLeftAxisLeavesTheRightAxisAutoRanged() {
+        useBothAxes();
+        panel.model().update(st -> st.withAutoRangeAll(true));
+
+        drag(Y_AXIS_X, 450, Y_AXIS_X, 500);
+
+        assertFalse(panel.isAutoRange(Axis.Y));
+        assertTrue(panel.isAutoRange(Axis.Y2));
     }
 
     @Test
@@ -219,12 +242,12 @@ class FlowVizPanelAxisDragTest {
 
     @Test
     void aFewPixelsOfJitterOnAnAxisIsAClickNotADrag() {
-        panel.model().update(st -> st.withAutoYMode(true));
+        panel.model().update(st -> st.withAutoRangeAll(true));
         ViewPort before = view();
 
         drag(Y_AXIS_X, 450, Y_AXIS_X + 1, 452);
 
-        assertTrue(panel.isAutoYMode(), "a wobbly click, as in a double-click to fit, keeps auto-Y");
+        assertTrue(panel.isAutoRange(Axis.Y), "a wobbly click, as in a double-click to fit, keeps auto-range");
         assertEquals(before.getMinValue(), view().getMinValue());
     }
 
@@ -244,12 +267,12 @@ class FlowVizPanelAxisDragTest {
 
     @Test
     void aPressOnAnAxisWithoutMovingChangesNothing() {
-        panel.model().update(st -> st.withAutoYMode(true));
+        panel.model().update(st -> st.withAutoRangeAll(true));
         ViewPort before = view();
 
         drag(Y_AXIS_X, 450, Y_AXIS_X, 450);
 
-        assertTrue(panel.isAutoYMode());
+        assertTrue(panel.isAutoRange(Axis.Y));
         assertEquals(before.getMinValue(), view().getMinValue());
         assertEquals(before.getMaxValue(), view().getMaxValue());
     }

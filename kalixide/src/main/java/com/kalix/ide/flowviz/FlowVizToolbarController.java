@@ -48,7 +48,7 @@ class FlowVizToolbarController {
         setSilently(maskCombo, FlowVizToolbarBuilder.maskItem(state.getMaskMode()));
         setSilently(plotTypeCombo, state.getPlotType());
         setSilently(ySpaceCombo, state.getYAxisScale().getDisplayName());
-        setSilently(autoYToggle, state.isAutoYMode());
+        setSilently(autoYToggle, state.isAutoRangeAll());
         // The button notifies nothing on setMode, so no listener juggling is needed here.
         if (seasonalMaskButton != null) {
             seasonalMaskButton.setMode(state.getSeasonalMaskMode());

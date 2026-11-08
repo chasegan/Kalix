@@ -16,8 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Pins two of the panel's fit rules that the other viewport tests don't reach: a new
- * reference series on a difference plot re-fits Y under auto-Y, and a scale switch with
- * auto-Y off keeps the bounds.
+ * reference series on a difference plot re-fits Y under auto-range, and a scale switch with
+ * auto-range off keeps the bounds.
  */
 class FlowVizPanelFitRulesTest {
 
@@ -36,11 +36,11 @@ class FlowVizPanelFitRulesTest {
     }
 
     @Test
-    void newReferenceOnADifferencePlotRefitsYAndKeepsXUnderAutoY() {
+    void newReferenceOnADifferencePlotRefitsYAndKeepsXUnderAutoRange() {
         FlowVizPanel panel = panel(new double[] {0, 10, 20}, new double[] {5, 5, 5});
         panel.model().update(st -> st.withVisibleSeries(List.of(A, B)));
         panel.model().update(st -> st.withPlotType(PlotType.DIFFERENCE));
-        panel.model().update(st -> st.withAutoYMode(true));
+        panel.model().update(st -> st.withAutoRangeAll(true));
         panel.refreshData(true);
         ViewPort before = panel.viewportForTests();
         assertTrue(before.getMaxValue() < 10, "against a, b's differences top out at 5");
@@ -48,13 +48,13 @@ class FlowVizPanelFitRulesTest {
         panel.model().update(st -> st.withVisibleSeries(List.of(B, A))); // b becomes the reference
 
         ViewPort after = panel.viewportForTests();
-        assertEquals(before.getStartTimeMs(), after.getStartTimeMs(), "auto-Y keeps the X range");
-        assertEquals(before.getEndTimeMs(), after.getEndTimeMs(), "auto-Y keeps the X range");
+        assertEquals(before.getStartTimeMs(), after.getStartTimeMs(), "auto-range keeps the X range");
+        assertEquals(before.getEndTimeMs(), after.getEndTimeMs(), "auto-range keeps the X range");
         assertTrue(after.getMaxValue() >= 15, "Y re-fitted to a's differences against b, up to 15");
     }
 
     @Test
-    void scaleSwitchWithAutoYOffKeepsTheBoundsAndRecordsAnEntry() {
+    void scaleSwitchWithAutoRangeOffKeepsTheBoundsAndRecordsAnEntry() {
         FlowVizPanel panel = panel(new double[] {100, 150, 200}, new double[] {120, 140, 160});
         panel.model().update(st -> st.withVisibleSeries(List.of(A, B)));
         panel.refreshData(true);
@@ -64,8 +64,8 @@ class FlowVizPanelFitRulesTest {
         panel.model().update(st -> st.withYAxisScale(YAxisScale.LOG));
 
         ViewPort after = panel.viewportForTests();
-        assertEquals(before.getMinValue(), after.getMinValue(), 1e-12, "no re-fit with auto-Y off");
-        assertEquals(before.getMaxValue(), after.getMaxValue(), 1e-12, "no re-fit with auto-Y off");
+        assertEquals(before.getMinValue(), after.getMinValue(), 1e-12, "no re-fit with auto-range off");
+        assertEquals(before.getMaxValue(), after.getMaxValue(), 1e-12, "no re-fit with auto-range off");
         assertEquals(YAxisScale.LOG, after.getYAxisScale());
         assertTrue(panel.canUndo(), "the switch is one undoable entry");
     }

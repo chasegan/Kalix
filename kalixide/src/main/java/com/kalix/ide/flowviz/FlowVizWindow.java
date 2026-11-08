@@ -135,8 +135,8 @@ public class FlowVizWindow extends JFrame {
         vizPanel.setLabelResolver(ref -> ref instanceof com.kalix.ide.flowviz.data.DatasetSeries d
             ? d.baseName()
             : String.valueOf(ref));
-        // Auto-Y mode and precision will be initialized by action manager
-        vizPanel.model().update(st -> st.withAutoYMode(true));  // Default value, will be updated by loadPreferences
+        // Auto-range and precision are set by the action manager's loadPreferences
+        vizPanel.model().update(st -> st.withAutoRangeAll(true));  // Default value, will be updated by loadPreferences
         vizPanel.setPrecision64Supplier(() -> actionManager == null || actionManager.isPrecision64());
         dataPanel = new DataPanel();
         dataPanel.setPreferredSize(new Dimension(250, 0));
@@ -174,7 +174,7 @@ public class FlowVizWindow extends JFrame {
             actionManager::zoomOut,
             actionManager::zoomToFit,
             actionManager::resetView,
-            actionManager::toggleAutoYMode,
+            actionManager::toggleAutoRange,
             actionManager::showStatistics,
             actionManager::showDataInfo,
             actionManager::showAbout,
@@ -185,7 +185,7 @@ public class FlowVizWindow extends JFrame {
         // Setup state suppliers (delegated to action manager)
         menuManager.setupStateSuppliers(
             actionManager::isDataVisible,
-            actionManager::isAutoYMode,
+            actionManager::isAutoRangeAll,
             () -> vizPanel.isShowCoordinates(),
             actionManager::isPrecision64
         );
@@ -223,30 +223,36 @@ public class FlowVizWindow extends JFrame {
         toolBar.add(zoomOutButton);
 
         JButton zoomFitButton = new JButton("Fit");
-        zoomFitButton.setToolTipText("Zoom to fit all data (F)");
+        zoomFitButton.setToolTipText("Zoom to fit all data");
         zoomFitButton.addActionListener(e -> actionManager.zoomToFit());
         toolBar.add(zoomFitButton);
 
         JButton resetButton = new JButton("Reset");
-        resetButton.setToolTipText("Reset view (R)");
+        resetButton.setToolTipText("Reset view");
         resetButton.addActionListener(e -> actionManager.resetView());
         toolBar.add(resetButton);
 
         toolBar.addSeparator();
 
         // Toggle buttons
-        JToggleButton autoYButton = new JToggleButton("Auto Y");
-        autoYButton.setToolTipText("Auto-scale Y axis during zoom (Y)");
-        autoYButton.addActionListener(e -> actionManager.toggleAutoYMode());
+        JToggleButton autoYButton = new JToggleButton("Auto-range");
+        autoYButton.setToolTipText("Fit the Y axes to the data in view as you zoom and pan");
+        autoYButton.addActionListener(e -> actionManager.toggleAutoRange());
         toolBar.add(autoYButton);
+        // The button and the Zoom menu's item show the plot's state, whoever changed it: an
+        // axis drag, a paste, the plot's own menu, an undo. setSelected fires no action.
+        vizPanel.model().addListener((old, now, cause) -> {
+            autoYButton.setSelected(now.isAutoRangeAll());
+            menuManager.updateMenuStates();
+        });
 
         JToggleButton coordButton = new JToggleButton("Coordinates");
-        coordButton.setToolTipText("Show coordinates (C)");
+        coordButton.setToolTipText("Show coordinates");
         coordButton.addActionListener(e -> actionManager.toggleCoordinateDisplay());
         toolBar.add(coordButton);
 
         JToggleButton dataButton = new JToggleButton("Data Panel");
-        dataButton.setToolTipText("Toggle data panel visibility (D)");
+        dataButton.setToolTipText("Toggle data panel visibility (L)");
         dataButton.addActionListener(e -> actionManager.toggleData());
         toolBar.add(dataButton);
 
@@ -262,7 +268,7 @@ public class FlowVizWindow extends JFrame {
         // This will be called after loadPreferences()
         SwingUtilities.invokeLater(() -> {
             if (actionManager != null) {
-                autoYButton.setSelected(actionManager.isAutoYMode());
+                autoYButton.setSelected(actionManager.isAutoRangeAll());
                 coordButton.setSelected(vizPanel.isShowCoordinates());
                 dataButton.setSelected(actionManager.isDataVisible());
             }

@@ -306,7 +306,7 @@ public class FlowVizPanel extends JPanel {
      * Releases display-scoped resources only. This fires on every hierarchy detach,
      * including the remove/insert cycle a tab reorder or reset performs, and everything
      * torn down here is re-established on {@link #addNotify()} or on next use. Callbacks
-     * installed by the owning toolbar ({@code onHistoryChanged}, {@code onAutoYModeChanged})
+     * installed by the owning toolbar ({@code onHistoryChanged})
      * are deliberately <em>not</em> cleared: they belong to the owner, which detaches
      * them when it closes the tab, and clearing them here would sever a re-parented
      * panel from its own toolbar. (Stopping the coalesce timer drops one pending history
@@ -396,7 +396,7 @@ public class FlowVizPanel extends JPanel {
      * series moved between axes ({@link FlowVizState#withSeriesOnRightAxis}, one undoable
      * step like any other change): neither axis' range is reset; only the right axis'
      * first appearance sizes it, to its series over the current time window; a right axis
-     * left with no series goes; and under auto-Y both axes are then refitted, as
+     * left with no series goes; and the auto-ranged axes are then refitted, as
      * {@link #applyUserChange} does for every change that calls for it.
      */
     private void syncRightAxisRange() {
@@ -407,7 +407,7 @@ public class FlowVizPanel extends JPanel {
             // Sized to its series; with nothing showable yet, to the left axis' range. A
             // hidden plot has no display set to size from; a whole new state owes a fit
             // when shown, which rewrites its entry with the fitted range.
-            double[] y2Range = plotInteractionManager.fittedRangeForAxis(PlotInteractionManager.Axis.Y2);
+            double[] y2Range = plotInteractionManager.fittedRangeForAxis(Axis.Y2);
             if (y2Range == null) {
                 y2Range = new double[]{currentViewport.getMinValue(), currentViewport.getMaxValue()};
             }
@@ -424,13 +424,13 @@ public class FlowVizPanel extends JPanel {
             return;
         }
 
-        // Each axis fits its own series over the whole span, exactly as auto-Y would. An axis
+        // Each axis fits its own series over the whole span, exactly as auto-range would. An axis
         // with nothing showable takes the other's range; the default view only when neither
         // has anything (on LOG, data that is all zero or negative, say).
         YAxisScale yAxisScale = state().getYAxisScale();
-        double[] yRange = plotInteractionManager.fittedRangeForAxis(PlotInteractionManager.Axis.Y, timeRange[0], timeRange[1], yAxisScale);
+        double[] yRange = plotInteractionManager.fittedRangeForAxis(Axis.Y, timeRange[0], timeRange[1], yAxisScale);
         double[] y2Range = isRightAxisInUse()
-            ? plotInteractionManager.fittedRangeForAxis(PlotInteractionManager.Axis.Y2, timeRange[0], timeRange[1], yAxisScale) : null;
+            ? plotInteractionManager.fittedRangeForAxis(Axis.Y2, timeRange[0], timeRange[1], yAxisScale) : null;
         if (yRange == null && y2Range == null) {
             createDefaultViewport();
             return;
@@ -672,7 +672,7 @@ public class FlowVizPanel extends JPanel {
         repaint();
     }
 
-    /** Fits Y to the data in the current X range; a hidden page fits when shown. */
+    /** Refits the auto-ranged value axes to the data in the current X range; a hidden page fits when shown. */
     public void fitYAxis() {
         if (deferFit(Fit.Y)) {
             return;
@@ -694,8 +694,14 @@ public class FlowVizPanel extends JPanel {
         }
     }
 
-    public boolean isAutoYMode() {
-        return state().isAutoYMode();
+    /** Whether {@code axis} is refitted to its series as the time window changes. */
+    public boolean isAutoRange(Axis axis) {
+        return state().isAutoRange(axis);
+    }
+
+    /** The plot's interactions, for tests that drive its context menu. */
+    PlotInteractionManager interactionsForTests() {
+        return plotInteractionManager;
     }
 
     public void setShowCoordinates(boolean showCoordinates) {
@@ -1028,7 +1034,7 @@ public class FlowVizPanel extends JPanel {
         syncRightAxisRange();
         if (old.getPlotType().xAxisType() != state().getPlotType().xAxisType()) {
             zoomToFit();
-        } else if (state().isAutoYMode()) {
+        } else if (state().isAutoRangeAll()) {
             fitYAxis();
         } else {
             zoomToFit();
@@ -1049,7 +1055,7 @@ public class FlowVizPanel extends JPanel {
         boolean seriesChanged = !now.getVisibleSeries().equals(old.getVisibleSeries());
         boolean axesChanged = !now.getRightAxisSeries().equals(old.getRightAxisSeries());
         boolean scaleChanged = now.getYAxisScale() != old.getYAxisScale();
-        boolean autoYSwitchedOn = now.isAutoYMode() && !old.isAutoYMode();
+        boolean autoRangeSwitchedOn = now.autoRangeTurnedOnSince(old);
 
         if (scaleChanged && currentViewport != null) {
             currentViewport = currentViewport.withYAxisScale(now.getYAxisScale());
@@ -1067,18 +1073,19 @@ public class FlowVizPanel extends JPanel {
             syncRightAxisRange(); // a right axis that appeared is sized; one left empty goes
         }
 
-        // If the X-axis domain changed, X zoom can't be preserved; otherwise auto-Y keeps
-        // the X zoom and fits Y, and without it the user expects to see all the new data.
-        // A series moved between axes resets neither axis by itself; auto-Y refits both.
+        // If the X-axis domain changed, X zoom can't be preserved; otherwise with every
+        // axis auto-ranged the X zoom is kept and the axes refit, and with a manual axis
+        // the user expects to see all the new data. A series moved between axes resets
+        // neither axis by itself; the auto-ranged axes refit.
         if (shapeChanged) {
             if (old.getPlotType().xAxisType() != now.getPlotType().xAxisType()) {
                 zoomToFit();
-            } else if (now.isAutoYMode()) {
+            } else if (now.isAutoRangeAll()) {
                 fitYAxis();
             } else {
                 zoomToFit();
             }
-        } else if ((scaleChanged || autoYSwitchedOn || axesChanged) && now.isAutoYMode()) {
+        } else if ((scaleChanged || autoRangeSwitchedOn || axesChanged) && now.isAutoRangeAny()) {
             fitYAxis();
         }
         repaint();
@@ -1168,7 +1175,7 @@ public class FlowVizPanel extends JPanel {
             // Reference series changed - need to recalculate
             rebuildOrDefer();
 
-            if (state().isAutoYMode()) {
+            if (state().isAutoRangeAny()) {
                 fitYAxis();
             }
         }

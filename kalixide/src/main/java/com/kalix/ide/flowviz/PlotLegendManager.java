@@ -1,5 +1,6 @@
 package com.kalix.ide.flowviz;
 
+import com.kalix.ide.constants.AppShortcut;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.rendering.PlotColors;
@@ -20,6 +21,7 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.event.InputEvent;
 import java.awt.geom.RoundRectangle2D;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -61,8 +63,9 @@ public class PlotLegendManager {
     private static final int COLLAPSED_WIDTH = 30;  // Width when fully collapsed
     private static final int COLLAPSED_HEIGHT = 24; // Height when fully collapsed
     private static final int DIVIDER_HEIGHT = 18;   // An axis caption row, above each group
-    private static final String LEFT_CAPTION = "Y axis";
-    private static final String RIGHT_CAPTION = "Secondary Y axis";
+    // The captions appear only while there is a right axis, so the left one is "Left"
+    private static final String LEFT_CAPTION = Axis.Y.label(true);
+    private static final String RIGHT_CAPTION = Axis.Y2.label(true);
 
     // Colors. The theme supplies three legend roles (background, border, foreground)
     // via the Kalix.plot.* keys; the remaining tints are derived from them once per
@@ -209,12 +212,19 @@ public class PlotLegendManager {
     }
 
     /**
-     * The whole label of the series whose row contains the point, when the last paint cut
-     * it short; otherwise null, so a tooltip never restates what is already readable.
+     * The tooltip for the point: on a series' row, how to move it to the other axis, led
+     * by the whole label when the last paint cut it short (a tooltip never restates what
+     * is already readable). Null off the rows. The modifier-click has no other hint on
+     * screen, and a tooltip is where a shortcut may be spelt out (ADR-0002, tooltips).
      */
     public String tooltipAt(int mouseX, int mouseY) {
         LegendEntry entry = rowAt(mouseX, mouseY);
-        return entry != null && entry.clipped ? displayLabel(entry.ref) : null;
+        if (entry == null) {
+            return null;
+        }
+        String modifier = (AppShortcut.menuMask() & InputEvent.META_DOWN_MASK) != 0 ? "Cmd" : "Ctrl";
+        String hint = modifier + "+click moves it to the " + (onRightAxis.test(entry.ref) ? "left" : "right") + " Y axis";
+        return entry.clipped ? displayLabel(entry.ref) + ". " + hint : hint;
     }
 
     private LegendEntry rowAt(int mouseX, int mouseY) {

@@ -154,7 +154,7 @@ class AxisLimitCodecTest {
         for (XAxisType type : XAxisType.values()) {
             IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
                 () -> AxisLimitCodec.parseX("   ", type), type.name());
-            assertEquals("X value cannot be blank.", ex.getMessage());
+            assertEquals("Value cannot be blank.", ex.getMessage());
         }
     }
 
@@ -176,7 +176,7 @@ class AxisLimitCodecTest {
 
     @Test
     void yRejectsNonFiniteBlankAndText() {
-        assertEquals("Y value cannot be blank.",
+        assertEquals("Value cannot be blank.",
             assertThrows(IllegalArgumentException.class, () -> AxisLimitCodec.parseY("")).getMessage());
         for (String text : new String[]{ "NaN", "Infinity", "ten" }) {
             IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
@@ -186,6 +186,18 @@ class AxisLimitCodecTest {
     }
 
     // ---- pairs ----
+
+    /** A pair the axis transforms could not show: inverted or empty, on either axis. */
+    @Test
+    void aPairMustIncrease() {
+        assertEquals("Min must be less than max.", assertThrows(IllegalArgumentException.class,
+            () -> AxisLimitCodec.parseYLimits("10, 0")).getMessage());
+        assertThrows(IllegalArgumentException.class, () -> AxisLimitCodec.parseYLimits("5, 5"));
+        assertEquals("Min must be less than max.", assertThrows(IllegalArgumentException.class,
+            () -> AxisLimitCodec.parseXLimits("2024-01-16, 2024-01-15", XAxisType.TIME)).getMessage());
+        assertThrows(IllegalArgumentException.class, () -> AxisLimitCodec.parseXLimits("50%, 50%", XAxisType.PERCENTILE));
+        assertArrayEquals(new double[] {0, 10}, AxisLimitCodec.parseYLimits("0, 10"));
+    }
 
     @Test
     void splitPairTrimsAroundTheComma() {

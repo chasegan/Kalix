@@ -13,7 +13,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pins that zoom-to-fit honours the scale's domain the way auto-Y does: on LOG a series
+ * Pins that zoom-to-fit honours the scale's domain the way auto-range does: on LOG a series
  * that touches zero fits to its smallest positive value rather than padding from NaN.
  */
 class FlowVizPanelZoomToFitTest {

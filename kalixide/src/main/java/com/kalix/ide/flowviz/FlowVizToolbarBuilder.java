@@ -38,7 +38,7 @@ import java.util.function.Consumer;
  * (leading), the always-visible shared controls (save, undo/redo, aggregation,
  * mask — one set of controls over the one shared state, so the views can never
  * disagree), the plot type, shown in the Plot and Data views since it changes
- * what both show, and the plot-only cluster (palette, y-scale, auto-Y,
+ * what both show, and the plot-only cluster (palette, y-scale, auto-range,
  * coordinates, legend, line shape).
  *
  * <p>All controls change the tab's state through its {@link FlowVizModel}; the mask
@@ -131,7 +131,7 @@ class FlowVizToolbarBuilder {
             plotTypeCombo, ySpaceCombo, autoYToggle, seasonalMaskButton);
         // The controls show the model's state, whoever changed it: this toolbar, the
         // plot's context menu, a reset, an undo or redo. Setting them is silent. Only
-        // the toolbar's own auto-Y toggle records the preference: other paths change
+        // the toolbar's own auto-range toggle records the preference: other paths change
         // this plot, not the default.
         tabInfo.model().addListener((old, now, cause) -> {
             if (cause != FlowVizModel.Cause.DATA) {
@@ -349,11 +349,16 @@ class FlowVizToolbarBuilder {
         plotOnly(ySpaceCombo);
     }
 
+    /**
+     * One toggle for every Y axis: on sets each axis auto-ranged, off sets each manual, and
+     * it shows selected only while every axis is auto-ranged. A single axis is set from
+     * its own submenu on the plot's context menu.
+     */
     private void addAutoYToggle(boolean initialState) {
-        autoYToggle = createToggleButton(FontAwesomeSolid.ARROWS_ALT_V, "Auto-Y Mode", initialState);
+        autoYToggle = createToggleButton(FontAwesomeSolid.ARROWS_ALT_V, "Auto-range Y axes", initialState);
         autoYToggle.addActionListener(e -> {
             boolean enabled = autoYToggle.isSelected();
-            tabInfo.model().update(st -> st.withAutoYMode(enabled));
+            tabInfo.model().update(st -> st.withAutoRangeAll(enabled));
             PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(enabled);
         });
         plotOnly(autoYToggle);

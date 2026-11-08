@@ -29,7 +29,7 @@ public final class PreferenceKeys {
     public static final Pref<Boolean> FLOWVIZ_PRECISION64 =
         Pref.fileBoolean("flowviz.precision64", true);
 
-    /** FlowViz Auto-Y mode toggle. */
+    /** Whether a new plot's Y axes start auto-ranged; the plot toolbar's toggle records it. */
     public static final Pref<Boolean> FLOWVIZ_AUTO_Y_MODE =
         Pref.fileBoolean("flowviz.autoYMode", true);
 
