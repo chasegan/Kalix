@@ -215,7 +215,7 @@ grow over the line the caret is on, so typing below a collapsed section stays vi
 Key files: `KalixIniFoldParser.java`, `KalixTextArea.java`
 
 ### Plot axes (#505)
-- `Axis` (X, Y, Y2) names the plot's axes; `Axis.label(rightAxisInUse)` is the one spelling ("Y axis", "Left Y axis", "Right Y axis") for menus, Key and dialog.
+- `Axis` (X, Y, Y2) names the plot's axes; `Axis.label(rightAxisInUse)` is the one spelling ("Y axis", "Y axis (left)", "Y axis (right)") for menus, Key and dialog.
 - Auto-range is a flag per value axis on `FlowVizState`. The right axis' flag is true whenever there is no right axis, so a new one is born auto-ranged and states compare equal through its absence. The toolbar toggle is `withAutoRangeAll`/`isAutoRangeAll`; the preference `flowviz.autoYMode` is only the default for new plots (ADR-0015).
 - Every navigation (wheel, pan, zoom buttons, time-axis drag or paste, the dialog's time change) goes through `PlotInteractionManager.navigate`: auto-ranged axes refit to the window, manual ones move with the gesture, axes the dialog was given explicitly are left as typed. `show` is the one way a view lands.
 - The plot's context menu offers one submenu per axis (Fit to data, Copy range, Paste range, and Auto-range on the Y axes), the right axis' only while it exists: ADR-0002 §6, third grammar.

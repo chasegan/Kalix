@@ -205,10 +205,10 @@ and child aloud: "Y-axis scale: log" is a setting; "Insert node: GR4J" is a
 command.
 
 Where the children are **commands on one thing**, the title is that thing's
-name, a noun in sentence case (`Left Y axis`), and the children are items
+name, a noun in sentence case (`Y axis (left)`), and the children are items
 under §2.2 (`Fit to data`, `Copy range`), with a checkbox where the thing
-has a setting (`Auto-range`). Read aloud as thing then command: "Left Y
-axis: copy range".
+has a setting (`Auto-range`). Read aloud as thing then command: "Y axis
+(left): copy range".
 
 ### Consequences
 
@@ -363,6 +363,6 @@ this document.
   examples. Other existing messages are not re-cut; it is the standard the
   next one is held to.
 - *2026-11-08* — §6 gained a third grammar: a submenu named for the thing
-  its children act on (`Left Y axis ▸ Fit to data`, `Copy range`), read aloud
+  its children act on (`Y axis (left) ▸ Fit to data`, `Copy range`), read aloud
   as thing then command. Harvested from the plot's axis submenus (#505),
   which gathered six copy/paste items into one pair per axis.

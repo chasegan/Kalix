@@ -888,7 +888,7 @@ public class PlotInteractionManager {
 
         // View/state block (block 8): everything that changes how the data is shown, never
         // the data. First the axes, each as a submenu of its own commands: a submenu named
-        // for the thing its children act on, read aloud as "Left Y axis: copy range". The
+        // for the thing its children act on, read aloud as "Y axis (left): copy range". The
         // copy and paste items act immediately and carry no ellipsis (2.4); "Set axis
         // ranges…" opens a dialog, so it does; the remaining submenus are category nouns
         // with value children (6).
@@ -1286,7 +1286,7 @@ public class PlotInteractionManager {
         }
     }
 
-    /** {@code "Right Y axis: min must be less than max."}: the row's own label, then the codec's complaint. */
+    /** {@code "Y axis (right): min must be less than max."}: the row's own label, then the codec's complaint. */
     private static String aboutAxis(String axisLabel, String message) {
         String reason = message.length() > 1 && Character.isLowerCase(message.charAt(1))
             ? Character.toLowerCase(message.charAt(0)) + message.substring(1) : message;

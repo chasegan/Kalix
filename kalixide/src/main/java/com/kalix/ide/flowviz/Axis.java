@@ -14,14 +14,16 @@ public enum Axis {
 
     /**
      * The axis' name as the menus, the Key and the dialog spell it. The one Y axis is "Y
-     * axis"; once there is a right one, the two are told apart as left and right, which
-     * is what the eye sees (ADR-0002 §2.3: no word the plot does not already supply).
+     * axis"; once there is a right one, the two are told apart by a qualifier after the
+     * name, "Y axis (left)" and "Y axis (right)", which is what the eye sees (ADR-0002
+     * §2.3: no word the plot does not already supply) and keeps the names in step with
+     * "X axis". In prose the qualifier leads: "Move to right Y axis".
      */
     public String label(boolean rightAxisInUse) {
         return switch (this) {
             case X -> "X axis";
-            case Y -> rightAxisInUse ? "Left Y axis" : "Y axis";
-            case Y2 -> "Right Y axis";
+            case Y -> rightAxisInUse ? "Y axis (left)" : "Y axis";
+            case Y2 -> "Y axis (right)";
         };
     }
 }

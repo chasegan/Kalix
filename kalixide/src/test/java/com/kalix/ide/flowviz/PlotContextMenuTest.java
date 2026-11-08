@@ -85,17 +85,17 @@ class PlotContextMenuTest {
     }
 
     @Test
-    void withARightAxisTheMenuTellsTheTwoApartAsLeftAndRight() {
+    void withARightAxisTheMenuQualifiesTheTwoAsLeftAndRight() {
         panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         JPopupMenu menu = menu();
 
-        assertTrue(visibleLabels(menu.getComponents()).containsAll(List.of("X axis", "Left Y axis", "Right Y axis")));
+        assertTrue(visibleLabels(menu.getComponents()).containsAll(List.of("X axis", "Y axis (left)", "Y axis (right)")));
         assertEquals(List.of("Fit to data", "Copy range", "Paste range"),
             visibleLabels(submenu(menu, "X axis").getMenuComponents()), "the time axis has no range to auto-fit");
         assertEquals(List.of("Fit to data", "Auto-range", "Copy range", "Paste range"),
-            visibleLabels(submenu(menu, "Left Y axis").getMenuComponents()));
+            visibleLabels(submenu(menu, "Y axis (left)").getMenuComponents()));
         assertEquals(List.of("Fit to data", "Auto-range", "Copy range", "Paste range"),
-            visibleLabels(submenu(menu, "Right Y axis").getMenuComponents()));
+            visibleLabels(submenu(menu, "Y axis (right)").getMenuComponents()));
     }
 
     @Test
@@ -103,8 +103,8 @@ class PlotContextMenuTest {
         panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         panel.model().update(st -> st.withAutoRangeAll(true).withAutoRange(Axis.Y, false));
         JPopupMenu menu = menu();
-        JCheckBoxMenuItem left = (JCheckBoxMenuItem) submenu(menu, "Left Y axis").getMenuComponent(1);
-        JCheckBoxMenuItem right = (JCheckBoxMenuItem) submenu(menu, "Right Y axis").getMenuComponent(1);
+        JCheckBoxMenuItem left = (JCheckBoxMenuItem) submenu(menu, "Y axis (left)").getMenuComponent(1);
+        JCheckBoxMenuItem right = (JCheckBoxMenuItem) submenu(menu, "Y axis (right)").getMenuComponent(1);
         assertFalse(left.isSelected());
         assertTrue(right.isSelected());
 
