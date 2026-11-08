@@ -80,7 +80,7 @@ class PlotContextMenuTest {
         assertEquals(List.of(
             "Zoom to fit", "---",
             "Save data…", "---",
-            "X axis", "Y axis", "Set axis ranges…", "Y axis scale", "---",
+            "X axis", "Y axis", "Y axis scale", "---",
             "Line shape", "Missing data", "---",
             "Reset key"), visibleLabels(menu().getComponents()));
     }
@@ -91,11 +91,11 @@ class PlotContextMenuTest {
         JPopupMenu menu = menu();
 
         assertTrue(visibleLabels(menu.getComponents()).containsAll(List.of("X axis", "Y axis (left)", "Y axis (right)")));
-        assertEquals(List.of("Fit to data", "Copy range", "Paste range"),
+        assertEquals(List.of("Fit to data", "Set range…", "Copy range", "Paste range"),
             visibleLabels(submenu(menu, "X axis").getMenuComponents()), "the time axis has no range to auto-fit");
-        assertEquals(List.of("Fit to data", "Auto-range", "Copy range", "Paste range"),
+        assertEquals(List.of("Fit to data", "Set range…", "Copy range", "Paste range", "Auto-range"),
             visibleLabels(submenu(menu, "Y axis (left)").getMenuComponents()));
-        assertEquals(List.of("Fit to data", "Auto-range", "Copy range", "Paste range"),
+        assertEquals(List.of("Fit to data", "Set range…", "Copy range", "Paste range", "Auto-range"),
             visibleLabels(submenu(menu, "Y axis (right)").getMenuComponents()));
     }
 
@@ -104,8 +104,8 @@ class PlotContextMenuTest {
         panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         panel.model().update(st -> st.withAutoRangeAll(true).withAutoRange(Axis.Y, false));
         JPopupMenu menu = menu();
-        JCheckBoxMenuItem left = (JCheckBoxMenuItem) submenu(menu, "Y axis (left)").getMenuComponent(1);
-        JCheckBoxMenuItem right = (JCheckBoxMenuItem) submenu(menu, "Y axis (right)").getMenuComponent(1);
+        JCheckBoxMenuItem left = (JCheckBoxMenuItem) submenu(menu, "Y axis (left)").getMenuComponent(4);
+        JCheckBoxMenuItem right = (JCheckBoxMenuItem) submenu(menu, "Y axis (right)").getMenuComponent(4);
         assertFalse(left.isSelected());
         assertTrue(right.isSelected());
 

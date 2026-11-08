@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Text &lt;-&gt; value codec for axis ranges, in the axis' own units: the pure half of the
- * axis menus' "Copy range" and "Paste range" and of the "Set axis ranges…" dialog.
+ * axis menus' "Set range…", "Copy range" and "Paste range".
  *
  * <p>X bounds are viewport longs: real epoch millis on a {@link XAxisType#TIME} axis, and
  * fake-timestamp encodings on the others (percentile &times;
