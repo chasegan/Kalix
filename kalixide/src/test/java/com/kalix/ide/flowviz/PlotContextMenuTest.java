@@ -47,7 +47,7 @@ class PlotContextMenuTest {
 
     /** The menu as it is about to show: its listener has synced it with the plot. */
     private JPopupMenu menu() {
-        JPopupMenu menu = panel.interactionsForTests().contextMenu();
+        JPopupMenu menu = panel.interactionsForTests().contextMenuForTests();
         for (PopupMenuListener l : menu.getPopupMenuListeners()) {
             l.popupMenuWillBecomeVisible(new PopupMenuEvent(menu));
         }

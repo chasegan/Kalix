@@ -65,12 +65,18 @@ class FlowVizStateTest {
     }
 
     @Test
-    void theAllFlagSetsEveryAxis() {
+    void withAutoRangeAllSetsEveryAxis() {
         FlowVizState s = FlowVizState.INITIAL.withVisibleSeries(List.of(A, B)).withSeriesOnRightAxis(A, true)
             .withAutoRange(Axis.Y2, false);
         assertTrue(s.withAutoRangeAll(true).isAutoRangeAll());
         assertFalse(s.withAutoRangeAll(false).isAutoRangeAny());
-        assertThrows(IllegalArgumentException.class, () -> s.isAutoRange(Axis.X), "X has no range to fit");
+    }
+
+    @Test
+    void theTimeAxisHasNoAutoRangeFlag() {
+        FlowVizState s = FlowVizState.INITIAL;
+        assertThrows(IllegalArgumentException.class, () -> s.isAutoRange(Axis.X));
+        assertThrows(IllegalArgumentException.class, () -> s.withAutoRange(Axis.X, true));
     }
 
     @Test

@@ -821,7 +821,7 @@ public class PlotInteractionManager {
     }
 
     /** The plot's context menu, for tests that check what it offers. */
-    JPopupMenu contextMenu() {
+    JPopupMenu contextMenuForTests() {
         return contextMenu;
     }
 

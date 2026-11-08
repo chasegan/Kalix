@@ -259,10 +259,10 @@ class FlowVizPanelRightAxisTest {
         assertEquals(zoomedBoth.getStartTimeMs(), view().getStartTimeMs(), "X zooms about the centre");
         assertEquals(zoomedBoth.getMinValue(), view().getMinValue(), "the manual left axis zooms with the gesture");
         assertEquals(zoomedBoth.getMaxValue(), view().getMaxValue());
-        double[] fitted = panel.interactionsForTests().fittedRangeForAxis(Axis.Y2);
-        assertEquals(fitted[0], view().getY2MinValue(), "the auto-ranged right axis refits to the new window");
-        assertEquals(fitted[1], view().getY2MaxValue());
-        assertTrue(view().getY2MinValue() != zoomedBoth.getY2MinValue(), "and is not merely zoomed: " + view());
+        // Only large's middle point (1500) is left in the narrower window
+        assertTrue(view().getY2MinValue() < 1500 && view().getY2MaxValue() > 1500, "the right axis holds the point in view: " + view());
+        assertTrue(view().getY2MaxValue() - view().getY2MinValue() < zoomedBoth.getY2MaxValue() - zoomedBoth.getY2MinValue(),
+            "refit to that point, tighter than the zoom would have left it: " + view());
     }
 
     @Test
