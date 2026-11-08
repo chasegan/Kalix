@@ -8,7 +8,7 @@ Model outputs listed in the [outputs] section are recorded during the simulation
 
 Refer to the node documentation ([Nodes](nodes.md)) to see the available outputs.
 
-Each entry is dot-separated names of letters, digits and underscores, such as `node.dam.volume`, is not case sensitive, and may be listed once. An entry with any other shape (a space, a symbol, an empty part, no dot) is refused when the engine loads the model. An entry that names an output nothing produces is not an error: the IDE shows it as an empty series, the CLI leaves its column out of the CSV, and in Python `get_outputs()` raises for it unless `missing_ok=True`, which returns zeros.
+Each entry is dot-separated names of letters, digits and underscores, such as `node.dam.volume`, and is not case sensitive; an entry listed twice is recorded once. An entry with any other shape (a space, a symbol, an empty part, no dot) is refused when the engine loads the model. An entry that names an output nothing produces is not an error: the IDE shows it as an empty series, the CLI leaves its column out of the CSV, and in Python `get_outputs()` raises for it unless `missing_ok=True`, which returns zeros.
 
 Values published by [`[var.*]` blocks](vars.md) are recordable the same way —
 one bare line per series:
