@@ -159,12 +159,56 @@ See [Allocation systems](allocation-systems.md#how) for how `allocate` and
 `reset_allocation` combine into a working announced-allocation scheme, including
 priority tiers and resource assessment.
 
+**Sharing a volume** — `distribute` places one volume across the target
+accounts: <a name="distribute"></a>
+
+| Action | Effect |
+| --- | --- |
+| `distribute(x, by_size)` | Share `x` across the target accounts in proportion to their sizes. |
+| `distribute(x, by_balance)` | Share `x` in proportion to their balances as they stood before the action. |
+
+A positive `x` credits and a negative `x` debits. No balance leaves
+`[0, size]` by this action: an account that fills, or empties, takes what it
+can, and the rest is shared among the others by the same weights, until the
+volume is placed or no account has room. What finds no room is recorded as
+[`ras.<name>.undistributed`](#series), never silently dropped. An account with
+no weight — a zero size, or a zero balance under `by_balance` — receives
+nothing. `x` is one volume for the whole pool, evaluated once per firing, so
+like `allocate` it never takes `self`; and where `targets` names several
+groups, their accounts form one pool.
+
+The two idioms are new resource shared by entitlement, and a loss shared by
+holding:
+
+```ini
+[ras.share_inflow]
+targets = acc.stgeorge
+trigger = every_step
+action  = distribute(node.beardmore.inflow[-1, 0], by_size)
+
+[ras.share_evap]
+targets = acc.stgeorge
+trigger = every_step
+action  = distribute(-node.beardmore.evap_vol[-1, 0], by_balance)
+```
+
+A distributed debit is policy, not use: like `debit(x)` it moves the balance
+and leaves `debits` and `use` alone, so the allocation falls with it. A
+standing `allocate` that fires again after a distributed loss tops the loss
+back up, because an announcement only ever raises an allocation; share a loss
+across announced accounts only where the plan says the loss is borne by the
+holder.
+
 ## Recordable series
+
+<a name="series"></a>
 
 | Series | Meaning |
 | --- | --- |
 | `ras.<name>.fired` | 1 on steps the trigger fired, else 0. |
 | `ras.<name>.pct` | The percentage an `allocate` action last announced (carried forward between firings). |
+| `ras.<name>.amount` | The volume a `distribute` action was asked to share this step; 0 on steps it did not fire. |
+| `ras.<name>.undistributed` | The part of that volume that found no room: every target was full, or empty, or had no weight. 0 on steps it did not fire. |
 
 Both are opt-in via [`[outputs]`](model-outputs.md), like any recorder.
 
@@ -173,6 +217,7 @@ Both are opt-in via [`[outputs]`](model-outputs.md), like any recorder.
 - Exactly one `trigger` and one `action` per section. Related steps are
   consecutive sections; there is no second ordering rule inside a section.
 - `allocate` takes a single target group.
+- `distribute` pools every account its targets name, and takes one volume.
 - Everything a RAS reads is an ordinary expression, so any resource assessment —
   storage volume, minimum inflows, a lookup curve, reserve balances — is authored,
   not built in.

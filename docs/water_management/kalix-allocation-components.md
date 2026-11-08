@@ -27,7 +27,11 @@ Three commitments, applied to management:
 ## 2. Where Kalix stands today
 
 *Phase 1 (§5) is built: account groups, the RAS kernel with its stencilled
-action set, node references, and the `acc.*` expression namespace.*
+action set, node references, and the `acc.*` expression namespace. Of the
+distributive actions, `distribute(x, by_size | by_balance)` is built
+(ADR-0019): one signed volume shared by weight, capped at `[0, size]` with
+the internal-spill redistribution of §3.5, which covers the crediting of
+`share_inflow` and `apportion_loss`; `reconcile` is not built.*
 
 | Exists now | Role in this design |
 |---|---|

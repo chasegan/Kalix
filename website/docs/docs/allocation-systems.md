@@ -102,6 +102,10 @@ The percentage comes from an authored assessment — here a lookup over storage 
 
 **Priority tiers** — a high-priority town supply filled before medium-priority irrigators — are just more `[ras.*]` sections: one `allocate` per class, each with its own curve, running in file order. **Reserves** are ordinary accounts credited by their own rule. A plain balance can be held to a **carryover limit** at year end with [`reduce_to`](ras.md#actions) rather than zeroed.
 
+### Sharing a volume
+
+Where the resource is shared rather than announced — capacity sharing, or a loss borne by the holders — one [`distribute`](ras.md#distribute) section shares a volume across a group: inflow in proportion to account size, a loss in proportion to balance. An account that fills or empties takes what it can and the rest goes to the others, so a full account's share spills to its neighbours as it does in the St George scheme; what no account can hold is recorded, not lost.
+
 For the full grammar see **[`[acc.*]`](accounts.md)** and **[`[ras.*]`](ras.md)**.
 
 ## Further reading
