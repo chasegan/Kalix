@@ -275,8 +275,8 @@ impl RasSystem {
     /// of what remains, capped at that room; an account that reaches its room
     /// leaves the pool and the next pass shares the rest among those left, by
     /// the same frozen weights. A pass that fills nobody has placed the whole
-    /// remainder, so the loop ends in at most one pass per target, with no
-    /// dependence on target order. What is left when no account has room is
+    /// remainder, so the loop ends in at most one filling pass per target and
+    /// one more, with no dependence on target order. What is left when no account has room is
     /// `last_undistributed`, for the recorder — never silently dropped.
     ///
     /// Balances are written through the unclamped setter: an account already

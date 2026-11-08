@@ -27,8 +27,9 @@ over `self`. The question was what the action is, and how much it does.
   recorded.
 - Manifesto §2.8 — one verb for both directions and both weights, not a verb
   per idiom.
-- [ADR-0004](0004-performance-on-the-hot-path.md) §3.5 — a model without the
-  action pays nothing; a firing allocates nothing.
+- [ADR-0004](0004-performance-on-the-hot-path.md) §3.5 — a model without a
+  `[ras.*]` section pays nothing, and one on another action only the tests
+  for two recorders; a firing allocates nothing.
 
 ## Considered options
 
@@ -53,18 +54,20 @@ Chosen option: **1**.
    action. Each pass hands every account with room its weighted share of
    what remains, capped at that room; an account that reaches its room leaves
    the pool, and the rest is shared among those left by the same weights.
-   The loop ends in at most one pass per target and does not depend on
-   target order. An account with no weight receives nothing. An account
+   The loop ends in at most one filling pass per target and one more, and
+   does not depend on target order. An account with no weight receives nothing. An account
    already above its size, from an announcement over 100%, has no room to
    credit and is debited by its share, not cut back to its size.
 3. **What finds no room is recorded.** `ras.<name>.undistributed` carries
-   it, and `ras.<name>.amount` the volume asked for; both read as zero on
-   steps the action does not fire. The ledger's mass balance is auditable
-   from the series.
+   it, signed like the amount, and `ras.<name>.amount` the volume asked for;
+   both read as zero on steps the action does not fire. The ledger's mass
+   balance is auditable from the series: the amount less the undistributed
+   part is what landed.
 4. **One volume for the pool.** `x` is evaluated once per firing and never
    takes `self`, as `allocate` does not. Where `targets` names several
    groups their accounts form one pool, as stencilled actions already
-   flatten them.
+   flatten them; a group named twice is a load error, since it would weigh
+   twice.
 5. **Policy, not use.** A distributed debit moves the balance and leaves
    `debits` and `use` alone, as `debit(x)` does; only a user's take is use.
 6. **No new timing slot.** The action runs in the ras slot like every other,
@@ -80,8 +83,12 @@ the requirement.
 
 - ✅ Inflow sharing and loss attribution are one section each, and every
   balance they move is a recordable account.
-- ✅ Models without the action run the instructions they ran before; a RAS
-  on another action pays two `Option` tests per step for the new recorders.
+- ✅ Models without a `[ras.*]` section run the instructions they ran
+  before. A RAS on another action pays two `Option` tests per step for the
+  new recorders: speed test 10, a regulated system with one RAS, measured at
+  the noise floor against `main` (sim time by minimum over 7 repeats, three
+  alternating runs each: 39.6, 40.1, 40.3 ms on `main`; 40.2, 40.2, 39.9 ms
+  here; Apple silicon, one session).
 - ❌ A firing costs O(passes × targets), at most O(targets²); accepted, as
   firings are rare or the pool is small, and the weights live in a scratch
   sized at load.
@@ -95,11 +102,12 @@ balances 100/95/45, nothing undistributed.
 
 ## Enforcement
 
-- **Structural**: §1, §3 and §4 by the parser in
+- **Structural**: §1 and §4 by the parser in
   `src/io/ini_model_io_versions/ini_doc_model_io_0_0_1.rs` (the two weight
-  keywords, the closed series set, `self` refused); §2 and §5 by
-  `RasSystem::distribute` in `src/hydrology/allocation_systems/ras.rs`, tested
-  in `src/tests/test_ras.rs` (`test_distribute_*`).
+  keywords, the closed series set, `self` refused, a group once in
+  `targets`); §2, §3 and §5 by `RasSystem::distribute` and `run` in
+  `src/hydrology/allocation_systems/ras.rs`, tested in
+  `src/tests/test_ras.rs` (`test_distribute_*`).
 - **Advisory**: that the weights stay at two. A `by_<column>` weight, or a
   reconciliation verb, is proposed against §1 when a use case arrives.
 
