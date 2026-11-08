@@ -52,8 +52,10 @@ import java.awt.event.MouseWheelEvent;
 import java.io.File;
 import java.io.IOException;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -531,6 +533,15 @@ public class PlotInteractionManager {
      * so the one rule holds for all of them.
      */
     private void navigate(ViewPort navigated) {
+        navigate(navigated, Set.of());
+    }
+
+    /**
+     * As {@link #navigate(ViewPort)}, except that the axes in {@code explicit} show the
+     * range {@code navigated} gives them whether or not they are auto-ranged: the user
+     * typed those, and the caller is about to switch their auto-range off.
+     */
+    private void navigate(ViewPort navigated, Set<Axis> explicit) {
         ViewPort current = viewportSupplier.get();
         if (current == null) return;
 
@@ -538,12 +549,12 @@ public class PlotInteractionManager {
         long endTime = navigated.getEndTimeMs();
         YAxisScale scale = navigated.getYAxisScale();
         ViewPort settled = navigated;
-        if (isAutoRange(Axis.Y)) {
+        if (isAutoRange(Axis.Y) && !explicit.contains(Axis.Y)) {
             double[] y = fittedRangeForAxis(Axis.Y, startTime, endTime, scale);
             settled = y != null ? settled.withValueBounds(y[0], y[1])
                 : settled.withValueBounds(current.getMinValue(), current.getMaxValue());
         }
-        if (navigated.hasY2() && isAutoRange(Axis.Y2)) {
+        if (navigated.hasY2() && isAutoRange(Axis.Y2) && !explicit.contains(Axis.Y2)) {
             double[] y2 = fittedRangeForAxis(Axis.Y2, startTime, endTime, scale);
             settled = y2 != null ? settled.withY2Bounds(y2[0], y2[1])
                 : settled.withY2Bounds(current.getY2MinValue(), current.getY2MaxValue());
@@ -1194,28 +1205,7 @@ public class PlotInteractionManager {
                 ViewPort.validateBounds(x[0], x[1], currentViewport.getMinValue(), currentViewport.getMaxValue());
                 double[] y = parseValueRange(yField.getText(), yLabel);
                 double[] y2 = y2Field != null ? parseValueRange(y2Field.getText(), y2Label) : null;
-                // An edited value field is an explicit range for that axis, whose auto-range
-                // goes off; an untouched one (the codec's formatting round-trips exactly)
-                // leaves its axis alone, so the change is navigation for it.
-                boolean yEdited = y[0] != currentViewport.getMinValue() || y[1] != currentViewport.getMaxValue();
-                boolean y2Edited = y2 != null
-                    && (y2[0] != currentViewport.getY2MinValue() || y2[1] != currentViewport.getY2MaxValue());
-                if (yEdited || y2Edited) {
-                    ViewPort target = currentViewport.withTimeRange(x[0], x[1]);
-                    if (yEdited) {
-                        target = target.withValueBounds(y[0], y[1]);
-                    }
-                    if (y2Edited) {
-                        target = target.withY2Bounds(y2[0], y2[1]);
-                    }
-                    navigate(target);
-                    panel.model().update(st -> {
-                        FlowVizState next = yEdited ? st.withAutoRange(Axis.Y, false) : st;
-                        return y2Edited ? next.withAutoRange(Axis.Y2, false) : next;
-                    });
-                } else {
-                    applyXLimits(x[0], x[1]);
-                }
+                applyAxisRanges(x, y, y2);
                 dialog.dispose();
             } catch (IllegalArgumentException ex) {
                 // The dialog stays open so the user can correct the field.
@@ -1244,6 +1234,42 @@ public class PlotInteractionManager {
         dialog.pack();
         dialog.setLocationRelativeTo(panel);
         dialog.setVisible(true);
+    }
+
+    /**
+     * Applies the dialog's ranges, {@code y2} null when the plot has no right axis. An
+     * edited value range is explicit for its axis, whose auto-range goes off; an untouched
+     * one (the codec's formatting round-trips exactly) leaves its axis to follow the time
+     * change as navigation does. The viewport lands first and the flags second, so undo
+     * restores both in one step (see {@link #applyExplicitLimits}).
+     */
+    void applyAxisRanges(long[] x, double[] y, double[] y2) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) {
+            return;
+        }
+        Set<Axis> explicit = EnumSet.noneOf(Axis.class);
+        ViewPort target = currentViewport.withTimeRange(x[0], x[1]);
+        if (y[0] != currentViewport.getMinValue() || y[1] != currentViewport.getMaxValue()) {
+            target = target.withValueBounds(y[0], y[1]);
+            explicit.add(Axis.Y);
+        }
+        if (y2 != null && currentViewport.hasY2()
+                && (y2[0] != currentViewport.getY2MinValue() || y2[1] != currentViewport.getY2MaxValue())) {
+            target = target.withY2Bounds(y2[0], y2[1]);
+            explicit.add(Axis.Y2);
+        }
+        navigate(target, explicit);
+        panel.repaint();
+        if (!explicit.isEmpty()) {
+            panel.model().update(st -> {
+                FlowVizState next = st;
+                for (Axis axis : explicit) {
+                    next = next.withAutoRange(axis, false);
+                }
+                return next;
+            });
+        }
     }
 
     /** Parses and checks a value axis' range, naming the axis in any complaint. */
