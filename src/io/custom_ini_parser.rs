@@ -62,6 +62,7 @@ impl IniDocument {
     /// since the readers match keys ignoring case; a repeat is refused, naming
     /// both lines. The one exception is a repeated `[outputs]` entry, which
     /// is kept once: it names a result, and asking twice means the same thing.
+    /// The repeated line stays in the document's text, as a comment does.
     ///
     /// The comment grammar, shared with the IDE's parsers (see the website's
     /// Conventions page, "Comments"): `#` starts a comment anywhere outside
@@ -231,13 +232,16 @@ impl IniDocument {
                         let lowered = code.to_ascii_lowercase();
                         if let Some(&earlier) = seen_keys.get(&lowered) {
                             // A repeated [outputs] entry asks for a result already
-                            // recorded, and nothing is lost by keeping the first;
-                            // anywhere else a repeat is refused, as a repeated key is.
+                            // recorded, so the first is kept and the repeat is carried
+                            // verbatim as a leading line of whatever follows, as a
+                            // comment is, so that the text is written back as it was
+                            // read. Anywhere else a repeat is refused, as a repeated
+                            // key is.
                             if section_name != "outputs" {
                                 return Err(format!("Duplicate entry '{}' at line {} in [{}] (also listed on line {})",
                                     code, line_number, section_name, earlier));
                             }
-                            pending_comments.clear();
+                            pending_comments.push(line.to_string());
                             line_idx += 1;
                             continue;
                         }
@@ -620,6 +624,15 @@ key3 = value3
         let keys: Vec<&String> = doc.sections["outputs"].properties.keys().collect();
         assert_eq!(keys, vec!["node.a.dsflow", "node.b.dsflow"]);
         assert_eq!(doc.sections["outputs"].properties["node.a.dsflow"].line_number, 2);
+    }
+
+    #[test]
+    fn test_repeated_outputs_entry_is_written_back_as_read() {
+        let content = "[outputs]\nnode.a.dsflow\n# recorded again, deliberately\nnode.a.dsflow  # see above\nnode.b.dsflow\n\n[node.a]\ntype = inflow\n";
+        let doc = IniDocument::parse(content).unwrap();
+        assert_eq!(doc.to_string(), content);
+        let trailing = "[outputs]\nnode.a.dsflow\nnode.a.dsflow\n";
+        assert_eq!(IniDocument::parse(trailing).unwrap().to_string(), trailing);
     }
 
     #[test]
