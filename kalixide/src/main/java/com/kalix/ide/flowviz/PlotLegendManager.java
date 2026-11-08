@@ -63,7 +63,7 @@ public class PlotLegendManager {
     private static final int COLLAPSED_WIDTH = 30;  // Width when fully collapsed
     private static final int COLLAPSED_HEIGHT = 24; // Height when fully collapsed
     private static final int DIVIDER_HEIGHT = 18;   // An axis caption row, above each group
-    // The captions appear only while there is a right axis, so the left one is "Left"
+    // The captions appear only while there is a right axis, so the left one carries its qualifier
     private static final String LEFT_CAPTION = Axis.Y.label(true);
     private static final String RIGHT_CAPTION = Axis.Y2.label(true);
 

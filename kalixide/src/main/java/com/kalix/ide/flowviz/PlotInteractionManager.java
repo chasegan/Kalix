@@ -889,9 +889,8 @@ public class PlotInteractionManager {
         contextMenu.addSeparator();
 
         // View/state block (block 8): everything that changes how the data is shown, never
-        // the data. First the axes, each as a submenu of its own commands: a submenu named
-        // for the thing its children act on, read aloud as "Y axis (left): copy range"
-        // (6). Every axis command lives in its axis; the remaining submenus are category
+        // the data. First the axes, each a submenu named for the thing its children act on,
+        // read aloud as "Y axis (left): copy range"; the remaining submenus are category
         // nouns with value children (6).
         for (Axis axis : Axis.values()) {
             AxisMenu axisMenu = buildAxisMenu(axis);
@@ -913,7 +912,7 @@ public class PlotInteractionManager {
         contextMenu.add(yAxisScaleMenu);
 
         // Still the view block, but what follows acts on the lines, not the axes, so a
-        // divider splits the block by subject (ADR-0002 §1, the 2026-11-08 note).
+        // divider splits the block by subject (ADR-0002 §1).
         contextMenu.addSeparator();
 
         // Line shape submenu: a category noun with value children (6). The items are shared
@@ -1008,10 +1007,10 @@ public class PlotInteractionManager {
 
     /**
      * One axis' commands as a submenu named for it. "Fit to data" leads, being what
-     * double-clicking the axis does (ADR-0002 §1, block 1); "Set range…" opens the ranges
-     * dialog on this axis' row, so it carries the ellipsis (2.4); copy and paste act at
-     * once; the value axes close with their auto-range setting, a checkbox after the
-     * commands as the top-level menu keeps settings after commands.
+     * double-clicking the axis does (ADR-0002 §1, block 1); "Set range…" opens the Set axis
+     * ranges dialog on this axis' row, so it carries the ellipsis (2.4); copy and paste act
+     * at once; the value axes close with their auto-range setting, the checkbox after the
+     * commands (6).
      */
     private AxisMenu buildAxisMenu(Axis axis) {
         JMenu menu = new JMenu(axis.label(true));
@@ -1023,7 +1022,7 @@ public class PlotInteractionManager {
         set.addActionListener(e -> showSetAxesDialog(axis));
         menu.add(set);
 
-        // Copy and paste go through AxisLimitCodec -- the same codec the ranges dialog
+        // Copy and paste go through AxisLimitCodec -- the same codec the Set axis ranges dialog
         // uses -- so the clipboard always carries the axis' own units.
         JMenuItem copy = new JMenuItem("Copy range");
         copy.addActionListener(e -> copyAxisRange(axis));
