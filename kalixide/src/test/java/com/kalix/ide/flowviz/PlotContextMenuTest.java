@@ -75,6 +75,15 @@ class PlotContextMenuTest {
         throw new AssertionError("no submenu " + label);
     }
 
+    private static JMenuItem item(JMenu menu, String label) {
+        for (Component c : menu.getMenuComponents()) {
+            if (c instanceof JMenuItem i && label.equals(i.getText())) {
+                return i;
+            }
+        }
+        throw new AssertionError("no item " + label + " under " + menu.getText());
+    }
+
     @Test
     void withOneYAxisTheMenuNamesItPlainlyAndHidesTheRightOne() {
         assertEquals(List.of(
@@ -104,8 +113,8 @@ class PlotContextMenuTest {
         panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         panel.model().update(st -> st.withAutoRangeAll(true).withAutoRange(Axis.Y, false));
         JPopupMenu menu = menu();
-        JCheckBoxMenuItem left = (JCheckBoxMenuItem) submenu(menu, "Y axis (left)").getMenuComponent(4);
-        JCheckBoxMenuItem right = (JCheckBoxMenuItem) submenu(menu, "Y axis (right)").getMenuComponent(4);
+        JCheckBoxMenuItem left = (JCheckBoxMenuItem) item(submenu(menu, "Y axis (left)"), "Auto-range");
+        JCheckBoxMenuItem right = (JCheckBoxMenuItem) item(submenu(menu, "Y axis (right)"), "Auto-range");
         assertFalse(left.isSelected());
         assertTrue(right.isSelected());
 
