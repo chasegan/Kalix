@@ -206,8 +206,9 @@ command.
 
 Where the children are **commands on one thing**, the title is that thing's
 name, a noun in sentence case (`Left Y axis`), and the children are items
-under §2.2 (`Fit to data`, `Copy range`). Read aloud as thing then command:
-"Left Y axis: copy range".
+under §2.2 (`Fit to data`, `Copy range`), with a checkbox where the thing
+has a setting (`Auto-range`). Read aloud as thing then command: "Left Y
+axis: copy range".
 
 ### Consequences
 
