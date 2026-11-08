@@ -92,7 +92,7 @@ public class UniqueNameValidator implements ValidationStrategy {
                 }
             }
         }
-        checkEntries(model.getOutputReferenceEntries(), "outputs", rule, result);
+        // A repeated [outputs] entry is kept once by the engine, so it is not reported here.
         // An aliased [data] line is keyed by its alias, so one file may be listed under
         // two aliases; only the bare paths are entries in the engine's sense.
         Set<Integer> aliasLines = new HashSet<>();

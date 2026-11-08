@@ -11,10 +11,11 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Entries that appear twice are wrong twice. A repeated key or bare entry is reported
- * on the line that repeats it, pointing back to the first, as the engine's refusal
- * does; a duplicated bad {@code [outputs]} reference or missing input file is reported
- * on every line, since each line is wrong in its own right.
+ * Entries that appear twice are wrong twice. A repeated key or bare {@code [data]} entry
+ * is reported on the line that repeats it, pointing back to the first, as the engine's
+ * refusal does; a repeated {@code [outputs]} entry is not, since the engine keeps it once;
+ * a duplicated bad {@code [outputs]} reference or missing input file is reported on every
+ * line, since each line is wrong in its own right.
  */
 class DuplicateEntryLintTest {
 
@@ -74,8 +75,9 @@ class DuplicateEntryLintTest {
         assertEquals(List.of(4), linesOf(result, "duplicate_key"));
     }
 
+    /** The engine records a result listed twice once, so the repeat is not an error. */
     @Test
-    void duplicateOutputEntryIsADuplicateKey() {
+    void duplicateOutputEntryIsNotReported() {
         String model = """
                 [outputs]
                 node.a.dsflow
@@ -86,7 +88,7 @@ class DuplicateEntryLintTest {
         ValidationResult result = new ValidationResult();
         new UniqueNameValidator().validate(parsed, LinterSchema.loadDefault(), result, null);
 
-        assertEquals(List.of(4), linesOf(result, "duplicate_key"));
+        assertEquals(List.of(), linesOf(result, "duplicate_key"));
     }
 
     @Test

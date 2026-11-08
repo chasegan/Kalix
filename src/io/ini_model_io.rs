@@ -238,6 +238,14 @@ mod tests {
         assert_eq!(model.outputs, vec!["node.bh.dsflow".to_string()]);
     }
 
+    /// A result listed twice in [outputs] is recorded once, not refused.
+    #[test]
+    fn read_model_string_keeps_a_repeated_output_once() {
+        let ini = format!("{}\n[outputs]\nnode.bh.dsflow\nnode.bh.usflow\nnode.bh.dsflow\n", model_ini());
+        let model = IniModelIO::read_model_string(&ini).expect("a repeated output is not an error");
+        assert_eq!(model.outputs, vec!["node.bh.dsflow".to_string(), "node.bh.usflow".to_string()]);
+    }
+
     /// Write a two-day Pixie pair to a unique temp dir; returns the base path.
     fn write_pixie_fixture(test_name: &str) -> std::path::PathBuf {
         use crate::io::pixie_io;

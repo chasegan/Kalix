@@ -60,7 +60,8 @@ impl IniDocument {
     /// Parses Kalix INI text. A section header may appear only once in a
     /// document, and a key or bare entry once in its section, in any case,
     /// since the readers match keys ignoring case; a repeat is refused, naming
-    /// both lines.
+    /// both lines. The one exception is a repeated `[outputs]` entry, which
+    /// is kept once: it names a result, and asking twice means the same thing.
     ///
     /// The comment grammar, shared with the IDE's parsers (see the website's
     /// Conventions page, "Comments"): `#` starts a comment anywhere outside
@@ -227,10 +228,20 @@ impl IniDocument {
                         // The inline comment is kept (slot 0, as for a property's first
                         // line) so a canonical rewrite of the item can carry it along.
                         let section = sections.get_mut(section_name).unwrap();
-                        if let Some(earlier) = seen_keys.insert(code.to_ascii_lowercase(), line_number) {
-                            return Err(format!("Duplicate entry '{}' at line {} in [{}] (also listed on line {})",
-                                code, line_number, section_name, earlier));
+                        let lowered = code.to_ascii_lowercase();
+                        if let Some(&earlier) = seen_keys.get(&lowered) {
+                            // A repeated [outputs] entry asks for a result already
+                            // recorded, and nothing is lost by keeping the first;
+                            // anywhere else a repeat is refused, as a repeated key is.
+                            if section_name != "outputs" {
+                                return Err(format!("Duplicate entry '{}' at line {} in [{}] (also listed on line {})",
+                                    code, line_number, section_name, earlier));
+                            }
+                            pending_comments.clear();
+                            line_idx += 1;
+                            continue;
                         }
+                        seen_keys.insert(lowered, line_number);
 
                         let property = IniProperty {
                             value: String::new(),  // Empty value for list items
@@ -597,9 +608,18 @@ key3 = value3
 
     #[test]
     fn test_repeated_list_item_in_a_section_is_refused() {
-        let content = "[outputs]\nnode.a.dsflow\nnode.b.dsflow\nnode.a.dsflow\n";
+        let content = "[data]\na.csv\nb.csv\na.csv\n";
         let err = IniDocument::parse(content).unwrap_err();
-        assert_eq!(err, "Duplicate entry 'node.a.dsflow' at line 4 in [outputs] (also listed on line 2)");
+        assert_eq!(err, "Duplicate entry 'a.csv' at line 4 in [data] (also listed on line 2)");
+    }
+
+    #[test]
+    fn test_repeated_outputs_entry_is_kept_once() {
+        let content = "[outputs]\nnode.a.dsflow  # first\nnode.b.dsflow\nNode.A.dsflow\n";
+        let doc = IniDocument::parse(content).unwrap();
+        let keys: Vec<&String> = doc.sections["outputs"].properties.keys().collect();
+        assert_eq!(keys, vec!["node.a.dsflow", "node.b.dsflow"]);
+        assert_eq!(doc.sections["outputs"].properties["node.a.dsflow"].line_number, 2);
     }
 
     #[test]
