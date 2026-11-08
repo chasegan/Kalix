@@ -246,13 +246,20 @@ mod tests {
         assert_eq!(model.outputs, vec!["node.bh.dsflow".to_string(), "node.bh.usflow".to_string()]);
     }
 
-    /// A standard save writes the repeated line, and the comments around it, as they were read.
+    /// A standard save lists the result once and keeps the comments; removing the
+    /// output removes it, the dropped repeat does not bring it back.
     #[test]
-    fn standard_save_keeps_a_repeated_output_line_as_written() {
+    fn standard_save_drops_a_repeated_output_line_and_keeps_its_comments() {
         let ini = format!("{}\n[outputs]\nnode.bh.dsflow\n# once more\nnode.bh.dsflow  # on purpose\nnode.bh.usflow\n", model_ini());
         let mut model = IniModelIO::read_model_string(&ini).expect("a repeated output is not an error");
         model.configuration.save_method = crate::misc::configuration::SaveMethod::Standard;
-        assert_eq!(IniModelIO::model_to_string(&model), ini);
+        assert_eq!(IniModelIO::model_to_string(&model),
+            format!("{}\n[outputs]\nnode.bh.dsflow\n# once more\nnode.bh.usflow\n", model_ini()));
+
+        model.outputs.retain(|o| o != "node.bh.dsflow");
+        let saved = IniModelIO::model_to_string(&model);
+        let reloaded = IniModelIO::read_model_string(&saved).expect("saved model reloads");
+        assert_eq!(reloaded.outputs, vec!["node.bh.usflow".to_string()]);
     }
 
     /// Write a two-day Pixie pair to a unique temp dir; returns the base path.
