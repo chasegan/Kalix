@@ -356,3 +356,8 @@ this document.
   drifted to lowercase beside capitalised neighbours and the ADR-0012
   examples. Other existing messages are not re-cut; it is the standard the
   next one is held to.
+- *2026-11-08* — §6 gained a third grammar: a submenu may be named for the
+  **object** its children act on (`Left Y axis ▸ Fit to data`, `Copy range`),
+  read aloud as object then command. The title is the object's name in
+  sentence case and the children follow §2.2. Harvested from the plot's axis
+  submenus (#505), which gathered six copy/paste items into one per axis.

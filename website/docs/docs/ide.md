@@ -65,9 +65,11 @@ Use the **Navigate Back** and **Navigate Forward** buttons to flick back and for
 
 ![](../assets/docs-using-ide/image_9.png)
 
-**Plot on a secondary Y axis** to compare series of very different sizes. Ctrl+click a series in the plot's key (Cmd+click on macOS), or right-click it and choose **Move to secondary Y axis**, and it is drawn against its own axis on the right of the plot. The key then lists series under **Y axis** and **Secondary Y axis**; move the last one back and the secondary axis goes away. **Auto-scale Y axis** fits each axis to its own series, and while the secondary axis is shown the context menu gains **Copy secondary Y axis** and **Paste secondary Y axis**, and **Set axis limits…** gains a row for it.
+**Plot on a second Y axis** to compare series of very different sizes. Ctrl+click a series in the plot's key (Cmd+click on macOS), or right-click it and choose **Move to right Y axis**, and it is drawn against its own axis on the right of the plot. The key then lists series under **Left Y axis** and **Right Y axis**; move the last one back and the right axis goes away.
 
-**Drag an axis to set its range.** Grab the bottom half of a Y axis to move its minimum, or the top half to move its maximum; on the time axis, the left half moves the start and the right half the end. The value you grabbed follows the mouse while the other end stays put. Dragging a Y axis turns off **Auto-scale Y axis**. Double-click a Y axis to fit it to the data in view, or the time axis to show the whole record.
+**Each axis has its own menu.** Right-click the plot and open **X axis**, **Left Y axis** or **Right Y axis** for **Fit to data**, **Copy range** and **Paste range**; the Y axes also have **Auto-range**. An auto-ranged Y axis refits itself to its own series whenever you zoom or pan along the time axis, a manual one keeps the range you gave it, and a new right axis starts auto-ranged. The toolbar's **Auto-range Y axes** toggle sets every Y axis at once, and is on while they all are. **Set axis ranges…** has a row for each axis.
+
+**Drag an axis to set its range.** Grab the bottom half of a Y axis to move its minimum, or the top half to move its maximum; on the time axis, the left half moves the start and the right half the end. The value you grabbed follows the mouse while the other end stays put. Dragging a Y axis, or pasting or typing a range for it, turns off that axis' **Auto-range**. Double-click a Y axis to fit it to the data in view, or the time axis to show the whole record.
 
 The **Parameter Sheet** shows node properties in a table. Filter by node type and name. Great for model review or bulk edits. Find it in the Tools menu.
 
