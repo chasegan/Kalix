@@ -53,12 +53,12 @@ class FlowVizStateTest {
         FlowVizState split = manual.withSeriesOnRightAxis(A, true);
         assertTrue(split.isAutoRange(Axis.Y2), "born auto-ranged, whatever the left axis is");
         assertFalse(split.isAutoRange(Axis.Y));
-        assertTrue(split.isAnyAutoRange());
+        assertTrue(split.isAutoRangeAny());
         assertFalse(split.isAutoRangeAll());
 
         FlowVizState pinned = split.withAutoRange(Axis.Y2, false);
         assertFalse(pinned.isAutoRange(Axis.Y2));
-        assertFalse(pinned.isAnyAutoRange(), "neither axis follows the data now");
+        assertFalse(pinned.isAutoRangeAny(), "neither axis follows the data now");
 
         FlowVizState rejoined = pinned.withSeriesOnRightAxis(A, false);
         assertEquals(manual, rejoined, "the right axis' flag goes with the axis, so the states compare equal");
@@ -69,7 +69,7 @@ class FlowVizStateTest {
         FlowVizState s = FlowVizState.INITIAL.withVisibleSeries(List.of(A, B)).withSeriesOnRightAxis(A, true)
             .withAutoRange(Axis.Y2, false);
         assertTrue(s.withAutoRangeAll(true).isAutoRangeAll());
-        assertFalse(s.withAutoRangeAll(false).isAnyAutoRange());
+        assertFalse(s.withAutoRangeAll(false).isAutoRangeAny());
         assertThrows(IllegalArgumentException.class, () -> s.isAutoRange(Axis.X), "X has no range to fit");
     }
 

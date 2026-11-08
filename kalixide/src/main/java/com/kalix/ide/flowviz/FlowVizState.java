@@ -57,6 +57,8 @@ public final class FlowVizState {
         return INITIAL.withAutoRangeAll(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get());
     }
 
+    private static final String NOT_A_VALUE_AXIS = "A value axis, Y or Y2, not X.";
+
     private final List<SeriesRef> visibleSeries;
     private final Set<SourceRef> checkedSources;
     private final AggregationPeriod aggregationPeriod;
@@ -178,6 +180,9 @@ public final class FlowVizState {
 
     /** One value axis auto-ranged or not; the other is left as it is. */
     public FlowVizState withAutoRange(Axis axis, boolean auto) {
+        if (!axis.isValueAxis()) {
+            throw new IllegalArgumentException(NOT_A_VALUE_AXIS);
+        }
         boolean y = axis == Axis.Y ? auto : autoRangeY;
         boolean y2 = axis == Axis.Y2 ? auto : autoRangeY2;
         return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
@@ -251,13 +256,17 @@ public final class FlowVizState {
         return switch (axis) {
             case Y -> autoRangeY;
             case Y2 -> autoRangeY2;
-            case X -> throw new IllegalArgumentException("A value axis, Y or Y2, not X.");
+            case X -> throw new IllegalArgumentException(NOT_A_VALUE_AXIS);
         };
     }
     /** True when every value axis is auto-ranged: the toolbar toggle's state. */
     public boolean isAutoRangeAll() { return autoRangeY && autoRangeY2; }
     /** True when some value axis the plot shows is auto-ranged, so a change of window refits something. */
-    public boolean isAnyAutoRange() { return autoRangeY || (isRightAxisInUse() && autoRangeY2); }
+    public boolean isAutoRangeAny() { return autoRangeY || (isRightAxisInUse() && autoRangeY2); }
+    /** True when a value axis is auto-ranged now and was not in {@code old}: the moment it should refit. */
+    public boolean autoRangeTurnedOnSince(FlowVizState old) {
+        return (autoRangeY && !old.autoRangeY) || (autoRangeY2 && !old.autoRangeY2);
+    }
     public Set<SeriesRef> getRightAxisSeries() { return rightAxisSeries; }
     /** True when {@code ref} is drawn against the right axis. */
     public boolean isOnRightAxis(SeriesRef ref) { return rightAxisSeries.contains(ref); }

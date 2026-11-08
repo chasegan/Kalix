@@ -274,7 +274,7 @@ class FlowVizPanelRightAxisTest {
         panel.model().update(st -> st.withAutoRange(Axis.Y2, false));
 
         assertFalse(panel.model().current().isAutoRangeAll());
-        assertTrue(panel.model().current().isAnyAutoRange());
+        assertTrue(panel.model().current().isAutoRangeAny());
     }
 
     @Test

@@ -1055,8 +1055,7 @@ public class FlowVizPanel extends JPanel {
         boolean seriesChanged = !now.getVisibleSeries().equals(old.getVisibleSeries());
         boolean axesChanged = !now.getRightAxisSeries().equals(old.getRightAxisSeries());
         boolean scaleChanged = now.getYAxisScale() != old.getYAxisScale();
-        boolean autoRangeSwitchedOn = (now.isAutoRange(Axis.Y) && !old.isAutoRange(Axis.Y))
-            || (now.isAutoRange(Axis.Y2) && !old.isAutoRange(Axis.Y2));
+        boolean autoRangeSwitchedOn = now.autoRangeTurnedOnSince(old);
 
         if (scaleChanged && currentViewport != null) {
             currentViewport = currentViewport.withYAxisScale(now.getYAxisScale());
@@ -1086,7 +1085,7 @@ public class FlowVizPanel extends JPanel {
             } else {
                 zoomToFit();
             }
-        } else if ((scaleChanged || autoRangeSwitchedOn || axesChanged) && now.isAnyAutoRange()) {
+        } else if ((scaleChanged || autoRangeSwitchedOn || axesChanged) && now.isAutoRangeAny()) {
             fitYAxis();
         }
         repaint();
@@ -1176,7 +1175,7 @@ public class FlowVizPanel extends JPanel {
             // Reference series changed - need to recalculate
             rebuildOrDefer();
 
-            if (state().isAnyAutoRange()) {
+            if (state().isAutoRangeAny()) {
                 fitYAxis();
             }
         }
