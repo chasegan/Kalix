@@ -406,21 +406,19 @@ public class PlotInteractionManager {
             }
             case Y_MIN, Y_MAX -> {
                 ViewPort dragged = start.dragValueEnd(axisDrag == AxisHandle.Y_MAX, axisDragPress.y, point.y);
-                acceptNewAxes(current.getStartTimeMs(), current.getEndTimeMs(),
-                    dragged.getMinValue(), dragged.getMaxValue());
+                show(current.withValueBounds(dragged.getMinValue(), dragged.getMaxValue()));
             }
             case Y2_MIN, Y2_MAX -> {
                 ViewPort dragged = start.dragY2End(axisDrag == AxisHandle.Y2_MAX, axisDragPress.y, point.y);
-                acceptY2Bounds(dragged.getY2MinValue(), dragged.getY2MaxValue());
+                show(current.withY2Bounds(dragged.getY2MinValue(), dragged.getY2MaxValue()));
             }
         }
-        panel.repaint();
     }
 
     /**
      * Ends an axis drag. A value axis that actually moved switches its own auto-range off,
      * after the viewport, so undo records the two as one step (see
-     * {@link #applyExplicitLimits}). A press without movement changes nothing. The cursor
+     * {@link #applyExplicitRange}). A press without movement changes nothing. The cursor
      * goes back to whatever {@code point} is over, so a grabbable axis keeps its resize cursor.
      */
     private void finishAxisDrag(Point point) {
@@ -456,13 +454,13 @@ public class PlotInteractionManager {
             case Y -> {
                 double[] y = fittedRangeForAxis(Axis.Y);
                 if (y != null) {
-                    acceptNewAxes(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
+                    show(currentViewport.withValueBounds(y[0], y[1]));
                 }
             }
             case Y2 -> {
                 double[] y2 = fittedRangeForAxis(Axis.Y2);
-                if (y2 != null) {
-                    acceptY2Bounds(y2[0], y2[1]);
+                if (y2 != null && currentViewport.hasY2()) {
+                    show(currentViewport.withY2Bounds(y2[0], y2[1]));
                 }
             }
         }
@@ -521,7 +519,6 @@ public class PlotInteractionManager {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
         navigate(currentViewport);
-        panel.repaint();
     }
 
     /**
@@ -530,7 +527,7 @@ public class PlotInteractionManager {
      * range the gesture gave it. An auto-ranged axis with nothing showable in the window
      * keeps the range it has: a stock default can be off the scale (-1 on LOG). Every
      * navigation -- wheel, pan, the zoom buttons, a time-axis drag or paste -- lands here,
-     * so the one rule holds for all of them.
+     * so the one rule holds for all of them, and is shown ({@link #show}).
      */
     private void navigate(ViewPort navigated) {
         navigate(navigated, Set.of());
@@ -559,8 +556,14 @@ public class PlotInteractionManager {
             settled = y2 != null ? settled.withY2Bounds(y2[0], y2[1])
                 : settled.withY2Bounds(current.getY2MinValue(), current.getY2MaxValue());
         }
+        show(settled);
+    }
+
+    /** Shows {@code view} in the plot's current area and repaints: the one way a view lands. */
+    private void show(ViewPort view) {
         Rectangle plotArea = plotAreaSupplier.get();
-        viewportUpdater.accept(settled.withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height));
+        viewportUpdater.accept(view.withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height));
+        panel.repaint();
     }
 
     /** Zooms in about the plot centre: X, and any manual value axis; the auto-ranged ones refit. */
@@ -568,7 +571,6 @@ public class PlotInteractionManager {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
         navigate(currentViewport.zoom(ZOOM_FACTOR));
-        panel.repaint();
     }
 
     /** Zooms out about the plot centre: X, and any manual value axis; the auto-ranged ones refit. */
@@ -576,7 +578,6 @@ public class PlotInteractionManager {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
         navigate(currentViewport.zoom(1.0 / ZOOM_FACTOR));
-        panel.repaint();
     }
 
     /**
@@ -613,7 +614,6 @@ public class PlotInteractionManager {
             zoomed = zoomed.withTimeRange(startTime, startTime + newTimeRange);
         }
         navigate(zoomed);
-        panel.repaint();
     }
 
     /**
@@ -627,9 +627,7 @@ public class PlotInteractionManager {
         int dx = e.getX() - lastMousePos.x;
         int dy = e.getY() - lastMousePos.y;
         navigate(currentViewport.panByPixels(dx, dy));
-
         lastMousePos = e.getPoint();
-        panel.repaint();
     }
 
     /**
@@ -1080,12 +1078,11 @@ public class PlotInteractionManager {
                 }
                 case Y -> {
                     double[] y = parseValueRange(text, axisLabel(Axis.Y, currentViewport.hasY2()));
-                    applyExplicitLimits(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
+                    applyExplicitRange(Axis.Y, y[0], y[1]);
                 }
                 case Y2 -> {
                     double[] y2 = parseValueRange(text, axisLabel(Axis.Y2, true));
-                    acceptY2Bounds(y2[0], y2[1]);
-                    panel.model().update(st -> st.withAutoRange(Axis.Y2, false));
+                    applyExplicitRange(Axis.Y2, y2[0], y2[1]);
                 }
             }
         } catch (IllegalArgumentException ex) {
@@ -1144,19 +1141,23 @@ public class PlotInteractionManager {
             return;
         }
         navigate(currentViewport.withTimeRange(startTime, endTime));
-        panel.repaint();
     }
 
     /**
-     * Applies limits that include an explicit left-axis range: the user has opted that
-     * axis out of auto-range, otherwise the next wheel tick or drag would silently refit
-     * it and discard them. The viewport lands first and the flag second: the viewport
-     * update only restarts the coalesce timer, while the model update records an entry at
-     * once with the viewport as it then is, so undo restores both in one step.
+     * Applies an explicit range to a value axis: the user has opted that axis out of
+     * auto-range, otherwise the next wheel tick or drag would silently refit it and discard
+     * the range. The viewport lands first and the flag second: the viewport update only
+     * restarts the coalesce timer, while the model update records an entry at once with
+     * the viewport as it then is, so undo restores both in one step.
      */
-    private void applyExplicitLimits(long startTime, long endTime, double minValue, double maxValue) {
-        acceptNewAxes(startTime, endTime, minValue, maxValue);
-        panel.model().update(st -> st.withAutoRange(Axis.Y, false));
+    private void applyExplicitRange(Axis axis, double minValue, double maxValue) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null || (axis == Axis.Y2 && !currentViewport.hasY2())) {
+            return;
+        }
+        show(axis == Axis.Y ? currentViewport.withValueBounds(minValue, maxValue)
+            : currentViewport.withY2Bounds(minValue, maxValue));
+        panel.model().update(st -> st.withAutoRange(axis, false));
     }
 
     /**
@@ -1239,7 +1240,7 @@ public class PlotInteractionManager {
      * edited value range is explicit for its axis, whose auto-range goes off; an untouched
      * one (the codec's formatting round-trips exactly) leaves its axis to follow the time
      * change as navigation does. The viewport lands first and the flags second, so undo
-     * restores both in one step (see {@link #applyExplicitLimits}).
+     * restores both in one step (see {@link #applyExplicitRange}).
      */
     void applyAxisRanges(long[] x, double[] y, double[] y2) {
         ViewPort currentViewport = viewportSupplier.get();
@@ -1258,7 +1259,6 @@ public class PlotInteractionManager {
             explicit.add(Axis.Y2);
         }
         navigate(target, explicit);
-        panel.repaint();
         if (!explicit.isEmpty()) {
             panel.model().update(st -> {
                 FlowVizState next = st;
@@ -1295,16 +1295,6 @@ public class PlotInteractionManager {
         return axisLabel + ": " + reason;
     }
 
-    /** Sets the right axis' range, leaving everything else as it is. */
-    private void acceptY2Bounds(double minValue, double maxValue) {
-        ViewPort currentViewport = viewportSupplier.get();
-        if (currentViewport == null || !currentViewport.hasY2()) {
-            return;
-        }
-        viewportUpdater.accept(currentViewport.withY2Bounds(minValue, maxValue));
-        panel.repaint();
-    }
-
     /**
      * Adds a label + text field pair as one row of a {@link GridBagLayout} form.
      */
@@ -1318,24 +1308,6 @@ public class PlotInteractionManager {
         gbc.weightx = 1;
         gbc.fill = GridBagConstraints.HORIZONTAL;
         form.add(field, gbc);
-    }
-
-    /**
-     * Moves the viewport to the given axis limits, keeping plot area, Y-axis scale, and
-     * X-axis type unchanged. All four limits are required and are applied as given; callers
-     * are responsible for parsing them, which checks them.
-     */
-    private void acceptNewAxes(long startTime, long endTime, double minValue, double maxValue) {
-        var currentViewport = this.viewportSupplier.get();
-        if (currentViewport == null) {
-            return;
-        }
-        // Built from the current view: the window's scale, X axis type and y2 carry over
-        Rectangle plotArea = plotAreaSupplier.get();
-        ViewPort newViewport = currentViewport.withTimeRange(startTime, endTime).withValueBounds(minValue, maxValue)
-            .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
-        viewportUpdater.accept(newViewport);
-        panel.repaint();
     }
 
     /**
