@@ -239,6 +239,12 @@ public class FlowVizWindow extends JFrame {
         autoYButton.setToolTipText("Fit the Y axes to the data in view as you zoom and pan");
         autoYButton.addActionListener(e -> actionManager.toggleAutoYMode());
         toolBar.add(autoYButton);
+        // The button and the Zoom menu's item show the plot's state, whoever changed it: an
+        // axis drag, a paste, the plot's own menu, an undo. setSelected fires no action.
+        vizPanel.model().addListener((old, now, cause) -> {
+            autoYButton.setSelected(now.isAutoRangeAll());
+            menuManager.updateMenuStates();
+        });
 
         JToggleButton coordButton = new JToggleButton("Coordinates");
         coordButton.setToolTipText("Show coordinates");
