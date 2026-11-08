@@ -159,8 +159,8 @@ See [Allocation systems](allocation-systems.md#how) for how `allocate` and
 `reset_allocation` combine into a working announced-allocation scheme, including
 priority tiers and resource assessment.
 
-**Sharing a volume** — `distribute` places one volume across the target
-accounts: <a name="distribute"></a>
+<a name="distribute"></a>**Sharing a volume** — `distribute` places one
+volume across the target accounts:
 
 | Action | Effect |
 | --- | --- |
@@ -172,8 +172,8 @@ A positive `x` credits and a negative `x` debits. No balance leaves
 can, and the rest is shared among the others by the same weights, until the
 volume is placed or no account has room. What finds no room is recorded as
 [`ras.<name>.undistributed`](#series), never silently dropped. An account with
-no weight — a zero size, or a zero balance under `by_balance` — receives
-nothing. `x` is one volume for the whole pool, evaluated once per firing, so
+no weight — a zero size, or a zero balance under `by_balance` — takes no
+share. `x` is one volume for the whole pool, evaluated once per firing, so
 like `allocate` it never takes `self`; and where `targets` names several
 groups, their accounts form one pool.
 
@@ -184,7 +184,7 @@ holding:
 [ras.share_inflow]
 targets = acc.stgeorge
 trigger = every_step
-action  = distribute(node.beardmore.inflow[-1, 0], by_size)
+action  = distribute(node.beardmore.usflow[-1, 0], by_size)
 
 [ras.share_evap]
 targets = acc.stgeorge
@@ -208,9 +208,9 @@ holder.
 | `ras.<name>.fired` | 1 on steps the trigger fired, else 0. |
 | `ras.<name>.pct` | The percentage an `allocate` action last announced (carried forward between firings). |
 | `ras.<name>.amount` | The volume a `distribute` action was asked to share this step; 0 on steps it did not fire. |
-| `ras.<name>.undistributed` | The part of that volume that found no room: every target was full, or empty, or had no weight. 0 on steps it did not fire. |
+| `ras.<name>.undistributed` | The part of that volume that found no room: every target was full, or empty, or had no weight. Signed like `amount`, so `amount − undistributed` is what landed. 0 on steps it did not fire. |
 
-Both are opt-in via [`[outputs]`](model-outputs.md), like any recorder.
+All four are opt-in via [`[outputs]`](model-outputs.md), like any recorder.
 
 ## Rules
 
