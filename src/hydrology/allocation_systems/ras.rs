@@ -318,7 +318,9 @@ impl RasSystem {
             for (k, &idx) in self.target_account_ids.iter().enumerate() {
                 let room_k = room(account_manager, idx);
                 let weight = self.distribute_weights[k];
-                if room_k <= 0.0 || weight <= 0.0 {
+                // The same test as the weight sum, so a NaN room or weight is
+                // outside the pool in both loops and never handed a share.
+                if !(room_k > 0.0 && weight > 0.0) {
                     continue;
                 }
                 let want = per_weight * weight;
