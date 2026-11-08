@@ -228,7 +228,8 @@ public class ValidationUtils {
         java.util.Set.of("opening_balance", "closing_balance", "debits", "allocation", "allocation_pct",
                          "use", "committed", "size", "initial");
     private static final java.util.Set<String> ACCOUNT_GROUP_OUTPUT_FIELDS = ACCOUNT_OUTPUT_FIELDS;
-    private static final java.util.Set<String> RAS_OUTPUT_FIELDS = java.util.Set.of("fired", "pct");
+    private static final java.util.Set<String> RAS_OUTPUT_FIELDS =
+        java.util.Set.of("fired", "pct", "amount", "undistributed");
 
     /**
      * Validate an accounting series reference in {@code [outputs]}:

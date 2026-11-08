@@ -1503,12 +1503,20 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         // Resolve targets: one or more acc.<group> references, flattened to
         // member accounts in group-then-row order
         let mut target_account_ids = Vec::new();
+        let mut target_group_ids: Vec<usize> = Vec::new();
         for t in csv_to_string_vec(&targets_str) {
             let lower = t.to_lowercase();
             let group_name = lower.strip_prefix("acc.").ok_or_else(|| KalixIoError::Parse(format!(
                 "Error on line {}: RAS target '{}' must be an account group reference like 'acc.<group>'", line, t)))?;
             let group_idx = model.account_manager.get_group_idx(group_name).ok_or_else(|| KalixIoError::Validate(format!(
                 "Error on line {}: Unknown account group '{}' in RAS targets", line, t)))?;
+            // Once each: a group named twice would act on its accounts twice,
+            // and distribute would count their weight twice (ADR-0019 §4).
+            if target_group_ids.contains(&group_idx) {
+                return Err(KalixIoError::Validate(format!(
+                    "Error on line {}: RAS target '{}' is named more than once", line, t)));
+            }
+            target_group_ids.push(group_idx);
             target_account_ids.extend(model.account_manager.get_group(group_idx).unwrap().member_ids.iter().copied());
         }
         let trigger = parse_ras_trigger(&trigger_str, &mut model, line)
@@ -1529,6 +1537,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 }
             }
         }
+        // Scratch for a distribute action, sized here so a firing never allocates.
+        let distribute_weights = match parsed_action.action {
+            crate::hydrology::allocation_systems::ras::RasAction::Distribute(..) => vec![0.0; target_account_ids.len()],
+            _ => Vec::new(),
+        };
         ras_slot_items.push((line, crate::model::RasSlotItem::Ras(model.ras_systems.len())));
         model.ras_systems.push(RasSystem {
             name: ras_name,
@@ -1541,7 +1554,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             action_original: action_str,
             recorder_idx_fired: None,
             recorder_idx_pct: None,
+            recorder_idx_amount: None,
+            recorder_idx_undistributed: None,
             last_pct: 0.0,
+            last_amount: 0.0,
+            last_undistributed: 0.0,
+            distribute_weights,
         });
     }
 
@@ -1592,8 +1610,8 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
     // checked for layout only). Each must name a real account (or group) and a
     // real field — otherwise a typo would sit there as a series nothing ever
     // writes, reading as a silent NaN instead of an error.
-    // ras.<name>.<field> references get the same strictness (only fired and
-    // pct exist; anything else would sit as a silently unwritten series).
+    // ras.<name>.<field> references get the same strictness (the closed set
+    // RAS_SERIES_FIELDS; anything else would sit as a silently unwritten series).
     for name in model.data_cache.series_name.clone() {
         let Some(rest) = name.strip_prefix("ras.") else { continue };
         let (target, field) = rest.rsplit_once('.').ok_or_else(|| KalixIoError::Parse(format!(
@@ -1602,9 +1620,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             return Err(KalixIoError::Validate(format!(
                 "Unknown RAS '{}' in reference '{}'. RAS systems are declared as [ras.*] sections.", target, name)));
         }
-        if field != "fired" && field != "pct" {
+        if !RAS_SERIES_FIELDS.contains(&field) {
             return Err(KalixIoError::Validate(format!(
-                "Unknown field '{}' in reference '{}'. Available for a RAS: fired, pct", field, name)));
+                "Unknown field '{}' in reference '{}'. Available for a RAS: {}", field, name, RAS_SERIES_FIELDS.join(", "))));
         }
     }
 
@@ -2291,8 +2309,13 @@ fn parse_ras_trigger(s: &str, model: &mut Model, line: usize) -> Result<crate::h
     Ok(RasTrigger::Expression(input))
 }
 
-/// Parse a RAS action: a stencilled action name with an optional
-/// expression-valued argument. Distributive actions arrive in phase 2/3.
+/// The `ras.<name>.<field>` series a model may reference or record.
+const RAS_SERIES_FIELDS: [&str; 4] = ["fired", "pct", "amount", "undistributed"];
+
+/// The action vocabulary as the error messages list it.
+const RAS_ACTIONS: &str = "set_full, set_empty, reset_allocation, set(x), set_fraction(x), credit(x), \
+credit_fraction(x), debit(x), roll_cap(n), scale(x), reduce_to(x), allocate(pct), distribute(x, by_size|by_balance)";
+
 /// A parsed RAS action plus the self plumbing of its argument (see
 /// `DynamicInput::from_string_ras_action`): the slot base when the argument
 /// reads self.*, and whether it reads self.pair.* (which obliges every
@@ -2303,8 +2326,11 @@ struct ParsedRasAction {
     uses_pair: bool,
 }
 
+/// Parse a RAS action: an action name with an optional expression-valued
+/// argument, plus for `distribute` the weight keyword after the last
+/// top-level comma.
 fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<ParsedRasAction, String> {
-    use crate::hydrology::allocation_systems::ras::RasAction;
+    use crate::hydrology::allocation_systems::ras::{DistributeBy, RasAction};
     let no_self = |action: RasAction| ParsedRasAction { action, self_slots: None, uses_pair: false };
     let trimmed = s.trim();
     match trimmed {
@@ -2317,10 +2343,30 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<ParsedRas
     let (name, arg) = match (open, trimmed.ends_with(')')) {
         (Some(p), true) => (trimmed[..p].trim(), trimmed[p + 1..trimmed.len() - 1].trim()),
         _ => {
-            return Err(format!("Error on line {}: Invalid RAS action '{}'. Expected one of: set_full, \
-                set_empty, reset_allocation, set(x), set_fraction(x), credit(x), credit_fraction(x), debit(x), roll_cap(n), scale(x), \
-                reduce_to(x), allocate(pct)", line, trimmed));
+            return Err(format!("Error on line {}: Invalid RAS action '{}'. Expected one of: {}", line, trimmed, RAS_ACTIONS));
         }
+    };
+    // distribute(x, by_size|by_balance): the weight keyword is the last
+    // top-level argument; the amount is everything before it.
+    let (arg, distribute_by) = if name == "distribute" {
+        let Some(comma) = last_top_level_comma(arg) else {
+            return Err(format!("Error on line {}: distribute() needs an amount and a weight: \
+                distribute(x, by_size) or distribute(x, by_balance)", line));
+        };
+        let by = match arg[comma + 1..].trim() {
+            "by_size" => DistributeBy::Size,
+            "by_balance" => DistributeBy::Balance,
+            other => return Err(format!("Error on line {}: Unknown distribute weight '{}'. \
+                Expected by_size or by_balance", line, other)),
+        };
+        let amount = arg[..comma].trim();
+        if amount.is_empty() {
+            return Err(format!("Error on line {}: distribute() needs an amount before the weight: \
+                distribute(x, by_size) or distribute(x, by_balance)", line));
+        }
+        (amount, Some(by))
+    } else {
+        (arg, None)
     };
     let parsed_arg = DynamicInput::from_string_ras_action(arg, &mut model.data_cache)
         .map_err(|e| format!("Error on line {}: Invalid argument for RAS action '{}': {}", line, name, e))?;
@@ -2330,6 +2376,10 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<ParsedRas
     if name == "allocate" && parsed_arg.self_slots.is_some() {
         return Err(format!("Error on line {}: allocate() does not take self.* references — an announcement \
             is one percentage for the whole target group", line));
+    }
+    if name == "distribute" && parsed_arg.self_slots.is_some() {
+        return Err(format!("Error on line {}: distribute() does not take self.* references — the amount \
+            is one volume shared across the target accounts", line));
     }
     let input = parsed_arg.input;
     let action = match name {
@@ -2342,17 +2392,32 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<ParsedRas
         "scale" => RasAction::Scale(input),
         "reduce_to" => RasAction::ReduceTo(input),
         "allocate" => RasAction::Allocate(input),
+        "distribute" => RasAction::Distribute(input, distribute_by.expect("set above for distribute")),
         // carryover(x) was briefly an action here (2026-08); it is now the
         // authored pattern `set(x * self.pair.balance)` targeting the pool
         // group — one spelling per policy, and every action writes only to
         // its own targets.
         "carryover" => return Err(format!("Error on line {}: 'carryover' is not an action. Target the \
             pool group and write it directly: action = set(x * self.pair.balance)", line)),
-        other => return Err(format!("Error on line {}: Unknown RAS action '{}'. Expected one of: set_full, \
-            set_empty, reset_allocation, set(x), set_fraction(x), credit(x), credit_fraction(x), debit(x), roll_cap(n), scale(x), \
-            reduce_to(x), allocate(pct)", line, other)),
+        other => return Err(format!("Error on line {}: Unknown RAS action '{}'. Expected one of: {}", line, other, RAS_ACTIONS)),
     };
     Ok(ParsedRasAction { action, self_slots: parsed_arg.self_slots, uses_pair: parsed_arg.uses_pair })
+}
+
+/// The byte offset of the last comma at nesting depth zero (outside every
+/// pair of parentheses, brackets and braces), or None.
+fn last_top_level_comma(s: &str) -> Option<usize> {
+    let mut depth = 0i32;
+    let mut found = None;
+    for (i, c) in s.char_indices() {
+        match c {
+            '(' | '[' | '{' => depth += 1,
+            ')' | ']' | '}' => depth -= 1,
+            ',' if depth == 0 => found = Some(i),
+            _ => {}
+        }
+    }
+    found
 }
 
 /// Read a node's `accounts` property: the plain list, or a combination with
