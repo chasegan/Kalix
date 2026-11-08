@@ -129,11 +129,12 @@ public class FlowVizActionManager {
     }
 
     /**
-     * Auto-ranges every Y axis, or sets every one manual, as the toolbar's toggle does.
-     * The plot's state is the one record of the flags; the default for new plots follows.
+     * Auto-ranges every Y axis, or sets every one manual, as the toolbar's toggle does, and
+     * records the preference, which is the default for new plots. The plot's state is the
+     * one record of the flags.
      */
-    public void toggleAutoYMode() {
-        boolean enabled = !isAutoYMode();
+    public void toggleAutoRange() {
+        boolean enabled = !isAutoRangeAll();
         vizPanel.model().update(st -> st.withAutoRangeAll(enabled));
         PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(enabled);
 
@@ -264,7 +265,7 @@ public class FlowVizActionManager {
     }
 
     /** True while every Y axis is auto-ranged: what the toggle and menu item show. */
-    public boolean isAutoYMode() {
+    public boolean isAutoRangeAll() {
         return vizPanel.model().current().isAutoRangeAll();
     }
 
