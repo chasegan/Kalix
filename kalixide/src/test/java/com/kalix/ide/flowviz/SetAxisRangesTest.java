@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What the Set-axis-ranges dialog applies: a typed value range lands on its axis whether or
+ * What the Set axis ranges dialog applies: a typed value range lands on its axis whether or
  * not that axis was auto-ranged, and switches only that axis' auto-range off; an untouched
  * row leaves its axis to follow the time change as any navigation does. The dialog decides
  * which rows were typed by their text, so a row left as filled is untouched even when the

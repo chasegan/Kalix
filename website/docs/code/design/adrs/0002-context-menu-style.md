@@ -47,7 +47,9 @@ Chosen option: **one design, held to everywhere.**
 ### 1. Ordering skeleton
 
 Every menu is built from the same top-to-bottom blocks, separated by
-dividers. Omit any block that has no items; never reorder them.
+dividers. Omit any block that has no items; never reorder them. A long block
+may be split by a divider between the things its items act on (the plot's
+axes, then its lines); the blocks stay in order.
 
 | # | Block | Contains |
 |---|-------|----------|
@@ -194,21 +196,21 @@ to the bare verb: `Rename`.
 
 ### 6. Submenus & value lists are a different grammar
 
-Submenu titles are category **nouns** (`Y-axis scale`, `Missing data`) and
+Submenu titles are category **nouns** (`Y axis scale`, `Missing data`) and
 radio/checkbox options are **values** (`Linear`, `Log`, `Sqrt`).
 Parallelism applies *within* each class — do not try to verb them. Sentence
 case still applies.
 
 Where the children are instead the **objects of a verb**, the title is an
 item, not a category, and §2.2 applies — it begins with a verb. Read title
-and child aloud: "Y-axis scale: log" is a setting; "Insert node: GR4J" is a
+and child aloud: "Y axis scale: log" is a setting; "Insert node: GR4J" is a
 command.
 
 Where the children are **commands on one thing**, the title is that thing's
-name, a noun in sentence case (`Left Y axis`), and the children are items
-under §2.2 (`Fit to data`, `Copy range`), with a checkbox where the thing
-has a setting (`Auto-range`). Read aloud as thing then command: "Left Y
-axis: copy range".
+name, a noun in sentence case (`Y axis (left)`), and the children are items
+under §2.2 (`Fit to data`, `Set range…`), with a checkbox after them where
+the thing has a setting (`Auto-range`). Read aloud as thing then command:
+"Y axis (left): copy range".
 
 ### Consequences
 
@@ -363,6 +365,9 @@ this document.
   examples. Other existing messages are not re-cut; it is the standard the
   next one is held to.
 - *2026-11-08* — §6 gained a third grammar: a submenu named for the thing
-  its children act on (`Left Y axis ▸ Fit to data`, `Copy range`), read aloud
-  as thing then command. Harvested from the plot's axis submenus (#505),
+  its children act on (`Y axis (left) ▸ Fit to data`, `Copy range`), read
+  aloud as thing then command. Harvested from the plot's axis submenus (#505),
   which gathered six copy/paste items into one pair per axis.
+- *2026-11-08* — §1: a long view block may be split by a divider between the
+  things its items act on, as the plot's menu divides the axes from the
+  lines. The blocks stay in order; the divider only groups within one.

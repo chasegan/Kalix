@@ -75,27 +75,37 @@ class PlotContextMenuTest {
         throw new AssertionError("no submenu " + label);
     }
 
+    private static JMenuItem item(JMenu menu, String label) {
+        for (Component c : menu.getMenuComponents()) {
+            if (c instanceof JMenuItem i && label.equals(i.getText())) {
+                return i;
+            }
+        }
+        throw new AssertionError("no item " + label + " under " + menu.getText());
+    }
+
     @Test
     void withOneYAxisTheMenuNamesItPlainlyAndHidesTheRightOne() {
         assertEquals(List.of(
             "Zoom to fit", "---",
             "Save data…", "---",
-            "X axis", "Y axis", "Set axis ranges…", "Y-axis scale", "Line shape", "Missing data", "---",
+            "X axis", "Y axis", "Y axis scale", "---",
+            "Line shape", "Missing data", "---",
             "Reset key"), visibleLabels(menu().getComponents()));
     }
 
     @Test
-    void withARightAxisTheMenuTellsTheTwoApartAsLeftAndRight() {
+    void withARightAxisTheMenuQualifiesTheTwoAsLeftAndRight() {
         panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         JPopupMenu menu = menu();
 
-        assertTrue(visibleLabels(menu.getComponents()).containsAll(List.of("X axis", "Left Y axis", "Right Y axis")));
-        assertEquals(List.of("Fit to data", "Copy range", "Paste range"),
+        assertTrue(visibleLabels(menu.getComponents()).containsAll(List.of("X axis", "Y axis (left)", "Y axis (right)")));
+        assertEquals(List.of("Fit to data", "Set range…", "Copy range", "Paste range"),
             visibleLabels(submenu(menu, "X axis").getMenuComponents()), "the time axis has no range to auto-fit");
-        assertEquals(List.of("Fit to data", "Auto-range", "Copy range", "Paste range"),
-            visibleLabels(submenu(menu, "Left Y axis").getMenuComponents()));
-        assertEquals(List.of("Fit to data", "Auto-range", "Copy range", "Paste range"),
-            visibleLabels(submenu(menu, "Right Y axis").getMenuComponents()));
+        assertEquals(List.of("Fit to data", "Set range…", "Copy range", "Paste range", "Auto-range"),
+            visibleLabels(submenu(menu, "Y axis (left)").getMenuComponents()));
+        assertEquals(List.of("Fit to data", "Set range…", "Copy range", "Paste range", "Auto-range"),
+            visibleLabels(submenu(menu, "Y axis (right)").getMenuComponents()));
     }
 
     @Test
@@ -103,8 +113,8 @@ class PlotContextMenuTest {
         panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         panel.model().update(st -> st.withAutoRangeAll(true).withAutoRange(Axis.Y, false));
         JPopupMenu menu = menu();
-        JCheckBoxMenuItem left = (JCheckBoxMenuItem) submenu(menu, "Left Y axis").getMenuComponent(1);
-        JCheckBoxMenuItem right = (JCheckBoxMenuItem) submenu(menu, "Right Y axis").getMenuComponent(1);
+        JCheckBoxMenuItem left = (JCheckBoxMenuItem) item(submenu(menu, "Y axis (left)"), "Auto-range");
+        JCheckBoxMenuItem right = (JCheckBoxMenuItem) item(submenu(menu, "Y axis (right)"), "Auto-range");
         assertFalse(left.isSelected());
         assertTrue(right.isSelected());
 

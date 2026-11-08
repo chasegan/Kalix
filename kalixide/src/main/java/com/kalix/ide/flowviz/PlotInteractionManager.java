@@ -49,6 +49,8 @@ import java.awt.event.ActionEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
 import java.io.IOException;
 import java.util.EnumMap;
@@ -776,7 +778,7 @@ public class PlotInteractionManager {
             minValue = logScaleMin;
         }
 
-        // Add 5% padding appropriate for the current Y-axis scale
+        // Add 5% padding appropriate for the current Y axis scale
         double valueRange = maxValue - minValue;
         if (valueRange < 1e-15) { // Constant data - use relative padding based on magnitude
             double center = (minValue + maxValue) / 2;
@@ -887,23 +889,17 @@ public class PlotInteractionManager {
         contextMenu.addSeparator();
 
         // View/state block (block 8): everything that changes how the data is shown, never
-        // the data. First the axes, each as a submenu of its own commands: a submenu named
-        // for the thing its children act on, read aloud as "Left Y axis: copy range". The
-        // copy and paste items act immediately and carry no ellipsis (2.4); "Set axis
-        // ranges…" opens a dialog, so it does; the remaining submenus are category nouns
-        // with value children (6).
+        // the data. First the axes, each a submenu named for the thing its children act on,
+        // read aloud as "Y axis (left): copy range"; the remaining submenus are category
+        // nouns with value children (6).
         for (Axis axis : Axis.values()) {
             AxisMenu axisMenu = buildAxisMenu(axis);
             axisMenus.put(axis, axisMenu);
             contextMenu.add(axisMenu.menu());
         }
 
-        JMenuItem setAxes = new JMenuItem("Set axis ranges…");
-        setAxes.addActionListener(e1 -> showSetAxesDialog());
-        contextMenu.add(setAxes);
-
-        // Y-axis scale submenu
-        yAxisScaleMenu = new JMenu("Y-axis scale");
+        // Y axis scale submenu: one scale for both Y axes
+        yAxisScaleMenu = new JMenu("Y axis scale");
         ButtonGroup yAxisScaleGroup = new ButtonGroup();
         for (YAxisScale scale : YAxisScale.values()) {
             JRadioButtonMenuItem scaleItem = new JRadioButtonMenuItem(scale.getDisplayName());
@@ -914,6 +910,10 @@ public class PlotInteractionManager {
             yAxisScaleMenu.add(scaleItem);
         }
         contextMenu.add(yAxisScaleMenu);
+
+        // Still the view block, but what follows acts on the lines, not the axes, so a
+        // divider splits the block by subject (ADR-0002 §1).
+        contextMenu.addSeparator();
 
         // Line shape submenu: a category noun with value children (6). The items are shared
         // with the toolbar's line shape button (LineShapeMenu) and keyed by enum, so sync
@@ -1007,14 +1007,29 @@ public class PlotInteractionManager {
 
     /**
      * One axis' commands as a submenu named for it. "Fit to data" leads, being what
-     * double-clicking the axis does (ADR-0002 §1, block 1); the value axes then have their
-     * auto-range flag; copy and paste of the range close the list.
+     * double-clicking the axis does (ADR-0002 §1, block 1); "Set range…" opens the Set axis
+     * ranges dialog on this axis' row, so it carries the ellipsis (2.4); copy and paste act
+     * at once; the value axes close with their auto-range setting, the checkbox after the
+     * commands (6).
      */
     private AxisMenu buildAxisMenu(Axis axis) {
         JMenu menu = new JMenu(axis.label(true));
         JMenuItem fit = new JMenuItem("Fit to data");
         fit.addActionListener(e -> fitAxis(axis));
         menu.add(fit);
+
+        JMenuItem set = new JMenuItem("Set range…");
+        set.addActionListener(e -> showSetAxesDialog(axis));
+        menu.add(set);
+
+        // Copy and paste go through AxisLimitCodec -- the same codec the Set axis ranges dialog
+        // uses -- so the clipboard always carries the axis' own units.
+        JMenuItem copy = new JMenuItem("Copy range");
+        copy.addActionListener(e -> copyAxisRange(axis));
+        menu.add(copy);
+        JMenuItem paste = new JMenuItem("Paste range");
+        paste.addActionListener(e -> pasteAxisRange(axis));
+        menu.add(paste);
 
         JCheckBoxMenuItem autoRange = null;
         if (axis.isValueAxis()) {
@@ -1023,15 +1038,6 @@ public class PlotInteractionManager {
             menu.add(item);
             autoRange = item;
         }
-
-        // Copy and paste go through AxisLimitCodec -- the same codec the Set-axis-ranges
-        // dialog uses -- so the clipboard always carries the axis' own units.
-        JMenuItem copy = new JMenuItem("Copy range");
-        copy.addActionListener(e -> copyAxisRange(axis));
-        menu.add(copy);
-        JMenuItem paste = new JMenuItem("Paste range");
-        paste.addActionListener(e -> pasteAxisRange(axis));
-        menu.add(paste);
         return new AxisMenu(menu, autoRange, paste);
     }
 
@@ -1148,13 +1154,14 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Shows a modal dialog with the current axis limits, pre-filled and editable as text.
+     * Shows a modal dialog with every axis' current range, pre-filled and editable as text,
+     * with {@code focus}'s row focused: each axis' "Set range…" opens the one dialog.
      * All four fields are required -- they arrive pre-filled with the current limits, so
      * leaving one alone is how a limit is kept, and a blank field is an error. X fields are
      * parsed according to the viewport's {@link XAxisType} (dates for TIME, percentages for
      * PERCENTILE, etc.) so the field always shows and accepts values in the axis' own units.
      */
-    private void showSetAxesDialog() {
+    private void showSetAxesDialog(Axis focus) {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) {
             return;
@@ -1229,6 +1236,22 @@ public class PlotInteractionManager {
             }
         });
 
+        // The row the command was asked for takes the focus with its text selected, so
+        // the user types the new range at once; a right-axis row that has gone falls
+        // back to the left
+        JTextField focused = switch (focus) {
+            case X -> xField;
+            case Y -> yField;
+            case Y2 -> y2Field != null ? y2Field : yField;
+        };
+        dialog.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowOpened(WindowEvent e) {
+                focused.requestFocusInWindow();
+                focused.selectAll();
+            }
+        });
+
         dialog.pack();
         dialog.setLocationRelativeTo(panel);
         dialog.setVisible(true);
@@ -1286,7 +1309,7 @@ public class PlotInteractionManager {
         }
     }
 
-    /** {@code "Right Y axis: min must be less than max."}: the row's own label, then the codec's complaint. */
+    /** {@code "Y axis (right): min must be less than max."}: the row's own label, then the codec's complaint. */
     private static String aboutAxis(String axisLabel, String message) {
         String reason = message.length() > 1 && Character.isLowerCase(message.charAt(1))
             ? Character.toLowerCase(message.charAt(0)) + message.substring(1) : message;
