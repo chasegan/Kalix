@@ -455,7 +455,7 @@ public class VisualizationTabManager {
 
         FlowVizToolbarBuilder toolbarBuilder = new FlowVizToolbarBuilder(tabInfo);
         toolbarBuilder.setOnViewToggle(mode -> switchView(tabInfo, mode));
-        containerPanel.add(toolbarBuilder.build(model.current().isAutoYMode(), prefs.showCoordinates()),
+        containerPanel.add(toolbarBuilder.build(model.current().isAutoRangeAll(), prefs.showCoordinates()),
             BorderLayout.NORTH);
         tabInfo.vizToolbar = toolbarBuilder;
 

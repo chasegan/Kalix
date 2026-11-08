@@ -84,7 +84,7 @@ class FlowVizModelReleaseTest {
         model.replace(FlowVizState.INITIAL.withVisibleSeries(List.of(A)));
         DataSet shown = model.display();
 
-        model.update(s -> s.withAutoYMode(!s.isAutoYMode()));
+        model.update(s -> s.withAutoRangeAll(!s.isAutoRangeAll()));
         assertTrue(model.holdsDisplay(shown), "auto-Y is not part of what the set was built under");
     }
 }

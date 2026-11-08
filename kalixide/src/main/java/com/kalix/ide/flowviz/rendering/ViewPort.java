@@ -77,11 +77,21 @@ public class ViewPort {
         if (startTimeMs >= endTimeMs) {
             throw new IllegalArgumentException("X min must be less than X max.");
         }
+        validateValueRange("Y", minValue, maxValue);
+    }
+
+    /**
+     * Checks one value axis' range as {@link #validateBounds} does, naming the axis as the
+     * caller spells it ("Right Y axis", say) so a message cannot be taken for another row.
+     *
+     * @throws IllegalArgumentException if the range is inverted, empty, or non-finite
+     */
+    public static void validateValueRange(String axis, double minValue, double maxValue) {
         if (!Double.isFinite(minValue) || !Double.isFinite(maxValue)) {
-            throw new IllegalArgumentException("Y limits must be finite numbers.");
+            throw new IllegalArgumentException(axis + " range must be finite numbers.");
         }
         if (minValue >= maxValue) {
-            throw new IllegalArgumentException("Y min must be less than Y max.");
+            throw new IllegalArgumentException(axis + " min must be less than " + axis + " max.");
         }
     }
 

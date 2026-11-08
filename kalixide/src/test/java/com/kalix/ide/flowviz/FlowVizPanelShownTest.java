@@ -81,7 +81,7 @@ class FlowVizPanelShownTest {
         DataSet pool = new DataSet();
         pool.addSeries(A, days(3)); // values 0, 1, 2
         panel.setDataSet(pool);
-        panel.model().update(st -> st.withVisibleSeries(List.of(A)).withAutoYMode(false));
+        panel.model().update(st -> st.withVisibleSeries(List.of(A)).withAutoRangeAll(false));
 
         panel.setShown(false);
         panel.model().update(st -> st.withPlotType(PlotType.CUMULATIVE)); // 0, 1, 3

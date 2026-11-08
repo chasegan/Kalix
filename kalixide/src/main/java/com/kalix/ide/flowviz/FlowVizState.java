@@ -38,18 +38,23 @@ import java.util.Set;
  * secondary (right) Y axis, kept a subset by construction: a series that leaves the
  * plot leaves the right axis too, and comes back on the left. The plot shows a right
  * axis exactly while the set is non-empty, and the snapshot then carries its range.</p>
+ *
+ * <p>Each value axis is auto-ranged or not on its own: an auto-ranged axis is refitted to
+ * its series whenever the time window changes, a manual one keeps the range the user gave
+ * it. A right axis is born auto-ranged, whatever the left axis is set to, so the flag for
+ * an axis the plot does not show is always true.</p>
  */
 public final class FlowVizState {
 
     /** A fresh tab before anything is chosen: no series, native resolution, every option off. */
     public static final FlowVizState INITIAL = new FlowVizState(List.of(), Set.of(),
         AggregationPeriod.ORIGINAL, AggregationMethod.SUM, PlotType.VALUES, YAxisScale.LINEAR,
-        LineShape.STRAIGHT, MaskMode.NONE, SeasonalMaskMode.DISABLED, false, Set.of(),
+        LineShape.STRAIGHT, MaskMode.NONE, SeasonalMaskMode.DISABLED, false, true, Set.of(),
         0, 0, 0, 0, Double.NaN, Double.NaN);
 
-    /** A new tab's state: {@link #INITIAL}, with auto-Y as the user's preference has it. */
+    /** A new tab's state: {@link #INITIAL}, with the Y axes auto-ranged as the user's preference has it. */
     public static FlowVizState defaults() {
-        return INITIAL.withAutoYMode(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get());
+        return INITIAL.withAutoRangeAll(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get());
     }
 
     private final List<SeriesRef> visibleSeries;
@@ -61,7 +66,9 @@ public final class FlowVizState {
     private final LineShape lineShape;
     private final MaskMode maskMode;
     private final SeasonalMaskMode seasonalMaskMode;
-    private final boolean autoYMode;
+    // Whether each value axis is refitted to its series as the time window changes
+    private final boolean autoRangeY;
+    private final boolean autoRangeY2;
     // Visible series drawn against the right (y2) axis; a subset of visibleSeries
     private final Set<SeriesRef> rightAxisSeries;
 
@@ -83,7 +90,8 @@ public final class FlowVizState {
                      LineShape lineShape,
                      MaskMode maskMode,
                      SeasonalMaskMode seasonalMaskMode,
-                     boolean autoYMode,
+                     boolean autoRangeY,
+                     boolean autoRangeY2,
                      Set<SeriesRef> rightAxisSeries,
                      long startTimeMs,
                      long endTimeMs,
@@ -103,12 +111,15 @@ public final class FlowVizState {
         this.lineShape = lineShape;
         this.maskMode = maskMode;
         this.seasonalMaskMode = seasonalMaskMode;
-        this.autoYMode = autoYMode;
         // Only refs still visible: a series that leaves the plot leaves the right axis, and
         // a snapshot can outlive its series (see above), never an error.
         Set<SeriesRef> onRight = new LinkedHashSet<>(rightAxisSeries);
         onRight.retainAll(this.visibleSeries);
         this.rightAxisSeries = Collections.unmodifiableSet(onRight);
+        this.autoRangeY = autoRangeY;
+        // A right axis is born auto-ranged: with no right axis the flag is true, so the
+        // next one starts that way, and states that differ only in it compare equal
+        this.autoRangeY2 = onRight.isEmpty() || autoRangeY2;
         this.startTimeMs = startTimeMs;
         this.endTimeMs = endTimeMs;
         this.minValue = minValue;
@@ -119,61 +130,71 @@ public final class FlowVizState {
 
     public FlowVizState withVisibleSeries(List<SeriesRef> series) {
         return new FlowVizState(series, checkedSources, aggregationPeriod, aggregationMethod, plotType,
-            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, rightAxisSeries,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoRangeY, autoRangeY2, rightAxisSeries,
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 
     public FlowVizState withCheckedSources(Set<SourceRef> sources) {
         return new FlowVizState(visibleSeries, sources, aggregationPeriod, aggregationMethod, plotType,
-            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, rightAxisSeries,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoRangeY, autoRangeY2, rightAxisSeries,
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 
     public FlowVizState withAggregation(AggregationPeriod period, AggregationMethod method) {
         return new FlowVizState(visibleSeries, checkedSources, period, method, plotType,
-            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, rightAxisSeries,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoRangeY, autoRangeY2, rightAxisSeries,
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 
     public FlowVizState withPlotType(PlotType type) {
         return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, type,
-            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, rightAxisSeries,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoRangeY, autoRangeY2, rightAxisSeries,
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 
     public FlowVizState withYAxisScale(YAxisScale scale) {
         return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
-            scale, lineShape, maskMode, seasonalMaskMode, autoYMode, rightAxisSeries,
+            scale, lineShape, maskMode, seasonalMaskMode, autoRangeY, autoRangeY2, rightAxisSeries,
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 
     public FlowVizState withLineShape(LineShape shape) {
         return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
-            yAxisScale, shape, maskMode, seasonalMaskMode, autoYMode, rightAxisSeries,
+            yAxisScale, shape, maskMode, seasonalMaskMode, autoRangeY, autoRangeY2, rightAxisSeries,
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 
     public FlowVizState withMaskMode(MaskMode mode) {
         return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
-            yAxisScale, lineShape, mode, seasonalMaskMode, autoYMode, rightAxisSeries,
+            yAxisScale, lineShape, mode, seasonalMaskMode, autoRangeY, autoRangeY2, rightAxisSeries,
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 
     public FlowVizState withSeasonalMaskMode(SeasonalMaskMode mode) {
         return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
-            yAxisScale, lineShape, maskMode, mode, autoYMode, rightAxisSeries,
+            yAxisScale, lineShape, maskMode, mode, autoRangeY, autoRangeY2, rightAxisSeries,
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 
-    public FlowVizState withAutoYMode(boolean autoY) {
+    /** One value axis auto-ranged or not; the other is left as it is. */
+    public FlowVizState withAutoRange(Axis axis, boolean auto) {
+        boolean y = axis == Axis.Y ? auto : autoRangeY;
+        boolean y2 = axis == Axis.Y2 ? auto : autoRangeY2;
         return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
-            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoY, rightAxisSeries,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, y, y2, rightAxisSeries,
+            startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
+    }
+
+    /** Every value axis auto-ranged, or none: what the toolbar's one toggle sets. */
+    public FlowVizState withAutoRangeAll(boolean auto) {
+        return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, auto, auto, rightAxisSeries,
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 
     private FlowVizState withRightAxisSeries(Set<SeriesRef> series) {
         return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
-            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, series,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoRangeY, autoRangeY2, series,
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 
@@ -191,7 +212,7 @@ public final class FlowVizState {
     /** The viewport's bounds; a null viewport records zeros, and no right axis NaN. */
     public FlowVizState withViewport(ViewPort viewport) {
         return new FlowVizState(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod, plotType,
-            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, rightAxisSeries,
+            yAxisScale, lineShape, maskMode, seasonalMaskMode, autoRangeY, autoRangeY2, rightAxisSeries,
             viewport != null ? viewport.getStartTimeMs() : 0, viewport != null ? viewport.getEndTimeMs() : 0,
             viewport != null ? viewport.getMinValue() : 0, viewport != null ? viewport.getMaxValue() : 0,
             viewport != null ? viewport.getY2MinValue() : Double.NaN,
@@ -200,7 +221,8 @@ public final class FlowVizState {
 
     /** True when the two differ in anything but the viewport bounds and checked sources: what the plot draws. */
     public boolean differsInPlotFrom(FlowVizState other) {
-        return autoYMode != other.autoYMode
+        return autoRangeY != other.autoRangeY
+            || autoRangeY2 != other.autoRangeY2
             || !Objects.equals(visibleSeries, other.visibleSeries)
             || !Objects.equals(rightAxisSeries, other.rightAxisSeries)
             || aggregationPeriod != other.aggregationPeriod
@@ -221,7 +243,21 @@ public final class FlowVizState {
     public LineShape getLineShape() { return lineShape; }
     public MaskMode getMaskMode() { return maskMode; }
     public SeasonalMaskMode getSeasonalMaskMode() { return seasonalMaskMode; }
-    public boolean isAutoYMode() { return autoYMode; }
+    /**
+     * True when {@code axis} is refitted to its series as the time window changes. Always
+     * true for a right axis the plot does not show, which is born that way.
+     */
+    public boolean isAutoRange(Axis axis) {
+        return switch (axis) {
+            case Y -> autoRangeY;
+            case Y2 -> autoRangeY2;
+            case X -> throw new IllegalArgumentException("A value axis, Y or Y2, not X.");
+        };
+    }
+    /** True when every value axis is auto-ranged: the toolbar toggle's state. */
+    public boolean isAutoRangeAll() { return autoRangeY && autoRangeY2; }
+    /** True when some value axis the plot shows is auto-ranged, so a change of window refits something. */
+    public boolean isAnyAutoRange() { return autoRangeY || (isRightAxisInUse() && autoRangeY2); }
     public Set<SeriesRef> getRightAxisSeries() { return rightAxisSeries; }
     /** True when {@code ref} is drawn against the right axis. */
     public boolean isOnRightAxis(SeriesRef ref) { return rightAxisSeries.contains(ref); }
@@ -240,7 +276,8 @@ public final class FlowVizState {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof FlowVizState s)) return false;
-        return autoYMode == s.autoYMode
+        return autoRangeY == s.autoRangeY
+            && autoRangeY2 == s.autoRangeY2
             && startTimeMs == s.startTimeMs
             && endTimeMs == s.endTimeMs
             && Double.compare(minValue, s.minValue) == 0
@@ -262,7 +299,7 @@ public final class FlowVizState {
     @Override
     public int hashCode() {
         return Objects.hash(visibleSeries, checkedSources, aggregationPeriod, aggregationMethod,
-            plotType, yAxisScale, lineShape, maskMode, seasonalMaskMode, autoYMode, rightAxisSeries,
+            plotType, yAxisScale, lineShape, maskMode, seasonalMaskMode, autoRangeY, autoRangeY2, rightAxisSeries,
             startTimeMs, endTimeMs, minValue, maxValue, y2MinValue, y2MaxValue);
     }
 }

@@ -14,7 +14,7 @@ import java.awt.image.BufferedImage;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -94,7 +94,8 @@ class PlotLegendLongNamesTest {
         assertTrue(width > 400, "wider than the old 400px cap: " + width);
         assertTrue(width < WIDE_PLOT, "but no wider than the name needs: " + width);
         int[] row = rowPoint(extent, longOne);
-        assertNull(legend.tooltipAt(row[0], row[1]), "a label that fits has no tooltip");
+        assertTrue(legend.tooltipAt(row[0], row[1]).endsWith("+click moves it to the right Y axis"),
+            "a label that fits is not restated; the tooltip teaches the modifier-click");
     }
 
     @Test
@@ -106,7 +107,7 @@ class PlotLegendLongNamesTest {
         assertEquals(0, extent[0], "pinned to the plot's left edge");
         assertEquals(NARROW_PLOT, extent[1], "as wide as the plot");
         int[] row = rowPoint(extent, longOne);
-        assertEquals(LONG_NAME, legend.tooltipAt(row[0], row[1]), "the cut label is offered whole");
+        assertTrue(legend.tooltipAt(row[0], row[1]).startsWith(LONG_NAME + ". "), "the cut label is offered whole, then the hint");
     }
 
     @Test
@@ -115,7 +116,7 @@ class PlotLegendLongNamesTest {
         paint(NARROW_PLOT);
         int[] row = rowPoint(keyExtent(NARROW_PLOT), shortOne);
 
-        assertNull(legend.tooltipAt(row[0], row[1]));
+        assertTrue(legend.tooltipAt(row[0], row[1]).endsWith("+click moves it to the right Y axis"), "only the hint, not the label");
     }
 
     @Test
@@ -123,10 +124,10 @@ class PlotLegendLongNamesTest {
         assumeKeyDrawnExpanded();
         paint(NARROW_PLOT);
         int[] narrowRow = rowPoint(keyExtent(NARROW_PLOT), longOne);
-        assertEquals(LONG_NAME, legend.tooltipAt(narrowRow[0], narrowRow[1]));
+        assertTrue(legend.tooltipAt(narrowRow[0], narrowRow[1]).startsWith(LONG_NAME + ". "));
 
         paint(WIDE_PLOT);
         int[] wideRow = rowPoint(keyExtent(WIDE_PLOT), longOne);
-        assertNull(legend.tooltipAt(wideRow[0], wideRow[1]), "clipping is decided afresh on every paint");
+        assertFalse(legend.tooltipAt(wideRow[0], wideRow[1]).contains(LONG_NAME), "clipping is decided afresh on every paint");
     }
 }

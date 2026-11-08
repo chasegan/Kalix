@@ -184,7 +184,7 @@ public class FlowVizMenuManager {
         zoomMenu.add(createMenuItem("Reset View", e -> resetViewAction.run()));
         zoomMenu.addSeparator();
 
-        autoYToggle = new JCheckBoxMenuItem("Auto-Y", autoYModeSupplier.get());
+        autoYToggle = new JCheckBoxMenuItem("Auto-range", autoYModeSupplier.get());
         autoYToggle.addActionListener(e -> toggleAutoYModeAction.run());
         zoomMenu.add(autoYToggle);
 

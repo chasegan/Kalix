@@ -40,7 +40,7 @@ class FlowVizPanelFitRulesTest {
         FlowVizPanel panel = panel(new double[] {0, 10, 20}, new double[] {5, 5, 5});
         panel.model().update(st -> st.withVisibleSeries(List.of(A, B)));
         panel.model().update(st -> st.withPlotType(PlotType.DIFFERENCE));
-        panel.model().update(st -> st.withAutoYMode(true));
+        panel.model().update(st -> st.withAutoRangeAll(true));
         panel.refreshData(true);
         ViewPort before = panel.viewportForTests();
         assertTrue(before.getMaxValue() < 10, "against a, b's differences top out at 5");

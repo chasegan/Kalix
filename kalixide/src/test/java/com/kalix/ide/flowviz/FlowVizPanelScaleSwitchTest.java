@@ -33,7 +33,7 @@ class FlowVizPanelScaleSwitchTest {
         panel.setDataSet(dataSet);
         panel.model().update(st -> st.withVisibleSeries(List.of(ref)));
         panel.refreshData(true);
-        assertFalse(panel.isAutoYMode(), "auto-Y off is the mode under test");
+        assertFalse(panel.isAutoRange(Axis.Y), "auto-Y off is the mode under test");
         assertTrue(panel.viewportForTests().getMinValue() < 0, "the linear fit reaches below zero");
 
         panel.model().update(st -> st.withYAxisScale(YAxisScale.LOG));

@@ -30,7 +30,6 @@ public class FlowVizActionManager {
 
     // State management
     private boolean dataVisible = false;  // Hidden by default
-    private boolean autoYMode = true;
     private boolean precision64 = true;
 
     // Callbacks for parent communication
@@ -130,14 +129,13 @@ public class FlowVizActionManager {
     }
 
     /**
-     * Toggles the Auto-Y mode for automatic Y-axis scaling.
+     * Auto-ranges every Y axis, or sets every one manual, as the toolbar's toggle does.
+     * The plot's state is the one record of the flags; the default for new plots follows.
      */
     public void toggleAutoYMode() {
-        autoYMode = !autoYMode;
-        vizPanel.model().update(st -> st.withAutoYMode(autoYMode));
-
-        // Save preference
-        PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(autoYMode);
+        boolean enabled = !isAutoYMode();
+        vizPanel.model().update(st -> st.withAutoRangeAll(enabled));
+        PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(enabled);
 
         menuManager.updateMenuStates();
     }
@@ -220,6 +218,8 @@ public class FlowVizActionManager {
             Mouse wheel - Zoom at cursor
             Mouse drag - Pan view
             Double-click plot - Reset zoom to fit data
+            Drag an axis end - Set that axis' range
+            Double-click an axis - Fit that axis to its data
 
             Data Reordering:
             Click data item - Select item
@@ -239,9 +239,9 @@ public class FlowVizActionManager {
         // Load precision preference (default: true for 64-bit)
         precision64 = PreferenceKeys.FLOWVIZ_PRECISION64.get();
 
-        // Load auto-Y mode preference (default: true)
-        autoYMode = PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get();
-        vizPanel.model().update(st -> st.withAutoYMode(autoYMode));
+        // Auto-range as the preference has it (default: on)
+        boolean autoRange = PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get();
+        vizPanel.model().update(st -> st.withAutoRangeAll(autoRange));
     }
 
     /**
@@ -263,12 +263,9 @@ public class FlowVizActionManager {
         return dataVisible;
     }
 
-    /**
-     * Gets the current Auto-Y mode state.
-     * @return true if Auto-Y mode is enabled
-     */
+    /** True while every Y axis is auto-ranged: what the toggle and menu item show. */
     public boolean isAutoYMode() {
-        return autoYMode;
+        return vizPanel.model().current().isAutoRangeAll();
     }
 
     /**

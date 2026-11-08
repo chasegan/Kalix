@@ -70,7 +70,7 @@ import com.kalix.ide.utils.DialogUtils;
  * - Mouse wheel zooming with cursor positioning
  * - Click and drag panning
  * - Right-click context menu
- * - Auto-Y mode support
+ * - Auto-range per value axis
  * - Data export functionality
  */
 public class PlotInteractionManager {
@@ -89,11 +89,8 @@ public class PlotInteractionManager {
     private Point lastMousePos;
     private boolean isDragging = false;
     private JPopupMenu contextMenu;
-    private JCheckBoxMenuItem autoYMenuItem;
-    private JMenuItem pasteXAxisItem;
-    private JMenuItem pasteYAxisItem;
-    private JMenuItem copyY2AxisItem;
-    private JMenuItem pasteY2AxisItem;
+    // One submenu per axis, holding that axis' commands; the right axis' only while it exists
+    private final Map<Axis, AxisMenu> axisMenus = new EnumMap<>(Axis.class);
     private JCheckBoxMenuItem connectGapsMenuItem;
     private JCheckBoxMenuItem orphanMarkersMenuItem;
     private final Map<LineShape, JRadioButtonMenuItem> lineShapeMenuItems = new EnumMap<>(LineShape.class);
@@ -260,7 +257,7 @@ public class PlotInteractionManager {
                     } else {
                         AxisHandle handle = axisHandleAt(e.getPoint());
                         if (handle != null) {
-                            fitAxis(handle);
+                            fitAxis(handle.axis());
                         }
                     }
                 }
@@ -316,9 +313,6 @@ public class PlotInteractionManager {
             }
         };
     }
-
-    /** The plot's axes: time, the Y axis, and the secondary (right, y2) Y axis. */
-    enum Axis { X, Y, Y2 }
 
     /** An axis end a press can grab: which axis, and which end moves. */
     private enum AxisHandle {
@@ -382,9 +376,9 @@ public class PlotInteractionManager {
      * once the press has moved {@link #AXIS_DRAG_THRESHOLD} pixels, always computed from the
      * view at the start of the drag. Only the grabbed axis comes
      * from that view; the rest is the view as it is now, so a change made meanwhile (a data
-     * refresh, a series leaving the plot) is not undone. Dragging X obeys auto-Y like any
-     * other X-only change; dragging a value axis is an explicit range, so auto-Y goes off
-     * when the drag ends ({@link #finishAxisDrag}).
+     * refresh, a series leaving the plot) is not undone. Dragging X is navigation, so the
+     * auto-ranged value axes refit; dragging a value axis is an explicit range, so that
+     * axis' auto-range goes off when the drag ends ({@link #finishAxisDrag}).
      */
     private void handleAxisDrag(Point point) {
         ViewPort current = viewportSupplier.get();
@@ -406,11 +400,7 @@ public class PlotInteractionManager {
         switch (axisDrag) {
             case X_START, X_END -> {
                 ViewPort dragged = start.dragTimeEnd(axisDrag == AxisHandle.X_END, axisDragPress.x, point.x);
-                if (isAutoYMode()) {
-                    updateViewportWithFittedY(dragged.getStartTimeMs(), dragged.getEndTimeMs());
-                } else {
-                    viewportUpdater.accept(current.withTimeRange(dragged.getStartTimeMs(), dragged.getEndTimeMs()));
-                }
+                navigate(current.withTimeRange(dragged.getStartTimeMs(), dragged.getEndTimeMs()));
             }
             case Y_MIN, Y_MAX -> {
                 ViewPort dragged = start.dragValueEnd(axisDrag == AxisHandle.Y_MAX, axisDragPress.y, point.y);
@@ -426,15 +416,15 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Ends an axis drag. A value axis that actually moved switches auto-Y off (shared by both
-     * axes), after the viewport, so undo records the two as one step (see
+     * Ends an axis drag. A value axis that actually moved switches its own auto-range off,
+     * after the viewport, so undo records the two as one step (see
      * {@link #applyExplicitLimits}). A press without movement changes nothing. The cursor
      * goes back to whatever {@code point} is over, so a grabbable axis keeps its resize cursor.
      */
     private void finishAxisDrag(Point point) {
-        boolean valueAxis = axisDrag.axis() != Axis.X;
-        if (axisDragMoved && valueAxis) {
-            panel.model().update(st -> st.withAutoYMode(false));
+        Axis axis = axisDrag.axis();
+        if (axisDragMoved && axis.isValueAxis()) {
+            panel.model().update(st -> st.withAutoRange(axis, false));
         }
         axisDrag = null;
         axisDragPress = null;
@@ -444,17 +434,17 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Fits one axis to its data, leaving the others and the auto-Y mode alone: a one-off
-     * fit, as auto-Y would give that axis now. X fits the whole time span and then obeys
-     * auto-Y like any other X-only change; Y and Y2 fit their own series over the time
-     * window shown.
+     * Fits one axis to its data, leaving the others and every auto-range flag alone: a
+     * one-off fit, as auto-range would give that axis now. X fits the whole time span,
+     * which is navigation, so the auto-ranged value axes refit with it; Y and Y2 fit their
+     * own series over the time window shown.
      */
-    private void fitAxis(AxisHandle handle) {
+    private void fitAxis(Axis axis) {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) {
             return;
         }
-        switch (handle.axis()) {
+        switch (axis) {
             case X -> {
                 long[] timeRange = panel.fittedTimeRange();
                 if (timeRange != null) {
@@ -477,12 +467,17 @@ public class PlotInteractionManager {
     }
 
     /**
-     * The panel's auto-Y mode, which decides whether X-only navigation refits Y. Read on
-     * every use rather than mirrored, so undo/redo and every other path that changes the
-     * mode are seen here without any synchronisation.
+     * Whether {@code axis} is auto-ranged, which decides whether navigation refits it. Read
+     * on every use rather than mirrored, so undo/redo and every other path that changes
+     * the flag are seen here without any synchronisation.
      */
-    private boolean isAutoYMode() {
-        return panel.isAutoYMode();
+    private boolean isAutoRange(Axis axis) {
+        return panel.isAutoRange(axis);
+    }
+
+    /** True when some value axis {@code view} shows is not auto-ranged, so a gesture can zoom it. */
+    private boolean anyManualValueAxis(ViewPort view) {
+        return !isAutoRange(Axis.Y) || (view.hasY2() && !isAutoRange(Axis.Y2));
     }
 
     /** Sets the lookup from a point to the Key entry under it, for the axis menu item. */
@@ -497,8 +492,8 @@ public class PlotInteractionManager {
 
     /**
      * The padded value range of one value axis' ({@link Axis#Y} or {@link Axis#Y2}) series
-     * over the current time window: the range auto-Y would give that axis. Null when the
-     * axis has nothing showable there.
+     * over the current time window: the range auto-range would give that axis. Null when
+     * the axis has nothing showable there.
      */
     double[] fittedRangeForAxis(Axis axis) {
         ViewPort currentViewport = viewportSupplier.get();
@@ -517,93 +512,59 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Fits the Y-axis to the data visible in the current X (time) range.
-     * Keeps the X zoom unchanged.
+     * Refits the auto-ranged value axes to the data in the current time window, keeping
+     * the X zoom and every manual axis as they are.
      */
     public void fitYAxisToCurrentXRange() {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
-
-        long startTime = currentViewport.getStartTimeMs();
-        long endTime = currentViewport.getEndTimeMs();
-        updateViewportWithFittedY(startTime, endTime);
+        navigate(currentViewport);
         panel.repaint();
     }
 
     /**
-     * Helper method: Updates viewport with specified time range and Y fitted to visible data.
-     * Used by Auto-Y mode zoom operations.
+     * Shows {@code navigated}, a view the user has moved to: each auto-ranged value axis is
+     * refitted to its own series over the new time window, and a manual one shows the
+     * range the gesture gave it. An auto-ranged axis with nothing showable in the window
+     * keeps the range it has: a stock default can be off the scale (-1 on LOG). Every
+     * navigation -- wheel, pan, the zoom buttons, a time-axis drag or paste -- lands here,
+     * so the one rule holds for all of them.
      */
-    private void updateViewportWithFittedY(long startTime, long endTime) {
-        ViewPort currentViewport = viewportSupplier.get();
-        if (currentViewport == null) return;
+    private void navigate(ViewPort navigated) {
+        ViewPort current = viewportSupplier.get();
+        if (current == null) return;
 
-        // Fit each axis to its own series in the time range. An axis with nothing showable
-        // there keeps its range: a stock default can be off the scale (-1 on LOG).
-        YAxisScale scale = currentViewport.getYAxisScale();
-        double[] yRange = fittedRangeForAxis(Axis.Y, startTime, endTime, scale);
-        if (yRange == null) {
-            yRange = new double[]{currentViewport.getMinValue(), currentViewport.getMaxValue()};
+        long startTime = navigated.getStartTimeMs();
+        long endTime = navigated.getEndTimeMs();
+        YAxisScale scale = navigated.getYAxisScale();
+        ViewPort settled = navigated;
+        if (isAutoRange(Axis.Y)) {
+            double[] y = fittedRangeForAxis(Axis.Y, startTime, endTime, scale);
+            settled = y != null ? settled.withValueBounds(y[0], y[1])
+                : settled.withValueBounds(current.getMinValue(), current.getMaxValue());
         }
-
-        // Built from the current view: the X axis type (exceedance plots) and y2 carry over
+        if (navigated.hasY2() && isAutoRange(Axis.Y2)) {
+            double[] y2 = fittedRangeForAxis(Axis.Y2, startTime, endTime, scale);
+            settled = y2 != null ? settled.withY2Bounds(y2[0], y2[1])
+                : settled.withY2Bounds(current.getY2MinValue(), current.getY2MaxValue());
+        }
         Rectangle plotArea = plotAreaSupplier.get();
-        ViewPort newViewport = currentViewport.withTimeRange(startTime, endTime).withValueBounds(yRange[0], yRange[1])
-            .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height);
-        if (currentViewport.hasY2()) {
-            double[] y2Range = fittedRangeForAxis(Axis.Y2, startTime, endTime, scale);
-            if (y2Range != null) {
-                newViewport = newViewport.withY2Bounds(y2Range[0], y2Range[1]);
-            }
-        }
-        viewportUpdater.accept(newViewport);
+        viewportUpdater.accept(settled.withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height));
     }
 
-    /**
-     * Zooms in at the center of the plot area.
-     */
+    /** Zooms in about the plot centre: X, and any manual value axis; the auto-ranged ones refit. */
     public void zoomIn() {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
-
-        if (isAutoYMode()) {
-            // Auto-Y mode: only zoom X-axis, then auto-fit Y
-            long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
-            long timeRange = currentViewport.getTimeRangeMs();
-            long newTimeRange = (long) (timeRange / ZOOM_FACTOR);
-
-            long startTime = centerTime - newTimeRange / 2;
-            long endTime = centerTime + newTimeRange / 2;
-
-            updateViewportWithFittedY(startTime, endTime);
-        } else {
-            // Standard zoom: both axes about the plot centre
-            viewportUpdater.accept(currentViewport.zoom(ZOOM_FACTOR));
-        }
+        navigate(currentViewport.zoom(ZOOM_FACTOR));
         panel.repaint();
     }
 
-    /**
-     * Zooms out from the center of the plot area.
-     */
+    /** Zooms out about the plot centre: X, and any manual value axis; the auto-ranged ones refit. */
     public void zoomOut() {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) return;
-
-        if (isAutoYMode()) {
-            // Auto-Y mode: only zoom X-axis, then auto-fit Y
-            long centerTime = (currentViewport.getStartTimeMs() + currentViewport.getEndTimeMs()) / 2;
-            long timeRange = currentViewport.getTimeRangeMs();
-            long newTimeRange = (long) (timeRange * ZOOM_FACTOR);
-
-            long startTime = centerTime - newTimeRange / 2;
-            long endTime = centerTime + newTimeRange / 2;
-
-            updateViewportWithFittedY(startTime, endTime);
-        } else {
-            // Standard zoom: both axes about the plot centre
-            viewportUpdater.accept(currentViewport.zoom(1.0 / ZOOM_FACTOR));
-        }
+        navigate(currentViewport.zoom(1.0 / ZOOM_FACTOR));
         panel.repaint();
     }
 
@@ -615,9 +576,11 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Handles mouse wheel zoom events.
-     * Ctrl+Scroll (Windows/Linux) or Cmd+Scroll (Mac): Y-axis only
-     * Scroll alone: Both axes
+     * Handles mouse wheel zoom events. The point under the mouse stays put. Scroll alone
+     * zooms X and every manual value axis, and the auto-ranged value axes refit to the new
+     * window. Ctrl+Scroll (Cmd+Scroll on macOS) zooms the manual value axes only; with
+     * every value axis auto-ranged there is nothing for it to do, so it zooms as a plain
+     * scroll does.
      */
     private void handleZoom(MouseWheelEvent e) {
         ViewPort currentViewport = viewportSupplier.get();
@@ -625,57 +588,26 @@ public class PlotInteractionManager {
 
         // Use smaller zoom factor for mouse wheel (less sensitive)
         double wheelZoomFactor = Math.pow(1.1, -e.getWheelRotation());
+        boolean valueAxesOnly = e.isControlDown() || e.isMetaDown();
+        ViewPort zoomed = currentViewport.zoomValueAxis(wheelZoomFactor, e.getY());
 
-        // Check for modifier keys: Ctrl (Windows/Linux) or Cmd (Mac)
-        boolean isYAxisOnlyZoom = e.isControlDown() || e.isMetaDown();
-
-        if (isAutoYMode()) {
-            // Auto-Y mode: only zoom X-axis centered on mouse, then auto-fit Y
+        if (!valueAxesOnly || !anyManualValueAxis(currentViewport)) {
+            // Time in data space, as it is always linear
             long mouseTime = currentViewport.screenXToTime(e.getX());
             long currentStartTime = currentViewport.getStartTimeMs();
-            long currentEndTime = currentViewport.getEndTimeMs();
-            long currentTimeRange = currentEndTime - currentStartTime;
-
-            // Calculate new time range centered on mouse
+            long currentTimeRange = currentViewport.getEndTimeMs() - currentStartTime;
             long newTimeRange = (long) (currentTimeRange / wheelZoomFactor);
             double mouseRatio = (double) (mouseTime - currentStartTime) / currentTimeRange;
             long startTime = mouseTime - (long) (newTimeRange * mouseRatio);
-            long endTime = startTime + newTimeRange;
-
-            updateViewportWithFittedY(startTime, endTime);
-        } else if (isYAxisOnlyZoom) {
-            // Ctrl/Cmd+Scroll: Y-axis only, the value under the mouse stays put
-            Rectangle plotArea = plotAreaSupplier.get();
-            viewportUpdater.accept(currentViewport.zoomValueAxis(wheelZoomFactor, e.getY())
-                .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height));
-        } else {
-            // Standard zoom: both axes, the point under the mouse stays put
-            long mouseTime = currentViewport.screenXToTime(e.getX());
-
-            // Get current ranges (time in data space, as it's always linear)
-            long currentStartTime = currentViewport.getStartTimeMs();
-            long currentEndTime = currentViewport.getEndTimeMs();
-            long currentTimeRange = currentEndTime - currentStartTime;
-
-            // Calculate new time range
-            long newTimeRange = (long) (currentTimeRange / wheelZoomFactor);
-
-            // Center time range on mouse position (linear, so data space is fine)
-            double mouseTimeRatio = (double) (mouseTime - currentStartTime) / currentTimeRange;
-            long startTime = mouseTime - (long) (newTimeRange * mouseTimeRatio);
-            long endTime = startTime + newTimeRange;
-
-            Rectangle plotArea = plotAreaSupplier.get();
-            viewportUpdater.accept(currentViewport.zoomValueAxis(wheelZoomFactor, e.getY())
-                .withTimeRange(startTime, endTime)
-                .withPlotArea(plotArea.x, plotArea.y, plotArea.width, plotArea.height));
+            zoomed = zoomed.withTimeRange(startTime, startTime + newTimeRange);
         }
-
+        navigate(zoomed);
         panel.repaint();
     }
 
     /**
-     * Handles mouse drag panning events.
+     * Handles mouse drag panning: X and every manual value axis pan with the mouse, and
+     * the auto-ranged value axes refit to the new window.
      */
     private void handlePan(MouseEvent e) {
         ViewPort currentViewport = viewportSupplier.get();
@@ -683,21 +615,7 @@ public class PlotInteractionManager {
 
         int dx = e.getX() - lastMousePos.x;
         int dy = e.getY() - lastMousePos.y;
-
-        if (isAutoYMode()) {
-            // Auto-Y mode: only pan X-axis, then auto-fit Y
-            long timeRange = currentViewport.getTimeRangeMs();
-            long deltaTime = -dx * timeRange / currentViewport.getPlotWidth();
-
-            long newStartTime = currentViewport.getStartTimeMs() + deltaTime;
-            long newEndTime = currentViewport.getEndTimeMs() + deltaTime;
-
-            updateViewportWithFittedY(newStartTime, newEndTime);
-        } else {
-            // Standard pan: pan both axes using pixel-based panning for correct non-linear scale behavior
-            ViewPort newViewport = currentViewport.panByPixels(dx, dy);
-            viewportUpdater.accept(newViewport);
-        }
+        navigate(currentViewport.panByPixels(dx, dy));
 
         lastMousePos = e.getPoint();
         panel.repaint();
@@ -729,8 +647,8 @@ public class PlotInteractionManager {
         long startTime = currentViewport.screenXToTime(leftX);
         long endTime = currentViewport.screenXToTime(rightX);
 
-        // Always zoom both axes — ignores auto-Y so the user can "peek" at a region.
-        // Subsequent pan or scroll-zoom will snap Y back via auto-Y.
+        // Always zooms every axis -- ignores auto-range so the user can "peek" at a region.
+        // The next pan or scroll-zoom refits the auto-ranged axes again.
         double maxValue = currentViewport.screenYToValue(topY);   // top of screen = max value
         double minValue = currentViewport.screenYToValue(bottomY); // bottom of screen = min value
 
@@ -888,9 +806,27 @@ public class PlotInteractionManager {
         menuSeries = keyEntryLookup.apply(e.getPoint());
         moveAxisItem.setVisible(menuSeries != null);
         if (menuSeries != null) {
-            moveAxisItem.setText(onRightAxis.test(menuSeries) ? "Move to Y axis" : "Move to secondary Y axis");
+            moveAxisItem.setText(onRightAxis.test(menuSeries) ? "Move to left Y axis" : "Move to right Y axis");
         }
         contextMenu.show(panel, e.getX(), e.getY());
+    }
+
+    /**
+     * The axis' name as the menus, the Key and the dialog spell it. The one Y axis is "Y
+     * axis"; once there is a right one, the two are told apart as left and right, which
+     * is what the eye sees (ADR-0002 §2.3: no word the plot does not already supply).
+     */
+    static String axisLabel(Axis axis, boolean rightAxisInUse) {
+        return switch (axis) {
+            case X -> "X axis";
+            case Y -> rightAxisInUse ? "Left Y axis" : "Y axis";
+            case Y2 -> "Right Y axis";
+        };
+    }
+
+    /** The plot's context menu, for tests that check what it offers. */
+    JPopupMenu contextMenu() {
+        return contextMenu;
     }
 
     /**
@@ -921,12 +857,12 @@ public class PlotInteractionManager {
      * Whether the clipboard currently holds text the paste items could read. Per
      * ADR-0002 §4, Paste with an empty clipboard is shown disabled rather than
      * hidden: the user should know the command exists. A clipboard held by another
-     * application counts as empty.
+     * application, or none at all (headless), counts as empty.
      */
     private static boolean hasClipboardText() {
         try {
             return Toolkit.getDefaultToolkit().getSystemClipboard().isDataFlavorAvailable(DataFlavor.stringFlavor);
-        } catch (IllegalStateException ex) {
+        } catch (IllegalStateException | java.awt.HeadlessException ex) {
             return false;
         }
     }
@@ -954,107 +890,21 @@ public class PlotInteractionManager {
 
         contextMenu.addSeparator();
 
-        // Clipboard block (block 3). The copy/paste items act immediately and carry no
-        // ellipsis (2.4).
-        JMenuItem copyXAxis = new JMenuItem("Copy X axis");
-
-        // Copy/paste go through AxisLimitCodec -- the same codec the Set-axis-limits
-        // dialog uses -- so the clipboard always carries the axis' own units.
-        copyXAxis.addActionListener(e -> {
-            ViewPort currentViewport = viewportSupplier.get();
-            if (currentViewport != null) {
-                copyStringToClipboard(AxisLimitCodec.formatXLimits(currentViewport));
-            }
-        });
-        contextMenu.add(copyXAxis);
-        pasteXAxisItem = new JMenuItem("Paste X axis");
-        pasteXAxisItem.addActionListener(e -> {
-            ViewPort currentViewport = viewportSupplier.get();
-            String text = readClipboardText();
-            if (currentViewport == null || text == null) {
-                return;
-            }
-            long[] x;
-            try {
-                x = AxisLimitCodec.parseXLimits(text, currentViewport.getXAxisType());
-                ViewPort.validateBounds(x[0], x[1], currentViewport.getMinValue(), currentViewport.getMaxValue());
-            } catch (IllegalArgumentException ex) {
-                showInvalidInput(panel, ex.getMessage());
-                return;
-            }
-            applyXLimits(x[0], x[1]);
-        });
-        contextMenu.add(pasteXAxisItem);
-
-        JMenuItem copyYAxis = new JMenuItem("Copy Y axis");
-        copyYAxis.addActionListener(e -> {
-            ViewPort currentViewport = viewportSupplier.get();
-            if (currentViewport != null) {
-                copyStringToClipboard(AxisLimitCodec.formatYLimits(currentViewport));
-            }
-        });
-        contextMenu.add(copyYAxis);
-        pasteYAxisItem = new JMenuItem("Paste Y axis");
-        pasteYAxisItem.addActionListener(e -> {
-            ViewPort currentViewport = viewportSupplier.get();
-            String text = readClipboardText();
-            if (currentViewport == null || text == null) {
-                return;
-            }
-            double[] y;
-            try {
-                y = AxisLimitCodec.parseYLimits(text);
-                ViewPort.validateBounds(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
-            } catch (IllegalArgumentException ex) {
-                showInvalidInput(panel, ex.getMessage());
-                return;
-            }
-            applyExplicitLimits(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
-        });
-        contextMenu.add(pasteYAxisItem);
-
-        // The right axis' pair, shown only while the plot has one (4). Same codec as Y.
-        copyY2AxisItem = new JMenuItem("Copy secondary Y axis");
-        copyY2AxisItem.addActionListener(e -> {
-            ViewPort currentViewport = viewportSupplier.get();
-            if (currentViewport != null && currentViewport.hasY2()) {
-                copyStringToClipboard(AxisLimitCodec.formatYLimits(currentViewport.forY2()));
-            }
-        });
-        contextMenu.add(copyY2AxisItem);
-        pasteY2AxisItem = new JMenuItem("Paste secondary Y axis");
-        pasteY2AxisItem.addActionListener(e -> {
-            ViewPort currentViewport = viewportSupplier.get();
-            String text = readClipboardText();
-            if (currentViewport == null || !currentViewport.hasY2() || text == null) {
-                return;
-            }
-            double[] y2;
-            try {
-                y2 = parseY2Limits(text, currentViewport);
-            } catch (IllegalArgumentException ex) {
-                showInvalidInput(panel, ex.getMessage());
-                return;
-            }
-            acceptY2Bounds(y2[0], y2[1]);
-            panel.model().update(st -> st.withAutoYMode(false)); // an explicit range, as for Paste Y axis
-        });
-        contextMenu.add(pasteY2AxisItem);
-
-        contextMenu.addSeparator();
-
         // View/state block (block 8): everything that changes how the data is shown, never
-        // the data. "Set axis limits…" carries an ellipsis because it opens a dialog (2.4);
-        // the submenus are category nouns with value children (6).
-        JMenuItem setAxes = new JMenuItem("Set axis limits…");
+        // the data. First the axes, each as a submenu of its own commands: a submenu named
+        // for the thing its children act on, read aloud as "Left Y axis: copy range". The
+        // copy and paste items act immediately and carry no ellipsis (2.4); "Set axis
+        // ranges…" opens a dialog, so it does; the remaining submenus are category nouns
+        // with value children (6).
+        for (Axis axis : Axis.values()) {
+            AxisMenu axisMenu = buildAxisMenu(axis);
+            axisMenus.put(axis, axisMenu);
+            contextMenu.add(axisMenu.menu());
+        }
+
+        JMenuItem setAxes = new JMenuItem("Set axis ranges…");
         setAxes.addActionListener(e1 -> showSetAxesDialog());
         contextMenu.add(setAxes);
-
-        autoYMenuItem = new JCheckBoxMenuItem("Auto-scale Y axis");
-        autoYMenuItem.addActionListener(e -> {
-            panel.model().update(st -> st.withAutoYMode(autoYMenuItem.isSelected()));
-        });
-        contextMenu.add(autoYMenuItem);
 
         // Y-axis scale submenu
         yAxisScaleMenu = new JMenu("Y-axis scale");
@@ -1102,7 +952,8 @@ public class PlotInteractionManager {
 
         // Still block 8, but commands rather than settings (6), so they sit apart from the
         // settings above. The axis move is shown only over a Key entry (4).
-        moveAxisItem = new JMenuItem("Move to secondary Y axis");
+        moveAxisItem = new JMenuItem("Move to right Y axis");
+        moveAxisItem.setVisible(false); // shown over a Key entry (showContextMenuIfPlotted)
         moveAxisItem.addActionListener(e -> {
             if (menuSeries != null) {
                 panel.model().update(st -> st.withSeriesOnRightAxis(menuSeries, !st.isOnRightAxis(menuSeries)));
@@ -1122,16 +973,19 @@ public class PlotInteractionManager {
             @Override
             public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
                 boolean clipboardHasText = hasClipboardText();
-                pasteXAxisItem.setEnabled(clipboardHasText);
-                pasteYAxisItem.setEnabled(clipboardHasText);
                 ViewPort currentViewport = viewportSupplier.get();
                 boolean hasY2 = currentViewport != null && currentViewport.hasY2();
-                copyY2AxisItem.setVisible(hasY2);
-                pasteY2AxisItem.setVisible(hasY2);
-                pasteY2AxisItem.setEnabled(clipboardHasText);
+                for (Axis axis : Axis.values()) {
+                    AxisMenu axisMenu = axisMenus.get(axis);
+                    axisMenu.menu().setText(axisLabel(axis, hasY2));
+                    axisMenu.menu().setVisible(axis != Axis.Y2 || hasY2);
+                    axisMenu.paste().setEnabled(clipboardHasText);
+                    if (axisMenu.autoRange() != null) {
+                        axisMenu.autoRange().setSelected(isAutoRange(axis));
+                    }
+                }
 
                 // Sync the menu with the plot's current state
-                autoYMenuItem.setSelected(isAutoYMode());
                 lineShapeMenuItems.get(panel.getLineShape()).setSelected(true);
                 connectGapsMenuItem.setSelected(panel.isConnectAcrossGaps());
                 orphanMarkersMenuItem.setSelected(panel.isShowOrphanMarkers());
@@ -1150,6 +1004,83 @@ public class PlotInteractionManager {
             @Override
             public void popupMenuCanceled(PopupMenuEvent e) {}
         });
+    }
+
+    /** An axis' submenu and the items on it that change with the plot's state. */
+    private record AxisMenu(JMenu menu, JCheckBoxMenuItem autoRange, JMenuItem paste) {}
+
+    /**
+     * One axis' commands as a submenu named for it. "Fit to data" leads, being what
+     * double-clicking the axis does (ADR-0002 §1, block 1); the value axes then have their
+     * auto-range flag; copy and paste of the range close the list.
+     */
+    private AxisMenu buildAxisMenu(Axis axis) {
+        JMenu menu = new JMenu(axisLabel(axis, true));
+        JMenuItem fit = new JMenuItem("Fit to data");
+        fit.addActionListener(e -> fitAxis(axis));
+        menu.add(fit);
+
+        JCheckBoxMenuItem autoRange = null;
+        if (axis.isValueAxis()) {
+            JCheckBoxMenuItem item = new JCheckBoxMenuItem("Auto-range");
+            item.addActionListener(e -> panel.model().update(st -> st.withAutoRange(axis, item.isSelected())));
+            menu.add(item);
+            autoRange = item;
+        }
+
+        // Copy and paste go through AxisLimitCodec -- the same codec the Set-axis-ranges
+        // dialog uses -- so the clipboard always carries the axis' own units.
+        JMenuItem copy = new JMenuItem("Copy range");
+        copy.addActionListener(e -> copyAxisRange(axis));
+        menu.add(copy);
+        JMenuItem paste = new JMenuItem("Paste range");
+        paste.addActionListener(e -> pasteAxisRange(axis));
+        menu.add(paste);
+        return new AxisMenu(menu, autoRange, paste);
+    }
+
+    private void copyAxisRange(Axis axis) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null || (axis == Axis.Y2 && !currentViewport.hasY2())) {
+            return;
+        }
+        copyStringToClipboard(switch (axis) {
+            case X -> AxisLimitCodec.formatXLimits(currentViewport);
+            case Y -> AxisLimitCodec.formatYLimits(currentViewport);
+            case Y2 -> AxisLimitCodec.formatYLimits(currentViewport.forY2());
+        });
+    }
+
+    /**
+     * Pastes a range onto one axis. A time range is navigation; a value range is explicit,
+     * so that axis' auto-range goes off, as for a drag or the dialog.
+     */
+    private void pasteAxisRange(Axis axis) {
+        ViewPort currentViewport = viewportSupplier.get();
+        String text = readClipboardText();
+        if (currentViewport == null || text == null || (axis == Axis.Y2 && !currentViewport.hasY2())) {
+            return;
+        }
+        try {
+            switch (axis) {
+                case X -> {
+                    long[] x = AxisLimitCodec.parseXLimits(text, currentViewport.getXAxisType());
+                    ViewPort.validateBounds(x[0], x[1], currentViewport.getMinValue(), currentViewport.getMaxValue());
+                    applyXLimits(x[0], x[1]);
+                }
+                case Y -> {
+                    double[] y = parseValueRange(text, axisLabel(Axis.Y, currentViewport.hasY2()));
+                    applyExplicitLimits(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y[0], y[1]);
+                }
+                case Y2 -> {
+                    double[] y2 = parseValueRange(text, axisLabel(Axis.Y2, true));
+                    acceptY2Bounds(y2[0], y2[1]);
+                    panel.model().update(st -> st.withAutoRange(Axis.Y2, false));
+                }
+            }
+        } catch (IllegalArgumentException ex) {
+            showInvalidInput(panel, ex.getMessage());
+        }
     }
 
     /**
@@ -1193,32 +1124,29 @@ public class PlotInteractionManager {
     }
 
     /**
-     * Applies an X-only change: obeys auto-Y exactly as wheel zoom and drag pan do, so a
-     * pasted time window shows its own data rather than the previous window's Y range.
+     * Applies an X-only change: navigation, exactly as wheel zoom and drag pan are, so a
+     * pasted time window shows its own data on the auto-ranged axes rather than the
+     * previous window's range.
      */
     private void applyXLimits(long startTime, long endTime) {
         ViewPort currentViewport = viewportSupplier.get();
         if (currentViewport == null) {
             return;
         }
-        if (isAutoYMode()) {
-            updateViewportWithFittedY(startTime, endTime);
-            panel.repaint();
-        } else {
-            acceptNewAxes(startTime, endTime, currentViewport.getMinValue(), currentViewport.getMaxValue());
-        }
+        navigate(currentViewport.withTimeRange(startTime, endTime));
+        panel.repaint();
     }
 
     /**
-     * Applies limits that include an explicit Y range: the user has opted out of auto-Y,
-     * otherwise the next wheel tick or drag would silently refit Y and discard them. The
-     * viewport lands first and the mode second: the viewport update only restarts the
-     * coalesce timer, while the model update records an entry at once with the viewport
-     * as it then is, so undo restores both in one step.
+     * Applies limits that include an explicit left-axis range: the user has opted that
+     * axis out of auto-range, otherwise the next wheel tick or drag would silently refit
+     * it and discard them. The viewport lands first and the flag second: the viewport
+     * update only restarts the coalesce timer, while the model update records an entry at
+     * once with the viewport as it then is, so undo restores both in one step.
      */
     private void applyExplicitLimits(long startTime, long endTime, double minValue, double maxValue) {
         acceptNewAxes(startTime, endTime, minValue, maxValue);
-        panel.model().update(st -> st.withAutoYMode(false));
+        panel.model().update(st -> st.withAutoRange(Axis.Y, false));
     }
 
     /**
@@ -1235,24 +1163,26 @@ public class PlotInteractionManager {
         }
         XAxisType xAxisType = currentViewport.getXAxisType();
 
+        boolean hasY2 = currentViewport.hasY2();
+        String yLabel = axisLabel(Axis.Y, hasY2);
+        String y2Label = axisLabel(Axis.Y2, hasY2);
         JTextField xField = new JTextField(AxisLimitCodec.formatXLimits(currentViewport), 32);
         JTextField yField = new JTextField(AxisLimitCodec.formatYLimits(currentViewport), 32);
-        // A secondary Y row only while the plot has one
-        JTextField y2Field = currentViewport.hasY2()
-            ? new JTextField(AxisLimitCodec.formatYLimits(currentViewport.forY2()), 32) : null;
+        // A right-axis row only while the plot has one
+        JTextField y2Field = hasY2 ? new JTextField(AxisLimitCodec.formatYLimits(currentViewport.forY2()), 32) : null;
 
         JPanel form = new JPanel(new GridBagLayout());
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(4, 4, 4, 4);
         gbc.anchor = GridBagConstraints.WEST;
-        addAxisFieldRow(form, gbc, 0, "X limits:", xField);
-        addAxisFieldRow(form, gbc, 1, "Y limits:", yField);
+        addAxisFieldRow(form, gbc, 0, axisLabel(Axis.X, hasY2) + ":", xField);
+        addAxisFieldRow(form, gbc, 1, yLabel + ":", yField);
         if (y2Field != null) {
-            addAxisFieldRow(form, gbc, 2, "Secondary Y limits:", y2Field);
+            addAxisFieldRow(form, gbc, 2, y2Label + ":", y2Field);
         }
 
         JDialog dialog = new JDialog(SwingUtilities.getWindowAncestor(panel),
-            "Set axis limits", Dialog.ModalityType.APPLICATION_MODAL);  // sentence case (2.1)
+            "Set axis ranges", Dialog.ModalityType.APPLICATION_MODAL);  // sentence case (2.1)
         dialog.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
         dialog.setLayout(new BorderLayout());
         dialog.add(form, BorderLayout.CENTER);
@@ -1261,22 +1191,28 @@ public class PlotInteractionManager {
         okButton.addActionListener(ev -> {
             try {
                 long[] x = AxisLimitCodec.parseXLimits(xField.getText(), xAxisType);
-                double[] y = AxisLimitCodec.parseYLimits(yField.getText());
-                ViewPort.validateBounds(x[0], x[1], y[0], y[1]);
-                double[] y2 = y2Field != null ? parseY2Limits(y2Field.getText(), currentViewport) : null;
-                // An edited Y or Y2 field is an explicit value range; untouched ones (the
-                // codec's formatting round-trips exactly) mean the user only wanted X, which
-                // obeys auto-Y like any other X-only change. Auto-Y is shared, so either
-                // edit turns it off for both axes.
+                ViewPort.validateBounds(x[0], x[1], currentViewport.getMinValue(), currentViewport.getMaxValue());
+                double[] y = parseValueRange(yField.getText(), yLabel);
+                double[] y2 = y2Field != null ? parseValueRange(y2Field.getText(), y2Label) : null;
+                // An edited value field is an explicit range for that axis, whose auto-range
+                // goes off; an untouched one (the codec's formatting round-trips exactly)
+                // leaves its axis alone, so the change is navigation for it.
                 boolean yEdited = y[0] != currentViewport.getMinValue() || y[1] != currentViewport.getMaxValue();
                 boolean y2Edited = y2 != null
                     && (y2[0] != currentViewport.getY2MinValue() || y2[1] != currentViewport.getY2MaxValue());
                 if (yEdited || y2Edited) {
-                    acceptNewAxes(x[0], x[1], y[0], y[1]);
-                    if (y2Edited) {
-                        acceptY2Bounds(y2[0], y2[1]);
+                    ViewPort target = currentViewport.withTimeRange(x[0], x[1]);
+                    if (yEdited) {
+                        target = target.withValueBounds(y[0], y[1]);
                     }
-                    panel.model().update(st -> st.withAutoYMode(false));
+                    if (y2Edited) {
+                        target = target.withY2Bounds(y2[0], y2[1]);
+                    }
+                    navigate(target);
+                    panel.model().update(st -> {
+                        FlowVizState next = yEdited ? st.withAutoRange(Axis.Y, false) : st;
+                        return y2Edited ? next.withAutoRange(Axis.Y2, false) : next;
+                    });
                 } else {
                     applyXLimits(x[0], x[1]);
                 }
@@ -1310,18 +1246,11 @@ public class PlotInteractionManager {
         dialog.setVisible(true);
     }
 
-    /**
-     * Parses and checks right-axis limits, naming Y2 in the message so it cannot be taken
-     * for the Y row.
-     */
-    private static double[] parseY2Limits(String text, ViewPort currentViewport) {
-        try {
-            double[] y2 = AxisLimitCodec.parseYLimits(text);
-            ViewPort.validateBounds(currentViewport.getStartTimeMs(), currentViewport.getEndTimeMs(), y2[0], y2[1]);
-            return y2;
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("Secondary Y limits: " + ex.getMessage(), ex);
-        }
+    /** Parses and checks a value axis' range, naming the axis in any complaint. */
+    private static double[] parseValueRange(String text, String axisLabel) {
+        double[] range = AxisLimitCodec.parseYLimits(text);
+        ViewPort.validateValueRange(axisLabel, range[0], range[1]);
+        return range;
     }
 
     /** Sets the right axis' range, leaving everything else as it is. */

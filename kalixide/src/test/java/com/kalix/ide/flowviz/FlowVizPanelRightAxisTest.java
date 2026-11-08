@@ -1,6 +1,7 @@
 package com.kalix.ide.flowviz;
 
 import com.kalix.ide.constants.AppShortcut;
+import com.kalix.ide.constants.UIConstants;
 import com.kalix.ide.flowviz.data.DataSet;
 import com.kalix.ide.flowviz.data.DatasetSeries;
 import com.kalix.ide.flowviz.data.TimeSeriesData;
@@ -74,7 +75,7 @@ class FlowVizPanelRightAxisTest {
     @Test
     void onLogAnAutoYLeftAxisWithNoSeriesKeepsItsRange() {
         panel.model().update(st -> st.withYAxisScale(YAxisScale.LOG));
-        panel.model().update(st -> st.withAutoYMode(true));
+        panel.model().update(st -> st.withAutoRangeAll(true));
         panel.model().update(st -> st.withSeriesOnRightAxis(small, true));
         panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         double y1Min = view().getMinValue(); // fitted to larger alone
@@ -100,15 +101,26 @@ class FlowVizPanelRightAxisTest {
     }
 
     @Test
-    void laterMovesDoNotResetTheRightAxis() {
+    void laterMovesDoNotResetAManualRightAxis() {
         panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
+        panel.model().update(st -> st.withAutoRange(Axis.Y2, false));
         double y2Min = view().getY2MinValue();
         double y2Max = view().getY2MaxValue();
 
         panel.model().update(st -> st.withSeriesOnRightAxis(larger, true));
 
-        assertEquals(y2Min, view().getY2MinValue(), "y2 is sized only when it first appears");
+        assertEquals(y2Min, view().getY2MinValue(), "a manual y2 is sized only when it first appears");
         assertEquals(y2Max, view().getY2MaxValue());
+    }
+
+    @Test
+    void laterMovesRefitAnAutoRangedRightAxis() {
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
+        double y2Max = view().getY2MaxValue();
+
+        panel.model().update(st -> st.withSeriesOnRightAxis(larger, true));
+
+        assertTrue(view().getY2MaxValue() > 6000 && view().getY2MaxValue() > y2Max, "the newcomer is in range: " + view());
     }
 
     @Test
@@ -122,7 +134,7 @@ class FlowVizPanelRightAxisTest {
 
     @Test
     void autoYFitsEachAxisToItsOwnSeries() {
-        panel.model().update(st -> st.withAutoYMode(true));
+        panel.model().update(st -> st.withAutoRangeAll(true));
         panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
         panel.model().update(st -> st.withSeriesOnRightAxis(larger, true));
 
@@ -222,6 +234,47 @@ class FlowVizPanelRightAxisTest {
         for (MouseListener l : panel.getMouseListeners()) {
             l.mouseReleased(new MouseEvent(panel, MouseEvent.MOUSE_RELEASED, 0, modifiers, at.x, at.y, 1, false, MouseEvent.BUTTON1));
         }
+    }
+
+    @Test
+    void aNewRightAxisIsBornAutoRangedWhateverTheLeftAxisIs() {
+        panel.model().update(st -> st.withAutoRangeAll(false));
+
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
+
+        assertFalse(panel.isAutoRange(Axis.Y), "the left axis stays as the user set it");
+        assertTrue(panel.isAutoRange(Axis.Y2), "the new axis follows the data until the user sets its range");
+    }
+
+    @Test
+    void navigationRefitsTheAutoRangedAxisAndZoomsTheManualOne() {
+        panel.model().update(st -> st.withAutoRangeAll(true));
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
+        panel.model().update(st -> st.withAutoRange(Axis.Y, false));
+        ViewPort before = view();
+        ViewPort zoomedBoth = before.zoom(UIConstants.Zoom.ZOOM_FACTOR);
+
+        panel.zoomIn();
+
+        assertEquals(zoomedBoth.getStartTimeMs(), view().getStartTimeMs(), "X zooms about the centre");
+        assertEquals(zoomedBoth.getMinValue(), view().getMinValue(), "the manual left axis zooms with the gesture");
+        assertEquals(zoomedBoth.getMaxValue(), view().getMaxValue());
+        double[] fitted = panel.interactionsForTests().fittedRangeForAxis(Axis.Y2);
+        assertEquals(fitted[0], view().getY2MinValue(), "the auto-ranged right axis refits to the new window");
+        assertEquals(fitted[1], view().getY2MaxValue());
+        assertTrue(view().getY2MinValue() != zoomedBoth.getY2MinValue(), "and is not merely zoomed: " + view());
+    }
+
+    @Test
+    void theToolbarToggleIsOnOnlyWhileEveryAxisIsAutoRanged() {
+        panel.model().update(st -> st.withAutoRangeAll(true));
+        panel.model().update(st -> st.withSeriesOnRightAxis(large, true));
+        assertTrue(panel.model().current().isAutoRangeAll());
+
+        panel.model().update(st -> st.withAutoRange(Axis.Y2, false));
+
+        assertFalse(panel.model().current().isAutoRangeAll());
+        assertTrue(panel.model().current().isAnyAutoRange());
     }
 
     @Test

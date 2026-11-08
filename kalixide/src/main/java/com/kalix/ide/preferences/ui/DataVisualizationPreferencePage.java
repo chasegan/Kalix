@@ -84,8 +84,8 @@ public class DataVisualizationPreferencePage extends AbstractPreferencePage {
 
         // Auto-Y mode setting
         gbc.gridx = 0; gbc.gridy = 2; gbc.gridwidth = GridBagConstraints.REMAINDER; gbc.weightx = 1.0; gbc.fill = GridBagConstraints.HORIZONTAL;
-        autoYModeCheckBox = new JCheckBox("Enable Auto-Y mode in FlowViz");
-        autoYModeCheckBox.setToolTipText("Automatically adjust Y-axis scaling in FlowViz charts");
+        autoYModeCheckBox = new JCheckBox("Auto-range the Y axes of new plots");
+        autoYModeCheckBox.setToolTipText("A new plot fits its Y axes to the data in view as you zoom and pan");
         autoYModeCheckBox.setSelected(PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.get());
         autoYModeCheckBox.addActionListener(e -> {
             PreferenceKeys.FLOWVIZ_AUTO_Y_MODE.set(autoYModeCheckBox.isSelected());

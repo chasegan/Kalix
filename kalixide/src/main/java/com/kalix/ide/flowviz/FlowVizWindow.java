@@ -136,7 +136,7 @@ public class FlowVizWindow extends JFrame {
             ? d.baseName()
             : String.valueOf(ref));
         // Auto-Y mode and precision will be initialized by action manager
-        vizPanel.model().update(st -> st.withAutoYMode(true));  // Default value, will be updated by loadPreferences
+        vizPanel.model().update(st -> st.withAutoRangeAll(true));  // Default value, will be updated by loadPreferences
         vizPanel.setPrecision64Supplier(() -> actionManager == null || actionManager.isPrecision64());
         dataPanel = new DataPanel();
         dataPanel.setPreferredSize(new Dimension(250, 0));
@@ -223,30 +223,30 @@ public class FlowVizWindow extends JFrame {
         toolBar.add(zoomOutButton);
 
         JButton zoomFitButton = new JButton("Fit");
-        zoomFitButton.setToolTipText("Zoom to fit all data (F)");
+        zoomFitButton.setToolTipText("Zoom to fit all data");
         zoomFitButton.addActionListener(e -> actionManager.zoomToFit());
         toolBar.add(zoomFitButton);
 
         JButton resetButton = new JButton("Reset");
-        resetButton.setToolTipText("Reset view (R)");
+        resetButton.setToolTipText("Reset view");
         resetButton.addActionListener(e -> actionManager.resetView());
         toolBar.add(resetButton);
 
         toolBar.addSeparator();
 
         // Toggle buttons
-        JToggleButton autoYButton = new JToggleButton("Auto Y");
-        autoYButton.setToolTipText("Auto-scale Y axis during zoom (Y)");
+        JToggleButton autoYButton = new JToggleButton("Auto-range");
+        autoYButton.setToolTipText("Fit the Y axes to the data in view as you zoom and pan");
         autoYButton.addActionListener(e -> actionManager.toggleAutoYMode());
         toolBar.add(autoYButton);
 
         JToggleButton coordButton = new JToggleButton("Coordinates");
-        coordButton.setToolTipText("Show coordinates (C)");
+        coordButton.setToolTipText("Show coordinates");
         coordButton.addActionListener(e -> actionManager.toggleCoordinateDisplay());
         toolBar.add(coordButton);
 
         JToggleButton dataButton = new JToggleButton("Data Panel");
-        dataButton.setToolTipText("Toggle data panel visibility (D)");
+        dataButton.setToolTipText("Toggle data panel visibility (L)");
         dataButton.addActionListener(e -> actionManager.toggleData());
         toolBar.add(dataButton);
 
