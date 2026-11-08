@@ -366,3 +366,6 @@ this document.
   its children act on (`Y axis (left) ▸ Fit to data`, `Copy range`), read aloud
   as thing then command. Harvested from the plot's axis submenus (#505),
   which gathered six copy/paste items into one pair per axis.
+- *2026-11-08* — §1: a long view block may be split by a divider between the
+  things its items act on, as the plot's menu divides the axes from the
+  lines. The blocks stay in order; the divider only groups within one.

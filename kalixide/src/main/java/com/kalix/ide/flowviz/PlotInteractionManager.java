@@ -915,6 +915,10 @@ public class PlotInteractionManager {
         }
         contextMenu.add(yAxisScaleMenu);
 
+        // Still the view block, but what follows acts on the lines, not the axes, so a
+        // divider splits the block by subject (ADR-0002 §1, the 2026-11-08 note).
+        contextMenu.addSeparator();
+
         // Line shape submenu: a category noun with value children (6). The items are shared
         // with the toolbar's line shape button (LineShapeMenu) and keyed by enum, so sync
         // never reads identity back out of label text (ADR-0003 §2.2).
