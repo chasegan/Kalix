@@ -80,7 +80,7 @@ class PlotContextMenuTest {
         assertEquals(List.of(
             "Zoom to fit", "---",
             "Save data…", "---",
-            "X axis", "Y axis", "Set axis ranges…", "Y-axis scale", "Line shape", "Missing data", "---",
+            "X axis", "Y axis", "Set axis ranges…", "Y axis scale", "Line shape", "Missing data", "---",
             "Reset key"), visibleLabels(menu().getComponents()));
     }
 

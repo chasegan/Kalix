@@ -48,7 +48,7 @@ import java.util.function.Consumer;
  */
 class FlowVizToolbarBuilder {
 
-    /** Y-axis scale options. */
+    /** Y axis scale options. */
     private static final String[] Y_SPACE_OPTIONS = Arrays.stream(YAxisScale.values()).map(YAxisScale::getDisplayName).toArray(String[]::new);
 
     private final JToolBar toolbar;
@@ -338,7 +338,7 @@ class FlowVizToolbarBuilder {
 
     private void addYSpaceDropdown() {
         ySpaceCombo = createDropdown(Y_SPACE_OPTIONS,
-            ToolbarConstants.NARROW_DROPDOWN_SIZE, "Y-axis scale");
+            ToolbarConstants.NARROW_DROPDOWN_SIZE, "Y axis scale");
         ySpaceCombo.setSelectedItem(tabInfo.vizPanel.getYAxisScale().getDisplayName());
         ySpaceCombo.addActionListener(e -> {
             String selected = (String) ySpaceCombo.getSelectedItem();

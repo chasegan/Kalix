@@ -776,7 +776,7 @@ public class PlotInteractionManager {
             minValue = logScaleMin;
         }
 
-        // Add 5% padding appropriate for the current Y-axis scale
+        // Add 5% padding appropriate for the current Y axis scale
         double valueRange = maxValue - minValue;
         if (valueRange < 1e-15) { // Constant data - use relative padding based on magnitude
             double center = (minValue + maxValue) / 2;
@@ -902,8 +902,8 @@ public class PlotInteractionManager {
         setAxes.addActionListener(e1 -> showSetAxesDialog());
         contextMenu.add(setAxes);
 
-        // Y-axis scale submenu
-        yAxisScaleMenu = new JMenu("Y-axis scale");
+        // Y axis scale submenu: one scale for both Y axes
+        yAxisScaleMenu = new JMenu("Y axis scale");
         ButtonGroup yAxisScaleGroup = new ButtonGroup();
         for (YAxisScale scale : YAxisScale.values()) {
             JRadioButtonMenuItem scaleItem = new JRadioButtonMenuItem(scale.getDisplayName());

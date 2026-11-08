@@ -59,7 +59,7 @@ class VizToolbarControllerTest {
         // As the plot's context menu does: straight to the state, not through the toolbar.
         mgr.getTargetVizPanel().model().update(st -> st.withYAxisScale(YAxisScale.LOG));
 
-        assertEquals(YAxisScale.LOG.getDisplayName(), combo(root, "Y-axis scale").getSelectedItem());
+        assertEquals(YAxisScale.LOG.getDisplayName(), combo(root, "Y axis scale").getSelectedItem());
     }
 
     @Test
