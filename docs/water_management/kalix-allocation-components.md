@@ -27,25 +27,28 @@ Three commitments, applied to management:
 ## 2. Where Kalix stands today
 
 *Phase 1 (§5) is built: account groups, the RAS kernel with its stencilled
-action set, node references, and the `acc.*` expression namespace. Of the
-distributive actions, `distribute(x, by_size | by_balance)` is built
-(ADR-0019): one signed volume shared by weight, capped at `[0, size]` with
-the internal-spill redistribution of §3.5, which covers the crediting of
-`share_inflow` and `apportion_loss`; `reconcile` is not built.*
+action set, node references, and the `acc.*` expression namespace; so are
+`allocate` and `reset_allocation` (§3.4). Of the distributive actions,
+`distribute(x, by_size | by_balance)` is built (ADR-0019): one signed volume
+shared by weight, capped at `[0, size]` with the internal-spill
+redistribution of §3.5, which covers what `share_inflow` and
+`apportion_loss` were sketched for. The ADR supersedes this note where they
+differ: distributive actions pool several target groups, and they run in the
+ras slot reading fluxes at `[-1, 0]`, not in a post-flow slot. `reconcile` is
+not built.*
 
 | Exists now | Role in this design |
 |---|---|
 | `Account` {name, group, size, initial, balance, debits_today} (`src/hydrology/accounts/account.rs`) | Pure state — no behaviour, no calendar. Every balance change is a RAS action or a node take. |
 | `AccountGroup` + `AccountManager` (`[acc.*]` sections, §3.1) | Declaration and membership; the group is the addressing unit RAS clauses target. |
-| `RasSystem` {targets, trigger, action} (`src/hydrology/allocation_systems/ras.rs`, §3.3) | The policy kernel. Calendar and expression triggers; stencilled actions (`set_full`, `set`, `credit`, `debit`, `scale`, `reduce_to`, …). Distributive actions are Phase 2–3. |
+| `RasSystem` {targets, trigger, action} (`src/hydrology/allocation_systems/ras.rs`, §3.3) | The policy kernel. Calendar and expression triggers; stencilled actions (`set_full`, `set`, `credit`, `debit`, `scale`, `reduce_to`, …), `allocate`, and `distribute`. `reconcile` is not built. |
 | `unregulated_user` / `regulated_user`: ordered `accounts` reference lists (§3.6) | Availability capped by summed balances, debits cascade in order of use; regulated orders capped at order time by holdings less the orders already en route (the accounts' `committed` forecast, released as each order falls due; only the diversion is debited). |
 | DynamicExpressions + `[table.*]` + `sim.*` context + temporal offsets + `acc.*` (§3.2) | The policy language, now including account state. |
 | Ordering system (backward order pass, zones, lags, loss gross-up) + `storage` node (4 outlets, MOL, target level, backward-Euler) | The physical regulated-river machinery orders and delivers water — account-blind, which is correct: ownership is a ledger over the storage's fluxes, not part of its physics (§3.5). |
 | `acc.<name>.opening_balance` / `.closing_balance` / `.debits` / `.size` and `ras.<name>.fired` series | The transparency channel, and the expression-readable view of account state (§3.2). |
 
 Gaps, in increasing order of depth: per-account data columns are parsed but not
-yet resolvable as action arguments (`reduce_to(carryover_limit)`); there is no
-resource assessment / announcement machinery (the distributive actions); storage
+yet resolvable as action arguments (`reduce_to(carryover_limit)`); storage
 fluxes (evaporation, seepage, total inflow) are not all exposed as readable
 outputs; orders and deliveries are not attributed to accounts.
 
@@ -204,9 +207,10 @@ action  = scale(0.95)
   consecutive sections; RAS sections execute in **file order** within their
   timestep slot (`ADR-0005` §1 extended to policy), which is also
   how priority tiers chain (§3.4). No second intra-section ordering rule.
-- `targets` lists one or more `acc.*` group references. Multiple targets are
-  valid for stencilled actions; distributive actions take exactly one target
-  group (tiering is chaining, not multi-targeting).
+- `targets` lists one or more `acc.*` group references, each once. The
+  accounts of every target form the action's pool, for stencilled and
+  distributive actions alike (ADR-0019 §4); tiering is chaining, not
+  multi-targeting.
 - Shared calendar facts (water-year months) are model constants, referenced by
   triggers — `[const]` already exists for exactly this.
 
