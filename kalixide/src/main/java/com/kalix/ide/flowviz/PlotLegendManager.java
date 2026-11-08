@@ -63,8 +63,9 @@ public class PlotLegendManager {
     private static final int COLLAPSED_WIDTH = 30;  // Width when fully collapsed
     private static final int COLLAPSED_HEIGHT = 24; // Height when fully collapsed
     private static final int DIVIDER_HEIGHT = 18;   // An axis caption row, above each group
-    private static final String LEFT_CAPTION = "Left Y axis";
-    private static final String RIGHT_CAPTION = "Right Y axis";
+    // The captions appear only while there is a right axis, so the left one is "Left"
+    private static final String LEFT_CAPTION = Axis.Y.label(true);
+    private static final String RIGHT_CAPTION = Axis.Y2.label(true);
 
     // Colors. The theme supplies three legend roles (background, border, foreground)
     // via the Kalix.plot.* keys; the remaining tints are derived from them once per

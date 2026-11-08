@@ -820,19 +820,6 @@ public class PlotInteractionManager {
         contextMenu.show(panel, e.getX(), e.getY());
     }
 
-    /**
-     * The axis' name as the menus, the Key and the dialog spell it. The one Y axis is "Y
-     * axis"; once there is a right one, the two are told apart as left and right, which
-     * is what the eye sees (ADR-0002 §2.3: no word the plot does not already supply).
-     */
-    static String axisLabel(Axis axis, boolean rightAxisInUse) {
-        return switch (axis) {
-            case X -> "X axis";
-            case Y -> rightAxisInUse ? "Left Y axis" : "Y axis";
-            case Y2 -> "Right Y axis";
-        };
-    }
-
     /** The plot's context menu, for tests that check what it offers. */
     JPopupMenu contextMenu() {
         return contextMenu;
@@ -986,7 +973,7 @@ public class PlotInteractionManager {
                 boolean hasY2 = currentViewport != null && currentViewport.hasY2();
                 for (Axis axis : Axis.values()) {
                     AxisMenu axisMenu = axisMenus.get(axis);
-                    axisMenu.menu().setText(axisLabel(axis, hasY2));
+                    axisMenu.menu().setText(axis.label(hasY2));
                     axisMenu.menu().setVisible(axis != Axis.Y2 || hasY2);
                     axisMenu.paste().setEnabled(clipboardHasText);
                     if (axisMenu.autoRange() != null) {
@@ -1024,7 +1011,7 @@ public class PlotInteractionManager {
      * auto-range flag; copy and paste of the range close the list.
      */
     private AxisMenu buildAxisMenu(Axis axis) {
-        JMenu menu = new JMenu(axisLabel(axis, true));
+        JMenu menu = new JMenu(axis.label(true));
         JMenuItem fit = new JMenuItem("Fit to data");
         fit.addActionListener(e -> fitAxis(axis));
         menu.add(fit);
@@ -1077,11 +1064,11 @@ public class PlotInteractionManager {
                     applyXLimits(x[0], x[1]);
                 }
                 case Y -> {
-                    double[] y = parseValueRange(text, axisLabel(Axis.Y, currentViewport.hasY2()));
+                    double[] y = parseValueRange(text, Axis.Y.label(currentViewport.hasY2()));
                     applyExplicitRange(Axis.Y, y[0], y[1]);
                 }
                 case Y2 -> {
-                    double[] y2 = parseValueRange(text, axisLabel(Axis.Y2, true));
+                    double[] y2 = parseValueRange(text, Axis.Y2.label(true));
                     applyExplicitRange(Axis.Y2, y2[0], y2[1]);
                 }
             }
@@ -1175,8 +1162,8 @@ public class PlotInteractionManager {
         XAxisType xAxisType = currentViewport.getXAxisType();
 
         boolean hasY2 = currentViewport.hasY2();
-        String yLabel = axisLabel(Axis.Y, hasY2);
-        String y2Label = axisLabel(Axis.Y2, hasY2);
+        String yLabel = Axis.Y.label(hasY2);
+        String y2Label = Axis.Y2.label(hasY2);
         JTextField xField = new JTextField(AxisLimitCodec.formatXLimits(currentViewport), 32);
         JTextField yField = new JTextField(AxisLimitCodec.formatYLimits(currentViewport), 32);
         // A right-axis row only while the plot has one
@@ -1186,7 +1173,7 @@ public class PlotInteractionManager {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(4, 4, 4, 4);
         gbc.anchor = GridBagConstraints.WEST;
-        addAxisFieldRow(form, gbc, 0, axisLabel(Axis.X, hasY2) + ":", xField);
+        addAxisFieldRow(form, gbc, 0, Axis.X.label(hasY2) + ":", xField);
         addAxisFieldRow(form, gbc, 1, yLabel + ":", yField);
         if (y2Field != null) {
             addAxisFieldRow(form, gbc, 2, y2Label + ":", y2Field);
@@ -1284,7 +1271,7 @@ public class PlotInteractionManager {
         try {
             return AxisLimitCodec.parseXLimits(text, xAxisType);
         } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException(aboutAxis(axisLabel(Axis.X, false), ex.getMessage()), ex);
+            throw new IllegalArgumentException(aboutAxis(Axis.X.label(false), ex.getMessage()), ex);
         }
     }
 
