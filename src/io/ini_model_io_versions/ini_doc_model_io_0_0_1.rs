@@ -1503,12 +1503,20 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         // Resolve targets: one or more acc.<group> references, flattened to
         // member accounts in group-then-row order
         let mut target_account_ids = Vec::new();
+        let mut target_group_ids: Vec<usize> = Vec::new();
         for t in csv_to_string_vec(&targets_str) {
             let lower = t.to_lowercase();
             let group_name = lower.strip_prefix("acc.").ok_or_else(|| KalixIoError::Parse(format!(
                 "Error on line {}: RAS target '{}' must be an account group reference like 'acc.<group>'", line, t)))?;
             let group_idx = model.account_manager.get_group_idx(group_name).ok_or_else(|| KalixIoError::Validate(format!(
                 "Error on line {}: Unknown account group '{}' in RAS targets", line, t)))?;
+            // Once each: a group named twice would act on its accounts twice,
+            // and distribute would count their weight twice (ADR-0019 §4).
+            if target_group_ids.contains(&group_idx) {
+                return Err(KalixIoError::Validate(format!(
+                    "Error on line {}: RAS target '{}' is named more than once", line, t)));
+            }
+            target_group_ids.push(group_idx);
             target_account_ids.extend(model.account_manager.get_group(group_idx).unwrap().member_ids.iter().copied());
         }
         let trigger = parse_ras_trigger(&trigger_str, &mut model, line)

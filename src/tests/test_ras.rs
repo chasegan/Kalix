@@ -1737,3 +1737,19 @@ action  = distribute(-node.src.dsflow[-1, 0] * 0.05, by_balance)
     let reloaded = load(&saved);
     assert_eq!(reloaded.ras_systems.len(), 1);
 }
+
+#[test]
+fn test_ras_target_group_named_twice_is_an_error() {
+    let ini = format!(r#"{DISTRIBUTE_HEAD}
+[acc.g1]
+accounts = name, size,
+           a, 100,
+
+[ras.share]
+targets = acc.g1, acc.g1
+trigger = start_month
+action  = distribute(30, by_size)
+{TAIL}"#);
+    let e = load_err(&ini);
+    assert!(e.contains("RAS target 'acc.g1' is named more than once"), "{e}");
+}
