@@ -2351,7 +2351,12 @@ fn parse_ras_action(s: &str, model: &mut Model, line: usize) -> Result<ParsedRas
             other => return Err(format!("Error on line {}: Unknown distribute weight '{}'. \
                 Expected by_size or by_balance", line, other)),
         };
-        (arg[..comma].trim(), Some(by))
+        let amount = arg[..comma].trim();
+        if amount.is_empty() {
+            return Err(format!("Error on line {}: distribute() needs an amount before the weight: \
+                distribute(x, by_size) or distribute(x, by_balance)", line));
+        }
+        (amount, Some(by))
     } else {
         (arg, None)
     };
