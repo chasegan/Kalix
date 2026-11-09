@@ -69,6 +69,18 @@ class ModelLinterSyntaxIssueTest {
     }
 
     @Test
+    void repeatedClusterLineIsAWarning() {
+        ModelLinter linter = new ModelLinter(new EnabledSchemaManager());
+        ValidationResult result = linter.validate(
+                "#@cluster = north\n#@cluster = south\n[node.a]\ntype = gauge\nloc = 1, 2\n", null);
+
+        List<ValidationIssue> issues = issuesFor(INIModelParser.RULE_ANNOTATION_DUPLICATE_CLUSTER, result);
+        assertEquals(1, issues.size());
+        assertEquals(2, issues.get(0).getLineNumber());
+        assertEquals(ValidationRule.Severity.WARNING, issues.get(0).getSeverity());
+    }
+
+    @Test
     void disabledRuleIsSilent() {
         SchemaManager schemaManager = new EnabledSchemaManager();
         schemaManager.getCurrentSchema().getValidationRule(INIModelParser.RULE_SEMICOLON_COMMENT).setEnabled(false);

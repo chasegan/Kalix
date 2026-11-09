@@ -1286,6 +1286,10 @@
     "annotation_no_effect": {
       "severity": "warning",
       "description": "This annotation means nothing on this kind of section"
+    },
+    "annotation_duplicate_cluster": {
+      "severity": "warning",
+      "description": "A node has more than one cluster annotation; the last one counts"
     }
   },
   "data_types": {

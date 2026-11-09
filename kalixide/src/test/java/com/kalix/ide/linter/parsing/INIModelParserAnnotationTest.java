@@ -8,7 +8,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The annotation lints of ADR-0010 §2 to §4: malformed, misplaced, unknown key, no effect. */
+/** The annotation lints of ADR-0010 §2 to §4: malformed, misplaced, unknown key, no effect, a repeated cluster. */
 class INIModelParserAnnotationTest {
 
     private static List<SyntaxIssue> issues(String model) {
@@ -78,6 +78,37 @@ class INIModelParserAnnotationTest {
         List<SyntaxIssue> issues = issues("#@aka = The outputs\n[outputs]\nnode.a.dsflow\n");
         assertOnly(INIModelParser.RULE_ANNOTATION_NO_EFFECT, 1, issues);
         assertEquals("'aka' has no effect on [outputs]", issues.get(0).message());
+    }
+
+    @Test
+    void repeatedClusterLineIsReportedOnTheLaterLineNamingTheEarlier() {
+        List<SyntaxIssue> issues = issues("#@cluster = north\n#@cluster = south\n[node.a]\n");
+        assertOnly(INIModelParser.RULE_ANNOTATION_DUPLICATE_CLUSTER, 2, issues);
+        assertEquals("Duplicate annotation 'cluster' on [node.a] (also on line 1); the last one counts",
+                issues.get(0).message());
+    }
+
+    @Test
+    void eachRepeatNamesTheClusterLineJustBeforeIt() {
+        List<SyntaxIssue> issues = issues("#@cluster = a\n#@aka = x\n#@cluster = b\n#@cluster = c\n[node.n]\n");
+        assertEquals(2, issues.size(), issues.toString());
+        assertEquals(3, issues.get(0).lineNumber());
+        assertTrue(issues.get(0).message().contains("(also on line 1)"), issues.get(0).message());
+        assertEquals(4, issues.get(1).lineNumber());
+        assertTrue(issues.get(1).message().contains("(also on line 3)"), issues.get(1).message());
+    }
+
+    @Test
+    void oneClusterLinePerNodeIsClean() {
+        assertTrue(issues("#@cluster = a\n[node.m]\n#@cluster = a\n[node.n]\n").isEmpty());
+    }
+
+    @Test
+    void repeatedClusterLineOnANonNodeSectionOnlyHasNoEffect() {
+        List<SyntaxIssue> issues = issues("#@cluster = a\n#@cluster = b\n[outputs]\n");
+        assertEquals(2, issues.size(), issues.toString());
+        assertTrue(issues.stream().allMatch(i -> INIModelParser.RULE_ANNOTATION_NO_EFFECT.equals(i.ruleName())),
+                issues.toString());
     }
 
     @Test

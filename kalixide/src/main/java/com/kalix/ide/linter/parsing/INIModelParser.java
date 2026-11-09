@@ -37,6 +37,8 @@ public class INIModelParser {
     public static final String RULE_ANNOTATION_UNKNOWN_KEY = "annotation_unknown_key";
     /** Rule name for a known key on a section it means nothing to. */
     public static final String RULE_ANNOTATION_NO_EFFECT = "annotation_no_effect";
+    /** Rule name for a second {@code #@cluster} line above one node; the last one counts. */
+    public static final String RULE_ANNOTATION_DUPLICATE_CLUSTER = "annotation_duplicate_cluster";
 
     /**
      * A lexical problem found while parsing: something the engine would reject (or
@@ -361,11 +363,14 @@ public class INIModelParser {
     /**
      * Checks the annotations above a header against the key registry: a bare key
      * Kalix does not know is a warning, as is a known key on a section it means
-     * nothing to. A dotted key belongs to another tool and is never checked.
-     * {@code sectionName} is {@code null} for a malformed header, which still
-     * consumes the annotations but cannot say what they apply to.
+     * nothing to. A second {@code cluster} on a node is a warning on the later
+     * line, naming the one before it: the last one counts. A dotted key belongs
+     * to another tool and is never checked. {@code sectionName} is {@code null}
+     * for a malformed header, which still consumes the annotations but cannot say
+     * what they apply to.
      */
     private static void checkAnnotations(List<PendingAnnotation> pending, String sectionName, ParsedModel model) {
+        int earlierCluster = 0;
         for (PendingAnnotation p : pending) {
             String key = p.annotation().key();
             if (AnnotationKey.isToolKey(key)) {
@@ -382,6 +387,14 @@ public class INIModelParser {
             } else if (sectionName != null && !known.appliesTo(sectionName)) {
                 model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(),
                     "'" + key + "' has no effect on [" + sectionName + "]", RULE_ANNOTATION_NO_EFFECT));
+            } else if (known == AnnotationKey.CLUSTER) {
+                if (earlierCluster > 0) {
+                    model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(),
+                        "Duplicate annotation '" + key + "' on [" + sectionName + "] (also on line "
+                            + earlierCluster + "); the last one counts",
+                        RULE_ANNOTATION_DUPLICATE_CLUSTER));
+                }
+                earlierCluster = p.lineNumber();
             }
         }
         pending.clear();
