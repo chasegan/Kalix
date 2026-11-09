@@ -198,7 +198,8 @@ so the parser and linter can't disagree. `ClusterEdits` computes cluster edits a
 functions, and `CommandExecutor` applies them as one atomic edit. `ClusterLabels` makes
 every menu label that names a cluster, with its `(cluster)` suffix rule, and
 `ClusterMenuRules` decides, as a pure function, which cluster items a selection is
-offered. `NodeLabelMode` owns what
+offered; `MapContextMenuManager` asks it with the selected nodes only, and its
+`buildMenu()` lets a test read the real menu without a display. `NodeLabelMode` owns what
 the map draws per node (names / aka only / hidden, with the hover rule) and the one
 toolbar button cycles it; `MapRenderer` draws the lines it is given. The editor
 tokenises annotation lines as `Token.ANNOTATION`.

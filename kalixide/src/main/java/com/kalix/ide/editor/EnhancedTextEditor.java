@@ -706,6 +706,68 @@ public class EnhancedTextEditor extends JPanel {
     }
 
     /**
+     * Asks for a name and puts the nodes in that cluster, moving them from any they were
+     * in (the map's {@code Create cluster…}). An existing name joins it. Cancelled or empty
+     * does nothing; an invalid name is reported and changes nothing.
+     *
+     * @return true if the text changed
+     */
+    public boolean createCluster(java.util.Collection<String> nodeNames) {
+        String name = askClusterName("Create Cluster", "Name for the new cluster:", "");
+        CommandExecutor executor = clusterExecutor();
+        return name != null && executor != null && executor.assignToCluster(nodeNames, name);
+    }
+
+    /** Puts the nodes in an existing cluster (the map's {@code Add to}). */
+    public boolean addToCluster(java.util.Collection<String> nodeNames, String cluster) {
+        CommandExecutor executor = clusterExecutor();
+        return executor != null && executor.assignToCluster(nodeNames, cluster);
+    }
+
+    /** Takes the nodes out of their clusters (the map's {@code Remove from cluster}). */
+    public boolean removeFromCluster(java.util.Collection<String> nodeNames) {
+        CommandExecutor executor = clusterExecutor();
+        return executor != null && executor.removeFromCluster(nodeNames);
+    }
+
+    /**
+     * Asks for a new name and renames the cluster; an existing name merges the two.
+     * Cancelled, empty or unchanged does nothing; an invalid name is reported and
+     * changes nothing.
+     *
+     * @return true if the text changed
+     */
+    public boolean renameCluster(String cluster) {
+        String name = askClusterName("Rename Cluster", "Enter new name for cluster '" + cluster + "':", cluster);
+        CommandExecutor executor = clusterExecutor();
+        return name != null && !name.equals(cluster) && executor != null && executor.renameCluster(cluster, name);
+    }
+
+    /** Takes every member out of the clusters; the nodes stay (the map's {@code Disband}). */
+    public boolean disbandClusters(java.util.Collection<String> clusters) {
+        CommandExecutor executor = clusterExecutor();
+        return executor != null && executor.disbandClusters(clusters);
+    }
+
+    /** The name typed, trimmed, or {@code null} if the prompt was cancelled or left empty. */
+    private String askClusterName(String title, String message, String initial) {
+        if (commandParentFrame == null) {
+            return null;
+        }
+        String typed = (String) javax.swing.JOptionPane.showInputDialog(
+            commandParentFrame, message, title, javax.swing.JOptionPane.PLAIN_MESSAGE, null, null, initial);
+        return typed == null || typed.trim().isEmpty() ? null : typed.trim();
+    }
+
+    private CommandExecutor clusterExecutor() {
+        if (commandParentFrame == null) {
+            logger.warn("Context commands not initialized - cannot edit clusters");
+            return null;
+        }
+        return new CommandExecutor(textArea, commandParentFrame, this::applyAtomicReplacements);
+    }
+
+    /**
      * Inserts a node template programmatically (e.g., from the map context menu). The
      * new node's {@code loc} is the given world location; its section goes below the
      * last selected node, or at the bottom when nothing is selected.

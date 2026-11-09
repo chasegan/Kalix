@@ -1,7 +1,8 @@
 # Node Clusters
 
-Status: **design settled; V1a in progress: `#@cluster` is parsed and indexed, and the edits
-exist, but nothing on the map or menu uses them yet** (stages below). Issue
+Status: **design settled; V1a in progress: `#@cluster` is parsed and indexed, and the map's
+menu offers Create, Add, Remove, Rename and Disband, but the map doesn't draw clusters yet**
+(stages below). Issue
 [#476](https://github.com/chasegan/Kalix/issues/476). The present
 tense below describes the design. A few choices are marked for checking at user
 testing (see Context menu).
@@ -173,8 +174,8 @@ clusters; Create moving members; the `Cluster` child label; the wording of the "
 ## Architecture
 
 Nothing is stored that isn't derived from the text at each reparse, except a session map
-of collapse state. Parsing, edits and menu rules are headless-tested; drawing and
-interaction sit on the existing map panel.
+of collapse state. Parsing, edits, menu rules and the cluster items the real menu holds
+are headless-tested; drawing and interaction sit on the existing map panel.
 
 **Parsing** (`ModelParser`, `ModelNode`, `AnnotationKey`). `#@cluster` is read as `#@aka`
 is. With two lines on a node the last counts, and the linter says so. Unlike an empty
@@ -240,10 +241,12 @@ each member has.
 ## Stages
 
 - **V1a: model and rules.** Parsing, the edits, the label helper, the menu rules as pure
-  functions with table tests, two lint rules (strict bare name; two `#@cluster` lines). All
-  headless.
+  functions with table tests, two lint rules (strict bare name; two `#@cluster` lines). A
+  thin slice of the menu, so the edits can be tried by hand: Create, Add, Remove, Rename and
+  Disband, with every cluster counted as expanded.
 - **V1b: drawing.** Boxes, icons, links to icons, collapse state.
-- **V1c: interaction.** Menu items, selection, hit-testing, drag, rotate, Delete.
+- **V1c: interaction.** The rest of the menu (`Select nodes ▸ Cluster`, Collapse, Expand),
+  selection, hit-testing, drag, rotate, Delete.
 - **V1d: toolbar and menu bar.** The boxes setting and its preference. The last code stage,
   since nothing depends on it.
 - **V1e: docs.** A clusters section in `website/docs/docs/ide.md`, a release-note bullet.

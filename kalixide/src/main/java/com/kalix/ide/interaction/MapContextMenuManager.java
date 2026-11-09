@@ -19,9 +19,11 @@ import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.function.BiFunction;
+import java.util.function.BooleanSupplier;
 
 /**
  * Manages the right-click context menu for the map panel.
@@ -89,18 +91,26 @@ public class MapContextMenuManager {
         // Store location for potential use by menu actions (e.g., paste at location)
         lastContextMenuLocation = clickPoint;
 
-        // Build the context menu
+        JPopupMenu menu = buildMenu();
+
+        // Show the menu if it has items
+        if (menu.getComponentCount() > 0) {
+            menu.show(mapPanel, clickPoint.x, clickPoint.y);
+        }
+    }
+
+    /**
+     * The menu for the current selection, built without showing it, so which items it
+     * holds can be tested without a display.
+     */
+    JPopupMenu buildMenu() {
         JPopupMenu menu = new JPopupMenu();
 
         // Selection-based actions. Note these act on the *existing* selection, not on
         // whatever sits under the click — right-clicking deliberately does not alter
         // the selection, so the menu never silently retargets a multi-node selection.
         addSelectionActions(menu);
-
-        // Show the menu if it has items
-        if (menu.getComponentCount() > 0) {
-            menu.show(mapPanel, clickPoint.x, clickPoint.y);
-        }
+        return menu;
     }
 
     /**
@@ -111,6 +121,14 @@ public class MapContextMenuManager {
         boolean hasSelection = hasNodeSelection || model.getSelectedLinkCount() > 0;
         boolean hasClipboard = clipboardManager != null && clipboardManager.hasClipboardContent();
         int shortcutMask = AppShortcut.menuMask();
+
+        // The cluster items ask the rules, which are given the selected nodes only, so a
+        // selected link never changes them. Every cluster counts as expanded until the map
+        // can draw a collapsed one.
+        List<String> selectedNodes = List.copyOf(model.getSelectedNodes());
+        ClusterMenuRules clusterRules = ClusterMenuRules.of(selectedNodes, model.getClusters(), Set.of());
+        ClusterLabels clusterLabels = new ClusterLabels(
+            model.getAllNodes().stream().map(ModelNode::getName).toList());
 
         // Cut
         JMenuItem cutItem = new JMenuItem("Cut");
@@ -206,6 +224,10 @@ public class MapContextMenuManager {
         }
         menu.add(insertNodeTemplateMenu);
 
+        if (clusterRules.offersCreate()) {
+            menu.add(clusterItem("Create cluster…", () -> textEditor.createCluster(selectedNodes)));
+        }
+
         menu.addSeparator();
 
         // Rename - only enabled when exactly one node is selected
@@ -223,6 +245,32 @@ public class MapContextMenuManager {
             }
         });
         menu.add(renameItem);
+
+        // Cluster edits, Disband at their foot. One cluster to add to is a direct item;
+        // several are the objects of "Add to cluster" (ADR-0002 §6).
+        List<String> addTargets = clusterRules.addTargets();
+        if (addTargets.size() == 1) {
+            String target = addTargets.get(0);
+            menu.add(clusterItem(clusterLabels.addTo(target), () -> textEditor.addToCluster(selectedNodes, target)));
+        } else if (!addTargets.isEmpty()) {
+            JMenu addMenu = new JMenu("Add to cluster");
+            for (String target : addTargets) {
+                addMenu.add(clusterItem(clusterLabels.name(target), () -> textEditor.addToCluster(selectedNodes, target)));
+            }
+            menu.add(addMenu);
+        }
+        if (clusterRules.offersRemove()) {
+            menu.add(clusterItem("Remove from cluster", () -> textEditor.removeFromCluster(selectedNodes)));
+        }
+        String renameCluster = clusterRules.renameTarget();
+        if (renameCluster != null) {
+            menu.add(clusterItem(clusterLabels.rename(renameCluster), () -> textEditor.renameCluster(renameCluster)));
+        }
+        List<String> disbandTargets = clusterRules.disbandTargets();
+        if (!disbandTargets.isEmpty()) {
+            menu.add(clusterItem(ClusterLabels.disband(disbandTargets.size()),
+                () -> textEditor.disbandClusters(disbandTargets)));
+        }
 
         // Delete (destructive — sits at the foot of the modify block)
         JMenuItem deleteItem = new JMenuItem("Delete");
@@ -269,6 +317,18 @@ public class MapContextMenuManager {
         zoomToFitItem.setAccelerator(AppShortcut.ZOOM_TO_FIT.keyStroke());
         zoomToFitItem.addActionListener(e -> mapPanel.zoomToFit());
         menu.add(zoomToFitItem);
+    }
+
+    /** A cluster edit, made through the text editor; the map repaints if the text changed. */
+    private JMenuItem clusterItem(String label, BooleanSupplier edit) {
+        JMenuItem item = new JMenuItem(label);
+        item.setEnabled(textEditor != null);
+        item.addActionListener(e -> {
+            if (textEditor != null && edit.getAsBoolean()) {
+                mapPanel.repaint();
+            }
+        });
+        return item;
     }
 
     /** An item that adds to the selection whatever {@code grow} finds from the selection. */
