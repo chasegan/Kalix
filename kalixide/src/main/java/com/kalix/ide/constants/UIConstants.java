@@ -57,6 +57,13 @@ public final class UIConstants {
         /** Upper bound for the map zoom level (pixels per world unit) */
         public static final double MAX_ZOOM = 1e6;
 
+        /**
+         * Screen pixels a view pans per wheel notch when scroll pans (Shift+scroll on the
+         * map and in plots, plain scroll in map trackpad mode). A trackpad reports
+         * fractions of a notch, so it pans proportionally less per event.
+         */
+        public static final double WHEEL_PAN_PX = 48.0;
+
         private Zoom() { throw new UnsupportedOperationException("Constants class"); }
     }
 

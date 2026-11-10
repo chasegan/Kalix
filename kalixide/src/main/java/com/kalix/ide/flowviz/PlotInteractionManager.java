@@ -12,6 +12,7 @@ import com.kalix.ide.io.SourceResCsvExporter;
 import com.kalix.ide.io.SourceResCsvFormat;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.interaction.WheelNavigation;
 
 import javax.swing.AbstractAction;
 import javax.swing.ButtonGroup;
@@ -72,6 +73,7 @@ import com.kalix.ide.utils.DialogUtils;
  *
  * This class handles:
  * - Mouse wheel zooming with cursor positioning
+ * - Shift+wheel panning through time
  * - Click and drag panning
  * - Right-click context menu
  * - Auto-range per value axis
@@ -135,6 +137,7 @@ public class PlotInteractionManager {
      * <p>This manager centralizes all mouse-based interactions including:
      * <ul>
      * <li>Mouse wheel zooming with cursor-centered scaling</li>
+     * <li>Shift+wheel panning through time</li>
      * <li>Click and drag panning with visual feedback</li>
      * <li>Right-click context menu with plot operations</li>
      * <li>Double-click zoom-to-fit functionality</li>
@@ -209,6 +212,7 @@ public class PlotInteractionManager {
      * <li><strong>Left-click drag:</strong> Pans the plot view with visual cursor feedback</li>
      * <li><strong>Double-click:</strong> Resets zoom to fit all data</li>
      * <li><strong>Mouse wheel:</strong> Zooms in/out centered on cursor position</li>
+     * <li><strong>Shift+wheel:</strong> Pans through time</li>
      * <li><strong>Mouse movement:</strong> Delegates to coordinate display manager</li>
      * </ul>
      *
@@ -311,9 +315,19 @@ public class PlotInteractionManager {
             @Override
             public void mouseWheelMoved(MouseWheelEvent e) {
                 Rectangle plotArea = plotAreaSupplier.get();
-                if (plotArea.contains(e.getPoint())) {
+                if (!plotArea.contains(e.getPoint())) {
+                    return;
+                }
+                // Plots ignore the trackpad preference: plain scroll always zooms here
+                WheelNavigation action = WheelNavigation.of(
+                    e.isShiftDown(), e.isControlDown() || e.isMetaDown(), false);
+                if (action == WheelNavigation.PAN_HORIZONTAL) {
+                    handleWheelPan(e);
+                } else {
                     handleZoom(e);
                 }
+                // The data moved under a still pointer: re-aim the hover readout
+                coordinateDisplayManager.handleMouseMoved(e, plotArea);
             }
         };
     }
@@ -601,19 +615,14 @@ public class PlotInteractionManager {
         if (currentViewport == null) return;
 
         // Use smaller zoom factor for mouse wheel (less sensitive)
-        double wheelZoomFactor = Math.pow(1.1, -e.getWheelRotation());
+        // Precise rotation: a trackpad's fractional notches zoom smoothly instead of
+        // being banked into whole-notch jumps.
+        double wheelZoomFactor = Math.pow(1.1, -e.getPreciseWheelRotation());
         boolean valueAxesOnly = e.isControlDown() || e.isMetaDown();
         ViewPort zoomed = currentViewport.zoomValueAxis(wheelZoomFactor, e.getY());
 
         if (!valueAxesOnly || !anyManualValueAxis(currentViewport)) {
-            // Time in data space, as it is always linear
-            long mouseTime = currentViewport.screenXToTime(e.getX());
-            long currentStartTime = currentViewport.getStartTimeMs();
-            long currentTimeRange = currentViewport.getEndTimeMs() - currentStartTime;
-            long newTimeRange = (long) (currentTimeRange / wheelZoomFactor);
-            double mouseRatio = (double) (mouseTime - currentStartTime) / currentTimeRange;
-            long startTime = mouseTime - (long) (newTimeRange * mouseRatio);
-            zoomed = zoomed.withTimeRange(startTime, startTime + newTimeRange);
+            zoomed = zoomed.zoomTimeAxis(wheelZoomFactor, e.getX());
         }
         navigate(zoomed);
     }
@@ -630,6 +639,14 @@ public class PlotInteractionManager {
         int dy = e.getY() - lastMousePos.y;
         navigate(currentViewport.panByPixels(dx, dy));
         lastMousePos = e.getPoint();
+    }
+
+    /** Shift+wheel pans the time axis; scrolling right moves later in time, as a drag left does. */
+    private void handleWheelPan(MouseWheelEvent e) {
+        ViewPort currentViewport = viewportSupplier.get();
+        if (currentViewport == null) return;
+
+        navigate(currentViewport.wheelPanTime(-e.getPreciseWheelRotation() * UIConstants.Zoom.WHEEL_PAN_PX));
     }
 
     /**

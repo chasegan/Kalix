@@ -32,6 +32,7 @@ import com.kalix.ide.interaction.MapContextMenuManager;
 import com.kalix.ide.interaction.MapInteractionManager;
 import com.kalix.ide.interaction.MapSearchManager;
 import com.kalix.ide.interaction.TextCoordinateUpdater;
+import com.kalix.ide.interaction.WheelNavigation;
 import com.kalix.ide.editor.EnhancedTextEditor;
 import com.kalix.ide.themes.NodeTheme;
 import com.kalix.ide.rendering.MapRenderer;
@@ -70,8 +71,15 @@ public class MapPanel extends JPanel {
     // time the panel is laid out with non-zero dimensions; see componentResized below.
     private boolean pendingZoomToFit = false;
     private Point lastPanPoint = null;
-    private boolean isPanning = false;
-    
+    // The button whose drag is panning (left on empty map, or middle); NOBUTTON when none
+    private int panButton = MouseEvent.NOBUTTON;
+
+    /**
+     * Trackpad navigation: plain scroll pans instead of zooming. An application
+     * preference set by {@code KalixIDE} on every map, never per-model view state.
+     */
+    private boolean trackpadNavigation = false;
+
     // Click tracking for node navigation
     private Point clickStartPoint = null;
     private String clickedNodeName = null;
@@ -241,10 +249,30 @@ public class MapPanel extends JPanel {
         MouseAdapter panningHandler = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                // Left and middle never interrupt each other: a press of one while the
+                // other is held is ignored, and so is its release (see mouseReleased).
+                if ((SwingUtilities.isMiddleMouseButton(e) && isHeld(e, MouseEvent.BUTTON1))
+                    || (SwingUtilities.isLeftMouseButton(e) && isHeld(e, MouseEvent.BUTTON2))) {
+                    return;
+                }
+
+                // A pan whose release was lost must not carry into this gesture.
+                if (panButton != MouseEvent.NOBUTTON && !isHeld(e, panButton)) {
+                    endPan();
+                }
+
                 // Any new press ends a link drag: a release that never arrived (e.g. taken
                 // by a popup) must not leave one running.
                 if (linkDragManager.isDragging()) {
                     linkDragManager.cancel();
+                }
+
+                // Middle-drag pans from anywhere — over nodes too, and without touching the
+                // selection (the Blender/Houdini/QGIS idiom).
+                if (SwingUtilities.isMiddleMouseButton(e)) {
+                    requestFocusInWindow();
+                    startPan(e.getPoint(), MouseEvent.BUTTON2);
+                    return;
                 }
 
                 // Right-click: show context menu.
@@ -322,9 +350,7 @@ public class MapPanel extends JPanel {
                                 if (model != null) {
                                     model.clearSelection();
                                 }
-                                lastPanPoint = e.getPoint();
-                                isPanning = true;
-                                setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                                startPan(e.getPoint(), MouseEvent.BUTTON1);
                             }
                         }
                     }
@@ -333,6 +359,16 @@ public class MapPanel extends JPanel {
             
             @Override
             public void mouseReleased(MouseEvent e) {
+                // Only the button that owns the pan ends it; the other's press was ignored.
+                if (SwingUtilities.isMiddleMouseButton(e)) {
+                    if (panButton == MouseEvent.BUTTON2) {
+                        endPan();
+                    }
+                    return;
+                }
+                if (panButton == MouseEvent.BUTTON2) {
+                    return;
+                }
                 if (SwingUtilities.isLeftMouseButton(e)) {
                     if (linkDragManager.isDragging()) {
                         linkDragManager.finishDrag();
@@ -357,10 +393,8 @@ public class MapPanel extends JPanel {
                         rectangleCurrentPoint = null;
                     }
                     
-                    isPanning = false;
-                    lastPanPoint = null;
-                    setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
-                    
+                    endPan();
+
                     // Clear click tracking
                     clickStartPoint = null;
                     clickedNodeName = null;
@@ -392,33 +426,7 @@ public class MapPanel extends JPanel {
                     linkDragManager.cancel();
                 }
 
-                // With labels hidden, hovering a node reveals its label. Only the
-                // transition matters — an unchanged hover costs nothing beyond the
-                // coordinate overlay repaint below.
-                boolean hoverChanged = updateHoveredNode(e.getPoint());
-
-                // With Shift (rectangle select) or a rotation modifier held, a press would not
-                // draw a link, so no ring is offered.
-                boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
-                boolean rotating = isCtrlDown && interactionManager != null
-                    && interactionManager.canStartRotation();
-                hoverChanged |= linkDragManager.updateHover(rotating || e.isShiftDown() ? null : e.getPoint());
-
-                // Show rotation cursor when Ctrl is held and multiple nodes are selected,
-                // and a crosshair over a node's link ring. Only touch the cursor on a state
-                // change — setCursor per event is wasteful.
-                Cursor desiredCursor;
-                if (rotating) {
-                    desiredCursor = rotateCursor();
-                } else if (linkDragManager.isHovering()) {
-                    desiredCursor = Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
-                } else {
-                    desiredCursor = Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR);
-                }
-                if (getCursor() != desiredCursor) {
-                    setCursor(desiredCursor);
-                }
-
+                boolean hoverChanged = updateIdleHover(e);
                 if (hoverChanged) {
                     // A label appeared or disappeared — the overlay clip won't cover it.
                     repaint();
@@ -460,17 +468,10 @@ public class MapPanel extends JPanel {
                     // Update rectangle selection
                     rectangleCurrentPoint = new Point(e.getPoint());
                     repaint();
-                } else if (isPanning && lastPanPoint != null) {
-                    // Handle map panning
+                } else if (panButton != MouseEvent.NOBUTTON && lastPanPoint != null) {
                     Point currentPoint = e.getPoint();
-                    double deltaX = currentPoint.x - lastPanPoint.x;
-                    double deltaY = currentPoint.y - lastPanPoint.y;
-                    
-                    panX += deltaX;
-                    panY += deltaY;
-                    
+                    panBy(currentPoint.x - lastPanPoint.x, currentPoint.y - lastPanPoint.y);
                     lastPanPoint = currentPoint;
-                    repaint();
                 }
             }
         };
@@ -478,8 +479,58 @@ public class MapPanel extends JPanel {
         addMouseListener(panningHandler);
         addMouseMotionListener(panningHandler);
 
-        // Mouse wheel zoom handler
-        addMouseWheelListener(this::handleMouseWheelZoom);
+        addMouseWheelListener(this::handleMouseWheel);
+    }
+
+    private void startPan(Point point, int button) {
+        lastPanPoint = point;
+        panButton = button;
+        setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+    }
+
+    private void endPan() {
+        panButton = MouseEvent.NOBUTTON;
+        lastPanPoint = null;
+        setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+    }
+
+    /** True when {@code button} is held during {@code e}. */
+    private static boolean isHeld(MouseEvent e, int button) {
+        return (e.getModifiersEx() & InputEvent.getMaskForButton(button)) != 0;
+    }
+
+    /**
+     * Re-reads what an idle pointer is over: the hovered node, the link ring, and the
+     * cursor they imply. Returns whether a hover changed, which needs a full repaint.
+     */
+    private boolean updateIdleHover(MouseEvent e) {
+        // With labels hidden, hovering a node reveals its label. Only the
+        // transition matters — an unchanged hover costs nothing beyond the
+        // coordinate overlay repaint.
+        boolean hoverChanged = updateHoveredNode(e.getPoint());
+
+        // With Shift (rectangle select) or a rotation modifier held, a press would not
+        // draw a link, so no ring is offered.
+        boolean isCtrlDown = e.isControlDown() || e.isMetaDown();
+        boolean rotating = isCtrlDown && interactionManager != null
+            && interactionManager.canStartRotation();
+        hoverChanged |= linkDragManager.updateHover(rotating || e.isShiftDown() ? null : e.getPoint());
+
+        // Show rotation cursor when Ctrl is held and multiple nodes are selected,
+        // and a crosshair over a node's link ring. Only touch the cursor on a state
+        // change — setCursor per event is wasteful.
+        Cursor desiredCursor;
+        if (rotating) {
+            desiredCursor = rotateCursor();
+        } else if (linkDragManager.isHovering()) {
+            desiredCursor = Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR);
+        } else {
+            desiredCursor = Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR);
+        }
+        if (getCursor() != desiredCursor) {
+            setCursor(desiredCursor);
+        }
+        return hoverChanged;
     }
 
     /**
@@ -493,11 +544,40 @@ public class MapPanel extends JPanel {
     }
     
     /**
-     * Handles mouse wheel zoom events.
-     * Zooms in/out while keeping the point under the cursor fixed.
+     * Zooms about the cursor or pans, as {@link WheelNavigation} decides.
+     *
+     * <p>Reads the precise rotation rather than whole notches: a trackpad reports
+     * fractions of a notch, which {@code getWheelRotation()} banks until a full notch
+     * and then releases as one coarse step.
      */
-    private void handleMouseWheelZoom(MouseWheelEvent e) {
-        zoomAt(e.getX(), e.getY(), Math.pow(ZOOM_FACTOR, -e.getWheelRotation()));
+    private void handleMouseWheel(MouseWheelEvent e) {
+        double rotation = e.getPreciseWheelRotation();
+        if (rotation == 0) {
+            return;
+        }
+        WheelNavigation action = WheelNavigation.of(
+            e.isShiftDown(), e.isControlDown() || e.isMetaDown(), trackpadNavigation);
+        switch (action) {
+            case ZOOM -> zoomAt(e.getX(), e.getY(), Math.pow(ZOOM_FACTOR, -rotation));
+            case PAN_HORIZONTAL -> panBy(-rotation * UIConstants.Zoom.WHEEL_PAN_PX, 0);
+            case PAN_VERTICAL -> panBy(0, -rotation * UIConstants.Zoom.WHEEL_PAN_PX);
+        }
+        // The map moved under a still pointer: a pan moves the world point under it, and a
+        // zoom (which keeps that point fixed) still moves the nodes around it.
+        mouseWorldX = toWorldX(e.getX());
+        mouseWorldY = toWorldY(e.getY());
+        if (linkDragManager.isDragging()) {
+            linkDragManager.updateDrag(e.getPoint());
+        } else if (!isHeld(e, MouseEvent.BUTTON1) && !isHeld(e, MouseEvent.BUTTON2)
+            && !isHeld(e, MouseEvent.BUTTON3)) {
+            updateIdleHover(e);
+        }
+    }
+
+    private void panBy(double dx, double dy) {
+        panX += dx;
+        panY += dy;
+        repaint();
     }
 
     /**
@@ -665,6 +745,18 @@ public class MapPanel extends JPanel {
         return true;
     }
     
+    /**
+     * Sets trackpad navigation: plain scroll pans (two-finger scroll), and zoom moves to
+     * Ctrl/Cmd+scroll, or pinch on Windows. See {@link WheelNavigation}.
+     */
+    public void setTrackpadNavigation(boolean trackpadNavigation) {
+        this.trackpadNavigation = trackpadNavigation;
+    }
+
+    public boolean isTrackpadNavigation() {
+        return trackpadNavigation;
+    }
+
     // View-menu zoom operations anchor at the viewport centre so the content
     // in view stays in view (zooming about the world origin walked it off-screen).
 
