@@ -12,6 +12,11 @@ deficit. Each crop's root zone is the FAO-56 daily depletion balance, with the c
 and a stress coefficient that reduces evapotranspiration as the soil dries. The soil below the
 roots is kept in layers, so that water left by one crop is there for the next.
 
+The field follows FAO-56 for the soil and the crop, pyfao56 for the soil below the roots, and
+Source's Irrigator Demand Model for the farm: the fallow, planting, the irrigation target, crop
+death and losses. [Where each part comes from](#where-each-part-comes-from) says which rule is
+whose, and what is Kalix's own.
+
 A field is supplied by the node above it: a [storage](storage.md) outlet, or a supply outlet
 (`ds_2` to `ds_4`) of a [regulated user](regulated-user.md#supply-outlets) or an
 [unregulated user](unregulated-user.md#supply-outlets). What it does not take, and what runs off
@@ -143,8 +148,8 @@ is deciding when to top it up. Depths are in mm over the cropped area; P is rain
 reference evapotranspiration.
 
 1. **Rain that counts.** Some rain never reaches the soil: it wets leaves and evaporates.
-   Effective rain is P_e = max(0, P − 0.2·E₀) (FAO-56); the 0.2 is `interception`, and
-   P − P_e is `intercepted`.
+   Effective rain is P_e = max(0, P − 0.2·E₀), Source Irrigator's effective rain with FAO-56's
+   0.2·E₀ as the loss; the 0.2 is `interception`, and P − P_e is `intercepted`.
 2. **The bucket.** The root zone is a column of soil of depth Z_r. Between full (field capacity)
    and empty (wilting point) it holds a depth of water TAW = θ_cap · Z_r, where θ_cap is the
    soil's water-holding capacity as a fraction (0.1–0.3 is typical). In Kalix θ_cap is the
@@ -447,6 +452,41 @@ close, record `volume` with `rain_vol`, `intercepted`, `supply`, `escape`, `et_v
 and `excess`: the day-to-day change in the first is the sum of the rest, every day. `bypass`, `excess` and `return_flow` are still
 in the model, on `ds_1` and `ds_2`.
 
+## Where each part comes from
+
+Kalix does not invent crop models. Every rule in the field node is taken from a published model,
+and this table says which; the few things that are Kalix's own are marked as such. Source has two
+crop models, the Irrigator Demand Model and IQQM Crop Model 2; the field follows Irrigator.
+
+| Part | What it does | Where it comes from |
+| --- | --- | --- |
+| Root-zone water balance | One depletion per crop: ET out, effective rain and irrigation in, overflow when full | FAO-56 Chapter 8, equations 85 and 86 |
+| Bucket capacity | `available_water × root_depth`, and the depletion fraction `p` | FAO-56 equations 82 and 83, Tables 19 and 22 |
+| Root growth | Roots from `initial_root_depth` to `root_depth` in step with the kc curve's rise; the soil reached joins the bucket with its water | FAO-56 Chapter 8; pyfao56 grows the roots with the coefficient. Omitted, the fixed root zone of Source Irrigator |
+| Stress coefficient | `ks` from 1 at `p` of the bucket used to 0 at empty, on the opening depletion | FAO-56 equation 84; pyfao56's convention for when it is read |
+| Evapotranspiration | `ks × kc × kc_multiplier × evap`, no more than the water held | FAO-56 equation 81, the single-coefficient approach of Chapter 6; the multiplier is FAO-56's Chapter 9 adjustment left to the modeller |
+| Crop coefficient curve | A table by days since planting, interpolated, flat beyond its ends | FAO-56 Chapter 6, Figure 25, Tables 11 and 12 |
+| Interception | `min(rain − runoff, interception × evap)` off every rain day | Source Irrigator, equation 7, for the form; FAO-56 Chapter 7 for the 0.2 × ET₀ figure. FAO-56's own text is a threshold on small rains, not a deduction |
+| Soil below the roots | Layers that keep their water at or below field capacity, filled by overflow, drawn only by roots that reach them | pyfao56's depletion to the maximum root depth, generalised to the field's root depths; no drainage below field capacity as in FAO-56 equation 88 and AquaCrop. Source Irrigator instead assumes the soil below the fallow is full |
+| Saturation-excess runoff | Overflow past the deepest layer leaves on the links | Source Irrigator equation 8; NSW river-model practice. In FAO-56 the same water is deep percolation, lost |
+| Storm runoff | Curve number on gross rain, the curve set by the bucket's wetness between dry and wet | USDA-NRCS NEH-630 Chapter 10; the wetness interpolation and CN1/CN3 fits as APSIM SoilWat and HowLeaky use them, with the whole root bucket as the wetness rather than APSIM's surface layers |
+| Fallow | A crop that is never irrigated, with its own depth, coefficient and `p` | Source Irrigator's automatic fallow crop, with a fallow factor and a depth evaporation reaches. With a depth near 150 mm, `kc` near 1.1 and `p` near 0.4 it is FAO-56 Chapter 7's two-stage bare-soil evaporation instead |
+| Irrigation | Each crop takes up to its order, never more than its bucket has room for | FAO-56 Chapter 8 scheduling; Source Irrigator orders to hold a target depletion |
+| Delivery loss | `efficiency` of the supply reaches the soil; the rest escapes and is lost | Source Irrigator's crop-level escapes, fractions of applied water with no return; irrigation deep percolation belongs here |
+| Death | A crop whose opening `ks` is 0.05 or below dies and its land returns to the fallow | Source Irrigator, which states the 0.05 |
+| Planting, harvest, abandonment | Authored rules for the area to plant and the area to keep; harvest at `season_len` | Source Irrigator's planting decisions and fixed seasons, written out as expressions rather than built-in triggers |
+| Ordering | Orders placed in the order phase on yesterday's states, with travel time and orders en route, no forecast | IQQM's ordering convention. Source Irrigator forecasts over the travel time; Kalix does not |
+| Land moving with its water | Planting, harvest and abandonment move area between partitions with its water, mixed by area, layer by layer | Kalix's own. Source Irrigator initialises a new crop from the fallow's depletion with the subsoil assumed full; the field tracks it instead. Conserving by construction |
+| Pour of surplus | Water beyond the orders poured over the standing crops, driest first | Kalix's own, for water a modeller has forced to the field |
+| Several crops at once, the kc multiplier, the balance identity | Up to four slots on one soil; a daily scalar on kc; `volume` changing by exactly the fluxes | Kalix's own |
+
+Not modelled, and worth knowing: FAO-56's dual coefficient (basal transpiration and a separate
+soil-evaporation layer), its adjustment of `p` for the day's evapotranspiration and of `kc` for
+climate, capillary rise from a water table, and salinity; Source Irrigator's forecasting of
+demand over the travel time, opportunistic targets, ponded crops and planting windows, all of
+which the authored rules can express but do not build in. Deep drainage past the deepest roots
+leaves on the links rather than to groundwater.
+
 ## References
 
 The field is the FAO-56 root-zone water balance, with a layered soil below the roots. Where a
@@ -458,8 +498,9 @@ choice is not in FAO-56, the reference it follows is given.
   linear stress coefficient Ks (equation 84), and deep percolation as the overflow of a root
   zone at field capacity (equation 88). Table 19 gives available water by soil texture, Table 22
   root depths and depletion fractions by crop, and Chapter 8 grows the root zone over the
-  season, which `initial_root_depth` follows. Chapter 7 is the origin of the interception rule:
-  wettings under about 0.2 × ET₀ evaporate without reaching the root zone.
+  season, which `initial_root_depth` follows. Chapter 7 is the origin of the 0.2 × ET₀ in the
+  interception rule: it notes that wettings under about 0.2 × ET₀ evaporate without reaching
+  the root zone, a threshold the field applies as Irrigator does, as a deduction.
 - Pereira, L.S., Allen, R.G., Paredes, P., López-Urrea, R., Raes, D., Smith, M., Kilic, A. and
   Salman, M. (2025). *Crop evapotranspiration: Guidelines for computing crop water requirements.
   Second edition, revised 2025.* FAO Irrigation and Drainage Paper 56 Rev.1. Updated Kc and Kcb
@@ -490,8 +531,10 @@ choice is not in FAO-56, the reference it follows is given.
   of Experimental Agriculture 45, 65–77. Water use and yield of solid, single-skip and
   double-skip cotton; the place to take a `kc_multiplier` from, with the industry's WATERpak
   (Cotton Research and Development Corporation) crop water-use chapters.
-- eWater. *Source Scientific Reference Guide: Irrigator Demand Model.* The fallow as a crop with
-  its own depth and coefficient, the planting decision as an authored rule, the effective-rain
-  form of interception, crop death under sustained stress, and a fixed root zone per crop, which
-  the field has when `initial_root_depth` is omitted. Its assumption that the soil
-  below the fallow's roots is at field capacity is the one the field does not make.
+- eWater. *Source Scientific Reference Guide: Irrigator Demand Model* (Source 4.3). The fallow
+  as an automatic crop with its own depth and a fallow factor; the planting decision as a rule;
+  effective rain as rain less 0.2 × ET₀ (its equation 7); saturation-excess runoff (equation 8);
+  crop death when Ks falls to 0.05, the area returning to fallow; losses as fractions of applied
+  water with no return; and a fixed root zone per crop, which the field has when
+  `initial_root_depth` is omitted. Its assumption that the soil below the fallow's roots is at
+  field capacity when a crop is planted (equation 18) is the one the field does not make.
