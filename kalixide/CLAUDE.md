@@ -193,8 +193,9 @@ untouched. `ModelParser` attaches an `aka` above a `[node.*]` header to that nod
 (`ModelNode.getAka()`); a code line in between orphans it. A `cluster` attaches the same
 way (`ModelNode.getCluster()`), the last line counting and an invalid name leaving the
 node loose, and `HydrologicalModel.getClusters()` holds a `ClusterIndex` rebuilt at each
-parse; the design is `docs/clusters.md`. `AnnotationKey` owns which values a key accepts,
-so the parser and linter can't disagree. `ClusterEdits` computes cluster edits as pure
+parse, which owns how names compare (ignoring case) and which spelling is shown (the
+first mention's); the design is `docs/clusters.md`. `AnnotationKey` owns which values a
+key accepts and the message refusing one, so the parser, linter and edits can't disagree. `ClusterEdits` computes cluster edits as pure
 functions, and `CommandExecutor` applies them as one atomic edit. `ClusterLabels` makes
 every menu label that names a cluster, with its `(cluster)` suffix rule, and
 `ClusterMenuRules` decides, as a pure function, which cluster items a selection is

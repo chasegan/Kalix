@@ -180,22 +180,30 @@ are headless-tested; drawing and interaction sit on the existing map panel.
 **Parsing** (`ModelParser`, `ModelNode`, `AnnotationKey`). `#@cluster` is read as `#@aka`
 is. With two lines on a node the last counts, and the linter says so. Unlike an empty
 `#@aka`, an empty or invalid last line counts too: there is no falling back to an earlier
-line. A name must be a strict bare name (ADR-0006 §2.6), which `AnnotationKey` checks for
-the parser and the linter alike; a node with an invalid name is drawn loose, and the linter
-says why. A last line with no `=` isn't an annotation (ADR-0010 §2): the lexer reads it as
-a comment, so the earlier line counts, and the linter reports it as malformed.
+line. A name follows the node-name rule (ADR-0010 §6.2, amended 2026-11-10): ASCII
+letters in either case, digits and underscores. `AnnotationKey` checks it for the parser,
+the linter and the edits alike, and words the one message that refuses a name; a node with
+an invalid name is drawn loose, and the linter says why. A last line with no `=` isn't an
+annotation (ADR-0010 §2): the lexer reads it as a comment, so the earlier line counts, and
+the linter reports it as malformed.
 
 **The cluster index** (`ClusterIndex`, on `HydrologicalModel`). The model's node map has no
 order, so the order of first mention has to be kept from the parse. The index holds each
 cluster's members in file order, and is replaced whole at every reparse, so it is a snapshot
-of the text. Only complete nodes count, as only they are on the map.
+of the text. Only complete nodes count, as only they are on the map. Names are matched
+ignoring case, as node names are, so `teemburra` and `Teemburra` are one cluster, shown
+with the spelling of its first mention. The index owns both choices, each in one place:
+the key names are compared by, and which spelling is shown.
 
 **Edits** (`ClusterEdits`, `CommandExecutor`). Each is a pure function from text to text
 edits; `CommandExecutor` is the one place that applies them, once inside
 `beginAtomicEdit()`/`endAtomicEdit()`. Create and Add are one function. They read the text
 through `NodeSectionLocator`, not the model, so Rename and Disband reach a section that
 isn't on the map. An invalid name is refused with an error stating the rule, and never
-corrected. A cluster edit leaves a
+corrected. Edits match a cluster by its key. Create with a name that exists in another
+case joins that cluster and writes its existing spelling, not the typed one, so a mistyped
+case never rewrites a whole cluster; Rename changes the spelling, a rename that changes
+only case included, by rewriting every member. A cluster edit leaves a
 node with at most one `#@cluster` line, so a node with two can't fall back to the earlier
 cluster: it rewrites the last line in place and deletes any others. Rewriting in place
 keeps a comment below the line inside the section, where a delete and re-insert would push
@@ -241,7 +249,7 @@ each member has.
 ## Stages
 
 - **V1a: model and rules.** Parsing, the edits, the label helper, the menu rules as pure
-  functions with table tests, two lint rules (strict bare name; two `#@cluster` lines). A
+  functions with table tests, two lint rules (an invalid name; two `#@cluster` lines). A
   thin slice of the menu, so the edits can be tried by hand: Create, Add, Remove, Rename and
   Disband, with every cluster counted as expanded.
 - **V1b: drawing.** Boxes, icons, links to icons, collapse state.
