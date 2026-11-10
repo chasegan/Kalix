@@ -35,13 +35,32 @@ impl KcCurve {
             }
         }
     }
+
+    /// The first value and the highest value of the curve: the span the roots
+    /// grow over, as pyfao56 grows them with the coefficient
+    pub fn first_and_peak(&self) -> (f64, f64) {
+        match self {
+            KcCurve::Constant(kc) => (*kc, *kc),
+            KcCurve::ByDay(table) => {
+                let first = table.get_value(0, 1);
+                let peak = (0..table.nrows()).map(|r| table.get_value(r, 1)).fold(first, f64::max);
+                (first, peak)
+            }
+        }
+    }
 }
 
 #[derive(Clone)]
 pub struct Crop {
     pub name: String,
     /// mm; the crop's bucket holds `available_water × root_depth / 1000` mm
+    /// once the roots are fully down
     pub root_depth: f64,
+    /// mm, the roots at planting. None: the roots are at root_depth from the
+    /// day of planting (Source Irrigator's fixed root zone). Some: they grow to
+    /// root_depth in step with the kc curve's rise to its peak (FAO-56 Ch. 8,
+    /// as pyfao56 does it).
+    pub initial_root_depth: Option<f64>,
     /// Depletion fraction: stress begins beyond p of the bucket
     pub p: f64,
     pub kc: KcCurve,
@@ -50,10 +69,34 @@ pub struct Crop {
 }
 
 impl Crop {
+    /// How deep the roots reach `days` after planting: the initial depth plus
+    /// the share of the way to full that the kc curve has risen from its first
+    /// value towards its peak. A crop with no initial depth is at full depth
+    /// from planting. The caller keeps roots from shrinking when kc falls.
+    pub fn root_depth_at(&self, days: f64) -> f64 {
+        match self.initial_root_depth {
+            None => self.root_depth,
+            Some(initial) => {
+                let (first, peak) = self.kc.first_and_peak();
+                let risen = ((self.kc.at(days) - first) / (peak - first)).clamp(0.0, 1.0);
+                initial + (self.root_depth - initial) * risen
+            }
+        }
+    }
+
     /// Checks a crop makes sense. Errors name the property and the crop.
     pub fn validate(&self) -> Result<(), String> {
         if !(self.root_depth > 0.0 && self.root_depth.is_finite()) {
             return Err(format!("Crop '{}': root_depth must be a positive number of mm, got {}.", self.name, self.root_depth));
+        }
+        if let Some(initial) = self.initial_root_depth {
+            if !(initial > 0.0 && initial < self.root_depth) {
+                return Err(format!("Crop '{}': initial_root_depth must be a positive number of mm less than root_depth ({}), got {}.", self.name, self.root_depth, initial));
+            }
+            let (first, peak) = self.kc.first_and_peak();
+            if !(peak > first) {
+                return Err(format!("Crop '{}': initial_root_depth needs a kc table that rises from its first value, so the roots have a development stage to grow over.", self.name));
+            }
         }
         if !(self.p >= 0.0 && self.p < 1.0) {
             return Err(format!("Crop '{}': p must be at least 0 and less than 1, got {}.", self.name, self.p));

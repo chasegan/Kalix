@@ -440,6 +440,7 @@
         "crop_1_viable_area",
         "crop_1_kc_multiplier",
         "crop_1_kc",
+        "crop_1_root_depth",
         "crop_2_area",
         "crop_2_days",
         "crop_2_depletion",
@@ -451,6 +452,7 @@
         "crop_2_viable_area",
         "crop_2_kc_multiplier",
         "crop_2_kc",
+        "crop_2_root_depth",
         "crop_3_area",
         "crop_3_days",
         "crop_3_depletion",
@@ -462,6 +464,7 @@
         "crop_3_viable_area",
         "crop_3_kc_multiplier",
         "crop_3_kc",
+        "crop_3_root_depth",
         "crop_4_area",
         "crop_4_days",
         "crop_4_depletion",
@@ -472,7 +475,8 @@
         "crop_4_plant",
         "crop_4_viable_area",
         "crop_4_kc_multiplier",
-        "crop_4_kc"
+        "crop_4_kc",
+        "crop_4_root_depth"
       ],
       "required_params": [
         "type",

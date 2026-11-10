@@ -19,7 +19,8 @@ import java.util.regex.Pattern;
  * so a modeller sees the problem in the editor rather than at model load:</p>
  * <ul>
  *   <li>Crop names: a lowercase letter, then lowercase letters, digits and underscores</li>
- *   <li>Allowed properties: {@code root_depth} (required, positive mm), {@code p}
+ *   <li>Allowed properties: {@code root_depth} (required, positive mm),
+ *       {@code initial_root_depth} (optional, positive mm below root_depth), {@code p}
  *       (0 &le; p &lt; 1, default 0.5), {@code kc} (required: a non-negative number,
  *       or a two-column table of days since planting and kc, days non-negative and
  *       increasing, an optional two-label text header), {@code season_len}
@@ -128,6 +129,21 @@ public class CropSectionValidator implements ValidationStrategy {
                                 ValidationRule.Severity.ERROR, "invalid_crop_root_depth");
                     }
                     break;
+                case "initial_root_depth":
+                    if (!isFiniteNumber(value) || Double.parseDouble(value) <= 0) {
+                        result.addIssue(prop.getLineNumber(),
+                                "Crop '" + cropName + "': initial_root_depth must be a positive number of mm, less than root_depth, got '" + value + "'",
+                                ValidationRule.Severity.ERROR, "invalid_crop_initial_root_depth");
+                    } else {
+                        INIModelParser.Property rootDepth = section.getProperties().get("root_depth");
+                        if (rootDepth != null && isFiniteNumber(rootDepth.getValue().trim())
+                                && Double.parseDouble(value) >= Double.parseDouble(rootDepth.getValue().trim())) {
+                            result.addIssue(prop.getLineNumber(),
+                                    "Crop '" + cropName + "': initial_root_depth must be less than root_depth (" + rootDepth.getValue().trim() + "), got '" + value + "'",
+                                    ValidationRule.Severity.ERROR, "invalid_crop_initial_root_depth");
+                        }
+                    }
+                    break;
                 case "p":
                     if (!isFiniteNumber(value) || Double.parseDouble(value) < 0 || Double.parseDouble(value) >= 1) {
                         result.addIssue(prop.getLineNumber(),
@@ -151,7 +167,7 @@ public class CropSectionValidator implements ValidationStrategy {
                 default:
                     result.addIssue(prop.getLineNumber(),
                             "Unexpected property '" + prop.getKey() + "' in [" + sectionName
-                                    + "] (allowed: root_depth, p, kc, season_len)",
+                                    + "] (allowed: root_depth, initial_root_depth, p, kc, season_len)",
                             ValidationRule.Severity.ERROR, "unexpected_crop_property");
                     break;
             }

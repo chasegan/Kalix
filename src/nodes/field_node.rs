@@ -21,7 +21,7 @@ pub const MAX_CROPS: usize = 4;
 pub const CROP_SLOT_PROPERTIES: [&str; 5] = ["", "_plant", "_order", "_viable_area", "_kc_multiplier"];
 
 /// The results of a crop slot, after `crop_N`
-pub const CROP_SLOT_OUTPUTS: [&str; 11] = ["_area", "_days", "_depletion", "_ks", "_order", "_order_due", "_orders_en_route", "_plant", "_viable_area", "_kc_multiplier", "_kc"];
+pub const CROP_SLOT_OUTPUTS: [&str; 12] = ["_area", "_days", "_depletion", "_ks", "_order", "_order_due", "_orders_en_route", "_plant", "_viable_area", "_kc_multiplier", "_kc", "_root_depth"];
 
 /// A crop whose stress coefficient at the start of the day is this or below dies,
 /// when the slot has no viable_area rule of its own (Source's rule)
@@ -251,6 +251,14 @@ impl FieldNode {
         for slot in &mut self.slots {
             if !slot.in_ground { continue; }
             slot.days += 1;
+            // Root growth: the roots reach today's depth, taking in the soil below with its
+            // water, so today's capacity and stress are the day's (FAO-56 Ch. 8, as pyfao56
+            // grows the roots with the coefficient). A crop with no initial_root_depth is at
+            // full depth already and this does nothing.
+            if slot.crop.initial_root_depth.is_some() {
+                let depth = slot.crop.root_depth_at(slot.days as f64);
+                slot.partition.grow(&self.profile, depth);
+            }
             // Harvest: season_len days after planting, the whole crop goes back to the fallow
             if let Some(season_len) = slot.crop.season_len {
                 if slot.days >= season_len {
@@ -300,6 +308,8 @@ impl FieldNode {
             }
             let area = wanted.min(self.fallow_partition.area);
             if area <= 0.0 { continue; }
+            // The new crop's roots start at their planting depth; the land arrives with its water
+            slot.partition = Partition::new(&self.profile, slot.crop.root_depth_at(0.0), 0.0, 0.0);
             transfer(&self.profile, &mut self.fallow_partition, &mut slot.partition, area);
             slot.in_ground = true;
             slot.days = 0;
@@ -323,6 +333,9 @@ impl FieldNode {
             }
             if let Some(idx) = slot.recorder_idx[1] {
                 data_cache.add_value_at_index(idx, days);
+            }
+            if let Some(idx) = slot.recorder_idx[11] {
+                data_cache.add_value_at_index(idx, if slot.in_ground { slot.partition.root_depth } else { f64::NAN });
             }
             // The rules as read today: not a number on a day a rule was not read
             if let Some(idx) = slot.recorder_idx[7] {

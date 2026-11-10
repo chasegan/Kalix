@@ -77,6 +77,7 @@ node.paddock.crop_1_plant
 node.paddock.crop_1_viable_area
 node.paddock.crop_1_kc_multiplier
 node.paddock.crop_1_kc
+node.paddock.crop_1_root_depth
 node.paddock.crop_2_plant
 node.paddock.fallow_depletion
 node.paddock.soil_moisture
@@ -626,4 +627,65 @@ fn test_the_kc_multiplier_can_follow_the_season_and_the_curve() {
     assert!(rendered.contains("crop_1_kc_multiplier = 0.85"), "survives save:\n{rendered}");
     let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig("", "crop_1 = shallow\ncrop_1_plant = 0")).unwrap());
     assert!(!plain.contains("crop_1_kc_multiplier ="), "absent stays absent:\n{plain}");
+}
+
+#[test]
+fn test_roots_grow_with_the_kc_curve_and_take_in_the_soil_below() {
+    // A crop whose kc rises from 0.4 to 1.0 over its first ten days, roots from 250 to
+    // 1000 mm with it: 75 mm a day. No weather, the profile half empty throughout, so the
+    // bucket's depletion is half its growing capacity: 12.5 at 25 mm of capacity, 50 at 100
+    let crops = "\n[crop.grower]\nroot_depth = 1000\ninitial_root_depth = 250\nkc = 0, 0.4, 10, 1.0\n";
+    let mut model = run(&rig(crops, "evap = 0\nrain = 0\ninitial_depletion = 50\ncrop_1 = grower\ncrop_1_plant = if(var.day.n == 1, 4, 0)"));
+    let depth = s(&mut model, "crop_1_root_depth");
+    let depletion = s(&mut model, "crop_1_depletion");
+    assert_close(depth[0], 250.0, "at planting");
+    assert_close(depth[5], 625.0, "day 5");
+    assert_close(depth[10], 1000.0, "day 10, kc at its peak");
+    assert_close(depth[11], 1000.0, "and no further");
+    assert_close(depletion[0], 12.5, "half of 25 mm");
+    assert_close(depletion[5], 31.25, "half of 62.5 mm");
+    assert_close(depletion[10], 50.0, "half of 100 mm");
+    field_balance_closes(&mut model);
+    // Water left below a shallow bucket is reached as the roots grow: dry the top 250 mm
+    // by evaporation while the soil below stays full, then watch the bucket's depletion
+    // per mm of capacity fall as the roots take in full soil
+    let mut model = run(&rig(crops, "evap = 10\nrain = 0\ncrop_1 = grower\ncrop_1_plant = if(var.day.n == 1, 4, 0)"));
+    let depth = s(&mut model, "crop_1_root_depth");
+    let depletion = s(&mut model, "crop_1_depletion");
+    let ks = s(&mut model, "crop_1_ks");
+    // Day 0: 25 mm bucket, 4 mm of ET (kc 0.4 x 10) -> depletion 4
+    assert_close(depletion[0], 4.0, "day 0");
+    // Day 1: roots to 325 mm take in 7.5 mm of full soil; ks at the start of the day is on
+    // the grown bucket, 32.5 mm with 4 below full: no stress yet
+    assert_close(depth[1], 325.0, "day 1");
+    assert_eq!(ks[1], 1.0);
+    assert!(depletion[11] < 100.0 && depth[11] == 1000.0, "the crop never runs out: {}", depletion[11]);
+    field_balance_closes(&mut model);
+}
+
+#[test]
+fn test_replanting_starts_the_roots_at_their_planting_depth_again() {
+    let crops = "\n[crop.grower]\nroot_depth = 1000\ninitial_root_depth = 250\nkc = 0, 0.4, 10, 1.0\nseason_len = 5\n";
+    let mut model = run(&rig(crops, "evap = 0\ncrop_1 = grower\ncrop_1_plant = if(var.day.n == 1 || var.day.n == 7, 4, 0)"));
+    let depth = s(&mut model, "crop_1_root_depth");
+    assert_close(depth[4], 550.0, "day 4 of the first crop");
+    assert!(depth[5].is_nan(), "harvested on day 5: nothing stands");
+    assert_close(depth[6], 250.0, "the second crop starts shallow");
+    assert_close(depth[7], 325.0, "and grows again");
+    field_balance_closes(&mut model);
+}
+
+#[test]
+fn test_initial_root_depth_is_checked_and_round_trips() {
+    let too_deep = rig("\n[crop.bad]\nroot_depth = 500\ninitial_root_depth = 500\nkc = 0, 0.4, 10, 1.0\n", "crop_1 = bad\ncrop_1_plant = 0");
+    let err = IniModelIO::read_model_string(&too_deep).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(err.contains("initial_root_depth must be a positive number of mm less than root_depth (500)"), "got: {err}");
+    let flat = rig("\n[crop.bad]\nroot_depth = 500\ninitial_root_depth = 100\nkc = 1\n", "crop_1 = bad\ncrop_1_plant = 0");
+    let err = IniModelIO::read_model_string(&flat).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(err.contains("needs a kc table that rises from its first value"), "got: {err}");
+    let ok = rig("\n[crop.grower]\nroot_depth = 1000\ninitial_root_depth = 250\nkc = 0, 0.4, 10, 1.0\n", "crop_1 = grower\ncrop_1_plant = 0");
+    let rendered = IniModelIO::model_to_string(&IniModelIO::read_model_string(&ok).expect("loads"));
+    assert!(rendered.contains("initial_root_depth = 250"), "survives save:\n{rendered}");
+    let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig("", "crop_1 = deep\ncrop_1_plant = 0")).unwrap());
+    assert!(!plain.contains("initial_root_depth"), "absent stays absent");
 }

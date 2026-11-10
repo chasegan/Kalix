@@ -61,7 +61,8 @@ digits and underscores, starting with a letter.
 
 | Property | Description |
 | --- | --- |
-| root\_depth (compulsory) | How deep the crop roots [mm]. Its bucket holds `available_water × root_depth / 1000` mm of water between full and empty. Example: `root_depth = 900` |
+| root\_depth (compulsory) | How deep the crop roots when fully grown [mm]. Its bucket holds `available_water × root_depth / 1000` mm of water between full and empty. Example: `root_depth = 900` |
+| initial\_root\_depth (optional) | How deep the roots are at planting [mm]. They grow to `root_depth` as the crop's `kc` rises from its first value to its peak, in step with it, as FAO-56 and pyfao56 grow them; the soil they grow into joins the bucket with the water it holds. Needs a `kc` table that rises. Omitted, the roots are at `root_depth` from the day of planting, as Source's Irrigator has them. Example: `initial_root_depth = 200` |
 | p (optional) | The depletion fraction: the share of the bucket the crop can use before stress begins (FAO-56 Table 22). Default 0.5. Example: `p = 0.65` |
 | kc (compulsory) | The crop coefficient: a number, or a table of (days since planting, kc) with the FAO-56 curve as its rows, interpolated between rows and held flat beyond the first and last. A text header row is allowed. Example: `kc = 0.95` |
 | season\_len (optional) | Days from planting to harvest. Omitted, the crop is a perennial and is never harvested. Example: `season_len = 180` |
@@ -103,6 +104,7 @@ dries.
 | --- | --- |
 | crop\_N\_area | The area under slot N's crop today [km²]; 0 when nothing is in the ground. Written when planting runs, before any order rule, so `this.crop_N_area` with no offset is today's area |
 | crop\_N\_days | Days since planting, 0 on the day it is planted; not a number when nothing is in the ground. Written when planting runs, like `crop_N_area` |
+| crop\_N\_root\_depth | How deep the crop's roots reach today [mm]: `initial_root_depth` at planting, growing to `root_depth`; `root_depth` throughout for a crop with no initial depth. Not a number when nothing is in the ground. Written when planting runs |
 | crop\_N\_depletion | How far the crop's root zone is below full at the end of the step [mm]: 0 is full, the bucket's capacity is empty. A state, reported at the end of the step like a storage's `volume`; the irrigation rule reads the previous step's value, `this.crop_N_depletion[-1, 0]`, the soil at the start of today. Not a number when nothing is in the ground |
 | crop\_N\_ks | The crop's stress coefficient this step, 0 to 1, from the depletion at the start of the day. Written the moment it is computed, before the viable-area rule reads it, so `this.crop_N_ks` with no offset is today's. On the morning a crop is abandoned it is the stress that was read; not a number when nothing stands at the start of the day |
 | crop\_N\_order | The order slot N placed this step [ML] |
@@ -146,7 +148,9 @@ reference evapotranspiration.
 2. **The bucket.** The root zone is a column of soil of depth Z_r. Between full (field capacity)
    and empty (wilting point) it holds a depth of water TAW = θ_cap · Z_r, where θ_cap is the
    soil's water-holding capacity as a fraction (0.1–0.3 is typical). In Kalix θ_cap is the
-   field's `available_water` / 1000 (150 mm/m is 0.15) and Z_r the crop's `root_depth`.
+   field's `available_water` / 1000 (150 mm/m is 0.15) and Z_r the crop's `root_depth`. With
+   an `initial_root_depth`, Z_r starts there and grows to `root_depth` as the crop develops, so
+   a seedling's bucket is small and a mature crop's is deep.
 3. **The state: depletion.** D is how far the bucket is below full, in mm. D = 0 is full and
    D = TAW is empty. This is the crop's `crop_N_depletion`.
 4. **What the crop wants.** A well-watered crop uses E_c = K_c · E₀, where the crop coefficient
@@ -188,11 +192,12 @@ The steps above, as this version runs them each day, exactly.
 
 The field is partitioned: the fallow, and each crop slot with a crop in the ground. Each
 partition works in mm over its own area: 1 mm × 1 km² = 1 ML. The soil is kept in layers whose
-boundaries are the field's distinct root depths, fallow included, so every crop's root zone is a
-whole number of layers; a layer holds `available_water` times its thickness. Each partition has
-one bucket for its root zone, which the plants and the irrigator work, and one depletion for
-each layer below its roots, which only drainage and planting touch. Below the deepest roots on
-the field nothing draws, so water that passes is gone.
+boundaries are the field's distinct full root depths, fallow included; a layer holds
+`available_water` times its thickness. Each partition has one bucket for its root zone, which
+the plants and the irrigator work, and one depletion for each layer below its roots, which only
+drainage, root growth and planting touch. A root zone still growing ends inside a layer; the
+part of that layer below the root front keeps its own depletion until the roots reach through
+it. Below the deepest roots on the field nothing draws, so water that passes is gone.
 
 ![The soil as one set of layers for the whole field, each partition with a bucket to its root depth and a depletion per layer below; and at harvest, the crop's bucket spread over its layers and mixed into the fallow's by area](../assets/docs-nodes-field/layers.svg)
 
@@ -215,7 +220,10 @@ In this order:
    area-weighted mix. Where a root zone shrinks (a deep crop's land going to a shallower
    fallow) the bucket's water is spread to one wetness over the layers it covered, each taking its share by capacity, and the deeper ones
    keep it; where it grows, the new bucket pools the layers it reaches, with whatever each held.
-   Nothing is created or lost in a move.
+   Nothing is created or lost in a move. Root growth: a crop with an `initial_root_depth`
+   reaches today's depth first, taking the soil it grows into, and that soil's water, into its
+   bucket, so the day's capacity and stress are the day's. A new crop's roots start at their
+   planting depth.
 2. **Stress**, for each partition, from the depletion `D` of its bucket at the start of the day:
    `ks = clamp((TAW − D) / ((1 − p) × TAW), 0, 1)`, with `TAW` the bucket's capacity and `p` the
    crop's. The crop transpires freely while it has used less than `p` of its bucket, and less
@@ -449,7 +457,8 @@ choice is not in FAO-56, the reference it follows is given.
   root-zone depletion balance (equations 82 to 88): total and readily available water, the
   linear stress coefficient Ks (equation 84), and deep percolation as the overflow of a root
   zone at field capacity (equation 88). Table 19 gives available water by soil texture, Table 22
-  root depths and depletion fractions by crop. Chapter 7 is the origin of the interception rule:
+  root depths and depletion fractions by crop, and Chapter 8 grows the root zone over the
+  season, which `initial_root_depth` follows. Chapter 7 is the origin of the interception rule:
   wettings under about 0.2 × ET₀ evaporate without reaching the root zone.
 - Pereira, L.S., Allen, R.G., Paredes, P., López-Urrea, R., Raes, D., Smith, M., Kilic, A. and
   Salman, M. (2025). *Crop evapotranspiration: Guidelines for computing crop water requirements.
@@ -460,8 +469,9 @@ choice is not in FAO-56, the reference it follows is given.
   Thorp, K.R. et al. (2024), version 1.3.0, *SoftwareX* 26, 101724. USDA-ARS's reference
   implementation. Its depletion to the maximum root depth, with the soil below the roots filled
   by what the root zone cannot hold and untouched by evapotranspiration, is the same structure
-  as the field's layers; irrigation losses there are likewise taken off the applied water and
-  never counted as percolation.
+  as the field's layers; its roots grow from an initial depth to the maximum in step with the
+  crop coefficient, as the field's do; irrigation losses there are likewise taken off the
+  applied water and never counted as percolation.
 - Raes, D., Steduto, P., Hsiao, T.C. and Fereres, E. (2026). *AquaCrop Reference Manual, version
   7.3*, Chapter 3. Drainage is zero at or below field capacity (§3.7), which is why the layers
   keep their water; its convex stress curves (§3.2) are the alternative to FAO-56's linear Ks.
@@ -482,5 +492,6 @@ choice is not in FAO-56, the reference it follows is given.
   (Cotton Research and Development Corporation) crop water-use chapters.
 - eWater. *Source Scientific Reference Guide: Irrigator Demand Model.* The fallow as a crop with
   its own depth and coefficient, the planting decision as an authored rule, the effective-rain
-  form of interception, and crop death under sustained stress. Its assumption that the soil
+  form of interception, crop death under sustained stress, and a fixed root zone per crop, which
+  the field has when `initial_root_depth` is omitted. Its assumption that the soil
   below the fallow's roots is at field capacity is the one the field does not make.

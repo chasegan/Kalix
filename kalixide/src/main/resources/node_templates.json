@@ -111,7 +111,8 @@
           "kc = 0.4 #bare-soil evaporation factor"
         ],
         "crop.cotton": [
-          "root_depth = 900 #mm",
+          "root_depth = 900 #mm, fully grown",
+          "initial_root_depth = 200 #mm at planting; the roots reach root_depth as kc rises to its peak",
           "p = 0.65",
           "kc = Day, Kc, #by days since planting",
           "     0,   0.35,",
