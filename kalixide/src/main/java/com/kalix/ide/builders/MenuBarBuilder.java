@@ -52,6 +52,8 @@ public class MenuBarBuilder {
         void zoomOut();
         void resetZoom();
         void zoomToFit();
+        void setTrackpadNavigation(boolean enabled);
+        boolean isTrackpadNavigation();
         void toggleFileTree();
         boolean isFileTreeVisible();
         void toggleShowHiddenFiles(boolean show);
@@ -307,20 +309,6 @@ public class MenuBarBuilder {
         JCheckBoxMenuItem showHiddenItem = new JCheckBoxMenuItem("Show Hidden Files");
         showHiddenItem.addActionListener(e -> callbacks.toggleShowHiddenFiles(showHiddenItem.isSelected()));
         viewMenu.add(showHiddenItem);
-        viewMenu.addMenuListener(new MenuListener() {
-            @Override
-            public void menuSelected(MenuEvent e) {
-                showHiddenItem.setSelected(callbacks.isShowHiddenFiles());
-            }
-
-            @Override
-            public void menuDeselected(MenuEvent e) {
-            }
-
-            @Override
-            public void menuCanceled(MenuEvent e) {
-            }
-        });
         viewMenu.addSeparator();
 
         // Zoom to Fit
@@ -331,6 +319,27 @@ public class MenuBarBuilder {
         viewMenu.add(createMenuItem("Zoom In", e -> callbacks.zoomIn()));
         viewMenu.add(createMenuItem("Zoom Out", e -> callbacks.zoomOut()));
         viewMenu.add(createMenuItem("Reset", e -> callbacks.resetZoom()));
+        viewMenu.addSeparator();
+
+        JCheckBoxMenuItem trackpadItem = new JCheckBoxMenuItem("Trackpad Navigation");
+        trackpadItem.addActionListener(e -> callbacks.setTrackpadNavigation(trackpadItem.isSelected()));
+        viewMenu.add(trackpadItem);
+
+        viewMenu.addMenuListener(new MenuListener() {
+            @Override
+            public void menuSelected(MenuEvent e) {
+                showHiddenItem.setSelected(callbacks.isShowHiddenFiles());
+                trackpadItem.setSelected(callbacks.isTrackpadNavigation());
+            }
+
+            @Override
+            public void menuDeselected(MenuEvent e) {
+            }
+
+            @Override
+            public void menuCanceled(MenuEvent e) {
+            }
+        });
 
         return viewMenu;
     }

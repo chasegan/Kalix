@@ -219,6 +219,14 @@ public final class PreferenceKeys {
     public static final Pref<Boolean> UI_MAP_COLLAPSED =
         Pref.osBoolean("ui.mapCollapsed", false);
 
+    /**
+     * Map trackpad navigation: plain scroll pans and Ctrl(Cmd)+scroll zooms,
+     * instead of plain scroll zooming. Machine-local, because it follows this machine's
+     * pointing device rather than the team's taste.
+     */
+    public static final Pref<Boolean> MAP_TRACKPAD_NAVIGATION =
+        Pref.osBoolean("map.trackpadNavigation", false);
+
     /** Absolute path of the currently open project folder, or empty if none. */
     public static final Pref<String> UI_WORKSPACE_FOLDER =
         Pref.osString("ui.workspaceFolder", "");

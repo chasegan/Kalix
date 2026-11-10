@@ -184,6 +184,30 @@ public class ViewPort {
     }
 
     /**
+     * This view with the time axis zoomed by {@code factor} (above 1 zooms in) about the
+     * time under {@code screenX}, which stays put on screen: the wheel-zoom contract for X.
+     * The span changes by at least one time unit and never drops below one, so a fractional
+     * wheel step on a short count axis (one unit per evaluation) neither stalls nor
+     * collapses the axis. Value axes are left alone.
+     */
+    public ViewPort zoomTimeAxis(double factor, int screenX) {
+        long timeRange = endTimeMs - startTimeMs;
+        if (timeRange <= 0 || factor == 1) {
+            return this;
+        }
+        long newTimeRange = Math.max(1, timeRange + atLeastOneUnit(timeRange / factor - timeRange));
+        double ratio = timeRatio(screenX);
+        long newStart = Math.round(startTimeMs + ratio * (timeRange - newTimeRange));
+        return withTimeRange(newStart, newStart + newTimeRange);
+    }
+
+    /** {@code exact} rounded to whole time units, but never to zero when it is not zero. */
+    private static long atLeastOneUnit(double exact) {
+        long rounded = Math.round(exact);
+        return rounded == 0 && exact != 0 ? (long) Math.signum(exact) : rounded;
+    }
+
+    /**
      * This view with one end of the y1 value axis dragged: the value that was under
      * {@code pressY} follows the cursor to {@code screenY} while the other end stays put.
      * Call it on the view from the start of the drag, not the last step, so nothing drifts.
@@ -306,10 +330,10 @@ public class ViewPort {
      * @param deltaPixelsY Vertical pan distance in pixels (positive = pan up)
      * @return New viewport after panning
      */
-    public ViewPort panByPixels(int deltaPixelsX, int deltaPixelsY) {
-        // Calculate time delta (unchanged)
+    public ViewPort panByPixels(double deltaPixelsX, double deltaPixelsY) {
+        // Time moves in whole units, rounded rather than truncated
         long timeRange = endTimeMs - startTimeMs;
-        long deltaTime = (long) (-deltaPixelsX * timeRange / (double) plotWidth);
+        long deltaTime = Math.round(-deltaPixelsX * timeRange / plotWidth);
         long newStartTime = startTimeMs + deltaTime;
         long newEndTime = endTimeMs + deltaTime;
 
@@ -324,6 +348,20 @@ public class ViewPort {
         ViewPort panned = withValueBoundsFrom(transformedMin + deltaTransformed, transformedMax + deltaTransformed)
             .withTimeRange(newStartTime, newEndTime);
         return hasY2() ? panned.withY2From(forY2().panByPixels(0, deltaPixelsY)) : panned;
+    }
+
+    /**
+     * This view panned in time by a wheel step of {@code deltaPixelsX}, as
+     * {@link #panByPixels} pans it, but by at least one time unit, so a slow swipe on a
+     * short count axis still moves. Not for drags: there the floor would run the data away
+     * from the pointer. Value axes are left alone.
+     */
+    public ViewPort wheelPanTime(double deltaPixelsX) {
+        if (plotWidth == 0 || deltaPixelsX == 0) {
+            return this;
+        }
+        long deltaTime = atLeastOneUnit(-deltaPixelsX * (endTimeMs - startTimeMs) / plotWidth);
+        return withTimeRange(startTimeMs + deltaTime, endTimeMs + deltaTime);
     }
 
     public ViewPort withTimeRange(long startTimeMs, long endTimeMs) {
