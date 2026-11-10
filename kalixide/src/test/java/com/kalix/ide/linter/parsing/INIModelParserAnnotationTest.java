@@ -146,7 +146,7 @@ class INIModelParserAnnotationTest {
     }
 
     @Test
-    void clusterSpelledInAnotherCaseIsReportedNamingTheFirstMention() {
+    void clusterSpelledWithOtherCapitalisationIsReportedNamingTheFirstMention() {
         List<SyntaxIssue> issues = issues("#@cluster = north\n[node.a]\n#@cluster = North\n[node.b]\n");
         assertOnly(INIModelParser.RULE_ANNOTATION_MIXED_CASE_CLUSTER, 3, issues);
         assertEquals("Cluster spelled 'North' here and 'north' on line 1; they are one cluster",

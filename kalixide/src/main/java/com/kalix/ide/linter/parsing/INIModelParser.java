@@ -42,7 +42,7 @@ public class INIModelParser {
     public static final String RULE_ANNOTATION_DUPLICATE_CLUSTER = "annotation_duplicate_cluster";
     /** Rule name for a {@code #@cluster} value that breaks the node-name rule (ADR-0010 §6.2). */
     public static final String RULE_ANNOTATION_INVALID_CLUSTER = "annotation_invalid_cluster";
-    /** Rule name for a cluster spelled differently, in case only, from its first mention. */
+    /** Rule name for a cluster spelled differently, in capitalisation only, from its first mention. */
     public static final String RULE_ANNOTATION_MIXED_CASE_CLUSTER = "annotation_mixed_case_cluster";
 
     /**
@@ -378,7 +378,7 @@ public class INIModelParser {
      * what they apply to.
      *
      * <p>A node's last valid {@code cluster} line is a mention of that cluster. One
-     * spelled differently from the cluster's first mention, in case only, is a warning
+     * spelled differently from the cluster's first mention, in capitalisation only, is a warning
      * naming that first mention: they are one cluster, shown with the first spelling
      * ({@link ClusterIndex}). {@code firstClusterMentions} holds the first mention of
      * each cluster so far, by {@link ClusterIndex#key}.</p>

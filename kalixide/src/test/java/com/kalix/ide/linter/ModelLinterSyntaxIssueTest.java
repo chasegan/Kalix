@@ -81,7 +81,7 @@ class ModelLinterSyntaxIssueTest {
     }
 
     @Test
-    void clusterSpelledInAnotherCaseIsAWarning() {
+    void clusterSpelledWithOtherCapitalisationIsAWarning() {
         ModelLinter linter = new ModelLinter(new EnabledSchemaManager());
         ValidationResult result = linter.validate("#@cluster = north\n[node.a]\ntype = gauge\nloc = 1, 2\n"
                 + "#@cluster = North\n[node.b]\ntype = gauge\nloc = 3, 4\n", null);

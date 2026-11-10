@@ -1297,7 +1297,7 @@
     },
     "annotation_mixed_case_cluster": {
       "severity": "warning",
-      "description": "A cluster is spelled in more than one case; names that differ only in case are one cluster"
+      "description": "A cluster is spelled with different capitalisation; names that differ only in capitalisation are one cluster"
     }
   },
   "data_types": {

@@ -201,10 +201,10 @@ edits; `CommandExecutor` is the one place that applies them, once inside
 `beginAtomicEdit()`/`endAtomicEdit()`. Create and Add are one function. They read the text
 through `NodeSectionLocator`, not the model, so Rename and Disband reach a section that
 isn't on the map. An invalid name is refused with an error stating the rule, and never
-corrected. Edits match a cluster by its key. Create with a name that exists in another
-case joins that cluster and writes its existing spelling, not the typed one, so a mistyped
-case never rewrites a whole cluster; Rename changes the spelling, a rename that changes
-only case included, by rewriting every member. A cluster edit leaves a
+corrected. Edits match a cluster by its key. Create with a name that exists with other
+capitalisation joins that cluster and writes its existing spelling, not the typed one, so
+mistyped capitals never rewrite a whole cluster; Rename changes the spelling, a rename that
+changes only capitalisation included, by rewriting every member. A cluster edit leaves a
 node with at most one `#@cluster` line, so a node with two can't fall back to the earlier
 cluster: it rewrites the last line in place and deletes any others. Rewriting in place
 keeps a comment below the line inside the section, where a delete and re-insert would push
@@ -251,7 +251,7 @@ each member has.
 
 - **V1a: model and rules.** Parsing, the edits, the label helper, the menu rules as pure
   functions with table tests, three lint rules (an invalid name; two `#@cluster` lines; one
-  cluster spelled in two cases). A
+  cluster spelled with different capitalisation). A
   thin slice of the menu, so the edits can be tried by hand: Create, Add, Remove, Rename and
   Disband, with every cluster counted as expanded.
 - **V1b: drawing.** Boxes, icons, links to icons, collapse state.
