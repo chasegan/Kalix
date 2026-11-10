@@ -707,15 +707,16 @@ public class EnhancedTextEditor extends JPanel {
 
     /**
      * Asks for a name and puts the nodes in that cluster, moving them from any they were
-     * in (the map's {@code Create cluster…}). An existing name joins it. Cancelled or empty
-     * does nothing; an invalid name is reported and changes nothing.
+     * in (the map's {@code Create cluster…}). An existing name joins it, with its spelling
+     * if it was typed in another case. Cancelled or empty does nothing; an invalid name is
+     * reported and changes nothing.
      *
      * @return true if the text changed
      */
     public boolean createCluster(java.util.Collection<String> nodeNames) {
         String name = askClusterName("Create Cluster", "Name for the new cluster:", "");
         CommandExecutor executor = clusterExecutor();
-        return name != null && executor != null && executor.assignToCluster(nodeNames, name);
+        return name != null && executor != null && executor.createCluster(nodeNames, name);
     }
 
     /** Puts the nodes in an existing cluster (the map's {@code Add to}). */

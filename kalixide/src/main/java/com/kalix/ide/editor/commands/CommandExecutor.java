@@ -686,13 +686,24 @@ public class CommandExecutor {
     }
 
     /**
-     * Puts the nodes in a cluster, moving them from any they were in: Create and Add.
+     * Puts the nodes in a cluster, moving them from any they were in: Add.
      *
      * @return false if the name is invalid (reported) or nothing needed changing
      */
     public boolean assignToCluster(Collection<String> nodes, String cluster) {
         String name = cluster == null ? "" : cluster.trim();
         return applyClusterEdit(ClusterEdits.nameError(name), () -> ClusterEdits.assign(editor.getText(), nodes, name));
+    }
+
+    /**
+     * Puts the nodes in the cluster named {@code typed}: Create. A name that exists in
+     * another case joins that cluster with its spelling.
+     *
+     * @return false if the name is invalid (reported) or nothing needed changing
+     */
+    public boolean createCluster(Collection<String> nodes, String typed) {
+        String name = typed == null ? "" : typed.trim();
+        return applyClusterEdit(ClusterEdits.nameError(name), () -> ClusterEdits.create(editor.getText(), nodes, name));
     }
 
     /**

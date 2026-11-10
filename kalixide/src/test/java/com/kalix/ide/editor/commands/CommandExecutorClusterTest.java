@@ -174,4 +174,19 @@ class CommandExecutorClusterTest {
         assertTrue(f.executor().assignToCluster(List.of("c"), "  dam  "));
         assertTrue(f.area().getText().contains("#@cluster = dam\n[node.c]"));
     }
+
+    @Test
+    void createWithAnExistingNameInAnotherCaseJoinsWithItsSpelling() {
+        Fixture f = fixture();
+        assertTrue(f.executor().createCluster(List.of("c"), "FARM"));
+        assertTrue(f.area().getText().contains("#@cluster = farm\n[node.c]"));
+        assertOneUndoRestoresTheText(f);
+    }
+
+    @Test
+    void creatingWithAnInvalidNameChangesNothing() {
+        Fixture f = fixture();
+        assertFalse(f.executor().createCluster(List.of("c"), "Not Valid"));
+        assertEquals(MODEL, f.area().getText());
+    }
 }

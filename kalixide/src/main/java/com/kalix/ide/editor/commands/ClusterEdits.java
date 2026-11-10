@@ -2,6 +2,8 @@ package com.kalix.ide.editor.commands;
 
 import com.kalix.ide.linter.parsing.AnnotationKey;
 import com.kalix.ide.linter.parsing.IniSyntax;
+import com.kalix.ide.model.ClusterIndex;
+import com.kalix.ide.model.ModelParser;
 import com.kalix.ide.model.NodeSectionLocator;
 import com.kalix.ide.model.NodeSectionLocator.AnnotationLine;
 import com.kalix.ide.model.NodeSectionLocator.HeaderBlock;
@@ -11,18 +13,25 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * The cluster edits as pure functions from text to edits; {@link CommandExecutor} is the
- * one place that applies them. Create and Add are both {@link #assign}. All of them read
- * the text through {@link NodeSectionLocator}, never the model, so Rename and Disband
- * reach a section that isn't on the map, which would otherwise keep the old name.
+ * one place that applies them. Add is {@link #assign}, and Create is too once it has the
+ * name's spelling. All of them read the text through {@link NodeSectionLocator}, never
+ * the model, so Rename and Disband reach a section that isn't on the map, which would
+ * otherwise keep the old name.
  *
  * <p>A node ends with at most one {@code #@cluster} line, so it can't fall back to an
  * earlier line. The last line is rewritten in place and any others deleted, which keeps a
  * comment below the line inside the section. A node with none gets one directly above its
  * header, below any comments: those belong to the section above with or without the line
  * (ADR-0010 §3), so a later Cut takes the same text plus the annotation.</p>
+ *
+ * <p>A cluster is found from any spelling ({@link ClusterIndex#key}), but every line an
+ * edit touches gets exactly the name it is given, so the edit brings its nodes'
+ * spellings back together.</p>
  */
 final class ClusterEdits {
 
@@ -36,17 +45,31 @@ final class ClusterEdits {
         return editNodes(text, nodes, cluster);
     }
 
+    /**
+     * Puts each node in the cluster named {@code typed}, as {@link #assign}. A cluster that
+     * exists in another case is joined with its own spelling, read from the text through
+     * {@link ClusterIndex} so the spelling is chosen in one place: a mistyped case never
+     * rewrites the other members (Rename is how a spelling changes).
+     */
+    static List<CommandExecutor.TextEdit> create(String text, Collection<String> nodes, String typed) {
+        String existing = ClusterIndex.of(ModelParser.parse(text).getNodes()).name(typed);
+        return assign(text, nodes, existing != null ? existing : typed);
+    }
+
     /** Takes each node out of its cluster. */
     static List<CommandExecutor.TextEdit> clear(String text, Collection<String> nodes) {
         return editNodes(text, nodes, null);
     }
 
-    /** Moves every member of {@code oldName} to {@code newName}, merging if that exists. */
+    /**
+     * Moves every member of {@code oldName} to {@code newName}, merging if that exists. A
+     * change of case alone rewrites every member to the new spelling.
+     */
     static List<CommandExecutor.TextEdit> rename(String text, String oldName, String newName) {
         List<CommandExecutor.TextEdit> edits = new ArrayList<>();
         for (NodeSection section : NodeSectionLocator.findAll(text)) {
             HeaderBlock block = NodeSectionLocator.headerBlock(text, section, AnnotationKey.CLUSTER);
-            if (oldName.equals(cluster(block))) {
+            if (sameCluster(oldName, cluster(block))) {
                 addEdits(edits, text, block, newName);
             }
         }
@@ -55,11 +78,12 @@ final class ClusterEdits {
 
     /** Takes every member of the named clusters out of them; the nodes stay. */
     static List<CommandExecutor.TextEdit> disband(String text, Collection<String> clusters) {
+        Set<String> keys = clusters.stream().map(ClusterIndex::key).collect(Collectors.toSet());
         List<CommandExecutor.TextEdit> edits = new ArrayList<>();
         for (NodeSection section : NodeSectionLocator.findAll(text)) {
             HeaderBlock block = NodeSectionLocator.headerBlock(text, section, AnnotationKey.CLUSTER);
             String cluster = cluster(block);
-            if (cluster != null && clusters.contains(cluster)) {
+            if (cluster != null && keys.contains(ClusterIndex.key(cluster))) {
                 addEdits(edits, text, block, null);
             }
         }
@@ -72,6 +96,10 @@ final class ClusterEdits {
             return null;
         }
         return AnnotationKey.CLUSTER.valueRule() + ": '" + name + "'";
+    }
+
+    private static boolean sameCluster(String name, String other) {
+        return other != null && ClusterIndex.key(name).equals(ClusterIndex.key(other));
     }
 
     /** The cluster a section's lines put it in, read as the parser reads them. */
@@ -112,6 +140,7 @@ final class ClusterEdits {
         if (cluster == null) {
             edits.add(new CommandExecutor.TextEdit(last.lineStart(), last.lineEnd(), ""));
         } else if (!cluster.equals(last.value())) {
+            // Exact, not by key: a line spelled differently is rewritten to this spelling.
             edits.add(new CommandExecutor.TextEdit(last.lineStart(), last.contentEnd(), LINE_PREFIX + cluster));
         }
     }
