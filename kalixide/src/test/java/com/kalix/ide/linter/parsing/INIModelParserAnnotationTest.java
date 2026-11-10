@@ -8,7 +8,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The annotation lints of ADR-0010 §2 to §4: malformed, misplaced, unknown key, no effect, a repeated cluster, an invalid cluster name. */
+/** The annotation lints of ADR-0010 §2 to §4: malformed, misplaced, unknown key, no effect, a repeated cluster, an invalid cluster name, a cluster spelled in two cases. */
 class INIModelParserAnnotationTest {
 
     private static List<SyntaxIssue> issues(String model) {
@@ -143,6 +143,51 @@ class INIModelParserAnnotationTest {
     @Test
     void invalidClusterOnANonNodeSectionOnlyHasNoEffect() {
         assertOnly(INIModelParser.RULE_ANNOTATION_NO_EFFECT, 1, issues("#@cluster = farm 3\n[outputs]\n"));
+    }
+
+    @Test
+    void clusterSpelledInAnotherCaseIsReportedNamingTheFirstMention() {
+        List<SyntaxIssue> issues = issues("#@cluster = north\n[node.a]\n#@cluster = North\n[node.b]\n");
+        assertOnly(INIModelParser.RULE_ANNOTATION_MIXED_CASE_CLUSTER, 3, issues);
+        assertEquals("Cluster spelled 'North' here and 'north' on line 1; they are one cluster",
+                issues.get(0).message());
+    }
+
+    @Test
+    void everyLaterSpellingNamesTheFirstMention() {
+        List<SyntaxIssue> issues = issues(
+                "#@cluster = north\n[node.a]\n#@cluster = North\n[node.b]\n#@cluster = NORTH\n[node.c]\n");
+        assertEquals(2, issues.size(), issues.toString());
+        assertEquals(3, issues.get(0).lineNumber());
+        assertEquals(5, issues.get(1).lineNumber());
+        assertTrue(issues.get(1).message().endsWith("'north' on line 1; they are one cluster"),
+                issues.get(1).message());
+    }
+
+    @Test
+    void oneSpellingThroughoutIsClean() {
+        assertTrue(issues("#@cluster = North\n[node.a]\n#@cluster = North\n[node.b]\n").isEmpty());
+    }
+
+    @Test
+    void onlyANodesLastClusterLineIsAMention() {
+        List<SyntaxIssue> issues = issues(
+                "#@cluster = North\n#@cluster = north\n[node.a]\n#@cluster = north\n[node.b]\n");
+        assertOnly(INIModelParser.RULE_ANNOTATION_DUPLICATE_CLUSTER, 2, issues);
+    }
+
+    @Test
+    void clusterOnANonNodeSectionIsNotAMention() {
+        List<SyntaxIssue> issues = issues("#@cluster = North\n[outputs]\n#@cluster = north\n[node.a]\n");
+        assertOnly(INIModelParser.RULE_ANNOTATION_NO_EFFECT, 1, issues);
+    }
+
+    @Test
+    void invalidClusterIsNotAMention() {
+        List<SyntaxIssue> issues = issues("#@cluster = North 1\n[node.a]\n#@cluster = north 1\n[node.b]\n");
+        assertEquals(2, issues.size(), issues.toString());
+        assertTrue(issues.stream().allMatch(i -> INIModelParser.RULE_ANNOTATION_INVALID_CLUSTER.equals(i.ruleName())),
+                issues.toString());
     }
 
     @Test

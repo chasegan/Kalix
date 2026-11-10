@@ -1,5 +1,6 @@
 package com.kalix.ide.linter.parsing;
 
+import com.kalix.ide.model.ClusterIndex;
 import com.kalix.ide.utils.EngineNames;
 
 import java.util.ArrayList;
@@ -41,6 +42,8 @@ public class INIModelParser {
     public static final String RULE_ANNOTATION_DUPLICATE_CLUSTER = "annotation_duplicate_cluster";
     /** Rule name for a {@code #@cluster} value that breaks the node-name rule (ADR-0010 §6.2). */
     public static final String RULE_ANNOTATION_INVALID_CLUSTER = "annotation_invalid_cluster";
+    /** Rule name for a cluster spelled differently, in case only, from its first mention. */
+    public static final String RULE_ANNOTATION_MIXED_CASE_CLUSTER = "annotation_mixed_case_cluster";
 
     /**
      * A lexical problem found while parsing: something the engine would reject (or
@@ -167,6 +170,7 @@ public class INIModelParser {
         Section currentSection = null;
         // Annotations waiting for the header they attach to (ADR-0010 §3).
         List<PendingAnnotation> pending = new ArrayList<>();
+        Map<String, PendingAnnotation> firstClusterMentions = new HashMap<>();
 
         for (int i = 0; i < lines.length; i++) {
             int lineNumber = i + 1;
@@ -197,7 +201,7 @@ public class INIModelParser {
             // ']') is an engine error, and it still closes the previous section.
             if (first == '[') {
                 String sectionName = IniSyntax.sectionName(line);
-                checkAnnotations(pending, sectionName, model);
+                checkAnnotations(pending, sectionName, firstClusterMentions, model);
                 if (sectionName == null) {
                     model.getSyntaxIssues().add(new SyntaxIssue(lineNumber,
                         "Malformed section header: expected '[name]' with only a '#' comment after it",
@@ -372,9 +376,17 @@ public class INIModelParser {
      * to another tool and is never checked. {@code sectionName} is {@code null}
      * for a malformed header, which still consumes the annotations but cannot say
      * what they apply to.
+     *
+     * <p>A node's last valid {@code cluster} line is a mention of that cluster. One
+     * spelled differently from the cluster's first mention, in case only, is a warning
+     * naming that first mention: they are one cluster, shown with the first spelling
+     * ({@link ClusterIndex}). {@code firstClusterMentions} holds the first mention of
+     * each cluster so far, by {@link ClusterIndex#key}.</p>
      */
-    private static void checkAnnotations(List<PendingAnnotation> pending, String sectionName, ParsedModel model) {
+    private static void checkAnnotations(List<PendingAnnotation> pending, String sectionName,
+                                         Map<String, PendingAnnotation> firstClusterMentions, ParsedModel model) {
         int earlierCluster = 0;
+        PendingAnnotation mention = null;
         for (PendingAnnotation p : pending) {
             String key = p.annotation().key();
             if (AnnotationKey.isToolKey(key)) {
@@ -397,6 +409,7 @@ public class INIModelParser {
                     model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(), invalid,
                         RULE_ANNOTATION_INVALID_CLUSTER));
                 }
+                mention = invalid == null ? p : null;
                 if (earlierCluster > 0) {
                     model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(),
                         "Duplicate annotation '" + key + "' on [" + sectionName + "] (also on line "
@@ -404,6 +417,16 @@ public class INIModelParser {
                         RULE_ANNOTATION_DUPLICATE_CLUSTER));
                 }
                 earlierCluster = p.lineNumber();
+            }
+        }
+        if (mention != null) {
+            String spelling = mention.annotation().value();
+            PendingAnnotation first = firstClusterMentions.putIfAbsent(ClusterIndex.key(spelling), mention);
+            if (first != null && !first.annotation().value().equals(spelling)) {
+                model.getSyntaxIssues().add(new SyntaxIssue(mention.lineNumber(),
+                    "Cluster spelled '" + spelling + "' here and '" + first.annotation().value()
+                        + "' on line " + first.lineNumber() + "; they are one cluster",
+                    RULE_ANNOTATION_MIXED_CASE_CLUSTER));
             }
         }
         pending.clear();

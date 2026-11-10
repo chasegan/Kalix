@@ -193,7 +193,8 @@ cluster's members in file order, and is replaced whole at every reparse, so it i
 of the text. Only complete nodes count, as only they are on the map. Names are matched
 ignoring case, as node names are, so `teemburra` and `Teemburra` are one cluster, shown
 with the spelling of its first mention. The index owns both choices, each in one place:
-the key names are compared by, and which spelling is shown.
+the key names are compared by, and which spelling is shown. The linter warns on each
+mention spelled differently from the first, naming it, so a stray spelling is found.
 
 **Edits** (`ClusterEdits`, `CommandExecutor`). Each is a pure function from text to text
 edits; `CommandExecutor` is the one place that applies them, once inside
@@ -249,7 +250,8 @@ each member has.
 ## Stages
 
 - **V1a: model and rules.** Parsing, the edits, the label helper, the menu rules as pure
-  functions with table tests, two lint rules (an invalid name; two `#@cluster` lines). A
+  functions with table tests, three lint rules (an invalid name; two `#@cluster` lines; one
+  cluster spelled in two cases). A
   thin slice of the menu, so the edits can be tried by hand: Create, Add, Remove, Rename and
   Disband, with every cluster counted as expanded.
 - **V1b: drawing.** Boxes, icons, links to icons, collapse state.

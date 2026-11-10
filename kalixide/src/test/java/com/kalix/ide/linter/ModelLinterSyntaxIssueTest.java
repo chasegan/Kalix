@@ -81,6 +81,18 @@ class ModelLinterSyntaxIssueTest {
     }
 
     @Test
+    void clusterSpelledInAnotherCaseIsAWarning() {
+        ModelLinter linter = new ModelLinter(new EnabledSchemaManager());
+        ValidationResult result = linter.validate("#@cluster = north\n[node.a]\ntype = gauge\nloc = 1, 2\n"
+                + "#@cluster = North\n[node.b]\ntype = gauge\nloc = 3, 4\n", null);
+
+        List<ValidationIssue> issues = issuesFor(INIModelParser.RULE_ANNOTATION_MIXED_CASE_CLUSTER, result);
+        assertEquals(1, issues.size());
+        assertEquals(5, issues.get(0).getLineNumber());
+        assertEquals(ValidationRule.Severity.WARNING, issues.get(0).getSeverity());
+    }
+
+    @Test
     void invalidClusterNameIsAWarning() {
         ModelLinter linter = new ModelLinter(new EnabledSchemaManager());
         ValidationResult result = linter.validate(
