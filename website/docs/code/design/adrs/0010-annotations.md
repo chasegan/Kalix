@@ -67,7 +67,8 @@ Chosen option: **4**, for regions as well.
        akas in a label mode of their own, and hovering any node reveals its
        name, so identity is never more than a hover away.
     2. `cluster` — a strict bare name. Nodes sharing one may be drawn as one
-       icon at their centroid. `.` is reserved for hierarchy later.
+       icon at their centroid. `.` is reserved for hierarchy later. Cluster
+       names now follow the node-name rule (amendment 2026-11-10).
     3. `region` — the title of a text region, which runs to the next `region`
        or the end of the file. Regions do not nest and are not clusters.
        Folding a section or a multi-line value is structural and needs no
@@ -148,4 +149,19 @@ type = storage
 
 ## Amendments
 
-*None.*
+- *2026-11-10* — Annotation values that are names follow the node-name rule,
+  not the strict bare-name rule (#476).
+  - **Kinds of value.** Today a value is one of three kinds: a name, free
+    text or coordinates. Only `cluster` (§6.2) takes a name; `aka` and
+    `region` take free text and `loc` takes coordinates. A new key may bring
+    a new kind.
+  - **The rule.** A name follows ADR-0006's node-name rule (amendment
+    2026-10-29), matched ignoring case, so names that differ only in case
+    are the same name. A later key that takes a name, such as `tags` (§10),
+    follows it too.
+  - **Why.** A cluster names a group of nodes, and people name clusters the
+    way they name nodes; two rules for the two would confuse.
+  - **Keys unchanged.** A key itself still follows ADR-0006 §2.6 (§4).
+  - **Enforcement.** `AnnotationKey.isValidValue` in the IDE, which asks
+    `EngineNames.isValidNodeName`, so the two rules can't drift apart. §6.2
+    is no longer held by review alone.
