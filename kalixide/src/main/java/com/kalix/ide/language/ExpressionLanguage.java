@@ -201,9 +201,8 @@ public final class ExpressionLanguage {
 
     /**
      * The strict rule for bare definition names — {@code [fn]} function names
-     * and parameters, {@code [var.*]} block and key names, {@code #@cluster}
-     * names (ADR-0010 §6.2): a lowercase letter, then lowercase letters, digits,
-     * or underscores. Mirrors the engine's
+     * and parameters, {@code [var.*]} block and key names: a lowercase letter,
+     * then lowercase letters, digits, or underscores. Mirrors the engine's
      * {@code is_valid_bare_name} ({@code src/misc/misc_functions.rs}).
      */
     public static final Pattern BARE_NAME = Pattern.compile("^[a-z][a-z0-9_]*$");

@@ -185,7 +185,10 @@ letters in either case, digits and underscores. `AnnotationKey` checks it for th
 the linter and the edits alike, and words the one message that refuses a name; a node with
 an invalid name is drawn loose, and the linter says why. A last line with no `=` isn't an
 annotation (ADR-0010 §2): the lexer reads it as a comment, so the earlier line counts, and
-the linter reports it as malformed.
+the linter reports it as malformed. Everything after the `=` is the value (ADR-0010 §2), so
+`#@cluster = north # main catchment` names an invalid cluster, not `north` with a comment:
+the node is loose, and an edit that puts it in a cluster rewrites the line without the
+trailing text.
 
 **The cluster index** (`ClusterIndex`, on `HydrologicalModel`). The model's node map has no
 order, so the order of first mention has to be kept from the parse. The index holds each
@@ -204,7 +207,8 @@ isn't on the map. An invalid name is refused with an error stating the rule, and
 corrected. Edits match a cluster by its key. Create with a name that exists with other
 capitalisation joins that cluster and writes its existing spelling, not the typed one, so
 mistyped capitals never rewrite a whole cluster; so does a Rename that merges into another
-cluster. A Rename within one cluster changes its spelling by rewriting every member, and
+cluster. The existing spelling is the index's, so it is found only among clusters on the
+map: a name used only on incomplete nodes isn't, and the typed spelling is written. A Rename within one cluster changes its spelling by rewriting every member, and
 renaming to the spelling already shown tidies any member spelled otherwise. A cluster edit
 leaves a
 node with at most one `#@cluster` line, so a node with two can't fall back to the earlier
@@ -215,7 +219,8 @@ comments belong to the section above, with or without the new line (ADR-0010 §3
 later Cut takes the same text plus the annotation. A section starts at its first annotation
 (`NodeSectionLocator`), so the clipboard and Delete already carry `#@cluster`.
 
-**Collapse state** is a session map keyed by cluster name, and entries are **never removed
+**Collapse state** is a session map keyed by `ClusterIndex.key`, not by a spelling, so a
+rename that changes only capitalisation keeps its state; entries are **never removed
 when a cluster vanishes**. Undo is the editor's own text undo followed by a reparse, so a
 cluster that undo brings back finds its old state. Create and Rename write entries
 explicitly: a new name starts collapsed, a rename copies the old name's state, and joining
