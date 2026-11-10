@@ -81,6 +81,18 @@ class ModelLinterSyntaxIssueTest {
     }
 
     @Test
+    void invalidClusterNameIsAWarning() {
+        ModelLinter linter = new ModelLinter(new EnabledSchemaManager());
+        ValidationResult result = linter.validate(
+                "#@cluster = farm 3\n[node.a]\ntype = gauge\nloc = 1, 2\n", null);
+
+        List<ValidationIssue> issues = issuesFor(INIModelParser.RULE_ANNOTATION_INVALID_CLUSTER, result);
+        assertEquals(1, issues.size());
+        assertEquals(1, issues.get(0).getLineNumber());
+        assertEquals(ValidationRule.Severity.WARNING, issues.get(0).getSeverity());
+    }
+
+    @Test
     void disabledRuleIsSilent() {
         SchemaManager schemaManager = new EnabledSchemaManager();
         schemaManager.getCurrentSchema().getValidationRule(INIModelParser.RULE_SEMICOLON_COMMENT).setEnabled(false);

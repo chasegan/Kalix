@@ -64,4 +64,30 @@ class AnnotationKeyValueTest {
             assertNull(key.valueRule(), key.key());
         }
     }
+
+    @Test
+    void anInvalidClusterIsRefusedWithTheRuleAndTheValue() {
+        for (String name : INVALID) {
+            if (name.isEmpty()) {
+                continue;
+            }
+            assertEquals(AnnotationKey.CLUSTER.valueRule() + ": '" + name + "'",
+                    AnnotationKey.CLUSTER.valueError(name), name);
+        }
+    }
+
+    @Test
+    void aMissingClusterIsSaidToBeMissing() {
+        assertEquals("Missing cluster name", AnnotationKey.CLUSTER.valueError(""));
+    }
+
+    @Test
+    void aValidValueHasNoError() {
+        for (String name : VALID) {
+            assertNull(AnnotationKey.CLUSTER.valueError(name), name);
+        }
+        for (AnnotationKey key : List.of(AnnotationKey.AKA, AnnotationKey.REGION, AnnotationKey.LOC)) {
+            assertNull(key.valueError("Not A Bare Name!"), key.key());
+        }
+    }
 }

@@ -92,10 +92,7 @@ final class ClusterEdits {
 
     /** What is wrong with {@code name} as a cluster's name, or {@code null} if nothing is. */
     static String nameError(String name) {
-        if (AnnotationKey.CLUSTER.isValidValue(name)) {
-            return null;
-        }
-        return AnnotationKey.CLUSTER.valueRule() + ": '" + name + "'";
+        return AnnotationKey.CLUSTER.valueError(name);
     }
 
     private static boolean sameCluster(String name, String other) {

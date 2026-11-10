@@ -8,7 +8,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/** The annotation lints of ADR-0010 §2 to §4: malformed, misplaced, unknown key, no effect, a repeated cluster. */
+/** The annotation lints of ADR-0010 §2 to §4: malformed, misplaced, unknown key, no effect, a repeated cluster, an invalid cluster name. */
 class INIModelParserAnnotationTest {
 
     private static List<SyntaxIssue> issues(String model) {
@@ -109,6 +109,40 @@ class INIModelParserAnnotationTest {
         assertEquals(2, issues.size(), issues.toString());
         assertTrue(issues.stream().allMatch(i -> INIModelParser.RULE_ANNOTATION_NO_EFFECT.equals(i.ruleName())),
                 issues.toString());
+    }
+
+    @Test
+    void invalidClusterNameIsReportedWithTheRule() {
+        List<SyntaxIssue> issues = issues("#@cluster = farm 3\n[node.a]\n");
+        assertOnly(INIModelParser.RULE_ANNOTATION_INVALID_CLUSTER, 1, issues);
+        assertEquals(AnnotationKey.CLUSTER.valueError("farm 3"), issues.get(0).message());
+    }
+
+    @Test
+    void emptyClusterNameIsInvalid() {
+        List<SyntaxIssue> issues = issues("#@cluster =\n[node.a]\n");
+        assertOnly(INIModelParser.RULE_ANNOTATION_INVALID_CLUSTER, 1, issues);
+        assertEquals("Missing cluster name", issues.get(0).message());
+    }
+
+    @Test
+    void clusterNameInEitherCaseOrWithALeadingDigitIsClean() {
+        assertTrue(issues("#@cluster = Teemburra\n[node.a]\n#@cluster = 3farm\n[node.b]\n").isEmpty());
+    }
+
+    @Test
+    void invalidEarlierClusterLineIsReportedAsWellAsTheRepeat() {
+        List<SyntaxIssue> issues = issues("#@cluster = farm 3\n#@cluster = north\n[node.a]\n");
+        assertEquals(2, issues.size(), issues.toString());
+        assertEquals(INIModelParser.RULE_ANNOTATION_INVALID_CLUSTER, issues.get(0).ruleName());
+        assertEquals(1, issues.get(0).lineNumber());
+        assertEquals(INIModelParser.RULE_ANNOTATION_DUPLICATE_CLUSTER, issues.get(1).ruleName());
+        assertEquals(2, issues.get(1).lineNumber());
+    }
+
+    @Test
+    void invalidClusterOnANonNodeSectionOnlyHasNoEffect() {
+        assertOnly(INIModelParser.RULE_ANNOTATION_NO_EFFECT, 1, issues("#@cluster = farm 3\n[outputs]\n"));
     }
 
     @Test

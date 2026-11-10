@@ -1290,6 +1290,10 @@
     "annotation_duplicate_cluster": {
       "severity": "warning",
       "description": "A node has more than one cluster annotation; the last one counts"
+    },
+    "annotation_invalid_cluster": {
+      "severity": "warning",
+      "description": "A cluster name may contain only letters, digits and underscores; a node with an invalid one is in no cluster"
     }
   },
   "data_types": {

@@ -78,4 +78,17 @@ public enum AnnotationKey {
             case AKA, REGION, LOC -> null;
         };
     }
+
+    /**
+     * What is wrong with {@code value} for this key, or {@code null} if nothing is: the
+     * one message for a refused value, shown by the linter and by an edit alike. An
+     * empty value is called missing: quoted, {@code ''} reads like the start of a
+     * quotation. Only name-valued keys refuse values (ADR-0010 §6.2), hence "name".
+     */
+    public String valueError(String value) {
+        if (isValidValue(value)) {
+            return null;
+        }
+        return value.isEmpty() ? "Missing " + key + " name" : valueRule() + ": '" + value + "'";
+    }
 }

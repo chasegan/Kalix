@@ -39,6 +39,8 @@ public class INIModelParser {
     public static final String RULE_ANNOTATION_NO_EFFECT = "annotation_no_effect";
     /** Rule name for a second {@code #@cluster} line above one node; the last one counts. */
     public static final String RULE_ANNOTATION_DUPLICATE_CLUSTER = "annotation_duplicate_cluster";
+    /** Rule name for a {@code #@cluster} value that breaks the node-name rule (ADR-0010 §6.2). */
+    public static final String RULE_ANNOTATION_INVALID_CLUSTER = "annotation_invalid_cluster";
 
     /**
      * A lexical problem found while parsing: something the engine would reject (or
@@ -364,7 +366,9 @@ public class INIModelParser {
      * Checks the annotations above a header against the key registry: a bare key
      * Kalix does not know is a warning, as is a known key on a section it means
      * nothing to. A second {@code cluster} on a node is a warning on the later
-     * line, naming the one before it: the last one counts. A dotted key belongs
+     * line, naming the one before it: the last one counts. A cluster name that
+     * breaks the node-name rule is a warning on its line, earlier lines included:
+     * the node is drawn loose if it is the last. A dotted key belongs
      * to another tool and is never checked. {@code sectionName} is {@code null}
      * for a malformed header, which still consumes the annotations but cannot say
      * what they apply to.
@@ -388,6 +392,11 @@ public class INIModelParser {
                 model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(),
                     "'" + key + "' has no effect on [" + sectionName + "]", RULE_ANNOTATION_NO_EFFECT));
             } else if (known == AnnotationKey.CLUSTER) {
+                String invalid = known.valueError(p.annotation().value());
+                if (invalid != null) {
+                    model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(), invalid,
+                        RULE_ANNOTATION_INVALID_CLUSTER));
+                }
                 if (earlierCluster > 0) {
                     model.getSyntaxIssues().add(new SyntaxIssue(p.lineNumber(),
                         "Duplicate annotation '" + key + "' on [" + sectionName + "] (also on line "

@@ -313,7 +313,8 @@ class ClusterEditsTest {
 
     @Test
     void anythingElseHasAnErrorStatingTheRule() {
-        for (String name : List.of("", "farm 3", "farm.north", "farm-3")) {
+        assertEquals("Missing cluster name", ClusterEdits.nameError(""));
+        for (String name : List.of("farm 3", "farm.north", "farm-3")) {
             String error = ClusterEdits.nameError(name);
             assertNotNull(error, name);
             assertTrue(error.contains(AnnotationKey.CLUSTER.valueRule()), error);
