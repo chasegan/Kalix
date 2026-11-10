@@ -21,7 +21,7 @@ pub const MAX_CROPS: usize = 4;
 pub const CROP_SLOT_PROPERTIES: [&str; 5] = ["", "_plant", "_order", "_viable_area", "_kc_multiplier"];
 
 /// The results of a crop slot, after `crop_N`
-pub const CROP_SLOT_OUTPUTS: [&str; 13] = ["_area", "_days", "_depletion", "_ks", "_order", "_order_due", "_orders_en_route", "_plant", "_viable_area", "_kc_multiplier", "_kc", "_root_depth", "_p"];
+pub const CROP_SLOT_OUTPUTS: [&str; 14] = ["_area", "_days", "_depletion", "_ks", "_order", "_order_due", "_orders_en_route", "_plant", "_viable_area", "_kc_multiplier", "_kc", "_root_depth", "_p", "_ke"];
 
 /// A crop whose stress coefficient at the start of the day is this or below dies,
 /// when the slot has no viable_area rule of its own (Source's rule)
@@ -52,6 +52,11 @@ pub struct CropSlot {
     kc_multiplier_read: f64,              // what the multiplier gave today; 1 when none is written; NaN when the crop does not stand
     kc_used: f64,                         // the coefficient used for today's ET: the curve times the multiplier; NaN when the crop does not stand
     p_today: f64,                         // the depletion fraction used today, adjusted for the day's ETc unless the crop says not; NaN when the crop does not stand
+    kcb_today: f64,                       // the coefficient the stress applies to: kc (single) or kcb (dual), times the multiplier
+    ke_today: f64,                        // the soil evaporation coefficient of a dual crop; 0 for a single one; NaN when the crop does not stand
+    few_today: f64,                       // the exposed and wetted share of a dual crop's ground, which its evaporation layer's balance is over
+    dual: bool,                           // the crop's: declared with kcb, so the surface evaporates by ke from the field's layer
+    grows: bool,                          // the crop's: it has an initial_root_depth, so the roots grow each day
     p_adjust: bool,                       // the crop's p_adjust, and its adjustment precomputed: p_base − 0.04 × ETc within p_lo..p_hi
     p_base: f64,
     p_lo: f64,
@@ -64,6 +69,8 @@ pub struct CropSlot {
 impl CropSlot {
     pub fn new(crop: Crop) -> Self {
         Self {
+            dual: crop.dual,
+            grows: crop.initial_root_depth.is_some(),
             p_adjust: crop.p_adjust,
             p_base: crop.p + 0.2,
             p_lo: crop.p.min(0.1),
@@ -86,6 +93,9 @@ impl CropSlot {
             kc_multiplier_read: f64::NAN,
             kc_used: f64::NAN,
             p_today: f64::NAN,
+            kcb_today: 0.0,
+            ke_today: f64::NAN,
+            few_today: 1.0,
             recorder_idx: [None; CROP_SLOT_OUTPUTS.len()],
         }
     }
@@ -99,7 +109,7 @@ impl CropSlot {
     /// no offset. The multiplier may read `this.crop_N_days` likewise; the area is
     /// settled later and wants `[-1, 0]`.
     #[inline]
-    fn open_day(&mut self, field_name: &str, evap_mm: f64, data_cache: &mut DataCache) {
+    fn open_day(&mut self, field_name: &str, evap_mm: f64, layer: Option<&EvapLayer>, data_cache: &mut DataCache) {
         for (j, value) in [(1, self.days as f64), (11, self.partition.root_depth)] {
             if let Some(idx) = self.recorder_idx[j] {
                 data_cache.add_value_at_index(idx, value);
@@ -116,13 +126,25 @@ impl CropSlot {
             }
         };
         self.kc_multiplier_read = multiplier;
-        self.kc_used = self.crop.kc.at(self.days as f64) * multiplier;
+        self.kcb_today = self.crop.kc.at(self.days as f64) * multiplier;
+        // A dual crop (kcb): the soil surface evaporates by Ke from the field's evaporation
+        // layer, and FAO-56's Kc for the day is Kcb + Ke. A single crop: kc is the lot.
+        if self.dual {
+            let layer = layer.expect("initialise checked the field has an evaporation layer for its dual crops");
+            let (ke, few) = layer.ke(self.partition.evap_depletion, self.kcb_today);
+            self.ke_today = ke;
+            self.few_today = few;
+            self.kc_used = self.kcb_today + ke;
+        } else {
+            self.ke_today = 0.0;
+            self.kc_used = self.kcb_today;
+        }
         // FAO-56 Table 22's adjustment of p for the day's ETc (Crop::p_for, unrolled onto
         // the slot's own precomputed numbers for the hot path)
         self.p_today = if self.p_adjust { (self.p_base - 0.04 * self.kc_used * evap_mm).clamp(self.p_lo, self.p_hi) } else { self.crop.p };
         self.ks = stress(&self.partition, self.p_today);
         self.opened = true;
-        let values = [(9, multiplier), (10, self.kc_used), (12, self.p_today), (3, self.ks)];
+        let values = [(9, multiplier), (10, self.kc_used), (12, self.p_today), (3, self.ks), (13, self.ke_today)];
         for (j, value) in values {
             if let Some(idx) = self.recorder_idx[j] {
                 data_cache.add_value_at_index(idx, value);
@@ -131,18 +153,68 @@ impl CropSlot {
     }
 }
 
+#[inline]
 fn stress(partition: &Partition, p: f64) -> f64 {
     let readily_available = (1.0 - p) * partition.root_capacity;
     ((partition.root_capacity - partition.root_depletion) / readily_available).clamp(0.0, 1.0)
 }
 
-/// One partition's day: evapotranspiration at the crop's rate, stressed as the
-/// bucket dries, then the rain, less what the canopy intercepts, into the root
-/// bucket; what the bucket cannot hold fills the layers below, and what passes
-/// the last layer is excess. Returns (ks, et, excess), all in mm.
-fn soil_day(profile: &Profile, partition: &mut Partition, p: f64, kc: f64, evap_mm: f64, effective_rain_mm: f64) -> (f64, f64, f64) {
+/// The field's surface evaporation layer, for crops with a basal coefficient
+/// (FAO-56 Chapter 7): the top 100 to 150 mm of soil, holding `tew` mm of
+/// evaporable water of which `rew` mm evaporate at the full rate before the
+/// surface dries and the rate falls.
+#[derive(Clone, Copy, Default)]
+struct EvapLayer {
+    tew: f64,    // total evaporable water, mm
+    rew: f64,    // readily evaporable water, mm
+    kc_max: f64, // the most evaporation and transpiration a wet surface under a full canopy gives, as a share of evap
+    fw: f64,     // the share of the ground that irrigation wets
+}
+
+impl EvapLayer {
+    /// The soil evaporation coefficient Ke for a surface `de` mm below full under a
+    /// crop with basal coefficient `kcb`, and the share of the ground `few` that is
+    /// both exposed and wetted, which the layer's balance is over. FAO-56 eqs 71 to
+    /// 76: Kr = 1 while less than REW has evaporated, then falls to 0 at TEW; Ke is
+    /// Kr of the energy the canopy leaves, no more than the exposed wetted ground
+    /// can give; the canopy's cover from Kcb (eq. 76 with its exponent 1: the
+    /// crop-height exponent only tells under drip at full canopy).
+    #[inline]
+    fn ke(&self, de: f64, kcb: f64) -> (f64, f64) {
+        let kr = if de <= self.rew { 1.0 } else { ((self.tew - de) / (self.tew - self.rew)).clamp(0.0, 1.0) };
+        const KC_MIN: f64 = 0.15;
+        let cover = ((kcb - KC_MIN) / (self.kc_max - KC_MIN)).clamp(0.0, 1.0);
+        let few = (1.0 - cover).min(self.fw);
+        let ke = (kr * (self.kc_max - kcb)).min(few * self.kc_max).max(0.0);
+        (ke, few)
+    }
+
+    /// The layer's balance for the day: the evaporation taken from it over the
+    /// exposed wetted ground, the rain that reached the soil put back, held between
+    /// full and TEW (what a full layer cannot take is in the root bucket already).
+    #[inline]
+    fn day(&self, partition: &mut Partition, e_mm: f64, few: f64, effective_rain_mm: f64) {
+        let de = partition.evap_depletion + if few > 0.0 { e_mm / few } else { 0.0 } - effective_rain_mm;
+        partition.evap_depletion = de.clamp(0.0, self.tew);
+    }
+
+    /// Irrigation of `depth_mm` over the partition wets the share fw of its ground
+    #[inline]
+    fn irrigate(&self, partition: &mut Partition, depth_mm: f64) {
+        partition.evap_depletion = (partition.evap_depletion - depth_mm / self.fw).max(0.0);
+    }
+}
+
+/// One partition's day: transpiration at the crop's rate `kc` (its kc, or its
+/// kcb for a dual crop), stressed as the bucket dries, plus the surface's
+/// evaporation `ke` (0 for a single-coefficient crop), then the rain, less what
+/// the canopy intercepts, into the root bucket; what the bucket cannot hold
+/// fills the layers below, and what passes the last layer is excess. Returns
+/// (ks, et, excess), all in mm.
+#[inline]
+fn soil_day(profile: &Profile, partition: &mut Partition, p: f64, kc: f64, ke: f64, evap_mm: f64, effective_rain_mm: f64) -> (f64, f64, f64) {
     let ks = stress(partition, p);
-    let et_mm = (ks * kc * evap_mm).min(partition.root_capacity - partition.root_depletion);
+    let et_mm = ((ks * kc + ke) * evap_mm).min(partition.root_capacity - partition.root_depletion);
     partition.root_depletion += et_mm;
     partition.root_depletion -= effective_rain_mm;
     let mut excess_mm = 0.0;
@@ -207,6 +279,10 @@ pub struct FieldNode {
     pub interception: f64,          // fraction of evap that rain must exceed to reach the soil (FAO-56: 0.2)
     pub return_fraction: f64,       // share of the excess that the farm catches: it goes down ds_2 as return_flow
     pub curve_number: Option<f64>,  // USDA-NRCS CN2 for storm runoff off the paddock surface; None, saturation excess only
+    pub tew: Option<f64>,           // the surface evaporation layer's total evaporable water, mm (FAO-56 Table 19); needed by crops with a kcb
+    pub rew: Option<f64>,           // its readily evaporable water, mm
+    pub kc_max: f64,                // the ceiling on Kcb + Ke, 1.2 unless the climate says otherwise (FAO-56 eq. 72)
+    pub wetted_fraction: f64,       // the share of the ground irrigation wets (FAO-56 Table 20); 1 for rain, flood and furrow
     pub rain_input: DynamicInput,   // mm
     pub evap_input: DynamicInput,   // mm, the reference the kc values were derived for
     pub fallow: Option<Crop>,       // the crop that covers what is not planted; required
@@ -222,6 +298,10 @@ pub struct FieldNode {
     fallow_partition: Partition,
     planting_done: bool,            // this step's planting ran in the order phase
     evap_today: f64,                // today's reference evapotranspiration, read when planting runs
+    evap_layer: Option<EvapLayer>,  // tew, rew, kc_max and wetted_fraction together, when the field has them
+    fallow_dual: bool,              // the fallow is declared with kcb: bare soil evaporating from the layer
+    fallow_kc: f64,                 // the fallow's coefficient, a number
+    fallow_p: (bool, f64, f64, f64), // the fallow's p adjustment: on, p_base, p_lo, p_hi; off: p in p_base
     cn_dry: f64,                    // the curve numbers at wilting point and at field capacity (CN1, CN3)
     cn_wet: f64,
     usflow: f64,
@@ -259,6 +339,8 @@ impl FieldNode {
             efficiency: 1.0,
             interception: 0.2,
             return_fraction: 0.0,
+            kc_max: 1.2,
+            wetted_fraction: 1.0,
             rain_input: DynamicInput::default(),
             evap_input: DynamicInput::default(),
             ..Default::default()
@@ -304,7 +386,7 @@ impl FieldNode {
             // water, so today's capacity and stress are the day's (FAO-56 Ch. 8, as pyfao56
             // grows the roots with the coefficient). A crop with no initial_root_depth is at
             // full depth already and this does nothing.
-            if slot.crop.initial_root_depth.is_some() {
+            if slot.grows {
                 let depth = slot.crop.root_depth_at(slot.days as f64);
                 slot.partition.grow(&self.profile, depth);
             }
@@ -320,7 +402,7 @@ impl FieldNode {
             // Viability: the area can only fall; what leaves goes to the fallow with its water.
             // The day opens first, so a rule reads today's `this.crop_N_ks`, the same number
             // the built-in rule uses.
-            slot.open_day(&self.name, evap_mm, data_cache);
+            slot.open_day(&self.name, evap_mm, self.evap_layer.as_ref(), data_cache);
             let viable_area = match &slot.viable_area_input {
                 Some(input) => {
                     let value = input.get_value(data_cache);
@@ -358,7 +440,7 @@ impl FieldNode {
             transfer(&self.profile, &mut self.fallow_partition, &mut slot.partition, area);
             slot.in_ground = true;
             slot.days = 0;
-            slot.open_day(&self.name, evap_mm, data_cache);
+            slot.open_day(&self.name, evap_mm, self.evap_layer.as_ref(), data_cache);
         }
         // The day's areas are settled: record them now. A slot whose day did not open has
         // nothing in the ground: no area, and not a number for its opening state.
@@ -371,7 +453,8 @@ impl FieldNode {
                 slot.kc_multiplier_read = f64::NAN;
                 slot.kc_used = f64::NAN;
                 slot.p_today = f64::NAN;
-                for j in [1, 3, 9, 10, 11, 12] {
+                slot.ke_today = f64::NAN;
+                for j in [1, 3, 9, 10, 11, 12, 13] {
                     if let Some(idx) = slot.recorder_idx[j] {
                         data_cache.add_value_at_index(idx, f64::NAN);
                     }
@@ -429,6 +512,11 @@ impl FieldNode {
             let slot = &mut self.slots[t.0];
             let poured = (slot.partition.root_depletion - level).max(0.0);
             slot.partition.root_depletion -= poured;
+            if slot.dual {
+                if let Some(layer) = self.evap_layer {
+                    layer.irrigate(&mut slot.partition, poured);
+                }
+            }
             to_soil += poured * slot.partition.area;
         }
         to_soil / self.efficiency
@@ -497,6 +585,30 @@ impl Node for FieldNode {
         let Some(fallow) = &self.fallow else {
             return Err(format!("Error in node '{}'. A field needs a fallow: the crop that covers what is not planted (fallow = <crop>).", self.name));
         };
+        // The evaporation layer, for crops with a basal coefficient
+        let dual_crops: Vec<&str> = self.slots.iter().map(|s| &s.crop).chain(std::iter::once(fallow)).filter(|c| c.dual).map(|c| c.name.as_str()).collect();
+        self.evap_layer = match (self.tew, self.rew) {
+            (Some(tew), Some(rew)) => {
+                if !(rew > 0.0 && tew > rew && tew.is_finite()) {
+                    return Err(format!("Error in node '{}'. rew must be greater than 0 and tew greater than rew, in mm of the evaporation layer's water, got tew {} and rew {}.", self.name, tew, rew));
+                }
+                if !(self.kc_max > 0.0 && self.kc_max.is_finite()) {
+                    return Err(format!("Error in node '{}'. kc_max must be a positive number, got {}.", self.name, self.kc_max));
+                }
+                if !(self.wetted_fraction > 0.0 && self.wetted_fraction <= 1.0) {
+                    return Err(format!("Error in node '{}'. wetted_fraction must be greater than 0 and at most 1, got {}.", self.name, self.wetted_fraction));
+                }
+                Some(EvapLayer { tew, rew, kc_max: self.kc_max, fw: self.wetted_fraction })
+            }
+            (None, None) => None,
+            _ => return Err(format!("Error in node '{}'. tew and rew go together: the evaporation layer's total and readily evaporable water, in mm.", self.name)),
+        };
+        self.fallow_dual = fallow.dual && self.evap_layer.is_some();
+        self.fallow_kc = fallow.kc.at(0.0);
+        self.fallow_p = if fallow.p_adjust { (true, fallow.p + 0.2, fallow.p.min(0.1), fallow.p.max(0.8)) } else { (false, fallow.p, 0.0, 0.0) };
+        if self.evap_layer.is_none() && !dual_crops.is_empty() {
+            return Err(format!("Error in node '{}'. Crop '{}' has a basal coefficient (kcb), so the field needs its evaporation layer: tew and rew, in mm (FAO-56 Table 19).", self.name, dual_crops[0]));
+        }
         // The fallow is never planted, so days since planting mean nothing to it
         if matches!(fallow.kc, crate::hydrology::crop::KcCurve::ByDay(_)) {
             return Err(format!("Error in node '{}'. The fallow's kc must be a number, not a table by days since planting: a fallow is never planted (crop '{}').", self.name, fallow.name));
@@ -527,6 +639,10 @@ impl Node for FieldNode {
         self.dsflow_return = 0.0;
         self.fallow_partition = Partition::new(&self.profile, fallow.root_depth, self.area, self.initial_depletion);
         self.planting_done = false;
+        if let Some(layer) = self.evap_layer {
+            let fraction = (self.initial_depletion / self.profile.total_capacity()).clamp(0.0, 1.0);
+            self.fallow_partition.evap_depletion = fraction * layer.tew;
+        }
         for slot in &mut self.slots {
             slot.partition = Partition::new(&self.profile, slot.crop.root_depth, 0.0, self.initial_depletion);
             slot.in_ground = false;
@@ -664,11 +780,22 @@ impl Node for FieldNode {
         let mut et_ml = 0.0;
         let mut excess = 0.0;
         {
-            let fallow = self.fallow.as_ref().expect("initialise checked the fallow");
-            let kc = fallow.kc.at(0.0); // a number: initialise refused a table
+            let kcb = self.fallow_kc; // a number: initialise refused a table
+            // A dual fallow (kcb, usually 0) is bare soil evaporating from the layer
+            let (ke, few) = if self.fallow_dual {
+                self.evap_layer.as_ref().expect("fallow_dual implies a layer").ke(self.fallow_partition.evap_depletion, kcb)
+            } else {
+                (0.0, 1.0)
+            };
             let runoff_mm = curve.map_or(0.0, |(dry, wet)| curve_number_runoff(dry, wet, &self.fallow_partition, rain_mm));
             let intercepted_mm = (rain_mm - runoff_mm).min(self.interception * evap_mm);
-            let (_, et_mm, excess_mm) = soil_day(&self.profile, &mut self.fallow_partition, fallow.p_for(kc * evap_mm), kc, evap_mm, rain_mm - runoff_mm - intercepted_mm);
+            let effective_rain_mm = rain_mm - runoff_mm - intercepted_mm;
+            let (adjust, p_base, p_lo, p_hi) = self.fallow_p;
+            let p = if adjust { (p_base - 0.04 * (kcb + ke) * evap_mm).clamp(p_lo, p_hi) } else { p_base };
+            let (_, et_mm, excess_mm) = soil_day(&self.profile, &mut self.fallow_partition, p, kcb, ke, evap_mm, effective_rain_mm);
+            if self.fallow_dual {
+                self.evap_layer.as_ref().expect("fallow_dual implies a layer").day(&mut self.fallow_partition, ke * evap_mm, few, effective_rain_mm);
+            }
             intercepted_ml += intercepted_mm * self.fallow_partition.area;
             et_ml += et_mm * self.fallow_partition.area;
             excess += (runoff_mm + excess_mm) * self.fallow_partition.area;
@@ -681,8 +808,14 @@ impl Node for FieldNode {
             // only, and p for the day's ETc. Interception reads evap as it is.
             let runoff_mm = curve.map_or(0.0, |(dry, wet)| curve_number_runoff(dry, wet, &slot.partition, rain_mm));
             let intercepted_mm = (rain_mm - runoff_mm).min(self.interception * evap_mm);
-            let (ks, et_mm, excess_mm) = soil_day(&self.profile, &mut slot.partition, slot.p_today, slot.kc_used, evap_mm, rain_mm - runoff_mm - intercepted_mm);
+            let effective_rain_mm = rain_mm - runoff_mm - intercepted_mm;
+            let (ks, et_mm, excess_mm) = soil_day(&self.profile, &mut slot.partition, slot.p_today, slot.kcb_today, slot.ke_today, evap_mm, effective_rain_mm);
             slot.ks = ks;
+            if slot.dual {
+                if let Some(layer) = self.evap_layer {
+                    layer.day(&mut slot.partition, slot.ke_today * evap_mm, slot.few_today, effective_rain_mm);
+                }
+            }
             intercepted_ml += intercepted_mm * slot.partition.area;
             et_ml += et_mm * slot.partition.area;
             excess += (runoff_mm + excess_mm) * slot.partition.area;
@@ -698,7 +831,13 @@ impl Node for FieldNode {
             if !slot.in_ground { continue; }
             let room_ml = slot.partition.root_depletion * slot.partition.area;
             let take = slot.order_due.min(room_ml / self.efficiency).min(remaining);
-            slot.partition.root_depletion -= take * self.efficiency / slot.partition.area;
+            let depth_mm = take * self.efficiency / slot.partition.area;
+            slot.partition.root_depletion -= depth_mm;
+            if slot.dual {
+                if let Some(layer) = self.evap_layer {
+                    layer.irrigate(&mut slot.partition, depth_mm);
+                }
+            }
             remaining -= take;
         }
         if remaining > 0.0 {

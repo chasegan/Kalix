@@ -442,6 +442,7 @@
         "crop_1_kc",
         "crop_1_root_depth",
         "crop_1_p",
+        "crop_1_ke",
         "crop_2_area",
         "crop_2_days",
         "crop_2_depletion",
@@ -455,6 +456,7 @@
         "crop_2_kc",
         "crop_2_root_depth",
         "crop_2_p",
+        "crop_2_ke",
         "crop_3_area",
         "crop_3_days",
         "crop_3_depletion",
@@ -468,6 +470,7 @@
         "crop_3_kc",
         "crop_3_root_depth",
         "crop_3_p",
+        "crop_3_ke",
         "crop_4_area",
         "crop_4_days",
         "crop_4_depletion",
@@ -480,7 +483,8 @@
         "crop_4_kc_multiplier",
         "crop_4_kc",
         "crop_4_root_depth",
-        "crop_4_p"
+        "crop_4_p",
+        "crop_4_ke"
       ],
       "required_params": [
         "type",
@@ -497,6 +501,10 @@
         "return_fraction",
         "initial_depletion",
         "curve_number",
+        "tew",
+        "rew",
+        "kc_max",
+        "wetted_fraction",
         "crop_1",
         "crop_1_plant",
         "crop_1_order",
@@ -577,6 +585,27 @@
           "type": "number",
           "min": 0,
           "description": "Water the soil holds between full and empty, per metre of soil [mm/m]"
+        },
+        "tew": {
+          "type": "number",
+          "min": 0,
+          "description": "Total evaporable water of the surface evaporation layer [mm] (FAO-56 Table 19), for crops with a basal coefficient (kcb); goes with rew"
+        },
+        "rew": {
+          "type": "number",
+          "min": 0,
+          "description": "Readily evaporable water of the surface layer [mm]: evaporation runs at the full rate until this much has gone, then falls to nothing at tew"
+        },
+        "kc_max": {
+          "type": "number",
+          "min": 0,
+          "description": "Ceiling on kcb + ke for a wet surface, default 1.2 (FAO-56 equation 72); raise for hot, dry, windy climates"
+        },
+        "wetted_fraction": {
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "description": "Share of the ground that irrigation wets (FAO-56 Table 20): 1 for rain, flood and furrow (default), 0.3 to 0.4 for drip"
         },
         "fallow": {
           "type": "string",

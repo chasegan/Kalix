@@ -83,6 +83,10 @@ pub struct Partition {
     /// the whole layer from root_layers + 1 down, and for layer root_layers the
     /// part below the root front. Meaningless above the roots.
     pub layer_depletion: [f64; MAX_LAYERS],
+    /// mm, how far the surface evaporation layer is below full (FAO-56 Chapter 7's
+    /// De), 0 to the field's TEW. Bookkeeping within the root bucket for a crop
+    /// with a basal coefficient; unused by a single-coefficient crop.
+    pub evap_depletion: f64,
 }
 
 impl Partition {
@@ -97,6 +101,7 @@ impl Partition {
             root_capacity: profile.capacity_of(root_depth),
             root_depletion: 0.0,
             layer_depletion: [0.0; MAX_LAYERS],
+            evap_depletion: 0.0,
         };
         partition.root_depletion = fraction * partition.root_capacity;
         for i in partition.root_layers..profile.n_layers {
@@ -205,6 +210,7 @@ pub fn transfer(profile: &Profile, from: &mut Partition, to: &mut Partition, are
     for i in 0..profile.n_layers {
         to_layers[i] = (to.area * to_layers[i] + area * from_layers[i]) / new_area;
     }
+    to.evap_depletion = (to.area * to.evap_depletion + area * from.evap_depletion) / new_area;
     to.pool(profile, to_layers);
     to.area = new_area;
     from.area -= area;

@@ -79,6 +79,7 @@ node.paddock.crop_1_kc_multiplier
 node.paddock.crop_1_kc
 node.paddock.crop_1_root_depth
 node.paddock.crop_1_p
+node.paddock.crop_1_ke
 node.paddock.crop_2_plant
 node.paddock.fallow_depletion
 node.paddock.soil_moisture
@@ -734,4 +735,89 @@ fn test_p_is_adjusted_for_the_days_evapotranspiration_unless_the_crop_says_not()
     let bad = rig("\n[crop.odd]\nroot_depth = 500\nkc = 1\np_adjust = maybe\n", "crop_1 = odd\ncrop_1_plant = 0");
     let err = IniModelIO::read_model_string(&bad).err().map(|e| e.to_string()).unwrap_or_default();
     assert!(err.contains("p_adjust must be true or false"), "got: {err}");
+}
+
+#[test]
+fn test_bare_soil_with_a_basal_coefficient_dries_in_two_stages() {
+    // FAO-56 Chapter 7: a bare surface (kcb 0) evaporates at kc_max (1.2) x evap while less
+    // than rew has gone, then at a falling rate to nothing at tew. tew 20, rew 8, evap 5:
+    // 6, 6, then (20 - 12) / 12 x 6 = 4, then 2, 1, 0.5. The fallow is the whole field.
+    let crops = "\n[crop.bare_dual]\nroot_depth = 300\nkcb = 0\n";
+    let mut model = run(&rig(crops, "evap = 5\nrain = 0\ntew = 20\nrew = 8").replace("fallow = bare\n", "fallow = bare_dual\n"));
+    let et = s(&mut model, "et");
+    for (t, e) in [6.0, 6.0, 4.0, 2.0, 1.0, 0.5].iter().enumerate() {
+        assert_close(et[t], *e, &format!("evaporation on day {t}"));
+    }
+    field_balance_closes(&mut model);
+    // Rain refills the layer: 10 mm on the fourth day puts the surface back inside rew
+    let mut model = run(&rig(crops, "evap = 5\nrain = if(var.day.n == 4, 10, 0)\ntew = 20\nrew = 8").replace("fallow = bare\n", "fallow = bare_dual\n"));
+    let et = s(&mut model, "et");
+    assert_close(et[3], 2.0, "the rain day evaporates from the morning's surface, 16 down");
+    assert_close(et[4], 6.0, "16 + 2 - 10 = 8 down: the full rate again");
+    assert_close(et[5], 3.0, "then 14 down: half rate");
+    field_balance_closes(&mut model);
+    // A crop planted into that fallow inherits its surface: 16 down on the morning of the
+    // fourth day, so its ke is a third of the energy its canopy leaves
+    let crops = "\n[crop.bare_dual]\nroot_depth = 300\nkcb = 0\n\n[crop.cotton_dual]\nroot_depth = 1000\nkcb = 1.0\n";
+    let mut model = run(&rig(crops, "evap = 5\nrain = 0\ntew = 20\nrew = 8\ncrop_1 = cotton_dual\ncrop_1_plant = if(var.day.n == 4, 4, 0)").replace("fallow = bare\n", "fallow = bare_dual\n"));
+    assert_close(s(&mut model, "crop_1_ke")[3], 0.2 / 3.0, "kr 1/3 of (1.2 - 1.0)");
+    assert!(s(&mut model, "crop_1_ke")[2].is_nan(), "nothing stands before planting");
+}
+
+#[test]
+fn test_a_crop_with_a_basal_coefficient_transpires_by_it_and_its_soil_evaporates_by_ke() {
+    // kcb 1.0 under kc_max 1.2 on a wet surface: the canopy covers (1.0 - 0.15) / 1.05 of the
+    // ground, leaving few = 0.1905 exposed; ke = min(1 x 0.2, 0.1905 x 1.2) = 0.2, so the
+    // day's kc is 1.2 and ET 6 mm of 5 evap. The layer's balance is over the exposed share:
+    // 1 mm of evaporation is 5.25 mm of its depletion. Day 3 the surface is 10.5 down and
+    // kr = 9.5 / 12, so ke = 0.1583 and ET 5.7917.
+    let crops = "\n[crop.cotton_dual]\nroot_depth = 1000\nkcb = 1.0\n";
+    let mut model = run(&rig(crops, "evap = 5\nrain = 0\ntew = 20\nrew = 8\ncrop_1 = cotton_dual\ncrop_1_plant = if(var.day.n == 1, 4, 0)"));
+    let ke = s(&mut model, "crop_1_ke");
+    let kc = s(&mut model, "crop_1_kc");
+    let et = s(&mut model, "et");
+    assert_close(ke[0], 0.2, "ke on a wet surface");
+    assert_close(kc[0], 1.2, "kc is kcb + ke");
+    assert_close(et[0], 6.0, "(ks 1 x 1.0 + 0.2) x 5");
+    assert_close(s(&mut model, "crop_1_p")[0], 0.46, "p adjusted for 6 mm of ETc");
+    assert_close(ke[2], 9.5 / 12.0 * 0.2, "the surface 10.5 down on day 3");
+    assert_close(et[2], (1.0 + 9.5 / 12.0 * 0.2) * 5.0, "ET with it");
+    field_balance_closes(&mut model);
+    // Irrigation wets the surface too: with drip over 0.3 of the ground the exposed wetted
+    // share is 0.3, which caps ke for a sparse crop: kcb 0.4 leaves 0.8 of energy but only
+    // 0.3 x 1.2 = 0.36 of ground
+    let sparse = "\n[crop.sparse]\nroot_depth = 1000\nkcb = 0.4\n";
+    let mut model = run(&rig(sparse, "evap = 5\nrain = 0\ntew = 20\nrew = 8\nwetted_fraction = 0.3\ncrop_1 = sparse\ncrop_1_plant = if(var.day.n == 1, 4, 0)"));
+    assert_close(s(&mut model, "crop_1_ke")[0], 0.36, "ground-limited ke");
+    assert_close(s(&mut model, "crop_1_kc")[0], 0.76, "kcb + ke");
+    field_balance_closes(&mut model);
+}
+
+#[test]
+fn test_the_evaporation_layer_is_checked_and_round_trips() {
+    // Load errors come from the reader, the field's own checks from configure
+    let err = |ini: &str| match IniModelIO::read_model_string(ini) {
+        Err(e) => e.to_string(),
+        Ok(mut model) => model.configure().err().map(|e| format!("{e:?}")).unwrap_or_default(),
+    };
+    let dual = "\n[crop.cotton_dual]\nroot_depth = 1000\nkcb = 1.0\n";
+    let e = err(&rig(dual, "crop_1 = cotton_dual\ncrop_1_plant = 0"));
+    assert!(e.contains("has a basal coefficient (kcb), so the field needs its evaporation layer"), "got: {e}");
+    let e = err(&rig(dual, "tew = 20\ncrop_1 = cotton_dual\ncrop_1_plant = 0"));
+    assert!(e.contains("tew and rew go together"), "got: {e}");
+    let e = err(&rig(dual, "tew = 8\nrew = 20\ncrop_1 = cotton_dual\ncrop_1_plant = 0"));
+    assert!(e.contains("tew greater than rew"), "got: {e}");
+    let e = err(&rig("\n[crop.both]\nroot_depth = 500\nkc = 1\nkcb = 0.9\n", "crop_1 = both\ncrop_1_plant = 0"));
+    assert!(e.contains("has both 'kc' and 'kcb'"), "got: {e}");
+    let e = err(&rig("\n[crop.neither]\nroot_depth = 500\n", "crop_1 = neither\ncrop_1_plant = 0"));
+    assert!(e.contains("has no 'kc' (or 'kcb')"), "got: {e}");
+    let ok = rig(dual, "tew = 20\nrew = 8\nkc_max = 1.25\nwetted_fraction = 0.4\ncrop_1 = cotton_dual\ncrop_1_plant = 0");
+    let rendered = IniModelIO::model_to_string(&IniModelIO::read_model_string(&ok).expect("loads"));
+    for want in ["kcb = 1", "tew = 20", "rew = 8", "kc_max = 1.25", "wetted_fraction = 0.4"] {
+        assert!(rendered.contains(want), "{want} survives save:\n{rendered}");
+    }
+    let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig("", "crop_1 = deep\ncrop_1_plant = 0")).unwrap());
+    for absent in ["kcb", "tew", "rew", "kc_max", "wetted_fraction"] {
+        assert!(!plain.contains(absent), "{absent} absent stays absent");
+    }
 }

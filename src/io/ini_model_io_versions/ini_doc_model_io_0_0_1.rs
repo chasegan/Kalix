@@ -141,6 +141,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         let mut p: f64 = 0.5;
         let mut p_adjust: bool = true;
         let mut kc: Option<crate::hydrology::crop::KcCurve> = None;
+        let mut kcb: Option<crate::hydrology::crop::KcCurve> = None;
         let mut season_len: Option<u32> = None;
         for (key, ini_property) in &ini_section.properties {
             let v = require_non_empty(&ini_property.value, key, ini_property.line_number).map_err(KalixIoError::Validate)?;
@@ -156,30 +157,40 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     "false" => false,
                     _ => return Err(KalixIoError::Parse(format!("Error on line {}: p_adjust must be true or false for crop '{}', got '{}'", ini_property.line_number, crop_name, v))),
                 },
-                "kc" => kc = Some(if let Ok(constant) = v.parse::<f64>() {
-                    crate::hydrology::crop::KcCurve::Constant(constant)
-                } else {
-                    // A table's header, if any, is two labels: a label beside a number would
-                    // otherwise be read as a header and the number lost with it
-                    let cells: Vec<&str> = v.trim_end_matches(|c: char| c == ',' || c.is_whitespace()).split(',').map(|c| c.trim()).collect();
-                    if cells.len() >= 2 && cells[0].parse::<f64>().is_err() && cells[1].parse::<f64>().is_ok() {
-                        return Err(KalixIoError::Parse(format!("Error on line {}: kc for crop '{}' starts with one label, '{}'; a table's header is two labels (days, kc) or none", ini_property.line_number, crop_name, cells[0])));
-                    }
-                    crate::hydrology::crop::KcCurve::ByDay(Table::from_csv_string(v, 2, false)
-                        .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse kc for crop '{}' as a number or a two-column table: {}", ini_property.line_number, crop_name, e)))?)
-                }),
+                key_lower @ ("kc" | "kcb") => {
+                    let curve = if let Ok(constant) = v.parse::<f64>() {
+                        crate::hydrology::crop::KcCurve::Constant(constant)
+                    } else {
+                        // A table's header, if any, is two labels: a label beside a number would
+                        // otherwise be read as a header and the number lost with it
+                        let cells: Vec<&str> = v.trim_end_matches(|c: char| c == ',' || c.is_whitespace()).split(',').map(|c| c.trim()).collect();
+                        if cells.len() >= 2 && cells[0].parse::<f64>().is_err() && cells[1].parse::<f64>().is_ok() {
+                            return Err(KalixIoError::Parse(format!("Error on line {}: {} for crop '{}' starts with one label, '{}'; a table's header is two labels (days, {}) or none", ini_property.line_number, key_lower, crop_name, cells[0], key_lower)));
+                        }
+                        crate::hydrology::crop::KcCurve::ByDay(Table::from_csv_string(v, 2, false)
+                            .map_err(|e| KalixIoError::Parse(format!("Error on line {}: Could not parse {} for crop '{}' as a number or a two-column table: {}", ini_property.line_number, key_lower, crop_name, e)))?)
+                    };
+                    if key_lower == "kc" { kc = Some(curve) } else { kcb = Some(curve) }
+                }
                 "season_len" => season_len = Some(v.parse::<u32>()
                     .map_err(|_| KalixIoError::Parse(format!("Error on line {}: season_len must be a whole number of days for crop '{}', got '{}'", ini_property.line_number, crop_name, v)))?),
                 other => return Err(KalixIoError::Validate(format!("Error on line {}: Unexpected property '{}' in section '[{}]'", ini_property.line_number, other, section_name))),
             }
         }
+        let (curve, dual) = match (kc, kcb) {
+            (Some(_), Some(_)) => return Err(KalixIoError::Validate(format!("Error on line {}: Crop '{}' has both 'kc' and 'kcb'; a crop has one coefficient, single (kc) or basal (kcb)", ini_section.line_number, crop_name))),
+            (Some(kc), None) => (kc, false),
+            (None, Some(kcb)) => (kcb, true),
+            (None, None) => return Err(KalixIoError::Validate(format!("Error on line {}: Crop '{}' has no 'kc' (or 'kcb')", ini_section.line_number, crop_name))),
+        };
         let crop = crate::hydrology::crop::Crop {
             name: crop_name.to_string(),
             root_depth: root_depth.ok_or_else(|| KalixIoError::Validate(format!("Error on line {}: Crop '{}' has no 'root_depth'", ini_section.line_number, crop_name)))?,
             initial_root_depth,
             p,
             p_adjust,
-            kc: kc.ok_or_else(|| KalixIoError::Validate(format!("Error on line {}: Crop '{}' has no 'kc'", ini_section.line_number, crop_name)))?,
+            kc: curve,
+            dual,
             season_len,
         };
         crop.validate().map_err(|e| KalixIoError::Validate(format!("Error on line {}: {}", ini_section.line_number, e)))?;
@@ -1286,6 +1297,18 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                         } else if name_lower == "curve_number" {
                             n.curve_number = Some(v.parse::<f64>()
                                 .map_err(|_| KalixIoError::Parse(format!("Error on line {}: curve_number must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?);
+                        } else if name_lower == "tew" {
+                            n.tew = Some(v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: tew must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?);
+                        } else if name_lower == "rew" {
+                            n.rew = Some(v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: rew must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?);
+                        } else if name_lower == "kc_max" {
+                            n.kc_max = v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: kc_max must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
+                        } else if name_lower == "wetted_fraction" {
+                            n.wetted_fraction = v.parse::<f64>()
+                                .map_err(|_| KalixIoError::Parse(format!("Error on line {}: wetted_fraction must be a number for node '{}', got '{}'", ini_property.line_number, node_name, v)))?;
                         } else if name_lower == "fallow" {
                             let idx = model.crops.get_idx(v)
                                 .ok_or_else(|| KalixIoError::Validate(format!("Error on line {}: No crop '{}' is declared for the fallow of node '{}' (a [crop.{}] section)", ini_property.line_number, v, node_name, v)))?;
@@ -1986,6 +2009,14 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 if let Some(cn) = n.curve_number {
                     ini_doc.set_property(section_name.as_str(), "curve_number", format_f64(cn).as_str());
                 }
+                if let Some(tew) = n.tew {
+                    ini_doc.set_property(section_name.as_str(), "tew", format_f64(tew).as_str());
+                }
+                if let Some(rew) = n.rew {
+                    ini_doc.set_property(section_name.as_str(), "rew", format_f64(rew).as_str());
+                }
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "kc_max", &format_f64(n.kc_max), "1.2");
+                set_property_unless_default(&mut ini_doc, section_name.as_str(), "wetted_fraction", &format_f64(n.wetted_fraction), "1");
                 if let Some(fallow) = &n.fallow {
                     ini_doc.set_property(section_name.as_str(), "fallow", fallow.name.as_str());
                 }
@@ -2046,7 +2077,7 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
             crate::hydrology::crop::KcCurve::Constant(kc) => format_f64(*kc),
             crate::hydrology::crop::KcCurve::ByDay(table) => format_vec_as_multiline_table(&table.get_values_as_vec(), 2, 4),
         };
-        ini_doc.set_property(section_name.as_str(), "kc", kc.as_str());
+        ini_doc.set_property(section_name.as_str(), if crop.dual { "kcb" } else { "kc" }, kc.as_str());
         if let Some(days) = crop.season_len {
             ini_doc.set_property(section_name.as_str(), "season_len", days.to_string().as_str());
         }

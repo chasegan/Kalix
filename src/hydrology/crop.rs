@@ -56,6 +56,10 @@ pub struct Crop {
     /// mm; the crop's bucket holds `available_water × root_depth / 1000` mm
     /// once the roots are fully down
     pub root_depth: f64,
+    /// The curve is a basal coefficient Kcb (FAO-56 Chapter 7, `kcb = …`): the
+    /// crop transpires by it and the soil surface evaporates by Ke from the
+    /// field's evaporation layer. False: a single coefficient Kc (`kc = …`).
+    pub dual: bool,
     /// mm, the roots at planting. None: the roots are at root_depth from the
     /// day of planting (Source Irrigator's fixed root zone). Some: they grow to
     /// root_depth in step with the kc curve's rise to its peak (FAO-56 Ch. 8,

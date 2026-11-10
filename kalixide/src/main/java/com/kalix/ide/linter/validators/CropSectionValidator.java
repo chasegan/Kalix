@@ -160,6 +160,12 @@ public class CropSectionValidator implements ValidationStrategy {
                     }
                     break;
                 case "kc":
+                case "kcb":
+                    if (hasKc) {
+                        result.addIssue(prop.getLineNumber(),
+                                "Crop '" + cropName + "' has both 'kc' and 'kcb'; a crop has one coefficient, single (kc) or basal (kcb)",
+                                ValidationRule.Severity.ERROR, "invalid_crop_kc");
+                    }
                     hasKc = true;
                     for (String error : checkKc(cropName, value)) {
                         result.addIssue(prop.getLineNumber(), error, ValidationRule.Severity.ERROR, "invalid_crop_kc");
@@ -175,7 +181,7 @@ public class CropSectionValidator implements ValidationStrategy {
                 default:
                     result.addIssue(prop.getLineNumber(),
                             "Unexpected property '" + prop.getKey() + "' in [" + sectionName
-                                    + "] (allowed: root_depth, initial_root_depth, p, p_adjust, kc, season_len)",
+                                    + "] (allowed: root_depth, initial_root_depth, p, p_adjust, kc or kcb, season_len)",
                             ValidationRule.Severity.ERROR, "unexpected_crop_property");
                     break;
             }
@@ -188,7 +194,7 @@ public class CropSectionValidator implements ValidationStrategy {
         }
         if (!hasKc) {
             result.addIssue(section.getStartLine(),
-                    "Crop '" + cropName + "' has no 'kc'",
+                    "Crop '" + cropName + "' has no 'kc' (or 'kcb')",
                     ValidationRule.Severity.ERROR, "missing_crop_kc");
         }
     }

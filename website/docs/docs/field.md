@@ -70,14 +70,26 @@ digits and underscores, starting with a letter.
 | initial\_root\_depth (optional) | How deep the roots are at planting [mm]. They grow to `root_depth` as the crop's `kc` rises from its first value to its peak, in step with it, as FAO-56 and pyfao56 grow them; the soil they grow into joins the bucket with the water it holds. Needs a `kc` table that rises. Omitted, the roots are at `root_depth` from the day of planting, as Source's Irrigator has them. Example: `initial_root_depth = 200` |
 | p (optional) | The depletion fraction: the share of the bucket the crop can use before stress begins, for a crop using about 5 mm/day (FAO-56 Table 22). Default 0.5. Example: `p = 0.65` |
 | p\_adjust (optional) | Whether `p` is adjusted each day for the crop's evapotranspiration, as FAO-56's Table 22 says to and pyfao56 does: `p + 0.04 × (5 − kc × kc_multiplier × evap)`, held between 0.1 and 0.8, or between `p` and that range when `p` is written outside it. Default true. Write `false` to use `p` as written, as Source's Irrigator does. Example: `p_adjust = false` |
-| kc (compulsory) | The crop coefficient: a number, or a table of (days since planting, kc) with the FAO-56 curve as its rows, interpolated between rows and held flat beyond the first and last. A text header row is allowed. Example: `kc = 0.95` |
+| kc (one of kc, kcb) | The crop coefficient: a number, or a table of (days since planting, kc) with the FAO-56 curve as its rows, interpolated between rows and held flat beyond the first and last. A text header row is allowed. Example: `kc = 0.95` |
+| kcb (one of kc, kcb) | The basal crop coefficient instead, in the same form (FAO-56 Table 17): the crop's transpiration alone. The soil surface then evaporates separately, from the field's evaporation layer (`tew`, `rew`), by a coefficient `ke` that the node works out each day from how wet the surface is and how much ground the canopy leaves bare. See [The basal coefficient](#the-basal-coefficient). Example: `kcb = 0, 0.15, 60, 1.15, 180, 0.5` |
 | season\_len (optional) | Days from planting to harvest. Omitted, the crop is a perennial and is never harvested. Example: `season_len = 180` |
 
 Every field has a fallow: a crop with no plants, declared like any other and named by the field's
 `fallow`. It is never irrigated and never planted; it receives area at harvest and abandonment
-and gives it up at planting. A field with no crop slots is all fallow, all the time. A fallow's
-`kc` is its bare-soil evaporation factor, and its `root_depth` is how deep the fallow ground
-dries.
+and gives it up at planting. A field with no crop slots is all fallow, all the time. Three ways
+to declare one:
+
+- **As Source's Irrigator has it**: `kc` is a fallow factor, 0.4 to 1, and `root_depth` is how
+  deep the fallow ground dries, 600 mm say. The template's `bare_soil` is this.
+- **As FAO-56's bare soil, with a single coefficient**: `root_depth` is the evaporation layer,
+  100 to 150 mm by texture; `kc` is the bare-surface maximum, about 1.1; `p` is the readily
+  evaporable share of the layer, `rew / tew` from Table 19, about 0.4. The stress coefficient
+  is then FAO-56's two-stage drying, with the one imprecision that the layer's capacity is
+  `available_water × root_depth` where Table 19's total counts half the wilting-point water too.
+- **As FAO-56's bare soil, with the basal coefficient**: `kcb = 0` and the field's `tew` and
+  `rew`. The surface evaporates at `kc_max × evap` while less than `rew` has gone, then at a
+  falling rate to nothing at `tew`, exactly as Chapter 7 has it. `root_depth` is then only the
+  depth of soil the fallow's bucket covers.
 
 ## Node properties
 
@@ -96,6 +108,10 @@ dries.
 | return\_fraction (optional) | The share of the field's runoff (`excess`) that the farm's drains catch. It leaves on `ds_2` as `return_flow`; the rest goes down `ds_1` with the bypass. Default 0. See [Returning runoff to the farm storage](#returning-runoff-to-the-farm-storage). Example: `return_fraction = 0.8` |
 | initial\_depletion (optional) | How far below full the soil starts, over the whole profile to the deepest roots [mm], every layer alike. Default 0, a full profile top to bottom. Example: `initial_depletion = 20` |
 | curve\_number (optional) | The USDA-NRCS curve number for storm runoff off the paddock surface: the tabled value for average antecedent conditions (CN2), by cover and hydrologic soil group. Each day the curve is chosen between the dry and wet ones by each partition's wetness, so a crop held near full sheds more than the dry fallow beside it. Omitted, rain runs off only when the profile is full. Rain only, never irrigation; daily steps only. See [Storm runoff](#storm-runoff). Example: `curve_number = 85` |
+| tew (optional) | Total evaporable water of the surface evaporation layer [mm], FAO-56 Table 19: about 20 to 30 for a clay, 16 to 22 for a loam, 6 to 12 for a sand, for a 100 mm layer. Needed, with `rew`, by any crop or fallow declared with `kcb`. Example: `tew = 25` |
+| rew (optional) | Readily evaporable water of the surface layer [mm], Table 19: the surface evaporates at the full rate until this much has gone, then at a falling rate to nothing at `tew`. About 8 to 12 for a clay or loam. Example: `rew = 10` |
+| kc\_max (optional) | The most a wet surface and a full canopy evaporate together, as a share of `evap`: the ceiling on `kcb + ke` (FAO-56 equation 72). Default 1.2; 1.25 to 1.3 in a hot, dry, windy climate. Example: `kc_max = 1.25` |
+| wetted\_fraction (optional) | The share of the ground irrigation wets (FAO-56 Table 20): 1 for rain, flood, furrow and sprinkler, 0.3 to 0.4 for drip. Caps `ke` at the ground that is both bare and wet, and concentrates irrigation onto that share of the evaporation layer. Default 1. Example: `wetted_fraction = 0.4` |
 | crop\_N (optional) | The crop in slot N, for N from 1 to 4: the name of a `[crop.*]` section. Slots are numbered without gaps. Example: `crop_1 = cotton` |
 | crop\_N\_plant (compulsory with crop\_N) | The area of the crop to plant today [km²]: an expression, read every day the slot is empty, in the order phase (see step 1 of [How the node works](#how-the-node-works)). Above zero plants the crop on that much land, capped at the fallow's area that day, taking it from the fallow with its water; zero plants nothing. A slot with a crop in the ground is not read; where two slots plant the same day, the lower N goes first. A rule that gives an area every day plants again on the day of a harvest or an abandonment, into the land just returned to the fallow. Negative or not a number stops the run. Example: `crop_1_plant = if(sim.month == 10 && sim.day == 15, min(this.area, 0.01 * node.ofs.volume[-1, 0] / 8), 0)` |
 | crop\_N\_order (optional) | The irrigation rule for this crop: the order it places upstream each step [ML]. An expression, read only while the crop is in the ground; see [The irrigation rule](#the-irrigation-rule). Omitted, the crop is rain-fed. |
@@ -112,6 +128,7 @@ dries.
 | crop\_N\_days | Days since planting, 0 on the day it is planted; not a number when nothing is in the ground. Written when planting runs, like `crop_N_area` |
 | crop\_N\_root\_depth | How deep the crop's roots reach today [mm]: `initial_root_depth` at planting, growing to `root_depth`; `root_depth` throughout for a crop with no initial depth. Not a number when nothing is in the ground. Written when planting runs |
 | crop\_N\_p | The depletion fraction used today: the crop's `p` adjusted for the day's evapotranspiration, or `p` as written with `p_adjust = false`. Not a number when nothing is in the ground. Written when planting runs |
+| crop\_N\_ke | The soil evaporation coefficient of a crop declared with `kcb`: `crop_N_kc` is then `kcb × kc_multiplier + ke`. 0 for a crop declared with `kc`. Not a number when nothing is in the ground. Written when planting runs |
 | crop\_N\_depletion | How far the crop's root zone is below full at the end of the step [mm]: 0 is full, the bucket's capacity is empty. A state, reported at the end of the step like a storage's `volume`; the irrigation rule reads the previous step's value, `this.crop_N_depletion[-1, 0]`, the soil at the start of today. Not a number when nothing is in the ground |
 | crop\_N\_ks | The crop's stress coefficient this step, 0 to 1, from the depletion at the start of the day. Written the moment it is computed, before the viable-area rule reads it, so `this.crop_N_ks` with no offset is today's. On the morning a crop is abandoned it is the stress that was read; not a number when nothing stands at the start of the day |
 | crop\_N\_order | The order slot N placed this step [ML] |
@@ -163,6 +180,9 @@ reference evapotranspiration.
 4. **What the crop wants.** A well-watered crop uses E_c = K_c · E₀, where the crop coefficient
    K_c depends on the crop and how far through its growth it is (`kc`). A planting that is not
    a full stand, a single-skip cotton say, uses less: the slot's `kc_multiplier` scales it.
+   FAO-56 also splits K_c into the plant's transpiration, K_cb, and the soil surface's
+   evaporation, K_e, which is high for a day or two after every wetting of bare ground and
+   nothing under a closed canopy. A crop declared with `kcb` gets that split.
 5. **What it gets when the bucket is low.** A crop drinks freely until it has used a fraction
    `p` of the capacity, then less and less:
    K_s = 1 if D ≤ p·TAW, otherwise (TAW − D) / ((1 − p)·TAW), and E = K_s · E_c.
@@ -241,7 +261,9 @@ In this order:
    coefficient, so `crop_N_ks`, `crop_N_kc` and `crop_N_p` are there for the day's rules.
 3. **Evapotranspiration.** `et = ks × kc × kc_multiplier × evap`, no more than the water the
    bucket holds, with `kc` from the crop's curve at its days since planting and the slot's
-   `crop_N_kc_multiplier`, 1 unless written. The fallow's `kc` is its number.
+   `crop_N_kc_multiplier`, 1 unless written. The fallow's `kc` is its number. For a crop
+   declared with `kcb`, `et = (ks × kcb × kc_multiplier + ke) × evap`, the stress on the
+   transpiration only; see [The basal coefficient](#the-basal-coefficient) for `ke`.
 4. **Rain.** With a `curve_number`, each partition first sheds storm runoff by its own
    wetness (see [Storm runoff](#storm-runoff)). The rest goes on the soil, less
    `intercepted = min(rain, interception × evap)`. What would take a bucket below zero drains
@@ -277,7 +299,43 @@ bucket and every layer, so the identity holds through planting, harvest and aban
 move land and its water between partitions but nothing in or out of the field. Nothing leaves
 the field except on its links, as evapotranspiration, intercepted rain or escape.
 
-#### Storm runoff
+#### The basal coefficient
+
+A crop declared with `kcb` rather than `kc` follows FAO-56's dual crop coefficient (Chapter 7).
+Its curve is the plant's transpiration alone; the soil surface evaporates separately, by a
+coefficient `ke` the node works out each day, and the day's crop coefficient is `kcb + ke`:
+
+```
+et = (ks × kcb × kc_multiplier + ke) × evap
+```
+
+The stress applies to the transpiration only, since a wet surface dries whatever the plant is
+doing. `ke` comes from the field's surface evaporation layer, the top 100 to 150 mm of soil,
+which holds `tew` mm of evaporable water (FAO-56 Table 19) and has its own depletion `De`:
+
+- **Two-stage drying.** While less than `rew` has evaporated since the surface was last wet,
+  it evaporates at the full rate: `kr = 1`. Beyond that the rate falls in a straight line to
+  nothing at `tew`: `kr = (tew − De) / (tew − rew)`.
+- **The energy the canopy leaves.** `ke = kr × (kc_max − kcb)`: a full canopy at `kcb` near
+  `kc_max` leaves the surface almost nothing to evaporate with, bare ground leaves it all.
+- **The ground that can evaporate.** `ke` is no more than `few × kc_max`, where `few` is the
+  share of the ground both bare and wet: `min(1 − cover, wetted_fraction)`, with the canopy's
+  cover `(kcb − 0.15) / (kc_max − 0.15)` (FAO-56 equation 76, its height exponent taken as 1).
+  Under flood or furrow this seldom binds; under drip it is what keeps dry ground from
+  evaporating.
+- **The layer's balance.** The day's evaporation `ke × evap` deepens `De` over the share `few`
+  of the ground; rain that reaches the soil refills it; irrigation refills the share
+  `wetted_fraction` of it. `De` runs from 0 to `tew`. It is bookkeeping within the root bucket,
+  which still holds all the water: the balance identity below is unchanged.
+
+Planting, harvest and abandonment carry `De` with the land, mixed by area like the layers. A
+fallow declared with `kcb = 0` is FAO-56's bare soil exactly. Small rains then evaporate through
+`ke` from the surface in a day or two, which is what `interception` approximates for a single
+coefficient, so a field whose crops are all `kcb` would set `interception = 0`. Single- and
+basal-coefficient crops may share a field; `tew` and `rew` are needed only when one is `kcb`.
+Results: `crop_N_ke`, and `crop_N_kc` as `kcb × kc_multiplier + ke`.
+
+## Storm runoff
 
 Without a curve number a paddock sheds rain only by saturation excess: when the whole profile,
 to the deepest roots, is full. That is how the FAO-56 bucket works, and how NSW's river system
@@ -472,12 +530,13 @@ crop models, the Irrigator Demand Model and IQQM Crop Model 2; the field follows
 | Stress coefficient | `ks` from 1 at `p` of the bucket used to 0 at empty, on the opening depletion | FAO-56 equation 84; pyfao56's convention for when it is read |
 | Depletion fraction for the day | `p` adjusted by 0.04 per mm of the day's unstressed ET either side of 5 mm, within 0.1 to 0.8 | FAO-56 Table 22, footnote; pyfao56 applies it. `p_adjust = false` is Source Irrigator's constant `p` |
 | Evapotranspiration | `ks × kc × kc_multiplier × evap`, no more than the water held | FAO-56 equation 81, the single-coefficient approach of Chapter 6; the multiplier is FAO-56's Chapter 9 adjustment left to the modeller |
+| Basal coefficient and soil evaporation | With `kcb`: `(ks × kcb + ke) × evap`; `ke` from a surface layer that dries in two stages, over the ground the canopy leaves bare and irrigation wets | FAO-56 Chapter 7, equations 69 to 77, Tables 17, 19 and 20, with the canopy-cover exponent taken as 1 and transpiration from the surface layer ignored, as FAO-56 allows for all but shallow-rooted crops |
 | Crop coefficient curve | A table by days since planting, interpolated, flat beyond its ends | FAO-56 Chapter 6, Figure 25, Tables 11 and 12 |
 | Interception | `min(rain − runoff, interception × evap)` off every rain day | Source Irrigator, equation 7, for the form; FAO-56 Chapter 7 for the 0.2 × ET₀ figure. FAO-56's own text is a threshold on small rains, not a deduction |
 | Soil below the roots | Layers that keep their water at or below field capacity, filled by overflow, drawn only by roots that reach them | pyfao56's depletion to the maximum root depth, generalised to the field's root depths; no drainage below field capacity as in FAO-56 equation 88 and AquaCrop. Source Irrigator instead assumes the soil below the fallow is full |
 | Saturation-excess runoff | Overflow past the deepest layer leaves on the links | Source Irrigator equation 8; NSW river-model practice. In FAO-56 the same water is deep percolation, lost |
 | Storm runoff | Curve number on gross rain, the curve set by the bucket's wetness between dry and wet | USDA-NRCS NEH-630 Chapter 10; the wetness interpolation and CN1/CN3 fits as APSIM SoilWat and HowLeaky use them, with the whole root bucket as the wetness rather than APSIM's surface layers |
-| Fallow | A crop that is never irrigated, with its own depth, coefficient and `p` | Source Irrigator's automatic fallow crop, with a fallow factor and a depth evaporation reaches. With a depth near 150 mm, `kc` near 1.1 and `p` near 0.4 it is FAO-56 Chapter 7's two-stage bare-soil evaporation instead |
+| Fallow | A crop that is never irrigated, with its own depth, coefficient and `p` | Source Irrigator's automatic fallow crop, with a fallow factor and a depth evaporation reaches. With a depth near 150 mm, `kc` near 1.1 and `p` near 0.4 it is FAO-56 Chapter 7's two-stage bare-soil evaporation instead; with `kcb = 0` it is Chapter 7 exactly |
 | Irrigation | Each crop takes up to its order, never more than its bucket has room for | FAO-56 Chapter 8 scheduling; Source Irrigator orders to hold a target depletion |
 | Delivery loss | `efficiency` of the supply reaches the soil; the rest escapes and is lost | Source Irrigator's crop-level escapes, fractions of applied water with no return; irrigation deep percolation belongs here |
 | Death | A crop whose opening `ks` is 0.05 or below dies and its land returns to the fallow | Source Irrigator, which states the 0.05 |
@@ -487,12 +546,12 @@ crop models, the Irrigator Demand Model and IQQM Crop Model 2; the field follows
 | Pour of surplus | Water beyond the orders poured over the standing crops, driest first | Kalix's own, for water a modeller has forced to the field |
 | Several crops at once, the kc multiplier, the balance identity | Up to four slots on one soil; a daily scalar on kc; `volume` changing by exactly the fluxes | Kalix's own |
 
-Not modelled, and worth knowing: FAO-56's dual coefficient (basal transpiration and a separate
-soil-evaporation layer), its adjustment of `kc` for climate, capillary rise from a water table,
-and salinity; Source Irrigator's forecasting of
-demand over the travel time, opportunistic targets, ponded crops and planting windows, all of
-which the authored rules can express but do not build in. Deep drainage past the deepest roots
-leaves on the links rather than to groundwater.
+Not modelled, and worth knowing: FAO-56's adjustment of `kc` and `kc_max` for climate (humidity
+and wind, which a river model rarely has; the multiplier and `kc_max` carry it by hand), its
+transpiration from the evaporation layer, capillary rise from a water table, and salinity;
+Source Irrigator's forecasting of demand over the travel time, opportunistic targets, ponded
+crops and planting windows, all of which the authored rules can express but do not build in.
+Deep drainage past the deepest roots leaves on the links rather than to groundwater.
 
 ## References
 
@@ -506,9 +565,13 @@ choice is not in FAO-56, the reference it follows is given.
   zone at field capacity (equation 88). Table 19 gives available water by soil texture, Table 22
   root depths and depletion fractions by crop, with the footnote that adjusts `p` by 0.04 per
   mm of crop evapotranspiration either side of 5 mm/day, and Chapter 8 grows the root zone over
-  the season, which `initial_root_depth` follows. Chapter 7 is the origin of the 0.2 × ET₀ in the
-  interception rule: it notes that wettings under about 0.2 × ET₀ evaporate without reaching
-  the root zone, a threshold the field applies as Irrigator does, as a deduction.
+  the season, which `initial_root_depth` follows. Chapter 7 is the dual crop coefficient, which
+  a crop declared with `kcb` follows: the basal coefficient (Table 17), the surface evaporation
+  layer with its total and readily evaporable water (Table 19, equations 73 and 74), the
+  coefficient Ke (equations 71 and 72) over the exposed and wetted ground (equations 75 and 76,
+  Table 20). Chapter 7 is also the origin of the 0.2 × ET₀ in the interception rule: it notes
+  that wettings under about 0.2 × ET₀ evaporate without reaching the root zone, a threshold the
+  field applies as Irrigator does, as a deduction.
 - Pereira, L.S., Allen, R.G., Paredes, P., López-Urrea, R., Raes, D., Smith, M., Kilic, A. and
   Salman, M. (2025). *Crop evapotranspiration: Guidelines for computing crop water requirements.
   Second edition, revised 2025.* FAO Irrigation and Drainage Paper 56 Rev.1. Updated Kc and Kcb

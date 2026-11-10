@@ -53,7 +53,9 @@ class CropSectionValidatorTest {
     @DisplayName("Missing required properties should be flagged")
     void testMissingProperties() {
         assertHasIssue("[crop.cotton]\nkc = 1\n", "has no 'root_depth'");
-        assertHasIssue("[crop.cotton]\nroot_depth = 900\n", "has no 'kc'");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\n", "has no 'kc' (or 'kcb')");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\nkc = 1\nkcb = 0.9\n", "has both 'kc' and 'kcb'");
+        assertNoIssues("[crop.cotton]\nroot_depth = 900\nkcb = 0, 0.15, 60, 1.1, 180, 0.5\n");
     }
 
     @Test
