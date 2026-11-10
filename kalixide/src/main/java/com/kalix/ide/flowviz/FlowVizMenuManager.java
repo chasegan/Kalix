@@ -15,6 +15,7 @@ import javax.swing.JRootPane;
 import javax.swing.KeyStroke;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.util.function.Supplier;
 
 /**
@@ -158,6 +159,7 @@ public class FlowVizMenuManager {
 
         // File menu
         JMenu fileMenu = new JMenu("File");
+        fileMenu.setMnemonic(KeyEvent.VK_F);
         fileMenu.add(createMenuItem("New", e -> newSessionAction.run()));
         fileMenu.add(createMenuItem("Add CSV...", e -> openCsvFileAction.run()));
         fileMenu.addSeparator();
@@ -167,6 +169,7 @@ public class FlowVizMenuManager {
 
         // View menu
         JMenu viewMenu = new JMenu("View");
+        viewMenu.setMnemonic(KeyEvent.VK_V);
         dataToggle = new JCheckBoxMenuItem("Show Data", dataVisibleSupplier.get());
         dataToggle.addActionListener(e -> toggleDataAction.run());
         viewMenu.add(dataToggle);
@@ -177,6 +180,7 @@ public class FlowVizMenuManager {
 
         // Zoom menu
         JMenu zoomMenu = new JMenu("Zoom");
+        zoomMenu.setMnemonic(KeyEvent.VK_Z);
         zoomMenu.add(createMenuItem("Zoom In", e -> zoomInAction.run()));
         zoomMenu.add(createMenuItem("Zoom Out", e -> zoomOutAction.run()));
         zoomMenu.addSeparator();
@@ -190,17 +194,20 @@ public class FlowVizMenuManager {
 
         // Tools menu
         JMenu toolsMenu = new JMenu("Tools");
+        toolsMenu.setMnemonic(KeyEvent.VK_T);
         toolsMenu.add(createMenuItem("Statistics", e -> showStatisticsAction.run()));
         toolsMenu.add(createMenuItem("Data Info", e -> showDataInfoAction.run()));
 
         // Preferences menu
         JMenu preferencesMenu = new JMenu("Preferences");
+        preferencesMenu.setMnemonic(KeyEvent.VK_P);
         precision64Toggle = new JCheckBoxMenuItem("64bit Precision", precision64Supplier.get());
         precision64Toggle.addActionListener(e -> togglePrecision64Action.run());
         preferencesMenu.add(precision64Toggle);
 
         // Help menu
         JMenu helpMenu = new JMenu("Help");
+        helpMenu.setMnemonic(KeyEvent.VK_H);
         helpMenu.add(createMenuItem("About FlowViz", e -> showAboutAction.run()));
         helpMenu.add(createMenuItem("Keyboard Shortcuts", e -> showShortcutsAction.run()));
 
