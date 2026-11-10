@@ -60,6 +60,8 @@ public enum AppShortcut {
      */
     GO_TO_LINE("Go to Line", KeyEvent.VK_L),
     TOGGLE_FILE_TREE("Toggle File Tree", KeyEvent.VK_B),
+    /** Fit the map to its nodes: Ctrl/Cmd+0 is "fit on screen" in Photoshop and Illustrator. */
+    ZOOM_TO_FIT("Zoom to Fit", KeyEvent.VK_0),
     RUN_MODEL("Run Model", KeyEvent.VK_R),
     NAVIGATE_BACK("Navigate Back", KeyEvent.VK_OPEN_BRACKET),
     NAVIGATE_FORWARD("Navigate Forward", KeyEvent.VK_CLOSE_BRACKET);

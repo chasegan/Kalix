@@ -160,7 +160,7 @@ public class ToolBarBuilder {
 
         toolBar.add(createToolBarButton(
             "Zoom to Fit",
-            "Zoom to Fit",
+            AppShortcut.ZOOM_TO_FIT.tooltip(),
             FontIcon.of(FontAwesomeSolid.EXPAND, AppConstants.TOOLBAR_ICON_SIZE),
             e -> callbacks.zoomToFit()
         ));

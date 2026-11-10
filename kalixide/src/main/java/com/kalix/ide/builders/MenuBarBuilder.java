@@ -312,7 +312,7 @@ public class MenuBarBuilder {
         viewMenu.addSeparator();
 
         // Zoom to Fit
-        viewMenu.add(createMenuItem("Zoom to Fit", e -> callbacks.zoomToFit()));
+        viewMenu.add(createMenuItem("Zoom to Fit", AppShortcut.ZOOM_TO_FIT, e -> callbacks.zoomToFit()));
         viewMenu.addSeparator();
 
         // Zoom controls
