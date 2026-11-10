@@ -139,6 +139,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
         let mut root_depth: Option<f64> = None;
         let mut initial_root_depth: Option<f64> = None;
         let mut p: f64 = 0.5;
+        let mut p_adjust: bool = true;
         let mut kc: Option<crate::hydrology::crop::KcCurve> = None;
         let mut season_len: Option<u32> = None;
         for (key, ini_property) in &ini_section.properties {
@@ -150,6 +151,11 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     .map_err(|_| KalixIoError::Parse(format!("Error on line {}: initial_root_depth must be a number for crop '{}', got '{}'", ini_property.line_number, crop_name, v)))?),
                 "p" => p = v.parse::<f64>()
                     .map_err(|_| KalixIoError::Parse(format!("Error on line {}: p must be a number for crop '{}', got '{}'", ini_property.line_number, crop_name, v)))?,
+                "p_adjust" => p_adjust = match v.to_lowercase().as_str() {
+                    "true" => true,
+                    "false" => false,
+                    _ => return Err(KalixIoError::Parse(format!("Error on line {}: p_adjust must be true or false for crop '{}', got '{}'", ini_property.line_number, crop_name, v))),
+                },
                 "kc" => kc = Some(if let Ok(constant) = v.parse::<f64>() {
                     crate::hydrology::crop::KcCurve::Constant(constant)
                 } else {
@@ -172,6 +178,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             root_depth: root_depth.ok_or_else(|| KalixIoError::Validate(format!("Error on line {}: Crop '{}' has no 'root_depth'", ini_section.line_number, crop_name)))?,
             initial_root_depth,
             p,
+            p_adjust,
             kc: kc.ok_or_else(|| KalixIoError::Validate(format!("Error on line {}: Crop '{}' has no 'kc'", ini_section.line_number, crop_name)))?,
             season_len,
         };
@@ -2032,6 +2039,9 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
             ini_doc.set_property(section_name.as_str(), "initial_root_depth", format_f64(initial).as_str());
         }
         set_property_unless_default(&mut ini_doc, section_name.as_str(), "p", &format_f64(crop.p), "0.5");
+        if !crop.p_adjust {
+            ini_doc.set_property(section_name.as_str(), "p_adjust", "false");
+        }
         let kc = match &crop.kc {
             crate::hydrology::crop::KcCurve::Constant(kc) => format_f64(*kc),
             crate::hydrology::crop::KcCurve::ByDay(table) => format_vec_as_multiline_table(&table.get_values_as_vec(), 2, 4),

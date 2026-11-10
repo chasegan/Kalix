@@ -29,6 +29,7 @@ class CropSectionValidatorTest {
             root_depth = 900
             initial_root_depth = 200
             p = 0.65
+            p_adjust = false
             kc = Day, Kc,
                  0,   0.35,
                  70,  1.2,
@@ -67,6 +68,7 @@ class CropSectionValidatorTest {
         assertHasIssue("[crop.cotton]\nroot_depth = 900\nkc = 1\nyield = 2\n", "Unexpected property 'yield'");
         assertHasIssue("[crop.cotton]\nroot_depth = 900\ninitial_root_depth = 0\nkc = 1\n", "initial_root_depth must be a positive number");
         assertHasIssue("[crop.cotton]\nroot_depth = 900\ninitial_root_depth = 900\nkc = 1\n", "initial_root_depth must be less than root_depth");
+        assertHasIssue("[crop.cotton]\nroot_depth = 900\np_adjust = maybe\nkc = 1\n", "p_adjust must be true or false");
     }
 
     @Test

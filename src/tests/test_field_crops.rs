@@ -78,6 +78,7 @@ node.paddock.crop_1_viable_area
 node.paddock.crop_1_kc_multiplier
 node.paddock.crop_1_kc
 node.paddock.crop_1_root_depth
+node.paddock.crop_1_p
 node.paddock.crop_2_plant
 node.paddock.fallow_depletion
 node.paddock.soil_moisture
@@ -232,7 +233,8 @@ fn test_water_below_one_crops_roots_is_there_for_the_next() {
     // and 42 mm over 4 km2 leaves. Without the layer's memory the whole 12 would have left
     // on day 8.
     let ini = rig("", "evap = 10\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_2 = shallow\ncrop_2_plant = if(var.day.n == 7, 4, 0)\nrain = if(var.day.n == 8, 50, if(var.day.n == 9, 60, 0))")
-        .replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 1000\nkc = 1\nseason_len = 4\n");
+        .replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 1000\nkc = 1\nseason_len = 4\n")
+        .replace("[crop.shallow]\nroot_depth = 500\nkc = 1\n", "[crop.shallow]\nroot_depth = 500\nkc = 1\np_adjust = false\n");
     let mut model = run(&ini);
     assert_eq!(s(&mut model, "crop_1_depletion")[..4], [10.0, 20.0, 30.0, 40.0]);
     assert!(s(&mut model, "crop_1_days")[4].is_nan(), "harvested on day 5");
@@ -688,4 +690,48 @@ fn test_initial_root_depth_is_checked_and_round_trips() {
     assert!(rendered.contains("initial_root_depth = 250"), "survives save:\n{rendered}");
     let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig("", "crop_1 = deep\ncrop_1_plant = 0")).unwrap());
     assert!(!plain.contains("initial_root_depth"), "absent stays absent");
+}
+
+#[test]
+fn test_p_is_adjusted_for_the_days_evapotranspiration_unless_the_crop_says_not() {
+    // FAO-56 Table 22: the tabled p is for 5 mm/day; 0.04 more per mm less, 0.04 less per mm
+    // more, within 0.1 to 0.8. kc 1 so ETc is evap: 2 -> 0.62, 5 -> 0.5, 10 -> 0.3, 20 -> 0.1
+    let plant = "crop_1 = shallow\ncrop_1_plant = if(var.day.n == 1, 4, 0)";
+    for (evap, p) in [(2.0, 0.62), (5.0, 0.5), (10.0, 0.3), (20.0, 0.1)] {
+        let mut model = run(&rig("", &format!("evap = {evap}\n{plant}")));
+        assert_close(s(&mut model, "crop_1_p")[0], p, &format!("p at {evap} mm/day"));
+    }
+    // The stress follows the day's p: 60 mm down in a 50 mm bucket... use a deep crop, 100 mm,
+    // 60 down: at 10 mm/day p is 0.3, so ks = 40 / 70 instead of 40 / 50
+    let mut model = run(&rig("", "evap = 10\ninitial_depletion = 60\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)"));
+    assert_close(s(&mut model, "crop_1_ks")[0], 40.0 / 70.0, "ks under the adjusted p");
+    assert_close(s(&mut model, "et")[0], 40.0 / 70.0 * 10.0, "and the day's ET with it");
+    // p_adjust = false: p as written, ks = 40 / 50
+    let fixed = rig("", "evap = 10\ninitial_depletion = 60\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)")
+        .replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 1000\nkc = 1\np_adjust = false\n");
+    let mut model = run(&fixed);
+    assert_close(s(&mut model, "crop_1_p")[0], 0.5, "p as written");
+    assert_close(s(&mut model, "crop_1_ks")[0], 0.8, "ks under p as written");
+    // A p written outside 0.1 to 0.8 is its own bound: 0.99 under 2 mm/day stays 0.99, under
+    // 10 mm/day falls to 0.79
+    let extreme = rig("", "evap = 2\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)")
+        .replace("[crop.deep]\nroot_depth = 1000\nkc = 1\n", "[crop.deep]\nroot_depth = 1000\nkc = 1\np = 0.99\n");
+    let mut model = run(&extreme);
+    assert_close(s(&mut model, "crop_1_p")[0], 0.99, "the modeller's p is the ceiling");
+    let mut model = run(&extreme.replace("evap = 2", "evap = 10"));
+    assert_close(s(&mut model, "crop_1_p")[0], 0.79, "but it still falls with high ETc");
+    // The multiplier is in the ETc the adjustment sees: kc 1 x 0.5 at 10 mm/day is 5, so p stays 0.5
+    let mut model = run(&rig("", "evap = 10\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 1, 4, 0)\ncrop_1_kc_multiplier = 0.5"));
+    assert_close(s(&mut model, "crop_1_p")[0], 0.5, "ETc includes the multiplier");
+    // Not a number when nothing stands, and it round-trips
+    assert!(s(&mut model, "crop_1_p").iter().all(|v| v.is_finite()));
+    let mut model = run(&rig("", "evap = 5\ncrop_1 = deep\ncrop_1_plant = if(var.day.n == 3, 4, 0)"));
+    assert!(s(&mut model, "crop_1_p")[0].is_nan());
+    let rendered = IniModelIO::model_to_string(&IniModelIO::read_model_string(&fixed).expect("loads"));
+    assert!(rendered.contains("p_adjust = false"), "survives save:\n{rendered}");
+    let plain = IniModelIO::model_to_string(&IniModelIO::read_model_string(&rig("", "crop_1 = deep\ncrop_1_plant = 0")).unwrap());
+    assert!(!plain.contains("p_adjust"), "the default is not written");
+    let bad = rig("\n[crop.odd]\nroot_depth = 500\nkc = 1\np_adjust = maybe\n", "crop_1 = odd\ncrop_1_plant = 0");
+    let err = IniModelIO::read_model_string(&bad).err().map(|e| e.to_string()).unwrap_or_default();
+    assert!(err.contains("p_adjust must be true or false"), "got: {err}");
 }

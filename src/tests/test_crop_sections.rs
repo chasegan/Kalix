@@ -59,7 +59,7 @@ fn test_crop_validation_names_the_crop_and_the_line() {
 #[test]
 fn test_the_registry_refuses_a_second_crop_of_the_same_name() {
     let mut crops = CropRegistry::default();
-    let cotton = Crop { name: "cotton".into(), root_depth: 900.0, initial_root_depth: None, p: 0.5, kc: KcCurve::Constant(1.0), season_len: None };
+    let cotton = Crop { name: "cotton".into(), root_depth: 900.0, initial_root_depth: None, p: 0.5, p_adjust: true, kc: KcCurve::Constant(1.0), season_len: None };
     assert_eq!(crops.insert(cotton.clone()), Ok(0));
     assert!(crops.insert(cotton).unwrap_err().contains("declared twice"));
     assert_eq!(crops.get_idx("COTTON"), Some(0), "names match regardless of case");
