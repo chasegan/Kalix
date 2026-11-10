@@ -203,8 +203,10 @@ through `NodeSectionLocator`, not the model, so Rename and Disband reach a secti
 isn't on the map. An invalid name is refused with an error stating the rule, and never
 corrected. Edits match a cluster by its key. Create with a name that exists with other
 capitalisation joins that cluster and writes its existing spelling, not the typed one, so
-mistyped capitals never rewrite a whole cluster; Rename changes the spelling, a rename that
-changes only capitalisation included, by rewriting every member. A cluster edit leaves a
+mistyped capitals never rewrite a whole cluster; so does a Rename that merges into another
+cluster. A Rename within one cluster changes its spelling by rewriting every member, and
+renaming to the spelling already shown tidies any member spelled otherwise. A cluster edit
+leaves a
 node with at most one `#@cluster` line, so a node with two can't fall back to the earlier
 cluster: it rewrites the last line in place and deletes any others. Rewriting in place
 keeps a comment below the line inside the section, where a delete and re-insert would push

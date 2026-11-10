@@ -9,8 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * The edits find a cluster by any spelling, since names differing only in case are one
- * cluster (ADR-0010 §6.2), but write exactly the name they are given, so an edit
- * brings the spellings of its nodes back together.
+ * cluster (ADR-0010 §6.2), and bring the spellings of the nodes they touch back together.
+ * Joining an existing cluster, by Create or by a Rename that merges, writes that
+ * cluster's spelling; a Rename within one cluster writes the name as typed.
  */
 class ClusterEditsCaseTest {
 
@@ -51,6 +52,36 @@ class ClusterEditsCaseTest {
         String text = member("north", "a") + member("North", "b");
         assertEquals(member("NORTH", "a") + member("NORTH", "b"),
                 applied(text, ClusterEdits.rename(text, "north", "NORTH")));
+    }
+
+    @Test
+    void aRenameThatMergesWritesTheTargetsSpelling() {
+        // As Create: joining an existing cluster never rewrites its members' spelling.
+        String text = member("south", "a") + member("north", "b") + member("south", "c");
+        assertEquals(member("north", "a") + member("north", "b") + member("north", "c"),
+                applied(text, ClusterEdits.rename(text, "south", "NORTH")));
+    }
+
+    @Test
+    void aRenameThatMergesTakesTheTargetsFirstMention() {
+        String text = member("North", "a") + member("north", "b") + member("south", "c");
+        assertEquals(member("North", "a") + member("north", "b") + member("North", "c"),
+                applied(text, ClusterEdits.rename(text, "south", "NORTH")));
+    }
+
+    @Test
+    void aRenameToANewNameWritesItAsTyped() {
+        String text = member("south", "a") + member("north", "b");
+        assertEquals(member("East", "a") + member("north", "b"),
+                applied(text, ClusterEdits.rename(text, "south", "East")));
+    }
+
+    @Test
+    void aRenameToTheShownSpellingTidiesOnlyTheStrayLines() {
+        String text = member("North", "a") + member("north", "b");
+        List<CommandExecutor.TextEdit> edits = ClusterEdits.rename(text, "North", "North");
+        assertEquals(1, edits.size(), edits.toString());
+        assertEquals(member("North", "a") + member("North", "b"), applied(text, edits));
     }
 
     @Test

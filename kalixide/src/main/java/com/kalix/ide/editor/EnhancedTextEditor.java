@@ -741,7 +741,9 @@ public class EnhancedTextEditor extends JPanel {
     public boolean renameCluster(String cluster) {
         String name = askClusterName("Rename Cluster", "Enter new name for cluster '" + cluster + "':", cluster);
         CommandExecutor executor = clusterExecutor();
-        return name != null && !name.equals(cluster) && executor != null && executor.renameCluster(cluster, name);
+        // The shown spelling is allowed: it rewrites only members spelled otherwise, and an
+        // unchanged cluster comes back as nothing to do.
+        return name != null && executor != null && executor.renameCluster(cluster, name);
     }
 
     /** Takes every member out of the clusters; the nodes stay (the map's {@code Disband}). */

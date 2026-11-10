@@ -62,15 +62,22 @@ final class ClusterEdits {
     }
 
     /**
-     * Moves every member of {@code oldName} to {@code newName}, merging if that exists. A
-     * change of case alone rewrites every member to the new spelling.
+     * Moves every member of {@code oldName} to {@code newName}. A rename within one cluster
+     * (a change of capitalisation alone) rewrites every member to the new spelling. A
+     * rename onto another existing cluster merges into it with that cluster's spelling, as
+     * {@link #create} joins one, so its own members are never rewritten.
      */
     static List<CommandExecutor.TextEdit> rename(String text, String oldName, String newName) {
+        String written = newName;
+        if (!sameCluster(oldName, newName)) {
+            String existing = ClusterIndex.of(ModelParser.parse(text).getNodes()).name(newName);
+            written = existing != null ? existing : newName;
+        }
         List<CommandExecutor.TextEdit> edits = new ArrayList<>();
         for (NodeSection section : NodeSectionLocator.findAll(text)) {
             HeaderBlock block = NodeSectionLocator.headerBlock(text, section, AnnotationKey.CLUSTER);
             if (sameCluster(oldName, cluster(block))) {
-                addEdits(edits, text, block, newName);
+                addEdits(edits, text, block, written);
             }
         }
         return edits;
