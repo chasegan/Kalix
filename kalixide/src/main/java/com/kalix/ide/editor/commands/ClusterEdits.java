@@ -71,8 +71,7 @@ final class ClusterEdits {
         if (AnnotationKey.CLUSTER.isValidValue(name)) {
             return null;
         }
-        return "Cluster name '" + name + "' must be a lowercase letter, then lowercase letters, "
-                + "digits or underscores";
+        return AnnotationKey.CLUSTER.valueRule() + ": '" + name + "'";
     }
 
     /** The cluster a section's lines put it in, read as the parser reads them. */

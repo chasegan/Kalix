@@ -16,8 +16,8 @@ import java.util.List;
  * {@code type} and a parseable {@code loc}; {@code ds_N} properties become links.
  * An {@code #@aka} annotation above the header (ADR-0010 §3) gives the node its
  * readable name, and a {@code #@cluster} annotation its cluster. The one exception to
- * "no regular expressions" is checking a cluster name against the strict bare-name
- * rule, which only lines carrying that annotation pay for.</p>
+ * "no regular expressions" is checking a cluster name against the node-name rule,
+ * which only lines carrying that annotation pay for.</p>
  */
 public class ModelParser {
 

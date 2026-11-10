@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 /**
  * A {@code #@cluster} annotation puts the node below it in a cluster (ADR-0010 §6.2).
  * The text is the truth, so every malformed case has one fixed answer: the last line
- * counts, and a last line that is not a strict bare name leaves the node loose.
+ * counts, and a last line that breaks the node-name rule leaves the node loose.
  */
 class ModelParserClusterTest {
 
@@ -64,15 +64,15 @@ class ModelParserClusterTest {
     }
 
     @Test
-    void strictBareNamesAreClusters() {
-        for (String name : List.of("a", "farm", "farm_3", "a1_b2", "f_")) {
+    void namesUnderTheNodeNameRuleAreClusters() {
+        for (String name : List.of("a", "farm", "farm_3", "a1_b2", "f_", "Teemburra", "0202_dam", "_spare")) {
             assertEquals(name, clusterOf("#@cluster = " + name + "\n" + NODE));
         }
     }
 
     @Test
     void anythingElseIsLoose() {
-        for (String name : List.of("", "Farm", "3farm", "_farm", "farm-3", "farm 3", "farm.north", "farm # note")) {
+        for (String name : List.of("", "farm-3", "farm 3", "farm.north", "farm # note", "café")) {
             assertNull(clusterOf("#@cluster = " + name + "\n" + NODE), name);
         }
     }

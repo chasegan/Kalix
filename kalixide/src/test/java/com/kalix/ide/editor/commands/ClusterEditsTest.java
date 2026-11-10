@@ -1,5 +1,6 @@
 package com.kalix.ide.editor.commands;
 
+import com.kalix.ide.linter.parsing.AnnotationKey;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.model.ModelParser;
 import com.kalix.ide.model.NodeSectionLocator;
@@ -304,18 +305,18 @@ class ClusterEditsTest {
     // --- Names ---
 
     @Test
-    void aStrictBareNameHasNoError() {
-        for (String name : List.of("a", "farm", "farm_3")) {
+    void aNameUnderTheNodeNameRuleHasNoError() {
+        for (String name : List.of("a", "farm", "farm_3", "Teemburra", "0202_dam", "_spare")) {
             assertNull(ClusterEdits.nameError(name), name);
         }
     }
 
     @Test
     void anythingElseHasAnErrorStatingTheRule() {
-        for (String name : List.of("", "Farm", "3farm", "farm 3", "farm.north")) {
+        for (String name : List.of("", "farm 3", "farm.north", "farm-3")) {
             String error = ClusterEdits.nameError(name);
             assertNotNull(error, name);
-            assertTrue(error.contains("lowercase letter"), error);
+            assertTrue(error.contains(AnnotationKey.CLUSTER.valueRule()), error);
             assertTrue(error.contains("'" + name + "'"), error);
         }
     }
