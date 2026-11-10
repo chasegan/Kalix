@@ -266,6 +266,7 @@ public class MapContextMenuManager {
 
         // Zoom to fit
         JMenuItem zoomToFitItem = new JMenuItem("Zoom to fit");
+        zoomToFitItem.setAccelerator(AppShortcut.ZOOM_TO_FIT.keyStroke());
         zoomToFitItem.addActionListener(e -> mapPanel.zoomToFit());
         menu.add(zoomToFitItem);
     }
