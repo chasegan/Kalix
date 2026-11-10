@@ -9,29 +9,31 @@ assets:
 pip: "pip install kalix==0.4.9"
 ---
 
-- Input data checks (#479):
-    - A CSV input with only one row of data, or none, now stops the run with an error naming the input, instead of crashing. Kalix needs two rows to work out the timestep.
-    - So do inputs on different timesteps, and inputs that never all have data on the same timestep (e.g. an all-blank column, or date ranges that don't overlap).
-    - A `start` after the `end`, or outside the input data, is refused with both dates named. The old messages said the opposite or blamed the data.
-    - `kalix convert`, Python's `write_pixie()` and the IDE no longer stamp a timestep on a single row of data. The Pixie they write records no timestep, so running it is refused just as running a one-row CSV is.
-    - A Pixie file holding an empty series can now be read back in the engine and the IDE; its `.pxt` used to hold an invalid start and end.
-    - Python: `read_pixie()` returns an empty series as a column of NaN on the other series' timestamps. Series with values on different timesteps are still refused.
-    - Python: `set_input()` now raises `ModelValidationError` for data with no rows or one row. Previously it assumed a daily timestep for a single row, and raised `ValueError` for no rows.
-- New! View the plotted data as a table in the Run Manager! A `Data` view in the Run Manager's plot tabs, beside `Plot` and `Stats` (#456).
-    - It shows the plotted values as a table, after the tab's aggregation, masks and plot type, exactly as `Save Data` writes them.
-    - `Find…` (Ctrl+f, then F3 for the next match) and `Copy` work as in the data viewer.
-- Unticked series no longer stay in memory: untick a series in every plot tab to free it.
-- `Save Data` on a double-mass plot now writes the cumulative reference as the first column, headed `cumulative reference`. It used to write it as dates in 1970.
-- IDE: files dragged from Finder or Explorer onto the project tree are copied into the folder they land on. If a name is already taken, you're asked to replace it or keep both (#469).
-- IDE: New! Move a plotted series to a second Y axis (#196). Ctrl+click a series in the key (Cmd+click on macOS), or right-click it and choose **Move to right Y axis**, to plot it against its own axis on the right. The key groups series by axis.
-- IDE plots: each axis has its own submenu on the plot's menu, **X axis**, **Y axis (left)** and **Y axis (right)**, with **Fit to data**, **Set range…**, **Copy range**, **Paste range** and, on the Y axes, **Auto-range**. **Auto-range** is set per Y axis, a new right axis starts auto-ranged, and the toolbar toggle sets every axis at once (#505).
-- IDE plots: drag an axis to set its range. The bottom or top half of a Y axis moves its minimum or maximum, the left or right half of the time axis its start or end. Double-click a Y axis to fit it to the data in view, or the time axis to show the whole record.
-- IDE plots: an auto-ranged axis with no data in view now keeps its range, where it used to jump to -1 to 1.
-- Name and reference checks (#442). **Breaking:** models that break these rules are refused when the engine loads them.
-    - Node names may contain only letters, digits and underscores. Names that differ only in case (`Dam`, `dam`) are duplicates and rejected. A name like `[node.my gr4j]` used to load, but no expression could reach it.
-    - A section header that appears twice in a model (e.g. two `[node.a]` sections) is an error naming both lines. The later section used to replace the earlier one without warning, dropping all of its properties. So is a key that appears twice in one section, in any case, where the later value used to win without warning, and an entry listed twice in `[outputs]` or `[data]`.
-    - An expression that refers to a node, node output or var that doesn't exist is an error, with or without an offset. `node.nosuch.dsflow[-1, 0.0]` used to read 0 for the whole run, and `node.nosuch.dsflow` was reported as "computed later in the timestep".
-    - So is a reference to a constant that isn't declared in `[const]`. `const.nosuch` used to read 0 for the whole run. A constant an optimisation calibrates must be declared too; the optimisation sets its value, and a model that calibrates an undeclared one is refused.
-    - `[outputs]` entries must be dot-separated names (no spaces or symbols). An entry naming something that doesn't exist is still accepted and records nothing.
-    - IDE: the linter flags invalid and case-duplicate node names, and Rename refuses them. It also flags a repeated section header, key or entry.
-    - IDE: a model with a bad name or reference is refused when it is sent to the engine, before the run starts.
+- New! A user node can combine accounts with `|` and `&`, e.g. `accounts = (carryover | annual) & valley_cap`. See [combining accounts](https://kalix.org/docs/accounts/#combining-accounts).
+- New! RAS `distribute(x, by_size)` and `distribute(x, by_balance)` share one volume across a group of accounts. A full or empty account passes its share to the others. See [RAS](https://kalix.org/docs/ras/#distribute).
+- New! Plot on a second Y axis (#196):
+    - Ctrl+click a series in the key (Cmd+click on macOS), or right-click it and choose `Move to right Y axis`.
+    - Each axis has its own menu when you right-click the plot: `X axis`, `Y axis (left)` and `Y axis (right)`, with `Fit to data`, `Set range…`, `Copy range`, `Paste range` and `Auto-range` (#505).
+    - Drag an axis to change its range. Double-click a Y axis to fit it to the data in view, or the time axis to see the whole record.
+- New! Tabular view for plotted. The `Data` view sits beside `Plot` and `Stats` in each plot tab.
+- New! "Regions" let you collapse parts of the model in the text editor (`#@region = Title`). Sections and multi-line values are also collapsable. See `Fold` and `Unfold` on the Edit menu.
+- Stricter model checks. **Breaking:** models that break these rules are now refused when the engine loads them (#442, #479):
+    - Node names may contain only letters, digits and underscores. Names that differ only in case are duplicates.
+    - A section header, a key, or a `[data]` entry may appear only once. An entry listed twice in `[outputs]` is recorded once.
+    - An expression or `[outputs]` entry that refers to a node, output, var or constant that doesn't exist is an error. It used to read 0.
+    - An input CSV needs at least two rows, and all inputs must share one timestep.
+    - A `start` after the `end`, or outside the input data, is refused with both dates named.
+    - The IDE's linter flags all of these before you run.
+- IDE:
+    - Files dragged from Finder or Explorer onto the project tree are copied into the folder they land on (#469).
+    - The key grows to fit a long series name, and shows a cut name as a tooltip (#508).
+    - Editors in the optimiser window now follow the dark themes (#509).
+    - Unticked series are freed from memory.
+    - A burst of plot requests no longer stalls the Run Manager for a minute.
+    - `Save Data` on a double-mass plot writes the cumulative reference as the first column, not dates in 1970.
+- Python package:
+    - `read_pixie()` returns an empty series as a column of NaN.
+    - `set_input()` raises `ModelValidationError` for data with fewer than two rows.
+- Dev:
+    - Kalix IDE is now built on Java 25 (LTS).
+    - **Breaking:** Python 3.11 or newer is now required. Support for 3.9 and 3.10 has been dropped.
