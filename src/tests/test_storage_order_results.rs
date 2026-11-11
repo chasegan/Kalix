@@ -141,6 +141,23 @@ fn test_target_volume_orders_as_the_target_level_it_corresponds_to() {
 }
 
 #[test]
+fn test_a_target_cleared_between_runs_stops_ordering() {
+    // The first run's last order must not carry into a run without a target.
+    let mut model = run(&rig(3, "target_volume = 1500"));
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[0], 510.0);
+    for n in model.nodes.iter_mut() {
+        if let NodeEnum::StorageNode(s) = n {
+            if s.name == "weir" {
+                s.target_volume = DynamicInput::default();
+            }
+        }
+    }
+    model.run().expect("second run should succeed");
+    let dam_order = series(&mut model, "node.dam.ds_1_order");
+    assert!(dam_order.iter().all(|&v| v == 0.0), "the weir sends nothing up: {:?}", dam_order);
+}
+
+#[test]
 fn test_target_level_and_target_volume_are_both_recorded_whichever_is_given() {
     // The input is recorded as given and the other is derived from the dimension table.
     for (property, given, derived) in [
