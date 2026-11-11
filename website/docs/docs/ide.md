@@ -13,21 +13,21 @@ title: "Kalix IDE"
 
 **Rename node** from the schematic map context menu
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-using-ide/image.png)
 <figcaption>Rename in the schematic's context menu.</figcaption>
 </figure>
 
 Model editor context menu item **Show on Map** will select and centre the node you’re working on in the schematic map
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-using-ide/image_1.png)
 <figcaption>Show on Map in the editor's context menu.</figcaption>
 </figure>
 
 Click and drag to select nodes on the schematic map. Then drag to move or ctrl+drag to rotate.
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-using-ide/image_2.png)
 <figcaption>A rectangle selection on the schematic.</figcaption>
 </figure>
@@ -49,7 +49,7 @@ The link is written as `ds_N = <downstream>` at the first free outlet. If every 
 
 Ctrl+f in the model editor for **find**, or Ctrl+h for **find-and-replace**
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-using-ide/image_3.png)
 <figcaption>The Find and Replace dialog.</figcaption>
 </figure>
@@ -79,7 +79,7 @@ Use the **Navigate Back** and **Navigate Forward** buttons to flick back and for
 
 **Undo/redo in plots**! Buttons in the Run Manager’s plotting toolbar allow you to undo and redo your plotting actions (data selection, zoom, plot type).
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-using-ide/image_8.png)
 <figcaption>Undo and redo in the Run Manager's plot toolbar.</figcaption>
 </figure>
@@ -106,35 +106,35 @@ The **Parameter Sheet** shows node properties in a table. Filter by node type an
 
 **Auto-complete** is accessible from the context menu, or the ctrl+space keyboard shortcut. Suggestions include data references and model result references. The list filters as you type and is context aware.
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-using-ide/image_11.png)
 <figcaption>Auto-complete suggesting data references for an inflow node.</figcaption>
 </figure>
 
 **Cut/copy/paste** nodes in the schematic map using the context menu or keyboard shortcuts. Paste will paste nodes onto the schematic at the coordinates where you opened the context menu. These will appear in the text-based model representation immediately below the section where the cursor currently is. (If you want to paste below a specific node, click on that node to place the cursor there before pasting).
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-using-ide/image_12.png)
 <figcaption>The schematic's context menu on a selection of nodes: Cut, Copy and Paste.</figcaption>
 </figure>
 
 Ctrl+f to **Find node** on map. This is also available from a button in the toolbar.
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-using-ide/image_13.png)
 <figcaption>The Find Node dialog.</figcaption>
 </figure>
 
 **Linting** warnings and errors highlight issues with the model file before runtime
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-using-ide/image_14.png)
 <figcaption>A lint error: a link to a node that does not exist.</figcaption>
 </figure>
 
 **Undo and redo**, right out of the box ;)
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-using-ide/image_15.png)
 <figcaption>Undo and Redo in the Edit menu.</figcaption>
 </figure>
@@ -160,7 +160,7 @@ Look for the **Plot Palettes** button in the plotting tool to create custom colo
 <figcaption>The Plot Palettes dialog: a palette is a numbered list of colours and strokes.</figcaption>
 </figure>
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-using-ide/92a32e80-6483-4366-ad2c-563768393bbd.png)
 <figcaption>Picking a line colour from the plot key.</figcaption>
 </figure>

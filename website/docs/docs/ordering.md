@@ -96,7 +96,7 @@ Nodes send **orders** upstream to request flows from operational infrastructure.
 
 The model below has a **regulated\_user** node “0002\_user” which orders water according to a timeseries. There is a **storage** node “0001\_dam” which is upstream of the user and which tries to satisfy the order.
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-concepts-ordering/image.png)
 <figcaption>A dam supplying a regulated user, with a gauge below.</figcaption>
 </figure>
@@ -139,7 +139,7 @@ The plot below shows the order (solid green), the storage downstream flow (dotte
 
 The following model introduces a **loss** node between the user and storage. This loss node has a known flow-loss relationship (the table), and this causes flows >200 ML/d to be partly lost. When orders propagate through loss nodes, they are automatically adjusted to cover the losses.
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-concepts-ordering/image_2.png)
 <figcaption>The same system with a loss node between the dam and the user.</figcaption>
 </figure>
@@ -199,7 +199,7 @@ Streamflow routing can cause flows, including flows intended to satisfy orders, 
 
 The model below has a **routing** node positioned between the user and storage. The routing node has approximately 3 days of lag (= 2 days of pwl storage routing + 1 day of pure lag).
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-concepts-ordering/image_4.png)
 <figcaption>The same system with a routing node between the dam and the user.</figcaption>
 </figure>
@@ -278,7 +278,7 @@ Inflows may satisfy some or all of the order required for a **regulated\_user**.
 
 #### Case 1: Constant expected inflow
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-concepts-ordering/image_7.png)
 <figcaption>The same system with an inflow node between the dam and the user.</figcaption>
 </figure>

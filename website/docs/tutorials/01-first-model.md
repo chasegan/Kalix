@@ -233,14 +233,14 @@ The simulation should finish in a fraction of a second.
 
 The Run Manager window should open to a blank chart view. In order to plot `node.0002_ga_widebridge.dsflow` against the `obs` column of `observed.csv`, we must first load the data into the Run Manager. To load `observed.csv`, click and drag it from either your system file explorer or the KalixIDE file tree into the run manager window:
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/tutorials-01-first-model/image_6.png)
 <figcaption>Dragging observed.csv from the file tree into the Run Manager.</figcaption>
 </figure>
 
 Once loaded, verify that it appears in the “Loaded datasets” dropdown menu. Next, click the “Last” run icon, hold Ctrl/Cmd to select multiple data sources, and then click `observed.csv` under “Loaded datasets”. Your Kalix and Timeseries panes should look like this:
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/tutorials-01-first-model/image_7.png)
 <figcaption>The last run and observed.csv selected, with their time series listed below.</figcaption>
 </figure>

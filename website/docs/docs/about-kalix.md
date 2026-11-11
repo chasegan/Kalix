@@ -141,7 +141,7 @@ node.reach2.volume
 node.reach2.dsflow
 ```
 
-<figure markdown>
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-about-kalix/image.png)
 <figcaption>The example model on the Kalix IDE schematic: my_gr4j_node flows to reach2.</figcaption>
 </figure>
