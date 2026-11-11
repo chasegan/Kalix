@@ -328,9 +328,8 @@ impl SimpleNodewiseOrderingSystem {
     /// then follow these intended operations during the flow phase without further intervention
     /// from this struct during the flow phase.
     ///
-    /// Unlike simple_ordering.rs which iterates links in reverse, this method iterates only
-    /// regulated nodes in reverse definition order, with incoming links stored in a flat
-    /// contiguous vec for cache locality.
+    /// Iterates only the regulated nodes, in reverse definition order, with their incoming
+    /// links stored in a flat contiguous vec for cache locality.
     pub fn run_ordering_phase(&mut self, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache, account_manager: &mut AccountManager) {
 
         // Guard to save computation time if there is no ordering!
