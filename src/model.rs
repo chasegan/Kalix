@@ -7,7 +7,8 @@ use crate::io::error::KalixIoError;
 use crate::io::pixie_io;
 use crate::misc::configuration::Configuration;
 use crate::misc::simulation_context::{
-    clear_context, format_simulation_error, set_context_node, set_context_phase, SimPhase,
+    clear_context, clear_context_item, format_simulation_error, set_context_node,
+    set_context_phase, set_context_ras_section, set_context_var_block, ContextItem, SimPhase,
 };
 use crate::model_inputs::DynamicInput;
 use crate::nodes::{Link, Node, NodeEnum};
@@ -809,7 +810,11 @@ impl Model {
             Err(panic_info) => Err(format_simulation_error(
                 panic_info,
                 self.data_cache.current_timestamp,
-                |idx| self.nodes.get(idx).map(|n| n.get_name().to_string()),
+                |item| match item {
+                    ContextItem::Node(idx) => self.nodes.get(idx).map(|n| n.get_name().to_string()),
+                    ContextItem::VarBlock(idx) => self.var_blocks.get(idx).map(|vb| vb.name.clone()),
+                    ContextItem::RasSection(idx) => self.ras_systems.get(idx).map(|r| r.name.clone()),
+                },
             )),
         }
     }
@@ -1029,21 +1034,29 @@ impl Model {
         // step, before ordering and flow — today's orders and takes see
         // today's announcements (kalix-allocation-components.md §3.3), and
         // a section reads bare any assessment written above it.
-        for i in 0..self.ras_slot.len() {
-            match self.ras_slot[i] {
-                RasSlotItem::VarBlock(vb_idx) => {
-                    for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
-                        let value = self.var_blocks[vb_idx].defs[def_idx]
-                            .input
-                            .get_value(&mut self.data_cache);
-                        let series_idx = self.var_blocks[vb_idx].defs[def_idx].series_idx;
-                        self.data_cache.add_value_at_index(series_idx, value);
+        // Most models have no ras slot, so they skip its error context too
+        if !self.ras_slot.is_empty() {
+            set_context_phase(SimPhase::Ras);
+            for i in 0..self.ras_slot.len() {
+                match self.ras_slot[i] {
+                    RasSlotItem::VarBlock(vb_idx) => {
+                        set_context_var_block(vb_idx);
+                        for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
+                            let value = self.var_blocks[vb_idx].defs[def_idx]
+                                .input
+                                .get_value(&mut self.data_cache);
+                            let series_idx = self.var_blocks[vb_idx].defs[def_idx].series_idx;
+                            self.data_cache.add_value_at_index(series_idx, value);
+                        }
+                    }
+                    RasSlotItem::Ras(ras_idx) => {
+                        set_context_ras_section(ras_idx);
+                        self.ras_systems[ras_idx].run(&mut self.data_cache, &mut self.account_manager);
                     }
                 }
-                RasSlotItem::Ras(ras_idx) => {
-                    self.ras_systems[ras_idx].run(&mut self.data_cache, &mut self.account_manager);
-                }
             }
+            // The step's accounting below is no slot item
+            clear_context_item();
         }
 
         // Post-policy, pre-take snapshot: publishes acc.*.opening_balance and
@@ -1068,6 +1081,7 @@ impl Model {
                 &mut self.data_cache,
                 &mut self.account_manager,
                 |vb_idx, data_cache| {
+                    set_context_var_block(vb_idx);
                     for def in &var_blocks[vb_idx].defs {
                         let value = def.input.get_value(data_cache);
                         data_cache.add_value_at_index(def.series_idx, value);
@@ -1126,6 +1140,7 @@ impl Model {
                         // Evaluate the block's definitions top to bottom,
                         // each written to its series — computed exactly once
                         // per step, so every reader observes one value.
+                        set_context_var_block(vb_idx);
                         for def_idx in 0..self.var_blocks[vb_idx].defs.len() {
                             let value = self.var_blocks[vb_idx].defs[def_idx]
                                 .input

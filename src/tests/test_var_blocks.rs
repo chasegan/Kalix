@@ -914,6 +914,8 @@ var.assessment.x
 ";
     let err = run_err(ini);
     assert!(err.contains("no value yet"), "unexpected: {err}");
+    assert!(err.contains("Var block: '[var.assessment]'"), "context should name the block: {err}");
+    assert!(err.contains("Phase: ras"), "context should name the ras slot: {err}");
 }
 
 /// Placement is validated: an assessment block below the first node is a
@@ -1022,6 +1024,14 @@ saw_fire = ras.credit.fired
     // Var above the section: the read is of a value not yet written — loud.
     let err = run_err(&format!("{head}\n{var_block}\n{section}\n{tail}"));
     assert!(err.contains("no value yet"), "unexpected: {err}");
+    assert!(err.contains("Var block: '[var.watch]'"), "context should name the block: {err}");
+
+    // A run error inside a section names the section
+    let bad_section = section.replace("credit(5)", "credit(node.headwater.ds_1)");
+    let err = run_err(&format!("{head}\n{bad_section}\n{tail}"));
+    assert!(err.contains("no value yet"), "unexpected: {err}");
+    assert!(err.contains("Ras section: '[ras.credit]'") && err.contains("Phase: ras"),
+        "context should name the section: {err}");
 }
 
 // ============================================================================
@@ -1087,6 +1097,40 @@ fn order_phase_var_cannot_read_above_bare() {
     let mid = "[var.o]\nphase = order\nx = node.ctrl.ds_1_order";
     let err = run_err(&order_rig("set_order = 1", mid, ""));
     assert!(err.contains("no value yet"), "unexpected: {err}");
+    // The error names the var block, not the last node the walk visited
+    assert!(err.contains("Var block: '[var.o]'"), "context should name the block: {err}");
+}
+
+/// A run error inside a flow-phase block names the block too: here [var.a]
+/// reads [var.b], which sits below it and has not run yet this step.
+#[test]
+fn flow_phase_var_error_names_the_block() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-01-31
+
+[var.a]
+x = var.b.y
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = 10
+ds_1 = outlet
+
+[var.b]
+y = 1
+
+[node.outlet]
+loc = 0, 10
+type = blackhole
+
+[outputs]
+var.a.x
+";
+    let err = run_err(ini);
+    assert!(err.contains("Var block: '[var.a]'"), "context should name the block: {err}");
 }
 
 /// A block below every visited node (among the nodes ordering skips) runs
