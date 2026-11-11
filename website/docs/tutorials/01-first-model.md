@@ -17,25 +17,28 @@ A daily rainfall-runoff model for the (fictional) Stringybark Creek catchment �
 
 ## Prerequisites
 
-- **Kalix software** and the **Tutorial files** —
-  1. Download Kalix from the [Downloads](../downloads.md) page. Unzip the bundled software to a suitable place on your computer and double click “KalixIDE.exe” to launch it.
-  2. You may want to check/set the kalix engine by following the instructions on this page: [Specifying the Kalix binary path in KalixIDE](../docs/kalix-binary-path.md).
-  3. Next you will need the tutorial files. Go to the KalixTutorials repository on GitHub: <https://github.com/chasegan/KalixTutorials>. Click the green “Code” button and find the option that says “Download ZIP”. Unzip the tutorial material somewhere suitable. Open this folder in KalixIDE by clicking “File” > “Open Folder…”.
+You need the **Kalix software** and the **tutorial files**:
 
-     <figure markdown>
-     ![](../assets/tutorials-01-first-model/image_1.png)
-     <figcaption>The KalixTutorials repository on GitHub, with Download ZIP under the Code button.</figcaption>
-     </figure>
+1. Download Kalix from the [Downloads](../downloads.md) page. Unzip the bundled software to a suitable place on your computer and double click “KalixIDE.exe” to launch it.
+2. You may want to check/set the kalix engine by following the instructions on this page: [Specifying the Kalix binary path in KalixIDE](../docs/kalix-binary-path.md).
+3. Next you will need the tutorial files. Go to the KalixTutorials repository on GitHub: <https://github.com/chasegan/KalixTutorials>. Click the green “Code” button and find the option that says “Download ZIP”. Unzip the tutorial material somewhere suitable. Open this folder in KalixIDE by clicking “File” > “Open Folder…”.
 
-     <figure markdown>
-     ![](../assets/tutorials-01-first-model/image_2.png)
-     <figcaption>The tutorial folder open in Kalix IDE, with the file tree on the left.</figcaption>
-     </figure>
+<figure markdown>
+![](../assets/tutorials-01-first-model/image_1.png)
+<figcaption>The KalixTutorials repository on GitHub, with Download ZIP under the Code button.</figcaption>
+</figure>
 
-- For this tutorial you will need the `001/` folder. You'll need:
-  - `climate_data.csv` — daily rainfall and potential evaporation (mm/day)
-  - `observed.csv` — observed streamflow at the gauge (ML/day)
-  - Put both CSVs in the same folder. We'll build the model file (`stringybark_sacramento.ini`) from scratch in that same folder.
+<figure markdown>
+![](../assets/tutorials-01-first-model/image_2.png)
+<figcaption>The tutorial folder open in Kalix IDE, with the file tree on the left.</figcaption>
+</figure>
+
+For this tutorial you will need the `001/` folder, which holds:
+
+- `climate_data.csv` — daily rainfall and potential evaporation (mm/day)
+- `observed.csv` — observed streamflow at the gauge (ML/day)
+
+Put both CSVs in the same folder. We'll build the model file (`stringybark_sacramento.ini`) from scratch in that same folder.
 
 ## About the dataset
 
