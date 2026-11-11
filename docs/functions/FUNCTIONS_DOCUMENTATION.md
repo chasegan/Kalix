@@ -138,8 +138,10 @@ net_demand(pop, doy) = {
 
 `[var.*]` sections hold published calculations. Unlike tables and functions
 (passive — defined anywhere), var blocks are **active**: they execute at
-their file position among the nodes, in the flow phase, reading anything
-computed above them. The file reads downstream, calculations included.
+their file position among the nodes, by default in the flow phase, reading
+anything computed above them. The file reads downstream, calculations
+included (an order-phase block reads the nodes below it instead; see
+`phase` below).
 
 ```ini
 [var.accounting]
@@ -157,11 +159,14 @@ prev_headroom = var.accounting.headroom[-1, -999]
   readable in any expression, offset-addressable, and recordable in
   `[outputs]` like any node output.
 - Keys evaluate top to bottom; later keys see this step's earlier keys.
-- Reading a value computed *below* the block's position (this-timestep) is
-  caught at run start by the same validation as node references; use
+- In the flow phase, reading a value computed *below* the block's position
+  (this-timestep) is caught at run start by the same validation as node
+  references; in the order phase the error is for a node *above* it. Use
   `[-1, default]` for the previous step's value.
-- `phase = flow` (default). `phase = order` is designed but not yet
-  implemented and is rejected at load.
+- `phase = flow` (default) runs at file position in the flow pass;
+  `phase = ras` in the ras slot at the top of the step; `phase = order` at
+  file position in the order phase, which walks the file bottom-up (blocks
+  in reverse file order, keys top to bottom).
 - This replaces the dummy-gauge / `reference_flow` scratch-node workaround.
 
 ## Temporal (Stateful) Functions
@@ -484,9 +489,6 @@ intended growth path of the expression language, roughly in priority order.
   on the `sim.*` namespace. (The boundary flags `sim.new_day/month/year`
   shipped with the temporal functions; there is deliberately no water-year
   field — see Temporal Functions above.)
-- **Order-phase model variables** — `phase = order` on `[var.*]` blocks
-  (the order phase walks bottom-up; the interleave with the ordering system
-  is designed but unimplemented — rejected at load meanwhile).
 - **Inline interpolation** — `interp(x, x1, y1, x2, y2, ...)` for tiny two-
   or three-point relationships that don't warrant a named `[table.*]` section.
 - **File-backed tables** — `file = ./tables/rating.csv` as an alternative to
