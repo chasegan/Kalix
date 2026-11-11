@@ -9,7 +9,7 @@ core (`;`, blocks, locals, `assert`, `clamp`), stateful builtins
 (`moving_*`, `*_since`, `sim.new_*`), `[fn]` user-defined functions
 (inline expansion, hygienic, `this.` rebinding, DAG-checked, conditional
 execution in branches), and `[var.*]` blocks (flow phase at file position;
-`phase = order` rejected pending its ordering-system interleave). Phase 5
+`phase = ras` and, from November 2026, `phase = order`, #493). Phase 5
 (IDE lockstep — linter grammar/functions/sections, autocomplete) July 2026.** This document records the decisions and their
 reasons. An ADR will be harvested after implementation proves the
 calls out (per `ADR-0001 §2`).
