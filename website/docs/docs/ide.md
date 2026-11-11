@@ -150,7 +150,7 @@ If you’re inside a terminal and want to edit a model, you can **launch the IDE
 
 <figure markdown>
 ![](../assets/docs-using-ide/image_17.png)
-<figcaption>The IDE opened from a terminal by passing it a model file: kalixide model.ini.</figcaption>
+<figcaption>Launching the IDE from a terminal with a model file: kalixide model.ini.</figcaption>
 </figure>
 
 Look for the **Plot Palettes** button in the plotting tool to create custom colour palettes. And click the line sample in the key to change the colour and style of a given line. The key grows as wide as the plot to fit a long series name; hover a name it still had to cut short to read it in full.

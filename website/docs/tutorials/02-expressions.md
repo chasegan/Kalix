@@ -163,7 +163,7 @@ Run both the Tutorial 1 and Tutorial 2 models in Kalix IDE, and open the **Run M
 
 <figure markdown>
 ![](../assets/tutorials-02-expressions/image_3.png)
-<figcaption>The same two runs, December 1990 to June 1991: Run_2 (orange) peaks higher; recessions converge.</figcaption>
+<figcaption>The same two runs, December 1990 to June 1991: Run_2 (orange) has the higher peak in most events; recessions converge.</figcaption>
 </figure>
 
 Look at the overlay carefully. You'll likely see:
