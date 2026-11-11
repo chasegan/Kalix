@@ -327,6 +327,42 @@ var.accounting.prev_headroom
         &[-999.0, 90.0, 70.0, 70.0, 30.0], "prev_headroom");
 }
 
+/// A node above a var block may read it at an offset: the reference registers
+/// the series before the block defines it, which is not a duplicate.
+#[test]
+fn node_above_var_reads_it_at_an_offset() {
+    let ini = "\
+[kalix]
+start = 2020-01-30
+end = 2020-02-03
+
+[node.headwater]
+loc = 0, 0
+type = inflow
+inflow = (sim.step + 1) * 10
+ds_1 = gauge
+
+[node.gauge]
+loc = 0, 10
+type = gauge
+reference_flow = var.calc.x[-1, 0]
+ds_1 = sink
+
+[var.calc]
+x = node.headwater.ds_1
+
+[node.sink]
+loc = 0, 20
+type = blackhole
+
+[outputs]
+node.gauge.reference_flow
+";
+    let model = run_model(ini);
+    assert_series(&series(&model, "node.gauge.reference_flow"),
+        &[0.0, 10.0, 20.0, 30.0, 40.0], "node.gauge.reference_flow");
+}
+
 // ============================================================================
 // 7. Phase handling.
 // ============================================================================
@@ -431,15 +467,10 @@ bad.key = 1
         "a dotted key name should be rejected: {err}");
 }
 
-// NOTE on duplicate-series collision (test-plan item 8): no constructible case
-// was found. Two keys `x` in one `[var.a]` section are silently collapsed by
-// the INI parser's IndexMap before the var arm ever sees them (keys are unique
-// per section). Two *different* blocks cannot collide because their series are
-// namespaced by block name (`var.a.x` vs `var.b.x`). A var series could only
-// collide with a pre-existing series of the identical `var.<block>.<key>` name,
-// which nothing else in the model produces. The load arm's duplicate guard
-// (`get_existing_series_idx(...).is_some()`) is therefore real but unreachable
-// from INI; no test asserts it.
+// NOTE on duplicate series (test-plan item 8): the var arm has no duplicate
+// check. Block names and keys are lowercase bare names, and the INI parser
+// refuses a repeated section or key, so two defs cannot share a series. A
+// reference from above registers `var.<block>.<key>` first; the block adopts it.
 
 // ============================================================================
 // 9. Forward offset on a var is a load error.
