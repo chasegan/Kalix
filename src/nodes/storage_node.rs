@@ -1162,7 +1162,7 @@ impl StorageNode {
     }
 
     /// Record the order this storage places upstream and what is on its way to it. Out of
-    /// line and cold, so that run_order_phase stays the size it was (ADR-0004 §3.4).
+    /// line and cold, to keep the recording out of run_order_phase's body (ADR-0004 §3.4).
     #[cold]
     #[inline(never)]
     fn record_orders(&self, data_cache: &mut DataCache, orders_en_route: f64) {
