@@ -31,7 +31,7 @@ Established rainfall-runoff models such as [Sacramento](sacramento.md), [GR4J](g
 </div>
 <div class="kx-card-item" markdown>
 #### Calibration
-[Optimisation](optimisation.md) with established algorithms: [DE](differential-evolution.md), [SCE](sce.md), [CMA-ES](cma-es.md) and [DREAM](dream.md).
+[Optimisation](optimisation.md) with established algorithms: [DE](differential-evolution.md) and [SCE](sce.md).
 </div>
 <div class="kx-card-item" markdown>
 #### Water management
