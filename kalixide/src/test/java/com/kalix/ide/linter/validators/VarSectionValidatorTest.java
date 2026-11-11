@@ -55,9 +55,9 @@ class VarSectionValidatorTest {
     // ==================== Phase errors ====================
 
     @Test
-    @DisplayName("phase = order should be flagged as not yet implemented")
+    @DisplayName("phase = order should be accepted")
     void testPhaseOrder() {
-        assertHasIssue("[var.a]\nphase = order\nx = 1\n", "not yet implemented");
+        assertNoIssues("[var.a]\nphase = order\nx = 1\n");
     }
 
     @Test
