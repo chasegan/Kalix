@@ -1195,6 +1195,10 @@ impl Node for StorageNode {
         self.is_forcing_level  = false; 
         self.was_forcing_level = false; 
         self.sid_adjustment_volume = 0.0;
+        // StorageOrdering::None never writes us_orders, so a previous run's order would persist
+        self.us_orders = 0.0;
+        self.ds_orders = [0.0; MAX_DS_LINKS];
+        self.ds_orders_due = [0.0; MAX_DS_LINKS];
 
         // Checks
         if self.dimensions.nrows() < 2 {
