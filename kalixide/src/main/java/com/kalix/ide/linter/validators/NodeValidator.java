@@ -85,7 +85,7 @@ public class NodeValidator implements ValidationStrategy {
         }
         List<INIModelParser.Property> given = new ArrayList<>();
         for (String param : group) {
-            INIModelParser.Property prop = node.getProperties().get(param);
+            INIModelParser.Property prop = given(node, param);
             if (prop != null) {
                 given.add(prop);
             }
@@ -108,13 +108,13 @@ public class NodeValidator implements ValidationStrategy {
         if (rule != null && !rule.isEnabled()) {
             return;
         }
-        INIModelParser.Property flag = node.getProperties().get(overridden.whenTrue());
-        if (flag == null || !"true".equalsIgnoreCase(flag.getValue().trim())) {
+        INIModelParser.Property flag = given(node, overridden.whenTrue());
+        if (flag == null || !isTrue(flag.getValue())) {
             return;
         }
         ValidationRule.Severity severity = (rule != null) ? rule.getSeverity() : ValidationRule.Severity.WARNING;
         for (String param : overridden.params()) {
-            INIModelParser.Property prop = node.getProperties().get(param);
+            INIModelParser.Property prop = given(node, param);
             if (prop != null) {
                 result.addIssue(prop.getLineNumber(),
                               "Node '" + node.getNodeName() + "': " + param + " has no effect because "
@@ -131,8 +131,8 @@ public class NodeValidator implements ValidationStrategy {
         if (rule != null && !rule.isEnabled()) {
             return;
         }
-        INIModelParser.Property prop = node.getProperties().get(requires.param());
-        if (prop == null || requires.oneOf().stream().anyMatch(node.getProperties()::containsKey)) {
+        INIModelParser.Property prop = given(node, requires.param());
+        if (prop == null || requires.oneOf().stream().anyMatch(p -> given(node, p) != null)) {
             return;
         }
         ValidationRule.Severity severity = (rule != null) ? rule.getSeverity() : ValidationRule.Severity.ERROR;
@@ -140,6 +140,25 @@ public class NodeValidator implements ValidationStrategy {
                       "Node '" + node.getNodeName() + "': " + requires.param() + " needs "
                               + String.join(" or ", requires.oneOf()),
                       severity, "requires_one_of");
+    }
+
+    /** The node's property of this name, whatever its case: the engine lowercases names. */
+    private static INIModelParser.Property given(INIModelParser.NodeSection node, String name) {
+        INIModelParser.Property exact = node.getProperties().get(name);
+        if (exact != null) {
+            return exact;
+        }
+        for (INIModelParser.Property prop : node.getProperties().values()) {
+            if (prop.getKey().equalsIgnoreCase(name)) {
+                return prop;
+            }
+        }
+        return null;
+    }
+
+    /** Whether a boolean value is true. The engine reads the first comma-separated part. */
+    private static boolean isTrue(String value) {
+        return "true".equalsIgnoreCase(value.split(",", 2)[0].trim());
     }
 
     private void validateNodeProperty(INIModelParser.NodeSection node, INIModelParser.Property prop,

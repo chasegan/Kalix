@@ -56,6 +56,13 @@ class NodeValidatorRequiresOneOfTest {
     }
 
     @Test
+    void parameterNamesMatchWhateverTheirCase() {
+        LinterSchema schema = LinterSchema.loadDefault();
+        assertTrue(issues(storage("Target_Level = 1.5\nForecast_Adjustment = 200"), schema).isEmpty());
+        assertEquals(1, issues(storage("Forecast_Adjustment = 200"), schema).size());
+    }
+
+    @Test
     void disablingTheRuleSuppressesTheIssue() {
         LinterSchema schema = LinterSchema.loadDefault();
         schema.getValidationRule("requires_one_of").setEnabled(false);

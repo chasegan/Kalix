@@ -48,6 +48,12 @@ class NodeValidatorExclusiveParamsTest {
     }
 
     @Test
+    void parameterNamesMatchWhateverTheirCase() {
+        String model = storage("Target_Level = 1.5\ntarget_volume = 1500");
+        assertEquals(1, issues(model, LinterSchema.loadDefault()).size());
+    }
+
+    @Test
     void eitherTargetAloneIsFine() {
         LinterSchema schema = LinterSchema.loadDefault();
         assertTrue(issues(storage("target_level = 1.5"), schema).isEmpty());

@@ -49,6 +49,14 @@ class NodeValidatorOverriddenParamsTest {
     }
 
     @Test
+    void flagIsReadAsTheEngineReadsIt() {
+        LinterSchema schema = LinterSchema.loadDefault();
+        assertEquals(1, issues(storage("order_through = true, 2\ntarget_level = 1.5"), schema).size());
+        assertEquals(1, issues(storage("Order_Through = true\nTarget_Volume = 1500"), schema).size());
+        assertTrue(issues(storage("order_through = false, 2\ntarget_level = 1.5"), schema).isEmpty());
+    }
+
+    @Test
     void orderThroughFalseOrAbsentIsFine() {
         LinterSchema schema = LinterSchema.loadDefault();
         assertTrue(issues(storage("order_through = false\ntarget_volume = 1500"), schema).isEmpty());
