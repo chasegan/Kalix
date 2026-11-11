@@ -20,7 +20,10 @@ Four variants of one seven-node model:
 
 Along the way you'll meet a genuinely useful idea from operations: **water you have already ordered is not water you need to order again.**
 
+<figure markdown>
 ![](../assets/tutorials-18-weir-pulsing/pulsing-hero.png)
+<figcaption>Weir volume, naive rule (Weir1, blue) and reach-aware rule (Weir4, orange), December 1990 to October 1991: the pulse is gone.</figcaption>
+</figure>
 
 ## Prerequisites
 
@@ -83,7 +86,10 @@ kalix simulate weir1_lag_naive.ini -o results1.csv
 
 Plot `node.005_weir.volume` and `node.004_weir_orders.set_order` for **October–November 1994**, a period where downstream demand is nearly constant at 9.9 ML/day:
 
+<figure markdown>
 ![](../assets/tutorials-18-weir-pulsing/pulsing-limit-cycle.png)
+<figcaption>Weir volume (blue) and orders (orange), September to December 1994: orders swing from 0 to about 30 ML/day on an 11-day cycle.</figcaption>
+</figure>
 
 The demand is flat, yet the weir cycles endlessly between about 490 and 546 ML, and the orders swing 0 → 30 → 0 with an eleven-day period. This is **weir pulsing** — a self-sustained oscillation created by the rule itself. Over the full ten years it's not just cosmetic: the weir spends 711 days failing to meet orders, for a total shortfall of about 23,000 ML.
 
@@ -118,7 +124,10 @@ Run it:
 kalix simulate weir2_lag_stable.ini -o results2.csv
 ```
 
+<figure markdown>
 ![](../assets/tutorials-18-weir-pulsing/stable-comparison.png)
+<figcaption>Orders under the naive rule (Weir1, orange) and the order-up-to rule (Weir2, green), July to December 1994: the pulse is gone.</figcaption>
+</figure>
 
 The limit cycle is gone — flat demand now gives a flat weir. Across the decade, shortfall drops from ~23,000 ML to ~1,900 ML, and what remains is demand *spikes* exceeding anything in the previous five days, which no backward-looking forecast can see coming.
 
@@ -138,7 +147,10 @@ ds_1 = 004_weir_orders
 
 The `pwl` table adds piecewise-linear **storage routing** on top of the two-day lag: at 100 ML/day the extra travel time is negligible (0.2 days), but a 30 ML/day trickle takes an extra *three days* to work through the reach. Run it and plot the weir volume for **May 1990**, when the irrigation season starts up:
 
+<figure markdown>
 ![](../assets/tutorials-18-weir-pulsing/pwl-ramp-failure.png)
+<figcaption>Weir3 as demand ramps up: the reach absorbs the orders, the weir sits at its minimum for six days and shortfall (red) reaches about 36 ML/day.</figcaption>
+</figure>
 
 As demand ramps from 10 to 70 ML/day, the rule orders correctly — but the weir crashes onto its minimum operating level and sits there for six days, shorting deliveries by up to 36 ML/day. Decade-wide shortfall triples to ~6,000 ML. The order-up-to rule still "works", but something is quietly eating the water it orders.
 
@@ -176,7 +188,10 @@ values = 0,0, 15,67.5, 30,120, 40,149.25, 50,177, 75,228.875, 100,249.5,
 kalix simulate weir4_pwl_stable.ini -o results4.csv
 ```
 
+<figure markdown>
 ![](../assets/tutorials-18-weir-pulsing/pwl-fixed.png)
+<figcaption>Weir3 (solid) and Weir4 with the reach adjustment (dashed): orders go out earlier and the shortfall is gone.</figcaption>
+</figure>
 
 Same May 1990 ramp: the rule now starts lifting its orders about two days before the naive ledger would, the reach fills without raiding deliveries, and the weir never leaves its operating band. The decade's shortfall lands at ~1,400 ML — better than even the pure-lag case.
 

@@ -17,13 +17,13 @@ The data cache is the central hub for timeseries data in Kalix. It houses input 
 ### How can I use the data in my model?
 
 - Every series in the model has a unique name, used to refer to the data within the model.
-  - For input data (i.e. data loaded from a file) each series has three names: one based on the series name within the data file (e.g. column header text), and one based on the series number within the data file (e.g. column number). Here are examples:
-    - `data.input_rainfall_csv.by_name.35001_rain`
-    - `data.input_rainfall_csv.by_index.1`
-  - For function results, the name is based on the function name. Example:
-    - `func.reach_01_inflow`
-  - For model results, the name is based on the node name. Example:
-    - `node.0031_hoover_dam.dsflow`
+    - For input data (i.e. data loaded from a file) each series has three names: one based on the series name within the data file (e.g. column header text), and one based on the series number within the data file (e.g. column number). Here are examples:
+        - `data.input_rainfall_csv.by_name.35001_rain`
+        - `data.input_rainfall_csv.by_index.1`
+    - For function results, the name is based on the function name. Example:
+        - `func.reach_01_inflow`
+    - For model results, the name is based on the node name. Example:
+        - `node.0031_hoover_dam.dsflow`
 
 - Units are implicit: volumes are in [ML], flows are in [ML/d], levels are in [m], rainfall evaporation and seepage rates are [mm/d].
 

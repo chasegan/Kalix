@@ -82,9 +82,14 @@
 
   // --- widget --------------------------------------------------------------
 
-  function mount(root, { inline }) {
+  function mount(root, { inline, onClose }) {
     root.classList.add("kx-chat", inline ? "kx-chat--inline" : "kx-chat--floating");
-    root.innerHTML = `
+    const header = onClose ? `
+      <div class="kx-chat-head">
+        <span>Ask about Kalix</span>
+        <button type="button" class="kx-chat-close" aria-label="Close">&times;</button>
+      </div>` : "";
+    root.innerHTML = `${header}
       <div class="kx-chat-log" role="log" aria-live="polite"></div>
       <form class="kx-chat-form">
         <textarea rows="1" maxlength="2000" placeholder="Ask about Kalix…" aria-label="Your question"></textarea>
@@ -180,6 +185,12 @@
       redraw();
     });
 
+    if (onClose) {
+      root.querySelector(".kx-chat-close").addEventListener("click", onClose);
+      // isComposing: Escape that cancels an IME composition must not close the panel.
+      root.addEventListener("keydown", (e) => { if (e.key === "Escape" && !e.isComposing) onClose(); });
+    }
+
     redraw();
     return { focus: () => input.focus() };
   }
@@ -196,11 +207,15 @@
     document.body.append(button, panel);
 
     let chat;
+    const setOpen = (open) => {
+      panel.hidden = !open;
+      button.classList.toggle("kx-chat-fab--open", open);
+      if (open) chat.focus();
+    };
+    const close = () => { setOpen(false); button.focus(); };
     button.addEventListener("click", () => {
-      chat ??= mount(panel, { inline: false });
-      panel.hidden = !panel.hidden;
-      button.classList.toggle("kx-chat-fab--open", !panel.hidden);
-      if (!panel.hidden) chat.focus();
+      chat ??= mount(panel, { inline: false, onClose: close });
+      setOpen(panel.hidden);
     });
   }
 

@@ -97,6 +97,7 @@ markdown_extensions:
 extra_css:
   - stylesheets/tokens.css
   - stylesheets/extra.css
+  - stylesheets/focus.css
   - stylesheets/kx-chat.css
 
 extra_javascript:
@@ -229,7 +230,6 @@ nav:
               - "0019 distribute shares a volume by weight": code/design/adrs/0019-distribute-shares-a-volume-by-weight.md
           - Website:
               - code/design/website/index.md
-              - Todo: code/design/website/todo.md
   # Contact (docs/contact.md) runs inside the Material theme but hides both
   # sidebars via its front matter, so it is deliberately kept out of the nav —
   # the custom header already links to it.

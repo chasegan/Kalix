@@ -13,18 +13,16 @@ Each section header may appear only once in a model, and each key only once in i
 Node names are defined as part of the node declaration. Node naming follows the conventions below:
 
 - Node names are not case sensitive, so `Dam` and `dam` are the same node and cannot both be declared.
-
-- They may only contain
-  - alphabetical characters ‘a’-’z’ and ‘A’-’Z’
-  - numerical characters ‘0’-’9’ (including as the first character, e.g. `0001_inflow`)
-  - underscores ‘\_’
-
-- They must not contain
-  - spaces or other whitespace characters,
-  - punctuation including fullstops, commas, question-marks, exclamation points, quotation marks,
-  - symbols including ‘#’, ‘$’, ‘%’,
-  - mathematical symbols ‘+’, ‘-’, ‘\*’, ‘^’, ‘=’, ‘/’
-  - brackets.
+- They may only contain:
+    - alphabetical characters `a`–`z` and `A`–`Z`
+    - numerical characters `0`–`9` (including as the first character, e.g. `0001_inflow`)
+    - underscores `_`
+- They must not contain:
+    - spaces or other whitespace characters
+    - punctuation, including full stops, commas, question marks, exclamation points and quotation marks
+    - symbols, including `#`, `$` and `%`
+    - mathematical symbols `+`, `-`, `*`, `^`, `=` and `/`
+    - brackets
 
 A model with a node name that breaks these rules is refused when the engine loads it, with an error naming the line.
 

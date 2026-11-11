@@ -194,10 +194,11 @@ one bucket for its root zone, which the plants and the irrigator work, and one d
 each layer below its roots, which only drainage and planting touch. Below the deepest roots on
 the field nothing draws, so water that passes is gone.
 
+<figure markdown class="kx-figure--plain">
 ![The soil as one set of layers for the whole field, each partition with a bucket to its root depth and a depletion per layer below; and at harvest, the crop's bucket spread over its layers and mixed into the fallow's by area](../assets/docs-nodes-field/layers.svg)
-
-*The layers, and what harvest does with them. The 600 to 900 mm layer keeps the deficit cotton
-left there, below the fallow's roots, until the next deep-rooted crop reaches it.*
+<figcaption markdown>The layers, and what harvest does with them. The 600 to 900 mm layer keeps the deficit cotton
+left there, below the fallow's roots, until the next deep-rooted crop reaches it.</figcaption>
+</figure>
 
 In this order:
 
@@ -237,11 +238,11 @@ In this order:
    take is `bypass`. Of what is taken, `escape = supply × (1 − efficiency)` and the rest
    infiltrates. So irrigation never overfills a root zone, whatever was ordered.
 
+<figure markdown class="kx-figure--plain">
 ![The water balance of one partition: rain, interception and storm runoff above the surface; the root bucket with its depletion; irrigation in and escape out; evapotranspiration up; overflow down through the layers below the roots; excess leaving to ds_1 and ds_2](../assets/docs-nodes-field/water-balance.svg)
-
-*One partition's day. Rain is shed, intercepted or infiltrated; the root bucket is worked by the
-plants and the irrigator; what it cannot hold fills the layers below, and what passes the last
-layer is excess.*
+<figcaption markdown>One partition's day: rain is shed, intercepted or infiltrated; plants and irrigator work the
+root bucket; overflow fills the layers below, and what passes the last is excess.</figcaption>
+</figure>
 
 Rain goes on before irrigation so that a day's rain reduces what a crop takes, rather than
 running off a bucket that irrigation has just filled. Effective rainfall is `rain − intercepted`.
@@ -344,10 +345,11 @@ crop_1_plant = if(sim.month == 10 && sim.day == 15, min(this.area, 0.01 * (node.
 The `0.01` turns hectares into km²; this line plants a hectare for every 8 ML in the storage and
 the account.
 
+<figure markdown class="kx-figure--plain">
 ![A 4 km² field over six days: all fallow; 1 km² planted from the fallow at the fallow's wetness; the crop drying while the fallow does not; the land returned at harvest and the depletions mixed by area](../assets/docs-nodes-field/land-moves.svg)
-
-*Land moves with its water. The fallow gives up area at planting and takes it back at harvest or
-abandonment; every move mixes depletions by area, layer by layer, so nothing is created or lost.*
+<figcaption markdown>Land moves with its water. The fallow gives up area at planting and takes it back at harvest or
+abandonment; every move mixes depletions by area, layer by layer, so nothing is created or lost.</figcaption>
+</figure>
  A perennial is planted once and stays (`crop_1_plant = if(sim.year == 1990 && sim.month
 == 3 && sim.day == 1, this.area, 0)`, with no `season_len` on the crop; a rule on a recurring
 date would replant it after a death). Several slots may be in the ground at

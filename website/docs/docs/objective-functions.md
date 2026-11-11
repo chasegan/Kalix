@@ -164,9 +164,9 @@ Where:
 #### When to Use
 
 - Provides balanced assessment of three model aspects:
-  - **Correlation** (timing and dynamics)
-  - **Variability** (capturing the spread)
-  - **Bias** (volume errors)
+    - **Correlation** (timing and dynamics)
+    - **Variability** (capturing the spread)
+    - **Bias** (volume errors)
 
 - Preferred over NSE in many recent hydrological studies
 

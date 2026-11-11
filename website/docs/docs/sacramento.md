@@ -77,7 +77,7 @@ Parameters for soil moisture and Stores
 
 - LZFPM (Lower Zone Free Water Maximum for Percolation): Maximum capacity of the lower zone's free water that influences percolation.
 
-- RSERV (RSERV parameter): Not always optimised due to its low sensitivity, this parameter is generally the amount of water in the lower zone's free water stores that isn't available for transpiration.
+- RSERV: The fraction of the lower zone's free water stores that isn't available for transpiration. Kalix fixes it at 0.3, so it is not one of the node's `params` and cannot be optimised.
 
 Parameters for Flow Rates and Percolation
 
@@ -105,7 +105,10 @@ Parameters for Runoff Routing
 
 - LagUH is a single-value reparameterisation of the five original unit hydrograph parameters UH1 - UH5. This represents the shape of the unit hydrograph which is used to route instantaneous runoff through the system allowing for delays in the runoff process.
 
+<figure markdown class="kx-figure--plain">
 ![](../assets/docs-nodes-sacramento/image.png)
+<figcaption>The 17 Sacramento parameters with lower and upper bounds, and RSERV, which Kalix fixes at 0.3; LZPK and SARVA are bounded relative to LZSK and PCTIM.</figcaption>
+</figure>
 
 ## LagUH
 

@@ -1,0 +1,12 @@
+---
+version: "0.4.10"
+date: TBD
+prerelease: false
+assets:
+  Windows: "https://github.com/chasegan/Kalix/releases/download/v0.4.10/KalixIDE-Windows-0.4.10-Portable.zip"
+  macOS: "https://github.com/chasegan/Kalix/releases/download/v0.4.10/KalixIDE-macOS-0.4.10-Portable.zip"
+  Linux: "https://github.com/chasegan/Kalix/releases/download/v0.4.10/KalixIDE-Linux-0.4.10-Portable.zip"
+pip: "pip install kalix==0.4.10"
+---
+
+- Website: every link and button shows the same keyboard focus ring; tutorial and docs screenshots are framed with captions and a zoom badge; the About Kalix page is rebuilt and its quick example runs again; the Ask panel has a close button (Esc closes it too).

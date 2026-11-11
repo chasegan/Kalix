@@ -216,14 +216,14 @@ above; per §2.8.
   definitions confirmed as the series-semantics case of `this`.
 - *2026-10-29* — Node names are definitions, but follow a weaker rule than
   §2.6 (#442).
-  - **The rule.** ASCII letters in either case, digits and underscores; a
-    leading digit is allowed.
-  - **Why weaker.** Node IDs carried over from converted models
-    (`0202_UC_...`) often start with a digit, and expressions can already
-    reach such names.
-  - **Case.** Matching stays case-insensitive, so names that differ only in
-    case are duplicates.
-  - **No accented letters.** Accented and other non-ASCII letters are not
-    supported.
-  - **Enforcement.** `misc_functions::is_valid_name_segment` (engine) and
-    `EngineNames.isValidNodeName` (IDE).
+    - **The rule.** ASCII letters in either case, digits and underscores; a
+      leading digit is allowed.
+    - **Why weaker.** Node IDs carried over from converted models
+      (`0202_UC_...`) often start with a digit, and expressions can already
+      reach such names.
+    - **Case.** Matching stays case-insensitive, so names that differ only in
+      case are duplicates.
+    - **No accented letters.** Accented and other non-ASCII letters are not
+      supported.
+    - **Enforcement.** `misc_functions::is_valid_name_segment` (engine) and
+      `EngineNames.isValidNodeName` (IDE).
