@@ -1403,14 +1403,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 }
 
                 let series_name = format!("var.{}.{}", block_name, key).to_lowercase();
-                if model.data_cache.get_existing_series_idx(&series_name).is_some() {
-                    return Err(KalixIoError::Validate(format!(
-                        "Error on line {}: series '{}' already exists (duplicate var definition?)",
-                        ini_property.line_number, series_name)));
-                }
                 // The block's own output series: registered before lowering
                 // the expression, so a self-reference with a [-1, default]
-                // offset resolves to the same series.
+                // offset resolves to the same series. A reference from above
+                // the block may have registered it already; it is the same
+                // series. (No duplicate check: block names and keys are
+                // lowercase, and the parser refuses a repeated section or key.)
                 let series_idx = model.data_cache.get_or_add_new_series(&series_name, false);
                 model.data_cache.mark_written(series_idx);
 
