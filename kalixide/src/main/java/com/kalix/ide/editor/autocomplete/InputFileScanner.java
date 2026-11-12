@@ -1,6 +1,7 @@
 package com.kalix.ide.editor.autocomplete;
 
 import com.kalix.ide.constants.UIConstants;
+import com.kalix.ide.io.CompressedCsvFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -126,6 +127,6 @@ public class InputFileScanner {
     /** Whether a file name is one {@code [data]} will accept. */
     private static boolean isOfferable(String fileName) {
         String lower = fileName.toLowerCase();
-        return lower.endsWith(".csv") || lower.endsWith(".csv.zip") || lower.endsWith(".pxt");
+        return lower.endsWith(".csv") || CompressedCsvFormat.isCompressedCsv(lower) || lower.endsWith(".pxt");
     }
 }

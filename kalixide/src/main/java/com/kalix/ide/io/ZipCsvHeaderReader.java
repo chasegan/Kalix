@@ -8,21 +8,21 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
- * Reads column headers from zip-compressed CSV files ({@code .csv.zip}): the
- * same first-line parse as {@link CsvHeaderReader}, over the archive's single
- * entry — only the head of the stream is ever decompressed.
+ * Reads column headers from compressed CSV files ({@link CompressedCsvFormat}):
+ * the same first-line parse as {@link CsvHeaderReader}, over the decompressed
+ * stream — only its head is ever decompressed.
  */
 public class ZipCsvHeaderReader extends CsvHeaderReader {
 
     @Override
     public boolean canRead(String fileName) {
-        return CsvZipFormat.isCsvZip(fileName);
+        return CompressedCsvFormat.isCompressedCsv(fileName);
     }
 
     @Override
     public List<String> readSeriesNames(File file) throws IOException {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-                CsvZipFormat.openSingleEntry(file), StandardCharsets.UTF_8))) {
+                CompressedCsvFormat.openDecompressed(file), StandardCharsets.UTF_8))) {
             return readSeriesNames(reader);
         }
     }

@@ -151,13 +151,13 @@ public class TimeSeriesCsvExporter {
     }
 
     /**
-     * UTF-8 writer for the output file; a one-entry zip archive when the name
-     * says {@code .csv.zip} — the extension is the single source of truth for
-     * the format. Delegates to {@link CsvZipFormat#newUtf8Writer}, the one
-     * holder of the entry-name and pinned-timestamp conventions.
+     * UTF-8 writer for the output file; compressed when the name says so —
+     * the extension is the single source of truth for the format. Delegates
+     * to {@link CompressedCsvFormat#newUtf8Writer}, the one holder of the
+     * reproducibility conventions.
      */
     private static Writer openWriter(File file) throws IOException {
-        return CsvZipFormat.newUtf8Writer(file);
+        return CompressedCsvFormat.newUtf8Writer(file);
     }
 
     /** Writes the CSV header row: the table's first heading, then each series header, escaped for CSV. */

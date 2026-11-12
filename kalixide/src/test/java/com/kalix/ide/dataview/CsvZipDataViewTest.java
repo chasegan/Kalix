@@ -1,5 +1,6 @@
 package com.kalix.ide.dataview;
 
+import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.io.CsvZipFormat;
 import com.kalix.ide.io.ZipArchive;
 import com.kalix.ide.preferences.PreferenceKeys;
@@ -91,7 +92,7 @@ class CsvZipDataViewTest {
         int old = PreferenceKeys.DATAVIEW_ZIP_MEMORY_LIMIT_MB.get();
         try {
             PreferenceKeys.DATAVIEW_ZIP_MEMORY_LIMIT_MB.set(0);
-            CsvZipFormat.TooLargeException e = assertThrows(CsvZipFormat.TooLargeException.class,
+            CompressedCsvFormat.TooLargeException e = assertThrows(CompressedCsvFormat.TooLargeException.class,
                 () -> DataViewOpener.openFor(zip.toFile()));
             assertTrue(e.getMessage().contains("in-memory limit"), e.getMessage());
         } finally {
@@ -114,24 +115,24 @@ class CsvZipDataViewTest {
     void decompressBoundedRoundTripsAndRefusesHonestly() throws IOException {
         String content = "Date,q\n2020-01-01,1.0\n";
         Path zip = zipFile("small.csv.zip", "small.csv", content);
-        byte[] bytes = CsvZipFormat.decompressBounded(zip.toFile(), 1024 * 1024);
+        byte[] bytes = CompressedCsvFormat.decompressBounded(zip.toFile(), 1024 * 1024);
         assertEquals(content, new String(bytes, StandardCharsets.UTF_8));
 
-        assertThrows(CsvZipFormat.TooLargeException.class,
-            () -> CsvZipFormat.decompressBounded(zip.toFile(), 4),
+        assertThrows(CompressedCsvFormat.TooLargeException.class,
+            () -> CompressedCsvFormat.decompressBounded(zip.toFile(), 4),
             "the bound is enforced during decompression");
     }
 
     @Test
     void writerReadsBackAndPinsTheEntryName() throws IOException {
         Path out = tempDir.resolve("written.csv.zip");
-        try (var writer = CsvZipFormat.newUtf8Writer(out.toFile())) {
+        try (var writer = CompressedCsvFormat.newUtf8Writer(out.toFile())) {
             writer.write("Date,q\n2020-01-01,3.0\n");
         }
         assertEquals(java.util.List.of("written.csv"), ZipArchive.fileEntryNames(out.toFile()),
             "the single entry is named like the archive minus .zip (pandas' convention)");
         assertEquals("Date,q\n2020-01-01,3.0\n",
-            new String(CsvZipFormat.decompressBounded(out.toFile(), 1024), StandardCharsets.UTF_8));
+            new String(CompressedCsvFormat.decompressBounded(out.toFile(), 1024), StandardCharsets.UTF_8));
     }
 
     @Test

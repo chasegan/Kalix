@@ -53,7 +53,7 @@ public final class SeriesFileWriter {
             throw new IllegalArgumentException(
                 "Source result CSV (.res.csv) can't be written here. Save as .csv, .csv.zip or .pxt.");
         }
-        if (!name.toLowerCase().endsWith(".csv") && !CsvZipFormat.isCsvZip(name)) {
+        if (!name.toLowerCase().endsWith(".csv") && !CompressedCsvFormat.isCompressedCsv(name)) {
             file = new File(file.getAbsolutePath() + ".csv");
         }
         TimeSeriesCsvExporter.export(dataSet, file, plotType, labels);

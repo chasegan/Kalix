@@ -2,7 +2,7 @@ package com.kalix.ide.flowviz;
 
 import com.kalix.ide.io.TimeSeriesCsvImporter;
 import com.kalix.ide.io.SourceResCsvFormat;
-import com.kalix.ide.io.CsvZipFormat;
+import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.io.SourceResCsvImporter;
 import com.kalix.ide.io.PixieReader;
 import com.kalix.ide.io.PixieSeriesKey;
@@ -170,10 +170,10 @@ public class FlowVizDataManager {
     public void loadFile(File file) {
         String fileName = file.getName().toLowerCase();
         // ".res.csv" must be tested before ".csv" — the latter would otherwise swallow it.
-        // (".csv.zip" collides with neither; the importer decompresses it by name.)
+        // (Compressed CSV collides with neither; the importer decompresses it by name.)
         if (SourceResCsvFormat.isResCsv(fileName)) {
             loadResCsvFile(file);
-        } else if (fileName.endsWith(".csv") || CsvZipFormat.isCsvZip(fileName)) {
+        } else if (fileName.endsWith(".csv") || CompressedCsvFormat.isCompressedCsv(fileName)) {
             loadCsvFile(file);
         } else if (fileName.endsWith(".pxt")) {
             loadPixieFile(file);
@@ -705,7 +705,7 @@ public class FlowVizDataManager {
                         List<File> supportedFiles = files.stream()
                             .filter(file -> {
                                 String name = file.getName().toLowerCase();
-                                return name.endsWith(".csv") || name.endsWith(".csv.zip")
+                                return name.endsWith(".csv") || CompressedCsvFormat.isCompressedCsv(name)
                                     || name.endsWith(".pxt");
                             })
                             .toList();

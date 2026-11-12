@@ -1,6 +1,7 @@
 package com.kalix.ide.document;
 
 import com.kalix.ide.constants.AppConstants;
+import com.kalix.ide.io.CompressedCsvFormat;
 
 import java.io.File;
 import java.util.Locale;
@@ -37,9 +38,9 @@ public enum DocumentKind {
         if (name.endsWith(AppConstants.INI_EXTENSION)) {
             return MODEL;
         }
-        if (name.endsWith(".csv") || name.endsWith(".csv.zip")
+        if (name.endsWith(".csv") || CompressedCsvFormat.isCompressedCsv(name)
                 || name.endsWith(".pxt") || name.endsWith(".pxb")) {
-            // Covers .res.csv (header dispatch downstream), zip-compressed
+            // Covers .res.csv (header dispatch downstream), compressed
             // CSV, and the Pixie pair (.pxb redirects to its .pxt manifest at
             // the open path).
             return DATA;

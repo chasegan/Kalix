@@ -5,7 +5,7 @@ import com.kalix.ide.filedialog.KalixFileDialog;
 import com.kalix.ide.flowviz.data.LabelResolver;
 import com.kalix.ide.flowviz.data.SeriesRef;
 import com.kalix.ide.flowviz.models.StatsTableModel;
-import com.kalix.ide.io.CsvZipFormat;
+import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.utils.DialogUtils;
 
 import javax.swing.JLabel;
@@ -132,7 +132,7 @@ public final class StatsVizPanel extends JPanel {
             // The extension is the format: a name ending .csv.zip writes a
             // one-entry zip (and either way the text is UTF-8, like the data
             // exporter).
-            try (Writer writer = CsvZipFormat.newUtf8Writer(file)) {
+            try (Writer writer = CompressedCsvFormat.newUtf8Writer(file)) {
                 // Write header (dynamic columns from table)
                 for (int col = 0; col < table.getColumnCount(); col++) {
                     if (col > 0) writer.write(",");
