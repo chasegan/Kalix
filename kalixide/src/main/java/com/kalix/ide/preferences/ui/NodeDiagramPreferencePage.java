@@ -16,19 +16,25 @@ public class NodeDiagramPreferencePage extends AbstractPreferencePage {
 
     private final Runnable onMapPreferencesChanged;
     private final Consumer<Boolean> onGridlinesChanged;
+    private final Consumer<Boolean> onScrollPansMapChanged;
 
     private JCheckBox gridlinesCheckBox;
+    private JCheckBox scrollPansMapCheckBox;
 
     /**
      * @param onMapPreferencesChanged notified after a map preference changes, so
      *                                the map display can be updated
      * @param onGridlinesChanged      notified with the new value after the gridlines
      *                                preference changes, so the toolbar toggle can sync
+     * @param onScrollPansMapChanged  given the new value of the scroll setting; it
+     *                                applies the value to the open maps and saves it
      */
-    public NodeDiagramPreferencePage(Runnable onMapPreferencesChanged, Consumer<Boolean> onGridlinesChanged) {
+    public NodeDiagramPreferencePage(Runnable onMapPreferencesChanged, Consumer<Boolean> onGridlinesChanged,
+                                     Consumer<Boolean> onScrollPansMapChanged) {
         super("Node Diagram");
         this.onMapPreferencesChanged = onMapPreferencesChanged;
         this.onGridlinesChanged = onGridlinesChanged;
+        this.onScrollPansMapChanged = onScrollPansMapChanged;
         initializePanel();
     }
 
@@ -61,6 +67,15 @@ public class NodeDiagramPreferencePage extends AbstractPreferencePage {
             onGridlinesChanged.accept(enabled);
         });
         formPanel.add(gridlinesCheckBox, gbc);
+
+        // The same setting as View > Scroll Pans Map. It is saved per machine, not in
+        // kalix_prefs.json, because it follows the pointing device.
+        gbc.gridy = 1;
+        scrollPansMapCheckBox = new JCheckBox("Scroll pans the map (hold Ctrl or Cmd to zoom)");
+        scrollPansMapCheckBox.setSelected(PreferenceKeys.MAP_TRACKPAD_NAVIGATION.get());
+        scrollPansMapCheckBox.addActionListener(
+            e -> onScrollPansMapChanged.accept(scrollPansMapCheckBox.isSelected()));
+        formPanel.add(scrollPansMapCheckBox, gbc);
 
         add(formPanel, BorderLayout.NORTH);
     }
