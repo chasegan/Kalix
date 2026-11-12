@@ -141,6 +141,32 @@ fn test_target_volume_orders_as_the_target_level_it_corresponds_to() {
 }
 
 #[test]
+fn test_targets_convert_through_a_table_that_is_not_linear() {
+    // Every other test here uses a weir of 1000 ML per metre throughout, where a level
+    // and its volume differ only by a factor and a wrong lookup could go unseen. This
+    // weir holds 1000 ML at 1 m and 5000 ML at 3 m, so 2 m is 3000 ML, not 2000.
+    let kinked = |weir: &str| {
+        let ini = rig(3, weir);
+        assert!(ini.contains("3, 3000, 0.1, 0,"), "the rig's table has changed");
+        ini.replace("3, 3000, 0.1, 0,", "3, 5000, 0.1, 0,").replace("4, 4000, 0.1, 1e9,", "4, 7000, 0.1, 1e9,")
+    };
+    // Day 1: 1000 ML now, less the day's 10, against 3000: 2010 ordered.
+    let mut by_level = run(&kinked("target_level = 2"));
+    assert_eq!(series(&mut by_level, "node.weir.target_volume")[0], 3000.0);
+    assert_eq!(series(&mut by_level, "node.weir.order")[..2], [2010.0, 10.0]);
+    assert_eq!(series(&mut by_level, "node.dam.ds_1_order")[0], 2010.0);
+
+    let mut by_volume = run(&kinked("target_volume = 3000"));
+    assert_eq!(series(&mut by_volume, "node.weir.target_level")[0], 2.0);
+    assert_eq!(series(&mut by_volume, "node.weir.order")[..2], [2010.0, 10.0]);
+
+    // And through the per-step path, which a constant level does not take.
+    let mut per_step = run(&kinked("target_level = if(sim.step >= 0, 2, 0)"));
+    assert_eq!(series(&mut per_step, "node.weir.target_volume")[0], 3000.0);
+    assert_eq!(series(&mut per_step, "node.weir.order")[..2], [2010.0, 10.0]);
+}
+
+#[test]
 fn test_a_target_cleared_between_runs_stops_ordering() {
     // The first run's last order must not carry into a run without a target.
     let mut model = run(&rig(3, "target_volume = 1500"));
