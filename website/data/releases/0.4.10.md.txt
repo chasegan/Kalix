@@ -12,7 +12,7 @@ pip: "pip install kalix==0.4.10"
 - Website: every link and button shows the same keyboard focus ring; tutorial and docs screenshots are framed with captions and a zoom badge; the About Kalix page is rebuilt and its quick example runs again; the Ask panel has a close button (Esc closes it too).
 - Storage ordering targets (#492):
     - `target_volume` sets an ordering target as a volume [ML], as an alternative to `target_level`. The two cannot be given together, and both `target_level` and `target_volume` results are available whichever is used.
-    - `forecast_volume_adjustment` [ML] adds water you expect to arrive (+) or leave (-) over the order travel time, such as a forecast inflow or a planned diversion, to the forecast a target storage orders against. It needs a target.
+    - `forecast_volume_adjustment` [ML] adds the net water you expect to arrive (+) or leave (-) before today's order does, such as a forecast inflow or a planned diversion, to the forecast a target storage orders against. It is a total over the order travel time, not a daily rate, and is added on top of the orders already en route. It needs a target.
     - A new `forecast_volume` result records the forecast each target order is based on.
     - The IDE linter flags both targets given together and an adjustment without a target, and warns that a target has no effect under `order_through = true`.
     - A constant `target_level` is now converted to a volume once per run instead of every step, with identical results.
