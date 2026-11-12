@@ -87,7 +87,11 @@ public class DataDocument extends KalixDocument {
             openFailureNote = e.getMessage() + " (raise the limit in preferences and reopen)";
             logger.warn("Data view unavailable for {}: {}", file, e.getMessage());
         } catch (IOException e) {
-            // The tab still opens; only the data views are lost.
+            // The tab still opens; only the data views are lost. A read-only tab
+            // has no text to fall back on, so its banner says why (e.g. a
+            // truncated .csv.gz); a refused open builds no views to refresh into.
+            openFailureNote = "Can't read this file: "
+                + (e.getMessage() != null ? e.getMessage() : e.toString()) + " (reopen to retry)";
             logger.warn("Data view unavailable for {}: {}", file, e.getMessage());
         }
         this.dataViewSession = session;
@@ -119,9 +123,9 @@ public class DataDocument extends KalixDocument {
         if (virtualText) {
             this.largePrimaryView = withReadOnlyBanner(largeTextScroller, readOnlyBannerText(file));
         } else if (largeReadOnly && openFailureNote != null) {
-            // No views to show, but the tab must still say why (a refused
-            // .csv.zip): the banner carries the reason over the empty,
-            // unsaveable editor.
+            // No views to show, but the tab must still say why (a refused or
+            // unreadable compressed CSV): the banner carries the reason over
+            // the empty, unsaveable editor.
             this.largePrimaryView = withReadOnlyBanner(getEditor(), openFailureNote);
         } else {
             this.largePrimaryView = null;
