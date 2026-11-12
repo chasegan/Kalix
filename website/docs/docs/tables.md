@@ -152,7 +152,7 @@ table returns the cell written there, and a column key that matches returns
 exactly what the same table returns without `bilinear`. Between grid points
 the result never leaves the range of the four cells around it.
 
-`bilinear` takes `true` or `false`, in lowercase, and defaults to `false`.
+`bilinear` takes `true` or `false`, in any case, and defaults to `false`.
 It applies to 2D tables only: `bilinear = true` on a 1D table is an error at
 model load.
 
