@@ -149,6 +149,8 @@ The term `A` is the `forecast_volume_adjustment`, zero unless given. Use it for 
 - A single 100 ML inflow expected on one day, with an order travel time of 3 timesteps, is 100 on that day and on the 3 timesteps before it, and zero otherwise. Once the water has arrived it is part of `Vnow`.
 - A forecast inflow series is its sum over today and the next n\_timesteps, supplied as an input series.
 
+If the target or `A` evaluates to NaN on a timestep, the storage orders nothing on that timestep. The NaN shows in the `target_level` and `target_volume` results, or in `forecast_volume` and `forecast_volume_adjustment`, so the timestep can be found. This lets an input series switch the target off for part of the run.
+
 **Order through**
 
 When a storage is set with `order_through = true`, the storage will pass orders from the downstream link(s) to the upstream link(s) verbatim. Doing this means that downstream orders are really being satisfied from the upstream storage. This may change the ordering travel time perceived by regulated users.
