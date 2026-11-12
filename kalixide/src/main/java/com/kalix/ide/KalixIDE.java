@@ -166,7 +166,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
 
     // Toolbar toggle buttons (stored for state synchronization)
     private JToggleButton fileTreeToggleButton;
-    private JToggleButton lintingToggleButton;
     private JToggleButton autoReloadToggleButton;
     private JToggleButton gridlinesToggleButton;
     private JToggleButton labelsToggleButton;
@@ -788,7 +787,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
         ToolBarBuilder.ToolBarComponents components = toolBarBuilder.buildToolBar();
         toolBar = components.toolBar;
         fileTreeToggleButton = components.fileTreeToggleButton;
-        lintingToggleButton = components.lintingToggleButton;
         autoReloadToggleButton = components.autoReloadToggleButton;
         gridlinesToggleButton = components.gridlinesToggleButton;
         labelsToggleButton = components.labelsToggleButton;
@@ -957,14 +955,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             boolean treeVisible = isFileTreeVisible();
             fileTreeToggleButton.setSelected(treeVisible);
             fileTreeToggleButton.setToolTipText(treeVisible ? "Hide file tree" : "Show file tree");
-        }
-
-        if (lintingToggleButton != null) {
-            boolean lintingEnabled = isLintingEnabled();
-            lintingToggleButton.setSelected(lintingEnabled);
-            lintingToggleButton.setToolTipText(lintingEnabled
-                ? "Linting enabled - click to disable"
-                : "Linting disabled - click to enable");
         }
 
         if (autoReloadToggleButton != null) {
@@ -2304,7 +2294,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             ToolBarBuilder.ToolBarComponents components = toolBarBuilder.buildToolBar();
             toolBar = components.toolBar;
             fileTreeToggleButton = components.fileTreeToggleButton;
-            lintingToggleButton = components.lintingToggleButton;
             autoReloadToggleButton = components.autoReloadToggleButton;
             gridlinesToggleButton = components.gridlinesToggleButton;
             labelsToggleButton = components.labelsToggleButton;
