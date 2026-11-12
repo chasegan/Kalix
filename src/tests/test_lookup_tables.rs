@@ -344,7 +344,9 @@ fn test_model_table_error_cases() {
     assert!(err.contains("bilinear for table 't' must be true or false"), "got: {}", err);
     for value in ["true", "True", "TRUE", "false", "False", "FALSE"] {
         let ini = format!("[kalix]\n[table.t]\nn_cols = 3\nbilinear = {}\nvalues = x, 1, 2, 0, 5, 6\n", value);
-        assert!(read(&ini).is_ok(), "bilinear = {} should load", value);
+        let model = read(&ini).unwrap_or_else(|e| panic!("bilinear = {} should load, got: {}", value, e));
+        let table = model.data_cache.tables.get("t").expect("table registered");
+        assert_eq!(table.is_bilinear(), value.eq_ignore_ascii_case("true"), "bilinear = {}", value);
     }
     // bilinear = true on a 1D table, in either property order
     let err = read("[kalix]\n[table.t]\nbilinear = true\nvalues = 0, 0, 1, 1\n").err().expect("bilinear on 1D should fail").to_string();
