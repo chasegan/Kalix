@@ -13,9 +13,11 @@ import org.slf4j.LoggerFactory;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
@@ -196,6 +198,44 @@ public class LinterSchema {
             if (dsnodeNode.isArray()) {
                 for (JsonNode param : dsnodeNode) {
                     nodeType.dsnodeParams.add(param.asText());
+                }
+            }
+
+            // Parse groups of mutually exclusive parameters
+            JsonNode exclusiveNode = typeNode.path("exclusive_params");
+            if (exclusiveNode.isArray()) {
+                for (JsonNode group : exclusiveNode) {
+                    List<String> params = new ArrayList<>();
+                    for (JsonNode param : group) {
+                        params.add(param.asText());
+                    }
+                    nodeType.exclusiveParams.add(params);
+                }
+            }
+
+            // Parse parameters overridden by a boolean parameter
+            JsonNode overriddenNode = typeNode.path("overridden_params");
+            if (overriddenNode.isArray()) {
+                for (JsonNode entryNode : overriddenNode) {
+                    List<String> params = new ArrayList<>();
+                    for (JsonNode param : entryNode.path("params")) {
+                        params.add(param.asText());
+                    }
+                    nodeType.overriddenParams.add(new NodeTypeDefinition.OverriddenParams(
+                            entryNode.path("when_true").asText(), params));
+                }
+            }
+
+            // Parse parameters that need one of a set of others
+            JsonNode requiresNode = typeNode.path("requires_one_of");
+            if (requiresNode.isArray()) {
+                for (JsonNode entryNode : requiresNode) {
+                    List<String> oneOf = new ArrayList<>();
+                    for (JsonNode param : entryNode.path("one_of")) {
+                        oneOf.add(param.asText());
+                    }
+                    nodeType.requiresOneOf.add(new NodeTypeDefinition.RequiresOneOf(
+                            entryNode.path("param").asText(), oneOf));
                 }
             }
 

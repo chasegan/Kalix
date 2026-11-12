@@ -423,6 +423,41 @@ fn test_changed_storage_keeps_target_level_and_order_through() {
 }
 
 #[test]
+fn test_changed_storage_keeps_target_volume_and_forecast_volume_adjustment() {
+    let ini = "[kalix]\n\
+               \n\
+               [node.s]\n\
+               type = storage\n\
+               loc = 5, 6\n\
+               target_volume = 800\n\
+               forecast_volume_adjustment = -25\n\
+               initial_volume = 100\n\
+               dimensions = 0, 0, 0, 0,\n\
+               \x20            1, 1000, 3, 0\n\
+               ds_1 = bh\n\
+               \n\
+               [node.bh]\n\
+               type = blackhole\n\
+               loc = 1, 2\n";
+
+    let mut model = IniModelIO::read_model_string(ini).expect("model should parse");
+
+    // Force the storage section to re-render canonically.
+    for node in &mut model.nodes {
+        if let crate::nodes::NodeEnum::StorageNode(n) = node {
+            n.vol_initial = 200.0;
+        }
+    }
+
+    let saved = IniModelIO::model_to_string(&model);
+
+    assert!(saved.contains("initial_volume = 200"), "expected changed initial_volume, got:\n{}", saved);
+    assert!(saved.contains("target_volume = 800"), "changed storage must keep target_volume, got:\n{}", saved);
+    assert!(saved.contains("forecast_volume_adjustment = -25"), "changed storage must keep forecast_volume_adjustment, got:\n{}", saved);
+    assert!(!saved.contains("target_level"), "no target_level was given, got:\n{}", saved);
+}
+
+#[test]
 fn test_changed_unregulated_user_keeps_account() {
     // The account references must be re-emitted (reconstructed from the account
     // manager via the node's registered indices — the lesson of ec0e803, carried

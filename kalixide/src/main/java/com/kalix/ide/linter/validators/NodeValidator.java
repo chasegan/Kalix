@@ -9,6 +9,8 @@ import com.kalix.ide.linter.schema.DataType;
 import com.kalix.ide.linter.schema.NodeTypeDefinition;
 import com.kalix.ide.linter.schema.ParameterDefinition;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -58,10 +60,110 @@ public class NodeValidator implements ValidationStrategy {
             }
         }
 
+        for (List<String> group : typeDef.exclusiveParams) {
+            validateExclusiveParams(node, group, schema, result);
+        }
+        for (NodeTypeDefinition.OverriddenParams overridden : typeDef.overriddenParams) {
+            validateOverriddenParams(node, overridden, schema, result);
+        }
+        for (NodeTypeDefinition.RequiresOneOf requires : typeDef.requiresOneOf) {
+            validateRequiresOneOf(node, requires, schema, result);
+        }
+
         // Validate parameter types and formats
         for (INIModelParser.Property prop : node.getProperties().values()) {
             validateNodeProperty(node, prop, typeDef, model, schema, result);
         }
+    }
+
+    /** Report a node that gives more than one parameter of an exclusive group, on the last one given. */
+    private void validateExclusiveParams(INIModelParser.NodeSection node, List<String> group,
+                                         LinterSchema schema, ValidationResult result) {
+        ValidationRule rule = schema.getValidationRule("exclusive_params");
+        if (rule != null && !rule.isEnabled()) {
+            return;
+        }
+        List<INIModelParser.Property> present = new ArrayList<>();
+        for (String param : group) {
+            INIModelParser.Property prop = given(node, param);
+            if (prop != null) {
+                present.add(prop);
+            }
+        }
+        if (present.size() < 2) {
+            return;
+        }
+        present.sort(Comparator.comparingInt(INIModelParser.Property::getLineNumber));
+        ValidationRule.Severity severity = (rule != null) ? rule.getSeverity() : ValidationRule.Severity.ERROR;
+        List<String> names = present.stream().map(INIModelParser.Property::getKey).toList();
+        // "both" only reads right for two; a group of three or more may all be given.
+        String clash = names.size() == 2
+                ? "cannot have both " + names.get(0) + " and " + names.get(1)
+                : "can have only one of " + String.join(", ", names.subList(0, names.size() - 1))
+                        + " and " + names.get(names.size() - 1);
+        result.addIssue(present.get(present.size() - 1).getLineNumber(),
+                      "Node '" + node.getNodeName() + "' " + clash,
+                      severity, "exclusive_params");
+    }
+
+    /** Report each given parameter that a true boolean parameter makes ineffective, on its own line. */
+    private void validateOverriddenParams(INIModelParser.NodeSection node, NodeTypeDefinition.OverriddenParams overridden,
+                                          LinterSchema schema, ValidationResult result) {
+        ValidationRule rule = schema.getValidationRule("overridden_params");
+        if (rule != null && !rule.isEnabled()) {
+            return;
+        }
+        INIModelParser.Property flag = given(node, overridden.whenTrue());
+        if (flag == null || !isTrue(flag.getValue())) {
+            return;
+        }
+        ValidationRule.Severity severity = (rule != null) ? rule.getSeverity() : ValidationRule.Severity.WARNING;
+        for (String param : overridden.params()) {
+            INIModelParser.Property prop = given(node, param);
+            if (prop != null) {
+                result.addIssue(prop.getLineNumber(),
+                              "Node '" + node.getNodeName() + "': " + param + " has no effect because "
+                                      + overridden.whenTrue() + " = true",
+                              severity, "overridden_params");
+            }
+        }
+    }
+
+    /** Report a parameter given without any of the parameters it needs, on its own line. */
+    private void validateRequiresOneOf(INIModelParser.NodeSection node, NodeTypeDefinition.RequiresOneOf requires,
+                                       LinterSchema schema, ValidationResult result) {
+        ValidationRule rule = schema.getValidationRule("requires_one_of");
+        if (rule != null && !rule.isEnabled()) {
+            return;
+        }
+        INIModelParser.Property prop = given(node, requires.param());
+        if (prop == null || requires.oneOf().stream().anyMatch(p -> given(node, p) != null)) {
+            return;
+        }
+        ValidationRule.Severity severity = (rule != null) ? rule.getSeverity() : ValidationRule.Severity.ERROR;
+        result.addIssue(prop.getLineNumber(),
+                      "Node '" + node.getNodeName() + "': " + requires.param() + " needs "
+                              + String.join(" or ", requires.oneOf()),
+                      severity, "requires_one_of");
+    }
+
+    /** The node's property of this name, whatever its case: the engine lowercases names. */
+    private static INIModelParser.Property given(INIModelParser.NodeSection node, String name) {
+        INIModelParser.Property exact = node.getProperties().get(name);
+        if (exact != null) {
+            return exact;
+        }
+        for (INIModelParser.Property prop : node.getProperties().values()) {
+            if (prop.getKey().equalsIgnoreCase(name)) {
+                return prop;
+            }
+        }
+        return null;
+    }
+
+    /** Whether a boolean value is true. The engine reads the first comma-separated part. */
+    private static boolean isTrue(String value) {
+        return "true".equalsIgnoreCase(value.split(",", 2)[0].trim());
     }
 
     private void validateNodeProperty(INIModelParser.NodeSection node, INIModelParser.Property prop,

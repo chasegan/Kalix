@@ -586,3 +586,31 @@ citing them when a trade is proposed.
       effort, recorded as a measurement for it and not as its design.
       Sources: `e8e110b3` and `51cf87c1` on
       `feat-routing-dead-storage-and-evap`.
+- *2026-11-12* — thirteenth data point for §3.4: one recorder slot, never
+  filled, cost 8% on a model that does not use the feature. #514 gave the
+  storage node a `forecast_volume_adjustment` input and a recorder slot for
+  its result. `StorageNode` grew from 2,832 to 3,160 bytes over the whole
+  branch; `NodeEnum`'s stride stayed at 4,216. Against main, speed test 4
+  (which orders with `order_through` and never runs the new code) measured
+  +8.1% minimum and +7.8% median over 20 interleaved runs. Bisecting put
+  the cost in the commit that added the adjustment, and that commit was cut
+  into arms, 12 interleaved runs each, minimum and median against the
+  commit before it:
+    - the input field alone (128 bytes): +0.9% and +0.8%;
+    - the recorder slot alone (`Option<usize>`, 16 bytes): +8.4% and +8.3%;
+    - the slot declared and written to the cache if set, but never
+      registered, so always `None`: +8.2% and +9.1%;
+    - the whole commit: +8.3% and +10.0%.
+
+  So the cost followed the slot and the code that tests it, not the input
+  and not the recording. Moving the slot or the input first or last in the
+  struct, boxing the inputs, padding by 16 or by 48 bytes, changing the
+  inlining of the recording functions, and adding code that does nothing
+  each left the cost in place. Holding the index as `Option<u32>` (8 bytes,
+  `StorageNode` 3,152) removed it. The fixed head against main, 20
+  interleaved runs: test 4 +1.3% and +0.5%; the same model ordering to a
+  constant target −1.0% and −0.3%, and to an expression target +0.3% and
+  +0.6%; test 5 +2.5% and +1.7%. Outputs are byte-identical with main. The
+  mechanism is not established; the stride did not change. The test 5
+  figure was not chased. One machine (Apple M5), one session. Source:
+  `69fd6621` on `feat/storage-target-volume`.
