@@ -93,6 +93,18 @@ public final class PreferenceKeys {
         Pref.fileBoolean("map.showGridlines", true);
 
     /**
+     * Map trackpad navigation: plain scroll pans and Ctrl(Cmd)+scroll zooms,
+     * instead of plain scroll zooming.
+     *
+     * <p>In the file tier although it follows the pointing device: it is a setting the
+     * user chooses, and those live in {@code kalix_prefs.json}; the OS tier is for
+     * transient UI state. Blender, QGIS and VS Code likewise keep their mouse and
+     * trackpad navigation settings in the ordinary user settings.
+     */
+    public static final Pref<Boolean> MAP_TRACKPAD_NAVIGATION =
+        Pref.fileBoolean("map.trackpadNavigation", false);
+
+    /**
      * Map node-label mode: a {@code NodeLabelMode} key ({@code names}, {@code aka},
      * {@code hidden}). Empty means unset, and the legacy boolean below decides.
      */
@@ -218,14 +230,6 @@ public final class PreferenceKeys {
     /** Whether the contextual view (map) region is collapsed. */
     public static final Pref<Boolean> UI_MAP_COLLAPSED =
         Pref.osBoolean("ui.mapCollapsed", false);
-
-    /**
-     * Map trackpad navigation: plain scroll pans and Ctrl(Cmd)+scroll zooms,
-     * instead of plain scroll zooming. Machine-local, because it follows this machine's
-     * pointing device rather than the team's taste.
-     */
-    public static final Pref<Boolean> MAP_TRACKPAD_NAVIGATION =
-        Pref.osBoolean("map.trackpadNavigation", false);
 
     /** Absolute path of the currently open project folder, or empty if none. */
     public static final Pref<String> UI_WORKSPACE_FOLDER =

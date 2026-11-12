@@ -68,8 +68,7 @@ public class NodeDiagramPreferencePage extends AbstractPreferencePage {
         });
         formPanel.add(gridlinesCheckBox, gbc);
 
-        // The same setting as View > Scroll Pans Map. It is saved per machine, not in
-        // kalix_prefs.json, because it follows the pointing device.
+        // The same setting as View > Scroll Pans Map.
         gbc.gridy = 1;
         scrollPansMapCheckBox = new JCheckBox("Scroll pans the map (hold Ctrl or Cmd to zoom)");
         scrollPansMapCheckBox.setSelected(PreferenceKeys.MAP_TRACKPAD_NAVIGATION.get());
