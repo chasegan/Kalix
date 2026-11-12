@@ -20,3 +20,9 @@ pip: "pip install kalix==0.4.10"
     - `[var.*]` blocks can take `phase = order`. The block runs at its place in the order phase, which works up the file: it reads the orders of nodes below it, and nodes above it read the block in their order inputs (an order control's `set_order`, a storage's `target_level`).
     - A node or var above a `[var.*]` block can now refer to it (e.g. at `[-1, 0]`). This used to fail at load as a duplicate var definition.
     - An error while running a var block now names the block, not the last node run, and one in a `[ras.*]` section names the section.
+- IDE navigation (tried on Windows and macOS, not yet on Linux):
+    - Shift+scroll, or a sideways swipe, pans the schematic map and scrolls plots through time. Middle-drag pans the map from anywhere.
+    - Two-finger trackpad scrolling zooms smoothly instead of in steps. On macOS a mouse wheel now zooms a little for a slow notch and further when spun fast.
+    - `View → Scroll Pans Map`, also in Preferences under Node Diagram, makes scrolling pan the map, with a mouse wheel as well as a trackpad. Zoom is then Ctrl+scroll (Cmd+scroll on macOS) or, on Windows, pinch. Plots are not affected.
+    - Ctrl+0 (Cmd+0 on macOS) zooms the map to fit.
+    - Alt+letter opens the menus on Windows and Linux, e.g. Alt+F for `File`.

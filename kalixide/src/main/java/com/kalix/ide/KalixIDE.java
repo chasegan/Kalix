@@ -523,6 +523,7 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             map.setNodeTheme(com.kalix.ide.themes.ThemePreferences.effectiveNodeTheme());
             map.setShowGridlines(PreferenceKeys.MAP_SHOW_GRIDLINES.get());
             map.setLabelMode(NodeLabelMode.saved());
+            map.setTrackpadNavigation(PreferenceKeys.MAP_TRACKPAD_NAVIGATION.get());
         }
 
         if (document.isModel()) {
@@ -1540,6 +1541,26 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
+    public void setTrackpadNavigation(boolean enabled) {
+        // Apply to every open document's map so background tabs stay consistent.
+        for (KalixDocument document : documentManager.getDocuments()) {
+            MapPanel map = document.getMapPanel();
+            if (map != null) {
+                map.setTrackpadNavigation(enabled);
+            }
+        }
+        PreferenceKeys.MAP_TRACKPAD_NAVIGATION.set(enabled);
+    }
+
+    @Override
+    public boolean isTrackpadNavigation() {
+        // Falls back to the saved preference before any document/map exists.
+        return mapPanel != null
+            ? mapPanel.isTrackpadNavigation()
+            : PreferenceKeys.MAP_TRACKPAD_NAVIGATION.get();
+    }
+
+    @Override
     public void toggleFileTree() {
         if (workspacePanel == null) {
             return;
@@ -1695,7 +1716,8 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
             themePage,
             new FontPreferencePage(ThemeManager::notifyFontSizeChanged),
             linterPage,
-            new NodeDiagramPreferencePage(onMapPreferencesChanged, visible -> syncToggleButtonStates()),
+            new NodeDiagramPreferencePage(onMapPreferencesChanged, visible -> syncToggleButtonStates(),
+                this::setTrackpadNavigation),
             new DataVisualizationPreferencePage(onFlowVizPreferencesChanged),
             new KalixCliPreferencePage(),
             new IntegrationsPreferencePage()

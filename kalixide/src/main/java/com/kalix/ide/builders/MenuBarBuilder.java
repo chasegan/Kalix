@@ -16,6 +16,7 @@ import javax.swing.event.MenuListener;
 import javax.swing.text.DefaultEditorKit;
 import org.fife.ui.rsyntaxtextarea.RSyntaxTextAreaEditorKit;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
 import java.io.File;
 import java.util.List;
 import java.util.function.Consumer;
@@ -52,6 +53,8 @@ public class MenuBarBuilder {
         void zoomOut();
         void resetZoom();
         void zoomToFit();
+        void setTrackpadNavigation(boolean enabled);
+        boolean isTrackpadNavigation();
         void toggleFileTree();
         boolean isFileTreeVisible();
         void toggleShowHiddenFiles(boolean show);
@@ -212,6 +215,7 @@ public class MenuBarBuilder {
      */
     private JMenu createFileMenu() {
         fileMenu = new JMenu("File");
+        fileMenu.setMnemonic(KeyEvent.VK_F);
 
         fileMenu.add(createMenuItem("New", AppShortcut.NEW_MODEL, e -> callbacks.newModel()));
         fileMenu.add(createMenuItem("Open Model...", AppShortcut.OPEN_MODEL, e -> callbacks.openModel()));
@@ -245,6 +249,7 @@ public class MenuBarBuilder {
      */
     private JMenu createEditMenu() {
         JMenu editMenu = new JMenu("Edit");
+        editMenu.setMnemonic(KeyEvent.VK_E);
 
         JMenuItem undoItem = createMenuItem("Undo", AppShortcut.UNDO, e -> callbacks.undoAction());
         JMenuItem redoItem = createMenuItem("Redo", AppShortcut.REDO, e -> callbacks.redoAction());
@@ -297,6 +302,7 @@ public class MenuBarBuilder {
      */
     private JMenu createViewMenu() {
         JMenu viewMenu = new JMenu("View");
+        viewMenu.setMnemonic(KeyEvent.VK_V);
 
         // Panel visibility toggles at the top
         viewMenu.add(createMenuItem("Toggle File Tree", AppShortcut.TOGGLE_FILE_TREE, e -> callbacks.toggleFileTree()));
@@ -307,10 +313,27 @@ public class MenuBarBuilder {
         JCheckBoxMenuItem showHiddenItem = new JCheckBoxMenuItem("Show Hidden Files");
         showHiddenItem.addActionListener(e -> callbacks.toggleShowHiddenFiles(showHiddenItem.isSelected()));
         viewMenu.add(showHiddenItem);
+        viewMenu.addSeparator();
+
+        // Zoom to Fit
+        viewMenu.add(createMenuItem("Zoom to Fit", AppShortcut.ZOOM_TO_FIT, e -> callbacks.zoomToFit()));
+        viewMenu.addSeparator();
+
+        // Zoom controls
+        viewMenu.add(createMenuItem("Zoom In", e -> callbacks.zoomIn()));
+        viewMenu.add(createMenuItem("Zoom Out", e -> callbacks.zoomOut()));
+        viewMenu.add(createMenuItem("Reset", e -> callbacks.resetZoom()));
+        // Named for what it does, not for a device: with it on, a mouse wheel pans too.
+        JCheckBoxMenuItem trackpadItem = new JCheckBoxMenuItem("Scroll Pans Map");
+        trackpadItem.setToolTipText("Scrolling pans the map; hold Ctrl or Cmd to zoom");
+        trackpadItem.addActionListener(e -> callbacks.setTrackpadNavigation(trackpadItem.isSelected()));
+        viewMenu.add(trackpadItem);
+
         viewMenu.addMenuListener(new MenuListener() {
             @Override
             public void menuSelected(MenuEvent e) {
                 showHiddenItem.setSelected(callbacks.isShowHiddenFiles());
+                trackpadItem.setSelected(callbacks.isTrackpadNavigation());
             }
 
             @Override
@@ -321,16 +344,6 @@ public class MenuBarBuilder {
             public void menuCanceled(MenuEvent e) {
             }
         });
-        viewMenu.addSeparator();
-
-        // Zoom to Fit
-        viewMenu.add(createMenuItem("Zoom to Fit", e -> callbacks.zoomToFit()));
-        viewMenu.addSeparator();
-
-        // Zoom controls
-        viewMenu.add(createMenuItem("Zoom In", e -> callbacks.zoomIn()));
-        viewMenu.add(createMenuItem("Zoom Out", e -> callbacks.zoomOut()));
-        viewMenu.add(createMenuItem("Reset", e -> callbacks.resetZoom()));
 
         return viewMenu;
     }
@@ -340,6 +353,7 @@ public class MenuBarBuilder {
      */
     private JMenu createRunMenu() {
         JMenu runMenu = new JMenu("Run");
+        runMenu.setMnemonic(KeyEvent.VK_R);
         runMenu.add(createMenuItem("Run Model", AppShortcut.RUN_MODEL, e -> callbacks.runModelFromMemory()));
         runMenu.addSeparator();
         runMenu.add(createMenuItem("Optimiser", e -> callbacks.showOptimisation()));
@@ -352,6 +366,7 @@ public class MenuBarBuilder {
      */
     private JMenu createToolsMenu() {
         JMenu toolsMenu = new JMenu("Tools");
+        toolsMenu.setMnemonic(KeyEvent.VK_T);
         toolsMenu.add(createMenuItem("Parameter Sheet", e -> callbacks.showParameterSheet()));
         toolsMenu.addSeparator();
         toolsMenu.add(createMenuItem("FlowViz", e -> callbacks.flowViz()));
@@ -364,6 +379,7 @@ public class MenuBarBuilder {
      */
     private JMenu createAIMenu() {
         JMenu aiMenu = new JMenu("AI");
+        aiMenu.setMnemonic(KeyEvent.VK_A);
 
         aiMenu.add(createMenuItem("Init CLAUDE.md", e -> callbacks.initClaudeMd()));
         aiMenu.add(createMenuItem("Init AGENTS.md", e -> callbacks.initAgentsMd()));
@@ -376,6 +392,7 @@ public class MenuBarBuilder {
      */
     private JMenu createSystemMenu() {
         JMenu systemMenu = new JMenu("System");
+        systemMenu.setMnemonic(KeyEvent.VK_S);
 
         systemMenu.add(createMenuItem("Copy Model Path", e -> callbacks.copyModelPath()));
         systemMenu.addSeparator();
@@ -392,6 +409,7 @@ public class MenuBarBuilder {
      */
     private JMenu createHelpMenu() {
         JMenu helpMenu = new JMenu("Help");
+        helpMenu.setMnemonic(KeyEvent.VK_H);
         helpMenu.add(createMenuItem("About", e -> callbacks.showAbout()));
         return helpMenu;
     }

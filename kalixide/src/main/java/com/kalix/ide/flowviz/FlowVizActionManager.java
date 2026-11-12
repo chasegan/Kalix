@@ -217,6 +217,7 @@ public class FlowVizActionManager {
             + - Zoom in
             - - Zoom out
             Mouse wheel - Zoom at cursor
+            Shift+wheel - Pan through time
             Mouse drag - Pan view
             Double-click plot - Reset zoom to fit data
             Drag an axis end - Set that axis' range
