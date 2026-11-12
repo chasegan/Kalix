@@ -93,12 +93,26 @@ public class StdioTaskManager {
      *         to the user by the time it completes
      */
     public CompletableFuture<String> runModelFromMemory(String modelText) {
+        return runModelFromMemory(modelText, workingDirectorySupplier.get(), outcome -> { });
+    }
+
+    /**
+     * Runs a model text in the given folder, which the model's relative paths resolve
+     * against. Creates a persistent session and starts the Run Model program.
+     *
+     * @param modelText  the model definition
+     * @param workingDir the folder to run in; null for the engine's own working directory
+     * @param onFinished told how the run ended, on a session thread (see
+     *                   {@link RunModelProgram#setOnFinished})
+     * @return CompletableFuture with the session key; a failure has already been reported
+     *         to the user by the time it completes, and {@code onFinished} is not called
+     */
+    public CompletableFuture<String> runModelFromMemory(String modelText, File workingDir,
+                                                        Consumer<RunModelProgram.Outcome> onFinished) {
         // Dedicated thread pool instead of the common ForkJoinPool: this lambda blocks
         // on sessionFuture.get(), and blocking common-pool workers starves every other
         // common-pool user in the JVM.
         return CompletableFuture.supplyAsync(() -> {
-            // Get current working directory if available
-            File workingDir = workingDirectorySupplier.get();
             String currentFolder = workingDir != null ? workingDir.getAbsolutePath() : null;
 
             File projectDir = projectDirectorySupplier != null ? projectDirectorySupplier.get() : null;
@@ -135,6 +149,7 @@ public class StdioTaskManager {
                         this::updateProgressFromSession
                     );
                     runModelProgram.start(modelText);
+                    runModelProgram.setOnFinished(onFinished);
                     sessionManager.installProgram(sessionKey, runModelProgram);
                 } catch (Exception e) {
                     // Clean up session if RunModelProgram setup fails
@@ -213,6 +228,17 @@ public class StdioTaskManager {
      */
     public void sendCommand(String sessionKey, String command) {
         sessionManager.sendCommand(sessionKey, command);
+    }
+
+    /**
+     * Requests the mass balance report for the model a session has run.
+     * The future completes off the EDT.
+     *
+     * @param sessionKey the session to ask
+     * @return CompletableFuture with the report text
+     */
+    public CompletableFuture<String> requestMassBalanceReport(String sessionKey) {
+        return sessionManager.requestMassBalanceReport(sessionKey);
     }
 
     /**

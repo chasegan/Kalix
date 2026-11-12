@@ -248,11 +248,12 @@ fn main() {
                                 mb_report = m.generate_mass_balance_report();
                             }
 
-                            // Check that they are identical (nothing fancy for now)
+                            // Check that they are identical (nothing fancy for now), line by
+                            // line so a reference with CRLF line endings still matches.
                             let red = "\x1b[31m";
                             let green = "\x1b[32m";
                             let reset = "\x1b[0m";
-                            if mb_report.trim() == mb_verification.trim() {
+                            if mb_report.trim().lines().eq(mb_verification.trim().lines()) {
                                 println!("Mass balance verification: {green}VERIFIED!{reset}");
                             } else {
                                 eprintln!("Mass balance verification: {red}FAILED!{reset}")
