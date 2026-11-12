@@ -48,6 +48,19 @@ class NodeValidatorExclusiveParamsTest {
     }
 
     @Test
+    void threeOfAGroupAreNamedWithoutSayingBoth() {
+        // No shipped group has three members, so the test adds one.
+        LinterSchema schema = LinterSchema.loadDefault();
+        schema.getNodeType("storage").exclusiveParams
+                .add(List.of("target_level", "target_volume", "forced_level"));
+        String model = storage("forced_level = 2\ntarget_level = 1.5\ntarget_volume = 1500");
+        List<String> messages = issues(model, schema).stream().map(ValidationIssue::getMessage).toList();
+
+        assertTrue(messages.contains(
+                "Node 'weir' can have only one of forced_level, target_level and target_volume"), messages.toString());
+    }
+
+    @Test
     void parameterNamesMatchWhateverTheirCase() {
         String model = storage("Target_Level = 1.5\ntarget_volume = 1500");
         assertEquals(1, issues(model, LinterSchema.loadDefault()).size());

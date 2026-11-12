@@ -96,8 +96,13 @@ public class NodeValidator implements ValidationStrategy {
         present.sort(Comparator.comparingInt(INIModelParser.Property::getLineNumber));
         ValidationRule.Severity severity = (rule != null) ? rule.getSeverity() : ValidationRule.Severity.ERROR;
         List<String> names = present.stream().map(INIModelParser.Property::getKey).toList();
+        // "both" only reads right for two; a group of three or more may all be given.
+        String clash = names.size() == 2
+                ? "cannot have both " + names.get(0) + " and " + names.get(1)
+                : "can have only one of " + String.join(", ", names.subList(0, names.size() - 1))
+                        + " and " + names.get(names.size() - 1);
         result.addIssue(present.get(present.size() - 1).getLineNumber(),
-                      "Node '" + node.getNodeName() + "' cannot have both " + String.join(" and ", names),
+                      "Node '" + node.getNodeName() + "' " + clash,
                       severity, "exclusive_params");
     }
 
