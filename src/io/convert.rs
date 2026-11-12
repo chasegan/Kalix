@@ -1,12 +1,13 @@
 //! One conversion path shared by the CLI (`kalix convert`) and the Python
 //! API (`kalix.convert`), so the two can never drift (issue #11).
 //!
-//! CSV (plain or zip-compressed `.csv.zip`) and Pixie for now — the formats
-//! the engine can both read and write.
+//! CSV (plain, zip-compressed `.csv.zip` or gzip-compressed `.csv.gz`) and
+//! Pixie for now — the formats the engine can both read and write.
 //! (`.res.csv` is read on the IDE side only; the engine has no writer, so it
 //! is refused by name rather than silently mistaken for plain CSV.) A future
 //! format joins by extending [`TsFileFormat`] and the two match arms in
-//! [`convert_ts_file`].
+//! [`convert_ts_file`]; a new CSV compression joins in
+//! [`csv_io::csv_compression`] alone.
 
 use std::fs;
 
@@ -17,12 +18,11 @@ use crate::timeseries::Timeseries;
 /// The timeseries file formats the converter speaks, named by extension.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum TsFileFormat {
-    /// Date-indexed CSV (`.csv`).
+    /// Date-indexed CSV: plain `.csv`, or the same grammar compressed as
+    /// `.csv.zip` (one entry per archive, pandas' convention) or `.csv.gz`
+    /// with the same convention. The compression is read off the name by
+    /// [`csv_io::csv_compression`].
     Csv,
-    /// Zip-compressed date-indexed CSV (`.csv.zip`) — the same grammar as
-    /// [`TsFileFormat::Csv`] inside a one-entry zip archive (pandas'
-    /// convention: exactly one file per archive).
-    CsvZip,
     /// The Pixie pair (`.pxt` metadata + `.pxb` Gorilla-compressed values);
     /// either half names the dataset, and both halves are always written.
     Pixie,
@@ -43,19 +43,17 @@ pub fn detect_ts_format(path: &str) -> Result<TsFileFormat, String> {
     // Longest suffix first — the double-extension rule (.res.csv.zip before
     // .csv.zip before .csv), as everywhere else in the codebase.
     let lower = path.to_lowercase();
-    if lower.ends_with(".res.csv") || lower.ends_with(".res.csv.zip") {
+    if [".res.csv", ".res.csv.zip", ".res.csv.gz"].iter().any(|s| lower.ends_with(s)) {
         Err(format!(
-            "'{path}': .res.csv is not supported yet — the engine converts csv, csv.zip and pixie only"
+            "'{path}': .res.csv is not supported yet — the engine converts csv, csv.zip, csv.gz and pixie only"
         ))
-    } else if lower.ends_with(".csv.zip") {
-        Ok(TsFileFormat::CsvZip)
-    } else if lower.ends_with(".csv") {
+    } else if lower.ends_with(".csv") || csv_io::csv_compression(path) != csv_io::CsvCompression::None {
         Ok(TsFileFormat::Csv)
     } else if lower.ends_with(".pxt") || lower.ends_with(".pxb") {
         Ok(TsFileFormat::Pixie)
     } else {
         Err(format!(
-            "'{path}': unrecognised timeseries format (expected .csv, .csv.zip, .pxt or .pxb)"
+            "'{path}': unrecognised timeseries format (expected .csv, .csv.zip, .csv.gz, .pxt or .pxb)"
         ))
     }
 }
@@ -75,8 +73,8 @@ pub fn convert_ts_file(input: &str, output: &str) -> Result<ConvertSummary, Stri
     let output_format = detect_ts_format(output)?;
 
     let series: Vec<Timeseries> = match input_format {
-        TsFileFormat::Csv | TsFileFormat::CsvZip => {
-            // read_ts keys zip off the real input name.
+        TsFileFormat::Csv => {
+            // read_ts reads the compression off the input name.
             csv_io::read_ts(input).map_err(|e| format!("reading '{input}': {e}"))?
         }
         TsFileFormat::Pixie => {
@@ -93,7 +91,7 @@ pub fn convert_ts_file(input: &str, output: &str) -> Result<ConvertSummary, Stri
     let refs: Vec<&Timeseries> = series.iter().collect();
 
     let outputs = match output_format {
-        TsFileFormat::Csv | TsFileFormat::CsvZip => {
+        TsFileFormat::Csv => {
             // CSV shares one time column across every series; Pixie stores a
             // clock per series. Refuse a misaligned set rather than silently
             // stamping every series with the first one's clock.
@@ -108,15 +106,10 @@ pub fn convert_ts_file(input: &str, output: &str) -> Result<ConvertSummary, Stri
                     s.name, series[0].name
                 ));
             }
-            // The temp name's extension lies about both the format and the
-            // archive's entry name, so both derive from the real output name.
+            // The temp name's extension lies about both the compression and
+            // the zip entry name, so both derive from the real output name.
             let tmp = format!("{output}{TMP_SUFFIX}");
-            let inner = if output_format == TsFileFormat::CsvZip {
-                Some(csv_io::zip_inner_name(output))
-            } else {
-                None
-            };
-            csv_io::write_ts_opts(&tmp, refs, inner.as_deref()).map_err(|e| {
+            csv_io::write_ts_opts(&tmp, refs, output).map_err(|e| {
                 let _ = fs::remove_file(&tmp);
                 format!("writing '{output}': {}", String::from(e))
             })?;
@@ -153,7 +146,9 @@ pub fn convert_ts_file(input: &str, output: &str) -> Result<ConvertSummary, Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flate2::read::GzDecoder;
     use std::fs;
+    use std::io::Read;
 
     /// A per-process scratch path: two `cargo test` invocations racing on one
     /// machine must not share fixture files. Cleaned up by `Scratch::drop`.
@@ -312,7 +307,7 @@ mod tests {
             "the entry is named from the real archive name minus .zip (pandas' \
              convention), never from the temp staging name");
         let mut decompressed = Vec::new();
-        std::io::Read::read_to_end(&mut entry, &mut decompressed).unwrap();
+        entry.read_to_end(&mut decompressed).unwrap();
         assert_eq!(decompressed, fs::read(&plain.0).unwrap(),
             "decompressed bytes must equal the plain CSV writer's output");
         drop(entry);
@@ -367,6 +362,58 @@ mod tests {
     fn res_csv_zip_is_refused_like_res_csv() {
         let err = convert_ts_file("results.res.csv.zip", "out.csv").unwrap_err();
         assert!(err.contains(".res.csv"), "{err}");
+    }
+
+    #[test]
+    fn csv_gz_round_trips_and_decompresses_to_the_plain_csv_bytes() {
+        // The cross-platform pin: a .csv.gz decompresses to
+        // exactly the bytes the plain CSV writer would produce.
+        let content = "Date,flow,level\n2020-01-01,1.5,10.0\n2020-01-02,2.75,20.0\n";
+        let src = Scratch::new("gz_src.csv");
+        fs::write(&src.0, content).unwrap();
+        let plain = Scratch::new("gz_plain.csv");
+        let gzipped = Scratch::new("gz_out.csv.gz");
+        convert_ts_file(&src.0, &plain.0).expect("csv -> csv");
+        convert_ts_file(&src.0, &gzipped.0).expect("csv -> csv.gz");
+
+        let mut decompressed = Vec::new();
+        GzDecoder::new(fs::File::open(&gzipped.0).unwrap())
+            .read_to_end(&mut decompressed)
+            .expect("output is valid gzip");
+        assert_eq!(decompressed, fs::read(&plain.0).unwrap(),
+            "decompressed bytes must equal the plain CSV writer's output");
+
+        let back = Scratch::new("gz_back.csv");
+        convert_ts_file(&gzipped.0, &back.0).expect("csv.gz -> csv");
+        let reread = csv_io::read_ts(&back.0).unwrap();
+        assert_eq!(reread[0].name, "flow");
+        assert_eq!(reread[0].values, vec![1.5, 2.75]);
+        assert_eq!(reread[1].values, vec![10.0, 20.0]);
+    }
+
+    #[test]
+    fn csv_gz_output_is_byte_reproducible() {
+        // MTIME is pinned to 0, so identical content gzips to identical bytes
+        // (within one build; the cross-version contract is decompressed content).
+        let src = Scratch::new("gz_repro.csv");
+        fs::write(&src.0, "Date,q\n2020-01-01,1.0\n2020-01-02,2.0\n").unwrap();
+        let out = Scratch::new("gz_repro.csv.gz");
+        convert_ts_file(&src.0, &out.0).unwrap();
+        let first = fs::read(&out.0).unwrap();
+        convert_ts_file(&src.0, &out.0).unwrap();
+        assert_eq!(first, fs::read(&out.0).unwrap());
+    }
+
+    #[test]
+    fn res_csv_gz_is_refused_like_res_csv() {
+        let err = convert_ts_file("results.res.csv.gz", "out.csv").unwrap_err();
+        assert!(err.contains(".res.csv"), "{err}");
+    }
+
+    #[test]
+    fn a_plain_gz_is_not_taken_for_csv() {
+        let err = convert_ts_file("data.gz", "out.csv").unwrap_err();
+        assert!(err.contains("unrecognised"), "{err}");
     }
 
     #[test]

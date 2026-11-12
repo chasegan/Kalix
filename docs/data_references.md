@@ -94,6 +94,8 @@ Kalix sanitises filenames and column names to ensure valid references:
 | `Flow (ML/d)` | `flow__ml_d_` |
 | `Station_001` | `station_001` |
 | `Climate.pxt` | `climate_pxt` |
+| `Flows.csv.zip` | `flows_csv_zip` |
+| `Flows.csv.gz` | `flows_csv_gz` |
 
 This means references are **case-insensitive** - `data.climate_csv.by_name.Rainfall` and `data.climate_csv.by_name.rainfall` both work.
 

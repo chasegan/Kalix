@@ -991,9 +991,9 @@ impl Command for SaveResultsCommand {
             .and_then(|v| v.as_str())
             .unwrap_or("csv");
 
-        if format != "csv" && format != "csv.zip" && format != "pixie" {
+        if !["csv", "csv.zip", "csv.gz", "pixie"].contains(&format) {
             return Err(CommandError::InvalidParameters(
-                format!("Unsupported format '{}'; expected 'csv', 'csv.zip' or 'pixie'", format)));
+                format!("Unsupported format '{}'; expected 'csv', 'csv.zip', 'csv.gz' or 'pixie'", format)));
         }
 
         // Get model and check if it exists
@@ -1014,6 +1014,7 @@ impl Command for SaveResultsCommand {
             let ext = match format {
                 "pixie" => "pxt",
                 "csv.zip" => "csv.zip",
+                "csv.gz" => "csv.gz",
                 _ => "csv",
             };
             format!("simulation_results_{}.{}", timestamp, ext)
@@ -1035,13 +1036,13 @@ impl Command for SaveResultsCommand {
         // actually written — for pixie that is the .pxt metadata file (a .pxb sibling is
         // written alongside it).
         let written_path = match format {
-            "csv" | "csv.zip" => {
+            "csv" | "csv.zip" | "csv.gz" => {
                 // The extension is the single source of truth for the format:
                 // the format param picks the DEFAULT filename above, but the
-                // path's own extension decides the bytes — a .csv.zip name is
-                // never plaintext, and a .csv name is never an archive.
-                // write_ts keys the zip decision (and the entry name) off the
-                // real path.
+                // path's own extension decides the bytes — a .csv.zip or
+                // .csv.gz name is never plaintext, and a .csv name is never
+                // compressed. write_ts keys the compression (and the zip
+                // entry name) off the real path.
                 csv_io::write_ts(&file_path, timeseries_refs)
                     .map_err(|e| CommandError::IoError(format!("Failed to write CSV file: {}", String::from(e))))?;
                 file_path.clone()
@@ -1058,7 +1059,7 @@ impl Command for SaveResultsCommand {
                     .map_err(|e| CommandError::IoError(format!("Failed to write Pixie file: {}", String::from(e))))?;
                 format!("{}.pxt", base_path)
             }
-            _ => unreachable!("format already validated to be csv, csv.zip or pixie"),
+            _ => unreachable!("format already validated to be csv, csv.zip, csv.gz or pixie"),
         };
 
         // Get the absolute path for the response
