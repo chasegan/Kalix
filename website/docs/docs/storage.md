@@ -67,10 +67,10 @@ ds_1 = my_other_node
 | ds\_1\_force\_release | Forced release requested on link ds\_1 [ML], as supplied by `ds_1_force_release` before capacity and availability limits (the released flow is in ds\_1\_outlet); NaN when no forced release is configured (also available for other links) |
 | ds\_1\_spill | Flow over the spillway to ds\_1 [ML] (also available for other links, but = 0) |
 | ds\_1\_outlet | Flow through the outlet to ds\_1 [ML] (also available for other links) |
-| target\_level | Target level [m], for a storage ordering to a target: the evaluated `target_level`, or the level `target_volume` corresponds to on the dimensions table. Available whichever of the two is given |
-| target\_volume | Target volume [ML], for a storage ordering to a target: the evaluated `target_volume`, or the volume `target_level` corresponds to on the dimensions table. Available whichever of the two is given |
-| forecast\_volume | For a storage with a target: the forecast volume [ML] its order is based on, `Vestimated future` below, `forecast_volume_adjustment` included. The order is `max(0, target_volume − forecast_volume)` |
-| forecast\_volume\_adjustment | Evaluated `forecast_volume_adjustment` [ML], for a storage with a target |
+| target\_level | Target level [m], for a storage ordering to a target: the evaluated `target_level`, or the level `target_volume` corresponds to on the dimensions table. Available whichever of the two is given. Not written for a storage without a target, or with `order_through = true` |
+| target\_volume | Target volume [ML], for a storage ordering to a target: the evaluated `target_volume`, or the volume `target_level` corresponds to on the dimensions table. Available whichever of the two is given. Not written for a storage without a target, or with `order_through = true` |
+| forecast\_volume | For a storage with a target: the forecast volume [ML] its order is based on, `Vestimated future` below, `forecast_volume_adjustment` included. The order is `max(0, target_volume − forecast_volume)`. Not written for a storage without a target, or with `order_through = true` |
+| forecast\_volume\_adjustment | Evaluated `forecast_volume_adjustment` [ML], for a storage with a target. Not written for a storage without a target, or with `order_through = true` |
 | order | The order this storage places upstream [ML]: to reach its target, or the downstream orders it passes on with `order_through`. Not written for a storage that does not order |
 | orders\_en\_route | For a storage with a target: water on its way to it at the end of the step [ML], today's order included and the order arriving today not. The `O_upstream_enroute` term of the forecast below. 0 for a storage with `order_through`, to which nothing is en route; not written for a storage that does not order |
 | exists | Evaluated `exists` input; 1 when not configured |
@@ -81,6 +81,8 @@ ds_1 = my_other_node
 | sid\_flux | Storage inflow derivation [ML]: `adjustment_volume` on the interior of a forced run; NaN on the first forced step and wherever not forced. With no modelled upstream inflow this is the derived inflow; with one, it is the residual — the derived total is `usflow + adjustment_volume`. |
 | area | Area of the water surface at the end of the timestep [km2] |
 | initial\_volume | The declared `initial_volume` value, static for the whole run. See [Static Node Properties](referencing-model-results.md#static-node-properties). |
+
+A result that is not written is missing for the whole run: an `[outputs]` entry for it gives no column, and a lagged reference such as `node.weir.forecast_volume[-1, 0]` reads its default on every timestep.
 
 ## How the node works
 
