@@ -79,11 +79,12 @@ public class TableSectionValidator implements ValidationStrategy {
                     break;
                 case "bilinear":
                     String bilinear = prop.getValue().trim();
-                    if (!bilinear.equals("true") && !bilinear.equals("false")) {
+                    // In any case, as the engine reads it.
+                    if (!bilinear.equalsIgnoreCase("true") && !bilinear.equalsIgnoreCase("false")) {
                         result.addIssue(prop.getLineNumber(),
                                 "bilinear must be 'true' or 'false', got '" + bilinear + "'",
                                 ValidationRule.Severity.ERROR, "invalid_table_bilinear");
-                    } else if (bilinear.equals("true")) {
+                    } else if (bilinear.equalsIgnoreCase("true")) {
                         bilinearTrueProp = prop;
                     }
                     break;

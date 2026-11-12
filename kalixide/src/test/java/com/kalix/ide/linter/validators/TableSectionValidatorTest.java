@@ -90,10 +90,19 @@ class TableSectionValidatorTest {
     }
 
     @Test
+    @DisplayName("bilinear is read in any case, as the engine reads it")
+    void testBilinearInAnyCase() {
+        assertNoIssues("[table.t]\nn_cols = 3\nbilinear = True\nvalues = x, 1, 2, 0, 5, 6\n");
+        assertNoIssues("[table.t]\nn_cols = 3\nbilinear = TRUE\nvalues = x, 1, 2, 0, 5, 6\n");
+        assertNoIssues("[table.t]\nbilinear = FALSE\nvalues = 0, 0, 1, 1\n");
+        // and an upper-case true still counts as true for the 1D check
+        assertHasIssue("[table.t]\nbilinear = TRUE\nvalues = 0, 0, 1, 1\n", "bilinear applies only to 2D tables");
+    }
+
+    @Test
     @DisplayName("Bad bilinear values should be flagged")
     void testBadBilinear() {
         assertHasIssue("[table.t]\nn_cols = 3\nbilinear = yes\nvalues = x, 1, 2, 0, 5, 6\n", "bilinear must be 'true' or 'false'");
-        assertHasIssue("[table.t]\nn_cols = 3\nbilinear = True\nvalues = x, 1, 2, 0, 5, 6\n", "bilinear must be 'true' or 'false'");
     }
 
     @Test

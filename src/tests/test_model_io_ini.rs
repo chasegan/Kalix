@@ -554,3 +554,46 @@ fn test_save_keeps_time_of_day_on_start_and_end() {
     assert_eq!(reloaded.configuration.specified_sim_start_timestamp, Some(start), "saved:\n{}", out);
     assert_eq!(reloaded.configuration.specified_sim_end_timestamp, Some(end), "saved:\n{}", out);
 }
+
+#[test]
+fn test_boolean_properties_are_read_in_any_case() {
+    // The reader takes what the modeller meant.
+    for (written, expected) in [("true", true), ("True", true), ("TRUE", true),
+                                ("false", false), ("False", false), ("FALSE", false)] {
+        let ini = format!("[kalix]\n\
+                           \n\
+                           [node.s]\n\
+                           type = storage\n\
+                           loc = 5, 6\n\
+                           order_through = {}\n\
+                           dimensions = 0, 0, 0, 0,\n\
+                           \x20            1, 1000, 3, 0\n\
+                           ds_1 = bh\n\
+                           \n\
+                           [node.bh]\n\
+                           type = blackhole\n\
+                           loc = 1, 2\n", written);
+        let model = IniModelIO::read_model_string(&ini)
+            .unwrap_or_else(|e| panic!("order_through = {} should load, got: {}", written, e));
+        let order_through = model.nodes.iter().find_map(|node| match node {
+            crate::nodes::NodeEnum::StorageNode(n) => Some(n.order_through),
+            _ => None,
+        }).expect("model has a storage");
+        assert_eq!(order_through, expected, "order_through = {}", written);
+    }
+    // demand_carryover shares the reader and alone takes a reset month after the boolean
+    for (written, allowed, month) in [("TRUE, 7", true, Some(7)), ("True", true, None),
+                                      ("tRuE,7", true, Some(7)), ("FALSE", false, None)] {
+        let ini = format!("[kalix]\n\n[node.u]\ntype = unregulated_user\nloc = 1, 2\ndemand_carryover = {}\n", written);
+        let model = IniModelIO::read_model_string(&ini)
+            .unwrap_or_else(|e| panic!("demand_carryover = {} should load, got: {}", written, e));
+        let read = model.nodes.iter().find_map(|node| match node {
+            crate::nodes::NodeEnum::UnregulatedUserNode(n) => Some((n.demand_carryover_allowed, n.demand_carryover_reset_month)),
+            _ => None,
+        }).expect("model has an unregulated user");
+        assert_eq!(read, (allowed, month), "demand_carryover = {}", written);
+    }
+    // Anything else is still refused
+    let ini = "[kalix]\n\n[node.s]\ntype = storage\norder_through = yes\ndimensions = 0, 0, 0, 0, 1, 1000, 3, 0\n";
+    assert!(IniModelIO::read_model_string(ini).is_err());
+}

@@ -574,7 +574,7 @@ public class KalixCompletionProvider extends DefaultCompletionProvider {
             return "1D (interpolated, clamped at ends)";
         }
         INIModelParser.Property bilinear = tableSection.getProperties().get("bilinear");
-        if (bilinear != null && "true".equals(bilinear.getValue().trim())) {
+        if (bilinear != null && "true".equalsIgnoreCase(bilinear.getValue().trim())) {
             return "2D (bilinear, clamped at ends)";
         }
         return "2D (exact-match column, interpolated row)";
