@@ -20,9 +20,11 @@
 // type does not compile until each question has been answered for it. (The only single-type
 // patterns left pick out confluences, to resolve their own `regulated =` property.)
 //
-// run_ordering_phase() runs every step. It visits nodes in reverse definition order (highest
-// index to lowest). Since check_execution_order() enforces from_node < to_node for all links,
-// that visits downstream nodes before upstream ones.
+// The order phase runs every step: run_ordering_phase(), or run_ordering_phase_with_var_blocks()
+// when set_order_var_blocks() has merged order-phase var blocks into the visit list. Both
+// visit nodes through visit_node(), in reverse definition order (highest index to lowest).
+// Since check_execution_order() enforces from_node < to_node for all links, that visits
+// downstream nodes before upstream ones.
 // - Only nodes that need it are visited (decided in initialize)
 // - Incoming regulated links are stored in a flat CSR-style layout for cache locality
 
@@ -48,6 +50,16 @@ struct RegulatedNodeEntry {
     links_end: usize,    // end index (exclusive) into flat_incoming_links
 }
 
+/// One item of the order phase's visit list with var blocks: the order-phase counterpart of
+/// `ExecItem` in model.rs, walked bottom-up instead of top-down.
+#[derive(Clone, Copy, Debug)]
+enum OrderVisit {
+    /// Index into regulated_nodes
+    Node(usize),
+    /// Index into the model's var_blocks
+    VarBlock(usize),
+}
+
 #[derive(Clone, Default)]
 pub struct SimpleNodewiseOrderingSystem {
     links_simple_ordering: Vec<LinkInfo>,
@@ -59,6 +71,14 @@ pub struct SimpleNodewiseOrderingSystem {
     regulated_nodes: Vec<RegulatedNodeEntry>,
 
     model_has_ordering: bool,
+
+    /// regulated_nodes with the order-phase var blocks merged in at their file positions, in
+    /// run order (bottom-up). Empty for almost every model: only walked when it is not.
+    visit_items: Vec<OrderVisit>,
+
+    /// The order-phase var blocks as (nodes defined above the block, block index), in file
+    /// order: kept so the merge is redone whenever the visit list is rebuilt.
+    order_var_positions: Vec<(usize, usize)>,
 }
 
 impl SimpleNodewiseOrderingSystem {
@@ -68,6 +88,8 @@ impl SimpleNodewiseOrderingSystem {
             flat_incoming_links: Vec::new(),
             regulated_nodes: Vec::new(),
             model_has_ordering: false,
+            visit_items: Vec::new(),
+            order_var_positions: Vec::new(),
         }
     }
 
@@ -260,6 +282,7 @@ impl SimpleNodewiseOrderingSystem {
                 links_end: end,
             });
         }
+        self.merge_visit_items();
     }
 
     /// Step 1 of initialize: resolve each confluence's `regulated =` names
@@ -343,128 +366,199 @@ impl SimpleNodewiseOrderingSystem {
 
         // Iterate only regulated nodes (already in reverse definition order)
         for entry in &self.regulated_nodes {
-            let node_idx = entry.node_idx;
-            let incoming = &self.flat_incoming_links[entry.links_start..entry.links_end];
+            self.visit_node(entry, nodes, data_cache, account_manager);
+        }
+    }
 
-            // Set node context for error reporting
-            set_context_node(node_idx);
+    /// Place the order-phase var blocks, given as (nodes defined above the block, block
+    /// index) in file order. Before or after `initialize`: the blocks are merged into the
+    /// visit list here and again whenever it is rebuilt, so the step loop makes no position
+    /// comparisons.
+    pub fn set_order_var_blocks(&mut self, positions: &[(usize, usize)]) {
+        self.order_var_positions = positions.to_vec();
+        self.merge_visit_items();
+    }
 
-            // Every link points down the file (check_execution_order), so the nodes this one
-            // sends orders to all sit before it. Splitting the slice there lets this node be
-            // borrowed while its order is written into them, however many incoming links it has.
-            let (upstream, rest) = nodes.split_at_mut(node_idx);
-
-            // Run the node's order phase and get the order it sends upstream. Every node type
-            // but the confluence sends the same order up each of its incoming regulated links.
-            let order: f64 = match &mut rest[0] {
-                NodeEnum::StorageNode(node) => {
-                    // Pre-order phase
-                    node.run_order_phase(data_cache, account_manager);
-                    node.us_orders
-                },
-                NodeEnum::LossNode(node) => {
-                    // Pre-order phase
-                    node.run_order_phase(data_cache, account_manager);
-                    node.usorders
-                },
-                NodeEnum::InflowNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    node.usorders
-                },
-                NodeEnum::ConfluenceNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-
-                    // Evaluate the split once and compute both upstream orders
-                    // simultaneously. A single named `regulated` pathway is a
-                    // fixed 1.0 to us_1 — no fraction exists where there is
-                    // nothing to split. With no pathway stated at all (neither
-                    // `regulated` nor `harmony_fraction`), no order goes upstream.
-                    let (link_1_harmony, order_to_split) = match node.order_split {
-                        crate::nodes::confluence_node::OrderSplit::AllToUs1 => (1.0, node.total_outgoing_order),
-                        crate::nodes::confluence_node::OrderSplit::Harmony =>
-                            (node.harmony_fraction.get_value(data_cache).clamp(0.0, 1.0), node.total_outgoing_order),
-                        crate::nodes::confluence_node::OrderSplit::NoPathway => (0.0, 0.0),
-                    };
-                    node.harmony_fraction_value = link_1_harmony;
-                    node.record_harmony_fraction(data_cache);
-                    let link_1_order = link_1_harmony * order_to_split;
-                    let link_2_order = (1.0 - link_1_harmony) * order_to_split;
-
-                    // Propagate orders upstream: a different order up each branch
-                    for il in incoming {
-                        let link_order = if node.us_1_link_idx == Some(il.link_idx) {
-                            node.us_1_order_buffer.push(link_1_order)
-                        } else {
-                            node.us_2_order_buffer.push(link_2_order)
-                        };
-                        upstream[il.from_node].dsorders_mut()[il.from_outlet as usize] = link_order;
-                    }
-                    continue;
-                },
-                NodeEnum::OrderControlNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    node.usorders
-                }
-                NodeEnum::SplitterNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    node.usorders
-                }
-                NodeEnum::RegulatedUserNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    // order_placed is its own order plus the orders accepted from its supply outlets
-                    node.dsorders[0] + node.order_factor * node.order_placed()
-                }
-                NodeEnum::FieldNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    // Only its own order goes upstream: ds_1 is a drain, not a delivery path
-                    node.order_value
-                }
-                NodeEnum::BlackholeNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    0.0
-                }
-                NodeEnum::GaugeNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    node.dsorders[0]
-                }
-                NodeEnum::UnregulatedUserNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    node.dsorders[0]
-                }
-                NodeEnum::Gr4jNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    node.dsorders[0]
-                }
-                NodeEnum::AwbmNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    node.dsorders[0]
-                }
-                NodeEnum::SurmNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    node.dsorders[0]
-                }
-                NodeEnum::Gr4jsgNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    node.dsorders[0]
-                }
-                NodeEnum::RoutingNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    node.dsorders[0]
-                }
-                NodeEnum::RoutingNodeReachLosses(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    node.dsorders[0]
-                }
-                NodeEnum::SacramentoNode(node) => {
-                    node.run_order_phase(data_cache, account_manager);
-                    node.dsorders[0]
-                }
-            };
-
-            // Propagate the order to upstream nodes
-            for il in incoming {
-                upstream[il.from_node].dsorders_mut()[il.from_outlet as usize] = order;
+    /// Merge the order-phase var blocks into the visit list, or leave it empty if there are none.
+    fn merge_visit_items(&mut self) {
+        self.visit_items.clear();
+        let positions = &self.order_var_positions;
+        if positions.is_empty() {
+            return;
+        }
+        // The order phase walks the file bottom-up, so the last block in the file runs first.
+        // A block sits below a visited node when more nodes are defined above it than the
+        // node's index; it runs before that node, after every visited node below it.
+        let mut remaining = positions.len();
+        for (entry_idx, entry) in self.regulated_nodes.iter().enumerate() {
+            while remaining > 0 && positions[remaining - 1].0 > entry.node_idx {
+                remaining -= 1;
+                self.visit_items.push(OrderVisit::VarBlock(positions[remaining].1));
             }
+            self.visit_items.push(OrderVisit::Node(entry_idx));
+        }
+        // The rest sit above every visited node
+        while remaining > 0 {
+            remaining -= 1;
+            self.visit_items.push(OrderVisit::VarBlock(positions[remaining].1));
+        }
+    }
+
+    /// Does the model have order-phase var blocks?
+    pub fn has_order_var_blocks(&self) -> bool {
+        !self.visit_items.is_empty()
+    }
+
+    /// The order phase with order-phase var blocks: the visit list with each block in its
+    /// place, at its file position bottom-up (ADR-0005 §1), keys top to bottom. Blocks run
+    /// even when the model has no ordering; the list then holds only blocks. The ordering
+    /// system knows only where a block runs: `run_var_block` (the model's) evaluates it.
+    // Out of line: inlined into run_timestep, regulated models that never call it timed 4-6%
+    // slower than with it out of line (ADR-0004 §4)
+    #[inline(never)]
+    pub fn run_ordering_phase_with_var_blocks<F>(&self, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache,
+                                                 account_manager: &mut AccountManager, mut run_var_block: F)
+    where
+        F: FnMut(usize, &mut DataCache),
+    {
+        if self.model_has_ordering {
+            account_manager.start_of_ordering(data_cache);
+        }
+        for &item in &self.visit_items {
+            match item {
+                OrderVisit::Node(entry_idx) => {
+                    self.visit_node(&self.regulated_nodes[entry_idx], nodes, data_cache, account_manager);
+                }
+                OrderVisit::VarBlock(vb_idx) => run_var_block(vb_idx, data_cache),
+            }
+        }
+    }
+
+    /// One node's order phase and the order it sends upstream; both entry points visit through it.
+    #[inline(always)]
+    fn visit_node(&self, entry: &RegulatedNodeEntry, nodes: &mut Vec<NodeEnum>, data_cache: &mut DataCache,
+                  account_manager: &mut AccountManager) {
+        let node_idx = entry.node_idx;
+        let incoming = &self.flat_incoming_links[entry.links_start..entry.links_end];
+
+        // Set node context for error reporting
+        set_context_node(node_idx);
+
+        // Every link points down the file (check_execution_order), so the nodes this one
+        // sends orders to all sit before it. Splitting the slice there lets this node be
+        // borrowed while its order is written into them, however many incoming links it has.
+        let (upstream, rest) = nodes.split_at_mut(node_idx);
+
+        // Run the node's order phase and get the order it sends upstream. Every node type
+        // but the confluence sends the same order up each of its incoming regulated links.
+        let order: f64 = match &mut rest[0] {
+            NodeEnum::StorageNode(node) => {
+                // Pre-order phase
+                node.run_order_phase(data_cache, account_manager);
+                node.us_orders
+            },
+            NodeEnum::LossNode(node) => {
+                // Pre-order phase
+                node.run_order_phase(data_cache, account_manager);
+                node.usorders
+            },
+            NodeEnum::InflowNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                node.usorders
+            },
+            NodeEnum::ConfluenceNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+
+                // Evaluate the split once and compute both upstream orders
+                // simultaneously. A single named `regulated` pathway is a
+                // fixed 1.0 to us_1 — no fraction exists where there is
+                // nothing to split. With no pathway stated at all (neither
+                // `regulated` nor `harmony_fraction`), no order goes upstream.
+                let (link_1_harmony, order_to_split) = match node.order_split {
+                    crate::nodes::confluence_node::OrderSplit::AllToUs1 => (1.0, node.total_outgoing_order),
+                    crate::nodes::confluence_node::OrderSplit::Harmony =>
+                        (node.harmony_fraction.get_value(data_cache).clamp(0.0, 1.0), node.total_outgoing_order),
+                    crate::nodes::confluence_node::OrderSplit::NoPathway => (0.0, 0.0),
+                };
+                node.harmony_fraction_value = link_1_harmony;
+                node.record_harmony_fraction(data_cache);
+                let link_1_order = link_1_harmony * order_to_split;
+                let link_2_order = (1.0 - link_1_harmony) * order_to_split;
+
+                // Propagate orders upstream: a different order up each branch
+                for il in incoming {
+                    let link_order = if node.us_1_link_idx == Some(il.link_idx) {
+                        node.us_1_order_buffer.push(link_1_order)
+                    } else {
+                        node.us_2_order_buffer.push(link_2_order)
+                    };
+                    upstream[il.from_node].dsorders_mut()[il.from_outlet as usize] = link_order;
+                }
+                return;
+            },
+            NodeEnum::OrderControlNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                node.usorders
+            }
+            NodeEnum::SplitterNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                node.usorders
+            }
+            NodeEnum::RegulatedUserNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                // order_placed is its own order plus the orders accepted from its supply outlets
+                node.dsorders[0] + node.order_factor * node.order_placed()
+            }
+            NodeEnum::FieldNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                // Only its own order goes upstream: ds_1 is a drain, not a delivery path
+                node.order_value
+            }
+            NodeEnum::BlackholeNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                0.0
+            }
+            NodeEnum::GaugeNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                node.dsorders[0]
+            }
+            NodeEnum::UnregulatedUserNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                node.dsorders[0]
+            }
+            NodeEnum::Gr4jNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                node.dsorders[0]
+            }
+            NodeEnum::AwbmNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                node.dsorders[0]
+            }
+            NodeEnum::SurmNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                node.dsorders[0]
+            }
+            NodeEnum::Gr4jsgNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                node.dsorders[0]
+            }
+            NodeEnum::RoutingNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                node.dsorders[0]
+            }
+            NodeEnum::RoutingNodeReachLosses(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                node.dsorders[0]
+            }
+            NodeEnum::SacramentoNode(node) => {
+                node.run_order_phase(data_cache, account_manager);
+                node.dsorders[0]
+            }
+        };
+
+        // Propagate the order to upstream nodes
+        for il in incoming {
+            upstream[il.from_node].dsorders_mut()[il.from_outlet as usize] = order;
         }
     }
 }

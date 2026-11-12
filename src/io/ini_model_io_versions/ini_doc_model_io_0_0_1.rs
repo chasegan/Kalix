@@ -11,7 +11,7 @@ use crate::misc::location::Location;
 use crate::model_inputs::DynamicInput;
 use crate::numerical::lookup_table::LookupTable;
 use crate::numerical::table::Table;
-use crate::model::Model;
+use crate::model::{Model, VarPhase};
 use crate::misc::link_helper::LinkHelper;
 use crate::tid::utils::{date_string_to_u64_flexible, u64_to_date_string_for_step_size};
 use crate::misc::misc_functions::{is_valid_variable_name, is_valid_bare_name, is_valid_name_segment, parse_csv_to_bool_option_u8, require_non_empty, format_vec_as_multiline_table, set_property_if_not_empty, set_property_unless_default, format_f64};
@@ -1357,11 +1357,9 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
             // 'ras' runs in the assessment slot at the top of the step, before
             // the [ras.*] sections, and must precede the first node — the file
             // then reads exactly as the timestep runs (ADR-0005 §1
-            // extended to the whole step). 'order' is designed (order phase
-            // walks bottom-up) but its interleave with the ordering system is
-            // not yet implemented — rejected rather than approximated (owner
-            // decision, July 2026).
-            let mut phase = crate::model::VarPhase::Flow;
+            // extended to the whole step). 'order' runs at file position in
+            // the order phase, which walks the file bottom-up.
+            let mut phase = VarPhase::Flow;
             let mut phase_explicit: Option<String> = None;
             if let Some(p) = ini_section.properties.get("phase") {
                 match p.value.trim().to_lowercase().as_str() {
@@ -1375,14 +1373,12 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                                  file reads as the timestep runs.",
                                 p.line_number, section_name)));
                         }
-                        phase = crate::model::VarPhase::Ras;
+                        phase = VarPhase::Ras;
                         phase_explicit = Some(p.value.trim().to_string());
                     }
                     "order" => {
-                        return Err(KalixIoError::Validate(format!(
-                            "Error on line {}: phase = order is not yet implemented for \
-                             [var.*] blocks (only phase = ras or flow is supported)",
-                            p.line_number)));
+                        phase = VarPhase::Order;
+                        phase_explicit = Some(p.value.trim().to_string());
                     }
                     other => {
                         return Err(KalixIoError::Parse(format!(
@@ -1392,6 +1388,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 }
             }
 
+            // Register the var definitions in this block.
             let mut defs: Vec<crate::model::VarDef> = Vec::new();
             for (key, ini_property) in &ini_section.properties {
                 if key.as_str() == "phase" {
@@ -1440,7 +1437,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                 phase,
                 phase_explicit,
             });
-            if phase == crate::model::VarPhase::Ras {
+            if phase == VarPhase::Ras {
                 ras_slot_items.push((ini_section.line_number, crate::model::RasSlotItem::VarBlock(vb_idx)));
             }
         } else if section_name.starts_with("table.") {
@@ -1729,8 +1726,20 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
             crate::model::ExecItem::VarBlock(i) => {
                 let vb = &model.var_blocks[*i];
                 let section_name = format!("var.{}", vb.name);
-                if let Some(p) = &vb.phase_explicit {
-                    ini_doc.set_property(section_name.as_str(), "phase", p.as_str());
+                // The phase as written while it still names the block's phase; otherwise the
+                // phase itself, so a block built or changed in code keeps a non-default phase
+                let canonical = match vb.phase {
+                    VarPhase::Flow => "flow",
+                    VarPhase::Ras => "ras",
+                    VarPhase::Order => "order",
+                };
+                let phase_text = match &vb.phase_explicit {
+                    Some(p) if p.trim().eq_ignore_ascii_case(canonical) => Some(p.as_str()),
+                    _ if vb.phase == VarPhase::Flow => None,
+                    _ => Some(canonical),
+                };
+                if let Some(p) = phase_text {
+                    ini_doc.set_property(section_name.as_str(), "phase", p);
                 }
                 for def in &vb.defs {
                     ini_doc.set_property(section_name.as_str(), def.key.as_str(), def.original.as_str());
