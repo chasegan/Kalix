@@ -278,7 +278,10 @@ pub struct StorageNode {
     recorder_idx_target_level: Option<usize>,
     recorder_idx_target_volume: Option<usize>,
     recorder_idx_forecast_volume: Option<usize>,
-    recorder_idx_forecast_volume_adjustment: Option<usize>,
+    // A u32, on measurement (ADR-0004 §3.4). As a 16-byte Option<usize> beside the other
+    // recorder indices, this one slot cost +6% to +8% on speed test 4, whose storages
+    // never use it; as a u32 it costs nothing. See the commit that made it one.
+    recorder_idx_forecast_volume_adjustment: Option<u32>,
     // Declared here, and recorded through an out-of-line helper, on measurement
     // (ADR-0004 §3.4): see the commit that added them.
     recorder_idx_order: Option<usize>,
@@ -1157,7 +1160,7 @@ impl StorageNode {
             data_cache.add_value_at_index(idx, forecast_volume);
         }
         if let Some(idx) = self.recorder_idx_forecast_volume_adjustment {
-            data_cache.add_value_at_index(idx, adjustment);
+            data_cache.add_value_at_index(idx as usize, adjustment);
         }
     }
 
@@ -1380,7 +1383,8 @@ impl Node for StorageNode {
         self.recorder_idx_target_level = recorder(data_cache, &self.name, "target_level");
         self.recorder_idx_target_volume = recorder(data_cache, &self.name, "target_volume");
         self.recorder_idx_forecast_volume = recorder(data_cache, &self.name, "forecast_volume");
-        self.recorder_idx_forecast_volume_adjustment = recorder(data_cache, &self.name, "forecast_volume_adjustment");
+        self.recorder_idx_forecast_volume_adjustment = recorder(data_cache, &self.name, "forecast_volume_adjustment")
+            .map(|idx| u32::try_from(idx).expect("recorder index fits in u32"));
         self.recorder_idx_area = recorder(data_cache, &self.name, "area");
         self.recorder_idx_seep_megs = recorder(data_cache, &self.name, "seep_vol");
         self.recorder_idx_rain_megs = recorder(data_cache, &self.name, "rain_vol");
