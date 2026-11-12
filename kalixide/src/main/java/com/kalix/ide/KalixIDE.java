@@ -1980,26 +1980,6 @@ public class KalixIDE extends JFrame implements MenuBarBuilder.MenuBarCallbacks 
     }
 
     @Override
-    public void toggleLinting() {
-        boolean currentState = schemaManager.isLintingEnabled();
-        boolean newState = !currentState;
-
-        // Update schema manager preferences
-        schemaManager.updatePreferences(
-            newState,
-            null, // Keep current schema path
-            schemaManager.getDisabledRules()
-        );
-
-        updateStatus(newState ? "Linting enabled" : "Linting disabled");
-    }
-
-    @Override
-    public boolean isLintingEnabled() {
-        return schemaManager.isLintingEnabled();
-    }
-
-    @Override
     public void toggleAutoReload(boolean enabled) {
         fileWatcherManager.setAutoReloadEnabled(enabled);
     }

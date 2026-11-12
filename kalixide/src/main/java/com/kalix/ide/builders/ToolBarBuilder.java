@@ -44,18 +44,15 @@ public class ToolBarBuilder {
     public static class ToolBarComponents {
         public final JToolBar toolBar;
         public final JToggleButton fileTreeToggleButton;
-        public final JToggleButton lintingToggleButton;
         public final JToggleButton autoReloadToggleButton;
         public final JButton backButton;
         public final JButton forwardButton;
 
         public ToolBarComponents(JToolBar toolBar, JToggleButton fileTreeToggleButton,
-                                 JToggleButton lintingToggleButton,
                                  JToggleButton autoReloadToggleButton,
                                  JButton backButton, JButton forwardButton) {
             this.toolBar = toolBar;
             this.fileTreeToggleButton = fileTreeToggleButton;
-            this.lintingToggleButton = lintingToggleButton;
             this.autoReloadToggleButton = autoReloadToggleButton;
             this.backButton = backButton;
             this.forwardButton = forwardButton;
@@ -198,13 +195,11 @@ public class ToolBarBuilder {
         toolBar.addSeparator();
 
         // Create and store toggle buttons
-        JToggleButton lintingButton = createLintingToggleButton();
         JToggleButton autoReloadButton = createAutoReloadToggleButton();
 
-        toolBar.add(lintingButton);
         toolBar.add(autoReloadButton);
 
-        return new ToolBarComponents(toolBar, fileTreeButton, lintingButton, autoReloadButton,
+        return new ToolBarComponents(toolBar, fileTreeButton, autoReloadButton,
             backButton, forwardButton);
     }
 
@@ -369,43 +364,6 @@ public class ToolBarBuilder {
      */
     private static Color getThemeAwareIconColor() {
         return ThemeUtils.iconColor(UIManager.getColor("ToolBar.background"));
-    }
-
-    /**
-     * Creates a toggle button for linting with theme-aware ninja icon.
-     *
-     * @return Configured JToggleButton for linting
-     */
-    private JToggleButton createLintingToggleButton() {
-        // Create ninja icon
-        FontIcon icon = FontIcon.of(FontAwesomeSolid.USER_NINJA, AppConstants.TOOLBAR_ICON_SIZE);
-        Color iconColor = getThemeAwareIconColor();
-        icon.setIconColor(iconColor);
-
-        JToggleButton lintingButton = new JToggleButton(icon);
-        lintingButton.setFocusPainted(false);
-
-        // Set initial state
-        boolean lintingEnabled = callbacks.isLintingEnabled();
-        lintingButton.setSelected(lintingEnabled);
-        lintingButton.setToolTipText(lintingEnabled
-            ? "Linting enabled - click to disable"
-            : "Linting disabled - click to enable");
-
-        // Add action listener
-        lintingButton.addActionListener(e -> {
-            callbacks.toggleLinting();
-            boolean enabled = callbacks.isLintingEnabled();
-            lintingButton.setSelected(enabled);
-            lintingButton.setToolTipText(enabled
-                ? "Linting enabled - click to disable"
-                : "Linting disabled - click to enable");
-        });
-
-        // Set accessible name for screen readers
-        lintingButton.getAccessibleContext().setAccessibleName("Toggle Linting");
-
-        return lintingButton;
     }
 
     /**

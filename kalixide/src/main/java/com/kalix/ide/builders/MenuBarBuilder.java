@@ -87,10 +87,6 @@ public class MenuBarBuilder {
         // Preferences dialog
         void showPreferences();
 
-        // Linting toggle
-        void toggleLinting();
-        boolean isLintingEnabled();
-        
         // Appearance menu
         void toggleAutoReload(boolean enabled);
         boolean isAutoReloadEnabled();
