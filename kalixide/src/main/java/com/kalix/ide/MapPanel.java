@@ -22,9 +22,12 @@ import java.awt.event.MouseWheelEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.geom.Arc2D;
+import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
+import java.util.Objects;
 
 import com.kalix.ide.model.HydrologicalModel;
+import com.kalix.ide.model.ModelLink;
 import com.kalix.ide.model.ModelNode;
 import com.kalix.ide.interaction.LinkDragManager;
 import com.kalix.ide.interaction.MapClipboardManager;
@@ -136,8 +139,8 @@ public class MapPanel extends JPanel {
      * @param textEditor the document's editor, for bidirectional text sync (never null)
      */
     public MapPanel(HydrologicalModel model, EnhancedTextEditor textEditor) {
-        this.model = java.util.Objects.requireNonNull(model, "model");
-        this.textEditor = java.util.Objects.requireNonNull(textEditor, "textEditor");
+        this.model = Objects.requireNonNull(model, "model");
+        this.textEditor = Objects.requireNonNull(textEditor, "textEditor");
 
         // Theme colours are resolved by updateUI(), which JPanel's constructor has
         // already run by this point (and which re-runs on every LaF switch).
@@ -332,7 +335,7 @@ public class MapPanel extends JPanel {
                         linkDragManager.startDrag(ringNode, e.getPoint());
                     } else {
                         // Not clicking on a node - check for links
-                        com.kalix.ide.model.ModelLink linkAtPoint = getLinkAtPoint(e.getPoint());
+                        ModelLink linkAtPoint = getLinkAtPoint(e.getPoint());
 
                         if (linkAtPoint != null) {
                             // Clicking on a link - handle link selection
@@ -738,7 +741,7 @@ public class MapPanel extends JPanel {
      */
     private boolean updateHoveredNode(Point screenPoint) {
         String hovered = labelMode.revealsOnHover() ? getNodeAtPoint(screenPoint) : null;
-        if (java.util.Objects.equals(hovered, hoveredNodeName)) {
+        if (Objects.equals(hovered, hoveredNodeName)) {
             return false;
         }
         hoveredNodeName = hovered;
@@ -899,7 +902,7 @@ public class MapPanel extends JPanel {
      * @param screenPoint Screen coordinates (mouse position)
      * @return ModelLink if found, null if no link at that position
      */
-    public com.kalix.ide.model.ModelLink getLinkAtPoint(Point screenPoint) {
+    public ModelLink getLinkAtPoint(Point screenPoint) {
         if (model == null) {
             return null;
         }
@@ -907,10 +910,10 @@ public class MapPanel extends JPanel {
         final double LINK_HIT_TOLERANCE = 8.0; // pixels
 
         // Check each link to see if the screen point is near the line
-        for (com.kalix.ide.model.ModelLink link : model.getAllLinks()) {
+        for (ModelLink link : model.getAllLinks()) {
             // Get upstream and downstream nodes
-            com.kalix.ide.model.ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
-            com.kalix.ide.model.ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());
+            ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
+            ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());
 
             // Skip link if either node is missing
             if (upstreamNode == null || downstreamNode == null) {
@@ -997,7 +1000,7 @@ public class MapPanel extends JPanel {
      * @param link Link to select
      * @param addToSelection If true (Shift+click), add to selection; if false, replace selection
      */
-    private void handleLinkSelection(com.kalix.ide.model.ModelLink link, boolean addToSelection) {
+    private void handleLinkSelection(ModelLink link, boolean addToSelection) {
         if (model == null || link == null) {
             return;
         }
@@ -1047,15 +1050,15 @@ public class MapPanel extends JPanel {
     }
 
     /** Converts a screen point to world space. */
-    public java.awt.geom.Point2D.Double toWorld(Point screenPoint) {
-        return new java.awt.geom.Point2D.Double(toWorldX(screenPoint.x), toWorldY(screenPoint.y));
+    public Point2D.Double toWorld(Point screenPoint) {
+        return new Point2D.Double(toWorldX(screenPoint.x), toWorldY(screenPoint.y));
     }
 
     /**
      * Returns the world-space coordinate at the centre of the visible map viewport.
      */
-    public java.awt.geom.Point2D.Double getCenterWorldPoint() {
-        return new java.awt.geom.Point2D.Double(
+    public Point2D.Double getCenterWorldPoint() {
+        return new Point2D.Double(
             toWorldX(getWidth() / 2.0), toWorldY(getHeight() / 2.0));
     }
 
@@ -1226,10 +1229,10 @@ public class MapPanel extends JPanel {
         }
 
         // Find all links within the rectangle (check if link midpoint or any part intersects)
-        for (com.kalix.ide.model.ModelLink link : model.getAllLinks()) {
+        for (ModelLink link : model.getAllLinks()) {
             // Get upstream and downstream nodes
-            com.kalix.ide.model.ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
-            com.kalix.ide.model.ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());
+            ModelNode upstreamNode = model.getNode(link.getUpstreamTerminus());
+            ModelNode downstreamNode = model.getNode(link.getDownstreamTerminus());
 
             // Skip link if either node is missing
             if (upstreamNode == null || downstreamNode == null) {
