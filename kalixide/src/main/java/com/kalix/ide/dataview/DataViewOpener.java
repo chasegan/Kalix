@@ -64,7 +64,7 @@ public final class DataViewOpener {
     }
 
     /**
-     * The compressed CSV contract (issue #409): decompress the whole payload
+     * The compressed CSV contract: decompress the whole payload
      * to memory — bounded while it runs by the in-memory limit preference,
      * a cross that throws {@link CompressedCsvFormat.TooLargeException} with
      * the honest reason — then serve it through the ordinary session machinery

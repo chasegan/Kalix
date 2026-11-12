@@ -179,7 +179,7 @@ public class FlowVizDataManager {
             loadPixieFile(file);
         } else {
             DialogUtils.showError(parentFrame,
-                "Unsupported file type: " + file.getName() + "\nSupported types: .csv, .csv.zip, .res.csv, .pxt",
+                "Unsupported file type: " + file.getName() + "\nSupported types: .csv, .csv.zip, .csv.gz, .res.csv, .pxt",
                 "Load Error");
         }
     }

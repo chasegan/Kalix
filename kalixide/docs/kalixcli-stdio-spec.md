@@ -258,6 +258,7 @@ End the session and exit.
 - Parameters: `path` (string, optional), `format` (string, optional, default "csv")
 - Supported formats:
   - `"csv"` (default): single wide CSV with a `date` column (`datetime` when the timestamps carry a time of day) and one column per output series.
+  - `"csv.zip"`, `"csv.gz"`: the same CSV, zip-compressed (a one-entry archive) or gzip-compressed. The `path`'s own extension decides the bytes; `format` only picks the default file name's extension.
   - `"pixie"`: writes a `.pxt` (metadata) / `.pxb` (compressed binary) pair. The `path` is treated as a base path; a trailing `.pxt`/`.pxb` is stripped before writing, and `r.path` reports the `.pxt` file.
 
 **get_version**

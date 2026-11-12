@@ -1399,7 +1399,7 @@ public class PlotInteractionManager {
             com.kalix.ide.flowviz.transform.PlotType plotType = panel.getPlotType();
             com.kalix.ide.flowviz.data.LabelResolver labelResolver =
                 (labelResolverSupplier != null) ? labelResolverSupplier.get() : null;
-            // .csv.zip counts as CSV (the exporter zips by name); anything else gains .csv.
+            // Compressed CSV counts as CSV (the exporter compresses by name); anything else gains .csv.
             file = SeriesFileWriter.write(dataSet, file, plotType, labelResolver, false);
             JOptionPane.showMessageDialog(panel,
                 "Data saved successfully to " + file.getName(),

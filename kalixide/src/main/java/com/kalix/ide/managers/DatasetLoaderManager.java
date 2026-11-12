@@ -154,7 +154,7 @@ public class DatasetLoaderManager {
                         List<File> supportedFiles = files.stream()
                             .filter(file -> {
                                 String name = file.getName().toLowerCase();
-                                return name.endsWith(".csv") || CompressedCsvFormat.isCompressedCsv(name)
+                                return CompressedCsvFormat.isCsvOrCompressedCsv(name)
                                     || name.endsWith(".pxt") || name.endsWith(".pxb");
                             })
                             .toList();
@@ -226,7 +226,7 @@ public class DatasetLoaderManager {
         // (Compressed CSV collides with neither; the importer decompresses it by name.)
         if (SourceResCsvFormat.isResCsv(fileName)) {
             loadResCsvDataset(file);
-        } else if (fileName.endsWith(".csv") || CompressedCsvFormat.isCompressedCsv(fileName)) {
+        } else if (CompressedCsvFormat.isCsvOrCompressedCsv(fileName)) {
             loadCsvDataset(file);
         } else if (fileName.endsWith(".pxt") || fileName.endsWith(".pxb")) {
             loadPixieDataset(file);

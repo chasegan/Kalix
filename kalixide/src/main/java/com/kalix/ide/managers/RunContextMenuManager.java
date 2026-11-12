@@ -6,6 +6,7 @@ import com.kalix.ide.cli.SessionManager;
 import com.kalix.ide.diff.DiffWindow;
 import com.kalix.ide.filedialog.FileDialogFilter;
 import com.kalix.ide.filedialog.KalixFileDialog;
+import com.kalix.ide.io.CompressedCsvFormat;
 import com.kalix.ide.utils.DialogUtils;
 import com.kalix.ide.utils.StatusReporter;
 import com.kalix.ide.windows.MinimalEditorWindow;
@@ -738,10 +739,11 @@ public class RunContextMenuManager {
 
             // The format IS the extension the user settled on. The type combo only ever
             // sets that extension, so there is no second opinion to reconcile against.
+            // A compressed CSV's format value is its extension without the dot.
             boolean pixie = lowerName.endsWith(".pxt");
-            boolean csvZip = com.kalix.ide.io.CsvZipFormat.isCsvZip(lowerName);
-            String format = pixie ? "pixie" : (csvZip ? "csv.zip" : "csv");
-            String ext = pixie ? ".pxt" : (csvZip ? ".csv.zip" : ".csv");
+            String compressed = CompressedCsvFormat.extensionOf(lowerName);
+            String ext = pixie ? ".pxt" : (compressed != null ? compressed : ".csv");
+            String format = pixie ? "pixie" : ext.substring(1);
 
             // Append the format's extension unless the user already typed it.
             if (!lowerName.endsWith(ext)) {

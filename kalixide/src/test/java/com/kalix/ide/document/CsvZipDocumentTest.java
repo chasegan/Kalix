@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.zip.GZIPOutputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -48,6 +49,25 @@ class CsvZipDocumentTest {
                 "zip bytes on disk: no honest text buffer to edit, so always read-only");
             assertNotNull(doc.getContextView(), "the decoded table is the contextual view");
             assertFalse(doc.isModel());
+        } finally {
+            doc.dispose();
+        }
+    }
+
+    @Test
+    void csvGzOpensAsAReadOnlyDataDocument() throws IOException {
+        // The gzip sibling: same contract, same reasons.
+        Path file = tempDir.resolve("flows.csv.gz");
+        try (GZIPOutputStream out = new GZIPOutputStream(Files.newOutputStream(file))) {
+            out.write("Date,flow\n2020-01-01,1.5\n".getBytes(StandardCharsets.UTF_8));
+        }
+        File gz = file.toFile();
+        assertEquals(DocumentKind.DATA, DocumentKind.forFile(gz));
+        KalixDocument doc = KalixDocument.createFor(gz);
+        try {
+            assertInstanceOf(DataDocument.class, doc);
+            assertFalse(doc.isEditable(), "gzip bytes on disk: always read-only");
+            assertNotNull(doc.getContextView(), "the decoded table is the contextual view");
         } finally {
             doc.dispose();
         }

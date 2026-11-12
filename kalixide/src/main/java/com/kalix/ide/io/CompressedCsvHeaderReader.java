@@ -12,7 +12,7 @@ import java.util.List;
  * the same first-line parse as {@link CsvHeaderReader}, over the decompressed
  * stream — only its head is ever decompressed.
  */
-public class ZipCsvHeaderReader extends CsvHeaderReader {
+public class CompressedCsvHeaderReader extends CsvHeaderReader {
 
     @Override
     public boolean canRead(String fileName) {

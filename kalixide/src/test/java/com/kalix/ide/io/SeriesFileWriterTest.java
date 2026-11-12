@@ -44,6 +44,13 @@ class SeriesFileWriterTest {
     }
 
     @Test
+    void gzippedCsvKeepsItsExtension() throws IOException {
+        File written = SeriesFileWriter.write(oneSeries(), dir.resolve("out.csv.gz").toFile(), null, null, true);
+        assertEquals("out.csv.gz", written.getName());
+        assertEquals((byte) 0x1f, Files.readAllBytes(written.toPath())[0], "written as gzip");
+    }
+
+    @Test
     void twoSeriesWithOneLabelKeepTwoCsvColumns() throws IOException {
         // Two files of the same name, each with a flow column, project to the same label.
         DataSet data = new DataSet();
