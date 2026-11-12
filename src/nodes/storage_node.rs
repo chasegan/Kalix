@@ -1198,7 +1198,9 @@ impl Node for StorageNode {
         self.is_forcing_level  = false; 
         self.was_forcing_level = false; 
         self.sid_adjustment_volume = 0.0;
-        // StorageOrdering::None never writes us_orders, so a previous run's order would persist
+        // Orders are run state, so no run starts with another's. us_orders is the one
+        // that matters: StorageOrdering::None never writes it, so a previous run's
+        // order would persist. The downstream orders are cleared with it.
         self.us_orders = 0.0;
         self.ds_orders = [0.0; MAX_DS_LINKS];
         self.ds_orders_due = [0.0; MAX_DS_LINKS];
