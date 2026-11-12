@@ -742,10 +742,8 @@ class DerivedSeriesController {
             .title("Save derived series")
             .startIn(window.baseDirectory())
             .suggestedName(suggestion.replaceAll("[^A-Za-z0-9._-]+", "_").replaceAll("^_+|_+$", "") + ".csv")
-            .filters(
-                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"),
-                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
+            .filters(FileDialogFilter.csvThen(
+                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt")))
             .show();
         if (chosen.isEmpty()) {
             return;

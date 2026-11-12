@@ -1364,11 +1364,9 @@ public class PlotInteractionManager {
             .title("Save Data")
             .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
             .suggestedName("timeseries_data.csv")
-            .filters(
-                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"),
+            .filters(FileDialogFilter.csvThen(
                 FileDialogFilter.of("Source Result CSV (*.res.csv)", "res.csv"),
-                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
+                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt")))
             .show();
         if (chosen.isPresent()) {
             File file = chosen.get();

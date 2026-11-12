@@ -143,14 +143,9 @@ public class FlowVizDataManager {
             .title("Open Data Files")
             .multiSelect()
             .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
-            .filters(
-                FileDialogFilter.of("All Supported (*.csv, *.csv.zip, *.pxt)", "csv", "csv.zip", "pxt"),
-                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                // Whole-name suffix matching, so the double extensions need no bespoke
-                // filters of their own (JFileChooser could only match after the final dot).
-                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"),
+            .filters(FileDialogFilter.withAllSupported(FileDialogFilter.csvThen(
                 FileDialogFilter.of("Source Result CSV (*.res.csv)", "res.csv"),
-                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
+                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))))
             .showAll();
 
         if (selected.size() == 1) {
@@ -173,7 +168,7 @@ public class FlowVizDataManager {
         // (Compressed CSV collides with neither; the importer decompresses it by name.)
         if (SourceResCsvFormat.isResCsv(fileName)) {
             loadResCsvFile(file);
-        } else if (fileName.endsWith(".csv") || CompressedCsvFormat.isCompressedCsv(fileName)) {
+        } else if (CompressedCsvFormat.isCsvOrCompressedCsv(fileName)) {
             loadCsvFile(file);
         } else if (fileName.endsWith(".pxt")) {
             loadPixieFile(file);
@@ -705,14 +700,14 @@ public class FlowVizDataManager {
                         List<File> supportedFiles = files.stream()
                             .filter(file -> {
                                 String name = file.getName().toLowerCase();
-                                return name.endsWith(".csv") || CompressedCsvFormat.isCompressedCsv(name)
+                                return CompressedCsvFormat.isCsvOrCompressedCsv(name)
                                     || name.endsWith(".pxt");
                             })
                             .toList();
 
                         if (supportedFiles.isEmpty()) {
                             JOptionPane.showMessageDialog(parentFrame,
-                                "Please drop CSV or Pixie files only.",
+                                "Please drop CSV (plain or compressed) or Pixie files only.",
                                 "Invalid File Type",
                                 JOptionPane.WARNING_MESSAGE);
                         } else if (supportedFiles.size() == 1) {

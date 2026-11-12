@@ -122,16 +122,13 @@ public final class StatsVizPanel extends JPanel {
         Optional<File> chosen = KalixFileDialog.saveFile(table)
             .title("Save Statistics")
             .suggestedName("statistics.csv")
-            .filters(
-                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"))
+            .filters(FileDialogFilter.csvThen())
             .show();
         if (chosen.isPresent()) {
             File file = chosen.get();
 
-            // The extension is the format: a name ending .csv.zip writes a
-            // one-entry zip (and either way the text is UTF-8, like the data
-            // exporter).
+            // The extension is the format: .csv.zip or .csv.gz compresses
+            // (and either way the text is UTF-8, like the data exporter).
             try (Writer writer = CompressedCsvFormat.newUtf8Writer(file)) {
                 // Write header (dynamic columns from table)
                 for (int col = 0; col < table.getColumnCount(); col++) {

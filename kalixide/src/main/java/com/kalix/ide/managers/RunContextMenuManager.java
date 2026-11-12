@@ -728,10 +728,8 @@ public class RunContextMenuManager {
             .title("Save Results")
             .startIn(baseDirectorySupplier != null ? baseDirectorySupplier.get() : null)
             .suggestedName(baseFilename + ".csv")
-            .filters(
-                FileDialogFilter.of("CSV Files (*.csv)", "csv"),
-                FileDialogFilter.of("Zipped CSV (*.csv.zip)", "csv.zip"),
-                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt"))
+            .filters(FileDialogFilter.csvThen(
+                FileDialogFilter.of("Pixie Files (*.pxt)", "pxt")))
             .show();
         if (chosen.isPresent()) {
             File selectedFile = chosen.get();
