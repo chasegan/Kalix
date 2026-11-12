@@ -83,20 +83,20 @@ public class NodeValidator implements ValidationStrategy {
         if (rule != null && !rule.isEnabled()) {
             return;
         }
-        List<INIModelParser.Property> given = new ArrayList<>();
+        List<INIModelParser.Property> present = new ArrayList<>();
         for (String param : group) {
             INIModelParser.Property prop = given(node, param);
             if (prop != null) {
-                given.add(prop);
+                present.add(prop);
             }
         }
-        if (given.size() < 2) {
+        if (present.size() < 2) {
             return;
         }
-        given.sort(Comparator.comparingInt(INIModelParser.Property::getLineNumber));
+        present.sort(Comparator.comparingInt(INIModelParser.Property::getLineNumber));
         ValidationRule.Severity severity = (rule != null) ? rule.getSeverity() : ValidationRule.Severity.ERROR;
-        List<String> names = given.stream().map(INIModelParser.Property::getKey).toList();
-        result.addIssue(given.get(given.size() - 1).getLineNumber(),
+        List<String> names = present.stream().map(INIModelParser.Property::getKey).toList();
+        result.addIssue(present.get(present.size() - 1).getLineNumber(),
                       "Node '" + node.getNodeName() + "' cannot have both " + String.join(" and ", names),
                       severity, "exclusive_params");
     }
