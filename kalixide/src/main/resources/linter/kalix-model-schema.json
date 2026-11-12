@@ -695,7 +695,7 @@
         "target_level",
         "target_volume",
         "forecast_volume",
-        "forecast_adjustment",
+        "forecast_volume_adjustment",
         "order",
         "orders_en_route",
         "rain_vol",
@@ -729,7 +729,7 @@
         "ds_4_force_release",
         "target_level",
         "target_volume",
-        "forecast_adjustment",
+        "forecast_volume_adjustment",
         "order_through",
         "exists",
         "forced_level"
@@ -738,10 +738,10 @@
         ["target_level", "target_volume"]
       ],
       "overridden_params": [
-        { "when_true": "order_through", "params": ["target_level", "target_volume", "forecast_adjustment"] }
+        { "when_true": "order_through", "params": ["target_level", "target_volume", "forecast_volume_adjustment"] }
       ],
       "requires_one_of": [
-        { "param": "forecast_adjustment", "one_of": ["target_level", "target_volume"] }
+        { "param": "forecast_volume_adjustment", "one_of": ["target_level", "target_volume"] }
       ],
       "dsnode_params": [
         "ds_1",
@@ -824,7 +824,7 @@
           "type": "function_expression",
           "description": "Target storage volume; not with target_level (data reference, constant, or expression)"
         },
-        "forecast_adjustment": {
+        "forecast_volume_adjustment": {
           "type": "function_expression",
           "description": "Expected net inflow (+) or outflow (-) in ML over the order travel time, added to the forecast a target orders against; needs a target (data reference, constant, or expression)"
         },
@@ -1220,7 +1220,7 @@
     },
     "requires_one_of": {
       "severity": "error",
-      "description": "A parameter needs at least one of another set (e.g. forecast_adjustment needs a target)"
+      "description": "A parameter needs at least one of another set (e.g. forecast_volume_adjustment needs a target)"
     },
     "coordinate_format": {
       "severity": "error",

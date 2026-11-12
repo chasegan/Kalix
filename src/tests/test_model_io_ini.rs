@@ -423,14 +423,14 @@ fn test_changed_storage_keeps_target_level_and_order_through() {
 }
 
 #[test]
-fn test_changed_storage_keeps_target_volume_and_forecast_adjustment() {
+fn test_changed_storage_keeps_target_volume_and_forecast_volume_adjustment() {
     let ini = "[kalix]\n\
                \n\
                [node.s]\n\
                type = storage\n\
                loc = 5, 6\n\
                target_volume = 800\n\
-               forecast_adjustment = -25\n\
+               forecast_volume_adjustment = -25\n\
                initial_volume = 100\n\
                dimensions = 0, 0, 0, 0,\n\
                \x20            1, 1000, 3, 0\n\
@@ -453,7 +453,7 @@ fn test_changed_storage_keeps_target_volume_and_forecast_adjustment() {
 
     assert!(saved.contains("initial_volume = 200"), "expected changed initial_volume, got:\n{}", saved);
     assert!(saved.contains("target_volume = 800"), "changed storage must keep target_volume, got:\n{}", saved);
-    assert!(saved.contains("forecast_adjustment = -25"), "changed storage must keep forecast_adjustment, got:\n{}", saved);
+    assert!(saved.contains("forecast_volume_adjustment = -25"), "changed storage must keep forecast_volume_adjustment, got:\n{}", saved);
     assert!(!saved.contains("target_level"), "no target_level was given, got:\n{}", saved);
 }
 
